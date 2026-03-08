@@ -7,6 +7,31 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.22 - 2026-03-08
+### Summary
+Implemented MVP reporting endpoints with filter support and CSV export for governance reporting.
+
+### Included
+- Added reporting API router with role-gated endpoints:
+  - `GET /api/reports/completion`
+  - `GET /api/reports/pass-rates`
+  - `GET /api/reports/manual-review-queue`
+  - `GET /api/reports/appeals`
+  - `GET /api/reports/export?type=<...>&format=csv`
+- Added report filtering support across report types:
+  - `moduleId`
+  - `status` (comma-separated, report-specific)
+  - `dateFrom`
+  - `dateTo`
+  - `orgUnit` (department)
+- Added CSV export utility for core report types.
+- Added reporting service implementation that aggregates totals/rows from submissions, decisions, manual reviews, and appeals.
+- Added automated integration test for reporting and CSV behavior:
+  - `test/m2-reporting.test.ts`
+
+### Notes
+- Reporting access is restricted to `ADMINISTRATOR`, `REPORT_READER`, and `SUBJECT_MATTER_OWNER`.
+
 ## 0.3.21 - 2026-03-08
 ### Summary
 Implemented MVP observability baseline for correlation IDs, operational logging signals, Azure alerts, and runbook documentation.

@@ -1,0 +1,185 @@
+import request from "supertest";
+import { app } from "../src/app.js";
+import { prisma } from "../src/db/prisma.js";
+
+const participantAHeaders = {
+  "x-user-id": "report-participant-a",
+  "x-user-email": "report.participant.a@company.com",
+  "x-user-name": "Report Participant A",
+  "x-user-department": "Engineering",
+  "x-user-roles": "PARTICIPANT",
+};
+
+const participantBHeaders = {
+  "x-user-id": "report-participant-b",
+  "x-user-email": "report.participant.b@company.com",
+  "x-user-name": "Report Participant B",
+  "x-user-department": "HR",
+  "x-user-roles": "PARTICIPANT",
+};
+
+const reportReaderHeaders = {
+  "x-user-id": "report-reader-1",
+  "x-user-email": "report.reader@company.com",
+  "x-user-name": "Report Reader",
+  "x-user-roles": "REPORT_READER",
+};
+
+const appealHandlerHeaders = {
+  "x-user-id": "report-appeal-1",
+  "x-user-email": "report.appeal@company.com",
+  "x-user-name": "Report Appeal Handler",
+  "x-user-roles": "APPEAL_HANDLER",
+};
+
+describe("MVP reporting endpoints", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("provides completion/pass-rate/manual-review/appeals reports with filter support and csv export", async () => {
+    const modulesResponse = await request(app).get("/api/modules").set(participantAHeaders);
+    expect(modulesResponse.status).toBe(200);
+    const moduleId = modulesResponse.body.modules[0].id as string;
+
+    const completedSubmissionId = await createSubmissionAndAssessment({
+      moduleId,
+      headers: participantAHeaders,
+      rawText: "A normal practical submission with no sensitive data indicators.",
+      reflectionText: "I validated responses and improved prompt quality iteratively.",
+      promptExcerpt: "Summarize findings in a clear professional style.",
+    });
+
+    const underReviewSubmissionId = await createSubmissionAndAssessment({
+      moduleId,
+      headers: participantBHeaders,
+      rawText: "Contains sensitive client data snippets for manual routing.",
+      reflectionText: "This should route to manual review due to sensitive data concerns.",
+      promptExcerpt: "Assess policy risk and route for review if uncertain.",
+    });
+
+    const createAppealResponse = await request(app)
+      .post(`/api/submissions/${completedSubmissionId}/appeals`)
+      .set(participantAHeaders)
+      .send({
+        appealReason: "Requesting second review for certification outcome.",
+      });
+    expect(createAppealResponse.status).toBe(201);
+    const appealId = createAppealResponse.body.appeal.id as string;
+
+    const claimAppealResponse = await request(app)
+      .post(`/api/appeals/${appealId}/claim`)
+      .set(appealHandlerHeaders);
+    expect(claimAppealResponse.status).toBe(200);
+
+    const resolveAppealResponse = await request(app)
+      .post(`/api/appeals/${appealId}/resolve`)
+      .set(appealHandlerHeaders)
+      .send({
+        passFailTotal: true,
+        decisionReason: "Appeal resolved and decision confirmed after second review.",
+        resolutionNote: "Confirmed based on complete evidence package.",
+      });
+    expect(resolveAppealResponse.status).toBe(200);
+
+    const completionResponse = await request(app)
+      .get(`/api/reports/completion?moduleId=${encodeURIComponent(moduleId)}&orgUnit=Engineering`)
+      .set(reportReaderHeaders);
+    expect(completionResponse.status).toBe(200);
+    expect(completionResponse.body.rows.length).toBeGreaterThan(0);
+    expect(completionResponse.body.totals.totalSubmissions).toBeGreaterThanOrEqual(1);
+    expect(completionResponse.body.rows[0].moduleId).toBe(moduleId);
+
+    const passRatesResponse = await request(app)
+      .get(`/api/reports/pass-rates?moduleId=${encodeURIComponent(moduleId)}`)
+      .set(reportReaderHeaders);
+    expect(passRatesResponse.status).toBe(200);
+    expect(passRatesResponse.body.totals.decisionCount).toBeGreaterThanOrEqual(1);
+    expect(passRatesResponse.body.totals.passCount + passRatesResponse.body.totals.failCount).toBe(
+      passRatesResponse.body.totals.decisionCount,
+    );
+
+    const manualReviewQueueResponse = await request(app)
+      .get("/api/reports/manual-review-queue?status=OPEN")
+      .set(reportReaderHeaders);
+    expect(manualReviewQueueResponse.status).toBe(200);
+    expect(
+      (manualReviewQueueResponse.body.rows as Array<{ submissionId: string }>).some(
+        (row) => row.submissionId === underReviewSubmissionId,
+      ),
+    ).toBe(true);
+
+    const appealsReportResponse = await request(app)
+      .get("/api/reports/appeals?status=RESOLVED")
+      .set(reportReaderHeaders);
+    expect(appealsReportResponse.status).toBe(200);
+    expect(
+      (appealsReportResponse.body.rows as Array<{ appealId: string }>).some((row) => row.appealId === appealId),
+    ).toBe(true);
+
+    const completionCsvResponse = await request(app)
+      .get("/api/reports/export?type=completion&format=csv")
+      .set(reportReaderHeaders);
+    expect(completionCsvResponse.status).toBe(200);
+    expect(completionCsvResponse.headers["content-type"]).toContain("text/csv");
+    expect(completionCsvResponse.text).toContain("moduleId,moduleTitle");
+    expect(completionCsvResponse.text).toContain(moduleId);
+
+    const forbiddenResponse = await request(app).get("/api/reports/completion").set(participantAHeaders);
+    expect(forbiddenResponse.status).toBe(403);
+  });
+});
+
+async function createSubmissionAndAssessment(input: {
+  moduleId: string;
+  headers: Record<string, string>;
+  rawText: string;
+  reflectionText: string;
+  promptExcerpt: string;
+}) {
+  const submissionResponse = await request(app)
+    .post("/api/submissions")
+    .set(input.headers)
+    .send({
+      moduleId: input.moduleId,
+      deliveryType: "text",
+      rawText: input.rawText,
+      reflectionText: input.reflectionText,
+      promptExcerpt: input.promptExcerpt,
+      responsibilityAcknowledged: true,
+    });
+  expect(submissionResponse.status).toBe(201);
+  const submissionId = submissionResponse.body.submission.id as string;
+
+  const startMcqResponse = await request(app)
+    .get(`/api/modules/${input.moduleId}/mcq/start`)
+    .query({ submissionId })
+    .set(input.headers);
+  expect(startMcqResponse.status).toBe(200);
+
+  const responses = startMcqResponse.body.questions.map((question: { id: string; stem: string }) => ({
+    questionId: question.id,
+    selectedAnswer:
+      question.stem === "What is the recommended model ownership boundary?"
+        ? "Backend owns final decision"
+        : "Prompt versions and thresholds",
+  }));
+
+  const submitMcqResponse = await request(app)
+    .post(`/api/modules/${input.moduleId}/mcq/submit`)
+    .set(input.headers)
+    .send({
+      submissionId,
+      attemptId: startMcqResponse.body.attemptId,
+      responses,
+    });
+  expect(submitMcqResponse.status).toBe(200);
+
+  const runAssessmentResponse = await request(app)
+    .post(`/api/assessments/${submissionId}/run`)
+    .set(input.headers)
+    .send({ sync: true });
+  expect(runAssessmentResponse.status).toBe(202);
+
+  return submissionId;
+}
