@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -17,79 +17,88 @@
     </style>
   </head>
   <body>
-    <h1>Participant Test Console</h1>
-    <p class="small">Manual flow: modules -> submission -> MCQ -> assessment/result.</p>
-    <p class="small">Version: <strong id="appVersion">loading...</strong></p>
+    <h1 data-i18n="page.title"></h1>
+    <p class="small" data-i18n="page.subtitle"></p>
+    <p class="small"><span data-i18n="page.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="localeSelect" data-i18n="locale.label"></label>
+          <select id="localeSelect"></select>
+        </div>
+      </div>
+    </div>
 
     <section class="card">
-      <h3>Mock Identity</h3>
+      <h3 data-i18n="identity.title"></h3>
       <div class="row">
-        <div><label>User Id</label><input id="userId" value="participant-1" /></div>
-        <div><label>Email</label><input id="email" value="participant@company.com" /></div>
+        <div><label data-i18n="identity.userId"></label><input id="userId" value="participant-1" /></div>
+        <div><label data-i18n="identity.email"></label><input id="email" value="participant@company.com" /></div>
       </div>
       <div class="row">
-        <div><label>Name</label><input id="name" value="Platform Participant" /></div>
-        <div><label>Department</label><input id="department" value="Consulting" /></div>
+        <div><label data-i18n="identity.name"></label><input id="name" value="Platform Participant" /></div>
+        <div><label data-i18n="identity.department"></label><input id="department" value="Consulting" /></div>
       </div>
       <div>
-        <label>Roles (comma-separated)</label>
+        <label data-i18n="identity.roles"></label>
         <input id="roles" value="PARTICIPANT" />
       </div>
-      <button id="loadMe">Load /api/me</button>
+      <button id="loadMe" data-i18n="identity.loadMe"></button>
     </section>
 
     <section class="card">
-      <h3>Modules</h3>
-      <button id="loadModules">Load Modules</button>
+      <h3 data-i18n="modules.title"></h3>
+      <button id="loadModules" data-i18n="modules.load"></button>
       <div id="moduleList"></div>
     </section>
 
     <section class="card">
-      <h3>Submission</h3>
-      <div><label>Selected Module</label><input id="selectedModuleId" readonly /></div>
-      <div><label>Raw Text</label><textarea id="rawText" rows="5">This is a practical response showing iteration and quality assurance.</textarea></div>
-      <div><label>Reflection</label><textarea id="reflectionText" rows="4">I refined the prompt twice and validated the final output manually.</textarea></div>
-      <div><label>Prompt Excerpt</label><textarea id="promptExcerpt" rows="3">Summarize and improve this draft with professional tone.</textarea></div>
-      <label><input class="inline" type="checkbox" id="ack" checked /> I acknowledge responsibility for submitted content</label>
-      <button id="createSubmission">Create Submission</button>
-      <div class="small">Submission ID: <span id="submissionId">-</span></div>
+      <h3 data-i18n="submission.title"></h3>
+      <div><label data-i18n="submission.selectedModule"></label><input id="selectedModuleId" readonly /></div>
+      <div><label data-i18n="submission.rawText"></label><textarea id="rawText" rows="5"></textarea></div>
+      <div><label data-i18n="submission.reflection"></label><textarea id="reflectionText" rows="4"></textarea></div>
+      <div><label data-i18n="submission.promptExcerpt"></label><textarea id="promptExcerpt" rows="3"></textarea></div>
+      <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack"></span></label>
+      <button id="createSubmission" data-i18n="submission.create"></button>
+      <div class="small"><span data-i18n="submission.submissionId"></span> <span id="submissionId">-</span></div>
     </section>
 
     <section class="card">
-      <h3>MCQ</h3>
-      <button id="startMcq">Start MCQ</button>
+      <h3 data-i18n="mcq.title"></h3>
+      <button id="startMcq" data-i18n="mcq.start"></button>
       <div id="mcqQuestions"></div>
-      <button id="submitMcq">Submit MCQ</button>
-      <div class="small">Attempt ID: <span id="attemptId">-</span></div>
+      <button id="submitMcq" data-i18n="mcq.submit"></button>
+      <div class="small"><span data-i18n="mcq.attemptId"></span> <span id="attemptId">-</span></div>
     </section>
 
     <section class="card">
-      <h3>Assessment</h3>
-      <button id="queueAssessment">Queue Assessment</button>
-      <button id="checkAssessment">Check Assessment</button>
-      <button id="checkResult">Check Result</button>
-      <div class="small">Result summary:</div>
-      <pre id="resultSummary">No result loaded.</pre>
+      <h3 data-i18n="assessment.title"></h3>
+      <button id="queueAssessment" data-i18n="assessment.queue"></button>
+      <button id="checkAssessment" data-i18n="assessment.checkAssessment"></button>
+      <button id="checkResult" data-i18n="assessment.checkResult"></button>
+      <div class="small" data-i18n="assessment.resultSummary"></div>
+      <pre id="resultSummary"></pre>
     </section>
 
     <section class="card">
-      <h3>Appeal</h3>
-      <div><label>Appeal Reason</label><textarea id="appealReason" rows="3">Requesting second review due to potential scoring mismatch.</textarea></div>
-      <button id="createAppeal">Create Appeal</button>
-      <div class="small">Appeal ID: <span id="appealId">-</span></div>
+      <h3 data-i18n="appeal.title"></h3>
+      <div><label data-i18n="appeal.reason"></label><textarea id="appealReason" rows="3"></textarea></div>
+      <button id="createAppeal" data-i18n="appeal.create"></button>
+      <div class="small"><span data-i18n="appeal.appealId"></span> <span id="appealId">-</span></div>
     </section>
 
     <section class="card">
-      <h3>My History</h3>
-      <button id="loadHistory">Load My Submission History</button>
-      <pre id="historySummary">No history loaded.</pre>
+      <h3 data-i18n="history.title"></h3>
+      <button id="loadHistory" data-i18n="history.load"></button>
+      <pre id="historySummary"></pre>
     </section>
 
     <section class="card">
-      <h3>Output</h3>
-      <pre id="output">Ready.</pre>
+      <h3 data-i18n="output.title"></h3>
+      <pre id="output"></pre>
     </section>
 
+    <script src="/static/i18n/participant-translations.js" type="module"></script>
     <script src="/static/participant.js" type="module"></script>
   </body>
   </html>

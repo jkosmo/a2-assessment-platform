@@ -1,4 +1,5 @@
 import type { AppRole } from "@prisma/client";
+import type { SupportedLocale } from "../i18n/locale.js";
 
 export type AuthPrincipal = {
   externalId: string;
@@ -14,4 +15,5 @@ export type RequestContext = {
   principal?: AuthPrincipal;
   userId?: string;
   roles?: AppRole[];
+  locale?: SupportedLocale;
 };

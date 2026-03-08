@@ -119,3 +119,6 @@ Azure staging/production runbook:
 
 Azure deployment workflow:
 - `.github/workflows/deploy-azure.yml`
+
+Internationalization baseline and translation workflow:
+- `doc/I18N.md`

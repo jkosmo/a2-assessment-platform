@@ -7,6 +7,37 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.25 - 2026-03-08
+### Summary
+Implemented i18n baseline (`en-GB`, `nb`, `nn`) across participant UI and core API user-facing messages.
+
+### Included
+- Added locale model and resolution helpers:
+  - `src/i18n/locale.ts`
+  - supported locales: `en-GB`, `nb`, `nn`
+  - resolution strategy: `x-locale` -> `Accept-Language` -> `DEFAULT_LOCALE` -> `en-GB`
+- Added backend localized message catalog:
+  - `src/i18n/messages.ts`
+  - localized `unauthorized`, `missing_bearer_token`, `forbidden_requires_roles`, `module_not_found`
+- Integrated locale-aware behavior in API:
+  - `authenticate` now resolves locale and stores it in request context
+  - role authorization (`requireAnyRole`) now returns localized forbidden messages
+  - module not-found messages are localized
+  - `GET /api/me` now returns `user.locale` and `supportedLocales`
+- Implemented participant UI internationalization baseline:
+  - externalized UI strings into `public/i18n/participant-translations.js`
+  - added language selector (en-GB/nb/nn) with persistence in local storage
+  - participant API calls send `x-locale`
+  - result/history summaries now use locale-aware date/number formatting
+- Added documentation:
+  - `doc/I18N.md` (adding locales, translation workflow, backend/frontend responsibilities)
+- Added regression tests:
+  - `test/m2-i18n-baseline.test.ts`
+  - verifies language switching/resolution and fallback behavior
+
+### Notes
+- This addresses issue #41 acceptance criteria for locale model, fallback, language switching, API localization baseline, formatting, tests, and documentation.
+
 ## 0.3.24 - 2026-03-08
 ### Summary
 Implemented MVP admin content management and publication flow for module governance.

@@ -4,6 +4,8 @@ import type { NextFunction, Request, Response } from "express";
 import { env } from "../config/env.js";
 import type { AuthPrincipal } from "./principal.js";
 import { getActiveRoles, syncEntraGroupRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
+import { resolveRequestLocale } from "../i18n/locale.js";
+import { t } from "../i18n/messages.js";
 
 const entraIssuer = env.ENTRA_TENANT_ID
   ? `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/v2.0`
@@ -89,6 +91,12 @@ function principalFromJwtPayload(payload: JWTPayload): AuthPrincipal {
 }
 
 export async function authenticate(request: Request, response: Response, next: NextFunction) {
+  const locale = resolveRequestLocale({
+    explicitLocale: request.header("x-locale"),
+    acceptLanguage: request.header("accept-language"),
+    defaultLocale: env.DEFAULT_LOCALE,
+  });
+
   try {
     const principal =
       env.AUTH_MODE === "mock"
@@ -111,13 +119,20 @@ export async function authenticate(request: Request, response: Response, next: N
       principal,
       userId: user.id,
       roles,
+      locale,
     };
 
     next();
   } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "";
+    const message =
+      rawMessage === "Missing Bearer token."
+        ? t(locale, "missing_bearer_token")
+        : t(locale, "unauthorized");
+
     response.status(401).json({
       error: "unauthorized",
-      message: error instanceof Error ? error.message : "Authentication failed.",
+      message,
     });
   }
 }

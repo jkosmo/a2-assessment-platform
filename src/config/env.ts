@@ -18,6 +18,7 @@ const envSchema = z.object({
   MOCK_DEFAULT_EMAIL: z.string().email().default("dev.user@company.com"),
   MOCK_DEFAULT_NAME: z.string().default("Dev User"),
   MOCK_DEFAULT_DEPARTMENT: z.string().default("Technology"),
+  DEFAULT_LOCALE: z.enum(["en-GB", "nb", "nn"]).default("en-GB"),
   LLM_MODE: z.enum(["stub", "azure_openai"]).default("stub"),
   LLM_STUB_MODEL_NAME: z.string().default("stub-model-v1"),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),

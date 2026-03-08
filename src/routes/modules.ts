@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { listModules, getModuleById, getActiveModuleVersion } from "../repositories/moduleRepository.js";
 import { startMcqAttempt, submitMcqAttempt } from "../services/mcqService.js";
+import { t } from "../i18n/messages.js";
 
 const modulesRouter = Router();
 const mcqStartQuerySchema = z.object({
@@ -28,9 +29,10 @@ modulesRouter.get("/", async (request, response) => {
 modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const module = await getModuleById(request.params.moduleId, roles);
+  const locale = request.context?.locale ?? "en-GB";
 
   if (!module) {
-    response.status(404).json({ error: "not_found", message: "Module not found." });
+    response.status(404).json({ error: "not_found", message: t(locale, "module_not_found") });
     return;
   }
 
@@ -40,11 +42,12 @@ modulesRouter.get("/:moduleId", async (request, response) => {
 modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const activeVersion = await getActiveModuleVersion(request.params.moduleId, roles);
+  const locale = request.context?.locale ?? "en-GB";
 
   if (!activeVersion) {
     response
       .status(404)
-      .json({ error: "not_found", message: "Active module version not found." });
+      .json({ error: "not_found", message: t(locale, "module_not_found") });
     return;
   }
 
