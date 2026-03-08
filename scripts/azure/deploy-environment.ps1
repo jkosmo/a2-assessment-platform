@@ -22,6 +22,8 @@ param(
   [string]$ObservabilityAlertEmail = "",
   [int]$QueueBacklogAlertThreshold = 5,
   [int]$LatencyAlertThresholdSeconds = 3,
+  [int]$AppealOverdueAlertThreshold = 1,
+  [int]$AppealSlaMonitorIntervalMs = 600000,
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30
 )
@@ -103,6 +105,8 @@ $deployment = az deployment group create `
               observabilityAlertEmail=$ObservabilityAlertEmail `
               queueBacklogAlertThreshold=$QueueBacklogAlertThreshold `
               latencyAlertThresholdSeconds=$LatencyAlertThresholdSeconds `
+              appealOverdueAlertThreshold=$AppealOverdueAlertThreshold `
+              appealSlaMonitorIntervalMs=$AppealSlaMonitorIntervalMs `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 

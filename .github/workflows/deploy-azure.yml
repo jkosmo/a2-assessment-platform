@@ -73,6 +73,8 @@ jobs:
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
             -QueueBacklogAlertThreshold "${{ vars.QUEUE_BACKLOG_ALERT_THRESHOLD || '5' }}" `
             -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
+            -AppealOverdueAlertThreshold "${{ vars.APPEAL_OVERDUE_ALERT_THRESHOLD || '1' }}" `
+            -AppealSlaMonitorIntervalMs "${{ vars.APPEAL_SLA_MONITOR_INTERVAL_MS || '600000' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
 
@@ -127,5 +129,7 @@ jobs:
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
             -QueueBacklogAlertThreshold "${{ vars.QUEUE_BACKLOG_ALERT_THRESHOLD || '5' }}" `
             -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
+            -AppealOverdueAlertThreshold "${{ vars.APPEAL_OVERDUE_ALERT_THRESHOLD || '1' }}" `
+            -AppealSlaMonitorIntervalMs "${{ vars.APPEAL_SLA_MONITOR_INTERVAL_MS || '600000' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"

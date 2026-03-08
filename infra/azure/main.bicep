@@ -65,6 +65,12 @@ param queueBacklogAlertThreshold int = 5
 @description('Average response time threshold in seconds for latency alert.')
 param latencyAlertThresholdSeconds int = 3
 
+@description('Overdue appeal count threshold for escalation alert.')
+param appealOverdueAlertThreshold int = 1
+
+@description('Appeal SLA monitor interval in milliseconds.')
+param appealSlaMonitorIntervalMs int = 600000
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
@@ -90,6 +96,17 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where maxPendingJobs >= __THRESHOLD__
 '''
 var queueBacklogAlertQuery = replace(queueBacklogAlertQueryTemplate, '__THRESHOLD__', string(queueBacklogAlertThreshold))
+var appealOverdueAlertQueryTemplate = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(10m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"appeal_overdue_detected"'
+| extend overdueAppeals = toint(extract('"overdueAppeals":([0-9]+)', 1, raw))
+| where isnotnull(overdueAppeals)
+| summarize maxOverdueAppeals = max(overdueAppeals)
+| where maxOverdueAppeals >= __THRESHOLD__
+'''
+var appealOverdueAlertQuery = replace(appealOverdueAlertQueryTemplate, '__THRESHOLD__', string(appealOverdueAlertThreshold))
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsWorkspaceName
@@ -217,6 +234,14 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'ASSESSMENT_JOB_MAX_ATTEMPTS'
           value: string(assessmentJobMaxAttempts)
+        }
+        {
+          name: 'APPEAL_SLA_MONITOR_INTERVAL_MS'
+          value: string(appealSlaMonitorIntervalMs)
+        }
+        {
+          name: 'APPEAL_OVERDUE_ALERT_THRESHOLD'
+          value: string(appealOverdueAlertThreshold)
         }
         {
           name: 'BOOTSTRAP_SEED'
@@ -383,6 +408,45 @@ resource queueBacklogAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' =
       allOf: [
         {
           query: queueBacklogAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
+resource appealOverdueAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-appeal-${suffix}')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'Overdue appeals detected'
+    description: 'Detects overdue appeals and triggers escalation alerting.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT10M'
+    windowSize: 'PT10M'
+    criteria: {
+      allOf: [
+        {
+          query: appealOverdueAlertQuery
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0

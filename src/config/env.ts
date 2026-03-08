@@ -24,6 +24,8 @@ const envSchema = z.object({
   APPEAL_FIRST_RESPONSE_SLA_HOURS: z.coerce.number().positive().default(24),
   APPEAL_RESOLUTION_SLA_HOURS: z.coerce.number().positive().default(72),
   APPEAL_AT_RISK_RATIO: z.coerce.number().positive().max(1).default(0.75),
+  APPEAL_SLA_MONITOR_INTERVAL_MS: z.coerce.number().int().positive().default(600000),
+  APPEAL_OVERDUE_ALERT_THRESHOLD: z.coerce.number().int().positive().default(1),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),

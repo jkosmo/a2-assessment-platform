@@ -7,6 +7,38 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.32 - 2026-03-08
+### Summary
+Implemented automated overdue-appeal escalation monitoring and Azure alert routing baseline.
+
+### Included
+- Added runtime appeal SLA monitor service:
+  - `src/services/appealSlaMonitorService.ts`
+  - emits `appeal_sla_backlog` snapshots on interval
+  - emits `appeal_overdue_detected` error events when overdue threshold is breached
+- Wired monitor lifecycle into app runtime:
+  - `src/index.ts` now starts/stops appeal SLA monitor with worker lifecycle.
+- Added configuration keys:
+  - `APPEAL_SLA_MONITOR_INTERVAL_MS` (default `600000`)
+  - `APPEAL_OVERDUE_ALERT_THRESHOLD` (default `1`)
+  - reflected in `src/config/env.ts`, `.env.example`, `.env.test`, and Azure env examples.
+- Extended Azure observability infrastructure:
+  - `infra/azure/main.bicep` now provisions scheduled-query alert `Overdue appeals detected`
+  - App Service settings now include monitor interval + overdue threshold
+  - deploy pipeline wiring added in:
+    - `scripts/azure/deploy-environment.ps1`
+    - `.github/workflows/deploy-azure.yml`
+- Documentation updates:
+  - `doc/OBSERVABILITY_RUNBOOK.md`
+  - `doc/AZURE_ENVIRONMENTS.md`
+  - `doc/APPEALS_OPERATING_MODEL.md`
+- Added automated test coverage:
+  - `test/m2-appeal-sla-monitor.test.ts`
+  - verifies backlog classification and overdue threshold breach logic.
+
+### Notes
+- This implements issue `#45` acceptance criteria for automated overdue appeal escalation signals and routing baseline.
+
 ## 0.3.31 - 2026-03-08
 ### Summary
 Implemented explicit first-response tracking for appeals by adding `claimedAt` and wiring first-response duration/SLA metrics through queue and reporting.

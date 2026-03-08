@@ -1,6 +1,7 @@
 import { env } from "./config/env.js";
 import { app } from "./app.js";
 import { startAssessmentWorker, stopAssessmentWorker } from "./services/assessmentJobService.js";
+import { startAppealSlaMonitor, stopAppealSlaMonitor } from "./services/appealSlaMonitorService.js";
 import { spawn } from "node:child_process";
 import path from "node:path";
 
@@ -11,6 +12,7 @@ const server = app.listen(env.PORT, () => {
 });
 
 startAssessmentWorker();
+startAppealSlaMonitor();
 
 function startBootstrapSeed() {
   const scriptPath = path.resolve(process.cwd(), "scripts", "runtime", "bootstrapSeed.mjs");
@@ -35,6 +37,7 @@ function startBootstrapSeed() {
 }
 
 const gracefulShutdown = () => {
+  stopAppealSlaMonitor();
   stopAssessmentWorker();
   server.close(() => process.exit(0));
 };

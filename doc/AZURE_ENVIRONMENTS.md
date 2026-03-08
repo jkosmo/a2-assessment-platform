@@ -24,6 +24,7 @@ Each environment must use a dedicated resource group and be deployable via CI/CD
 - latency metric alert (App Service)
 - LLM failure log alert
 - assessment queue backlog log alert
+- appeal overdue escalation log alert
 - Single-instance non-critical setup.
 - SQLite file persisted at `/home/site/data/app.db` (non-critical baseline only).
 
@@ -61,6 +62,8 @@ For each environment, define variables/secrets used by workflow:
 - `OBSERVABILITY_ALERT_EMAIL` (optional)
 - `QUEUE_BACKLOG_ALERT_THRESHOLD` (optional, default `5`)
 - `LATENCY_ALERT_THRESHOLD_SECONDS` (optional, default `3`)
+- `APPEAL_OVERDUE_ALERT_THRESHOLD` (optional, default `1`)
+- `APPEAL_SLA_MONITOR_INTERVAL_MS` (optional, default `600000`)
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
 
@@ -84,4 +87,4 @@ For each environment, define variables/secrets used by workflow:
 4. Call `/healthz` and `/api/me`.
 5. Validate budget object exists (if budget email configured).
 6. Validate production deploy is blocked until manual approval.
-7. Validate alerts exist in Azure Monitor for latency, LLM failures, and queue backlog.
+7. Validate alerts exist in Azure Monitor for latency, LLM failures, queue backlog, and overdue appeals.

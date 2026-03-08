@@ -5,6 +5,7 @@ This runbook covers first-response operations for:
 - HTTP latency degradation
 - LLM evaluation failures
 - Assessment queue backlog growth
+- Overdue appeal escalation
 
 This baseline is implemented through:
 - Correlation ID request logging (`x-correlation-id`)
@@ -20,6 +21,8 @@ This baseline is implemented through:
 ### Structured Events
 - `llm_evaluation_failed`
 - `assessment_queue_backlog`
+- `appeal_sla_backlog`
+- `appeal_overdue_detected`
 - `http_request`
 
 ## Alert Baseline
@@ -38,6 +41,11 @@ This baseline is implemented through:
 - Window/Frequency: 10m / 10m
 - Severity: Sev2
 
+### Appeal Overdue Alert
+- Signal: Log query for `appeal_overdue_detected` with `overdueAppeals >= threshold`
+- Window/Frequency: 10m / 10m
+- Severity: Sev2
+
 ## First Response Checklist
 1. Confirm service health:
    - `GET /healthz`
@@ -50,7 +58,11 @@ This baseline is implemented through:
    - retry transient jobs
    - reduce load/test traffic
    - rollback last deploy if regression is confirmed
-7. Record incident summary and follow-up issue.
+7. For appeal-overdue incidents:
+   - confirm queue ownership and assign handler
+   - acknowledge alert in operations channel/ticket system
+   - capture expected resolution timestamp
+8. Record incident summary and follow-up issue.
 
 ## KQL Queries
 Replace `<workspace-id>` and adjust time window as needed.
@@ -86,6 +98,19 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | extend durationMs = todouble(extract("\"durationMs\":([0-9]+)", 1, raw))
 | where isnotnull(durationMs)
 | summarize p95DurationMs = percentile(durationMs, 95), maxDurationMs = max(durationMs) by bin(TimeGenerated, 5m)
+| order by TimeGenerated desc
+```
+
+### Overdue Appeals (recent)
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(1h)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has "\"event\":\"appeal_overdue_detected\""
+| extend overdueAppeals = toint(extract("\"overdueAppeals\":([0-9]+)", 1, raw))
+| extend overdueThreshold = toint(extract("\"overdueThreshold\":([0-9]+)", 1, raw))
+| extend oldestOverdueHours = todouble(extract("\"oldestOverdueHours\":([0-9.]+)", 1, raw))
+| project TimeGenerated, overdueAppeals, overdueThreshold, oldestOverdueHours, raw
 | order by TimeGenerated desc
 ```
 

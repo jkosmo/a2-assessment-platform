@@ -36,6 +36,8 @@ Configured via environment:
 - `APPEAL_FIRST_RESPONSE_SLA_HOURS` (default `24`)
 - `APPEAL_RESOLUTION_SLA_HOURS` (default `72`)
 - `APPEAL_AT_RISK_RATIO` (default `0.75`)
+- `APPEAL_OVERDUE_ALERT_THRESHOLD` (default `1`)
+- `APPEAL_SLA_MONITOR_INTERVAL_MS` (default `600000`)
 
 Derived states:
 - `ON_TRACK`: appeal age below at-risk thresholds.
@@ -55,7 +57,8 @@ Where available:
    - Daily review by Appeal Handler lead.
    - Re-prioritize queue; assign explicit owner.
 2. Overdue:
-   - Immediate admin notification.
+   - Automatic operational alert event `appeal_overdue_detected` is emitted.
+   - Immediate admin notification via Azure Monitor alert routing (action group).
    - Admin reassigns/claims appeal and sets expected resolution time.
 3. Persistent overdue (over 2x resolution SLA):
    - Escalate to service owner and product owner for capacity or process action.
@@ -91,5 +94,4 @@ To test escalation behavior quickly in staging:
 4. Restore normal SLA settings after test.
 
 ## Follow-up Backlog (Post-MVP hardening)
-- #45 Add automatic escalation alerting for overdue appeals.
 - #46 Add participant notification channel (email/Teams) for appeal status transitions.
