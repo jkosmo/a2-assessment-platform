@@ -7,6 +7,27 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.29 - 2026-03-08
+### Summary
+Localized module titles and MCQ content (questions/options) for `nb` and `nn` with English fallback.
+
+### Included
+- Added backend content translation dictionaries:
+  - `src/i18n/contentMessages.ts`
+  - `src/i18n/content.ts`
+- Localized module content responses by resolved request locale:
+  - `GET /api/modules`
+  - `GET /api/modules/:moduleId`
+  - `GET /api/modules/:moduleId/active-version`
+  - `GET /api/submissions/history` (module title in history rows)
+- Localized MCQ start payload by locale:
+  - `GET /api/modules/:moduleId/mcq/start` now localizes `stem` and `options` fields
+- Added i18n regression test coverage for localized module title and MCQ payload:
+  - `test/m2-i18n-baseline.test.ts`
+
+### Notes
+- Translation uses source-text mapping with fallback to original English content when no translation exists.
+
 ## 0.3.28 - 2026-03-08
 ### Summary
 Fixed participant UI locale switching so default textarea values are updated when language changes.

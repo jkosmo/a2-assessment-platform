@@ -3,8 +3,15 @@ import { prisma } from "../db/prisma.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import { enqueueAssessmentJob } from "./assessmentJobService.js";
 import { recordAuditEvent } from "./auditService.js";
+import type { SupportedLocale } from "../i18n/locale.js";
+import { localizeContentArray, localizeContentText } from "../i18n/content.js";
 
-export async function startMcqAttempt(moduleId: string, submissionId: string, userId: string) {
+export async function startMcqAttempt(
+  moduleId: string,
+  submissionId: string,
+  userId: string,
+  locale: SupportedLocale = "en-GB",
+) {
   const submission = await prisma.submission.findFirst({
     where: { id: submissionId, userId, moduleId },
     include: { moduleVersion: true },
@@ -44,8 +51,8 @@ export async function startMcqAttempt(moduleId: string, submissionId: string, us
     attemptId: attempt.id,
     questions: questions.map((question) => ({
       id: question.id,
-      stem: question.stem,
-      options: JSON.parse(question.optionsJson) as string[],
+      stem: localizeContentText(locale, question.stem) ?? question.stem,
+      options: localizeContentArray(locale, JSON.parse(question.optionsJson) as string[]),
     })),
   };
 }

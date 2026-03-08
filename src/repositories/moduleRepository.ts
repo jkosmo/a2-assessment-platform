@@ -1,6 +1,8 @@
 import type { AppRole as AppRoleType, Prisma } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import type { SupportedLocale } from "../i18n/locale.js";
+import { localizeContentText } from "../i18n/content.js";
 
 const ADMIN_READ_ROLES: AppRoleType[] = [
   AppRole.ADMINISTRATOR,
@@ -33,7 +35,7 @@ const moduleSummarySelect = {
   },
 } satisfies Prisma.ModuleSelect;
 
-export async function listModules(roles: AppRoleType[], userId?: string) {
+export async function listModules(roles: AppRoleType[], userId?: string, locale: SupportedLocale = "en-GB") {
   const now = new Date();
   const adminRead = hasAdminRead(roles);
 
@@ -52,7 +54,11 @@ export async function listModules(roles: AppRoleType[], userId?: string) {
   });
 
   if (!userId) {
-    return modules;
+    return modules.map((module) => ({
+      ...module,
+      title: localizeContentText(locale, module.title) ?? module.title,
+      description: localizeContentText(locale, module.description),
+    }));
   }
 
   return Promise.all(
@@ -68,6 +74,8 @@ export async function listModules(roles: AppRoleType[], userId?: string) {
       });
       return {
         ...module,
+        title: localizeContentText(locale, module.title) ?? module.title,
+        description: localizeContentText(locale, module.description),
         participantStatus: latest
           ? {
               latestSubmissionId: latest.id,
@@ -80,11 +88,15 @@ export async function listModules(roles: AppRoleType[], userId?: string) {
   );
 }
 
-export async function getModuleById(moduleId: string, roles: AppRoleType[]) {
+export async function getModuleById(
+  moduleId: string,
+  roles: AppRoleType[],
+  locale: SupportedLocale = "en-GB",
+) {
   const now = new Date();
   const adminRead = hasAdminRead(roles);
 
-  return prisma.module.findFirst({
+  const module = await prisma.module.findFirst({
     where: {
       id: moduleId,
       ...(adminRead
@@ -99,15 +111,29 @@ export async function getModuleById(moduleId: string, roles: AppRoleType[]) {
     },
     select: moduleSummarySelect,
   });
+
+  if (!module) {
+    return null;
+  }
+
+  return {
+    ...module,
+    title: localizeContentText(locale, module.title) ?? module.title,
+    description: localizeContentText(locale, module.description),
+  };
 }
 
-export async function getActiveModuleVersion(moduleId: string, roles: AppRoleType[]) {
-  const module = await getModuleById(moduleId, roles);
+export async function getActiveModuleVersion(
+  moduleId: string,
+  roles: AppRoleType[],
+  locale: SupportedLocale = "en-GB",
+) {
+  const module = await getModuleById(moduleId, roles, locale);
   if (!module || !module.activeVersion) {
     return null;
   }
 
-  return prisma.moduleVersion.findUnique({
+  const activeVersion = await prisma.moduleVersion.findUnique({
     where: { id: module.activeVersion.id },
     select: {
       id: true,
@@ -122,4 +148,14 @@ export async function getActiveModuleVersion(moduleId: string, roles: AppRoleTyp
       publishedAt: true,
     },
   });
+
+  if (!activeVersion) {
+    return null;
+  }
+
+  return {
+    ...activeVersion,
+    taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
+    guidanceText: localizeContentText(locale, activeVersion.guidanceText),
+  };
 }

@@ -22,14 +22,15 @@ const mcqSubmitBodySchema = z.object({
 modulesRouter.get("/", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const userId = request.context?.userId;
-  const modules = await listModules(roles, userId);
+  const locale = request.context?.locale ?? "en-GB";
+  const modules = await listModules(roles, userId, locale);
   response.json({ modules });
 });
 
 modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];
-  const module = await getModuleById(request.params.moduleId, roles);
   const locale = request.context?.locale ?? "en-GB";
+  const module = await getModuleById(request.params.moduleId, roles, locale);
 
   if (!module) {
     response.status(404).json({ error: "not_found", message: t(locale, "module_not_found") });
@@ -41,8 +42,8 @@ modulesRouter.get("/:moduleId", async (request, response) => {
 
 modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   const roles = request.context?.roles ?? [];
-  const activeVersion = await getActiveModuleVersion(request.params.moduleId, roles);
   const locale = request.context?.locale ?? "en-GB";
+  const activeVersion = await getActiveModuleVersion(request.params.moduleId, roles, locale);
 
   if (!activeVersion) {
     response
@@ -68,7 +69,8 @@ modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
   }
 
   try {
-    const result = await startMcqAttempt(request.params.moduleId, parsed.data.submissionId, userId);
+    const locale = request.context?.locale ?? "en-GB";
+    const result = await startMcqAttempt(request.params.moduleId, parsed.data.submissionId, userId, locale);
     response.json(result);
   } catch (error) {
     response.status(400).json({

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
 import { createSubmissionAppeal } from "../services/appealService.js";
+import { localizeContentText } from "../i18n/content.js";
 
 const createSubmissionSchema = z.object({
   moduleId: z.string().min(1),
@@ -117,13 +118,17 @@ submissionsRouter.get("/history", async (request, response) => {
   });
 
   const history = submissions.map((submission) => {
+    const locale = request.context?.locale ?? "en-GB";
     const latestDecision = submission.decisions[0] ?? null;
     const latestMcq = submission.mcqAttempts[0] ?? null;
     const latestLlm = submission.llmEvaluations[0] ?? null;
 
     return {
       submissionId: submission.id,
-      module: submission.module,
+      module: {
+        ...submission.module,
+        title: localizeContentText(locale, submission.module.title) ?? submission.module.title,
+      },
       submittedAt: submission.submittedAt,
       status: submission.submissionStatus,
       latestDecision,

@@ -71,4 +71,65 @@ describe("MVP i18n baseline", () => {
     expect(response.status).toBe(200);
     expect(response.body.user.locale).toBe("nn");
   });
+
+  it("localizes module title and MCQ content for nb locale", async () => {
+    const modulesEn = await request(app)
+      .get("/api/modules")
+      .set({
+        ...participantHeaders,
+        "x-locale": "en-GB",
+      });
+    expect(modulesEn.status).toBe(200);
+
+    const seedModule = (modulesEn.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+
+    const moduleNb = await request(app)
+      .get(`/api/modules/${seedModule.id}`)
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      });
+    expect(moduleNb.status).toBe(200);
+    expect(moduleNb.body.module.title).toBe("Grunnleggende generativ KI");
+
+    const submissionResponse = await request(app)
+      .post("/api/submissions")
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      })
+      .send({
+        moduleId: seedModule.id,
+        deliveryType: "text",
+        rawText: "Praktisk svar for i18n-test.",
+        reflectionText: "Jeg testet språkveksling og validerte resultatet.",
+        promptExcerpt: "Oppsummer innholdet med tydelig struktur.",
+        responsibilityAcknowledged: true,
+      });
+    expect(submissionResponse.status).toBe(201);
+    const submissionId = submissionResponse.body.submission.id as string;
+
+    const mcqStartResponse = await request(app)
+      .get(`/api/modules/${seedModule.id}/mcq/start`)
+      .query({ submissionId })
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      });
+    expect(mcqStartResponse.status).toBe(200);
+    expect(mcqStartResponse.body.questions.length).toBeGreaterThan(0);
+
+    const stems = (mcqStartResponse.body.questions as Array<{ stem: string }>).map((question) => question.stem);
+    expect(stems).toContain("Hva er anbefalt ansvarsgrense for modellen?");
+
+    const options = (mcqStartResponse.body.questions as Array<{ options: string[] }>).flatMap(
+      (question) => question.options,
+    );
+    expect(options).toContain("Backend eier endelig beslutning");
+  });
 });
