@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.0 - 2026-03-08
+### Summary
+Completed implementation of next-step tracks: dev-tenant auth hardening and Azure staging/production automation baseline.
+
+### Included
+- Dev-tenant auth enhancements:
+- Hardened Entra bootstrap script with API scope + client delegated permission setup.
+- Generated role-map file support for safer config-based mapping.
+- Extended onboarding/smoke-test guide for testers.
+- Added automated integration test for group-claim to role mapping.
+- Azure provisioning/deployment automation baseline:
+- Bicep template for cost-optimized App Service deployment per environment.
+- End-to-end deployment script for dedicated RG per environment.
+- Optional budget/alert cost-guardrail script.
+- GitHub Actions workflow for staging auto-deploy and production manual approval gate.
+- Azure environment plan and runbook docs.
+- Runtime migration script for deployed environments.
+
+### Notes
+- Production approval enforcement depends on GitHub Environment protection settings.
+- Dev-tenant auth issues remain open until tenant-side validation is completed.
+
 ## 0.2.0 - 2026-03-08
 ### Summary
 Parallel implementation of track A (dev-tenant auth setup baseline) and track B (M1 core assessment flow).

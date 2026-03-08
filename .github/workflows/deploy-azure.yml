@@ -1,0 +1,121 @@
+name: Deploy Azure Environments
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: "Deploy production after staging (requires environment approval)"
+        required: false
+        default: "false"
+      ref:
+        description: "Git ref to deploy"
+        required: false
+        default: "main"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy staging environment
+        shell: pwsh
+        run: |
+          ./scripts/azure/deploy-environment.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "staging" `
+            -Location "${{ vars.AZURE_LOCATION }}" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            -AppNamePrefix "${{ vars.AZURE_APP_NAME_PREFIX }}" `
+            -AppServiceSkuName "${{ vars.AZURE_APP_SERVICE_SKU }}" `
+            -CostCenter "${{ vars.AZURE_COST_CENTER }}" `
+            -Owner "${{ vars.AZURE_OWNER }}" `
+            -AuthMode "${{ vars.AUTH_MODE }}" `
+            -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
+            -EntraSyncGroupRoles "${{ vars.ENTRA_SYNC_GROUP_ROLES }}" `
+            -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `
+            -LlmMode "${{ vars.LLM_MODE }}" `
+            -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
+            -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
+            -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
+            -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
+            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
+
+  deploy-production:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_production == 'true' }}
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy production environment
+        shell: pwsh
+        run: |
+          ./scripts/azure/deploy-environment.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "production" `
+            -Location "${{ vars.AZURE_LOCATION }}" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            -AppNamePrefix "${{ vars.AZURE_APP_NAME_PREFIX }}" `
+            -AppServiceSkuName "${{ vars.AZURE_APP_SERVICE_SKU }}" `
+            -CostCenter "${{ vars.AZURE_COST_CENTER }}" `
+            -Owner "${{ vars.AZURE_OWNER }}" `
+            -AuthMode "${{ vars.AUTH_MODE }}" `
+            -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
+            -EntraSyncGroupRoles "${{ vars.ENTRA_SYNC_GROUP_ROLES }}" `
+            -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `
+            -LlmMode "${{ vars.LLM_MODE }}" `
+            -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
+            -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
+            -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
+            -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
+            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"

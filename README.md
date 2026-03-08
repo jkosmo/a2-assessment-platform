@@ -113,3 +113,9 @@ Dev-tenant auth onboarding and smoke tests are documented in:
 
 Dev-tenant auth bootstrap script:
 - `scripts/entra/setup-dev-tenant-auth.ps1`
+
+Azure staging/production runbook:
+- `doc/AZURE_ENVIRONMENTS.md`
+
+Azure deployment workflow:
+- `.github/workflows/deploy-azure.yml`

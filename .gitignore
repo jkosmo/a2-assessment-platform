@@ -1,7 +1,8 @@
 node_modules/
 dist/
 .env
+.env.entra.dev.generated
 *.db
 *.db-journal
 coverage/
-
+config/entra-group-role-map.generated.json
