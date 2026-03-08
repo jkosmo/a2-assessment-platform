@@ -1,0 +1,103 @@
+name: Deployment Incident (RCA)
+description: Track a deployment/runtime failure with mandatory root-cause-first evidence.
+title: "[Incident][Deploy]: "
+labels:
+  - type:ops
+body:
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Describe affected environment, user impact, and severity.
+      placeholder: Staging deploy failing, API unavailable for testers, severity medium.
+    validations:
+      required: true
+
+  - type: input
+    id: started_at
+    attributes:
+      label: Incident Start (UTC)
+      placeholder: "2026-03-08 12:45 UTC"
+    validations:
+      required: true
+
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Current Best Root-Cause Hypothesis
+      description: One sentence, testable hypothesis.
+      placeholder: Deployment package omits hidden runtime files required at startup.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: evidence_order
+    attributes:
+      label: Evidence Collected (in required order)
+      description: Complete in sequence before proposing a fix.
+      options:
+        - label: Workflow/job logs reviewed.
+          required: true
+        - label: Effective app/runtime settings verified.
+          required: true
+        - label: Deployed package contents verified.
+          required: true
+        - label: Startup contract validated (entrypoint, prestart/start, port/probe).
+          required: true
+        - label: Runtime data-path validated (DB/API behavior).
+          required: true
+
+  - type: checkboxes
+    id: artifact_contract
+    attributes:
+      label: Artifact Contract Validation
+      options:
+        - label: Expected compiled entrypoint exists in deployed package.
+          required: true
+        - label: Required runtime scripts exist in deployed package.
+          required: true
+        - label: Hidden runtime dependency artifacts exist (if applicable).
+          required: true
+        - label: Runtime remains valid after dependency pruning.
+          required: true
+
+  - type: textarea
+    id: attempted_changes
+    attributes:
+      label: Changes Attempted
+      description: One deploy-affecting change per iteration, with result.
+      placeholder: |
+        Attempt 1: ...
+        Result: ...
+        Attempt 2: ...
+        Result: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix_plan
+    attributes:
+      label: Smallest Next Fix
+      description: Propose the smallest change that addresses root cause.
+      placeholder: Update packaging command to include hidden directories and redeploy.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: smoke_gate
+    attributes:
+      label: Post-Deploy Smoke Gate
+      options:
+        - label: Health endpoint check passed.
+          required: true
+        - label: Critical API smoke path check passed.
+          required: true
+
+  - type: textarea
+    id: closeout
+    attributes:
+      label: Incident Closeout
+      description: Final root cause, why prior fixes failed, and prevention actions.
+      placeholder: Root cause was..., prior fixes failed because..., prevention is...
+    validations:
+      required: true

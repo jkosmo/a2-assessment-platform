@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.16 - 2026-03-08
+### Summary
+Strengthened engineering process to enforce root-cause-first handling of deployment incidents.
+
+### Included
+- Updated `doc/AI_WORKFLOW.md` with a mandatory deploy/runtime RCA-first workflow:
+  - single hypothesis first
+  - fixed evidence order
+  - artifact contract checks
+  - one-change-per-iteration budget
+  - post-deploy smoke gate
+  - explicit escalation criteria
+- Updated `.github/pull_request_template.md` with Deployment RCA guardrails for deploy/runtime changes.
+- Added `.github/ISSUE_TEMPLATE/deployment-incident.yml` to standardize incident capture and closeout.
+
+### Notes
+- Goal is to reduce trial-and-error loops and improve convergence speed in staging/production incident work.
+
 ## 0.3.15 - 2026-03-08
 ### Summary
 Fixed CI workflow database setup to use test environment variables consistently.

@@ -45,6 +45,14 @@
 - [ ] Production requires human approval and has not been auto-deployed.
 - Rollback plan:
 
+## Deployment RCA Guardrails (Required for deploy/runtime changes)
+- [ ] I documented one testable root-cause hypothesis before applying the fix.
+- [ ] I validated evidence in order: workflow logs -> app settings -> deployed artifact contents -> startup contract -> runtime data-path.
+- [ ] I verified deployed artifact contract (entrypoint, runtime scripts, hidden runtime dependencies, prune safety).
+- [ ] I verified post-deploy smoke checks (`/healthz` and one critical API path).
+- RCA summary (single sentence):
+- Evidence links/notes:
+
 ## Checklist
 - [ ] Acceptance criteria are met.
 - [ ] Security/privacy/traceability impacts were reviewed.

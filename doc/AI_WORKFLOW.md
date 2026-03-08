@@ -106,6 +106,49 @@ For every issue, explicitly evaluate:
 If answer is yes, include the work in the same PR when feasible.
 If deferred, create a follow-up issue with reason and priority.
 
+## Deploy/Runtime Incident Workflow (RCA-First)
+Use this flow for persistent staging/production deployment failures. Do not keep patching the latest visible symptom.
+
+### 1. Single hypothesis first
+- Write one testable root-cause hypothesis before changing code.
+- State what evidence would confirm or falsify it.
+
+### 2. Evidence order (mandatory)
+Collect evidence in this order:
+1. Workflow/job logs.
+2. Effective runtime/app settings in target environment.
+3. Deployed artifact contents (what is actually in the package).
+4. Startup contract validation (entrypoint, prestart/start behavior, port/probe assumptions).
+5. Runtime data-path verification (DB/API behavior).
+
+### 3. Artifact contract check (for package deployments)
+Verify deployment artifact is self-contained and startup-safe:
+- Compiled entrypoint exists at expected path.
+- Runtime scripts required at startup exist.
+- Hidden runtime dependencies are present (for example Prisma `.prisma` artifacts).
+- Runtime dependencies remain valid after pruning.
+
+### 4. Change budget per iteration
+- Make at most one deployment-affecting change per iteration.
+- Re-run deploy and capture outcomes against the same evidence checklist.
+- If two consecutive attempts fail, stop and reset with a new hypothesis and evidence matrix.
+
+### 5. Post-deploy smoke gate
+A deployment is not considered complete until smoke checks pass:
+1. Health endpoint is `200`.
+2. Critical API smoke path returns expected baseline data in staging.
+
+### 6. Escalation rule
+Escalate when:
+- No convergence after 45 minutes, or
+- Two hypotheses are contradicted by evidence.
+
+Escalation output must include:
+- Current best root-cause statement.
+- Evidence collected.
+- What was ruled out.
+- Smallest next experiment.
+
 ## Configuration-First Policy
 Move frequently changing behavior to config instead of code:
 - Thresholds and scoring parameters.
@@ -168,3 +211,4 @@ Update relevant docs when behavior changes:
 - Test coverage impact is described.
 - Docs impact is described.
 - Rollback considerations are noted.
+- For deploy/runtime changes, RCA hypothesis and artifact/startup evidence are included.
