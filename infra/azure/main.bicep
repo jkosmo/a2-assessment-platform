@@ -174,6 +174,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: string(assessmentJobMaxAttempts)
         }
         {
+          name: 'BOOTSTRAP_SEED'
+          value: environmentName == 'production' ? 'false' : 'true'
+        }
+        {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
           value: 'true'
         }

@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.13 - 2026-03-08
+### Summary
+Implemented automatic non-production bootstrap seeding so stage has testable data after deploy.
+
+### Included
+- Added `scripts/runtime/bootstrapSeed.mjs` with idempotent upserts for users, roles, module, rubric, prompt, MCQ set/questions, and active module version.
+- Updated `prestart` to run migrations and then bootstrap seed.
+- Added `BOOTSTRAP_SEED` app setting in Bicep (`true` for staging, `false` for production).
+
+### Notes
+- This enables repeatable stage data provisioning without running manual seed commands.
+
 ## 0.3.12 - 2026-03-08
 ### Summary
 Fixed stage participant test console to send role headers required by API authorization.
