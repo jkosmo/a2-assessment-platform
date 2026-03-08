@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { createSubmission, getOwnedSubmission } from "../services/submissionService.js";
+import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
 import { createSubmissionAppeal } from "../services/appealService.js";
 
 const createSubmissionSchema = z.object({
@@ -15,6 +15,9 @@ const createSubmissionSchema = z.object({
 
 const createAppealSchema = z.object({
   appealReason: z.string().trim().min(5),
+});
+const historyQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 const submissionsRouter = Router();
@@ -95,6 +98,43 @@ submissionsRouter.post("/:submissionId/appeals", async (request, response) => {
   }
 });
 
+submissionsRouter.get("/history", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const parsed = historyQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  const submissions = await getOwnedSubmissionHistory({
+    userId,
+    limit: parsed.data.limit,
+  });
+
+  const history = submissions.map((submission) => {
+    const latestDecision = submission.decisions[0] ?? null;
+    const latestMcq = submission.mcqAttempts[0] ?? null;
+    const latestLlm = submission.llmEvaluations[0] ?? null;
+
+    return {
+      submissionId: submission.id,
+      module: submission.module,
+      submittedAt: submission.submittedAt,
+      status: submission.submissionStatus,
+      latestDecision,
+      latestMcqAttempt: latestMcq,
+      latestLlmEvaluation: latestLlm,
+    };
+  });
+
+  response.json({ history });
+});
+
 submissionsRouter.get("/:submissionId", async (request, response) => {
   const userId = request.context?.userId;
   if (!userId) {
@@ -127,14 +167,50 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
   const decision = submission.decisions[0] ?? null;
   const llmEvaluation = submission.llmEvaluations[0] ?? null;
   const mcqAttempt = submission.mcqAttempts.find((attempt) => attempt.completedAt !== null) ?? null;
+  const llmStructured = parseLlmResponse(llmEvaluation?.responseJson);
+
+  const scoreComponents = {
+    mcqScaledScore: decision?.mcqScaledScore ?? mcqAttempt?.scaledScore ?? null,
+    practicalScaledScore: decision?.practicalScaledScore ?? llmEvaluation?.practicalScoreScaled ?? null,
+    totalScore: decision?.totalScore ?? null,
+  };
+
+  const statusExplanation =
+    submission.submissionStatus === "UNDER_REVIEW"
+      ? "Your submission is under manual review because confidence/red-flag rules require a human decision."
+      : submission.submissionStatus === "COMPLETED"
+        ? "Final decision is available."
+        : "Assessment is still processing.";
 
   response.json({
     submissionId: submission.id,
     status: submission.submissionStatus,
+    statusExplanation,
+    scoreComponents,
     decision,
     llmEvaluation,
     mcqAttempt,
+    participantGuidance: {
+      decisionReason: decision?.decisionReason ?? null,
+      confidenceNote: llmEvaluation?.confidenceNote ?? null,
+      improvementAdvice: llmStructured?.improvement_advice ?? [],
+      criterionRationales: llmStructured?.criterion_rationales ?? null,
+    },
   });
 });
+
+function parseLlmResponse(rawJson: string | undefined) {
+  if (!rawJson) {
+    return null;
+  }
+  try {
+    return JSON.parse(rawJson) as {
+      improvement_advice?: string[];
+      criterion_rationales?: Record<string, string>;
+    };
+  } catch {
+    return null;
+  }
+}
 
 export { submissionsRouter };

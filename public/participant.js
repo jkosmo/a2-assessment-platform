@@ -7,6 +7,8 @@ const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 const appealIdLabel = document.getElementById("appealId");
 const appVersionLabel = document.getElementById("appVersion");
+const resultSummary = document.getElementById("resultSummary");
+const historySummary = document.getElementById("historySummary");
 
 let currentQuestions = [];
 
@@ -196,6 +198,23 @@ document.getElementById("checkResult").addEventListener("click", async () => {
       throw new Error("Create submission first.");
     }
     const body = await api(`/api/submissions/${submissionId}/result`);
+    resultSummary.textContent = JSON.stringify(
+      {
+        status: body.status,
+        statusExplanation: body.statusExplanation,
+        scoreComponents: body.scoreComponents,
+        decision: body.decision
+          ? {
+              decisionType: body.decision.decisionType,
+              passFailTotal: body.decision.passFailTotal,
+              decisionReason: body.decision.decisionReason,
+            }
+          : null,
+        participantGuidance: body.participantGuidance,
+      },
+      null,
+      2,
+    );
     log(body);
   } catch (error) {
     log(error.message);
@@ -214,6 +233,16 @@ document.getElementById("createAppeal").addEventListener("click", async () => {
       body: JSON.stringify({ appealReason }),
     });
     appealIdLabel.textContent = body.appeal.id;
+    log(body);
+  } catch (error) {
+    log(error.message);
+  }
+});
+
+document.getElementById("loadHistory").addEventListener("click", async () => {
+  try {
+    const body = await api("/api/submissions/history?limit=20");
+    historySummary.textContent = JSON.stringify(body.history, null, 2);
     log(body);
   } catch (error) {
     log(error.message);

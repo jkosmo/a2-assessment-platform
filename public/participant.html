@@ -68,6 +68,8 @@
       <button id="queueAssessment">Queue Assessment</button>
       <button id="checkAssessment">Check Assessment</button>
       <button id="checkResult">Check Result</button>
+      <div class="small">Result summary:</div>
+      <pre id="resultSummary">No result loaded.</pre>
     </section>
 
     <section class="card">
@@ -75,6 +77,12 @@
       <div><label>Appeal Reason</label><textarea id="appealReason" rows="3">Requesting second review due to potential scoring mismatch.</textarea></div>
       <button id="createAppeal">Create Appeal</button>
       <div class="small">Appeal ID: <span id="appealId">-</span></div>
+    </section>
+
+    <section class="card">
+      <h3>My History</h3>
+      <button id="loadHistory">Load My Submission History</button>
+      <pre id="historySummary">No history loaded.</pre>
     </section>
 
     <section class="card">

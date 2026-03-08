@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.23 - 2026-03-08
+### Summary
+Implemented participant-facing result details and personal submission history for MVP transparency requirements.
+
+### Included
+- Enhanced result endpoint:
+  - `GET /api/submissions/{submissionId}/result` now includes:
+    - `statusExplanation`
+    - `scoreComponents` (mcq/practical/total)
+    - `participantGuidance` (decision reason, confidence note, improvement advice, criterion rationales)
+- Added personal history endpoint:
+  - `GET /api/submissions/history?limit=<n>`
+  - returns only current authenticated user's records
+  - includes module metadata, status, and latest decision/MCQ/LLM snapshots
+- Updated participant UI test console:
+  - result summary panel for status + score components + guidance
+  - history panel to load and inspect participant's own submission history
+- Added integration test:
+  - `test/m2-participant-results-history.test.ts`
+
+### Notes
+- This addresses issue #20 acceptance criteria for result transparency and user-scoped history.
+
 ## 0.3.22 - 2026-03-08
 ### Summary
 Implemented MVP reporting endpoints with filter support and CSV export for governance reporting.

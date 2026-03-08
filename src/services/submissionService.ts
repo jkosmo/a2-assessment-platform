@@ -67,3 +67,57 @@ export async function getOwnedSubmission(submissionId: string, userId: string) {
     },
   });
 }
+
+export async function getOwnedSubmissionHistory(input: {
+  userId: string;
+  limit: number;
+}) {
+  return prisma.submission.findMany({
+    where: { userId: input.userId },
+    orderBy: { submittedAt: "desc" },
+    take: input.limit,
+    include: {
+      module: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+      mcqAttempts: {
+        where: { completedAt: { not: null } },
+        orderBy: { completedAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          scaledScore: true,
+          percentScore: true,
+          passFailMcq: true,
+          completedAt: true,
+        },
+      },
+      llmEvaluations: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          practicalScoreScaled: true,
+          passFailPractical: true,
+          manualReviewRecommended: true,
+          createdAt: true,
+        },
+      },
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          decisionType: true,
+          passFailTotal: true,
+          totalScore: true,
+          decisionReason: true,
+          finalisedAt: true,
+        },
+      },
+    },
+  });
+}
