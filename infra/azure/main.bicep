@@ -113,7 +113,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     siteConfig: {
       linuxFxVersion: 'NODE|22-lts'
       alwaysOn: false
-      appCommandLine: 'npm run db:migrate:runtime && npm run start'
+      appCommandLine: 'cd /home/site/wwwroot && npm run db:migrate:runtime && npm run start'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
@@ -185,4 +185,3 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 output webAppName string = webApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
-

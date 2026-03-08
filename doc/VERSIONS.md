@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.2 - 2026-03-08
+### Summary
+Startup command fix for App Service Linux deployment.
+
+### Included
+- Updated App Service startup command in Bicep to ensure execution happens from app root:
+- `cd /home/site/wwwroot && npm run db:migrate:runtime && npm run start`
+
+### Notes
+- This targets startup failures where `npm` runs outside the deployed application directory.
+
 ## 0.3.1 - 2026-03-08
 ### Summary
 Staging deployment reliability fixes for GitHub Actions and App Service startup.
