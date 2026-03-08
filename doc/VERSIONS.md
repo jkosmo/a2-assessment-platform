@@ -7,6 +7,30 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.18 - 2026-03-08
+### Summary
+Hardened dev-tenant Entra onboarding and role-map handling based on real verification findings.
+
+### Included
+- Added robust role-map parser utility (`src/auth/entraRoleMap.ts`) that:
+  - handles UTF-8 BOM safely
+  - normalizes role names
+  - rejects invalid JSON with explicit error
+- Updated role sync repository to use the shared parser for both JSON env and file-based mappings.
+- Added automated tests for role-map parsing edge cases:
+  - BOM-prefixed JSON
+  - invalid entries and normalization
+  - invalid JSON input
+- Hardened Entra bootstrap script (`scripts/entra/setup-dev-tenant-auth.ps1`):
+  - improved tenant login flow compatibility
+  - client app creation fallback for CLI variants
+  - safer Graph API PATCH payload handling
+  - writes generated files as UTF-8 without BOM
+- Expanded onboarding troubleshooting guide with concrete fixes for consent, audience, groups claims, and BOM issues.
+
+### Notes
+- This directly reduces recurring setup failures in issues #38, #39, and #40.
+
 ## 0.3.17 - 2026-03-08
 ### Summary
 Ignored local staging diagnostics artifacts so repository status stays clean.

@@ -1,6 +1,6 @@
-import { AppRole } from "../db/prismaRuntime.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import type { AuthPrincipal } from "../auth/principal.js";
+import { parseEntraGroupRoleMapJson } from "../auth/entraRoleMap.js";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import fs from "node:fs";
@@ -39,40 +39,19 @@ export async function getActiveRoles(userId: string, at = new Date()): Promise<A
 }
 
 function parseRoleMap(): Record<string, AppRoleType> {
-  let parsed: unknown;
-
   if (env.ENTRA_GROUP_ROLE_MAP_FILE) {
     const roleMapPath = path.resolve(process.cwd(), env.ENTRA_GROUP_ROLE_MAP_FILE);
     if (!fs.existsSync(roleMapPath)) {
       throw new Error(`ENTRA_GROUP_ROLE_MAP_FILE not found: ${roleMapPath}`);
     }
-    parsed = JSON.parse(fs.readFileSync(roleMapPath, "utf8"));
-  } else {
-    if (!env.ENTRA_GROUP_ROLE_MAP_JSON.trim()) {
-      return {};
-    }
-    parsed = JSON.parse(env.ENTRA_GROUP_ROLE_MAP_JSON);
+    return parseEntraGroupRoleMapJson(fs.readFileSync(roleMapPath, "utf8"));
   }
 
-  if (!parsed || typeof parsed !== "object") {
+  if (!env.ENTRA_GROUP_ROLE_MAP_JSON.trim()) {
     return {};
   }
 
-  const validRoles = new Set<string>(Object.values(AppRole));
-  const map: Record<string, AppRoleType> = {};
-
-  for (const [groupId, rawRole] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof rawRole !== "string") {
-      continue;
-    }
-
-    const normalized = rawRole.trim().toUpperCase();
-    if (validRoles.has(normalized)) {
-      map[groupId] = normalized as AppRoleType;
-    }
-  }
-
-  return map;
+  return parseEntraGroupRoleMapJson(env.ENTRA_GROUP_ROLE_MAP_JSON);
 }
 
 export async function syncEntraGroupRoles(userId: string, principal: AuthPrincipal, at = new Date()) {
