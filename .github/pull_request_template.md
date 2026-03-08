@@ -35,6 +35,10 @@
 - Docs updated:
 - If not updated, reason + follow-up issue:
 
+## Versioning
+- [ ] Version number is bumped for this push.
+- [ ] `doc/VERSIONS.md` is updated with this version and summary.
+
 ## CI/CD and Deployment
 - [ ] CI passed.
 - [ ] Change deployed/validated in staging.

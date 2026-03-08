@@ -62,3 +62,6 @@ Borderline/manual review routing baseline is documented in:
 
 M0 architecture and implementation decisions are documented in:
 - `doc/M0_IMPLEMENTATION_DECISIONS.md`
+
+Version history is tracked in:
+- `doc/VERSIONS.md`

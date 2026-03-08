@@ -143,6 +143,11 @@ Update relevant docs when behavior changes:
 - Runbooks and incident response notes.
 - User/admin workflow guidance.
 
+## Versioning Policy
+- A version number must be bumped before every push to remote.
+- Semantic Versioning (`MAJOR.MINOR.PATCH`) must be used.
+- The version bump must be reflected in `doc/VERSIONS.md` with a short change summary.
+
 ## Definition of Done (per issue)
 - Acceptance criteria met and verified.
 - Design/architecture evaluation completed.
@@ -153,6 +158,7 @@ Update relevant docs when behavior changes:
 - Staging deploy successful.
 - Production approval requirement respected.
 - Documentation updated or follow-up issue created.
+- Version number bumped for this push and `doc/VERSIONS.md` updated.
 
 ## Pull Request Checklist
 - Linked issue and scope are clear.
