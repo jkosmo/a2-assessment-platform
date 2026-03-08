@@ -18,6 +18,13 @@ let currentLocale = resolveInitialLocale();
 let latestResult = null;
 let latestHistory = null;
 
+const defaultFieldBindings = [
+  { id: "rawText", key: "defaults.rawText" },
+  { id: "reflectionText", key: "defaults.reflection" },
+  { id: "promptExcerpt", key: "defaults.promptExcerpt" },
+  { id: "appealReason", key: "defaults.appealReason" },
+];
+
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
   if (stored && supportedLocales.includes(stored)) {
@@ -45,11 +52,17 @@ function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;
 }
 
+function tForLocale(locale, key) {
+  return translations[locale]?.[key] ?? translations["en-GB"][key] ?? key;
+}
+
 function setLocale(locale) {
+  const previousLocale = currentLocale;
   currentLocale = supportedLocales.includes(locale) ? locale : "en-GB";
   localStorage.setItem("participant.locale", currentLocale);
   document.documentElement.lang = currentLocale;
   applyTranslations();
+  setDefaultFieldValues(previousLocale, currentLocale);
   renderResultSummary(latestResult);
   renderHistorySummary(latestHistory);
 }
@@ -72,11 +85,23 @@ function applyTranslations() {
   }
 }
 
-function setDefaultFieldValues() {
-  document.getElementById("rawText").value = t("defaults.rawText");
-  document.getElementById("reflectionText").value = t("defaults.reflection");
-  document.getElementById("promptExcerpt").value = t("defaults.promptExcerpt");
-  document.getElementById("appealReason").value = t("defaults.appealReason");
+function setDefaultFieldValues(previousLocale, nextLocale) {
+  for (const field of defaultFieldBindings) {
+    const element = document.getElementById(field.id);
+    const previousDefault = tForLocale(previousLocale, field.key);
+    const nextDefault = tForLocale(nextLocale, field.key);
+    const englishDefault = tForLocale("en-GB", field.key);
+    const currentValue = element.value;
+
+    const shouldUpdate =
+      !currentValue ||
+      currentValue === previousDefault ||
+      currentValue === englishDefault;
+
+    if (shouldUpdate) {
+      element.value = nextDefault;
+    }
+  }
 }
 
 function populateLocaleSelect() {
@@ -433,5 +458,4 @@ function renderQuestions() {
 
 populateLocaleSelect();
 setLocale(currentLocale);
-setDefaultFieldValues();
 loadVersion();

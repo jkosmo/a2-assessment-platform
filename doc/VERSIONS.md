@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.28 - 2026-03-08
+### Summary
+Fixed participant UI locale switching so default textarea values are updated when language changes.
+
+### Included
+- Updated `public/participant.js` locale logic:
+  - default field values (`rawText`, `reflectionText`, `promptExcerpt`, `appealReason`) now re-localize on language switch
+  - preserves user-entered text by only replacing values that are empty or still equal to previous/default localized values
+- Removed one-time-only default assignment behavior that left stale language content after switching locale.
+
+### Notes
+- This addresses the reported UX bug where standard values did not change when switching language in `/participant`.
+
 ## 0.3.27 - 2026-03-08
 ### Summary
 Eliminated remaining CI test flakiness caused by relying on `modules[0]` in parallel test execution.
