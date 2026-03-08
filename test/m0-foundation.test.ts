@@ -30,7 +30,13 @@ describe("M0 foundation APIs", () => {
     expect(modulesResponse.status).toBe(200);
     expect(modulesResponse.body.modules.length).toBeGreaterThan(0);
 
-    const moduleId = modulesResponse.body.modules[0].id as string;
+    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+    const moduleId = seedModule.id;
 
     const activeVersionResponse = await request(app)
       .get(`/api/modules/${moduleId}/active-version`)

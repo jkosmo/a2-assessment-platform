@@ -26,7 +26,13 @@ describe("MVP participant result and history", () => {
   it("returns score components + guidance and keeps history scoped to current user", async () => {
     const modulesResponse = await request(app).get("/api/modules").set(participantAHeaders);
     expect(modulesResponse.status).toBe(200);
-    const moduleId = modulesResponse.body.modules[0].id as string;
+    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+    const moduleId = seedModule.id;
 
     const completedSubmissionId = await createSubmissionAndAssessment({
       moduleId,

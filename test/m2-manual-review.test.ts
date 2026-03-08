@@ -23,7 +23,13 @@ describe("MVP manual review workspace", () => {
   it("creates immutable override decision layer through reviewer workspace", async () => {
     const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
     expect(modulesResponse.status).toBe(200);
-    const moduleId = modulesResponse.body.modules[0].id as string;
+    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+    const moduleId = seedModule.id;
 
     const submissionResponse = await request(app)
       .post("/api/submissions")

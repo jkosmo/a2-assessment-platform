@@ -29,7 +29,13 @@ describe("MVP audit event pipeline", () => {
   it("captures audit trail across submission -> mcq -> assessment decision and supports retrieval by submission", async () => {
     const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
     expect(modulesResponse.status).toBe(200);
-    const moduleId = modulesResponse.body.modules[0].id as string;
+    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+    const moduleId = seedModule.id;
 
     const submissionResponse = await request(app)
       .post("/api/submissions")
@@ -87,7 +93,13 @@ describe("MVP audit event pipeline", () => {
   it("blocks non-owner participant from reading submission audit trail while allowing admin", async () => {
     const ownerModulesResponse = await request(app).get("/api/modules").set(participantHeaders);
     expect(ownerModulesResponse.status).toBe(200);
-    const moduleId = ownerModulesResponse.body.modules[0].id as string;
+    const seedModule = (ownerModulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+    const moduleId = seedModule.id;
 
     const ownerSubmissionResponse = await request(app)
       .post("/api/submissions")

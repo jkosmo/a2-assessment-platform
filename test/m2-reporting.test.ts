@@ -40,7 +40,13 @@ describe("MVP reporting endpoints", () => {
   it("provides completion/pass-rate/manual-review/appeals reports with filter support and csv export", async () => {
     const modulesResponse = await request(app).get("/api/modules").set(participantAHeaders);
     expect(modulesResponse.status).toBe(200);
-    const moduleId = modulesResponse.body.modules[0].id as string;
+    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+    const moduleId = seedModule.id;
 
     const completedSubmissionId = await createSubmissionAndAssessment({
       moduleId,

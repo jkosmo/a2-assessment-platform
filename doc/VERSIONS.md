@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.27 - 2026-03-08
+### Summary
+Eliminated remaining CI test flakiness caused by relying on `modules[0]` in parallel test execution.
+
+### Included
+- Updated core integration tests to select the seeded module by title (`Generative AI Foundations`) instead of the first returned module:
+  - `test/m1-core-flow.test.ts`
+  - `test/m0-foundation.test.ts`
+  - `test/m2-reporting.test.ts`
+  - `test/m2-participant-results-history.test.ts`
+  - `test/m2-manual-review.test.ts`
+  - `test/m2-appeal-flow.test.ts`
+  - `test/m2-audit-pipeline.test.ts`
+
+### Notes
+- This addresses CI failures where concurrently-created/published modules changed module ordering and broke MCQ assertions.
+
 ## 0.3.26 - 2026-03-08
 ### Summary
 Stabilized CI by fixing cross-test state mutation in admin content publication test.
