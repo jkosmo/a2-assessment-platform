@@ -6,6 +6,7 @@ export type AuthPrincipal = {
   name: string;
   department?: string;
   tokenRoles?: string[];
+  groupIds?: string[];
 };
 
 export type RequestContext = {
@@ -13,4 +14,3 @@ export type RequestContext = {
   userId: string;
   roles: AppRole[];
 };
-

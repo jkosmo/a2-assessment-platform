@@ -44,6 +44,13 @@ enum DecisionType {
   APPEAL_RESOLUTION
 }
 
+enum AssessmentJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id                    String                @id @default(cuid())
   externalId            String                @unique
@@ -132,6 +139,7 @@ model Submission {
   rawText           String?
   reflectionText    String
   promptExcerpt     String
+  responsibilityAcknowledged Boolean   @default(false)
   attachmentUri     String?
   submittedAt       DateTime           @default(now())
   submissionStatus  SubmissionStatus   @default(SUBMITTED)
@@ -145,6 +153,7 @@ model Submission {
   decisions         AssessmentDecision[]
   appeals           Appeal[]
   manualReviews     ManualReview[]
+  assessmentJobs    AssessmentJob[]
 
   @@index([userId, submittedAt])
   @@index([moduleId, submittedAt])
@@ -360,3 +369,20 @@ model AuditEvent {
   @@index([entityType, entityId, timestamp])
 }
 
+model AssessmentJob {
+  id            String              @id @default(cuid())
+  submissionId  String
+  status        AssessmentJobStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  maxAttempts   Int                 @default(3)
+  availableAt   DateTime            @default(now())
+  lockedAt      DateTime?
+  lockedBy      String?
+  errorMessage  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  submission    Submission          @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+
+  @@index([status, availableAt])
+  @@index([submissionId, createdAt])
+}

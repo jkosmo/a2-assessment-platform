@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A2 Participant Test Console</title>
+    <style>
+      body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f7f8fb; color: #222; }
+      .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      label { display: block; margin-bottom: 6px; font-size: 13px; color: #444; }
+      input, textarea, select, button { width: 100%; padding: 8px; box-sizing: border-box; }
+      button { cursor: pointer; }
+      .small { font-size: 12px; color: #666; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
+      .inline { display: inline-block; width: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Participant Test Console</h1>
+    <p class="small">Manual flow: modules -> submission -> MCQ -> assessment/result.</p>
+
+    <section class="card">
+      <h3>Mock Identity</h3>
+      <div class="row">
+        <div><label>User Id</label><input id="userId" value="participant-1" /></div>
+        <div><label>Email</label><input id="email" value="participant@company.com" /></div>
+      </div>
+      <div class="row">
+        <div><label>Name</label><input id="name" value="Platform Participant" /></div>
+        <div><label>Department</label><input id="department" value="Consulting" /></div>
+      </div>
+      <button id="loadMe">Load /api/me</button>
+    </section>
+
+    <section class="card">
+      <h3>Modules</h3>
+      <button id="loadModules">Load Modules</button>
+      <div id="moduleList"></div>
+    </section>
+
+    <section class="card">
+      <h3>Submission</h3>
+      <div><label>Selected Module</label><input id="selectedModuleId" readonly /></div>
+      <div><label>Raw Text</label><textarea id="rawText" rows="5">This is a practical response showing iteration and quality assurance.</textarea></div>
+      <div><label>Reflection</label><textarea id="reflectionText" rows="4">I refined the prompt twice and validated the final output manually.</textarea></div>
+      <div><label>Prompt Excerpt</label><textarea id="promptExcerpt" rows="3">Summarize and improve this draft with professional tone.</textarea></div>
+      <label><input class="inline" type="checkbox" id="ack" checked /> I acknowledge responsibility for submitted content</label>
+      <button id="createSubmission">Create Submission</button>
+      <div class="small">Submission ID: <span id="submissionId">-</span></div>
+    </section>
+
+    <section class="card">
+      <h3>MCQ</h3>
+      <button id="startMcq">Start MCQ</button>
+      <div id="mcqQuestions"></div>
+      <button id="submitMcq">Submit MCQ</button>
+      <div class="small">Attempt ID: <span id="attemptId">-</span></div>
+    </section>
+
+    <section class="card">
+      <h3>Assessment</h3>
+      <button id="queueAssessment">Queue Assessment</button>
+      <button id="checkAssessment">Check Assessment</button>
+      <button id="checkResult">Check Result</button>
+    </section>
+
+    <section class="card">
+      <h3>Output</h3>
+      <pre id="output">Ready.</pre>
+    </section>
+
+    <script src="/static/participant.js" type="module"></script>
+  </body>
+  </html>
+

@@ -32,11 +32,11 @@ const moduleSummarySelect = {
   },
 } satisfies Prisma.ModuleSelect;
 
-export async function listModules(roles: AppRole[]) {
+export async function listModules(roles: AppRole[], userId?: string) {
   const now = new Date();
   const adminRead = hasAdminRead(roles);
 
-  return prisma.module.findMany({
+  const modules = await prisma.module.findMany({
     where: adminRead
       ? {}
       : {
@@ -49,6 +49,34 @@ export async function listModules(roles: AppRole[]) {
     select: moduleSummarySelect,
     orderBy: { title: "asc" },
   });
+
+  if (!userId) {
+    return modules;
+  }
+
+  return Promise.all(
+    modules.map(async (module) => {
+      const latest = await prisma.submission.findFirst({
+        where: { userId, moduleId: module.id },
+        orderBy: { submittedAt: "desc" },
+        select: {
+          id: true,
+          submittedAt: true,
+          submissionStatus: true,
+        },
+      });
+      return {
+        ...module,
+        participantStatus: latest
+          ? {
+              latestSubmissionId: latest.id,
+              latestSubmittedAt: latest.submittedAt,
+              latestStatus: latest.submissionStatus,
+            }
+          : null,
+      };
+    }),
+  );
 }
 
 export async function getModuleById(moduleId: string, roles: AppRole[]) {
@@ -94,4 +122,3 @@ export async function getActiveModuleVersion(moduleId: string, roles: AppRole[])
     },
   });
 }
-

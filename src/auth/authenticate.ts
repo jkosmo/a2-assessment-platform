@@ -3,7 +3,7 @@ import { jwtVerify, createRemoteJWKSet, type JWTPayload } from "jose";
 import type { NextFunction, Request, Response } from "express";
 import { env } from "../config/env.js";
 import type { AuthPrincipal } from "./principal.js";
-import { getActiveRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
+import { getActiveRoles, syncEntraGroupRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
 
 const entraIssuer = env.ENTRA_TENANT_ID
   ? `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/v2.0`
@@ -37,6 +37,8 @@ function parseRoleNames(input: string[] | undefined): AppRole[] {
 function principalFromMockHeaders(request: Request): AuthPrincipal {
   const headerRoles = request.header("x-user-roles");
   const roleHints = headerRoles ? headerRoles.split(",") : [];
+  const headerGroups = request.header("x-user-groups");
+  const groupIds = headerGroups ? headerGroups.split(",").map((value) => value.trim()) : [];
 
   return {
     externalId: request.header("x-user-id") ?? env.MOCK_DEFAULT_USER_ID,
@@ -44,6 +46,7 @@ function principalFromMockHeaders(request: Request): AuthPrincipal {
     name: request.header("x-user-name") ?? env.MOCK_DEFAULT_NAME,
     department: request.header("x-user-department") ?? env.MOCK_DEFAULT_DEPARTMENT,
     tokenRoles: roleHints,
+    groupIds,
   };
 }
 
@@ -72,12 +75,16 @@ function principalFromJwtPayload(payload: JWTPayload): AuthPrincipal {
   const tokenRoles = Array.isArray(payload.roles)
     ? payload.roles.filter((value): value is string => typeof value === "string")
     : [];
+  const groupIds = Array.isArray(payload.groups)
+    ? payload.groups.filter((value): value is string => typeof value === "string")
+    : [];
 
   return {
     externalId,
     email,
     name,
     tokenRoles,
+    groupIds,
   };
 }
 
@@ -89,6 +96,7 @@ export async function authenticate(request: Request, response: Response, next: N
         : await principalFromBearerToken(extractBearerToken(request));
 
     const user = await upsertUserFromPrincipal(principal);
+    await syncEntraGroupRoles(user.id, principal);
     let roles = await getActiveRoles(user.id);
 
     // In mock mode, allow explicit role hints so local development can proceed
@@ -120,4 +128,3 @@ function extractBearerToken(request: Request): string {
 
   return authorization.slice("Bearer ".length);
 }
-

@@ -1,16 +1,24 @@
 import express from "express";
+import path from "node:path";
 import { AppRole } from "@prisma/client";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { meRouter } from "./routes/me.js";
 import { modulesRouter } from "./routes/modules.js";
+import { submissionsRouter } from "./routes/submissions.js";
+import { assessmentsRouter } from "./routes/assessments.js";
 
 const app = express();
 
 app.use(express.json({ limit: "1mb" }));
+app.use("/static", express.static(path.resolve(process.cwd(), "public")));
 
 app.get("/healthz", (_request, response) => {
   response.json({ status: "ok" });
+});
+
+app.get("/participant", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "participant.html"));
 });
 
 app.use("/api", authenticate);
@@ -27,6 +35,16 @@ app.use(
     AppRole.REVIEWER,
   ]),
   modulesRouter,
+);
+app.use(
+  "/api/submissions",
+  requireAnyRole([AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER]),
+  submissionsRouter,
+);
+app.use(
+  "/api/assessments",
+  requireAnyRole([AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER]),
+  assessmentsRouter,
 );
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
