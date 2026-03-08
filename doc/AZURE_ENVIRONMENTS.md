@@ -12,13 +12,18 @@ Each environment must use a dedicated resource group and be deployable via CI/CD
 - Deployment script: `scripts/azure/deploy-environment.ps1`
 - Cost guardrails script: `scripts/azure/configure-cost-guardrails.ps1`
 - CI/CD workflow: `.github/workflows/deploy-azure.yml`
+- Observability runbook: `doc/OBSERVABILITY_RUNBOOK.md`
 - Environment variable templates:
 - `.azure/environments/staging.env.example`
 - `.azure/environments/production.env.example`
 
 ## Architecture (cost-optimized baseline)
 - Azure App Service Linux (Node 22) on small SKU (`B1` default).
-- Application Insights (basic web monitoring).
+- Workspace-based Application Insights + Log Analytics workspace.
+- Azure Monitor alerts baseline:
+- latency metric alert (App Service)
+- LLM failure log alert
+- assessment queue backlog log alert
 - Single-instance non-critical setup.
 - SQLite file persisted at `/home/site/data/app.db` (non-critical baseline only).
 
@@ -53,6 +58,9 @@ For each environment, define variables/secrets used by workflow:
 - `LLM_STUB_MODEL_NAME`
 - `ASSESSMENT_JOB_POLL_INTERVAL_MS`
 - `ASSESSMENT_JOB_MAX_ATTEMPTS`
+- `OBSERVABILITY_ALERT_EMAIL` (optional)
+- `QUEUE_BACKLOG_ALERT_THRESHOLD` (optional, default `5`)
+- `LATENCY_ALERT_THRESHOLD_SECONDS` (optional, default `3`)
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
 
@@ -76,4 +84,4 @@ For each environment, define variables/secrets used by workflow:
 4. Call `/healthz` and `/api/me`.
 5. Validate budget object exists (if budget email configured).
 6. Validate production deploy is blocked until manual approval.
-
+7. Validate alerts exist in Azure Monitor for latency, LLM failures, and queue backlog.

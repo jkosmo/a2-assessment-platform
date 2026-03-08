@@ -70,6 +70,9 @@ jobs:
             -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
+            -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
+            -QueueBacklogAlertThreshold "${{ vars.QUEUE_BACKLOG_ALERT_THRESHOLD || '5' }}" `
+            -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
 
@@ -121,5 +124,8 @@ jobs:
             -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
+            -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
+            -QueueBacklogAlertThreshold "${{ vars.QUEUE_BACKLOG_ALERT_THRESHOLD || '5' }}" `
+            -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"

@@ -5,6 +5,7 @@ import { evaluatePracticalWithLlm } from "./llmAssessmentService.js";
 import { sha256 } from "../utils/hash.js";
 import { createAssessmentDecision } from "./decisionService.js";
 import { recordAuditEvent } from "./auditService.js";
+import { logOperationalEvent } from "../observability/operationalLog.js";
 
 let workerTimer: NodeJS.Timeout | null = null;
 let workerRunning = false;
@@ -35,6 +36,7 @@ export async function enqueueAssessmentJob(submissionId: string) {
     action: "assessment_job_enqueued",
     metadata: { submissionId },
   });
+  await logQueueBacklog("enqueue", submissionId);
 
   return job;
 }
@@ -169,6 +171,8 @@ async function processNextJob(): Promise<boolean> {
         errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
       },
     });
+  } finally {
+    await logQueueBacklog("worker_cycle", candidate.submissionId);
   }
   return true;
 }
@@ -197,12 +201,27 @@ async function runAssessment(jobId: string) {
     data: { submissionStatus: SubmissionStatus.PROCESSING },
   });
 
-  const llmResult = await evaluatePracticalWithLlm({
-    moduleId: submission.moduleId,
-    rawText: submission.rawText ?? "",
-    reflectionText: submission.reflectionText,
-    promptExcerpt: submission.promptExcerpt,
-  });
+  let llmResult: Awaited<ReturnType<typeof evaluatePracticalWithLlm>>;
+  try {
+    llmResult = await evaluatePracticalWithLlm({
+      moduleId: submission.moduleId,
+      rawText: submission.rawText ?? "",
+      reflectionText: submission.reflectionText,
+      promptExcerpt: submission.promptExcerpt,
+    });
+  } catch (error) {
+    logOperationalEvent(
+      "llm_evaluation_failed",
+      {
+        jobId,
+        submissionId: submission.id,
+        llmMode: env.LLM_MODE,
+        errorMessage: error instanceof Error ? error.message : "Unknown LLM evaluation error",
+      },
+      "error",
+    );
+    throw error;
+  }
 
   const requestPayload = {
     moduleId: submission.moduleId,
@@ -259,5 +278,21 @@ async function runAssessment(jobId: string) {
     action: "assessment_job_completed",
     actorId: submission.userId,
     metadata: { submissionId: submission.id },
+  });
+}
+
+async function logQueueBacklog(trigger: string, submissionId: string) {
+  const pendingJobs = await prisma.assessmentJob.count({
+    where: { status: AssessmentJobStatus.PENDING },
+  });
+  const runningJobs = await prisma.assessmentJob.count({
+    where: { status: AssessmentJobStatus.RUNNING },
+  });
+
+  logOperationalEvent("assessment_queue_backlog", {
+    trigger,
+    submissionId,
+    pendingJobs,
+    runningJobs,
   });
 }

@@ -4,6 +4,7 @@ import { AppRole } from "./db/prismaRuntime.js";
 import { appName, appVersion } from "./config/appMetadata.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
+import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
 import { meRouter } from "./routes/me.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
@@ -14,6 +15,8 @@ import { appealsRouter } from "./routes/appeals.js";
 
 const app = express();
 
+app.use(attachCorrelationId);
+app.use(requestLoggingMiddleware);
 app.use(express.json({ limit: "1mb" }));
 app.use("/static", express.static(path.resolve(process.cwd(), "public")));
 

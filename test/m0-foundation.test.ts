@@ -17,6 +17,7 @@ describe("M0 foundation APIs", () => {
     expect(response.status).toBe(200);
     expect(response.body.user.email).toBe("participant@company.com");
     expect(response.body.user.roles).toContain("PARTICIPANT");
+    expect(response.headers["x-correlation-id"]).toBeTruthy();
   });
 
   it("returns published modules and active version metadata", async () => {
@@ -52,4 +53,3 @@ describe("M0 foundation APIs", () => {
     expect(response.status).toBe(403);
   });
 });
-

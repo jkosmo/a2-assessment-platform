@@ -10,7 +10,8 @@ export type AuthPrincipal = {
 };
 
 export type RequestContext = {
-  principal: AuthPrincipal;
-  userId: string;
-  roles: AppRole[];
+  correlationId?: string;
+  principal?: AuthPrincipal;
+  userId?: string;
+  roles?: AppRole[];
 };

@@ -56,11 +56,56 @@ param assessmentJobPollIntervalMs int = 4000
 @description('Assessment worker max attempts.')
 param assessmentJobMaxAttempts int = 3
 
+@description('Optional email receiver for observability alerts.')
+param observabilityAlertEmail string = ''
+
+@description('Pending queue threshold for backlog alert.')
+param queueBacklogAlertThreshold int = 5
+
+@description('Average response time threshold in seconds for latency alert.')
+param latencyAlertThresholdSeconds int = 3
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
 var webAppName = toLower('${appNamePrefix}-${envCode}-app-${suffix}')
 var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
+var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
+var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
+var createObservabilityActionGroup = !empty(observabilityAlertEmail)
+var llmFailureAlertQuery = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(5m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"llm_evaluation_failed"'
+'''
+var queueBacklogAlertQueryTemplate = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(10m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"assessment_queue_backlog"'
+| extend pendingJobs = toint(extract('"pendingJobs":([0-9]+)', 1, raw))
+| where isnotnull(pendingJobs)
+| summarize maxPendingJobs = max(pendingJobs)
+| where maxPendingJobs >= __THRESHOLD__
+'''
+var queueBacklogAlertQuery = replace(queueBacklogAlertQueryTemplate, '__THRESHOLD__', string(queueBacklogAlertThreshold))
+
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: logAnalyticsWorkspaceName
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   name: appInsightsName
@@ -73,8 +118,8 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
   properties: {
     Application_Type: 'web'
-    WorkspaceResourceId: null
-    IngestionMode: 'ApplicationInsights'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+    IngestionMode: 'LogAnalytics'
   }
 }
 
@@ -194,6 +239,168 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
+resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: '${webAppName}-diagnostics'
+  scope: webApp
+  properties: {
+    workspaceId: logAnalyticsWorkspace.id
+    logs: [
+      {
+        category: 'AppServiceConsoleLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource observabilityActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = if (createObservabilityActionGroup) {
+  name: observabilityActionGroupName
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    enabled: true
+    groupShortName: 'a2obs${envCode}'
+    emailReceivers: [
+      {
+        name: 'primary-email'
+        emailAddress: observabilityAlertEmail
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+resource latencyMetricAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-latency-${suffix}')
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    description: 'Average response time is above threshold.'
+    severity: 2
+    enabled: true
+    scopes: [
+      webApp.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'high-latency'
+          metricNamespace: 'Microsoft.Web/sites'
+          metricName: 'AverageResponseTime'
+          operator: 'GreaterThan'
+          threshold: latencyAlertThresholdSeconds
+          timeAggregation: 'Average'
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: createObservabilityActionGroup
+      ? [
+          {
+            actionGroupId: observabilityActionGroup.id
+          }
+        ]
+      : []
+  }
+}
+
+resource llmFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-llmfail-${suffix}')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'LLM evaluation failures detected'
+    description: 'Detects llm_evaluation_failed events from runtime logs.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      allOf: [
+        {
+          query: llmFailureAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
+resource queueBacklogAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-queue-${suffix}')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'Assessment queue backlog is above threshold'
+    description: 'Detects sustained assessment queue backlog from runtime logs.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT10M'
+    windowSize: 'PT10M'
+    criteria: {
+      allOf: [
+        {
+          query: queueBacklogAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
 output webAppName string = webApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
+output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name

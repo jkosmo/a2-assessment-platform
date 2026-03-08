@@ -105,7 +105,9 @@ export async function authenticate(request: Request, response: Response, next: N
       roles = parseRoleNames(principal.tokenRoles);
     }
 
+    const correlationId = request.context?.correlationId;
     request.context = {
+      correlationId,
       principal,
       userId: user.id,
       roles,

@@ -9,3 +9,4 @@ config/entra-group-role-map.generated.json
 staging-logs*/
 staging-logs*.zip
 fic-staging.json
+infra/azure/main.json

@@ -19,6 +19,9 @@ param(
   [string]$LlmStubModelName = "stub-model-v1",
   [int]$AssessmentJobPollIntervalMs = 4000,
   [int]$AssessmentJobMaxAttempts = 3,
+  [string]$ObservabilityAlertEmail = "",
+  [int]$QueueBacklogAlertThreshold = 5,
+  [int]$LatencyAlertThresholdSeconds = 3,
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30
 )
@@ -97,6 +100,9 @@ $deployment = az deployment group create `
               llmStubModelName=$LlmStubModelName `
               assessmentJobPollIntervalMs=$AssessmentJobPollIntervalMs `
               assessmentJobMaxAttempts=$AssessmentJobMaxAttempts `
+              observabilityAlertEmail=$ObservabilityAlertEmail `
+              queueBacklogAlertThreshold=$QueueBacklogAlertThreshold `
+              latencyAlertThresholdSeconds=$LatencyAlertThresholdSeconds `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 

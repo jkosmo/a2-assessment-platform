@@ -7,6 +7,31 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.21 - 2026-03-08
+### Summary
+Implemented MVP observability baseline for correlation IDs, operational logging signals, Azure alerts, and runbook documentation.
+
+### Included
+- Added request observability middleware:
+  - propagates/creates `x-correlation-id` for all requests
+  - returns `x-correlation-id` in response headers
+  - logs structured request completion events (`http_request`)
+- Added operational event logging in assessment orchestration:
+  - `llm_evaluation_failed`
+  - `assessment_queue_backlog`
+- Extended Azure IaC with observability resources:
+  - workspace-based Application Insights + Log Analytics workspace
+  - App Service diagnostic settings to workspace
+  - latency metric alert
+  - scheduled query alerts for LLM failures and queue backlog
+  - optional action group email support
+- Extended deployment automation and environment templates with observability parameters.
+- Added runbook: `doc/OBSERVABILITY_RUNBOOK.md`.
+- Added test assertion for correlation header presence on API responses.
+
+### Notes
+- This addresses issue #26 acceptance criteria for baseline detection and first-response readiness.
+
 ## 0.3.20 - 2026-03-08
 ### Summary
 Added visible runtime version metadata in participant UI and implemented participant appeal action in the test console.
