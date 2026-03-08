@@ -74,6 +74,40 @@ export async function processAssessmentJobsNow(maxJobs = 1) {
   }
 }
 
+export async function processSubmissionJobNow(submissionId: string, maxCycles = 25) {
+  for (let cycle = 0; cycle < maxCycles; cycle += 1) {
+    const submissionJob = await prisma.assessmentJob.findFirst({
+      where: {
+        submissionId,
+        status: { in: [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING] },
+      },
+      select: { id: true },
+    });
+
+    if (!submissionJob) {
+      return;
+    }
+
+    const processed = await processNextJob();
+    if (!processed) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+    }
+  }
+
+  const unresolved = await prisma.assessmentJob.findFirst({
+    where: {
+      submissionId,
+      status: { in: [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING] },
+    },
+    select: { id: true },
+  });
+  if (unresolved) {
+    throw new Error("Timed out while synchronously processing submission assessment.");
+  }
+}
+
 async function processNextJob(): Promise<boolean> {
   const now = new Date();
   const candidate = await prisma.assessmentJob.findFirst({

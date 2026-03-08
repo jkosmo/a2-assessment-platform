@@ -75,12 +75,7 @@ describe("MVP audit event pipeline", () => {
       .send({ sync: true });
     expect(runAssessmentResponse.status).toBe(202);
 
-    const auditResponse = await request(app)
-      .get(`/api/audit/submissions/${submissionId}`)
-      .set(participantHeaders);
-    expect(auditResponse.status).toBe(200);
-
-    const actions = (auditResponse.body.events as Array<{ action: string }>).map((event) => event.action);
+    const actions = await getAuditActionsForSubmission(submissionId, participantHeaders);
     expect(actions).toContain("submission_created");
     expect(actions).toContain("mcq_submitted");
     expect(actions).toContain("assessment_job_enqueued");
@@ -120,3 +115,36 @@ describe("MVP audit event pipeline", () => {
     expect(adminResponse.body.submissionId).toBe(submissionId);
   });
 });
+
+async function getAuditActionsForSubmission(
+  submissionId: string,
+  headers: Record<string, string>,
+): Promise<string[]> {
+  const maxAttempts = 15;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const auditResponse = await request(app)
+      .get(`/api/audit/submissions/${submissionId}`)
+      .set(headers);
+
+    if (auditResponse.status !== 200) {
+      throw new Error(`Expected audit response 200, got ${auditResponse.status}`);
+    }
+
+    const actions = (auditResponse.body.events as Array<{ action: string }>).map((event) => event.action);
+    if (
+      actions.includes("llm_evaluation_created") &&
+      actions.includes("decision_created") &&
+      actions.includes("manual_review_opened")
+    ) {
+      return actions;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+  }
+
+  const finalResponse = await request(app).get(`/api/audit/submissions/${submissionId}`).set(headers);
+  return (finalResponse.body.events as Array<{ action: string }>).map((event) => event.action);
+}

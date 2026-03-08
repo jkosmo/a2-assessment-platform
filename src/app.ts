@@ -8,6 +8,8 @@ import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
 import { assessmentsRouter } from "./routes/assessments.js";
 import { auditRouter } from "./routes/audit.js";
+import { reviewsRouter } from "./routes/reviews.js";
+import { appealsRouter } from "./routes/appeals.js";
 
 const app = express();
 
@@ -63,6 +65,8 @@ app.use(
   ]),
   auditRouter,
 );
+app.use("/api/reviews", requireAnyRole([AppRole.ADMINISTRATOR, AppRole.REVIEWER]), reviewsRouter);
+app.use("/api/appeals", requireAnyRole([AppRole.ADMINISTRATOR, AppRole.APPEAL_HANDLER]), appealsRouter);
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : "Unexpected server error.";

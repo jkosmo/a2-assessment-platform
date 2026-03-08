@@ -7,6 +7,32 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.19 - 2026-03-08
+### Summary
+Implemented reviewer and appeal-handler workspace flows with immutable decision lineage, and stabilized synchronous assessment processing for deterministic behavior.
+
+### Included
+- Added manual review workspace API (`/api/reviews`) with:
+  - queue listing and detail workspace
+  - claim flow for reviewer assignment
+  - override resolution that creates a new `MANUAL_OVERRIDE` decision layer linked by `parentDecisionId`
+  - audit events for claim/resolve/override
+- Added appeal workflow APIs:
+  - participant endpoint to create appeals: `POST /api/submissions/{submissionId}/appeals`
+  - handler/admin endpoints: `GET /api/appeals`, `GET /api/appeals/{appealId}`, `POST /api/appeals/{appealId}/claim`, `POST /api/appeals/{appealId}/resolve`
+  - appeal resolution creates a new `APPEAL_RESOLUTION` decision layer linked by `parentDecisionId`
+  - audit events for appeal create/claim/resolve and appeal-resolution decision creation
+- Added deterministic sync assessment processing:
+  - `sync: true` now processes until the specific submission job is completed (not just one arbitrary pending job)
+  - removes flakiness in integration and audit flow verification
+- Added/updated integration tests:
+  - `test/m2-manual-review.test.ts`
+  - `test/m2-appeal-flow.test.ts`
+  - `test/m2-audit-pipeline.test.ts`
+
+### Notes
+- This closes core backend implementation scope for manual overprøving and anke handling in the M2 workflow set.
+
 ## 0.3.18 - 2026-03-08
 ### Summary
 Hardened dev-tenant Entra onboarding and role-map handling based on real verification findings.

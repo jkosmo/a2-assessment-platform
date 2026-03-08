@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
-import { enqueueAssessmentJob, processAssessmentJobsNow } from "../services/assessmentJobService.js";
+import { enqueueAssessmentJob, processSubmissionJobNow } from "../services/assessmentJobService.js";
 
 const assessmentsRouter = Router();
 const runBodySchema = z.object({
@@ -31,7 +31,7 @@ assessmentsRouter.post("/:submissionId/run", async (request, response) => {
 
   const job = await enqueueAssessmentJob(submission.id);
   if (parsed.data.sync) {
-    await processAssessmentJobsNow(1);
+    await processSubmissionJobNow(submission.id);
   }
   response.status(202).json({ status: "queued", jobId: job.id, syncProcessed: !!parsed.data.sync });
 });
