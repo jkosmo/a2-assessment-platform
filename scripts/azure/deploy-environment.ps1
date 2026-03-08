@@ -52,16 +52,24 @@ function Get-TempBasePath {
   throw "Could not resolve a temporary directory for deployment packaging."
 }
 
+function Assert-LastExitCode([string]$stepName) {
+  if ($LASTEXITCODE -ne 0) {
+    throw "$stepName failed with exit code $LASTEXITCODE."
+  }
+}
+
 Write-Host "Deploying environment: $EnvironmentName"
 Write-Host "Subscription: $SubscriptionId"
 Write-Host "Resource group: $ResourceGroupName"
 
 az account set --subscription $SubscriptionId
+Assert-LastExitCode "az account set"
 
 az group create `
   --name $ResourceGroupName `
   --location $Location `
   --tags environment=$EnvironmentName costCenter=$CostCenter owner=$Owner | Out-Null
+Assert-LastExitCode "az group create"
 
 $deploymentName = "a2-assessment-$EnvironmentName-$(Get-Date -Format 'yyyyMMddHHmmss')"
 
@@ -90,6 +98,7 @@ $deployment = az deployment group create `
               assessmentJobPollIntervalMs=$AssessmentJobPollIntervalMs `
               assessmentJobMaxAttempts=$AssessmentJobMaxAttempts `
   --query properties.outputs | ConvertFrom-Json
+Assert-LastExitCode "az deployment group create"
 
 $webAppName = $deployment.webAppName.value
 
@@ -105,6 +114,22 @@ if (Test-Path $tmpRoot) {
 New-Item -Path $tmpRoot -ItemType Directory | Out-Null
 
 git archive --format=tar HEAD | tar -xf - -C $tmpRoot
+Assert-LastExitCode "git archive + tar extract"
+
+Push-Location $tmpRoot
+try {
+  Write-Host "Building deployment artifact in: $tmpRoot"
+  npm ci
+  Assert-LastExitCode "npm ci"
+  npm run prisma:generate
+  Assert-LastExitCode "npm run prisma:generate"
+  npm run build
+  Assert-LastExitCode "npm run build"
+  npm prune --omit=dev
+  Assert-LastExitCode "npm prune --omit=dev"
+} finally {
+  Pop-Location
+}
 
 $zipPath = Join-Path $tempBasePath "a2-assessment-$EnvironmentName.zip"
 if (Test-Path $zipPath) {
@@ -120,6 +145,7 @@ az webapp deploy `
   --src-path $zipPath `
   --type zip `
   --restart true | Out-Null
+Assert-LastExitCode "az webapp deploy"
 
 if ($BudgetContactEmail) {
   & "$PSScriptRoot/configure-cost-guardrails.ps1" `

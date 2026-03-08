@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.1 - 2026-03-08
+### Summary
+Staging deployment reliability fixes for GitHub Actions and App Service startup.
+
+### Included
+- Deployment script hardening:
+- Robust temp directory resolution in Linux/Windows runners.
+- Explicit native command exit-code checks with fail-fast behavior.
+- Build deployment artifact before packaging (`npm ci`, Prisma client generation, TypeScript build).
+- Prune dev dependencies before zip to keep runtime package leaner.
+- CI/CD workflow update:
+- Added concurrency control to avoid overlapping staging deployments and Kudu deployment locks.
+
+### Notes
+- This release addresses deployment failures caused by missing built artifacts in Run-From-Package deployments.
+
 ## 0.3.0 - 2026-03-08
 ### Summary
 Completed implementation of next-step tracks: dev-tenant auth hardening and Azure staging/production automation baseline.
