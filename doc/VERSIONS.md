@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.6 - 2026-03-08
+### Summary
+Replaced startup migration mechanism to avoid `node:sqlite` runtime incompatibility.
+
+### Included
+- Changed `prestart` from custom SQLite migration script to `prisma migrate deploy`.
+- Moved `prisma` package to runtime dependencies to guarantee CLI availability in deployed app.
+
+### Notes
+- Startup no longer depends on Node built-in `node:sqlite`.
+
 ## 0.3.5 - 2026-03-08
 ### Summary
 Fixed runtime entrypoint mismatch in deployment artifact.
