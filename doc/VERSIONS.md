@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.15 - 2026-03-08
+### Summary
+Fixed CI workflow database setup to use test environment variables consistently.
+
+### Included
+- Updated CI step "Run migrations and seed" to execute `db:reset`, `db:migrate`, and `prisma:seed` with `dotenv -e .env.test`.
+
+### Notes
+- Resolves CI failures on main caused by missing `DATABASE_URL` during workflow execution.
+
 ## 0.3.14 - 2026-03-08
 ### Summary
 Made stage bootstrap seeding startup-safe by removing it from blocking prestart execution.
