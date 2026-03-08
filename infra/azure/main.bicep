@@ -121,6 +121,14 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: environmentName == 'production' ? 'production' : 'development'
         }
         {
+          name: 'PORT'
+          value: '8080'
+        }
+        {
+          name: 'WEBSITES_PORT'
+          value: '8080'
+        }
+        {
           name: 'DATABASE_URL'
           value: 'file:/home/site/data/app.db'
         }

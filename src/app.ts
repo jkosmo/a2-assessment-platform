@@ -13,6 +13,10 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use("/static", express.static(path.resolve(process.cwd(), "public")));
 
+app.get("/", (_request, response) => {
+  response.status(200).send("a2-assessment-platform");
+});
+
 app.get("/healthz", (_request, response) => {
   response.json({ status: "ok" });
 });

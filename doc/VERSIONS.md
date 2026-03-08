@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.4 - 2026-03-08
+### Summary
+Startup probe compatibility fixes for Azure App Service.
+
+### Included
+- Added root endpoint `GET /` returning `200` to satisfy warmup/startup probing.
+- Added explicit App Service port settings (`PORT=8080`, `WEBSITES_PORT=8080`) in Bicep app settings.
+
+### Notes
+- This targets recurring “site failed to start” deployment failures despite successful package deployment.
+
 ## 0.3.3 - 2026-03-08
 ### Summary
 App Service startup strategy updated to use platform default Node startup path.
