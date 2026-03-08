@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.7 - 2026-03-08
+### Summary
+Fixed App Service startup failures caused by non-executable Prisma CLI in deployment zip artifacts.
+
+### Included
+- Changed `prestart` to run Prisma migrate via `node ./node_modules/prisma/build/index.js migrate deploy` to avoid Linux execute-bit dependency.
+- Explicitly set `appCommandLine` to empty string in Azure Bicep to clear stale custom startup commands from prior deployments.
+
+### Notes
+- This resolves startup crashes with `sh: 1: prisma: Permission denied` and prevents old runtime migration startup commands from persisting.
+
 ## 0.3.6 - 2026-03-08
 ### Summary
 Replaced startup migration mechanism to avoid `node:sqlite` runtime incompatibility.

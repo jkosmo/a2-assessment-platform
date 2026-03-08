@@ -112,6 +112,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'NODE|22-lts'
+      appCommandLine: ''
       alwaysOn: false
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
