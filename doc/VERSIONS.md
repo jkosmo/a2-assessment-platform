@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.5 - 2026-03-08
+### Summary
+Fixed runtime entrypoint mismatch in deployment artifact.
+
+### Included
+- Updated `start` script from `node dist/index.js` to `node dist/src/index.js`.
+
+### Notes
+- Deployment artifact structure from TypeScript build places the entrypoint at `dist/src/index.js`.
+- Previous mismatch could terminate app startup immediately in App Service.
+
 ## 0.3.4 - 2026-03-08
 ### Summary
 Startup probe compatibility fixes for Azure App Service.
