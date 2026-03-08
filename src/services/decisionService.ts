@@ -1,4 +1,4 @@
-import { DecisionType, SubmissionStatus } from "@prisma/client";
+import { DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
@@ -88,4 +88,3 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
 
   return { decision, needsManualReview };
 }
-

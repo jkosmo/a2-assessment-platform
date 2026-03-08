@@ -1,4 +1,4 @@
-import { SubmissionStatus } from "@prisma/client";
+import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import { enqueueAssessmentJob } from "./assessmentJobService.js";
@@ -152,4 +152,3 @@ export async function submitMcqAttempt(input: {
     passFailMcq,
   };
 }
-

@@ -1,4 +1,5 @@
-import { AppRole } from "@prisma/client";
+import { AppRole } from "../db/prismaRuntime.js";
+import type { AppRole as AppRoleType } from "@prisma/client";
 import type { AuthPrincipal } from "../auth/principal.js";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
@@ -24,7 +25,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
   });
 }
 
-export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRole[]> {
+export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRoleType[]> {
   const assignments = await prisma.roleAssignment.findMany({
     where: {
       userId,
@@ -37,7 +38,7 @@ export async function getActiveRoles(userId: string, at = new Date()): Promise<A
   return assignments.map((assignment) => assignment.appRole);
 }
 
-function parseRoleMap(): Record<string, AppRole> {
+function parseRoleMap(): Record<string, AppRoleType> {
   let parsed: unknown;
 
   if (env.ENTRA_GROUP_ROLE_MAP_FILE) {
@@ -58,7 +59,7 @@ function parseRoleMap(): Record<string, AppRole> {
   }
 
   const validRoles = new Set<string>(Object.values(AppRole));
-  const map: Record<string, AppRole> = {};
+  const map: Record<string, AppRoleType> = {};
 
   for (const [groupId, rawRole] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof rawRole !== "string") {
@@ -67,7 +68,7 @@ function parseRoleMap(): Record<string, AppRole> {
 
     const normalized = rawRole.trim().toUpperCase();
     if (validRoles.has(normalized)) {
-      map[groupId] = normalized as AppRole;
+      map[groupId] = normalized as AppRoleType;
     }
   }
 
@@ -81,7 +82,7 @@ export async function syncEntraGroupRoles(userId: string, principal: AuthPrincip
 
   const map = parseRoleMap();
   const groupIds = principal.groupIds ?? [];
-  const desiredRoles = new Set<AppRole>();
+  const desiredRoles = new Set<AppRoleType>();
   for (const groupId of groupIds) {
     const role = map[groupId];
     if (role) {
@@ -98,7 +99,7 @@ export async function syncEntraGroupRoles(userId: string, principal: AuthPrincip
     },
   });
 
-  const activeRoles = new Set<AppRole>(activeAssignments.map((assignment) => assignment.appRole));
+  const activeRoles = new Set<AppRoleType>(activeAssignments.map((assignment) => assignment.appRole));
 
   for (const role of desiredRoles) {
     if (!activeRoles.has(role)) {

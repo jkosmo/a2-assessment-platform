@@ -1,6 +1,6 @@
 import express from "express";
 import path from "node:path";
-import { AppRole } from "@prisma/client";
+import { AppRole } from "./db/prismaRuntime.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { meRouter } from "./routes/me.js";

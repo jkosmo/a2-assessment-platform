@@ -1,4 +1,4 @@
-import { SubmissionStatus } from "@prisma/client";
+import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
 
@@ -66,4 +66,3 @@ export async function getOwnedSubmission(submissionId: string, userId: string) {
     },
   });
 }
-

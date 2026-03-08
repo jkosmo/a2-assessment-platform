@@ -1,7 +1,8 @@
-import { AppRole, Prisma } from "@prisma/client";
+import type { AppRole as AppRoleType, Prisma } from "@prisma/client";
+import { AppRole } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 
-const ADMIN_READ_ROLES: AppRole[] = [
+const ADMIN_READ_ROLES: AppRoleType[] = [
   AppRole.ADMINISTRATOR,
   AppRole.SUBJECT_MATTER_OWNER,
   AppRole.REVIEWER,
@@ -9,7 +10,7 @@ const ADMIN_READ_ROLES: AppRole[] = [
   AppRole.REPORT_READER,
 ];
 
-function hasAdminRead(roles: AppRole[]) {
+function hasAdminRead(roles: AppRoleType[]) {
   return roles.some((role) => ADMIN_READ_ROLES.includes(role));
 }
 
@@ -32,7 +33,7 @@ const moduleSummarySelect = {
   },
 } satisfies Prisma.ModuleSelect;
 
-export async function listModules(roles: AppRole[], userId?: string) {
+export async function listModules(roles: AppRoleType[], userId?: string) {
   const now = new Date();
   const adminRead = hasAdminRead(roles);
 
@@ -79,7 +80,7 @@ export async function listModules(roles: AppRole[], userId?: string) {
   );
 }
 
-export async function getModuleById(moduleId: string, roles: AppRole[]) {
+export async function getModuleById(moduleId: string, roles: AppRoleType[]) {
   const now = new Date();
   const adminRead = hasAdminRead(roles);
 
@@ -100,7 +101,7 @@ export async function getModuleById(moduleId: string, roles: AppRole[]) {
   });
 }
 
-export async function getActiveModuleVersion(moduleId: string, roles: AppRole[]) {
+export async function getActiveModuleVersion(moduleId: string, roles: AppRoleType[]) {
   const module = await getModuleById(moduleId, roles);
   if (!module || !module.activeVersion) {
     return null;

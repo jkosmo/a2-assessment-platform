@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.9 - 2026-03-08
+### Summary
+Fixed Prisma ESM/CJS interop crash that prevented app startup on Azure App Service.
+
+### Included
+- Added runtime-safe Prisma adapter module (`src/db/prismaRuntime.ts`) using default import interop.
+- Updated runtime enum/client imports to use the adapter instead of direct named imports from `@prisma/client`.
+- Kept type-only Prisma imports where needed.
+
+### Notes
+- This resolves startup crash: `Named export 'PrismaClient' not found` from `dist/src/db/prisma.js`.
+
 ## 0.3.8 - 2026-03-08
 ### Summary
 Resolved App Service startup permission failures by removing Prisma engine execution from startup path.

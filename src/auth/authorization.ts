@@ -1,7 +1,8 @@
-import { AppRole } from "@prisma/client";
+import { AppRole } from "../db/prismaRuntime.js";
+import type { AppRole as AppRoleType } from "@prisma/client";
 import type { NextFunction, Request, Response } from "express";
 
-export function requireAnyRole(allowed: AppRole[]) {
+export function requireAnyRole(allowed: AppRoleType[]) {
   return (request: Request, response: Response, next: NextFunction) => {
     const roles = request.context?.roles ?? [];
     const authorized = roles.some((role) => allowed.includes(role));
@@ -17,4 +18,3 @@ export function requireAnyRole(allowed: AppRole[]) {
     next();
   };
 }
-

@@ -1,4 +1,4 @@
-import { AssessmentJobStatus, SubmissionStatus } from "@prisma/client";
+import { AssessmentJobStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import { evaluatePracticalWithLlm } from "./llmAssessmentService.js";
