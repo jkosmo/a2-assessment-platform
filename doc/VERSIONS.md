@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.14 - 2026-03-08
+### Summary
+Made stage bootstrap seeding startup-safe by removing it from blocking prestart execution.
+
+### Included
+- Updated `prestart` to run only runtime migrations.
+- Added background bootstrap seed trigger in `src/index.ts` after server listen.
+- Kept bootstrap logic idempotent and environment-gated via `BOOTSTRAP_SEED`.
+
+### Notes
+- This avoids App Service warmup/startup timeouts caused by startup-blocking seeding while still ensuring non-prod data population.
+
 ## 0.3.13 - 2026-03-08
 ### Summary
 Implemented automatic non-production bootstrap seeding so stage has testable data after deploy.
