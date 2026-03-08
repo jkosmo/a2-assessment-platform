@@ -136,7 +136,18 @@ if (Test-Path $zipPath) {
   Remove-Item $zipPath -Force
 }
 
-Compress-Archive -Path (Join-Path $tmpRoot '*') -DestinationPath $zipPath -Force
+if ($IsLinux -or $IsMacOS) {
+  Push-Location $tmpRoot
+  try {
+    zip -r -q $zipPath .
+    Assert-LastExitCode "zip package"
+  } finally {
+    Pop-Location
+  }
+} else {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::CreateFromDirectory($tmpRoot, $zipPath)
+}
 
 Write-Host "Deploying app package to Web App: $webAppName"
 az webapp deploy `

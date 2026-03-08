@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.10 - 2026-03-08
+### Summary
+Fixed deployment packaging to include hidden Prisma client artifacts required at runtime.
+
+### Included
+- Replaced wildcard `Compress-Archive` packaging in `deploy-environment.ps1` with platform-aware zip creation that includes hidden files.
+- Linux/macOS packaging now uses `zip -r .` from artifact root, preserving `.prisma` directory in `node_modules`.
+- Windows packaging uses .NET `ZipFile.CreateFromDirectory`.
+
+### Notes
+- This resolves runtime startup crash: `Cannot find module '.prisma/client/default'`.
+
 ## 0.3.9 - 2026-03-08
 ### Summary
 Fixed Prisma ESM/CJS interop crash that prevented app startup on Azure App Service.
