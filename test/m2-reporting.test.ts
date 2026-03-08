@@ -140,11 +140,21 @@ describe("MVP reporting endpoints", () => {
     ).toBe(true);
     expect(appealsReportResponse.body.totals.overdueAppeals).toBeGreaterThanOrEqual(1);
     const overdueRow = (
-      appealsReportResponse.body.rows as Array<{ appealId: string; slaState: string; firstResponseSlaHours: number }>
+      appealsReportResponse.body.rows as Array<{
+        appealId: string;
+        slaState: string;
+        firstResponseSlaHours: number;
+        firstResponseDurationHours: number | null;
+        firstResponseOverdue: boolean;
+        claimedAt: string | null;
+      }>
     ).find((row) => row.appealId === openAppealId);
     expect(overdueRow).toBeDefined();
     expect(overdueRow?.slaState).toBe("OVERDUE");
     expect(overdueRow?.firstResponseSlaHours).toBeGreaterThan(0);
+    expect(overdueRow?.firstResponseDurationHours).toBeNull();
+    expect(overdueRow?.firstResponseOverdue).toBe(true);
+    expect(overdueRow?.claimedAt).toBeNull();
 
     const completionCsvResponse = await request(app)
       .get("/api/reports/export?type=completion&format=csv")

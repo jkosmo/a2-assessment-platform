@@ -7,6 +7,33 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.31 - 2026-03-08
+### Summary
+Implemented explicit first-response tracking for appeals by adding `claimedAt` and wiring first-response duration/SLA metrics through queue and reporting.
+
+### Included
+- Data model hardening:
+  - Added `claimedAt` to `Appeal` model.
+  - Added migration `2026030803_appeal_claimed_at`.
+  - Added index on `(appealStatus, claimedAt)` for operational queries.
+- SLA engine update:
+  - `src/services/appealSla.ts` now computes:
+    - `firstResponseDurationHours`
+    - first-response overdue using explicit `claimedAt` when available
+    - fallback behavior for unclaimed/unresolved appeals
+- Appeal runtime behavior:
+  - `claimAppeal` now sets `claimedAt` on first claim and preserves it on subsequent claims.
+  - queue/workspace responses include `claimedAt` and SLA snapshot.
+- Reporting update:
+  - appeals report rows now include `claimedAt` and `firstResponseDurationHours`.
+  - existing SLA aggregate totals preserved.
+- Tests updated:
+  - `test/m2-appeal-flow.test.ts` verifies `claimedAt` is set and stable.
+  - `test/m2-reporting.test.ts` verifies overdue open-appeal first-response SLA fields.
+
+### Notes
+- This implements follow-up issue #44 (first-response SLA hardening).
+
 ## 0.3.30 - 2026-03-08
 ### Summary
 Implemented MVP post-appeal operating model baseline with SLA visibility in appeal queue/reporting and documented runtime process.

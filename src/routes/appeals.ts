@@ -58,6 +58,7 @@ appealsRouter.get("/:appealId", async (request, response) => {
     appeal: workspace,
     sla: buildAppealSlaSnapshot({
       createdAt: workspace.createdAt,
+      claimedAt: workspace.claimedAt,
       resolvedAt: workspace.resolvedAt,
       appealStatus: workspace.appealStatus,
     }),

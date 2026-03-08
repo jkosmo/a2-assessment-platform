@@ -311,6 +311,7 @@ model Appeal {
   appealReason    String
   appealStatus    AppealStatus @default(OPEN)
   createdAt       DateTime     @default(now())
+  claimedAt       DateTime?
   resolvedAt      DateTime?
   resolvedById    String?
   resolutionNote  String?
@@ -319,6 +320,7 @@ model Appeal {
   resolvedBy      User?        @relation("AppealResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([appealStatus, createdAt])
+  @@index([appealStatus, claimedAt])
 }
 
 model ManualReview {

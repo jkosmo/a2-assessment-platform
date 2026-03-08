@@ -99,11 +99,13 @@ describe("MVP appeal flow", () => {
       queueResponse.body.appeals as Array<{
         id: string;
         submission: { id: string };
-        sla: { slaState: string };
+        claimedAt: string | null;
+        sla: { slaState: string; firstResponseDurationHours: number | null };
       }>
     ).find((item) => item.submission.id === submissionId);
     expect(queuedAppeal).toBeDefined();
     expect(queuedAppeal?.id).toBe(appealId);
+    expect(queuedAppeal?.claimedAt).toBeNull();
     expect(queuedAppeal?.sla.slaState).toMatch(/ON_TRACK|AT_RISK|OVERDUE|RESOLVED/);
 
     const detailResponse = await request(app).get(`/api/appeals/${appealId}`).set(appealHandlerHeaders);
@@ -116,6 +118,16 @@ describe("MVP appeal flow", () => {
     const claimResponse = await request(app).post(`/api/appeals/${appealId}/claim`).set(appealHandlerHeaders);
     expect(claimResponse.status).toBe(200);
     expect(claimResponse.body.appeal.appealStatus).toBe("IN_REVIEW");
+    expect(claimResponse.body.appeal.claimedAt).toBeTruthy();
+    const firstClaimedAt = claimResponse.body.appeal.claimedAt as string;
+
+    const reClaimResponse = await request(app).post(`/api/appeals/${appealId}/claim`).set(appealHandlerHeaders);
+    expect(reClaimResponse.status).toBe(200);
+    expect(reClaimResponse.body.appeal.claimedAt).toBe(firstClaimedAt);
+
+    const inReviewDetail = await request(app).get(`/api/appeals/${appealId}`).set(appealHandlerHeaders);
+    expect(inReviewDetail.status).toBe(200);
+    expect(inReviewDetail.body.sla.firstResponseDurationHours).not.toBeNull();
 
     const resolveResponse = await request(app)
       .post(`/api/appeals/${appealId}/resolve`)

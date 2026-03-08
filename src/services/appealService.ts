@@ -128,6 +128,7 @@ export async function listAppealQueue(input: {
   return appeals.map((appeal) => ({
     sla: buildAppealSlaSnapshot({
       createdAt: appeal.createdAt,
+      claimedAt: appeal.claimedAt,
       resolvedAt: appeal.resolvedAt,
       appealStatus: appeal.appealStatus,
     }),
@@ -135,6 +136,7 @@ export async function listAppealQueue(input: {
     appealStatus: appeal.appealStatus,
     appealReason: appeal.appealReason,
     createdAt: appeal.createdAt,
+    claimedAt: appeal.claimedAt,
     resolvedAt: appeal.resolvedAt,
     appealedBy: appeal.appealedBy,
     resolvedBy: appeal.resolvedBy,
@@ -217,6 +219,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
       id: true,
       submissionId: true,
       appealStatus: true,
+      claimedAt: true,
       resolvedById: true,
     },
   });
@@ -240,6 +243,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     data: {
       appealStatus: AppealStatus.IN_REVIEW,
       resolvedById: handlerId,
+      ...(appeal.claimedAt ? {} : { claimedAt: new Date() }),
     },
   });
 
@@ -251,6 +255,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     metadata: {
       submissionId: appeal.submissionId,
       appealStatus: claimed.appealStatus,
+      claimedAt: claimed.claimedAt?.toISOString() ?? null,
     },
   });
 

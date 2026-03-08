@@ -13,7 +13,7 @@ This document defines runtime operations after an appeal is submitted.
    - System effect: appeal is `OPEN`; submission is set to `UNDER_REVIEW`.
 2. `appeal_claimed`
    - Trigger: handler/admin claims appeal via `POST /api/appeals/{appealId}/claim`.
-   - System effect: appeal is `IN_REVIEW`.
+   - System effect: appeal is `IN_REVIEW` and `claimedAt` is stored on first claim.
 3. `appeal_resolved`
    - Trigger: handler/admin resolves via `POST /api/appeals/{appealId}/resolve`.
    - System effect: new immutable `APPEAL_RESOLUTION` decision is created, appeal is `RESOLVED`, submission returns to `COMPLETED`.
@@ -48,6 +48,7 @@ Where available:
 - Reporting API includes per-row SLA fields and totals:
   - `GET /api/reports/appeals`
   - totals include `onTrackAppeals`, `atRiskAppeals`, `overdueAppeals`.
+  - includes explicit `claimedAt` and `firstResponseDurationHours`.
 
 ## Escalation Path
 1. At-risk:
@@ -90,6 +91,5 @@ To test escalation behavior quickly in staging:
 4. Restore normal SLA settings after test.
 
 ## Follow-up Backlog (Post-MVP hardening)
-- #44 Track explicit `claimedAt` timestamp for exact first-response SLA.
 - #45 Add automatic escalation alerting for overdue appeals.
 - #46 Add participant notification channel (email/Teams) for appeal status transitions.

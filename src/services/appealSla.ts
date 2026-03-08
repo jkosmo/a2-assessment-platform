@@ -4,6 +4,7 @@ import type { AppealStatus as AppealStatusType } from "@prisma/client";
 
 export type AppealSlaSnapshot = {
   ageHours: number;
+  firstResponseDurationHours: number | null;
   resolutionDurationHours: number | null;
   firstResponseSlaHours: number;
   resolutionSlaHours: number;
@@ -15,6 +16,7 @@ export type AppealSlaSnapshot = {
 
 export function buildAppealSlaSnapshot(input: {
   createdAt: Date;
+  claimedAt: Date | null;
   resolvedAt: Date | null;
   appealStatus: AppealStatusType;
   now?: Date;
@@ -25,6 +27,11 @@ export function buildAppealSlaSnapshot(input: {
   const atRiskRatio = env.APPEAL_AT_RISK_RATIO;
 
   const ageHours = hoursBetween(input.createdAt, now);
+  const firstResponseDurationHours = input.claimedAt
+    ? hoursBetween(input.createdAt, input.claimedAt)
+    : input.resolvedAt
+      ? hoursBetween(input.createdAt, input.resolvedAt)
+      : null;
   const resolutionDurationHours = input.resolvedAt
     ? hoursBetween(input.createdAt, input.resolvedAt)
     : null;
@@ -32,14 +39,18 @@ export function buildAppealSlaSnapshot(input: {
   const unresolved =
     input.appealStatus === AppealStatus.OPEN || input.appealStatus === AppealStatus.IN_REVIEW;
 
-  const firstResponseOverdue =
-    unresolved && input.appealStatus === AppealStatus.OPEN && ageHours > firstResponseSlaHours;
+  const firstResponseOverdue = firstResponseDurationHours != null
+    ? firstResponseDurationHours > firstResponseSlaHours
+    : unresolved && ageHours > firstResponseSlaHours;
   const resolutionOverdue = unresolved && ageHours > resolutionSlaHours;
   const atRisk =
     unresolved &&
     !firstResponseOverdue &&
     !resolutionOverdue &&
-    (ageHours >= firstResponseSlaHours * atRiskRatio || ageHours >= resolutionSlaHours * atRiskRatio);
+    (
+      (input.claimedAt == null && ageHours >= firstResponseSlaHours * atRiskRatio) ||
+      ageHours >= resolutionSlaHours * atRiskRatio
+    );
 
   const slaState: AppealSlaSnapshot["slaState"] = input.resolvedAt
     ? "RESOLVED"
@@ -51,6 +62,8 @@ export function buildAppealSlaSnapshot(input: {
 
   return {
     ageHours: round2(ageHours),
+    firstResponseDurationHours:
+      firstResponseDurationHours == null ? null : round2(firstResponseDurationHours),
     resolutionDurationHours: resolutionDurationHours == null ? null : round2(resolutionDurationHours),
     firstResponseSlaHours,
     resolutionSlaHours,

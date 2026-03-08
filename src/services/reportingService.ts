@@ -55,6 +55,7 @@ type AppealRow = {
   appealId: string;
   appealStatus: string;
   createdAt: Date;
+  claimedAt: Date | null;
   resolvedAt: Date | null;
   moduleId: string;
   moduleTitle: string;
@@ -64,6 +65,7 @@ type AppealRow = {
   appealedByEmail: string;
   resolvedByEmail: string | null;
   ageHours: number;
+  firstResponseDurationHours: number | null;
   resolutionDurationHours: number | null;
   firstResponseSlaHours: number;
   resolutionSlaHours: number;
@@ -366,12 +368,14 @@ export async function getAppealsReport(filters: ReportFilters) {
   const rows: AppealRow[] = appeals.map((appeal) => ({
     ...buildAppealSlaSnapshot({
       createdAt: appeal.createdAt,
+      claimedAt: appeal.claimedAt,
       resolvedAt: appeal.resolvedAt,
       appealStatus: appeal.appealStatus,
     }),
     appealId: appeal.id,
     appealStatus: appeal.appealStatus,
     createdAt: appeal.createdAt,
+    claimedAt: appeal.claimedAt,
     resolvedAt: appeal.resolvedAt,
     moduleId: appeal.submission.module.id,
     moduleTitle: appeal.submission.module.title,
