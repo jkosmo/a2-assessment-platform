@@ -1,0 +1,150 @@
+name: Implementation Task
+description: Plan and track implementation work with mandatory design, refactor, test, and documentation evaluation.
+title: "[Implementation]: "
+labels:
+  - type:feature
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe what needs to be implemented.
+      placeholder: As a team, we need to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Define concrete, testable acceptance criteria.
+      placeholder: |
+        - criterion 1
+        - criterion 2
+        - criterion 3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: design_needed
+    attributes:
+      label: Design/Architecture Needed Before Coding?
+      description: Evaluate if this issue needs a design note first.
+      options:
+        - "No - direct implementation is safe"
+        - "Yes - design note required"
+        - "Unsure - needs discovery"
+    validations:
+      required: true
+
+  - type: textarea
+    id: design_decision
+    attributes:
+      label: Design Decision / Justification
+      description: If design is needed, link to or summarize it. If not, explain why.
+      placeholder: Decision, trade-offs, and references...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: refactor_needed
+    attributes:
+      label: Refactor Needed in Touched Area?
+      description: Evaluate whether refactoring should be done to reduce complexity.
+      options:
+        - "No - current structure is adequate"
+        - "Yes - include refactor in this issue"
+        - "Yes - create follow-up refactor issue"
+    validations:
+      required: true
+
+  - type: textarea
+    id: refactor_plan
+    attributes:
+      label: Refactor Decision Details
+      description: Describe what will be refactored or why it is deferred.
+      placeholder: Scope, rationale, and optional follow-up issue link...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: config_first
+    attributes:
+      label: Configuration-First Review
+      description: Confirm hardcoding has been explicitly evaluated.
+      options:
+        - label: I reviewed hardcoded values and moved evolving behavior to configuration where appropriate.
+          required: true
+        - label: I confirmed secrets and environment-specific values are not hardcoded.
+          required: true
+
+  - type: dropdown
+    id: unit_tests
+    attributes:
+      label: Unit Test Need
+      options:
+        - "Required - include in this issue"
+        - "Not required - justified below"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: integration_tests
+    attributes:
+      label: Integration Test Need
+      options:
+        - "Required - include in this issue"
+        - "Not required - justified below"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: e2e_tests
+    attributes:
+      label: E2E Test Need
+      options:
+        - "Required - include in this issue"
+        - "Not required - justified below"
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing_plan
+    attributes:
+      label: Testing Plan / Justification
+      description: Explain test additions or why specific test types are not needed.
+      placeholder: Commands, scope, and justification...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: docs_needed
+    attributes:
+      label: Documentation Update Needed?
+      options:
+        - "Yes - docs update required"
+        - "No - no docs impact"
+    validations:
+      required: true
+
+  - type: textarea
+    id: docs_plan
+    attributes:
+      label: Documentation Plan / Justification
+      description: Which docs must be updated, or why no update is needed.
+      placeholder: doc/API/runbook/user guide impacts...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: delivery_checks
+    attributes:
+      label: Delivery and Environments
+      description: Confirm CI/CD expectations.
+      options:
+        - label: This issue will pass CI checks before merge.
+          required: true
+        - label: This issue can be validated in staging.
+          required: true
+        - label: Production deployment requires human approval.
+          required: true
