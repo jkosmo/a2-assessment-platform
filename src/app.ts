@@ -13,6 +13,7 @@ import { auditRouter } from "./routes/audit.js";
 import { reviewsRouter } from "./routes/reviews.js";
 import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
+import { adminContentRouter } from "./routes/adminContent.js";
 
 const app = express();
 
@@ -80,6 +81,11 @@ app.use(
   "/api/reports",
   requireAnyRole([AppRole.ADMINISTRATOR, AppRole.REPORT_READER, AppRole.SUBJECT_MATTER_OWNER]),
   reportsRouter,
+);
+app.use(
+  "/api/admin/content",
+  requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]),
+  adminContentRouter,
 );
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {

@@ -7,6 +7,34 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.24 - 2026-03-08
+### Summary
+Implemented MVP admin content management and publication flow for module governance.
+
+### Included
+- Added admin content API (role-gated to `ADMINISTRATOR` and `SUBJECT_MATTER_OWNER`):
+  - `POST /api/admin/content/modules/{moduleId}/rubric-versions`
+  - `POST /api/admin/content/modules/{moduleId}/prompt-template-versions`
+  - `POST /api/admin/content/modules/{moduleId}/mcq-set-versions`
+  - `POST /api/admin/content/modules/{moduleId}/module-versions`
+  - `POST /api/admin/content/modules/{moduleId}/module-versions/{moduleVersionId}/publish`
+- Added content management service to:
+  - auto-increment version numbers per module/content type
+  - validate cross-module integrity when linking rubric/prompt/MCQ versions into module versions
+  - publish module versions by updating active version pointer
+- Added publication audit event:
+  - action: `module_version_published`
+  - entity: `module_version`
+- Added integration test:
+  - `test/m2-admin-content-publication.test.ts`
+  - validates create -> link -> publish path and role access control
+- Test stability hardening:
+  - increased Vitest timeout to 20s for current end-to-end style suite
+  - adjusted M0 module version assertion to support later published versions in shared test runtime
+
+### Notes
+- This addresses issue #23 acceptance criteria for admin-managed versioned content and auditable publication.
+
 ## 0.3.23 - 2026-03-08
 ### Summary
 Implemented participant-facing result details and personal submission history for MVP transparency requirements.

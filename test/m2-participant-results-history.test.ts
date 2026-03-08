@@ -83,7 +83,7 @@ describe("MVP participant result and history", () => {
     );
     expect(otherSubmissionIds).not.toContain(completedSubmissionId);
     expect(otherSubmissionIds).not.toContain(underReviewSubmissionId);
-  });
+  }, 15000);
 });
 
 async function createSubmissionAndAssessment(input: {

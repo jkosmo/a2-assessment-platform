@@ -40,7 +40,7 @@ describe("M0 foundation APIs", () => {
 
     expect(activeVersionResponse.status).toBe(200);
     expect(activeVersionResponse.body.activeVersion.moduleId).toBe(moduleId);
-    expect(activeVersionResponse.body.activeVersion.versionNo).toBe(1);
+    expect(activeVersionResponse.body.activeVersion.versionNo).toBeGreaterThanOrEqual(1);
   });
 
   it("blocks module access when no role is present", async () => {

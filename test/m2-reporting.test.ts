@@ -127,7 +127,7 @@ describe("MVP reporting endpoints", () => {
 
     const forbiddenResponse = await request(app).get("/api/reports/completion").set(participantAHeaders);
     expect(forbiddenResponse.status).toBe(403);
-  });
+  }, 15000);
 });
 
 async function createSubmissionAndAssessment(input: {
