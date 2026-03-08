@@ -20,9 +20,15 @@ describe("MVP admin content management and publication", () => {
   });
 
   it("creates linked content versions, creates module version, and publishes it with audit log", async () => {
-    const modulesResponse = await request(app).get("/api/modules").set(adminHeaders);
-    expect(modulesResponse.status).toBe(200);
-    const moduleId = modulesResponse.body.modules[0].id as string;
+    const module = await prisma.module.create({
+      data: {
+        title: `Admin Content Test Module ${Date.now()}`,
+        description: "Isolated module for admin content publication test.",
+        certificationLevel: "foundation",
+      },
+      select: { id: true },
+    });
+    const moduleId = module.id;
 
     const rubricResponse = await request(app)
       .post(`/api/admin/content/modules/${moduleId}/rubric-versions`)

@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.26 - 2026-03-08
+### Summary
+Stabilized CI by fixing cross-test state mutation in admin content publication test.
+
+### Included
+- Updated `test/m2-admin-content-publication.test.ts` to create and use an isolated test module instead of mutating the seeded shared module.
+- Removed flaky dependency where test order/parallelism could change active module version and break `test/m1-core-flow.test.ts`.
+
+### Notes
+- This resolves intermittent CI failures seen in `CI #31` for commit `12400c2`.
+
 ## 0.3.25 - 2026-03-08
 ### Summary
 Implemented i18n baseline (`en-GB`, `nb`, `nn`) across participant UI and core API user-facing messages.
