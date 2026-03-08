@@ -1,18 +1,14 @@
 # A2 Assessment Platform
 
-Backend implementation currently covers:
-- `#9` Entra login + RBAC bootstrap
-- `#10` Core data model + migrations with version traceability
-- `#11` Module + active version APIs
-- `#12` Borderline routing discovery baseline
-- `#13` Participant module overview (manual test UI)
-- `#14` Submission API with required field validation
-- `#15` MCQ start/submit with deterministic scoring
-- `#16` LLM assessment stub
-- `#17` LLM contract with strict schema validation
-- `#18` Backend decision engine with thresholds/manual-review routing
-- `#19` Async assessment job orchestration
-- `#37` Dev tenant auth target design
+Current implementation includes MVP core flow, governance flow, and observability baseline:
+- Foundation auth/RBAC with mock + Entra modes.
+- Module/version retrieval and participant flow (submission + MCQ + assessment result).
+- Decision engine, async assessment worker, audit event pipeline.
+- Manual review and appeal workspace flow with immutable decision lineage.
+- Reporting endpoints + CSV export (completion, pass rates, manual review queue, appeals).
+- Admin content publication flow for rubric/prompt/MCQ/module versions.
+- Internationalization baseline (`en-GB`, `nb`, `nn`) for participant UI and key API payloads.
+- Azure deployment baseline (staging auto deploy, production approval gate, alerts/runbooks).
 
 ## Tech
 - Node.js + TypeScript + Express
@@ -47,8 +43,28 @@ npm run prisma:seed
 npm run dev
 ```
 
+## Automated Testing
+- Local:
+```bash
+npm run lint
+npm test
+npm run build
+```
+- CI:
+  - Workflow: `.github/workflows/ci.yml`
+  - Runs on PR + push to `main`.
+  - Includes Prisma generate, migrate/seed against `.env.test`, type-check, tests, and build.
+
+## Deploy and Runtime Automation
+- CI/CD deploy workflow: `.github/workflows/deploy-azure.yml`
+- `main` push: automatic staging deploy.
+- Production deploy: manual `workflow_dispatch` with environment approval gate.
+- Infrastructure as code: `infra/azure/main.bicep`
+- Deploy script: `scripts/azure/deploy-environment.ps1`
+
 ## API
 - `GET /healthz`
+- `GET /version`
 - `GET /api/me`
 - `GET /api/modules`
 - `GET /api/modules/:moduleId`
@@ -56,10 +72,31 @@ npm run dev
 - `GET /api/modules/:moduleId/mcq/start?submissionId=<id>`
 - `POST /api/modules/:moduleId/mcq/submit`
 - `POST /api/submissions`
+- `GET /api/submissions/history?limit=<n>`
+- `POST /api/submissions/:submissionId/appeals`
 - `GET /api/submissions/:submissionId`
 - `GET /api/submissions/:submissionId/result`
 - `POST /api/assessments/:submissionId/run`
 - `GET /api/assessments/:submissionId`
+- `GET /api/audit/submissions/:submissionId`
+- `GET /api/reviews`
+- `GET /api/reviews/:reviewId`
+- `POST /api/reviews/:reviewId/claim`
+- `POST /api/reviews/:reviewId/resolve`
+- `GET /api/appeals`
+- `GET /api/appeals/:appealId`
+- `POST /api/appeals/:appealId/claim`
+- `POST /api/appeals/:appealId/resolve`
+- `GET /api/reports/completion`
+- `GET /api/reports/pass-rates`
+- `GET /api/reports/manual-review-queue`
+- `GET /api/reports/appeals`
+- `GET /api/reports/export?type=<report>&format=csv`
+- `POST /api/admin/content/modules/:moduleId/rubric-versions`
+- `POST /api/admin/content/modules/:moduleId/prompt-template-versions`
+- `POST /api/admin/content/modules/:moduleId/mcq-set-versions`
+- `POST /api/admin/content/modules/:moduleId/module-versions`
+- `POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish`
 - `GET /participant` (manual test UI)
 
 ## Auth modes
@@ -125,3 +162,6 @@ Internationalization baseline and translation workflow:
 
 Appeals operating process (SLA, ownership, escalation):
 - `doc/APPEALS_OPERATING_MODEL.md`
+
+Observability and incident response runbook:
+- `doc/OBSERVABILITY_RUNBOOK.md`

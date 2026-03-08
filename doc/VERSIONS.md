@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.33 - 2026-03-08
+### Summary
+Validated automated test baseline and aligned README documentation with current MVP implementation and CI/CD reality.
+
+### Included
+- Documentation hardening:
+  - Updated `README.md` to reflect current implemented scope beyond M1.
+  - Added explicit `Automated Testing` section with local + CI execution paths.
+  - Added deployment automation section (`staging` auto, `production` approval gate).
+  - Expanded API endpoint overview to include reviews, appeals, reporting, audit, and admin content APIs.
+- Validation run:
+  - `npm run lint`
+  - `npm test` (23 tests passing across 12 test files)
+
+### Notes
+- No runtime behavior changes in this version; this release is documentation and verification alignment only.
+
 ## 0.3.32 - 2026-03-08
 ### Summary
 Implemented automated overdue-appeal escalation monitoring and Azure alert routing baseline.
