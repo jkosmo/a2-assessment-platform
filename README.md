@@ -65,3 +65,6 @@ M0 architecture and implementation decisions are documented in:
 
 Version history is tracked in:
 - `doc/VERSIONS.md`
+
+Dev-tenant Entra auth target design is documented in:
+- `doc/DEV_TENANT_AUTH_TARGET_DESIGN.md`
