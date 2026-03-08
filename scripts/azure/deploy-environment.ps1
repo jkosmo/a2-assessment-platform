@@ -30,6 +30,28 @@ if (-not $ResourceGroupName) {
   $ResourceGroupName = "rg-a2-assessment-$EnvironmentName"
 }
 
+function Get-TempBasePath {
+  $candidatePaths = @(
+    $env:RUNNER_TEMP,
+    $env:TEMP,
+    $env:TMP,
+    $env:TMPDIR
+  )
+
+  foreach ($candidate in $candidatePaths) {
+    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+      return $candidate
+    }
+  }
+
+  $systemTemp = [System.IO.Path]::GetTempPath()
+  if (-not [string]::IsNullOrWhiteSpace($systemTemp)) {
+    return $systemTemp
+  }
+
+  throw "Could not resolve a temporary directory for deployment packaging."
+}
+
 Write-Host "Deploying environment: $EnvironmentName"
 Write-Host "Subscription: $SubscriptionId"
 Write-Host "Resource group: $ResourceGroupName"
@@ -75,7 +97,8 @@ if (-not $webAppName) {
   throw "webAppName output missing from deployment."
 }
 
-$tmpRoot = Join-Path $env:TEMP "a2-assessment-deploy-$EnvironmentName"
+$tempBasePath = Get-TempBasePath
+$tmpRoot = Join-Path $tempBasePath "a2-assessment-deploy-$EnvironmentName"
 if (Test-Path $tmpRoot) {
   Remove-Item $tmpRoot -Recurse -Force
 }
@@ -83,7 +106,7 @@ New-Item -Path $tmpRoot -ItemType Directory | Out-Null
 
 git archive --format=tar HEAD | tar -xf - -C $tmpRoot
 
-$zipPath = Join-Path $env:TEMP "a2-assessment-$EnvironmentName.zip"
+$zipPath = Join-Path $tempBasePath "a2-assessment-$EnvironmentName.zip"
 if (Test-Path $zipPath) {
   Remove-Item $zipPath -Force
 }
