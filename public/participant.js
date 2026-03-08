@@ -9,12 +9,20 @@ const attemptIdLabel = document.getElementById("attemptId");
 let currentQuestions = [];
 
 function headers() {
+  const roles = document
+    .getElementById("roles")
+    .value.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(",");
+
   return {
     "Content-Type": "application/json",
     "x-user-id": document.getElementById("userId").value,
     "x-user-email": document.getElementById("email").value,
     "x-user-name": document.getElementById("name").value,
     "x-user-department": document.getElementById("department").value,
+    "x-user-roles": roles,
   };
 }
 
@@ -205,4 +213,3 @@ function renderQuestions() {
     mcqQuestions.appendChild(wrapper);
   }
 }
-

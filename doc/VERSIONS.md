@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.12 - 2026-03-08
+### Summary
+Fixed stage participant test console to send role headers required by API authorization.
+
+### Included
+- Added roles input field in `public/participant.html` (default `PARTICIPANT`).
+- Updated `public/participant.js` to send `x-user-roles` on all API requests.
+
+### Notes
+- This resolves 403 responses from `/api/modules` in mock mode when testing via `/participant`.
+
 ## 0.3.11 - 2026-03-08
 ### Summary
 Stabilized deployment result detection by replacing fragile App Service startup tracking with explicit health verification.
