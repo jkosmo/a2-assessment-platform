@@ -1,0 +1,55 @@
+import request from "supertest";
+import { app } from "../src/app.js";
+import { prisma } from "../src/db/prisma.js";
+
+describe("M0 foundation APIs", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("returns current user and active role assignments from /api/me", async () => {
+    const response = await request(app)
+      .get("/api/me")
+      .set("x-user-id", "participant-1")
+      .set("x-user-email", "participant@company.com")
+      .set("x-user-name", "Platform Participant");
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.email).toBe("participant@company.com");
+    expect(response.body.user.roles).toContain("PARTICIPANT");
+  });
+
+  it("returns published modules and active version metadata", async () => {
+    const modulesResponse = await request(app)
+      .get("/api/modules")
+      .set("x-user-id", "participant-1")
+      .set("x-user-email", "participant@company.com")
+      .set("x-user-name", "Platform Participant");
+
+    expect(modulesResponse.status).toBe(200);
+    expect(modulesResponse.body.modules.length).toBeGreaterThan(0);
+
+    const moduleId = modulesResponse.body.modules[0].id as string;
+
+    const activeVersionResponse = await request(app)
+      .get(`/api/modules/${moduleId}/active-version`)
+      .set("x-user-id", "participant-1")
+      .set("x-user-email", "participant@company.com")
+      .set("x-user-name", "Platform Participant");
+
+    expect(activeVersionResponse.status).toBe(200);
+    expect(activeVersionResponse.body.activeVersion.moduleId).toBe(moduleId);
+    expect(activeVersionResponse.body.activeVersion.versionNo).toBe(1);
+  });
+
+  it("blocks module access when no role is present", async () => {
+    const response = await request(app)
+      .get("/api/modules")
+      .set("x-user-id", "no-role-user")
+      .set("x-user-email", "no.role@company.com")
+      .set("x-user-name", "No Role User");
+
+    expect(response.status).toBe(403);
+  });
+});
+

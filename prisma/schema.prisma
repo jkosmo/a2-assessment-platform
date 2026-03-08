@@ -1,0 +1,362 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  PARTICIPANT
+  SUBJECT_MATTER_OWNER
+  ADMINISTRATOR
+  APPEAL_HANDLER
+  REPORT_READER
+  REVIEWER
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  PROCESSING
+  SCORED
+  UNDER_REVIEW
+  COMPLETED
+  REJECTED
+}
+
+enum AppealStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum ReviewStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+}
+
+enum DecisionType {
+  AUTOMATIC
+  MANUAL_OVERRIDE
+  APPEAL_RESOLUTION
+}
+
+model User {
+  id                    String                @id @default(cuid())
+  externalId            String                @unique
+  name                  String
+  email                 String                @unique
+  department            String?
+  manager               String?
+  activeStatus          Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  roleAssignments       RoleAssignment[]
+  submissions           Submission[]
+  appealsCreated        Appeal[]              @relation("AppealedBy")
+  appealsResolved       Appeal[]              @relation("AppealResolvedBy")
+  manualReviewsAssigned ManualReview[]        @relation("Reviewer")
+  decisionsFinalised    AssessmentDecision[]  @relation("FinalisedBy")
+  auditEventsAsActor    AuditEvent[]          @relation("AuditActor")
+  certifications        CertificationStatus[]
+}
+
+model RoleAssignment {
+  id         String   @id @default(cuid())
+  userId     String
+  appRole    AppRole
+  validFrom  DateTime
+  validTo    DateTime?
+  createdAt  DateTime @default(now())
+  createdBy  String?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, validFrom, validTo])
+}
+
+model Module {
+  id                     String          @id @default(cuid())
+  title                  String
+  description            String?
+  certificationLevel     String?
+  validFrom              DateTime?
+  validTo                DateTime?
+  activeVersionId        String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  versions               ModuleVersion[] @relation("ModuleVersions")
+  activeVersion          ModuleVersion?  @relation("ActiveModuleVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  submissions            Submission[]
+  mcqQuestions           MCQQuestion[]
+  mcqSetVersions         MCQSetVersion[]
+  certificationStatuses  CertificationStatus[]
+  rubricVersions         RubricVersion[]
+  promptTemplateVersions PromptTemplateVersion[]
+}
+
+model ModuleVersion {
+  id                        String                @id @default(cuid())
+  moduleId                  String
+  versionNo                 Int
+  taskText                  String
+  guidanceText              String?
+  rubricVersionId           String
+  promptTemplateVersionId   String
+  mcqSetVersionId           String
+  publishedBy               String?
+  publishedAt               DateTime?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  module                    Module                @relation("ModuleVersions", fields: [moduleId], references: [id], onDelete: Restrict)
+  activeForModules          Module[]              @relation("ActiveModuleVersion")
+  rubricVersion             RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  promptTemplateVersion     PromptTemplateVersion @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+  mcqSetVersion             MCQSetVersion         @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
+  submissions               Submission[]
+  assessmentDecisions       AssessmentDecision[]
+  llmEvaluations            LLMEvaluation[]
+
+  @@unique([moduleId, versionNo])
+  @@index([moduleId, publishedAt])
+}
+
+model Submission {
+  id                String             @id @default(cuid())
+  userId            String
+  moduleId          String
+  moduleVersionId   String
+  deliveryType      String
+  rawText           String?
+  reflectionText    String
+  promptExcerpt     String
+  attachmentUri     String?
+  submittedAt       DateTime           @default(now())
+  submissionStatus  SubmissionStatus   @default(SUBMITTED)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  module            Module             @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  moduleVersion     ModuleVersion      @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+  mcqAttempts       MCQAttempt[]
+  llmEvaluations    LLMEvaluation[]
+  decisions         AssessmentDecision[]
+  appeals           Appeal[]
+  manualReviews     ManualReview[]
+
+  @@index([userId, submittedAt])
+  @@index([moduleId, submittedAt])
+}
+
+model MCQSetVersion {
+  id          String       @id @default(cuid())
+  moduleId    String
+  versionNo   Int
+  title       String
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  questions   MCQQuestion[]
+  attempts    MCQAttempt[]
+  versions    ModuleVersion[]
+
+  @@unique([moduleId, versionNo])
+}
+
+model MCQQuestion {
+  id              String        @id @default(cuid())
+  mcqSetVersionId String
+  moduleId        String
+  stem            String
+  optionsJson     String
+  correctAnswer   String
+  rationale       String?
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  mcqSetVersion   MCQSetVersion @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
+  module          Module        @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  responses       MCQResponse[]
+
+  @@index([mcqSetVersionId, active])
+}
+
+model MCQAttempt {
+  id              String       @id @default(cuid())
+  submissionId    String
+  mcqSetVersionId String
+  startedAt       DateTime
+  completedAt     DateTime?
+  rawScore        Int?
+  scaledScore     Float?
+  percentScore    Float?
+  passFailMcq     Boolean?
+  createdAt       DateTime     @default(now())
+  submission      Submission   @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  mcqSetVersion   MCQSetVersion @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
+  responses       MCQResponse[]
+}
+
+model MCQResponse {
+  id           String     @id @default(cuid())
+  mcqAttemptId String
+  questionId   String
+  selectedAnswer String
+  isCorrect    Boolean
+  createdAt    DateTime   @default(now())
+  mcqAttempt   MCQAttempt @relation(fields: [mcqAttemptId], references: [id], onDelete: Restrict)
+  question     MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+}
+
+model RubricVersion {
+  id              String          @id @default(cuid())
+  moduleId        String
+  versionNo       Int
+  criteriaJson    String
+  scalingRuleJson String
+  passRuleJson    String
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  module          Module          @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  moduleVersions  ModuleVersion[]
+  decisions       AssessmentDecision[]
+
+  @@unique([moduleId, versionNo])
+}
+
+model PromptTemplateVersion {
+  id               String          @id @default(cuid())
+  moduleId         String
+  versionNo        Int
+  systemPrompt     String
+  userPromptTemplate String
+  examplesJson     String
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  module           Module          @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  moduleVersions   ModuleVersion[]
+  llmEvaluations   LLMEvaluation[]
+  decisions        AssessmentDecision[]
+
+  @@unique([moduleId, versionNo])
+}
+
+model LLMEvaluation {
+  id                      String                @id @default(cuid())
+  submissionId            String
+  moduleVersionId         String
+  modelName               String
+  promptTemplateVersionId String
+  requestPayloadHash      String
+  responseJson            String
+  rubricTotal             Int
+  practicalScoreScaled    Float
+  passFailPractical       Boolean
+  manualReviewRecommended Boolean
+  confidenceNote          String?
+  evaluatedAt             DateTime              @default(now())
+  createdAt               DateTime              @default(now())
+  submission              Submission            @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  moduleVersion           ModuleVersion         @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+  promptTemplateVersion   PromptTemplateVersion @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+}
+
+model AssessmentDecision {
+  id                      String                @id @default(cuid())
+  submissionId            String
+  moduleVersionId         String
+  rubricVersionId         String
+  promptTemplateVersionId String
+  mcqScaledScore          Float
+  practicalScaledScore    Float
+  totalScore              Float
+  redFlagsJson            String
+  passFailTotal           Boolean
+  decisionType            DecisionType
+  decisionReason          String
+  finalisedAt             DateTime              @default(now())
+  finalisedById           String?
+  parentDecisionId        String?
+  createdAt               DateTime              @default(now())
+  submission              Submission            @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  moduleVersion           ModuleVersion         @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+  rubricVersion           RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  promptTemplateVersion   PromptTemplateVersion @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+  finalisedBy             User?                 @relation("FinalisedBy", fields: [finalisedById], references: [id], onDelete: SetNull)
+  parentDecision          AssessmentDecision?   @relation("DecisionLineage", fields: [parentDecisionId], references: [id], onDelete: SetNull)
+  childDecisions          AssessmentDecision[]  @relation("DecisionLineage")
+  certifications          CertificationStatus[]
+
+  @@index([submissionId, finalisedAt])
+}
+
+model Appeal {
+  id              String       @id @default(cuid())
+  submissionId    String
+  appealedById    String
+  appealReason    String
+  appealStatus    AppealStatus @default(OPEN)
+  createdAt       DateTime     @default(now())
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolutionNote  String?
+  submission      Submission   @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  appealedBy      User         @relation("AppealedBy", fields: [appealedById], references: [id], onDelete: Restrict)
+  resolvedBy      User?        @relation("AppealResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([appealStatus, createdAt])
+}
+
+model ManualReview {
+  id               String       @id @default(cuid())
+  submissionId     String
+  triggerReason    String
+  reviewerId       String?
+  reviewStatus     ReviewStatus @default(OPEN)
+  reviewedAt       DateTime?
+  overrideDecision String?
+  overrideReason   String?
+  createdAt        DateTime     @default(now())
+  submission       Submission   @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  reviewer         User?        @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([reviewStatus, createdAt])
+}
+
+model CertificationStatus {
+  id               String             @id @default(cuid())
+  userId           String
+  moduleId         String
+  latestDecisionId String
+  status           String
+  passedAt         DateTime?
+  expiryDate       DateTime?
+  recertificationDueDate DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  user             User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  module           Module             @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  latestDecision   AssessmentDecision @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, moduleId])
+}
+
+model AuditEvent {
+  id           String   @id @default(cuid())
+  entityType   String
+  entityId     String
+  action       String
+  actorId      String?
+  timestamp    DateTime @default(now())
+  payloadHash  String
+  metadataJson String
+  actor        User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, timestamp])
+}
+
