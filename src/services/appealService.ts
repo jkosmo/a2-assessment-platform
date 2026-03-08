@@ -1,6 +1,7 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
+import { buildAppealSlaSnapshot } from "./appealSla.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -125,6 +126,11 @@ export async function listAppealQueue(input: {
   });
 
   return appeals.map((appeal) => ({
+    sla: buildAppealSlaSnapshot({
+      createdAt: appeal.createdAt,
+      resolvedAt: appeal.resolvedAt,
+      appealStatus: appeal.appealStatus,
+    }),
     id: appeal.id,
     appealStatus: appeal.appealStatus,
     appealReason: appeal.appealReason,

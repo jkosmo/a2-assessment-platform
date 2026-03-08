@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { claimAppeal, getAppealWorkspace, listAppealQueue, resolveAppeal } from "../services/appealService.js";
+import { buildAppealSlaSnapshot } from "../services/appealSla.js";
 
 const appealsRouter = Router();
 
@@ -53,7 +54,14 @@ appealsRouter.get("/:appealId", async (request, response) => {
     return;
   }
 
-  response.json({ appeal: workspace });
+  response.json({
+    appeal: workspace,
+    sla: buildAppealSlaSnapshot({
+      createdAt: workspace.createdAt,
+      resolvedAt: workspace.resolvedAt,
+      appealStatus: workspace.appealStatus,
+    }),
+  });
 });
 
 appealsRouter.post("/:appealId/claim", async (request, response) => {

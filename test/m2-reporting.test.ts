@@ -73,6 +73,22 @@ describe("MVP reporting endpoints", () => {
     expect(createAppealResponse.status).toBe(201);
     const appealId = createAppealResponse.body.appeal.id as string;
 
+    const createOpenAppealResponse = await request(app)
+      .post(`/api/submissions/${underReviewSubmissionId}/appeals`)
+      .set(participantBHeaders)
+      .send({
+        appealReason: "Open appeal used for overdue SLA visibility checks.",
+      });
+    expect(createOpenAppealResponse.status).toBe(201);
+    const openAppealId = createOpenAppealResponse.body.appeal.id as string;
+
+    await prisma.appeal.update({
+      where: { id: openAppealId },
+      data: {
+        createdAt: new Date(Date.now() - 96 * 60 * 60 * 1000),
+      },
+    });
+
     const claimAppealResponse = await request(app)
       .post(`/api/appeals/${appealId}/claim`)
       .set(appealHandlerHeaders);
@@ -116,12 +132,19 @@ describe("MVP reporting endpoints", () => {
     ).toBe(true);
 
     const appealsReportResponse = await request(app)
-      .get("/api/reports/appeals?status=RESOLVED")
+      .get("/api/reports/appeals")
       .set(reportReaderHeaders);
     expect(appealsReportResponse.status).toBe(200);
     expect(
       (appealsReportResponse.body.rows as Array<{ appealId: string }>).some((row) => row.appealId === appealId),
     ).toBe(true);
+    expect(appealsReportResponse.body.totals.overdueAppeals).toBeGreaterThanOrEqual(1);
+    const overdueRow = (
+      appealsReportResponse.body.rows as Array<{ appealId: string; slaState: string; firstResponseSlaHours: number }>
+    ).find((row) => row.appealId === openAppealId);
+    expect(overdueRow).toBeDefined();
+    expect(overdueRow?.slaState).toBe("OVERDUE");
+    expect(overdueRow?.firstResponseSlaHours).toBeGreaterThan(0);
 
     const completionCsvResponse = await request(app)
       .get("/api/reports/export?type=completion&format=csv")

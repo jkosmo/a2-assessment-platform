@@ -99,13 +99,16 @@ describe("MVP appeal flow", () => {
       queueResponse.body.appeals as Array<{
         id: string;
         submission: { id: string };
+        sla: { slaState: string };
       }>
     ).find((item) => item.submission.id === submissionId);
     expect(queuedAppeal).toBeDefined();
     expect(queuedAppeal?.id).toBe(appealId);
+    expect(queuedAppeal?.sla.slaState).toMatch(/ON_TRACK|AT_RISK|OVERDUE|RESOLVED/);
 
     const detailResponse = await request(app).get(`/api/appeals/${appealId}`).set(appealHandlerHeaders);
     expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body.sla.slaState).toMatch(/ON_TRACK|AT_RISK|OVERDUE|RESOLVED/);
     expect(detailResponse.body.appeal.submission.llmEvaluations.length).toBeGreaterThan(0);
     expect(detailResponse.body.appeal.submission.mcqAttempts.length).toBeGreaterThan(0);
     expect(detailResponse.body.appeal.submission.decisions.length).toBeGreaterThan(0);

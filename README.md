@@ -122,3 +122,6 @@ Azure deployment workflow:
 
 Internationalization baseline and translation workflow:
 - `doc/I18N.md`
+
+Appeals operating process (SLA, ownership, escalation):
+- `doc/APPEALS_OPERATING_MODEL.md`

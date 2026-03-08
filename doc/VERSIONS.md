@@ -7,6 +7,42 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.30 - 2026-03-08
+### Summary
+Implemented MVP post-appeal operating model baseline with SLA visibility in appeal queue/reporting and documented runtime process.
+
+### Included
+- Added appeal SLA classification utility:
+  - `src/services/appealSla.ts`
+  - states: `ON_TRACK`, `AT_RISK`, `OVERDUE`, `RESOLVED`
+  - configurable thresholds via env:
+    - `APPEAL_FIRST_RESPONSE_SLA_HOURS` (default `24`)
+    - `APPEAL_RESOLUTION_SLA_HOURS` (default `72`)
+    - `APPEAL_AT_RISK_RATIO` (default `0.75`)
+- Added SLA fields to appeal operational APIs:
+  - `GET /api/appeals` rows now include `sla`
+  - `GET /api/appeals/{appealId}` now includes top-level `sla`
+- Extended appeals reporting for operational triage:
+  - `GET /api/reports/appeals` rows now include SLA/age fields
+  - totals now include:
+    - `onTrackAppeals`
+    - `atRiskAppeals`
+    - `overdueAppeals`
+- Added/updated test coverage:
+  - `test/m2-reporting.test.ts`
+  - `test/m2-appeal-flow.test.ts`
+  - verifies overdue visibility and SLA fields in queue/workspace/reporting
+- Added process documentation:
+  - `doc/APPEALS_OPERATING_MODEL.md`
+  - includes lifecycle, RACI, SLA targets, escalation path, participant communication, staging checklist
+- Created concrete follow-up issues from operating-model gaps:
+  - `#44` first-response SLA hardening (`claimedAt`)
+  - `#45` automated overdue escalation alerts
+  - `#46` participant notification channel for appeal transitions
+
+### Notes
+- This addresses issue `#43` acceptance criteria for documented process + operational detectability of at-risk/overdue appeals.
+
 ## 0.3.29 - 2026-03-08
 ### Summary
 Localized module titles and MCQ content (questions/options) for `nb` and `nn` with English fallback.

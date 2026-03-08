@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { ReviewStatus, AppealStatus, SubmissionStatus } from "../db/prismaRuntime.js";
+import { buildAppealSlaSnapshot } from "./appealSla.js";
 import type {
   SubmissionStatus as SubmissionStatusType,
   ReviewStatus as ReviewStatusType,
@@ -62,6 +63,14 @@ type AppealRow = {
   participantDepartment: string | null;
   appealedByEmail: string;
   resolvedByEmail: string | null;
+  ageHours: number;
+  resolutionDurationHours: number | null;
+  firstResponseSlaHours: number;
+  resolutionSlaHours: number;
+  firstResponseOverdue: boolean;
+  resolutionOverdue: boolean;
+  atRisk: boolean;
+  slaState: "ON_TRACK" | "AT_RISK" | "OVERDUE" | "RESOLVED";
 };
 
 export async function getCompletionReport(filters: ReportFilters) {
@@ -355,6 +364,11 @@ export async function getAppealsReport(filters: ReportFilters) {
   });
 
   const rows: AppealRow[] = appeals.map((appeal) => ({
+    ...buildAppealSlaSnapshot({
+      createdAt: appeal.createdAt,
+      resolvedAt: appeal.resolvedAt,
+      appealStatus: appeal.appealStatus,
+    }),
     appealId: appeal.id,
     appealStatus: appeal.appealStatus,
     createdAt: appeal.createdAt,
@@ -377,6 +391,9 @@ export async function getAppealsReport(filters: ReportFilters) {
       inReviewAppeals: rows.filter((row) => row.appealStatus === AppealStatus.IN_REVIEW).length,
       resolvedAppeals: rows.filter((row) => row.appealStatus === AppealStatus.RESOLVED).length,
       rejectedAppeals: rows.filter((row) => row.appealStatus === AppealStatus.REJECTED).length,
+      onTrackAppeals: rows.filter((row) => row.slaState === "ON_TRACK").length,
+      atRiskAppeals: rows.filter((row) => row.slaState === "AT_RISK").length,
+      overdueAppeals: rows.filter((row) => row.slaState === "OVERDUE").length,
     },
     rows,
   };
