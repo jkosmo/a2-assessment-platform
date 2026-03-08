@@ -155,8 +155,33 @@ az webapp deploy `
   --name $webAppName `
   --src-path $zipPath `
   --type zip `
+  --track-status false `
   --restart true | Out-Null
 Assert-LastExitCode "az webapp deploy"
+
+$healthUrl = "https://$webAppName.azurewebsites.net/healthz"
+$maxHealthChecks = 30
+$healthCheckDelaySeconds = 5
+$healthy = $false
+
+Write-Host "Validating deployment health endpoint: $healthUrl"
+for ($attempt = 1; $attempt -le $maxHealthChecks; $attempt++) {
+  try {
+    $response = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 10
+    if ($response.StatusCode -eq 200) {
+      Write-Host "Health check succeeded on attempt $attempt."
+      $healthy = $true
+      break
+    }
+  } catch {
+    Write-Host "Health check attempt $attempt/$maxHealthChecks failed; retrying..."
+  }
+  Start-Sleep -Seconds $healthCheckDelaySeconds
+}
+
+if (-not $healthy) {
+  throw "Deployment package published, but health endpoint check failed at $healthUrl."
+}
 
 if ($BudgetContactEmail) {
   & "$PSScriptRoot/configure-cost-guardrails.ps1" `

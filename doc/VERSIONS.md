@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.11 - 2026-03-08
+### Summary
+Stabilized deployment result detection by replacing fragile App Service startup tracking with explicit health verification.
+
+### Included
+- Updated `az webapp deploy` invocation to use `--track-status false`.
+- Added post-deploy `/healthz` polling in `deploy-environment.ps1` with retry and hard fail on timeout.
+
+### Notes
+- This avoids false-negative deployment failures where OneDeploy succeeds and site starts, but CLI startup tracking still times out.
+
 ## 0.3.10 - 2026-03-08
 ### Summary
 Fixed deployment packaging to include hidden Prisma client artifacts required at runtime.
