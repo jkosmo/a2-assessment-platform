@@ -11,6 +11,7 @@ if (!databaseUrl) {
 
 const databasePath = resolveSqliteFilePath(databaseUrl);
 const migrationsRoot = path.resolve(process.cwd(), "prisma", "migrations");
+fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
 if (!fs.existsSync(migrationsRoot)) {
   console.log("No migrations directory found; skipping.");

@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.8 - 2026-03-08
+### Summary
+Resolved App Service startup permission failures by removing Prisma engine execution from startup path.
+
+### Included
+- Changed `prestart` to `node scripts/runtime/applyMigrations.mjs` (manual SQL migration runner).
+- Ensured runtime migration script creates the SQLite database directory if missing.
+- Moved `prisma` back to `devDependencies` because runtime startup no longer uses Prisma CLI binaries.
+
+### Notes
+- This avoids `EACCES` on Prisma schema engine binaries in run-from-package deployments.
+
 ## 0.3.7 - 2026-03-08
 ### Summary
 Fixed App Service startup failures caused by non-executable Prisma CLI in deployment zip artifacts.
