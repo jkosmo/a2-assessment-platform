@@ -19,6 +19,7 @@
   <body>
     <h1>Participant Test Console</h1>
     <p class="small">Manual flow: modules -> submission -> MCQ -> assessment/result.</p>
+    <p class="small">Version: <strong id="appVersion">loading...</strong></p>
 
     <section class="card">
       <h3>Mock Identity</h3>
@@ -67,6 +68,13 @@
       <button id="queueAssessment">Queue Assessment</button>
       <button id="checkAssessment">Check Assessment</button>
       <button id="checkResult">Check Result</button>
+    </section>
+
+    <section class="card">
+      <h3>Appeal</h3>
+      <div><label>Appeal Reason</label><textarea id="appealReason" rows="3">Requesting second review due to potential scoring mismatch.</textarea></div>
+      <button id="createAppeal">Create Appeal</button>
+      <div class="small">Appeal ID: <span id="appealId">-</span></div>
     </section>
 
     <section class="card">

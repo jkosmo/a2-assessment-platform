@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.20 - 2026-03-08
+### Summary
+Added visible runtime version metadata in participant UI and implemented participant appeal action in the test console.
+
+### Included
+- Added backend app metadata utility and public version endpoint:
+  - `GET /version` returns app name/version.
+  - `GET /healthz` now also includes `version`.
+- Updated participant test console UI:
+  - shows current app version and updates browser title to include `v<version>`.
+  - added appeal section with reason input and `Create Appeal` button.
+  - displays created `appealId` in UI.
+
+### Notes
+- This enables quick confirmation that stage is running the expected release before manual verification.
+
 ## 0.3.19 - 2026-03-08
 ### Summary
 Implemented reviewer and appeal-handler workspace flows with immutable decision lineage, and stabilized synchronous assessment processing for deterministic behavior.

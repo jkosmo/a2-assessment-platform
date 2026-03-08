@@ -5,6 +5,8 @@ const mcqQuestions = document.getElementById("mcqQuestions");
 const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
+const appealIdLabel = document.getElementById("appealId");
+const appVersionLabel = document.getElementById("appVersion");
 
 let currentQuestions = [];
 
@@ -42,6 +44,17 @@ async function api(url, options = {}) {
     throw new Error(`${response.status}: ${JSON.stringify(body)}`);
   }
   return body;
+}
+
+async function loadVersion() {
+  try {
+    const body = await api("/version", { headers: {} });
+    const version = body.version ?? "unknown";
+    document.title = `A2 Participant Test Console v${version}`;
+    appVersionLabel.textContent = `v${version}`;
+  } catch {
+    appVersionLabel.textContent = "unknown";
+  }
 }
 
 document.getElementById("loadMe").addEventListener("click", async () => {
@@ -189,6 +202,24 @@ document.getElementById("checkResult").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("createAppeal").addEventListener("click", async () => {
+  try {
+    const submissionId = submissionIdLabel.textContent;
+    if (!submissionId || submissionId === "-") {
+      throw new Error("Create submission first.");
+    }
+    const appealReason = document.getElementById("appealReason").value;
+    const body = await api(`/api/submissions/${submissionId}/appeals`, {
+      method: "POST",
+      body: JSON.stringify({ appealReason }),
+    });
+    appealIdLabel.textContent = body.appeal.id;
+    log(body);
+  } catch (error) {
+    log(error.message);
+  }
+});
+
 function renderQuestions() {
   mcqQuestions.innerHTML = "";
   for (const question of currentQuestions) {
@@ -213,3 +244,5 @@ function renderQuestions() {
     mcqQuestions.appendChild(wrapper);
   }
 }
+
+loadVersion();

@@ -1,6 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { AppRole } from "./db/prismaRuntime.js";
+import { appName, appVersion } from "./config/appMetadata.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { meRouter } from "./routes/me.js";
@@ -21,7 +22,11 @@ app.get("/", (_request, response) => {
 });
 
 app.get("/healthz", (_request, response) => {
-  response.json({ status: "ok" });
+  response.json({ status: "ok", version: appVersion });
+});
+
+app.get("/version", (_request, response) => {
+  response.json({ app: appName, version: appVersion });
 });
 
 app.get("/participant", (_request, response) => {
