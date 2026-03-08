@@ -59,11 +59,23 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
   });
 
   if (needsManualReview) {
-    await prisma.manualReview.create({
+    const review = await prisma.manualReview.create({
       data: {
         submissionId: input.submissionId,
         triggerReason: decision.decisionReason,
         reviewStatus: "OPEN",
+      },
+    });
+
+    await recordAuditEvent({
+      entityType: "manual_review",
+      entityId: review.id,
+      action: "manual_review_opened",
+      actorId: input.userId,
+      metadata: {
+        submissionId: input.submissionId,
+        decisionId: decision.id,
+        triggerReason: review.triggerReason,
       },
     });
   }

@@ -44,6 +44,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     action: "submission_created",
     actorId: input.userId,
     metadata: {
+      submissionId: submission.id,
       moduleId: submission.moduleId,
       moduleVersionId: submission.moduleVersionId,
     },

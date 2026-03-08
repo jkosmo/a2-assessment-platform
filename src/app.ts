@@ -7,6 +7,7 @@ import { meRouter } from "./routes/me.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
 import { assessmentsRouter } from "./routes/assessments.js";
+import { auditRouter } from "./routes/audit.js";
 
 const app = express();
 
@@ -49,6 +50,18 @@ app.use(
   "/api/assessments",
   requireAnyRole([AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER]),
   assessmentsRouter,
+);
+app.use(
+  "/api/audit",
+  requireAnyRole([
+    AppRole.PARTICIPANT,
+    AppRole.SUBJECT_MATTER_OWNER,
+    AppRole.ADMINISTRATOR,
+    AppRole.APPEAL_HANDLER,
+    AppRole.REPORT_READER,
+    AppRole.REVIEWER,
+  ]),
+  auditRouter,
 );
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {

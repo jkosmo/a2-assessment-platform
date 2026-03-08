@@ -123,6 +123,18 @@ async function processNextJob(): Promise<boolean> {
         errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
       },
     });
+
+    await recordAuditEvent({
+      entityType: "assessment_job",
+      entityId: candidate.id,
+      action: willRetry ? "assessment_job_retry_scheduled" : "assessment_job_failed",
+      metadata: {
+        submissionId: candidate.submissionId,
+        attempts: job.attempts,
+        maxAttempts: job.maxAttempts,
+        errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
+      },
+    });
   }
   return true;
 }
@@ -166,7 +178,7 @@ async function runAssessment(jobId: string) {
     promptExcerpt: submission.promptExcerpt,
   };
 
-  await prisma.lLMEvaluation.create({
+  const llmEvaluation = await prisma.lLMEvaluation.create({
     data: {
       submissionId: submission.id,
       moduleVersionId: submission.moduleVersionId,
@@ -179,6 +191,20 @@ async function runAssessment(jobId: string) {
       passFailPractical: llmResult.pass_fail_practical,
       manualReviewRecommended: llmResult.manual_review_recommended,
       confidenceNote: llmResult.confidence_note,
+    },
+  });
+
+  await recordAuditEvent({
+    entityType: "llm_evaluation",
+    entityId: llmEvaluation.id,
+    action: "llm_evaluation_created",
+    actorId: submission.userId,
+    metadata: {
+      submissionId: submission.id,
+      modelName: llmEvaluation.modelName,
+      practicalScoreScaled: llmEvaluation.practicalScoreScaled,
+      passFailPractical: llmEvaluation.passFailPractical,
+      manualReviewRecommended: llmEvaluation.manualReviewRecommended,
     },
   });
 
