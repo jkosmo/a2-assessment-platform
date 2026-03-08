@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.3 - 2026-03-08
+### Summary
+App Service startup strategy updated to use platform default Node startup path.
+
+### Included
+- Added `prestart` script in `package.json` to run runtime migrations before app boot.
+- Removed custom `appCommandLine` override in Bicep and delegated startup to default `npm start` behavior.
+
+### Notes
+- This avoids custom startup command edge cases and keeps migration logic tied to app lifecycle.
+
 ## 0.3.2 - 2026-03-08
 ### Summary
 Startup command fix for App Service Linux deployment.

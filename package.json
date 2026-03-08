@@ -1,12 +1,13 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "prestart": "node scripts/runtime/applyMigrations.mjs",
     "start": "node dist/index.js",
     "db:reset": "tsx src/scripts/resetDatabase.ts",
     "db:migrate": "tsx src/scripts/applyMigrations.ts",
