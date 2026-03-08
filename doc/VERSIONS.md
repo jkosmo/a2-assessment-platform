@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.17 - 2026-03-08
+### Summary
+Ignored local staging diagnostics artifacts so repository status stays clean.
+
+### Included
+- Updated `.gitignore` to ignore:
+  - `staging-logs*/`
+  - `staging-logs*.zip`
+  - `fic-staging.json`
+
+### Notes
+- Prevents accidental tracking of downloaded operational logs and local export files.
+
 ## 0.3.16 - 2026-03-08
 ### Summary
 Strengthened engineering process to enforce root-cause-first handling of deployment incidents.

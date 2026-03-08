@@ -6,3 +6,6 @@ dist/
 *.db-journal
 coverage/
 config/entra-group-role-map.generated.json
+staging-logs*/
+staging-logs*.zip
+fic-staging.json
