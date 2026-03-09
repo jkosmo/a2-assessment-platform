@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.43 - 2026-03-09
+### Summary
+Simplified participant assessment UX further by hiding redundant manual controls in auto mode and making auto-evaluation timer visibility explicit.
+
+### Included
+- Participant assessment auto-flow UX:
+  - `public/participant.js`
+  - When `flow.autoStartAfterMcq=true`, hides manual assessment buttons:
+    - `Start assessment`
+    - `Check progress`
+    - `View result`
+  - Hides manual check hint in auto mode.
+  - Adds explicit elapsed seconds in assessment progress status while auto polling is running.
+- Translations:
+  - `public/i18n/participant-translations.js`
+  - Added `assessment.auto.elapsedPrefix` in `en-GB`, `nb`, and `nn`.
+- Documentation:
+  - `README.md` now states that manual assessment buttons are hidden when auto-start is enabled.
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.42 - 2026-03-09
 ### Summary
 Simplified participant flow between MCQ and assessment by starting assessment automatically after MCQ submission, showing countdown-based progress, and auto-loading result when ready.

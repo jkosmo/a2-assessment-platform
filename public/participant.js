@@ -327,19 +327,24 @@ function renderFlowGating() {
   const gate = deriveParticipantFlowGateState(flowState);
   const hasAssessmentContext =
     flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus);
+  const autoAssessmentEnabled = getFlowSettings().autoStartAfterMcq;
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
   assessmentSection.classList.toggle("section-locked", !gate.assessmentUnlocked);
   appealSection.classList.toggle("section-locked", !gate.appealUnlocked);
+  queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
+  checkAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
+  checkResultButton.classList.toggle("hidden", autoAssessmentEnabled);
+  checkAssessmentHint.classList.toggle("hidden", autoAssessmentEnabled);
 
   const queueBusy = queueAssessmentButton.dataset.busy === "true";
   const checkAssessmentBusy = checkAssessmentButton.dataset.busy === "true";
   const checkResultBusy = checkResultButton.dataset.busy === "true";
   const createAppealBusy = createAppealButton.dataset.busy === "true";
 
-  queueAssessmentButton.disabled = queueBusy || !gate.assessmentUnlocked;
-  checkResultButton.disabled = checkResultBusy || !gate.assessmentUnlocked;
-  checkAssessmentButton.disabled = checkAssessmentBusy || !gate.checkAssessmentUnlocked;
+  queueAssessmentButton.disabled = autoAssessmentEnabled || queueBusy || !gate.assessmentUnlocked;
+  checkResultButton.disabled = autoAssessmentEnabled || checkResultBusy || !gate.assessmentUnlocked;
+  checkAssessmentButton.disabled = autoAssessmentEnabled || checkAssessmentBusy || !gate.checkAssessmentUnlocked;
   createAppealButton.disabled = createAppealBusy || !gate.appealUnlocked;
 
   assessmentGateHint.textContent = t(gate.assessmentHintKey);
@@ -935,18 +940,24 @@ function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus
 
 function renderAssessmentProgress() {
   const base = t(assessmentProgressKey);
+  const hasAutoTimer =
+    autoAssessmentTicker !== null &&
+    typeof autoAssessmentElapsedSeconds === "number" &&
+    autoAssessmentElapsedSeconds >= 0;
+  const timerText = hasAutoTimer ? ` ${t("assessment.auto.elapsedPrefix")} ${autoAssessmentElapsedSeconds}s` : "";
+
   if (!assessmentProgressDetailKey) {
-    assessmentProgressStatus.textContent = base;
+    assessmentProgressStatus.textContent = `${base}${timerText}`;
     return;
   }
 
   const detail = t(assessmentProgressDetailKey);
   if (typeof assessmentProgressDetailCountdown === "number") {
-    assessmentProgressStatus.textContent = `${base} ${detail} ${assessmentProgressDetailCountdown}s`;
+    assessmentProgressStatus.textContent = `${base} ${detail} ${assessmentProgressDetailCountdown}s${timerText}`;
     return;
   }
 
-  assessmentProgressStatus.textContent = `${base} ${detail}`;
+  assessmentProgressStatus.textContent = `${base} ${detail}${timerText}`;
 }
 
 function renderAppealState() {
