@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.54 - 2026-03-09
+### Summary
+Implemented issue #28 with an admin-driven HR/LMS delta sync pipeline for users/org metadata, configurable conflict strategy, and audit/observability-based recovery tracing.
+
+### Included
+- Added org sync config model:
+  - `config/org-sync.json`
+  - `src/config/orgSync.ts`
+  - config-driven conflict and overwrite behavior
+- Added org sync service:
+  - `src/services/orgSyncService.ts`
+  - delta upsert for user identity/org metadata
+  - conflict handling strategies (`merge_by_email`, `skip_conflict`)
+  - per-record failure capture and recoverable run summaries
+  - observability events + audit events for run completion/failure
+- Added admin API endpoint:
+  - `POST /api/admin/sync/org/delta`
+  - route implementation in `src/routes/orgSync.ts`
+  - wired in `src/app.ts` (admin-only access)
+- Documentation:
+  - `doc/PHASE2_ORG_SYNC_DESIGN.md`
+  - `doc/ORG_SYNC_CONFLICT_STRATEGY.md` (explicit conflict/override strategy)
+  - README updated with endpoint and config references
+- Test coverage:
+  - `test/m2-org-sync.test.ts` (delta create/update, conflict handling, audit signal)
+
+### Verification
+- `npm run lint`
+- `npm test` (50 tests passing, 21 test files)
+
 ## 0.3.53 - 2026-03-09
 ### Summary
 Implemented issue #35 by adding benchmark example/anchor version management per module with prompt/module linking, configuration-based validation, and auditable publish flow integration.

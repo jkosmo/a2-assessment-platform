@@ -15,6 +15,7 @@ import { reviewsRouter } from "./routes/reviews.js";
 import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
 import { adminContentRouter } from "./routes/adminContent.js";
+import { orgSyncRouter } from "./routes/orgSync.js";
 
 const app = express();
 
@@ -96,6 +97,7 @@ app.use(
   requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]),
   adminContentRouter,
 );
+app.use("/api/admin/sync/org", requireAnyRole([AppRole.ADMINISTRATOR]), orgSyncRouter);
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : "Unexpected server error.";

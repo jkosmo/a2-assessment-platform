@@ -106,6 +106,7 @@ npm run build
 - `POST /api/admin/content/modules/:moduleId/mcq-set-versions`
 - `POST /api/admin/content/modules/:moduleId/module-versions`
 - `POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish`
+- `POST /api/admin/sync/org/delta`
 - `GET /participant` (manual participant test UI)
 - `GET /appeal-handler` (manual appeal-handler workspace UI)
 
@@ -199,6 +200,11 @@ Benchmark example versioning policy is config-driven via:
 - `maxTextLength` limits benchmark text field size
 - `requiredFields` enforces benchmark example structure
 
+Org delta sync policy is config-driven via:
+- `config/org-sync.json`
+- `conflictStrategy` controls identity collision handling (`merge_by_email` / `skip_conflict`)
+- `allowDepartmentOverwrite`, `allowManagerOverwrite`, `defaultActiveStatus` control update behavior
+
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`
 - `AI Governance and Risk Essentials`
@@ -242,3 +248,6 @@ Observability and incident response runbook:
 
 Phase-2 design note for participant appeal notifications:
 - `doc/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`
+
+Org sync conflict/override strategy:
+- `doc/ORG_SYNC_CONFLICT_STRATEGY.md`
