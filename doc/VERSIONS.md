@@ -7,6 +7,39 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.52 - 2026-03-09
+### Summary
+Implemented issue #30 by adding an advanced analytics reporting layer with semantic KPI model endpoints, trend/cohort analysis, and configurable data-quality checks.
+
+### Included
+- Added analytics model configuration:
+  - `config/reporting-analytics.json`
+  - `src/config/reportingAnalytics.ts`
+  - config includes KPI catalog metadata, trend/cohort dimensions, and data-quality thresholds
+- Reporting service analytics extensions (`src/services/reportingService.ts`):
+  - `getAnalyticsSemanticModel`
+  - `getAnalyticsTrendsReport`
+  - `getAnalyticsCohortsReport`
+  - `getReportingDataQualityReport`
+- New analytics API endpoints (`src/routes/reports.ts`):
+  - `GET /api/reports/analytics/semantic-model`
+  - `GET /api/reports/analytics/trends`
+  - `GET /api/reports/analytics/cohorts`
+  - `GET /api/reports/analytics/data-quality`
+- CSV export support added for analytics report types:
+  - `type=analytics-trends`
+  - `type=analytics-cohorts`
+- Design note:
+  - `doc/PHASE2_ADVANCED_REPORTING_DESIGN.md`
+- Test coverage:
+  - expanded `test/m2-reporting.test.ts` for semantic model, trends, cohorts, data quality, and analytics CSV export
+- Documentation:
+  - README updated with analytics endpoints and config model details
+
+### Verification
+- `npm run lint`
+- `npm test` (49 tests passing, 20 test files)
+
 ## 0.3.51 - 2026-03-09
 ### Summary
 Implemented issue #27 with a config-driven recertification engine, pre-expiry reminder scheduling, and reportable recertification status.

@@ -95,6 +95,10 @@ npm run build
 - `GET /api/reports/mcq-quality`
 - `GET /api/reports/recertification`
 - `POST /api/reports/recertification/reminders/run?asOf=<ISO-date>`
+- `GET /api/reports/analytics/semantic-model`
+- `GET /api/reports/analytics/trends?granularity=<day|week|month>`
+- `GET /api/reports/analytics/cohorts?cohortBy=<month|department>`
+- `GET /api/reports/analytics/data-quality`
 - `GET /api/reports/export?type=<report>&format=csv`
 - `POST /api/admin/content/modules/:moduleId/rubric-versions`
 - `POST /api/admin/content/modules/:moduleId/prompt-template-versions`
@@ -180,6 +184,13 @@ Recertification policy is config-driven via:
 - `recertification.dueOffsetDays` controls when recertification becomes due before expiry
 - `recertification.dueSoonDays` controls early warning status window
 - `recertification.reminderDaysBefore[]` controls pre-expiry reminder schedule offsets
+
+Advanced analytics reporting model is config-driven via:
+- `config/reporting-analytics.json`
+- `kpiDefinitions[]` defines semantic KPI catalog metadata
+- `trends.*` controls trend granularity behavior
+- `cohorts.*` controls cohort dimensions
+- `dataQuality.*` controls pipeline quality thresholds
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

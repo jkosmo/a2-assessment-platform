@@ -1,0 +1,48 @@
+{
+  "kpiDefinitions": [
+    {
+      "id": "submissions_total",
+      "label": "Total submissions",
+      "formula": "count(submissions)"
+    },
+    {
+      "id": "completion_rate",
+      "label": "Completion rate",
+      "formula": "completed_submissions / total_submissions"
+    },
+    {
+      "id": "pass_rate",
+      "label": "Pass rate",
+      "formula": "passed_decisions / total_decisions"
+    },
+    {
+      "id": "manual_review_rate",
+      "label": "Manual review rate",
+      "formula": "under_review_submissions / total_submissions"
+    },
+    {
+      "id": "appeal_rate",
+      "label": "Appeal rate",
+      "formula": "appeals / total_submissions"
+    }
+  ],
+  "trends": {
+    "defaultGranularity": "week",
+    "allowedGranularities": [
+      "day",
+      "week",
+      "month"
+    ]
+  },
+  "cohorts": {
+    "defaultCohortBy": "month",
+    "allowedCohortBy": [
+      "month",
+      "department"
+    ]
+  },
+  "dataQuality": {
+    "maxMissingDecisionRate": 0.1,
+    "maxDecisionWithoutEvaluationRate": 0.05
+  }
+}

@@ -167,6 +167,37 @@ describe("MVP reporting endpoints", () => {
     expect(typeof mcqQualityResponse.body.rows[0].difficulty === "number" || mcqQualityResponse.body.rows[0].difficulty === null).toBe(true);
     expect(typeof mcqQualityResponse.body.rows[0].qualityFlags).toBe("string");
 
+    const semanticModelResponse = await request(app)
+      .get(`/api/reports/analytics/semantic-model?moduleId=${encodeURIComponent(moduleId)}`)
+      .set(reportReaderHeaders);
+    expect(semanticModelResponse.status).toBe(200);
+    expect(semanticModelResponse.body.reportType).toBe("analytics-semantic-model");
+    expect(semanticModelResponse.body.kpiDefinitions.length).toBeGreaterThan(0);
+    expect(typeof semanticModelResponse.body.kpiValues.submissions_total).toBe("number");
+
+    const trendsResponse = await request(app)
+      .get(`/api/reports/analytics/trends?moduleId=${encodeURIComponent(moduleId)}&granularity=week`)
+      .set(reportReaderHeaders);
+    expect(trendsResponse.status).toBe(200);
+    expect(trendsResponse.body.reportType).toBe("analytics-trends");
+    expect(trendsResponse.body.granularity).toBe("week");
+    expect(Array.isArray(trendsResponse.body.rows)).toBe(true);
+
+    const cohortsResponse = await request(app)
+      .get(`/api/reports/analytics/cohorts?moduleId=${encodeURIComponent(moduleId)}&cohortBy=department`)
+      .set(reportReaderHeaders);
+    expect(cohortsResponse.status).toBe(200);
+    expect(cohortsResponse.body.reportType).toBe("analytics-cohorts");
+    expect(cohortsResponse.body.cohortBy).toBe("department");
+    expect(Array.isArray(cohortsResponse.body.rows)).toBe(true);
+
+    const dataQualityResponse = await request(app)
+      .get(`/api/reports/analytics/data-quality?moduleId=${encodeURIComponent(moduleId)}`)
+      .set(reportReaderHeaders);
+    expect(dataQualityResponse.status).toBe(200);
+    expect(dataQualityResponse.body.reportType).toBe("analytics-data-quality");
+    expect(dataQualityResponse.body.checks.length).toBeGreaterThan(0);
+
     const completionCsvResponse = await request(app)
       .get("/api/reports/export?type=completion&format=csv")
       .set(reportReaderHeaders);
@@ -181,6 +212,13 @@ describe("MVP reporting endpoints", () => {
     expect(mcqQualityCsvResponse.status).toBe(200);
     expect(mcqQualityCsvResponse.headers["content-type"]).toContain("text/csv");
     expect(mcqQualityCsvResponse.text).toContain("questionId,questionStem");
+
+    const trendsCsvResponse = await request(app)
+      .get("/api/reports/export?type=analytics-trends&format=csv")
+      .set(reportReaderHeaders);
+    expect(trendsCsvResponse.status).toBe(200);
+    expect(trendsCsvResponse.headers["content-type"]).toContain("text/csv");
+    expect(trendsCsvResponse.text).toContain("periodStart,submissions");
 
     const forbiddenResponse = await request(app).get("/api/reports/completion").set(participantAHeaders);
     expect(forbiddenResponse.status).toBe(403);

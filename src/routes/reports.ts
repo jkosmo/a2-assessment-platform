@@ -2,10 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   getAppealsReport,
+  getAnalyticsCohortsReport,
+  getAnalyticsSemanticModel,
+  getAnalyticsTrendsReport,
   getCompletionReport,
   getMcqQualityReport,
   getManualReviewQueueReport,
   getPassRatesReport,
+  getReportingDataQualityReport,
   getRecertificationStatusReport,
   toCsv,
   type ReportFilters,
@@ -23,12 +27,27 @@ const reportQuerySchema = z.object({
 });
 
 const exportQuerySchema = reportQuerySchema.extend({
-  type: z.enum(["completion", "pass-rates", "manual-review-queue", "appeals", "mcq-quality", "recertification"]),
+  type: z.enum([
+    "completion",
+    "pass-rates",
+    "manual-review-queue",
+    "appeals",
+    "mcq-quality",
+    "recertification",
+    "analytics-trends",
+    "analytics-cohorts",
+  ]),
   format: z.literal("csv"),
 });
 
 const reminderRunQuerySchema = z.object({
   asOf: z.string().trim().optional(),
+});
+const trendQuerySchema = z.object({
+  granularity: z.enum(["day", "week", "month"]).optional(),
+});
+const cohortQuerySchema = z.object({
+  cohortBy: z.enum(["month", "department"]).optional(),
 });
 
 reportsRouter.get("/completion", async (request, response) => {
@@ -97,6 +116,64 @@ reportsRouter.get("/recertification", async (request, response) => {
   response.json(report);
 });
 
+reportsRouter.get("/analytics/semantic-model", async (request, response) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+
+  const report = await getAnalyticsSemanticModel(filters);
+  response.json(report);
+});
+
+reportsRouter.get("/analytics/trends", async (request, response) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+  const parsed = trendQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  const report = await getAnalyticsTrendsReport(filters, {
+    granularity: parsed.data.granularity,
+  });
+  response.json(report);
+});
+
+reportsRouter.get("/analytics/cohorts", async (request, response) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+  const parsed = cohortQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  const report = await getAnalyticsCohortsReport(filters, {
+    cohortBy: parsed.data.cohortBy,
+  });
+  response.json(report);
+});
+
+reportsRouter.get("/analytics/data-quality", async (request, response) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+
+  const report = await getReportingDataQualityReport(filters);
+  response.json(report);
+});
+
 reportsRouter.post("/recertification/reminders/run", async (request, response) => {
   const roles = request.context?.roles ?? [];
   if (!roles.includes("ADMINISTRATOR") && !roles.includes("SUBJECT_MATTER_OWNER")) {
@@ -148,6 +225,10 @@ reportsRouter.get("/export", async (request, response) => {
     rows = (await getMcqQualityReport(filters)).rows;
   } else if (parsed.data.type === "recertification") {
     rows = (await getRecertificationStatusReport(filters)).rows;
+  } else if (parsed.data.type === "analytics-trends") {
+    rows = (await getAnalyticsTrendsReport(filters)).rows;
+  } else if (parsed.data.type === "analytics-cohorts") {
+    rows = (await getAnalyticsCohortsReport(filters)).rows;
   } else {
     rows = (await getAppealsReport(filters)).rows;
   }

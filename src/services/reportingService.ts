@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma.js";
 import { ReviewStatus, AppealStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
+import { getReportingAnalyticsConfig } from "../config/reportingAnalytics.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { deriveRecertificationStatus } from "./recertificationService.js";
 import type {
@@ -105,6 +106,30 @@ type RecertificationStatusRow = {
   daysUntilDue: number | null;
   daysUntilExpiry: number | null;
   updatedAt: Date;
+};
+
+type AnalyticsTrendRow = {
+  periodStart: string;
+  submissions: number;
+  completed: number;
+  underReview: number;
+  decisionCount: number;
+  passCount: number;
+  failCount: number;
+  completionRate: number;
+  passRate: number | null;
+};
+
+type AnalyticsCohortRow = {
+  cohort: string;
+  participants: number;
+  submissions: number;
+  completed: number;
+  underReview: number;
+  passCount: number;
+  failCount: number;
+  completionRate: number;
+  passRate: number | null;
 };
 
 export async function getCompletionReport(filters: ReportFilters) {
@@ -670,6 +695,327 @@ export async function getRecertificationStatusReport(filters: ReportFilters) {
   };
 }
 
+export async function getAnalyticsSemanticModel(filters: ReportFilters) {
+  const analyticsConfig = getReportingAnalyticsConfig();
+  const where = {
+    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+  } as const;
+
+  const submissions = await prisma.submission.findMany({
+    where,
+    select: {
+      id: true,
+      submissionStatus: true,
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: { passFailTotal: true },
+      },
+      appeals: {
+        select: { id: true },
+      },
+    },
+  });
+
+  const totalSubmissions = submissions.length;
+  const completedSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.COMPLETED).length;
+  const underReviewSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.UNDER_REVIEW).length;
+  const decisionCount = submissions.filter((submission) => submission.decisions[0]).length;
+  const passCount = submissions.filter((submission) => submission.decisions[0]?.passFailTotal === true).length;
+  const failCount = submissions.filter((submission) => submission.decisions[0]?.passFailTotal === false).length;
+  const appealCount = submissions.reduce((sum, submission) => sum + submission.appeals.length, 0);
+
+  const kpiValues = {
+    submissions_total: totalSubmissions,
+    completion_rate: totalSubmissions > 0 ? round2(completedSubmissions / totalSubmissions) : 0,
+    pass_rate: decisionCount > 0 ? round2(passCount / decisionCount) : null,
+    manual_review_rate: totalSubmissions > 0 ? round2(underReviewSubmissions / totalSubmissions) : 0,
+    appeal_rate: totalSubmissions > 0 ? round2(appealCount / totalSubmissions) : 0,
+  } as Record<string, number | null>;
+
+  return {
+    reportType: "analytics-semantic-model",
+    filters: normalizeFilters(filters),
+    kpiDefinitions: analyticsConfig.kpiDefinitions,
+    kpiValues,
+    totals: {
+      totalSubmissions,
+      completedSubmissions,
+      underReviewSubmissions,
+      decisionCount,
+      passCount,
+      failCount,
+      appealCount,
+    },
+  };
+}
+
+export async function getAnalyticsTrendsReport(
+  filters: ReportFilters,
+  input?: { granularity?: "day" | "week" | "month" },
+) {
+  const analyticsConfig = getReportingAnalyticsConfig();
+  const granularity = input?.granularity ?? analyticsConfig.trends.defaultGranularity;
+
+  const where = {
+    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+  } as const;
+
+  const submissions = await prisma.submission.findMany({
+    where,
+    select: {
+      submittedAt: true,
+      submissionStatus: true,
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: { passFailTotal: true },
+      },
+    },
+  });
+
+  const buckets = new Map<string, AnalyticsTrendRow>();
+  for (const submission of submissions) {
+    const periodStart = periodKey(submission.submittedAt, granularity);
+    const current = buckets.get(periodStart) ?? {
+      periodStart,
+      submissions: 0,
+      completed: 0,
+      underReview: 0,
+      decisionCount: 0,
+      passCount: 0,
+      failCount: 0,
+      completionRate: 0,
+      passRate: null,
+    };
+
+    current.submissions += 1;
+    if (submission.submissionStatus === SubmissionStatus.COMPLETED) {
+      current.completed += 1;
+    }
+    if (submission.submissionStatus === SubmissionStatus.UNDER_REVIEW) {
+      current.underReview += 1;
+    }
+    if (submission.decisions[0]) {
+      current.decisionCount += 1;
+      if (submission.decisions[0].passFailTotal) {
+        current.passCount += 1;
+      } else {
+        current.failCount += 1;
+      }
+    }
+    buckets.set(periodStart, current);
+  }
+
+  const rows = Array.from(buckets.values())
+    .sort((a, b) => a.periodStart.localeCompare(b.periodStart))
+    .map((row) => ({
+      ...row,
+      completionRate: row.submissions > 0 ? round2(row.completed / row.submissions) : 0,
+      passRate: row.decisionCount > 0 ? round2(row.passCount / row.decisionCount) : null,
+    }));
+
+  return {
+    reportType: "analytics-trends",
+    filters: normalizeFilters(filters),
+    granularity,
+    rows,
+  };
+}
+
+export async function getAnalyticsCohortsReport(
+  filters: ReportFilters,
+  input?: { cohortBy?: "month" | "department" },
+) {
+  const analyticsConfig = getReportingAnalyticsConfig();
+  const cohortBy = input?.cohortBy ?? analyticsConfig.cohorts.defaultCohortBy;
+
+  const where = {
+    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+  } as const;
+
+  const submissions = await prisma.submission.findMany({
+    where,
+    select: {
+      userId: true,
+      submittedAt: true,
+      submissionStatus: true,
+      user: {
+        select: {
+          department: true,
+        },
+      },
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: { passFailTotal: true },
+      },
+    },
+  });
+
+  const cohorts = new Map<string, AnalyticsCohortRow>();
+  const cohortParticipantSets = new Map<string, Set<string>>();
+
+  for (const submission of submissions) {
+    const cohort =
+      cohortBy === "department"
+        ? submission.user.department ?? "UNSPECIFIED"
+        : submission.submittedAt.toISOString().slice(0, 7);
+
+    const current = cohorts.get(cohort) ?? {
+      cohort,
+      participants: 0,
+      submissions: 0,
+      completed: 0,
+      underReview: 0,
+      passCount: 0,
+      failCount: 0,
+      completionRate: 0,
+      passRate: null,
+    };
+
+    current.submissions += 1;
+    if (submission.submissionStatus === SubmissionStatus.COMPLETED) {
+      current.completed += 1;
+    }
+    if (submission.submissionStatus === SubmissionStatus.UNDER_REVIEW) {
+      current.underReview += 1;
+    }
+    if (submission.decisions[0]?.passFailTotal === true) {
+      current.passCount += 1;
+    }
+    if (submission.decisions[0]?.passFailTotal === false) {
+      current.failCount += 1;
+    }
+
+    const participants = cohortParticipantSets.get(cohort) ?? new Set<string>();
+    participants.add(submission.userId);
+    cohortParticipantSets.set(cohort, participants);
+
+    cohorts.set(cohort, current);
+  }
+
+  const rows = Array.from(cohorts.values())
+    .sort((a, b) => a.cohort.localeCompare(b.cohort))
+    .map((row) => {
+      const decisionCount = row.passCount + row.failCount;
+      return {
+        ...row,
+        participants: cohortParticipantSets.get(row.cohort)?.size ?? 0,
+        completionRate: row.submissions > 0 ? round2(row.completed / row.submissions) : 0,
+        passRate: decisionCount > 0 ? round2(row.passCount / decisionCount) : null,
+      };
+    });
+
+  return {
+    reportType: "analytics-cohorts",
+    filters: normalizeFilters(filters),
+    cohortBy,
+    rows,
+  };
+}
+
+export async function getReportingDataQualityReport(filters: ReportFilters) {
+  const analyticsConfig = getReportingAnalyticsConfig();
+  const where = {
+    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+  } as const;
+
+  const submissions = await prisma.submission.findMany({
+    where,
+    select: {
+      id: true,
+      submissionStatus: true,
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: { id: true },
+      },
+      llmEvaluations: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { id: true },
+      },
+    },
+  });
+
+  const completedSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.COMPLETED);
+  const missingDecisionCount = completedSubmissions.filter((submission) => !submission.decisions[0]).length;
+  const decisionWithoutEvaluationCount = submissions.filter(
+    (submission) => submission.decisions[0] && !submission.llmEvaluations[0],
+  ).length;
+
+  const missingDecisionRate =
+    completedSubmissions.length > 0 ? round2(missingDecisionCount / completedSubmissions.length) : 0;
+  const decisionWithoutEvaluationRate =
+    submissions.length > 0 ? round2(decisionWithoutEvaluationCount / submissions.length) : 0;
+
+  const checks = [
+    {
+      id: "missing_decision_on_completed_submission",
+      severity: missingDecisionRate > analyticsConfig.dataQuality.maxMissingDecisionRate ? "error" : "ok",
+      value: missingDecisionRate,
+      threshold: analyticsConfig.dataQuality.maxMissingDecisionRate,
+      count: missingDecisionCount,
+    },
+    {
+      id: "decision_without_llm_evaluation",
+      severity:
+        decisionWithoutEvaluationRate > analyticsConfig.dataQuality.maxDecisionWithoutEvaluationRate ? "error" : "ok",
+      value: decisionWithoutEvaluationRate,
+      threshold: analyticsConfig.dataQuality.maxDecisionWithoutEvaluationRate,
+      count: decisionWithoutEvaluationCount,
+    },
+  ];
+
+  return {
+    reportType: "analytics-data-quality",
+    filters: normalizeFilters(filters),
+    checks,
+    totals: {
+      submissionCount: submissions.length,
+      completedSubmissionCount: completedSubmissions.length,
+      failedCheckCount: checks.filter((check) => check.severity === "error").length,
+    },
+  };
+}
+
 export function toCsv(
   rows: Array<Record<string, unknown>>,
   columnOrder?: string[],
@@ -769,6 +1115,21 @@ function computePointBiserial(values: Array<{ correct: number; score: number }>)
   const q = 1 - p;
 
   return ((meanCorrect - meanIncorrect) / stdDev) * Math.sqrt(p * q);
+}
+
+function periodKey(input: Date, granularity: "day" | "week" | "month") {
+  if (granularity === "day") {
+    return input.toISOString().slice(0, 10);
+  }
+  if (granularity === "month") {
+    return input.toISOString().slice(0, 7);
+  }
+
+  const date = new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate()));
+  const day = date.getUTCDay();
+  const isoWeekDay = day === 0 ? 7 : day;
+  date.setUTCDate(date.getUTCDate() - (isoWeekDay - 1));
+  return date.toISOString().slice(0, 10);
 }
 
 function diffUtcDays(from: Date, to: Date) {
