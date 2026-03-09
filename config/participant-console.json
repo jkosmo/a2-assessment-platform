@@ -16,5 +16,21 @@
     "availableStatuses": ["OPEN", "IN_REVIEW", "RESOLVED"],
     "defaultStatuses": ["OPEN", "IN_REVIEW"],
     "queuePageSize": 50
+  },
+  "identityDefaults": {
+    "participant": {
+      "userId": "participant-1",
+      "email": "participant@company.com",
+      "name": "Platform Participant",
+      "department": "Consulting",
+      "roles": ["PARTICIPANT"]
+    },
+    "appealHandler": {
+      "userId": "handler-1",
+      "email": "appeal.handler@company.com",
+      "name": "Platform Appeal Handler",
+      "department": "Quality",
+      "roles": ["APPEAL_HANDLER"]
+    }
   }
 }

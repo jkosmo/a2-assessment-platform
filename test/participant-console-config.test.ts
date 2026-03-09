@@ -26,6 +26,22 @@ describe("participant console runtime config", () => {
       defaultStatuses: ["OPEN", "IN_REVIEW"],
       queuePageSize: 50,
     });
+    expect(response.body.identityDefaults).toEqual({
+      participant: {
+        userId: "participant-1",
+        email: "participant@company.com",
+        name: "Platform Participant",
+        department: "Consulting",
+        roles: ["PARTICIPANT"],
+      },
+      appealHandler: {
+        userId: "handler-1",
+        email: "appeal.handler@company.com",
+        name: "Platform Appeal Handler",
+        department: "Quality",
+        roles: ["APPEAL_HANDLER"],
+      },
+    });
   });
 
   it("serves dedicated appeal-handler workspace page", async () => {

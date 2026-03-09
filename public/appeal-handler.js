@@ -41,6 +41,15 @@ let participantRuntimeConfig = {
     defaultStatuses: ["OPEN", "IN_REVIEW"],
     queuePageSize: 50,
   },
+  identityDefaults: {
+    appealHandler: {
+      userId: "handler-1",
+      email: "appeal.handler@company.com",
+      name: "Platform Appeal Handler",
+      department: "Quality",
+      roles: ["APPEAL_HANDLER"],
+    },
+  },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 
@@ -453,8 +462,22 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  applyIdentityDefaults();
   renderRolePresetControl();
   populateAppealStatusFilters();
+}
+
+function applyIdentityDefaults() {
+  const identityDefaults = participantRuntimeConfig?.identityDefaults?.appealHandler;
+  if (!identityDefaults) {
+    return;
+  }
+
+  document.getElementById("userId").value = identityDefaults.userId ?? "";
+  document.getElementById("email").value = identityDefaults.email ?? "";
+  document.getElementById("name").value = identityDefaults.name ?? "";
+  document.getElementById("department").value = identityDefaults.department ?? "";
+  rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
 }
 
 async function loadAppealDetails(appealId) {

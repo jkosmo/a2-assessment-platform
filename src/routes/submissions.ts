@@ -170,6 +170,7 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
   }
 
   const decision = submission.decisions[0] ?? null;
+  const latestAppeal = submission.appeals[0] ?? null;
   const llmEvaluation = submission.llmEvaluations[0] ?? null;
   const mcqAttempt = submission.mcqAttempts.find((attempt) => attempt.completedAt !== null) ?? null;
   const llmStructured = parseLlmResponse(llmEvaluation?.responseJson);
@@ -193,6 +194,7 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
     statusExplanation,
     scoreComponents,
     decision,
+    latestAppeal,
     llmEvaluation,
     mcqAttempt,
     participantGuidance: {

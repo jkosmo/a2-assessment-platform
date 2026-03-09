@@ -11,9 +11,12 @@
       label { display: block; margin-bottom: 6px; font-size: 13px; color: #444; }
       input, textarea, select, button { width: 100%; padding: 8px; box-sizing: border-box; }
       button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
+      button:not(:disabled):active { transform: translateY(1px); }
+      button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .small { font-size: 12px; color: #666; }
       .inline { display: inline-block; width: auto; }
-      .button-busy { opacity: 0.75; position: relative; }
+      .button-busy { opacity: 0.75; position: relative; border-color: #134ec9; background: #eaf1ff; }
       .button-busy::after { content: " ..."; }
       .queue-table-wrap { overflow-x: auto; border: 1px solid #d8dfeb; border-radius: 8px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
       table { width: 100%; border-collapse: collapse; min-width: 980px; }

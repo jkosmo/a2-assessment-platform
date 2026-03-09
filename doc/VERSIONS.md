@@ -7,6 +7,44 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.41 - 2026-03-09
+### Summary
+Hardened participant flow sequencing and feedback, localized more of the result summary, and made test-console identities config-driven per workspace.
+
+### Included
+- Participant UX flow hardening:
+  - `public/participant.html`
+  - `public/participant.js`
+  - Clearer button pressed/busy feedback (`busy` styling + disabled-state clarity).
+  - `Submission` button now has explicit availability validation/hints (module + reflection + instruction + acknowledgement).
+  - `Assessment` progress now shows explicit inline state text (`not started`, `waiting`, `completed`, `under review`, `failed`) instead of only raw output logs.
+  - `Appeal` action now follows progressive visibility rules:
+    - only shown for negative results (or existing appeal)
+    - hidden once appeal exists and replaced by submitted-status text with appeal ID.
+  - Result/history status and decision labels now use localized values in UI.
+- Result summary language improvements:
+  - `public/i18n/participant-translations.js`
+  - Added missing translation keys for validation messages, assessment progress, status/decision values, criterion labels, and known stub guidance phrases in `en-GB`, `nb`, and `nn`.
+- Config-driven identity defaults per workspace:
+  - `src/config/participantConsole.ts`
+  - `config/participant-console.json`
+  - `public/participant.js`
+  - `public/appeal-handler.js`
+  - Added optional `identityDefaults.participant` and `identityDefaults.appealHandler` to runtime config returned by `/participant/config`.
+- Appeal status visibility in participant result API:
+  - `src/services/submissionService.ts`
+  - `src/routes/submissions.ts`
+  - `GET /api/submissions/:submissionId/result` now returns `latestAppeal` for participant-side gating/status display.
+- Documentation:
+  - `README.md` updated with new `identityDefaults` config keys.
+- Automated tests:
+  - `test/m2-appeal-flow.test.ts` extended to verify `latestAppeal` in participant result payload after create/resolve.
+  - `test/participant-console-config.test.ts` extended to verify `identityDefaults` in `/participant/config`.
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.40 - 2026-03-09
 ### Summary
 Implemented UX text clarity improvements across participant and appeal-handler interfaces, with clearer actions, less technical wording, improved Norwegian readability, and more actionable appeal error messaging.

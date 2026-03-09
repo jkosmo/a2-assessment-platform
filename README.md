@@ -145,6 +145,7 @@ Participant console behavior is config-driven via:
 - `config/participant-console.json`
 - env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
 - `appealWorkspace.queuePageSize` controls `/appeal-handler` queue fetch limit (max `200`)
+- `identityDefaults.participant` and `identityDefaults.appealHandler` set default test identity per workspace
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

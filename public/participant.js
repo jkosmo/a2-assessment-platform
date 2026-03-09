@@ -35,14 +35,22 @@ const createSubmissionButton = document.getElementById("createSubmission");
 const startMcqButton = document.getElementById("startMcq");
 const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
+const rawTextInput = document.getElementById("rawText");
+const reflectionTextInput = document.getElementById("reflectionText");
+const promptExcerptInput = document.getElementById("promptExcerpt");
+const ackCheckbox = document.getElementById("ack");
+const appealReasonInput = document.getElementById("appealReason");
 const assessmentSection = document.getElementById("assessmentSection");
 const appealSection = document.getElementById("appealSection");
 const submissionSection = document.getElementById("submissionSection");
 const mcqSection = document.getElementById("mcqSection");
 const moduleSelectionHint = document.getElementById("moduleSelectionHint");
+const submissionValidationHint = document.getElementById("submissionValidationHint");
 const assessmentGateHint = document.getElementById("assessmentGateHint");
 const checkAssessmentHint = document.getElementById("checkAssessmentHint");
+const assessmentProgressStatus = document.getElementById("assessmentProgressStatus");
 const appealGateHint = document.getElementById("appealGateHint");
+const appealSubmittedStatus = document.getElementById("appealSubmittedStatus");
 const queueAssessmentButton = document.getElementById("queueAssessment");
 const checkAssessmentButton = document.getElementById("checkAssessment");
 const checkResultButton = document.getElementById("checkResult");
@@ -65,6 +73,15 @@ let participantRuntimeConfig = {
     availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
     defaultStatuses: ["OPEN", "IN_REVIEW"],
   },
+  identityDefaults: {
+    participant: {
+      userId: "participant-1",
+      email: "participant@company.com",
+      name: "Platform Participant",
+      department: "Consulting",
+      roles: ["PARTICIPANT"],
+    },
+  },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let loadedModules = [];
@@ -76,6 +93,8 @@ let flowState = {
   assessmentQueued: false,
   resultStatus: null,
 };
+let latestAppeal = null;
+let assessmentProgressKey = "assessment.progress.idle";
 
 const defaultFieldBindings = [
   { id: "rawText", key: "defaults.rawText" },
@@ -151,6 +170,9 @@ function applyTranslations() {
 
   const selectedTitle = resolveSelectedModule(loadedModules, selectedModuleId)?.title ?? "";
   setDraftStatus(draftStatus.dataset.state ?? "none", selectedTitle);
+  renderAssessmentProgress();
+  renderAppealState();
+  updateCreateSubmissionAvailability();
   renderFlowGating();
 }
 
@@ -171,6 +193,7 @@ function setDefaultFieldValues(previousLocale, nextLocale) {
       element.value = nextDefault;
     }
   }
+  updateCreateSubmissionAvailability();
 }
 
 function populateLocaleSelect() {
@@ -195,6 +218,37 @@ function updateModuleSelectionVisibility(hasSelectedModule) {
   submissionSection.classList.toggle("hidden", !hasSelectedModule);
   mcqSection.classList.toggle("hidden", !hasSelectedModule);
   moduleSelectionHint.hidden = hasSelectedModule;
+  updateCreateSubmissionAvailability();
+}
+
+function validateSubmissionInputState() {
+  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+  const hasModule = Boolean(selectedModule);
+  const hasReflection = reflectionTextInput.value.trim().length >= 10;
+  const hasPromptExcerpt = promptExcerptInput.value.trim().length >= 5;
+  const hasAcknowledgement = ackCheckbox.checked === true;
+
+  if (!hasModule) {
+    return { valid: false, hintKey: "submission.validation.selectModule" };
+  }
+  if (!hasReflection) {
+    return { valid: false, hintKey: "submission.validation.reflectionMin" };
+  }
+  if (!hasPromptExcerpt) {
+    return { valid: false, hintKey: "submission.validation.promptMin" };
+  }
+  if (!hasAcknowledgement) {
+    return { valid: false, hintKey: "submission.validation.ackRequired" };
+  }
+
+  return { valid: true, hintKey: "submission.validation.ready" };
+}
+
+function updateCreateSubmissionAvailability() {
+  const validation = validateSubmissionInputState();
+  const isBusy = createSubmissionButton.dataset.busy === "true";
+  createSubmissionButton.disabled = isBusy || !validation.valid;
+  submissionValidationHint.textContent = t(validation.hintKey);
 }
 
 function renderModules() {
@@ -244,27 +298,40 @@ function resetFlowStateForModuleContext() {
     assessmentQueued: false,
     resultStatus: null,
   };
+  latestAppeal = null;
+  assessmentProgressKey = "assessment.progress.idle";
   submissionIdLabel.textContent = "-";
   attemptIdLabel.textContent = "-";
   appealIdLabel.textContent = "-";
   renderResultSummary(null);
+  renderAssessmentProgress();
+  renderAppealState();
   renderFlowGating();
 }
 
 function renderFlowGating() {
   const gate = deriveParticipantFlowGateState(flowState);
+  const hasAssessmentContext =
+    flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus);
 
+  assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
   assessmentSection.classList.toggle("section-locked", !gate.assessmentUnlocked);
   appealSection.classList.toggle("section-locked", !gate.appealUnlocked);
 
-  queueAssessmentButton.disabled = !gate.assessmentUnlocked;
-  checkResultButton.disabled = !gate.assessmentUnlocked;
-  checkAssessmentButton.disabled = !gate.checkAssessmentUnlocked;
-  createAppealButton.disabled = !gate.appealUnlocked;
+  const queueBusy = queueAssessmentButton.dataset.busy === "true";
+  const checkAssessmentBusy = checkAssessmentButton.dataset.busy === "true";
+  const checkResultBusy = checkResultButton.dataset.busy === "true";
+  const createAppealBusy = createAppealButton.dataset.busy === "true";
+
+  queueAssessmentButton.disabled = queueBusy || !gate.assessmentUnlocked;
+  checkResultButton.disabled = checkResultBusy || !gate.assessmentUnlocked;
+  checkAssessmentButton.disabled = checkAssessmentBusy || !gate.checkAssessmentUnlocked;
+  createAppealButton.disabled = createAppealBusy || !gate.appealUnlocked;
 
   assessmentGateHint.textContent = t(gate.assessmentHintKey);
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
   appealGateHint.textContent = t(gate.appealHintKey);
+  renderAppealState();
 }
 
 function getDraftSettings() {
@@ -412,6 +479,7 @@ function restoreDraftForSelectedModule(showStatus = true) {
     currentQuestions = [];
     attemptIdLabel.textContent = "-";
     renderQuestions();
+    updateCreateSubmissionAvailability();
     if (showStatus) {
       setDraftStatus("none", selectedModule.title);
     }
@@ -437,6 +505,7 @@ function restoreDraftForSelectedModule(showStatus = true) {
   if (showStatus) {
     setDraftStatus("restored", selectedModule.title);
   }
+  updateCreateSubmissionAvailability();
 }
 
 function renderRolePresetControl() {
@@ -486,7 +555,21 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  applyIdentityDefaults();
   renderRolePresetControl();
+}
+
+function applyIdentityDefaults() {
+  const identityDefaults = participantRuntimeConfig?.identityDefaults?.participant;
+  if (!identityDefaults) {
+    return;
+  }
+
+  document.getElementById("userId").value = identityDefaults.userId ?? "";
+  document.getElementById("email").value = identityDefaults.email ?? "";
+  document.getElementById("name").value = identityDefaults.name ?? "";
+  document.getElementById("department").value = identityDefaults.department ?? "";
+  rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
 }
 
 function headers() {
@@ -592,35 +675,190 @@ function formatNumber(value, maxFractionDigits = 2) {
   }).format(value);
 }
 
+function localizeSubmissionStatus(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  return t(`result.statusValue.${normalized || "UNKNOWN"}`);
+}
+
+function localizeAppealStatus(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
+}
+
+function localizeDecisionType(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  return t(`result.decisionValue.${normalized || "UNKNOWN"}`);
+}
+
+function localizeStatusExplanation(status) {
+  const normalized = typeof status === "string" ? status.toUpperCase() : "";
+  if (normalized === "UNDER_REVIEW") {
+    return t("result.statusExplanation.underReview");
+  }
+  if (normalized === "COMPLETED") {
+    return t("result.statusExplanation.completed");
+  }
+  return t("result.statusExplanation.processing");
+}
+
+function localizeCriterionName(criterion) {
+  const key = typeof criterion === "string" ? criterion : "";
+  const translationKey = `result.criterion.${key}`;
+  const localized = t(translationKey);
+  return localized === translationKey ? key : localized;
+}
+
+function localizeKnownContent(value, map) {
+  if (typeof value !== "string") {
+    return value ?? "-";
+  }
+  const key = map[value.trim()];
+  return key ? t(key) : value;
+}
+
+function localizeDecisionReason(value) {
+  return localizeKnownContent(value, {
+    "Automatically routed to manual review due to red flag / confidence / borderline rule.":
+      "result.decisionReasonValue.autoManualReview",
+    "Automatic pass by threshold rules.": "result.decisionReasonValue.autoPass",
+    "Automatic fail by threshold rules.": "result.decisionReasonValue.autoFail",
+  });
+}
+
+function localizeConfidence(value) {
+  return localizeKnownContent(value, {
+    "Medium confidence due to potential responsible-use ambiguity.":
+      "result.confidenceValue.medium",
+    "High confidence: structured and sufficiently detailed submission.":
+      "result.confidenceValue.high",
+  });
+}
+
+function localizeImprovementAdvice(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return "-";
+  }
+
+  const mapping = {
+    "Provide clearer before/after examples.": "result.improvementAdviceValue.beforeAfter",
+    "Describe concrete validation checks you performed.":
+      "result.improvementAdviceValue.validationChecks",
+    "Reference responsible-use constraints explicitly.":
+      "result.improvementAdviceValue.responsibleUse",
+  };
+
+  return values.map((value) => localizeKnownContent(value, mapping)).join("; ");
+}
+
+function localizeCriterionRationale(value) {
+  return localizeKnownContent(value, {
+    "Stub: submission appears relevant to the module task.":
+      "result.rationaleValue.relevance_for_case",
+    "Stub: output shows practical utility.": "result.rationaleValue.quality_and_utility",
+    "Stub: at least one improvement iteration is visible.":
+      "result.rationaleValue.iteration_and_improvement",
+    "Stub: includes human QA/reflection markers.":
+      "result.rationaleValue.human_quality_assurance",
+    "Stub: responsible-use checks inferred from provided content.":
+      "result.rationaleValue.responsible_use",
+  });
+}
+
+function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus) {
+  const normalizedStatus = typeof status === "string" ? status.toUpperCase() : "";
+  const normalizedJobStatus = typeof latestJobStatus === "string" ? latestJobStatus.toUpperCase() : "";
+
+  if (normalizedJobStatus === "FAILED") {
+    return "assessment.progress.failed";
+  }
+  if (normalizedStatus === "COMPLETED") {
+    return "assessment.progress.completed";
+  }
+  if (normalizedStatus === "UNDER_REVIEW") {
+    return "assessment.progress.underReview";
+  }
+  if (normalizedStatus === "SCORED") {
+    return "assessment.progress.completed";
+  }
+  if (normalizedStatus === "PROCESSING" || normalizedJobStatus === "RUNNING" || normalizedJobStatus === "PENDING") {
+    return "assessment.progress.waiting";
+  }
+  if (normalizedStatus === "SUBMITTED") {
+    return "assessment.progress.waiting";
+  }
+  return "assessment.progress.idle";
+}
+
+function renderAssessmentProgress() {
+  assessmentProgressStatus.textContent = t(assessmentProgressKey);
+}
+
+function renderAppealState() {
+  const hasAppeal = latestAppeal && typeof latestAppeal.id === "string";
+  const isNegativeResult = latestResult?.decision?.passFailTotal === false;
+  const shouldShowAppealSection = hasAppeal || isNegativeResult;
+
+  appealSection.classList.toggle("hidden", !shouldShowAppealSection);
+
+  if (!shouldShowAppealSection) {
+    createAppealButton.classList.add("hidden");
+    appealSubmittedStatus.textContent = "";
+    appealIdLabel.textContent = "-";
+    return;
+  }
+
+  if (hasAppeal) {
+    createAppealButton.classList.add("hidden");
+    createAppealButton.disabled = true;
+    appealSubmittedStatus.textContent =
+      `${t("appeal.submittedPrefix")}: ${latestAppeal.id} (${localizeAppealStatus(latestAppeal.appealStatus)})`;
+    appealIdLabel.textContent = latestAppeal.id;
+    return;
+  }
+
+  createAppealButton.classList.remove("hidden");
+  appealIdLabel.textContent = "-";
+  appealSubmittedStatus.textContent = t("appeal.readyForSubmission");
+}
+
 function renderResultSummary(body) {
   latestResult = body;
+  latestAppeal = body?.latestAppeal ?? latestAppeal;
 
   if (!body) {
     resultSummary.dataset.hasResult = "";
     resultSummary.textContent = t("result.none");
+    renderAppealState();
     return;
   }
 
+  assessmentProgressKey = deriveAssessmentProgressKeyFromSubmissionStatus(
+    body.status,
+    body?.assessment?.latestJob?.status,
+  );
+  renderAssessmentProgress();
+
   const lines = [
-    `${t("result.status")}: ${body.status ?? "-"}`,
-    `${t("result.statusExplanation")}: ${body.statusExplanation ?? "-"}`,
+    `${t("result.status")}: ${localizeSubmissionStatus(body.status)}`,
+    `${t("result.statusExplanation")}: ${localizeStatusExplanation(body.status)}`,
     `${t("result.totalScore")}: ${formatNumber(body.scoreComponents?.totalScore)}`,
     `${t("result.mcqScore")}: ${formatNumber(body.scoreComponents?.mcqScaledScore)}`,
     `${t("result.practicalScore")}: ${formatNumber(body.scoreComponents?.practicalScaledScore)}`,
-    `${t("result.decision")}: ${body.decision?.decisionType ?? "-"}`,
-    `${t("result.decisionReason")}: ${body.participantGuidance?.decisionReason ?? "-"}`,
-    `${t("result.confidence")}: ${body.participantGuidance?.confidenceNote ?? "-"}`,
-    `${t("result.improvementAdvice")}: ${body.participantGuidance?.improvementAdvice ?? "-"}`,
+    `${t("result.decision")}: ${localizeDecisionType(body.decision?.decisionType)}`,
+    `${t("result.decisionReason")}: ${localizeDecisionReason(body.participantGuidance?.decisionReason)}`,
+    `${t("result.confidence")}: ${localizeConfidence(body.participantGuidance?.confidenceNote)}`,
+    `${t("result.improvementAdvice")}: ${localizeImprovementAdvice(body.participantGuidance?.improvementAdvice)}`,
     `${t("result.rationales")}:`,
   ];
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
   for (const [criterion, rationale] of Object.entries(rationales)) {
-    lines.push(`- ${criterion}: ${String(rationale)}`);
+    lines.push(`- ${localizeCriterionName(criterion)}: ${localizeCriterionRationale(String(rationale))}`);
   }
 
   resultSummary.dataset.hasResult = "true";
   resultSummary.textContent = lines.join("\n");
+  renderAppealState();
 }
 
 function renderHistorySummary(body) {
@@ -638,8 +876,8 @@ function renderHistorySummary(body) {
     lines.push(`${t("history.entry")}: ${item.submissionId}`);
     lines.push(`${t("history.module")}: ${item.module?.title ?? "-"} (${item.module?.id ?? "-"})`);
     lines.push(`${t("history.submittedAt")}: ${formatDateTime(item.submittedAt)}`);
-    lines.push(`${t("history.latestStatus")}: ${item.status ?? "-"}`);
-    lines.push(`${t("history.latestDecision")}: ${item.latestDecision?.decisionType ?? "-"}`);
+    lines.push(`${t("history.latestStatus")}: ${localizeSubmissionStatus(item.status)}`);
+    lines.push(`${t("history.latestDecision")}: ${localizeDecisionType(item.latestDecision?.decisionType)}`);
     lines.push(`${t("history.latestScore")}: ${formatNumber(item.latestDecision?.totalScore)}`);
     lines.push("");
   }
@@ -673,6 +911,7 @@ loadModulesButton.addEventListener("click", async () => {
       if (selectedModuleId) {
         restoreDraftForSelectedModule(false);
       }
+      updateCreateSubmissionAvailability();
       log(body);
     } catch (error) {
       log(error.message);
@@ -683,34 +922,41 @@ loadModulesButton.addEventListener("click", async () => {
 createSubmissionButton.addEventListener("click", async () => {
   await runWithBusyButton(createSubmissionButton, async () => {
     try {
-      const moduleId = selectedModuleId;
-      if (!moduleId) {
-        throw new Error(t("errors.selectModuleFirst"));
+      const validation = validateSubmissionInputState();
+      if (!validation.valid) {
+        throw new Error(t(validation.hintKey));
       }
+
+      const moduleId = selectedModuleId;
       const body = await api("/api/submissions", {
         method: "POST",
         body: JSON.stringify({
           moduleId,
           deliveryType: "text",
-          rawText: document.getElementById("rawText").value,
-          reflectionText: document.getElementById("reflectionText").value,
-          promptExcerpt: document.getElementById("promptExcerpt").value,
-          responsibilityAcknowledged: document.getElementById("ack").checked,
+          rawText: rawTextInput.value,
+          reflectionText: reflectionTextInput.value,
+          promptExcerpt: promptExcerptInput.value,
+          responsibilityAcknowledged: ackCheckbox.checked,
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
+      latestAppeal = null;
+      assessmentProgressKey = "assessment.progress.idle";
+      renderResultSummary(null);
       flowState = {
         hasSubmission: true,
         hasMcqSubmission: false,
         assessmentQueued: false,
         resultStatus: null,
       };
+      renderAssessmentProgress();
+      renderAppealState();
       renderFlowGating();
       log(body);
     } catch (error) {
       log(error.message);
     }
-  });
+  }, updateCreateSubmissionAvailability);
 });
 
 startMcqButton.addEventListener("click", async () => {
@@ -770,6 +1016,8 @@ submitMcqButton.addEventListener("click", async () => {
         assessmentQueued: false,
         resultStatus: null,
       };
+      assessmentProgressKey = "assessment.progress.idle";
+      renderAssessmentProgress();
       renderFlowGating();
       persistCurrentModuleDraft(true);
       log(body);
@@ -794,6 +1042,8 @@ queueAssessmentButton.addEventListener("click", async () => {
         ...flowState,
         assessmentQueued: true,
       };
+      assessmentProgressKey = "assessment.progress.waiting";
+      renderAssessmentProgress();
       renderFlowGating();
       log(body);
     } catch (error) {
@@ -810,6 +1060,11 @@ checkAssessmentButton.addEventListener("click", async () => {
         throw new Error(t("errors.createSubmissionFirst"));
       }
       const body = await api(`/api/assessments/${submissionId}`);
+      assessmentProgressKey = deriveAssessmentProgressKeyFromSubmissionStatus(
+        body.submissionStatus,
+        body.latestJob?.status,
+      );
+      renderAssessmentProgress();
       log(body);
     } catch (error) {
       log(error.message);
@@ -845,12 +1100,14 @@ createAppealButton.addEventListener("click", async () => {
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
       }
-      const appealReason = document.getElementById("appealReason").value;
+      const appealReason = appealReasonInput.value;
       const body = await api(`/api/submissions/${submissionId}/appeals`, {
         method: "POST",
         body: JSON.stringify({ appealReason }),
       });
+      latestAppeal = body.appeal;
       appealIdLabel.textContent = body.appeal.id;
+      renderAppealState();
       log(body);
     } catch (error) {
       log(error.message);
@@ -888,6 +1145,7 @@ clearDraftButton.addEventListener("click", async () => {
     renderQuestions();
     resetFlowStateForModuleContext();
     setDraftStatus("cleared", selectedModule.title);
+    updateCreateSubmissionAvailability();
   });
 });
 
@@ -912,8 +1170,13 @@ for (const fieldId of moduleDraftFieldIds) {
   const element = document.getElementById(fieldId);
   element.addEventListener("input", () => {
     scheduleDraftAutosave();
+    updateCreateSubmissionAvailability();
   });
 }
+
+ackCheckbox.addEventListener("change", () => {
+  updateCreateSubmissionAvailability();
+});
 
 window.addEventListener("beforeunload", () => {
   persistCurrentModuleDraft(false);

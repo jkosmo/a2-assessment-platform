@@ -58,6 +58,16 @@ export async function getOwnedSubmission(submissionId: string, userId: string) {
     where: { id: submissionId, userId },
     include: {
       moduleVersion: true,
+      appeals: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          appealStatus: true,
+          createdAt: true,
+          resolvedAt: true,
+        },
+      },
       mcqAttempts: {
         orderBy: { createdAt: "desc" },
         include: { responses: true },

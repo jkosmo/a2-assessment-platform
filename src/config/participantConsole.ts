@@ -12,6 +12,14 @@ const mockRoleSchema = z.enum([
   "SUBJECT_MATTER_OWNER",
 ]);
 
+const consoleIdentitySchema = z.object({
+  userId: z.string().trim().min(1),
+  email: z.string().trim().email(),
+  name: z.string().trim().min(1),
+  department: z.string().trim().min(1),
+  roles: z.array(mockRoleSchema).min(1),
+});
+
 const participantConsoleConfigSchema = z.object({
   mockRolePresets: z.array(mockRoleSchema).min(1),
   drafts: z.object({
@@ -28,6 +36,12 @@ const participantConsoleConfigSchema = z.object({
       .min(1),
     queuePageSize: z.number().int().min(1).max(200).default(50),
   }),
+  identityDefaults: z
+    .object({
+      participant: consoleIdentitySchema,
+      appealHandler: consoleIdentitySchema,
+    })
+    .optional(),
 });
 
 type ParticipantConsoleConfig = z.infer<typeof participantConsoleConfigSchema>;
@@ -38,6 +52,7 @@ export type ParticipantConsoleRuntimeConfig = {
   mockRolePresets: ParticipantConsoleConfig["mockRolePresets"];
   drafts: ParticipantConsoleConfig["drafts"];
   appealWorkspace: ParticipantConsoleConfig["appealWorkspace"];
+  identityDefaults?: ParticipantConsoleConfig["identityDefaults"];
 };
 
 let cached: ParticipantConsoleConfig | null = null;
@@ -61,6 +76,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     mockRolePresets: config.mockRolePresets,
     drafts: config.drafts,
     appealWorkspace: config.appealWorkspace,
+    identityDefaults: config.identityDefaults,
   };
 }
 

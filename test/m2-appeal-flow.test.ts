@@ -85,6 +85,15 @@ describe("MVP appeal flow", () => {
     const appealId = createAppealResponse.body.appeal.id as string;
     expect(createAppealResponse.body.appeal.appealStatus).toBe("OPEN");
 
+    const resultAfterAppealCreate = await request(app)
+      .get(`/api/submissions/${submissionId}/result`)
+      .set(participantHeaders);
+    expect(resultAfterAppealCreate.status).toBe(200);
+    expect(resultAfterAppealCreate.body.latestAppeal).toMatchObject({
+      id: appealId,
+      appealStatus: "OPEN",
+    });
+
     const duplicateAppealResponse = await request(app)
       .post(`/api/submissions/${submissionId}/appeals`)
       .set(participantHeaders)
@@ -143,6 +152,15 @@ describe("MVP appeal flow", () => {
     expect(resolveResponse.body.appeal.resolvedAt).toBeTruthy();
     expect(resolveResponse.body.resolutionDecision.decisionType).toBe("APPEAL_RESOLUTION");
     expect(resolveResponse.body.resolutionDecision.parentDecisionId).toBeTruthy();
+
+    const resultAfterAppealResolve = await request(app)
+      .get(`/api/submissions/${submissionId}/result`)
+      .set(participantHeaders);
+    expect(resultAfterAppealResolve.status).toBe(200);
+    expect(resultAfterAppealResolve.body.latestAppeal).toMatchObject({
+      id: appealId,
+      appealStatus: "RESOLVED",
+    });
 
     const resolvedQueueResponse = await request(app)
       .get("/api/appeals?status=RESOLVED")
