@@ -1,6 +1,7 @@
 import { DecisionType, ReviewStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
+import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
 
 export async function listManualReviewQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED">;
@@ -233,6 +234,11 @@ export async function finalizeManualReviewOverride(input: {
   await prisma.submission.update({
     where: { id: latestDecision.submissionId },
     data: { submissionStatus: SubmissionStatus.COMPLETED },
+  });
+
+  await upsertRecertificationStatusFromDecision({
+    decisionId: overrideDecision.id,
+    actorId: input.reviewerId,
   });
 
   await recordAuditEvent({

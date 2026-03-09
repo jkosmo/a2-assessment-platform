@@ -5,6 +5,7 @@ import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "./participantNotificationService.js";
 import { env } from "../config/env.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
+import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -380,6 +381,11 @@ export async function resolveAppeal(input: {
   await prisma.submission.update({
     where: { id: latestDecision.submissionId },
     data: { submissionStatus: SubmissionStatus.COMPLETED },
+  });
+
+  await upsertRecertificationStatusFromDecision({
+    decisionId: resolutionDecision.id,
+    actorId: input.handlerId,
   });
 
   await recordAuditEvent({

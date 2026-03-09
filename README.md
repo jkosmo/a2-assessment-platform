@@ -93,6 +93,8 @@ npm run build
 - `GET /api/reports/manual-review-queue`
 - `GET /api/reports/appeals`
 - `GET /api/reports/mcq-quality`
+- `GET /api/reports/recertification`
+- `POST /api/reports/recertification/reminders/run?asOf=<ISO-date>`
 - `GET /api/reports/export?type=<report>&format=csv`
 - `POST /api/admin/content/modules/:moduleId/rubric-versions`
 - `POST /api/admin/content/modules/:moduleId/prompt-template-versions`
@@ -171,6 +173,13 @@ Secondary LLM assessment policy is config-driven via:
 - `secondaryAssessment.moduleOverrides.<moduleId>` enables/disables second-pass per module
 - `secondaryAssessment.triggerRules` controls when a second pass should run
 - `secondaryAssessment.disagreementRules` controls when pass disagreement must route to manual review
+
+Recertification policy is config-driven via:
+- `config/assessment-rules.json`
+- `recertification.validityDays` controls certification validity period
+- `recertification.dueOffsetDays` controls when recertification becomes due before expiry
+- `recertification.dueSoonDays` controls early warning status window
+- `recertification.reminderDaysBefore[]` controls pre-expiry reminder schedule offsets
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

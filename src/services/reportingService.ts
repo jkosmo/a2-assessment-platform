@@ -2,6 +2,7 @@ import { prisma } from "../db/prisma.js";
 import { ReviewStatus, AppealStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
+import { deriveRecertificationStatus } from "./recertificationService.js";
 import type {
   SubmissionStatus as SubmissionStatusType,
   ReviewStatus as ReviewStatusType,
@@ -87,6 +88,23 @@ type McqQualityRow = {
   discrimination: number | null;
   flaggedLowQuality: boolean;
   qualityFlags: string;
+};
+
+type RecertificationStatusRow = {
+  certificationId: string;
+  userId: string;
+  participantEmail: string;
+  participantDepartment: string | null;
+  moduleId: string;
+  moduleTitle: string;
+  latestDecisionId: string;
+  status: string;
+  passedAt: Date | null;
+  recertificationDueDate: Date | null;
+  expiryDate: Date | null;
+  daysUntilDue: number | null;
+  daysUntilExpiry: number | null;
+  updatedAt: Date;
 };
 
 export async function getCompletionReport(filters: ReportFilters) {
@@ -568,6 +586,90 @@ export async function getMcqQualityReport(filters: ReportFilters) {
   };
 }
 
+export async function getRecertificationStatusReport(filters: ReportFilters) {
+  const rules = getAssessmentRules().recertification;
+  const now = new Date();
+  const statuses = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
+
+  const certifications = await prisma.certificationStatus.findMany({
+    where: {
+      ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+      ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+      ...(filters.dateFrom || filters.dateTo
+        ? {
+            updatedAt: {
+              ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+              ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+            },
+          }
+        : {}),
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          department: true,
+        },
+      },
+      module: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+    },
+    orderBy: [{ moduleId: "asc" }, { updatedAt: "desc" }],
+  });
+
+  const rows = certifications
+    .map((certification): RecertificationStatusRow => {
+      const derivedStatus = deriveRecertificationStatus({
+        now,
+        expiryDate: certification.expiryDate,
+        recertificationDueDate: certification.recertificationDueDate,
+        dueSoonDays: rules.dueSoonDays,
+      });
+      return {
+        certificationId: certification.id,
+        userId: certification.user.id,
+        participantEmail: certification.user.email,
+        participantDepartment: certification.user.department,
+        moduleId: certification.module.id,
+        moduleTitle: certification.module.title,
+        latestDecisionId: certification.latestDecisionId,
+        status: derivedStatus,
+        passedAt: certification.passedAt,
+        recertificationDueDate: certification.recertificationDueDate,
+        expiryDate: certification.expiryDate,
+        daysUntilDue: certification.recertificationDueDate
+          ? diffUtcDays(now, certification.recertificationDueDate)
+          : null,
+        daysUntilExpiry: certification.expiryDate ? diffUtcDays(now, certification.expiryDate) : null,
+        updatedAt: certification.updatedAt,
+      };
+    })
+    .filter((row) => statuses.size === 0 || statuses.has(row.status));
+
+  const statusCounts = {
+    ACTIVE: rows.filter((row) => row.status === "ACTIVE").length,
+    DUE_SOON: rows.filter((row) => row.status === "DUE_SOON").length,
+    DUE: rows.filter((row) => row.status === "DUE").length,
+    EXPIRED: rows.filter((row) => row.status === "EXPIRED").length,
+    NOT_CERTIFIED: rows.filter((row) => row.status === "NOT_CERTIFIED").length,
+  };
+
+  return {
+    reportType: "recertification-status",
+    filters: normalizeFilters(filters),
+    totals: {
+      certificationCount: rows.length,
+      ...statusCounts,
+    },
+    rows,
+  };
+}
+
 export function toCsv(
   rows: Array<Record<string, unknown>>,
   columnOrder?: string[],
@@ -667,4 +769,10 @@ function computePointBiserial(values: Array<{ correct: number; score: number }>)
   const q = 1 - p;
 
   return ((meanCorrect - meanIncorrect) / stdDev) * Math.sqrt(p * q);
+}
+
+function diffUtcDays(from: Date, to: Date) {
+  const fromDate = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  const toDate = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+  return Math.floor((toDate - fromDate) / (24 * 60 * 60 * 1000));
 }

@@ -97,6 +97,19 @@ const rulesSchema = z.object({
         manualReviewRecommendationMismatch: true,
       },
     }),
+  recertification: z
+    .object({
+      validityDays: z.number().int().positive().default(365),
+      dueOffsetDays: z.number().int().min(0).default(30),
+      dueSoonDays: z.number().int().min(0).default(14),
+      reminderDaysBefore: z.array(z.number().int().min(0)).default([30, 7, 1]),
+    })
+    .default({
+      validityDays: 365,
+      dueOffsetDays: 30,
+      dueSoonDays: 14,
+      reminderDaysBefore: [30, 7, 1],
+    }),
 });
 
 export type AssessmentRules = z.infer<typeof rulesSchema>;

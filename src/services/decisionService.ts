@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "./auditService.js";
+import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
 
 type BuildDecisionInput = {
   submissionId: string;
@@ -89,6 +90,13 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     where: { id: input.submissionId },
     data: { submissionStatus: needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED },
   });
+
+  if (!needsManualReview) {
+    await upsertRecertificationStatusFromDecision({
+      decisionId: decision.id,
+      actorId: input.userId,
+    });
+  }
 
   await recordAuditEvent({
     entityType: "assessment_decision",

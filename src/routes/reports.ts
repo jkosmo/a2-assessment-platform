@@ -6,9 +6,11 @@ import {
   getMcqQualityReport,
   getManualReviewQueueReport,
   getPassRatesReport,
+  getRecertificationStatusReport,
   toCsv,
   type ReportFilters,
 } from "../services/reportingService.js";
+import { runRecertificationReminderSchedule } from "../services/recertificationService.js";
 
 const reportsRouter = Router();
 
@@ -21,8 +23,12 @@ const reportQuerySchema = z.object({
 });
 
 const exportQuerySchema = reportQuerySchema.extend({
-  type: z.enum(["completion", "pass-rates", "manual-review-queue", "appeals", "mcq-quality"]),
+  type: z.enum(["completion", "pass-rates", "manual-review-queue", "appeals", "mcq-quality", "recertification"]),
   format: z.literal("csv"),
+});
+
+const reminderRunQuerySchema = z.object({
+  asOf: z.string().trim().optional(),
 });
 
 reportsRouter.get("/completion", async (request, response) => {
@@ -80,6 +86,42 @@ reportsRouter.get("/mcq-quality", async (request, response) => {
   response.json(report);
 });
 
+reportsRouter.get("/recertification", async (request, response) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+
+  const report = await getRecertificationStatusReport(filters);
+  response.json(report);
+});
+
+reportsRouter.post("/recertification/reminders/run", async (request, response) => {
+  const roles = request.context?.roles ?? [];
+  if (!roles.includes("ADMINISTRATOR") && !roles.includes("SUBJECT_MATTER_OWNER")) {
+    response.status(403).json({ error: "forbidden", message: "Only administrators can run recertification reminders." });
+    return;
+  }
+
+  const parsed = reminderRunQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  const asOf = parsed.data.asOf ? parseDate(parsed.data.asOf, false) : null;
+  if (parsed.data.asOf && !asOf) {
+    response.status(400).json({ error: "validation_error", message: "Invalid asOf date." });
+    return;
+  }
+
+  const result = await runRecertificationReminderSchedule({
+    asOf: asOf ?? undefined,
+  });
+  response.json({ run: result });
+});
+
 reportsRouter.get("/export", async (request, response) => {
   const parsed = exportQuerySchema.safeParse(request.query);
   if (!parsed.success) {
@@ -104,6 +146,8 @@ reportsRouter.get("/export", async (request, response) => {
     rows = (await getManualReviewQueueReport(filters)).rows;
   } else if (parsed.data.type === "mcq-quality") {
     rows = (await getMcqQualityReport(filters)).rows;
+  } else if (parsed.data.type === "recertification") {
+    rows = (await getRecertificationStatusReport(filters)).rows;
   } else {
     rows = (await getAppealsReport(filters)).rows;
   }

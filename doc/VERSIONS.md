@@ -7,6 +7,42 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.51 - 2026-03-09
+### Summary
+Implemented issue #27 with a config-driven recertification engine, pre-expiry reminder scheduling, and reportable recertification status.
+
+### Included
+- Added recertification policy config:
+  - `config/assessment-rules.json`
+  - `src/config/assessmentRules.ts`
+  - keys:
+    - `recertification.validityDays`
+    - `recertification.dueOffsetDays`
+    - `recertification.dueSoonDays`
+    - `recertification.reminderDaysBefore[]`
+- Added recertification service:
+  - `src/services/recertificationService.ts`
+  - upserts `CertificationStatus` from final decisions
+  - derives lifecycle statuses (`ACTIVE`, `DUE_SOON`, `DUE`, `EXPIRED`, `NOT_CERTIFIED`)
+  - executes reminder schedule with dedupe by `asOfDate` + reminder offset
+  - logs and audits reminder outcomes
+- Integrated certification updates into final-decision points:
+  - `src/services/decisionService.ts` (automatic completed decisions)
+  - `src/services/manualReviewService.ts` (manual override decisions)
+  - `src/services/appealService.ts` (appeal resolution decisions)
+- Added reporting and reminder endpoints:
+  - `GET /api/reports/recertification`
+  - `POST /api/reports/recertification/reminders/run?asOf=<ISO-date>`
+  - implementation in `src/routes/reports.ts` and `src/services/reportingService.ts`
+- Added design note + tests:
+  - `doc/PHASE2_RECERTIFICATION_DESIGN.md`
+  - `test/m2-recertification-flow.test.ts`
+  - README updated with recertification config/endpoint guidance
+
+### Verification
+- `npm run lint`
+- `npm test` (49 tests passing, 20 test files)
+
 ## 0.3.50 - 2026-03-09
 ### Summary
 Implemented issue #34 by adding PDF/DOCX document parsing in submission intake with fallback handling, parser-quality logging, and clear user-facing parse errors.
