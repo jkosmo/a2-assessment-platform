@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.44 - 2026-03-09
+### Summary
+Fixed appeal-handler workspace state issues so resolved appeals disappear consistently from open queues and resolution form inputs reset when switching appeals.
+
+### Included
+- Appeal queue/selection UX fixes:
+  - `public/appeal-handler.js`
+  - Ensures resolved appeal is removed from current queue view immediately when current status filter does not include `RESOLVED`.
+  - Clears selected appeal + details state correctly when queue becomes empty or filter has no rows.
+  - Prevents stale details reload for appeals no longer present in current queue.
+- Resolution form state reset:
+  - `public/appeal-handler.js`
+  - Added centralized reset for:
+    - `Decision reason`
+    - `Resolution note`
+    - `Pass/fail total` (default `Pass`)
+  - Inputs now reset when selecting a different appeal and after resolve-driven selection changes.
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.43 - 2026-03-09
 ### Summary
 Simplified participant assessment UX further by hiding redundant manual controls in auto mode and making auto-evaluation timer visibility explicit.

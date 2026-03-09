@@ -52,6 +52,7 @@ let participantRuntimeConfig = {
   },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+const defaultResolutionPassFailValue = "true";
 
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
@@ -299,7 +300,9 @@ function renderAppealQueue() {
 
   if (!Array.isArray(latestAppealQueue) || latestAppealQueue.length === 0) {
     queueCountLabel.textContent = "0";
-    handlerSelectedAppealIdInput.value = "-";
+    setSelectedAppeal("", true);
+    selectedAppealDetails = null;
+    renderAppealHandlerDetails(null);
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 9;
@@ -313,7 +316,9 @@ function renderAppealQueue() {
   queueCountLabel.textContent = `${filtered.length} / ${latestAppealQueue.length}`;
 
   if (filtered.length === 0) {
-    handlerSelectedAppealIdInput.value = "-";
+    setSelectedAppeal("", true);
+    selectedAppealDetails = null;
+    renderAppealHandlerDetails(null);
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 9;
@@ -324,7 +329,7 @@ function renderAppealQueue() {
   }
 
   if (!selectedAppealId || !filtered.some((appeal) => appeal.id === selectedAppealId)) {
-    selectedAppealId = filtered[0].id;
+    setSelectedAppeal(filtered[0].id, true);
   }
   handlerSelectedAppealIdInput.value = selectedAppealId;
 
@@ -333,8 +338,7 @@ function renderAppealQueue() {
     row.className = appeal.id === selectedAppealId ? "selected" : "";
     row.style.cursor = "pointer";
     row.addEventListener("click", async () => {
-      selectedAppealId = appeal.id;
-      handlerSelectedAppealIdInput.value = appeal.id;
+      setSelectedAppeal(appeal.id, true);
       renderAppealQueue();
       await loadAppealDetails(appeal.id);
     });
@@ -361,6 +365,23 @@ function renderAppealQueue() {
     }
 
     appealQueueBody.appendChild(row);
+  }
+}
+
+function resetResolutionInputs() {
+  handlerDecisionReasonInput.value = "";
+  handlerResolutionNoteInput.value = "";
+  handlerPassFailTotalInput.value = defaultResolutionPassFailValue;
+}
+
+function setSelectedAppeal(appealId, resetInputs = false) {
+  const nextId = typeof appealId === "string" ? appealId : "";
+  const changed = selectedAppealId !== nextId;
+  selectedAppealId = nextId;
+  handlerSelectedAppealIdInput.value = selectedAppealId || "-";
+
+  if (changed && resetInputs) {
+    resetResolutionInputs();
   }
 }
 
@@ -508,9 +529,11 @@ async function loadAppealQueue() {
     renderAppealQueue();
     appealHandlerMessage.textContent = `${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`;
 
-    if (selectedAppealId) {
+    if (selectedAppealId && latestAppealQueue.some((appeal) => appeal.id === selectedAppealId)) {
       await loadAppealDetails(selectedAppealId);
     } else {
+      setSelectedAppeal("", false);
+      selectedAppealDetails = null;
       renderAppealHandlerDetails(null);
     }
     log(body);
@@ -560,6 +583,7 @@ claimAppealButton.addEventListener("click", async () => {
         body: JSON.stringify({}),
       });
       appealHandlerMessage.textContent = t("appealHandler.claimed");
+      setSelectedAppeal(selectedAppealId, true);
       log(body);
       await loadAppealQueue();
       await loadAppealDetails(selectedAppealId);
@@ -587,9 +611,24 @@ resolveAppealButton.addEventListener("click", async () => {
         }),
       });
       appealHandlerMessage.textContent = t("appealHandler.resolved");
+      const resolvedAppealId = body?.appeal?.id ?? selectedAppealId;
+      const resolvedAppealStatus = body?.appeal?.appealStatus ?? "RESOLVED";
+      const selectedStatuses = getSelectedAppealStatuses();
+      if (!selectedStatuses.includes(resolvedAppealStatus)) {
+        latestAppealQueue = latestAppealQueue.filter((appeal) => appeal.id !== resolvedAppealId);
+        if (selectedAppealId === resolvedAppealId) {
+          setSelectedAppeal("", true);
+          selectedAppealDetails = null;
+        }
+      } else {
+        setSelectedAppeal(resolvedAppealId, true);
+      }
+      renderAppealQueue();
       log(body);
       await loadAppealQueue();
-      await loadAppealDetails(selectedAppealId);
+      if (selectedAppealId) {
+        await loadAppealDetails(selectedAppealId);
+      }
     } catch (error) {
       appealHandlerMessage.textContent = toActionableErrorMessage(error);
       log(error.message);
@@ -620,3 +659,4 @@ loadVersion();
 loadParticipantConsoleConfig();
 renderAppealQueue();
 renderAppealHandlerDetails(null);
+resetResolutionInputs();
