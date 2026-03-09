@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.34 - 2026-03-09
+### Summary
+Added second seeded module for multi-module flow verification and created dedicated usability discovery backlog item.
+
+### Included
+- Seed data enhancement for multi-module testing:
+  - `prisma/seed.ts` now seeds two published modules with independent rubric/prompt/MCQ/module-version bundles.
+  - Existing baseline module (`Generative AI Foundations`) retained.
+  - Added second baseline module (`AI Governance and Risk Essentials`) to support module-switch UX testing.
+- Validation:
+  - `npm run lint`
+  - `npm test` (23 tests passing, 12 test files)
+- Planning/backlog:
+  - Created `#47` for usability analysis and moderated UX testing, including module-switch scenario.
+
+### Notes
+- No API contract changes; this release extends seed/test fixtures and discovery planning.
+
 ## 0.3.33 - 2026-03-08
 ### Summary
 Validated automated test baseline and aligned README documentation with current MVP implementation and CI/CD reality.
