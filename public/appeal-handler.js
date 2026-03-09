@@ -206,6 +206,61 @@ function formatDateTime(value) {
   }
 }
 
+function formatNumber(value, maxFractionDigits = 2) {
+  if (typeof value !== "number") {
+    return "-";
+  }
+
+  return new Intl.NumberFormat(currentLocale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(value);
+}
+
+function formatPassFail(value) {
+  if (value === true) {
+    return t("appealHandler.pass");
+  }
+  if (value === false) {
+    return t("appealHandler.fail");
+  }
+  return "-";
+}
+
+function normalizeMultilineText(value) {
+  if (typeof value !== "string") {
+    return "-";
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "-";
+}
+
+function parseLlmStructuredResponse(rawJson) {
+  if (typeof rawJson !== "string" || rawJson.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(rawJson);
+  } catch {
+    return null;
+  }
+}
+
+function buildCriterionRationaleLines(criteria) {
+  if (!criteria || typeof criteria !== "object") {
+    return [t("appealHandler.details.noCriteria")];
+  }
+
+  const entries = Object.entries(criteria);
+  if (entries.length === 0) {
+    return [t("appealHandler.details.noCriteria")];
+  }
+
+  return entries.map(([criterion, rationale]) => `- ${criterion}: ${String(rationale)}`);
+}
+
 function toActionableErrorMessage(error) {
   if (!(error instanceof Error)) {
     return "Unexpected error.";
@@ -393,33 +448,78 @@ function renderAppealHandlerDetails(details) {
 
   const appeal = details.appeal ?? details;
   const sla = details.sla ?? appeal.sla ?? null;
+  const submission = appeal.submission ?? {};
+  const latestDecision = submission.decisions?.[0] ?? submission.latestDecision ?? null;
+  const latestLlmEvaluation = Array.isArray(submission.llmEvaluations) ? submission.llmEvaluations[0] ?? null : null;
+  const completedMcqAttempts = Array.isArray(submission.mcqAttempts)
+    ? submission.mcqAttempts.filter((attempt) => attempt?.completedAt)
+    : [];
+  const latestMcqAttempt = completedMcqAttempts[0] ?? null;
+  const llmStructured = parseLlmStructuredResponse(latestLlmEvaluation?.responseJson);
+  const improvementAdvice = Array.isArray(llmStructured?.improvement_advice) ? llmStructured.improvement_advice : [];
+  const criterionRationales = buildCriterionRationaleLines(llmStructured?.criterion_rationales);
+
   const lines = [
-    `appealId: ${appeal.id}`,
-    `status: ${appeal.appealStatus}`,
-    `participant: ${appeal.appealedBy?.name ?? "-"} (${appeal.appealedBy?.email ?? "-"})`,
-    `submissionParticipant: ${appeal.submission?.user?.name ?? "-"} (${appeal.submission?.user?.email ?? "-"})`,
-    `module: ${appeal.submission?.module?.title ?? "-"} (${appeal.submission?.module?.id ?? "-"})`,
-    `submissionId: ${appeal.submission?.id ?? "-"}`,
-    `submittedAt: ${formatDateTime(appeal.submission?.submittedAt)}`,
-    `createdAt: ${formatDateTime(appeal.createdAt)}`,
-    `claimedAt: ${formatDateTime(appeal.claimedAt)}`,
-    `resolvedAt: ${formatDateTime(appeal.resolvedAt)}`,
-    `handlerId: ${appeal.resolvedById ?? appeal.resolvedBy?.id ?? "-"}`,
-    `resolutionNote: ${appeal.resolutionNote ?? "-"}`,
+    `=== ${t("appealHandler.details.section.appeal")} ===`,
+    `${t("appealHandler.details.appealId")}: ${appeal.id}`,
+    `${t("appealHandler.details.appealStatus")}: ${appeal.appealStatus}`,
+    `${t("appealHandler.details.appealReason")}: ${normalizeMultilineText(appeal.appealReason)}`,
+    `${t("appealHandler.details.participant")}: ${appeal.appealedBy?.name ?? "-"} (${appeal.appealedBy?.email ?? "-"})`,
+    `${t("appealHandler.details.submissionParticipant")}: ${submission.user?.name ?? "-"} (${submission.user?.email ?? "-"})`,
+    `${t("appealHandler.details.module")}: ${submission.module?.title ?? "-"} (${submission.module?.id ?? "-"})`,
+    `${t("appealHandler.details.submissionId")}: ${submission.id ?? "-"}`,
+    `${t("appealHandler.details.submittedAt")}: ${formatDateTime(submission.submittedAt)}`,
+    `${t("appealHandler.details.createdAt")}: ${formatDateTime(appeal.createdAt)}`,
+    `${t("appealHandler.details.claimedAt")}: ${formatDateTime(appeal.claimedAt)}`,
+    `${t("appealHandler.details.resolvedAt")}: ${formatDateTime(appeal.resolvedAt)}`,
+    `${t("appealHandler.details.handlerId")}: ${appeal.resolvedById ?? appeal.resolvedBy?.id ?? "-"}`,
+    `${t("appealHandler.details.resolutionNote")}: ${normalizeMultilineText(appeal.resolutionNote)}`,
+    "",
+    `=== ${t("appealHandler.details.section.submission")} ===`,
+    `${t("appealHandler.details.deliveryType")}: ${submission.deliveryType ?? "-"}`,
+    `${t("appealHandler.details.rawText")}:`,
+    normalizeMultilineText(submission.rawText),
+    "",
+    `${t("appealHandler.details.reflection")}:`,
+    normalizeMultilineText(submission.reflectionText),
+    "",
+    `${t("appealHandler.details.promptExcerpt")}:`,
+    normalizeMultilineText(submission.promptExcerpt),
+    "",
+    `=== ${t("appealHandler.details.section.mcq")} ===`,
+    `${t("appealHandler.details.mcqAttemptId")}: ${latestMcqAttempt?.id ?? t("appealHandler.details.none")}`,
+    `${t("appealHandler.details.mcqPercentScore")}: ${formatNumber(latestMcqAttempt?.percentScore)}`,
+    `${t("appealHandler.details.mcqScaledScore")}: ${formatNumber(latestMcqAttempt?.scaledScore)}`,
+    `${t("appealHandler.details.mcqPassFail")}: ${formatPassFail(latestMcqAttempt?.passFailMcq)}`,
+    `${t("appealHandler.details.mcqCompletedAt")}: ${formatDateTime(latestMcqAttempt?.completedAt)}`,
+    "",
+    `=== ${t("appealHandler.details.section.evaluation")} ===`,
+    `${t("appealHandler.details.decisionId")}: ${latestDecision?.id ?? t("appealHandler.details.none")}`,
+    `${t("appealHandler.details.decisionType")}: ${latestDecision?.decisionType ?? "-"}`,
+    `${t("appealHandler.details.totalScore")}: ${formatNumber(latestDecision?.totalScore)}`,
+    `${t("appealHandler.details.passFailTotal")}: ${formatPassFail(latestDecision?.passFailTotal)}`,
+    `${t("appealHandler.details.decisionReason")}: ${normalizeMultilineText(latestDecision?.decisionReason)}`,
+    `${t("appealHandler.details.finalisedAt")}: ${formatDateTime(latestDecision?.finalisedAt)}`,
+    `${t("appealHandler.details.llmEvaluationId")}: ${latestLlmEvaluation?.id ?? t("appealHandler.details.none")}`,
+    `${t("appealHandler.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation?.practicalScoreScaled)}`,
+    `${t("appealHandler.details.llmPassFail")}: ${formatPassFail(latestLlmEvaluation?.passFailPractical)}`,
+    `${t("appealHandler.details.llmManualReviewRecommended")}: ${String(latestLlmEvaluation?.manualReviewRecommended ?? "-")}`,
+    `${t("appealHandler.details.llmConfidenceNote")}: ${normalizeMultilineText(latestLlmEvaluation?.confidenceNote)}`,
+    `${t("appealHandler.details.llmCreatedAt")}: ${formatDateTime(latestLlmEvaluation?.createdAt)}`,
+    `${t("appealHandler.details.improvementAdvice")}:`,
+    ...(improvementAdvice.length > 0
+      ? improvementAdvice.map((advice) => `- ${String(advice)}`)
+      : [t("appealHandler.details.none")]),
+    `${t("appealHandler.details.criterionRationales")}:`,
+    ...criterionRationales,
   ];
 
   if (sla) {
-    lines.push(`slaStatus: ${sla.status ?? "-"}`);
-    lines.push(`firstResponseHours: ${sla.firstResponseDurationHours ?? "-"}`);
-    lines.push(`resolutionHours: ${sla.resolutionDurationHours ?? "-"}`);
-  }
-
-  const latestDecision = appeal.submission?.decisions?.[0] ?? appeal.submission?.latestDecision ?? null;
-  if (latestDecision) {
-    lines.push(`latestDecisionId: ${latestDecision.id}`);
-    lines.push(`latestDecisionType: ${latestDecision.decisionType ?? "-"}`);
-    lines.push(`latestDecisionTotalScore: ${latestDecision.totalScore ?? "-"}`);
-    lines.push(`latestDecisionFinalisedAt: ${formatDateTime(latestDecision.finalisedAt)}`);
+    lines.push("");
+    lines.push(`=== ${t("appealHandler.details.section.sla")} ===`);
+    lines.push(`${t("appealHandler.details.slaStatus")}: ${sla.status ?? "-"}`);
+    lines.push(`${t("appealHandler.details.firstResponseHours")}: ${sla.firstResponseDurationHours ?? "-"}`);
+    lines.push(`${t("appealHandler.details.resolutionHours")}: ${sla.resolutionDurationHours ?? "-"}`);
   }
 
   appealHandlerDetails.textContent = lines.join("\n");

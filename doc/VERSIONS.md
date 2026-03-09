@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.45 - 2026-03-09
+### Summary
+Expanded appeal-handler case details so handlers can review full submission context directly in the workspace: participant submission content, MCQ result metrics, and evaluation details.
+
+### Included
+- Appeal workspace detail panel expansion:
+  - `public/appeal-handler.js`
+  - Added structured detail sections:
+    - `Appeal`
+    - `Submission` (answer text, reflection, prompt excerpt, delivery type)
+    - `MCQ` (latest attempt id, percent/scaled score, pass/fail, completed timestamp)
+    - `Evaluation` (latest decision + latest LLM evaluation fields, improvement advice, criterion rationales)
+    - `SLA`
+  - Added safer formatting helpers for numbers, pass/fail values, multiline text, and LLM response parsing.
+- UI text keys for detailed case fields:
+  - `public/i18n/appeal-handler-translations.js`
+  - Added detail-label translation keys in `en-GB` (used as fallback for `nb`/`nn`).
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.44 - 2026-03-09
 ### Summary
 Fixed appeal-handler workspace state issues so resolved appeals disappear consistently from open queues and resolution form inputs reset when switching appeals.
