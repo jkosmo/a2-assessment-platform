@@ -1,0 +1,19 @@
+{
+  "mockRolePresets": [
+    "PARTICIPANT",
+    "APPEAL_HANDLER",
+    "ADMINISTRATOR",
+    "REVIEWER",
+    "REPORT_READER",
+    "SUBJECT_MATTER_OWNER"
+  ],
+  "drafts": {
+    "storageKey": "participant.moduleDrafts.v1",
+    "ttlMinutes": 240,
+    "maxModules": 30
+  },
+  "appealWorkspace": {
+    "availableStatuses": ["OPEN", "IN_REVIEW", "RESOLVED"],
+    "defaultStatuses": ["OPEN", "IN_REVIEW"]
+  }
+}

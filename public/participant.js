@@ -1,22 +1,86 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
+import {
+  buildModuleCardViewModels,
+  deriveParticipantFlowGateState,
+  findMatchingPreset,
+  parseDraftEnvelope,
+  pruneExpiredModuleDrafts,
+  resolveRoleSwitchState,
+  resolveSelectedModule,
+  sanitizeAppealStatuses,
+  upsertModuleDraft,
+} from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
 const moduleList = document.getElementById("moduleList");
 const mcqQuestions = document.getElementById("mcqQuestions");
 const localeSelect = document.getElementById("localeSelect");
+const rolesInput = document.getElementById("roles");
+const mockRolePresetContainer = document.getElementById("mockRolePresetContainer");
+const mockRolePresetSelect = document.getElementById("mockRolePreset");
+const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 
 const selectedModuleIdInput = document.getElementById("selectedModuleId");
+const selectedModuleDisplay = document.getElementById("selectedModuleDisplay");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 const appealIdLabel = document.getElementById("appealId");
 const appVersionLabel = document.getElementById("appVersion");
 const resultSummary = document.getElementById("resultSummary");
 const historySummary = document.getElementById("historySummary");
+const draftStatus = document.getElementById("draftStatus");
+const clearDraftButton = document.getElementById("clearDraft");
+const assessmentSection = document.getElementById("assessmentSection");
+const appealSection = document.getElementById("appealSection");
+const assessmentGateHint = document.getElementById("assessmentGateHint");
+const checkAssessmentHint = document.getElementById("checkAssessmentHint");
+const appealGateHint = document.getElementById("appealGateHint");
+const queueAssessmentButton = document.getElementById("queueAssessment");
+const checkAssessmentButton = document.getElementById("checkAssessment");
+const checkResultButton = document.getElementById("checkResult");
+const createAppealButton = document.getElementById("createAppeal");
+const appealHandlerStatusFilter = document.getElementById("appealHandlerStatusFilter");
+const handlerSelectedAppealIdInput = document.getElementById("handlerSelectedAppealId");
+const loadAppealQueueButton = document.getElementById("loadAppealQueue");
+const appealQueueList = document.getElementById("appealQueueList");
+const appealHandlerDetails = document.getElementById("appealHandlerDetails");
+const claimAppealButton = document.getElementById("claimAppeal");
+const resolveAppealButton = document.getElementById("resolveAppeal");
+const handlerDecisionReasonInput = document.getElementById("handlerDecisionReason");
+const handlerResolutionNoteInput = document.getElementById("handlerResolutionNote");
+const handlerPassFailTotalInput = document.getElementById("handlerPassFailTotal");
+const appealHandlerMessage = document.getElementById("appealHandlerMessage");
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
 let latestResult = null;
 let latestHistory = null;
+let participantRuntimeConfig = {
+  authMode: "mock",
+  mockRoleSwitchEnabled: true,
+  mockRolePresets: [],
+  drafts: {
+    storageKey: "participant.moduleDrafts.v1",
+    ttlMinutes: 240,
+    maxModules: 30,
+  },
+  appealWorkspace: {
+    availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
+    defaultStatuses: ["OPEN", "IN_REVIEW"],
+  },
+};
+let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+let loadedModules = [];
+let selectedModuleId = "";
+let autosaveTimer = null;
+let flowState = {
+  hasSubmission: false,
+  hasMcqSubmission: false,
+  assessmentQueued: false,
+  resultStatus: null,
+};
+let latestAppealQueue = [];
+let selectedAppealId = "";
 
 const defaultFieldBindings = [
   { id: "rawText", key: "defaults.rawText" },
@@ -24,6 +88,8 @@ const defaultFieldBindings = [
   { id: "promptExcerpt", key: "defaults.promptExcerpt" },
   { id: "appealReason", key: "defaults.appealReason" },
 ];
+
+const moduleDraftFieldIds = ["rawText", "reflectionText", "promptExcerpt"];
 
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
@@ -83,6 +149,17 @@ function applyTranslations() {
   if (!historySummary.dataset.hasHistory) {
     historySummary.textContent = t("defaults.noHistory");
   }
+
+  renderModules();
+  renderSelectedModuleSummary();
+  renderRolePresetControl();
+
+  const selectedTitle = resolveSelectedModule(loadedModules, selectedModuleId)?.title ?? "";
+  setDraftStatus(draftStatus.dataset.state ?? "none", selectedTitle);
+  if (!selectedAppealId) {
+    renderAppealHandlerDetails(null);
+  }
+  renderFlowGating();
 }
 
 function setDefaultFieldValues(previousLocale, nextLocale) {
@@ -115,9 +192,307 @@ function populateLocaleSelect() {
   }
 }
 
+function renderSelectedModuleSummary() {
+  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+  selectedModuleIdInput.value = selectedModule?.id ?? "";
+  selectedModuleDisplay.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
+}
+
+function renderModules() {
+  moduleList.innerHTML = "";
+
+  const modules = buildModuleCardViewModels(loadedModules, selectedModuleId);
+  for (const module of modules) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = module.selected ? "module-card selected" : "module-card";
+    button.setAttribute("aria-pressed", module.selected ? "true" : "false");
+    button.addEventListener("click", () => {
+      persistCurrentModuleDraft(false);
+      selectedModuleId = module.id;
+      resetFlowStateForModuleContext();
+      renderModules();
+      renderSelectedModuleSummary();
+      restoreDraftForSelectedModule(true);
+      log({ selectedModule: { id: module.id, title: module.title } });
+    });
+
+    const title = document.createElement("div");
+    title.className = "module-title";
+    title.textContent = module.title;
+    button.appendChild(title);
+
+    const moduleMeta = document.createElement("div");
+    moduleMeta.className = "module-meta";
+    moduleMeta.textContent = `ID: ${module.id}`;
+    button.appendChild(moduleMeta);
+
+    if (module.selected) {
+      const selectedBadge = document.createElement("div");
+      selectedBadge.className = "selected-badge";
+      selectedBadge.textContent = t("modules.selectedBadge");
+      button.appendChild(selectedBadge);
+    }
+
+    moduleList.appendChild(button);
+  }
+}
+
+function resetFlowStateForModuleContext() {
+  flowState = {
+    hasSubmission: false,
+    hasMcqSubmission: false,
+    assessmentQueued: false,
+    resultStatus: null,
+  };
+  submissionIdLabel.textContent = "-";
+  attemptIdLabel.textContent = "-";
+  appealIdLabel.textContent = "-";
+  renderResultSummary(null);
+  renderFlowGating();
+}
+
+function renderFlowGating() {
+  const gate = deriveParticipantFlowGateState(flowState);
+
+  assessmentSection.classList.toggle("section-locked", !gate.assessmentUnlocked);
+  appealSection.classList.toggle("section-locked", !gate.appealUnlocked);
+
+  queueAssessmentButton.disabled = !gate.assessmentUnlocked;
+  checkResultButton.disabled = !gate.assessmentUnlocked;
+  checkAssessmentButton.disabled = !gate.checkAssessmentUnlocked;
+  createAppealButton.disabled = !gate.appealUnlocked;
+
+  assessmentGateHint.textContent = t(gate.assessmentHintKey);
+  checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
+  appealGateHint.textContent = t(gate.appealHintKey);
+}
+
+function getDraftSettings() {
+  const configured = participantRuntimeConfig?.drafts ?? {};
+  return {
+    storageKey: configured.storageKey || "participant.moduleDrafts.v1",
+    ttlMinutes: Number(configured.ttlMinutes) > 0 ? Number(configured.ttlMinutes) : 240,
+    maxModules: Number(configured.maxModules) > 0 ? Number(configured.maxModules) : 30,
+  };
+}
+
+function readModuleDraftMap() {
+  const settings = getDraftSettings();
+  const envelope = parseDraftEnvelope(localStorage.getItem(settings.storageKey));
+  const pruned = pruneExpiredModuleDrafts(envelope.modules, settings.ttlMinutes);
+  if (Object.keys(pruned).length !== Object.keys(envelope.modules).length) {
+    localStorage.setItem(settings.storageKey, JSON.stringify({ modules: pruned }));
+  }
+  return pruned;
+}
+
+function writeModuleDraftMap(moduleDrafts) {
+  const settings = getDraftSettings();
+  localStorage.setItem(settings.storageKey, JSON.stringify({ modules: moduleDrafts }));
+}
+
+function setDraftStatus(kind, moduleTitle) {
+  const safeTitle = moduleTitle || t("submission.selectedModuleNone");
+
+  if (kind === "saved") {
+    draftStatus.textContent = `${t("draft.savedPrefix")}: ${safeTitle}`;
+    draftStatus.dataset.state = "saved";
+    return;
+  }
+
+  if (kind === "restored") {
+    draftStatus.textContent = `${t("draft.restoredPrefix")}: ${safeTitle}`;
+    draftStatus.dataset.state = "restored";
+    return;
+  }
+
+  if (kind === "cleared") {
+    draftStatus.textContent = `${t("draft.clearedPrefix")}: ${safeTitle}`;
+    draftStatus.dataset.state = "cleared";
+    return;
+  }
+
+  draftStatus.textContent = t("draft.none");
+  draftStatus.dataset.state = "none";
+}
+
+function resetModuleDraftInputsToDefaultLocaleValues() {
+  for (const fieldId of moduleDraftFieldIds) {
+    const binding = defaultFieldBindings.find((item) => item.id === fieldId);
+    const element = document.getElementById(fieldId);
+    if (!binding || !element) {
+      continue;
+    }
+    element.value = t(binding.key);
+  }
+}
+
+function collectCurrentMcqDraft() {
+  if (!Array.isArray(currentQuestions) || currentQuestions.length === 0) {
+    return null;
+  }
+
+  const responses = {};
+  for (const question of currentQuestions) {
+    const selected = document.querySelector(`input[name='q_${question.id}']:checked`);
+    if (selected) {
+      responses[question.id] = selected.value;
+    }
+  }
+
+  const attemptId = attemptIdLabel.textContent;
+  if (attemptId && attemptId !== "-") {
+    return {
+      attemptId,
+      questions: currentQuestions,
+      responses,
+    };
+  }
+
+  if (Object.keys(responses).length > 0) {
+    return {
+      attemptId: null,
+      questions: currentQuestions,
+      responses,
+    };
+  }
+
+  return null;
+}
+
+function persistCurrentModuleDraft(showStatus = false) {
+  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+  if (!selectedModule) {
+    return;
+  }
+
+  const data = {};
+  for (const fieldId of moduleDraftFieldIds) {
+    const element = document.getElementById(fieldId);
+    data[fieldId] = element?.value ?? "";
+  }
+  data.mcq = collectCurrentMcqDraft();
+
+  const settings = getDraftSettings();
+  const existing = readModuleDraftMap();
+  const updated = upsertModuleDraft(existing, selectedModule.id, data, Date.now(), settings.maxModules);
+  writeModuleDraftMap(updated);
+
+  if (showStatus) {
+    setDraftStatus("saved", selectedModule.title);
+  }
+}
+
+function scheduleDraftAutosave() {
+  if (!selectedModuleId) {
+    return;
+  }
+
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+  }
+
+  autosaveTimer = setTimeout(() => {
+    persistCurrentModuleDraft(true);
+  }, 250);
+}
+
+function restoreDraftForSelectedModule(showStatus = true) {
+  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+  if (!selectedModule) {
+    setDraftStatus("none", "");
+    return;
+  }
+
+  const moduleDrafts = readModuleDraftMap();
+  const draft = moduleDrafts[selectedModule.id];
+
+  if (!draft) {
+    resetModuleDraftInputsToDefaultLocaleValues();
+    currentQuestions = [];
+    attemptIdLabel.textContent = "-";
+    renderQuestions();
+    if (showStatus) {
+      setDraftStatus("none", selectedModule.title);
+    }
+    return;
+  }
+
+  for (const fieldId of moduleDraftFieldIds) {
+    const element = document.getElementById(fieldId);
+    element.value = typeof draft[fieldId] === "string" ? draft[fieldId] : "";
+  }
+
+  const mcqDraft = draft.mcq;
+  if (mcqDraft && Array.isArray(mcqDraft.questions)) {
+    currentQuestions = mcqDraft.questions;
+    attemptIdLabel.textContent = mcqDraft.attemptId || "-";
+    renderQuestions(mcqDraft.responses ?? {});
+  } else {
+    currentQuestions = [];
+    attemptIdLabel.textContent = "-";
+    renderQuestions();
+  }
+
+  if (showStatus) {
+    setDraftStatus("restored", selectedModule.title);
+  }
+}
+
+function renderRolePresetControl() {
+  mockRolePresetSelect.innerHTML = "";
+
+  const manualOption = document.createElement("option");
+  manualOption.value = "";
+  manualOption.textContent = t("identity.rolePresetManual");
+  mockRolePresetSelect.appendChild(manualOption);
+
+  for (const role of roleSwitchState.presets) {
+    const option = document.createElement("option");
+    option.value = role;
+    option.textContent = role;
+    mockRolePresetSelect.appendChild(option);
+  }
+
+  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
+  mockRolePresetSelect.value = matchingPreset;
+
+  const disabled = !roleSwitchState.enabled;
+  mockRolePresetSelect.disabled = disabled;
+  mockRolePresetHint.textContent = disabled
+    ? t("identity.rolePresetDisabledEntra")
+    : t("identity.rolePresetHint");
+  mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
+}
+
+async function loadParticipantConsoleConfig() {
+  try {
+    const response = await fetch("/participant/config");
+    if (!response.ok) {
+      throw new Error("participant_config_unavailable");
+    }
+
+    const body = await response.json();
+    participantRuntimeConfig = {
+      ...participantRuntimeConfig,
+      ...body,
+      drafts: {
+        ...participantRuntimeConfig.drafts,
+        ...(body?.drafts ?? {}),
+      },
+    };
+    roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+  } catch {
+    roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+  }
+
+  renderRolePresetControl();
+  populateAppealStatusFilters();
+}
+
 function headers() {
-  const roles = document
-    .getElementById("roles")
+  const roles = rolesInput
     .value.split(",")
     .map((value) => value.trim())
     .filter(Boolean)
@@ -253,6 +628,149 @@ function renderHistorySummary(body) {
   historySummary.textContent = lines.join("\n").trim();
 }
 
+function toActionableErrorMessage(error) {
+  if (!(error instanceof Error)) {
+    return "Unexpected error.";
+  }
+
+  const raw = error.message ?? "";
+  const splitIndex = raw.indexOf(":");
+  if (splitIndex === -1) {
+    return raw;
+  }
+
+  const payloadText = raw.slice(splitIndex + 1).trim();
+  try {
+    const payload = JSON.parse(payloadText);
+    if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+      return payload.message;
+    }
+    if (payload.error === "validation_error" && Array.isArray(payload.issues)) {
+      return payload.issues
+        .map((issue) => {
+          const path = Array.isArray(issue.path) ? issue.path.join(".") : "";
+          return `${path || "field"}: ${issue.message ?? "invalid value"}`;
+        })
+        .join("; ");
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
+function getAppealWorkspaceSettings() {
+  const configured = participantRuntimeConfig?.appealWorkspace ?? {};
+  const availableStatuses = sanitizeAppealStatuses(configured.availableStatuses, [
+    "OPEN",
+    "IN_REVIEW",
+    "RESOLVED",
+  ]);
+  const defaultStatuses = sanitizeAppealStatuses(configured.defaultStatuses, ["OPEN", "IN_REVIEW"])
+    .filter((status) => availableStatuses.includes(status));
+
+  return {
+    availableStatuses,
+    defaultStatuses: defaultStatuses.length > 0 ? defaultStatuses : availableStatuses.slice(0, 1),
+  };
+}
+
+function populateAppealStatusFilters() {
+  const settings = getAppealWorkspaceSettings();
+  appealHandlerStatusFilter.innerHTML = "";
+
+  for (const status of settings.availableStatuses) {
+    const option = document.createElement("option");
+    option.value = status;
+    option.textContent = status;
+    option.selected = settings.defaultStatuses.includes(status);
+    appealHandlerStatusFilter.appendChild(option);
+  }
+}
+
+function getSelectedAppealStatuses() {
+  const selected = Array.from(appealHandlerStatusFilter.selectedOptions).map((option) => option.value);
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  return getAppealWorkspaceSettings().defaultStatuses;
+}
+
+function renderAppealHandlerDetails(appeal) {
+  if (!appeal) {
+    appealHandlerDetails.textContent = t("appealHandler.noSelection");
+    return;
+  }
+
+  const lines = [
+    `appealId: ${appeal.id}`,
+    `status: ${appeal.appealStatus}`,
+    `submissionId: ${appeal.submission?.id ?? "-"}`,
+    `createdAt: ${formatDateTime(appeal.createdAt)}`,
+    `claimedAt: ${formatDateTime(appeal.claimedAt)}`,
+    `resolvedAt: ${formatDateTime(appeal.resolvedAt)}`,
+    `handlerId: ${appeal.handlerId ?? "-"}`,
+    `resolutionNote: ${appeal.resolutionNote ?? "-"}`,
+  ];
+  appealHandlerDetails.textContent = lines.join("\n");
+}
+
+function renderAppealQueueList() {
+  appealQueueList.innerHTML = "";
+  if (!Array.isArray(latestAppealQueue) || latestAppealQueue.length === 0) {
+    handlerSelectedAppealIdInput.value = "-";
+    selectedAppealId = "";
+    renderAppealHandlerDetails(null);
+    appealHandlerMessage.textContent = t("appealHandler.queueEmpty");
+    return;
+  }
+
+  for (const appeal of latestAppealQueue) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = appeal.id === selectedAppealId ? "appeal-row selected" : "appeal-row";
+    button.addEventListener("click", () => {
+      selectedAppealId = appeal.id;
+      handlerSelectedAppealIdInput.value = appeal.id;
+      renderAppealQueueList();
+      renderAppealHandlerDetails(appeal);
+    });
+
+    button.textContent =
+      `${appeal.id} | ${appeal.appealStatus} | ` +
+      `created ${formatDateTime(appeal.createdAt)} | ` +
+      `claimed ${formatDateTime(appeal.claimedAt)} | ` +
+      `resolved ${formatDateTime(appeal.resolvedAt)}`;
+
+    appealQueueList.appendChild(button);
+  }
+
+  if (!selectedAppealId || !latestAppealQueue.some((item) => item.id === selectedAppealId)) {
+    selectedAppealId = latestAppealQueue[0].id;
+  }
+
+  const selectedAppeal = latestAppealQueue.find((item) => item.id === selectedAppealId);
+  handlerSelectedAppealIdInput.value = selectedAppeal?.id ?? "-";
+  renderAppealHandlerDetails(selectedAppeal ?? null);
+}
+
+async function loadAppealQueue() {
+  try {
+    const statuses = getSelectedAppealStatuses();
+    const body = await api(`/api/appeals?status=${encodeURIComponent(statuses.join(","))}`);
+    latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
+    renderAppealQueueList();
+    if (latestAppealQueue.length > 0) {
+      appealHandlerMessage.textContent = `${latestAppealQueue.length} appeal(s) loaded.`;
+    }
+    log(body);
+  } catch (error) {
+    appealHandlerMessage.textContent = toActionableErrorMessage(error);
+    log(error.message);
+  }
+}
+
 document.getElementById("loadMe").addEventListener("click", async () => {
   try {
     const body = await api("/api/me");
@@ -265,16 +783,15 @@ document.getElementById("loadMe").addEventListener("click", async () => {
 document.getElementById("loadModules").addEventListener("click", async () => {
   try {
     const body = await api("/api/modules");
-    moduleList.innerHTML = "";
-    for (const module of body.modules) {
-      const btn = document.createElement("button");
-      btn.textContent = `${module.title} (${module.id})`;
-      btn.addEventListener("click", () => {
-        selectedModuleIdInput.value = module.id;
-        log({ selectedModule: module });
-      });
-      moduleList.appendChild(btn);
-      moduleList.appendChild(document.createElement("br"));
+    loadedModules = Array.isArray(body.modules) ? body.modules : [];
+    if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
+      selectedModuleId = "";
+      resetFlowStateForModuleContext();
+    }
+    renderModules();
+    renderSelectedModuleSummary();
+    if (selectedModuleId) {
+      restoreDraftForSelectedModule(false);
     }
     log(body);
   } catch (error) {
@@ -284,7 +801,7 @@ document.getElementById("loadModules").addEventListener("click", async () => {
 
 document.getElementById("createSubmission").addEventListener("click", async () => {
   try {
-    const moduleId = selectedModuleIdInput.value;
+    const moduleId = selectedModuleId;
     if (!moduleId) {
       throw new Error(t("errors.selectModuleFirst"));
     }
@@ -300,6 +817,13 @@ document.getElementById("createSubmission").addEventListener("click", async () =
       }),
     });
     submissionIdLabel.textContent = body.submission.id;
+    flowState = {
+      hasSubmission: true,
+      hasMcqSubmission: false,
+      assessmentQueued: false,
+      resultStatus: null,
+    };
+    renderFlowGating();
     log(body);
   } catch (error) {
     log(error.message);
@@ -308,7 +832,7 @@ document.getElementById("createSubmission").addEventListener("click", async () =
 
 document.getElementById("startMcq").addEventListener("click", async () => {
   try {
-    const moduleId = selectedModuleIdInput.value;
+    const moduleId = selectedModuleId;
     const submissionId = submissionIdLabel.textContent;
     if (!moduleId || !submissionId || submissionId === "-") {
       throw new Error(t("errors.createSubmissionFirst"));
@@ -319,6 +843,7 @@ document.getElementById("startMcq").addEventListener("click", async () => {
     attemptIdLabel.textContent = body.attemptId;
     currentQuestions = body.questions;
     renderQuestions();
+    scheduleDraftAutosave();
     log(body);
   } catch (error) {
     log(error.message);
@@ -327,7 +852,7 @@ document.getElementById("startMcq").addEventListener("click", async () => {
 
 document.getElementById("submitMcq").addEventListener("click", async () => {
   try {
-    const moduleId = selectedModuleIdInput.value;
+    const moduleId = selectedModuleId;
     const submissionId = submissionIdLabel.textContent;
     const attemptId = attemptIdLabel.textContent;
     if (!moduleId || !submissionId || !attemptId || attemptId === "-") {
@@ -350,6 +875,17 @@ document.getElementById("submitMcq").addEventListener("click", async () => {
         responses,
       }),
     });
+    currentQuestions = [];
+    attemptIdLabel.textContent = "-";
+    renderQuestions();
+    flowState = {
+      ...flowState,
+      hasMcqSubmission: true,
+      assessmentQueued: false,
+      resultStatus: null,
+    };
+    renderFlowGating();
+    persistCurrentModuleDraft(true);
     log(body);
   } catch (error) {
     log(error.message);
@@ -366,6 +902,11 @@ document.getElementById("queueAssessment").addEventListener("click", async () =>
       method: "POST",
       body: JSON.stringify({}),
     });
+    flowState = {
+      ...flowState,
+      assessmentQueued: true,
+    };
+    renderFlowGating();
     log(body);
   } catch (error) {
     log(error.message);
@@ -393,6 +934,11 @@ document.getElementById("checkResult").addEventListener("click", async () => {
     }
     const body = await api(`/api/submissions/${submissionId}/result`);
     renderResultSummary(body);
+    flowState = {
+      ...flowState,
+      resultStatus: typeof body.status === "string" ? body.status : null,
+    };
+    renderFlowGating();
     log(body);
   } catch (error) {
     log(error.message);
@@ -427,11 +973,110 @@ document.getElementById("loadHistory").addEventListener("click", async () => {
   }
 });
 
+clearDraftButton.addEventListener("click", () => {
+  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+  if (!selectedModule) {
+    setDraftStatus("none", "");
+    return;
+  }
+
+  const moduleDrafts = readModuleDraftMap();
+  delete moduleDrafts[selectedModule.id];
+  writeModuleDraftMap(moduleDrafts);
+
+  resetModuleDraftInputsToDefaultLocaleValues();
+  currentQuestions = [];
+  attemptIdLabel.textContent = "-";
+  renderQuestions();
+  resetFlowStateForModuleContext();
+  setDraftStatus("cleared", selectedModule.title);
+});
+
+loadAppealQueueButton.addEventListener("click", async () => {
+  await loadAppealQueue();
+});
+
+appealHandlerStatusFilter.addEventListener("change", async () => {
+  await loadAppealQueue();
+});
+
+claimAppealButton.addEventListener("click", async () => {
+  if (!selectedAppealId) {
+    appealHandlerMessage.textContent = t("appealHandler.noSelection");
+    return;
+  }
+
+  try {
+    const body = await api(`/api/appeals/${selectedAppealId}/claim`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    appealHandlerMessage.textContent = t("appealHandler.claimed");
+    await loadAppealQueue();
+    renderAppealHandlerDetails(body.appeal);
+    log(body);
+  } catch (error) {
+    appealHandlerMessage.textContent = toActionableErrorMessage(error);
+    log(error.message);
+  }
+});
+
+resolveAppealButton.addEventListener("click", async () => {
+  if (!selectedAppealId) {
+    appealHandlerMessage.textContent = t("appealHandler.noSelection");
+    return;
+  }
+
+  try {
+    const body = await api(`/api/appeals/${selectedAppealId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({
+        passFailTotal: handlerPassFailTotalInput.value === "true",
+        decisionReason: handlerDecisionReasonInput.value,
+        resolutionNote: handlerResolutionNoteInput.value,
+      }),
+    });
+    appealHandlerMessage.textContent = t("appealHandler.resolved");
+    await loadAppealQueue();
+    if (body.appeal) {
+      renderAppealHandlerDetails(body.appeal);
+    }
+    log(body);
+  } catch (error) {
+    appealHandlerMessage.textContent = toActionableErrorMessage(error);
+    log(error.message);
+  }
+});
+
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
 });
 
-function renderQuestions() {
+mockRolePresetSelect.addEventListener("change", () => {
+  if (!mockRolePresetSelect.value || !roleSwitchState.enabled) {
+    return;
+  }
+
+  rolesInput.value = mockRolePresetSelect.value;
+});
+
+rolesInput.addEventListener("input", () => {
+  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
+  mockRolePresetSelect.value = matchingPreset;
+});
+
+for (const fieldId of moduleDraftFieldIds) {
+  const element = document.getElementById(fieldId);
+  element.addEventListener("input", () => {
+    scheduleDraftAutosave();
+  });
+}
+
+window.addEventListener("beforeunload", () => {
+  persistCurrentModuleDraft(false);
+});
+
+function renderQuestions(selectedResponses = {}) {
   mcqQuestions.innerHTML = "";
   for (const question of currentQuestions) {
     const wrapper = document.createElement("div");
@@ -447,6 +1092,10 @@ function renderQuestions() {
       input.type = "radio";
       input.name = `q_${question.id}`;
       input.value = option;
+      input.checked = selectedResponses[question.id] === option;
+      input.addEventListener("change", () => {
+        scheduleDraftAutosave();
+      });
       label.appendChild(input);
       label.append(` ${option}`);
       wrapper.appendChild(label);
@@ -459,3 +1108,4 @@ function renderQuestions() {
 populateLocaleSelect();
 setLocale(currentLocale);
 loadVersion();
+loadParticipantConsoleConfig();

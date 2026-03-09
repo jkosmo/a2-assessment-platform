@@ -138,8 +138,30 @@ describe("MVP appeal flow", () => {
         resolutionNote: "Original decision was adjusted after detailed second review.",
       });
     expect(resolveResponse.status).toBe(200);
+    expect(resolveResponse.body.appeal.createdAt).toBeTruthy();
+    expect(resolveResponse.body.appeal.claimedAt).toBeTruthy();
+    expect(resolveResponse.body.appeal.resolvedAt).toBeTruthy();
     expect(resolveResponse.body.resolutionDecision.decisionType).toBe("APPEAL_RESOLUTION");
     expect(resolveResponse.body.resolutionDecision.parentDecisionId).toBeTruthy();
+
+    const resolvedQueueResponse = await request(app)
+      .get("/api/appeals?status=RESOLVED")
+      .set(appealHandlerHeaders);
+    expect(resolvedQueueResponse.status).toBe(200);
+    const resolvedQueueAppeal = (
+      resolvedQueueResponse.body.appeals as Array<{
+        id: string;
+        appealStatus: string;
+        createdAt: string;
+        claimedAt: string | null;
+        resolvedAt: string | null;
+      }>
+    ).find((item) => item.id === appealId);
+    expect(resolvedQueueAppeal).toBeDefined();
+    expect(resolvedQueueAppeal?.appealStatus).toBe("RESOLVED");
+    expect(resolvedQueueAppeal?.createdAt).toBeTruthy();
+    expect(resolvedQueueAppeal?.claimedAt).toBeTruthy();
+    expect(resolvedQueueAppeal?.resolvedAt).toBeTruthy();
 
     const decisions = await prisma.assessmentDecision.findMany({
       where: { submissionId },

@@ -65,6 +65,7 @@ npm run build
 ## API
 - `GET /healthz`
 - `GET /version`
+- `GET /participant/config`
 - `GET /api/me`
 - `GET /api/modules`
 - `GET /api/modules/:moduleId`
@@ -128,6 +129,16 @@ http://localhost:3000/participant
 - Start and submit MCQ
 - Queue/check assessment
 - Check result
+- Create participant appeal (after `COMPLETED` result)
+
+4. Optional handler flow in same console (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
+- Load appeal queue with status filters (`OPEN`, `IN_REVIEW`, optional `RESOLVED`)
+- Select an appeal and run `Claim Appeal`
+- Resolve using decision reason + resolution note + pass/fail value
+
+Participant console behavior is config-driven via:
+- `config/participant-console.json`
+- env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

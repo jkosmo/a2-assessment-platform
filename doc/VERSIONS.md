@@ -7,6 +7,47 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.37 - 2026-03-09
+### Summary
+Implemented phase-2 participant test-console UX hardening across role switching, module selection clarity, draft persistence, progressive flow gating, and appeal-handler workspace actions.
+
+### Included
+- Config-driven participant console runtime settings:
+  - `config/participant-console.json`
+  - `src/config/participantConsole.ts`
+  - `GET /participant/config`
+- Issue #51 (`mock` role switch helper):
+  - mock-role preset dropdown in participant identity section
+  - Entra-aware disabled/read-only behavior while preserving manual role entry
+- Issue #49 (module selection UX):
+  - card-style module list with explicit selected state badge/highlight
+  - selected module summary now shows localized human-readable title (id remains internal)
+- Issue #50 (module-scoped drafts):
+  - autosave/restore of `rawText`, `reflectionText`, `promptExcerpt`
+  - optional in-progress MCQ draft persistence
+  - config-driven draft storage key/TTL/max-module retention
+  - manual clear-draft action and scoped restore/save status indicator
+- Issue #52 (progressive flow gating):
+  - assessment actions gated by submission + MCQ completion
+  - `Check assessment` gated by queue action
+  - appeal action gated by `COMPLETED` result status
+  - inline locked-state hints and immediate UI transition updates
+- Issue #48 (appeal handler workspace UI):
+  - queue filtering/listing
+  - claim and resolve actions
+  - status/timestamp visibility (`createdAt`, `claimedAt`, `resolvedAt`)
+  - actionable backend validation/error messaging in workspace
+- Frontend state utilities + tests:
+  - `public/participant-console-state.js`
+  - `test/participant-console-state.test.js`
+  - `test/participant-console-config.test.ts`
+  - `test/m2-appeal-flow.test.ts` extended for resolved queue/timestamp checks
+- Design/refactor gate notes:
+  - `doc/PHASE2_PARTICIPANT_UI_DESIGN.md`
+
+### Notes
+- All targeted issue checks were validated locally before closeout; full lint/test/build validation is included in this release verification.
+
 ## 0.3.36 - 2026-03-09
 ### Summary
 Implemented phase-2 participant notifications for appeal status transitions with config-driven delivery channels, localization baseline, and observability/audit coverage.

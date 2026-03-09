@@ -2,6 +2,7 @@ import express from "express";
 import path from "node:path";
 import { AppRole } from "./db/prismaRuntime.js";
 import { appName, appVersion } from "./config/appMetadata.js";
+import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
@@ -36,6 +37,10 @@ app.get("/version", (_request, response) => {
 
 app.get("/participant", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant.html"));
+});
+
+app.get("/participant/config", (_request, response) => {
+  response.json(getParticipantConsoleRuntimeConfig());
 });
 
 app.use("/api", authenticate);
