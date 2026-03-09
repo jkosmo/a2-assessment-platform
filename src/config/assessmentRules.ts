@@ -33,6 +33,26 @@ const rulesSchema = z.object({
       difficultyMax: 0.9,
       discriminationMin: 0.1,
     }),
+  sensitiveData: z
+    .object({
+      enabledByDefault: z.boolean().default(false),
+      moduleOverrides: z.record(z.string(), z.boolean()).default({}),
+      rules: z
+        .array(
+          z.object({
+            id: z.string().min(1),
+            pattern: z.string().min(1),
+            flags: z.string().optional(),
+            replacement: z.string().min(1),
+          }),
+        )
+        .default([]),
+    })
+    .default({
+      enabledByDefault: false,
+      moduleOverrides: {},
+      rules: [],
+    }),
 });
 
 export type AssessmentRules = z.infer<typeof rulesSchema>;

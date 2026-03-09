@@ -150,6 +150,12 @@ Participant console behavior is config-driven via:
   - when `flow.autoStartAfterMcq=true`, manual assessment buttons are hidden in participant UI
 - `identityDefaults.participant` and `identityDefaults.appealHandler` set default test identity per workspace
 
+Sensitive-data preprocessing before LLM evaluation is config-driven via:
+- `config/assessment-rules.json`
+- `sensitiveData.enabledByDefault` toggles masking baseline
+- `sensitiveData.moduleOverrides.<moduleId>` enables/disables masking per module
+- `sensitiveData.rules[]` defines detection regex patterns and replacement tokens
+
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`
 - `AI Governance and Risk Essentials`

@@ -85,6 +85,7 @@ describe("MVP audit event pipeline", () => {
     expect(actions).toContain("submission_created");
     expect(actions).toContain("mcq_submitted");
     expect(actions).toContain("assessment_job_enqueued");
+    expect(actions).toContain("sensitive_data_preprocessed");
     expect(actions).toContain("llm_evaluation_created");
     expect(actions).toContain("decision_created");
     expect(actions).toContain("manual_review_opened");
@@ -145,6 +146,7 @@ async function getAuditActionsForSubmission(
 
     const actions = (auditResponse.body.events as Array<{ action: string }>).map((event) => event.action);
     if (
+      actions.includes("sensitive_data_preprocessed") &&
       actions.includes("llm_evaluation_created") &&
       actions.includes("decision_created") &&
       actions.includes("manual_review_opened")

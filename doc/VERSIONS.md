@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.48 - 2026-03-09
+### Summary
+Implemented issue #29 with config-driven sensitive-data detection/masking before LLM evaluation, including per-module enablement and audit traceability.
+
+### Included
+- Added sensitive-data masking policy config in assessment rules:
+  - `config/assessment-rules.json`
+  - `src/config/assessmentRules.ts`
+  - `sensitiveData.enabledByDefault`
+  - `sensitiveData.moduleOverrides` (`moduleId -> enabled`)
+  - `sensitiveData.rules[]` (`id`, regex `pattern/flags`, `replacement`)
+- Added preprocessing service:
+  - `src/services/sensitiveDataMaskingService.ts`
+  - detects rule hits across submission text fields
+  - conditionally masks payload before LLM call
+  - returns structured decision metadata (`maskingEnabled`, `maskingApplied`, `ruleHits`, totals, fields)
+- Integrated preprocessing into assessment pipeline:
+  - `src/services/assessmentJobService.ts`
+  - audit event `sensitive_data_preprocessed` recorded per assessment with metadata
+  - LLM request payload hash now reflects the actual (possibly masked) payload
+- Tests and docs:
+  - new unit tests: `test/sensitive-data-masking.test.ts`
+  - updated integration coverage: `test/m2-audit-pipeline.test.ts`
+  - design note: `doc/PHASE2_SENSITIVE_DATA_MASKING_DESIGN.md`
+  - README updated with `sensitiveData` configuration guidance
+
+### Verification
+- `npm run lint`
+- `npm test` (41 tests passing, 17 test files)
+
 ## 0.3.47 - 2026-03-09
 ### Summary
 Implemented issue #33 by adding MCQ quality analytics reporting with configurable difficulty/discrimination thresholds and low-quality item flags.

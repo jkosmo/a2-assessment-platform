@@ -6,6 +6,7 @@ import { sha256 } from "../utils/hash.js";
 import { createAssessmentDecision } from "./decisionService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
+import { preprocessSensitiveDataForLlm } from "./sensitiveDataMaskingService.js";
 
 let workerTimer: NodeJS.Timeout | null = null;
 let workerRunning = false;
@@ -202,12 +203,34 @@ async function runAssessment(jobId: string) {
   });
 
   let llmResult: Awaited<ReturnType<typeof evaluatePracticalWithLlm>>;
+  const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({
+    moduleId: submission.moduleId,
+    rawText: submission.rawText ?? "",
+    reflectionText: submission.reflectionText,
+    promptExcerpt: submission.promptExcerpt,
+  });
+
+  await recordAuditEvent({
+    entityType: "submission",
+    entityId: submission.id,
+    action: "sensitive_data_preprocessed",
+    actorId: submission.userId,
+    metadata: {
+      moduleId: submission.moduleId,
+      maskingEnabled: sensitiveDataPreprocess.maskingEnabled,
+      maskingApplied: sensitiveDataPreprocess.maskingApplied,
+      totalMatches: sensitiveDataPreprocess.totalMatches,
+      ruleHits: sensitiveDataPreprocess.ruleHits,
+      fieldsMasked: sensitiveDataPreprocess.fieldsMasked,
+    },
+  });
+
   try {
     llmResult = await evaluatePracticalWithLlm({
       moduleId: submission.moduleId,
-      rawText: submission.rawText ?? "",
-      reflectionText: submission.reflectionText,
-      promptExcerpt: submission.promptExcerpt,
+      rawText: sensitiveDataPreprocess.payload.rawText,
+      reflectionText: sensitiveDataPreprocess.payload.reflectionText,
+      promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
     });
   } catch (error) {
     logOperationalEvent(
@@ -226,9 +249,15 @@ async function runAssessment(jobId: string) {
   const requestPayload = {
     moduleId: submission.moduleId,
     moduleVersionId: submission.moduleVersionId,
-    rawText: submission.rawText,
-    reflectionText: submission.reflectionText,
-    promptExcerpt: submission.promptExcerpt,
+    rawText: sensitiveDataPreprocess.payload.rawText,
+    reflectionText: sensitiveDataPreprocess.payload.reflectionText,
+    promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
+    sensitiveDataPreprocess: {
+      maskingEnabled: sensitiveDataPreprocess.maskingEnabled,
+      maskingApplied: sensitiveDataPreprocess.maskingApplied,
+      totalMatches: sensitiveDataPreprocess.totalMatches,
+      ruleHits: sensitiveDataPreprocess.ruleHits,
+    },
   };
 
   const llmEvaluation = await prisma.lLMEvaluation.create({

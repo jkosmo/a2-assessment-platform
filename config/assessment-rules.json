@@ -22,5 +22,29 @@
     "difficultyMin": 0.2,
     "difficultyMax": 0.9,
     "discriminationMin": 0.1
+  },
+  "sensitiveData": {
+    "enabledByDefault": false,
+    "moduleOverrides": {},
+    "rules": [
+      {
+        "id": "email",
+        "pattern": "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
+        "flags": "gi",
+        "replacement": "[MASKED_EMAIL]"
+      },
+      {
+        "id": "phone",
+        "pattern": "(?:\\+?\\d[\\d\\s-]{6,}\\d)",
+        "flags": "g",
+        "replacement": "[MASKED_PHONE]"
+      },
+      {
+        "id": "national-id",
+        "pattern": "\\b\\d{11}\\b",
+        "flags": "g",
+        "replacement": "[MASKED_ID]"
+      }
+    ]
   }
 }
