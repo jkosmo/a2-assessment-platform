@@ -12,6 +12,9 @@ const createSubmissionSchema = z.object({
   promptExcerpt: z.string().trim().min(5),
   responsibilityAcknowledged: z.literal(true),
   attachmentUri: z.string().trim().optional(),
+  attachmentBase64: z.string().trim().optional(),
+  attachmentFilename: z.string().trim().optional(),
+  attachmentMimeType: z.string().trim().optional(),
 });
 
 const createAppealSchema = z.object({

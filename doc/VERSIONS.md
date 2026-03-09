@@ -7,6 +7,42 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.50 - 2026-03-09
+### Summary
+Implemented issue #34 by adding PDF/DOCX document parsing in submission intake with fallback handling, parser-quality logging, and clear user-facing parse errors.
+
+### Included
+- Added parser service for attachment intake:
+  - `src/services/documentParsingService.ts`
+  - supports format detection for PDF/DOCX (`mimeType` + filename fallback)
+  - parses attachment payload from `attachmentBase64`
+  - fallback behavior:
+    - if parsing fails and `rawText` exists -> uses `rawText`
+    - if parsing fails and no fallback text -> returns clear parse error
+  - parser quality metadata (`status`, `format`, `quality`, `extractedChars`, `reason`)
+- Submission API input support:
+  - `src/routes/submissions.ts`
+  - `POST /api/submissions` now accepts optional:
+    - `attachmentBase64`
+    - `attachmentFilename`
+    - `attachmentMimeType`
+- Submission pipeline integration:
+  - `src/services/submissionService.ts`
+  - parsed/fallback text is resolved before submission persistence
+  - parser outcome added to submission audit metadata
+  - operational parser-quality signal logged via `submission_document_parse`
+- Dependencies:
+  - added parsing libraries: `pdf-parse`, `mammoth`
+- Tests/docs:
+  - added unit tests: `test/document-parsing.test.ts`
+  - updated audit integration test: `test/m2-audit-pipeline.test.ts`
+  - design note: `doc/PHASE2_DOCUMENT_PARSING_DESIGN.md`
+  - README updated with parser behavior and new submission fields
+
+### Verification
+- `npm run lint`
+- `npm test` (48 tests passing, 19 test files)
+
 ## 0.3.49 - 2026-03-09
 ### Summary
 Implemented issue #31 by adding config-driven secondary LLM assessment with trigger/disagreement rules, manual-review routing on disagreement, and end-to-end traceability.

@@ -92,6 +92,14 @@ describe("MVP audit event pipeline", () => {
     expect(actions).toContain("decision_created");
     expect(actions).toContain("manual_review_opened");
     expect(actions.filter((action) => action === "llm_evaluation_created").length).toBeGreaterThanOrEqual(2);
+
+    const auditResponse = await request(app).get(`/api/audit/submissions/${submissionId}`).set(participantHeaders);
+    expect(auditResponse.status).toBe(200);
+    const createdEvent = (auditResponse.body.events as Array<{ action: string; metadata: Record<string, unknown> }>).find(
+      (event) => event.action === "submission_created",
+    );
+    expect(createdEvent).toBeDefined();
+    expect(createdEvent?.metadata.parser).toBeTruthy();
   });
 
   it("blocks non-owner participant from reading submission audit trail while allowing admin", async () => {

@@ -133,6 +133,15 @@ http://localhost:3000/participant
 - Check result
 - Create participant appeal (after `COMPLETED` result)
 
+Submission parser behavior:
+- `POST /api/submissions` supports optional attachment parsing fields:
+  - `attachmentBase64`
+  - `attachmentFilename`
+  - `attachmentMimeType`
+- PDF and DOCX attachments are parsed into submission `rawText`.
+- If parsing fails and `rawText` is provided, `rawText` is used as fallback.
+- If parsing fails without fallback text, API returns a clear parse error message.
+
 4. Optional handler flow in dedicated workspace (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
 ```text
 http://localhost:3000/appeal-handler

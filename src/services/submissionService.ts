@@ -1,6 +1,8 @@
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
+import { logOperationalEvent } from "../observability/operationalLog.js";
+import { resolveSubmissionRawTextFromAttachment } from "./documentParsingService.js";
 
 export type CreateSubmissionInput = {
   userId: string;
@@ -11,6 +13,9 @@ export type CreateSubmissionInput = {
   promptExcerpt: string;
   responsibilityAcknowledged: boolean;
   attachmentUri?: string;
+  attachmentBase64?: string;
+  attachmentFilename?: string;
+  attachmentMimeType?: string;
 };
 
 export async function createSubmission(input: CreateSubmissionInput) {
@@ -23,13 +28,20 @@ export async function createSubmission(input: CreateSubmissionInput) {
     throw new Error("Module active version is not available.");
   }
 
+  const parseOutcome = await resolveSubmissionRawTextFromAttachment({
+    rawText: input.rawText,
+    attachmentBase64: input.attachmentBase64,
+    attachmentFilename: input.attachmentFilename,
+    attachmentMimeType: input.attachmentMimeType,
+  });
+
   const submission = await prisma.submission.create({
     data: {
       userId: input.userId,
       moduleId: module.id,
       moduleVersionId: module.activeVersion.id,
       deliveryType: input.deliveryType,
-      rawText: input.rawText,
+      rawText: parseOutcome.resolvedRawText,
       reflectionText: input.reflectionText,
       promptExcerpt: input.promptExcerpt,
       responsibilityAcknowledged: input.responsibilityAcknowledged,
@@ -47,7 +59,15 @@ export async function createSubmission(input: CreateSubmissionInput) {
       submissionId: submission.id,
       moduleId: submission.moduleId,
       moduleVersionId: submission.moduleVersionId,
+      parser: parseOutcome.parser,
     },
+  });
+
+  logOperationalEvent("submission_document_parse", {
+    submissionId: submission.id,
+    moduleId: submission.moduleId,
+    deliveryType: submission.deliveryType,
+    parser: parseOutcome.parser,
   });
 
   return submission;

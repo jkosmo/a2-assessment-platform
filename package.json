@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.3.49",
+  "version": "0.3.50",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -26,6 +26,8 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jose": "^6.1.0",
+    "mammoth": "^1.11.0",
+    "pdf-parse": "^2.4.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
