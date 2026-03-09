@@ -7,15 +7,44 @@ import fs from "node:fs";
 import path from "node:path";
 
 export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
-  return prisma.user.upsert({
+  const existingByExternalId = await prisma.user.findUnique({
     where: { externalId: principal.externalId },
-    update: {
-      email: principal.email,
-      name: principal.name,
-      department: principal.department,
-      activeStatus: true,
-    },
-    create: {
+    select: { id: true, email: true },
+  });
+  const existingByEmail = await prisma.user.findUnique({
+    where: { email: principal.email },
+    select: { id: true },
+  });
+
+  if (existingByExternalId) {
+    const emailTakenByDifferentUser =
+      existingByEmail && existingByEmail.id !== existingByExternalId.id;
+
+    return prisma.user.update({
+      where: { id: existingByExternalId.id },
+      data: {
+        ...(emailTakenByDifferentUser ? {} : { email: principal.email }),
+        name: principal.name,
+        department: principal.department,
+        activeStatus: true,
+      },
+    });
+  }
+
+  if (existingByEmail) {
+    return prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        externalId: principal.externalId,
+        name: principal.name,
+        department: principal.department,
+        activeStatus: true,
+      },
+    });
+  }
+
+  return prisma.user.create({
+    data: {
       externalId: principal.externalId,
       email: principal.email,
       name: principal.name,

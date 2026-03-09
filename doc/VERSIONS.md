@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.38 - 2026-03-09
+### Summary
+Hardened mock-identity reconciliation and non-production bootstrap seed resilience to recover from user identity conflicts and ensure module-seed completion.
+
+### Included
+- Mock auth user-upsert reconciliation hardening:
+  - `src/repositories/userRepository.ts`
+  - avoids failing auth when `externalId` and `email` map to different existing users by reconciling safely instead of throwing unique-key errors.
+- Bootstrap seed identity hardening:
+  - `scripts/runtime/bootstrapSeed.mjs`
+  - same reconciliation logic applied for seeded users (`admin-1`, `participant-1`) so bootstrap can continue and ensure seeded modules.
+- Automated regression test:
+  - `test/mock-auth-identity-reconciliation.test.ts`
+  - verifies `/api/me` remains functional under `externalId`/`email` conflict scenario in mock mode.
+
+### Notes
+- This release targets staging data-drift recovery and reliable non-production verification flows.
+
 ## 0.3.37 - 2026-03-09
 ### Summary
 Implemented phase-2 participant test-console UX hardening across role switching, module selection clarity, draft persistence, progressive flow gating, and appeal-handler workspace actions.

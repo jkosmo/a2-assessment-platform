@@ -92,29 +92,65 @@ const MODULE_SEEDS = [
   },
 ];
 
-async function upsertUsersAndRoles(now) {
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@company.com" },
-    update: { name: "Platform Admin", externalId: "admin-1", activeStatus: true },
-    create: {
-      externalId: "admin-1",
-      name: "Platform Admin",
-      email: "admin@company.com",
-      department: "Technology",
+async function ensureSeedUser(input) {
+  const existingByExternal = await prisma.user.findUnique({
+    where: { externalId: input.externalId },
+    select: { id: true, email: true },
+  });
+  const existingByEmail = await prisma.user.findUnique({
+    where: { email: input.email },
+    select: { id: true },
+  });
+
+  if (existingByExternal) {
+    const emailTakenByDifferentUser = existingByEmail && existingByEmail.id !== existingByExternal.id;
+    return prisma.user.update({
+      where: { id: existingByExternal.id },
+      data: {
+        ...(emailTakenByDifferentUser ? {} : { email: input.email }),
+        name: input.name,
+        department: input.department,
+        activeStatus: true,
+      },
+    });
+  }
+
+  if (existingByEmail) {
+    return prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        externalId: input.externalId,
+        name: input.name,
+        department: input.department,
+        activeStatus: true,
+      },
+    });
+  }
+
+  return prisma.user.create({
+    data: {
+      externalId: input.externalId,
+      email: input.email,
+      name: input.name,
+      department: input.department,
       activeStatus: true,
     },
   });
+}
 
-  const participant = await prisma.user.upsert({
-    where: { email: "participant@company.com" },
-    update: { name: "Platform Participant", externalId: "participant-1", activeStatus: true },
-    create: {
-      externalId: "participant-1",
-      name: "Platform Participant",
-      email: "participant@company.com",
-      department: "Consulting",
-      activeStatus: true,
-    },
+async function upsertUsersAndRoles(now) {
+  const admin = await ensureSeedUser({
+    externalId: "admin-1",
+    name: "Platform Admin",
+    email: "admin@company.com",
+    department: "Technology",
+  });
+
+  const participant = await ensureSeedUser({
+    externalId: "participant-1",
+    name: "Platform Participant",
+    email: "participant@company.com",
+    department: "Consulting",
   });
 
   for (const [userId, appRole] of [
