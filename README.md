@@ -102,6 +102,7 @@ npm run build
 - `GET /api/reports/export?type=<report>&format=csv`
 - `POST /api/admin/content/modules/:moduleId/rubric-versions`
 - `POST /api/admin/content/modules/:moduleId/prompt-template-versions`
+- `POST /api/admin/content/modules/:moduleId/benchmark-example-versions`
 - `POST /api/admin/content/modules/:moduleId/mcq-set-versions`
 - `POST /api/admin/content/modules/:moduleId/module-versions`
 - `POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish`
@@ -191,6 +192,12 @@ Advanced analytics reporting model is config-driven via:
 - `trends.*` controls trend granularity behavior
 - `cohorts.*` controls cohort dimensions
 - `dataQuality.*` controls pipeline quality thresholds
+
+Benchmark example versioning policy is config-driven via:
+- `config/benchmark-examples.json`
+- `maxExamplesPerVersion` limits benchmark anchor set size
+- `maxTextLength` limits benchmark text field size
+- `requiredFields` enforces benchmark example structure
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

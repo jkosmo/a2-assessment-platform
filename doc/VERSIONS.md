@@ -7,6 +7,38 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.53 - 2026-03-09
+### Summary
+Implemented issue #35 by adding benchmark example/anchor version management per module with prompt/module linking, configuration-based validation, and auditable publish flow integration.
+
+### Included
+- Added benchmark example config:
+  - `config/benchmark-examples.json`
+  - `src/config/benchmarkExamples.ts`
+  - configurable limits/required fields for benchmark payloads
+- Added benchmark version management API:
+  - `POST /api/admin/content/modules/:moduleId/benchmark-example-versions`
+  - route implementation: `src/routes/adminContent.ts`
+- Added benchmark creation service:
+  - `src/services/adminContentService.ts`
+  - creates a new versioned prompt template from a base prompt template
+  - supports optional link to a module version context
+  - validates benchmark examples against config limits/required fields
+  - stores enriched benchmark-anchor metadata in prompt examples payload
+  - emits audit event `benchmark_example_version_created`
+- Publish/linkage integration:
+  - benchmark prompt versions are linked to module versions through existing `promptTemplateVersionId`
+  - module versions referencing benchmark prompts are publishable via existing publish endpoint
+- Design note and tests:
+  - `doc/PHASE2_BENCHMARK_EXAMPLES_DESIGN.md`
+  - expanded `test/m2-admin-content-publication.test.ts` to cover benchmark version creation, linkage, publish, and audit
+- Documentation:
+  - README updated with benchmark admin endpoint and config guidance
+
+### Verification
+- `npm run lint`
+- `npm test` (49 tests passing, 20 test files)
+
 ## 0.3.52 - 2026-03-09
 ### Summary
 Implemented issue #30 by adding an advanced analytics reporting layer with semantic KPI model endpoints, trend/cohort analysis, and configurable data-quality checks.

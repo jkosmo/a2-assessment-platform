@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
+import { getBenchmarkExamplesConfig } from "../config/benchmarkExamples.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -36,6 +37,15 @@ type CreateModuleVersionInput = {
   rubricVersionId: string;
   promptTemplateVersionId: string;
   mcqSetVersionId: string;
+};
+
+type CreateBenchmarkExampleVersionInput = {
+  moduleId: string;
+  basePromptTemplateVersionId: string;
+  linkedModuleVersionId?: string;
+  examples: Array<Record<string, unknown>>;
+  active: boolean;
+  actorId?: string;
 };
 
 async function ensureModuleExists(moduleId: string) {
@@ -228,6 +238,109 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
       createdAt: true,
     },
   });
+}
+
+export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampleVersionInput) {
+  await ensureModuleExists(input.moduleId);
+  const benchmarkConfig = getBenchmarkExamplesConfig();
+
+  const basePromptTemplate = await prisma.promptTemplateVersion.findUnique({
+    where: { id: input.basePromptTemplateVersionId },
+    select: {
+      id: true,
+      moduleId: true,
+      systemPrompt: true,
+      userPromptTemplate: true,
+    },
+  });
+
+  if (!basePromptTemplate || basePromptTemplate.moduleId !== input.moduleId) {
+    throw new Error("Base prompt template version is missing or belongs to another module.");
+  }
+
+  if (input.linkedModuleVersionId) {
+    const linkedModuleVersion = await prisma.moduleVersion.findUnique({
+      where: { id: input.linkedModuleVersionId },
+      select: { id: true, moduleId: true },
+    });
+
+    if (!linkedModuleVersion || linkedModuleVersion.moduleId !== input.moduleId) {
+      throw new Error("Linked module version is missing or belongs to another module.");
+    }
+  }
+
+  if (input.examples.length === 0) {
+    throw new Error("At least one benchmark example is required.");
+  }
+
+  if (input.examples.length > benchmarkConfig.maxExamplesPerVersion) {
+    throw new Error(
+      `Benchmark example count exceeds maxExamplesPerVersion (${benchmarkConfig.maxExamplesPerVersion}).`,
+    );
+  }
+
+  for (const [index, example] of input.examples.entries()) {
+    for (const requiredField of benchmarkConfig.requiredFields) {
+      if (!(requiredField in example)) {
+        throw new Error(`Benchmark example at index ${index} is missing required field '${requiredField}'.`);
+      }
+      const value = example[requiredField];
+      if (typeof value === "string" && value.length > benchmarkConfig.maxTextLength) {
+        throw new Error(
+          `Benchmark example field '${requiredField}' at index ${index} exceeds maxTextLength (${benchmarkConfig.maxTextLength}).`,
+        );
+      }
+    }
+  }
+
+  const versionNo = await getNextVersionNo("prompt", input.moduleId);
+  const enrichedExamples = input.examples.map((example, index) => ({
+    ...example,
+    benchmarkExampleIndex: index + 1,
+    sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
+    sourceModuleVersionId: input.linkedModuleVersionId ?? null,
+    benchmarkVersionNo: versionNo,
+  }));
+
+  const promptTemplateVersion = await prisma.promptTemplateVersion.create({
+    data: {
+      moduleId: input.moduleId,
+      versionNo,
+      systemPrompt: basePromptTemplate.systemPrompt,
+      userPromptTemplate: basePromptTemplate.userPromptTemplate,
+      examplesJson: JSON.stringify(enrichedExamples),
+      active: input.active,
+    },
+    select: {
+      id: true,
+      moduleId: true,
+      versionNo: true,
+      active: true,
+      createdAt: true,
+    },
+  });
+
+  await recordAuditEvent({
+    entityType: "prompt_template_version",
+    entityId: promptTemplateVersion.id,
+    action: "benchmark_example_version_created",
+    actorId: input.actorId,
+    metadata: {
+      moduleId: input.moduleId,
+      promptTemplateVersionId: promptTemplateVersion.id,
+      sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
+      sourceModuleVersionId: input.linkedModuleVersionId ?? null,
+      benchmarkExampleCount: input.examples.length,
+      versionNo: promptTemplateVersion.versionNo,
+    },
+  });
+
+  return {
+    ...promptTemplateVersion,
+    sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
+    sourceModuleVersionId: input.linkedModuleVersionId ?? null,
+    benchmarkExampleCount: input.examples.length,
+  };
 }
 
 export async function publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string) {

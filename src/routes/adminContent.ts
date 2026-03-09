@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  createBenchmarkExampleVersion,
   createMcqSetVersion,
   createModuleVersion,
   createPromptTemplateVersion,
@@ -53,6 +54,13 @@ const moduleVersionBodySchema = z.object({
   rubricVersionId: z.string().min(1),
   promptTemplateVersionId: z.string().min(1),
   mcqSetVersionId: z.string().min(1),
+});
+
+const benchmarkExampleVersionBodySchema = z.object({
+  basePromptTemplateVersionId: z.string().min(1),
+  linkedModuleVersionId: z.string().min(1).optional(),
+  examples: z.array(z.record(z.unknown())).min(1),
+  active: z.boolean().optional().default(true),
 });
 
 function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {
@@ -151,6 +159,37 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
     response.status(400).json({
       error: "create_module_version_failed",
       message: error instanceof Error ? error.message : "Could not create module version.",
+    });
+  }
+});
+
+adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (request, response) => {
+  const parsed = parseRequest(benchmarkExampleVersionBodySchema, request.body);
+  if (parsed.error) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error });
+    return;
+  }
+
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const benchmarkExampleVersion = await createBenchmarkExampleVersion({
+      moduleId: request.params.moduleId,
+      basePromptTemplateVersionId: parsed.data.basePromptTemplateVersionId,
+      linkedModuleVersionId: parsed.data.linkedModuleVersionId,
+      examples: parsed.data.examples,
+      active: parsed.data.active ?? true,
+      actorId,
+    });
+    response.status(201).json({ benchmarkExampleVersion });
+  } catch (error) {
+    response.status(400).json({
+      error: "create_benchmark_example_version_failed",
+      message: error instanceof Error ? error.message : "Could not create benchmark example version.",
     });
   }
 });

@@ -104,11 +104,52 @@ describe("MVP admin content management and publication", () => {
     expect(moduleVersionResponse.body.moduleVersion.mcqSetVersionId).toBe(mcqSetVersionId);
     expect(moduleVersionResponse.body.moduleVersion.publishedAt).toBeNull();
 
+    const benchmarkVersionResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/benchmark-example-versions`)
+      .set(adminHeaders)
+      .send({
+        basePromptTemplateVersionId: promptTemplateVersionId,
+        linkedModuleVersionId: moduleVersionId,
+        examples: [
+          {
+            anchorId: "anchor-pass-1",
+            input: "Strong, policy-compliant submission with measurable QA checks.",
+            expectedOutcome: "PASS",
+            notes: "Reference anchor for stable high-quality evaluation.",
+          },
+          {
+            anchorId: "anchor-fail-1",
+            input: "Weak submission with no validation evidence and missing safeguards.",
+            expectedOutcome: "FAIL",
+            notes: "Reference anchor for stable low-quality evaluation.",
+          },
+        ],
+      });
+    expect(benchmarkVersionResponse.status).toBe(201);
+    const benchmarkPromptTemplateVersionId = benchmarkVersionResponse.body.benchmarkExampleVersion.id as string;
+    expect(benchmarkVersionResponse.body.benchmarkExampleVersion.sourcePromptTemplateVersionId).toBe(
+      promptTemplateVersionId,
+    );
+    expect(benchmarkVersionResponse.body.benchmarkExampleVersion.sourceModuleVersionId).toBe(moduleVersionId);
+
+    const benchmarkModuleVersionResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions`)
+      .set(adminHeaders)
+      .send({
+        taskText: "Submit practical reflection with benchmark-anchored quality expectations.",
+        guidanceText: "Use benchmark examples to calibrate scoring consistency.",
+        rubricVersionId,
+        promptTemplateVersionId: benchmarkPromptTemplateVersionId,
+        mcqSetVersionId,
+      });
+    expect(benchmarkModuleVersionResponse.status).toBe(201);
+    const benchmarkModuleVersionId = benchmarkModuleVersionResponse.body.moduleVersion.id as string;
+
     const publishResponse = await request(app)
-      .post(`/api/admin/content/modules/${moduleId}/module-versions/${moduleVersionId}/publish`)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions/${benchmarkModuleVersionId}/publish`)
       .set(adminHeaders);
     expect(publishResponse.status).toBe(200);
-    expect(publishResponse.body.moduleVersion.id).toBe(moduleVersionId);
+    expect(publishResponse.body.moduleVersion.id).toBe(benchmarkModuleVersionId);
     expect(publishResponse.body.moduleVersion.publishedAt).toBeTruthy();
     expect(publishResponse.body.moduleVersion.publishedBy).toBeTruthy();
 
@@ -116,19 +157,28 @@ describe("MVP admin content management and publication", () => {
       .get(`/api/modules/${moduleId}/active-version`)
       .set(adminHeaders);
     expect(activeVersionResponse.status).toBe(200);
-    expect(activeVersionResponse.body.activeVersion.id).toBe(moduleVersionId);
+    expect(activeVersionResponse.body.activeVersion.id).toBe(benchmarkModuleVersionId);
     expect(activeVersionResponse.body.activeVersion.rubricVersionId).toBe(rubricVersionId);
-    expect(activeVersionResponse.body.activeVersion.promptTemplateVersionId).toBe(promptTemplateVersionId);
+    expect(activeVersionResponse.body.activeVersion.promptTemplateVersionId).toBe(benchmarkPromptTemplateVersionId);
     expect(activeVersionResponse.body.activeVersion.mcqSetVersionId).toBe(mcqSetVersionId);
 
     const auditEvent = await prisma.auditEvent.findFirst({
       where: {
         entityType: "module_version",
-        entityId: moduleVersionId,
+        entityId: benchmarkModuleVersionId,
         action: "module_version_published",
       },
     });
     expect(auditEvent).toBeTruthy();
+
+    const benchmarkAuditEvent = await prisma.auditEvent.findFirst({
+      where: {
+        entityType: "prompt_template_version",
+        entityId: benchmarkPromptTemplateVersionId,
+        action: "benchmark_example_version_created",
+      },
+    });
+    expect(benchmarkAuditEvent).toBeTruthy();
   });
 
   it("blocks participant role from admin content routes", async () => {

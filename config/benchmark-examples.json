@@ -1,0 +1,9 @@
+{
+  "maxExamplesPerVersion": 20,
+  "maxTextLength": 4000,
+  "requiredFields": [
+    "anchorId",
+    "input",
+    "expectedOutcome"
+  ]
+}
