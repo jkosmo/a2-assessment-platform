@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { ReviewStatus, AppealStatus, SubmissionStatus } from "../db/prismaRuntime.js";
+import { getAssessmentRules } from "../config/assessmentRules.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import type {
   SubmissionStatus as SubmissionStatusType,
@@ -73,6 +74,19 @@ type AppealRow = {
   resolutionOverdue: boolean;
   atRisk: boolean;
   slaState: "ON_TRACK" | "AT_RISK" | "OVERDUE" | "RESOLVED";
+};
+
+type McqQualityRow = {
+  moduleId: string;
+  moduleTitle: string;
+  questionId: string;
+  questionStem: string;
+  attemptCount: number;
+  correctCount: number;
+  difficulty: number | null;
+  discrimination: number | null;
+  flaggedLowQuality: boolean;
+  qualityFlags: string;
 };
 
 export async function getCompletionReport(filters: ReportFilters) {
@@ -403,6 +417,157 @@ export async function getAppealsReport(filters: ReportFilters) {
   };
 }
 
+export async function getMcqQualityReport(filters: ReportFilters) {
+  const rules = getAssessmentRules();
+  const submissionWhere = {
+    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+  } as const;
+
+  const where = {
+    mcqAttempt: {
+      completedAt: { not: null },
+      submission: submissionWhere,
+    },
+  } as const;
+
+  const responses = await prisma.mCQResponse.findMany({
+    where,
+    select: {
+      questionId: true,
+      isCorrect: true,
+      question: {
+        select: {
+          id: true,
+          stem: true,
+          module: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+        },
+      },
+      mcqAttempt: {
+        select: {
+          id: true,
+          percentScore: true,
+        },
+      },
+    },
+  });
+
+  const perQuestion = new Map<string, {
+    moduleId: string;
+    moduleTitle: string;
+    questionId: string;
+    questionStem: string;
+    responses: Array<{ isCorrect: boolean; attemptScore: number | null }>;
+  }>();
+
+  for (const response of responses) {
+    const existing = perQuestion.get(response.questionId) ?? {
+      moduleId: response.question.module.id,
+      moduleTitle: response.question.module.title,
+      questionId: response.question.id,
+      questionStem: response.question.stem,
+      responses: [],
+    };
+
+    existing.responses.push({
+      isCorrect: response.isCorrect,
+      attemptScore: typeof response.mcqAttempt.percentScore === "number" ? response.mcqAttempt.percentScore : null,
+    });
+    perQuestion.set(response.questionId, existing);
+  }
+
+  const rows: McqQualityRow[] = Array.from(perQuestion.values()).map((entry) => {
+    const attemptCount = entry.responses.length;
+    const correctCount = entry.responses.filter((value) => value.isCorrect).length;
+    const difficulty = attemptCount > 0 ? round2(correctCount / attemptCount) : null;
+
+    const scoresForDiscrimination = entry.responses
+      .filter((value) => typeof value.attemptScore === "number")
+      .map((value) => ({
+        correct: value.isCorrect ? 1 : 0,
+        score: value.attemptScore as number,
+      }));
+
+    const qualityFlags: string[] = [];
+    if (difficulty !== null && difficulty < rules.mcqQuality.difficultyMin) {
+      qualityFlags.push("TOO_DIFFICULT");
+    }
+    if (difficulty !== null && difficulty > rules.mcqQuality.difficultyMax) {
+      qualityFlags.push("TOO_EASY");
+    }
+
+    let discrimination: number | null = null;
+    if (scoresForDiscrimination.length >= rules.mcqQuality.minAttemptCount) {
+      discrimination = round2(computePointBiserial(scoresForDiscrimination));
+      if (discrimination < rules.mcqQuality.discriminationMin) {
+        qualityFlags.push("LOW_DISCRIMINATION");
+      }
+    } else {
+      qualityFlags.push("INSUFFICIENT_SAMPLE");
+    }
+
+    return {
+      moduleId: entry.moduleId,
+      moduleTitle: entry.moduleTitle,
+      questionId: entry.questionId,
+      questionStem: entry.questionStem,
+      attemptCount,
+      correctCount,
+      difficulty,
+      discrimination,
+      flaggedLowQuality: qualityFlags.length > 0,
+      qualityFlags: qualityFlags.join("|"),
+    };
+  });
+
+  const statusFilter = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
+  const filteredRows = rows.filter((row) => {
+    if (statusFilter.size === 0) {
+      return true;
+    }
+    if (statusFilter.has("FLAGGED") && row.flaggedLowQuality) {
+      return true;
+    }
+    if (statusFilter.has("OK") && !row.flaggedLowQuality) {
+      return true;
+    }
+    return false;
+  });
+
+  return {
+    reportType: "mcq-quality",
+    filters: normalizeFilters(filters),
+    thresholds: {
+      minAttemptCount: rules.mcqQuality.minAttemptCount,
+      difficultyMin: rules.mcqQuality.difficultyMin,
+      difficultyMax: rules.mcqQuality.difficultyMax,
+      discriminationMin: rules.mcqQuality.discriminationMin,
+    },
+    totals: {
+      questionCount: filteredRows.length,
+      flaggedCount: filteredRows.filter((row) => row.flaggedLowQuality).length,
+      tooDifficultCount: filteredRows.filter((row) => row.qualityFlags.includes("TOO_DIFFICULT")).length,
+      tooEasyCount: filteredRows.filter((row) => row.qualityFlags.includes("TOO_EASY")).length,
+      lowDiscriminationCount: filteredRows.filter((row) => row.qualityFlags.includes("LOW_DISCRIMINATION")).length,
+      insufficientSampleCount: filteredRows.filter((row) => row.qualityFlags.includes("INSUFFICIENT_SAMPLE")).length,
+    },
+    rows: filteredRows,
+  };
+}
+
 export function toCsv(
   rows: Array<Record<string, unknown>>,
   columnOrder?: string[],
@@ -470,4 +635,36 @@ function normalizeFilters(filters: ReportFilters) {
 
 function round2(input: number) {
   return Number(input.toFixed(4));
+}
+
+function computePointBiserial(values: Array<{ correct: number; score: number }>) {
+  if (values.length < 2) {
+    return 0;
+  }
+
+  const meanScore = values.reduce((sum, value) => sum + value.score, 0) / values.length;
+  const variance =
+    values.reduce((sum, value) => {
+      const delta = value.score - meanScore;
+      return sum + delta * delta;
+    }, 0) / values.length;
+
+  if (variance <= 0) {
+    return 0;
+  }
+
+  const stdDev = Math.sqrt(variance);
+  const correctGroup = values.filter((value) => value.correct === 1).map((value) => value.score);
+  const incorrectGroup = values.filter((value) => value.correct === 0).map((value) => value.score);
+
+  if (correctGroup.length === 0 || incorrectGroup.length === 0) {
+    return 0;
+  }
+
+  const meanCorrect = correctGroup.reduce((sum, score) => sum + score, 0) / correctGroup.length;
+  const meanIncorrect = incorrectGroup.reduce((sum, score) => sum + score, 0) / incorrectGroup.length;
+  const p = correctGroup.length / values.length;
+  const q = 1 - p;
+
+  return ((meanCorrect - meanIncorrect) / stdDev) * Math.sqrt(p * q);
 }

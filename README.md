@@ -92,6 +92,7 @@ npm run build
 - `GET /api/reports/pass-rates`
 - `GET /api/reports/manual-review-queue`
 - `GET /api/reports/appeals`
+- `GET /api/reports/mcq-quality`
 - `GET /api/reports/export?type=<report>&format=csv`
 - `POST /api/admin/content/modules/:moduleId/rubric-versions`
 - `POST /api/admin/content/modules/:moduleId/prompt-template-versions`

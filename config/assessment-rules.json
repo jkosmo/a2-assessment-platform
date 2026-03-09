@@ -16,6 +16,11 @@
     "redFlagSeverities": [
       "high"
     ]
+  },
+  "mcqQuality": {
+    "minAttemptCount": 5,
+    "difficultyMin": 0.2,
+    "difficultyMax": 0.9,
+    "discriminationMin": 0.1
   }
 }
-

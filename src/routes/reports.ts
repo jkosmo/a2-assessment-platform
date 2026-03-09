@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   getAppealsReport,
   getCompletionReport,
+  getMcqQualityReport,
   getManualReviewQueueReport,
   getPassRatesReport,
   toCsv,
@@ -20,7 +21,7 @@ const reportQuerySchema = z.object({
 });
 
 const exportQuerySchema = reportQuerySchema.extend({
-  type: z.enum(["completion", "pass-rates", "manual-review-queue", "appeals"]),
+  type: z.enum(["completion", "pass-rates", "manual-review-queue", "appeals", "mcq-quality"]),
   format: z.literal("csv"),
 });
 
@@ -68,6 +69,17 @@ reportsRouter.get("/appeals", async (request, response) => {
   response.json(report);
 });
 
+reportsRouter.get("/mcq-quality", async (request, response) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+
+  const report = await getMcqQualityReport(filters);
+  response.json(report);
+});
+
 reportsRouter.get("/export", async (request, response) => {
   const parsed = exportQuerySchema.safeParse(request.query);
   if (!parsed.success) {
@@ -90,6 +102,8 @@ reportsRouter.get("/export", async (request, response) => {
     rows = (await getPassRatesReport(filters)).rows;
   } else if (parsed.data.type === "manual-review-queue") {
     rows = (await getManualReviewQueueReport(filters)).rows;
+  } else if (parsed.data.type === "mcq-quality") {
+    rows = (await getMcqQualityReport(filters)).rows;
   } else {
     rows = (await getAppealsReport(filters)).rows;
   }

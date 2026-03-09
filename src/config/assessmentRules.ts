@@ -20,6 +20,19 @@ const rulesSchema = z.object({
     }),
     redFlagSeverities: z.array(z.string().min(1)),
   }),
+  mcqQuality: z
+    .object({
+      minAttemptCount: z.number().int().positive().default(5),
+      difficultyMin: z.number().min(0).max(1).default(0.2),
+      difficultyMax: z.number().min(0).max(1).default(0.9),
+      discriminationMin: z.number().min(-1).max(1).default(0.1),
+    })
+    .default({
+      minAttemptCount: 5,
+      difficultyMin: 0.2,
+      difficultyMax: 0.9,
+      discriminationMin: 0.1,
+    }),
 });
 
 export type AssessmentRules = z.infer<typeof rulesSchema>;
@@ -37,4 +50,3 @@ export function getAssessmentRules(): AssessmentRules {
   cached = rulesSchema.parse(parsedJson);
   return cached;
 }
-

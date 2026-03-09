@@ -156,6 +156,17 @@ describe("MVP reporting endpoints", () => {
     expect(overdueRow?.firstResponseOverdue).toBe(true);
     expect(overdueRow?.claimedAt).toBeNull();
 
+    const mcqQualityResponse = await request(app)
+      .get(`/api/reports/mcq-quality?moduleId=${encodeURIComponent(moduleId)}`)
+      .set(reportReaderHeaders);
+    expect(mcqQualityResponse.status).toBe(200);
+    expect(mcqQualityResponse.body.reportType).toBe("mcq-quality");
+    expect(mcqQualityResponse.body.rows.length).toBeGreaterThan(0);
+    expect(mcqQualityResponse.body.rows[0].moduleId).toBe(moduleId);
+    expect(typeof mcqQualityResponse.body.rows[0].attemptCount).toBe("number");
+    expect(typeof mcqQualityResponse.body.rows[0].difficulty === "number" || mcqQualityResponse.body.rows[0].difficulty === null).toBe(true);
+    expect(typeof mcqQualityResponse.body.rows[0].qualityFlags).toBe("string");
+
     const completionCsvResponse = await request(app)
       .get("/api/reports/export?type=completion&format=csv")
       .set(reportReaderHeaders);
@@ -163,6 +174,13 @@ describe("MVP reporting endpoints", () => {
     expect(completionCsvResponse.headers["content-type"]).toContain("text/csv");
     expect(completionCsvResponse.text).toContain("moduleId,moduleTitle");
     expect(completionCsvResponse.text).toContain(moduleId);
+
+    const mcqQualityCsvResponse = await request(app)
+      .get("/api/reports/export?type=mcq-quality&format=csv")
+      .set(reportReaderHeaders);
+    expect(mcqQualityCsvResponse.status).toBe(200);
+    expect(mcqQualityCsvResponse.headers["content-type"]).toContain("text/csv");
+    expect(mcqQualityCsvResponse.text).toContain("questionId,questionStem");
 
     const forbiddenResponse = await request(app).get("/api/reports/completion").set(participantAHeaders);
     expect(forbiddenResponse.status).toBe(403);

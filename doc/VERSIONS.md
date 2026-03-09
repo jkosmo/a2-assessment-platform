@@ -7,6 +7,49 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.47 - 2026-03-09
+### Summary
+Implemented issue #33 by adding MCQ quality analytics reporting with configurable difficulty/discrimination thresholds and low-quality item flags.
+
+### Included
+- New MCQ quality report endpoint:
+  - `GET /api/reports/mcq-quality`
+  - `src/routes/reports.ts`
+  - supports existing report filters (`moduleId`, `dateFrom`, `dateTo`, `orgUnit`) and optional status filter (`FLAGGED`, `OK`).
+- MCQ quality analytics logic:
+  - `src/services/reportingService.ts`
+  - computes per-question metrics from completed MCQ responses:
+    - `attemptCount`
+    - `correctCount`
+    - `difficulty` (proportion correct)
+    - `discrimination` (point-biserial against attempt percent score)
+  - flags low-quality items via configurable rules:
+    - `TOO_DIFFICULT`
+    - `TOO_EASY`
+    - `LOW_DISCRIMINATION`
+    - `INSUFFICIENT_SAMPLE`
+  - exposes totals for flagged and per-flag category counts.
+- Config-driven thresholds:
+  - `src/config/assessmentRules.ts`
+  - `config/assessment-rules.json`
+  - added `mcqQuality` config:
+    - `minAttemptCount`
+    - `difficultyMin`
+    - `difficultyMax`
+    - `discriminationMin`
+- CSV export support:
+  - `GET /api/reports/export?type=mcq-quality&format=csv`
+  - `src/routes/reports.ts`
+- Documentation and tests:
+  - `README.md` API list updated with `/api/reports/mcq-quality`.
+  - `test/m2-reporting.test.ts` expanded to validate:
+    - `mcq-quality` report response
+    - `mcq-quality` CSV export.
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.46 - 2026-03-09
 ### Summary
 Delivered additional participant/appeal workspace simplifications: auto-loaded appeal queue, localized status filter labels, streamlined participant controls, and automatic MCQ start on submission.
