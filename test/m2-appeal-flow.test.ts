@@ -162,5 +162,6 @@ describe("MVP appeal flow", () => {
     expect(actions).toContain("appeal_claimed");
     expect(actions).toContain("appeal_resolution_decision_created");
     expect(actions).toContain("appeal_resolved");
+    expect(actions).toContain("participant_notification_sent");
   });
 });

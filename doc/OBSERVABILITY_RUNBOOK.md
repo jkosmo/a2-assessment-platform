@@ -23,6 +23,9 @@ This baseline is implemented through:
 - `assessment_queue_backlog`
 - `appeal_sla_backlog`
 - `appeal_overdue_detected`
+- `participant_notification_sent`
+- `participant_notification_failed`
+- `participant_notification_pipeline_failed`
 - `http_request`
 
 ## Alert Baseline
@@ -111,6 +114,16 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | extend overdueThreshold = toint(extract("\"overdueThreshold\":([0-9]+)", 1, raw))
 | extend oldestOverdueHours = todouble(extract("\"oldestOverdueHours\":([0-9.]+)", 1, raw))
 | project TimeGenerated, overdueAppeals, overdueThreshold, oldestOverdueHours, raw
+| order by TimeGenerated desc
+```
+
+### Participant Notification Delivery (recent)
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(1h)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has_any ("\"event\":\"participant_notification_sent\"", "\"event\":\"participant_notification_failed\"", "\"event\":\"participant_notification_pipeline_failed\"")
+| project TimeGenerated, raw
 | order by TimeGenerated desc
 ```
 

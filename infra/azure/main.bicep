@@ -71,6 +71,21 @@ param appealOverdueAlertThreshold int = 1
 @description('Appeal SLA monitor interval in milliseconds.')
 param appealSlaMonitorIntervalMs int = 600000
 
+@description('Participant notification delivery channel.')
+@allowed([
+  'disabled'
+  'log'
+  'webhook'
+])
+param participantNotificationChannel string = 'log'
+
+@description('Optional webhook endpoint for participant notifications.')
+@secure()
+param participantNotificationWebhookUrl string = ''
+
+@description('Webhook timeout in milliseconds for participant notifications.')
+param participantNotificationWebhookTimeoutMs int = 5000
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
@@ -242,6 +257,18 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'APPEAL_OVERDUE_ALERT_THRESHOLD'
           value: string(appealOverdueAlertThreshold)
+        }
+        {
+          name: 'PARTICIPANT_NOTIFICATION_CHANNEL'
+          value: participantNotificationChannel
+        }
+        {
+          name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_URL'
+          value: participantNotificationWebhookUrl
+        }
+        {
+          name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
+          value: string(participantNotificationWebhookTimeoutMs)
         }
         {
           name: 'BOOTSTRAP_SEED'

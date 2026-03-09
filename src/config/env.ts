@@ -26,6 +26,12 @@ const envSchema = z.object({
   APPEAL_AT_RISK_RATIO: z.coerce.number().positive().max(1).default(0.75),
   APPEAL_SLA_MONITOR_INTERVAL_MS: z.coerce.number().int().positive().default(600000),
   APPEAL_OVERDUE_ALERT_THRESHOLD: z.coerce.number().int().positive().default(1),
+  PARTICIPANT_NOTIFICATION_CHANNEL: z.enum(["disabled", "log", "webhook"]).default("log"),
+  PARTICIPANT_NOTIFICATION_WEBHOOK_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().url().optional(),
+  ),
+  PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
@@ -42,6 +48,11 @@ const env = parsed.data;
 
 if (env.AUTH_MODE === "entra" && (!env.ENTRA_TENANT_ID || !env.ENTRA_AUDIENCE)) {
   console.error("ENTRA_TENANT_ID and ENTRA_AUDIENCE are required when AUTH_MODE=entra");
+  process.exit(1);
+}
+
+if (env.PARTICIPANT_NOTIFICATION_CHANNEL === "webhook" && !env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL) {
+  console.error("PARTICIPANT_NOTIFICATION_WEBHOOK_URL is required when PARTICIPANT_NOTIFICATION_CHANNEL=webhook");
   process.exit(1);
 }
 

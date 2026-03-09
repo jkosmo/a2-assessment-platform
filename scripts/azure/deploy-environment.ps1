@@ -24,6 +24,9 @@ param(
   [int]$LatencyAlertThresholdSeconds = 3,
   [int]$AppealOverdueAlertThreshold = 1,
   [int]$AppealSlaMonitorIntervalMs = 600000,
+  [string]$ParticipantNotificationChannel = "log",
+  [string]$ParticipantNotificationWebhookUrl = "",
+  [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30
 )
@@ -107,6 +110,9 @@ $deployment = az deployment group create `
               latencyAlertThresholdSeconds=$LatencyAlertThresholdSeconds `
               appealOverdueAlertThreshold=$AppealOverdueAlertThreshold `
               appealSlaMonitorIntervalMs=$AppealSlaMonitorIntervalMs `
+              participantNotificationChannel=$ParticipantNotificationChannel `
+              participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
+              participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 

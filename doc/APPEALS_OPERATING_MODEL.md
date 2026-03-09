@@ -66,6 +66,9 @@ Where available:
 ## Participant Communication Points
 - Acknowledgement:
   - API response from appeal creation confirms case creation.
+- Proactive notifications:
+  - Participant notification event is emitted on appeal status transitions (`OPEN`, `IN_REVIEW`, `RESOLVED`, `REJECTED`).
+  - Delivery channel is environment-configurable (`log` / `webhook` / `disabled`).
 - Status visibility:
   - Current status available in appeal/admin endpoints and reporting.
 - Resolution communication:
@@ -94,4 +97,4 @@ To test escalation behavior quickly in staging:
 4. Restore normal SLA settings after test.
 
 ## Follow-up Backlog (Post-MVP hardening)
-- #46 Add participant notification channel (email/Teams) for appeal status transitions.
+- Add participant locale preference persistence for per-user notification language selection.

@@ -169,3 +169,6 @@ Appeals operating process (SLA, ownership, escalation):
 
 Observability and incident response runbook:
 - `doc/OBSERVABILITY_RUNBOOK.md`
+
+Phase-2 design note for participant appeal notifications:
+- `doc/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`

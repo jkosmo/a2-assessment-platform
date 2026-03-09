@@ -7,6 +7,40 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.36 - 2026-03-09
+### Summary
+Implemented phase-2 participant notifications for appeal status transitions with config-driven delivery channels, localization baseline, and observability/audit coverage.
+
+### Included
+- Appeal transition notifications (`OPEN`, `IN_REVIEW`, `RESOLVED`, `REJECTED`):
+  - `src/services/participantNotificationService.ts`
+  - integrated into appeal lifecycle in `src/services/appealService.ts`
+- Minimal template localization support:
+  - `src/i18n/notificationMessages.ts` (`en-GB`, `nb`, `nn`)
+- Config-driven channel model:
+  - `PARTICIPANT_NOTIFICATION_CHANNEL` (`disabled` / `log` / `webhook`)
+  - `PARTICIPANT_NOTIFICATION_WEBHOOK_URL`
+  - `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS`
+  - env schema validation updated in `src/config/env.ts`
+- Deployment/config plumbing:
+  - `infra/azure/main.bicep`
+  - `scripts/azure/deploy-environment.ps1`
+  - `.github/workflows/deploy-azure.yml`
+  - `.azure/environments/*.env.example`
+  - `.env.example`, `.env.test`
+- Documentation:
+  - `doc/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`
+  - `doc/APPEALS_OPERATING_MODEL.md`
+  - `doc/OBSERVABILITY_RUNBOOK.md`
+  - `doc/AZURE_ENVIRONMENTS.md`
+  - `README.md`
+- Automated tests:
+  - `test/participant-notifications.test.ts`
+  - `test/m2-appeal-flow.test.ts` updated for notification audit signal.
+
+### Notes
+- Notification pipeline is fail-safe: transition handling continues even if downstream delivery fails, while failures are logged and audited.
+
 ## 0.3.35 - 2026-03-09
 ### Summary
 Extended non-production bootstrap seed to include two modules so module-switch scenarios can be verified in stage/local runtime.

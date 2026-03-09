@@ -75,6 +75,9 @@ jobs:
             -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
             -AppealOverdueAlertThreshold "${{ vars.APPEAL_OVERDUE_ALERT_THRESHOLD || '1' }}" `
             -AppealSlaMonitorIntervalMs "${{ vars.APPEAL_SLA_MONITOR_INTERVAL_MS || '600000' }}" `
+            -ParticipantNotificationChannel "${{ vars.PARTICIPANT_NOTIFICATION_CHANNEL || 'log' }}" `
+            -ParticipantNotificationWebhookUrl "${{ secrets.PARTICIPANT_NOTIFICATION_WEBHOOK_URL }}" `
+            -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
 
@@ -131,5 +134,8 @@ jobs:
             -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
             -AppealOverdueAlertThreshold "${{ vars.APPEAL_OVERDUE_ALERT_THRESHOLD || '1' }}" `
             -AppealSlaMonitorIntervalMs "${{ vars.APPEAL_SLA_MONITOR_INTERVAL_MS || '600000' }}" `
+            -ParticipantNotificationChannel "${{ vars.PARTICIPANT_NOTIFICATION_CHANNEL || 'log' }}" `
+            -ParticipantNotificationWebhookUrl "${{ secrets.PARTICIPANT_NOTIFICATION_WEBHOOK_URL }}" `
+            -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"

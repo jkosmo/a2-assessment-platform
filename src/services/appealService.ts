@@ -2,6 +2,9 @@ import { AppealStatus, DecisionType, SubmissionStatus } from "../db/prismaRuntim
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
+import { notifyAppealStatusTransition } from "./participantNotificationService.js";
+import { env } from "../config/env.js";
+import { logOperationalEvent } from "../observability/operationalLog.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -64,6 +67,24 @@ export async function createSubmissionAppeal(input: {
       appealStatus: appeal.appealStatus,
     },
   });
+
+  const appealedBy = await prisma.user.findUnique({
+    where: { id: input.appealedById },
+    select: { id: true, email: true, name: true },
+  });
+
+  if (appealedBy) {
+    await safeNotifyAppealStatusTransition({
+      appealId: appeal.id,
+      submissionId: submission.id,
+      previousStatus: null,
+      currentStatus: appeal.appealStatus,
+      recipientUserId: appealedBy.id,
+      recipientEmail: appealedBy.email,
+      recipientName: appealedBy.name,
+      locale: env.DEFAULT_LOCALE,
+    });
+  }
 
   return appeal;
 }
@@ -221,6 +242,13 @@ export async function claimAppeal(appealId: string, handlerId: string) {
       appealStatus: true,
       claimedAt: true,
       resolvedById: true,
+      appealedBy: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
     },
   });
 
@@ -259,6 +287,17 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     },
   });
 
+  await safeNotifyAppealStatusTransition({
+    appealId: claimed.id,
+    submissionId: appeal.submissionId,
+    previousStatus: appeal.appealStatus,
+    currentStatus: claimed.appealStatus,
+    recipientUserId: appeal.appealedBy.id,
+    recipientEmail: appeal.appealedBy.email,
+    recipientName: appeal.appealedBy.name,
+    locale: env.DEFAULT_LOCALE,
+  });
+
   return claimed;
 }
 
@@ -272,6 +311,13 @@ export async function resolveAppeal(input: {
   const appeal = await prisma.appeal.findUnique({
     where: { id: input.appealId },
     include: {
+      appealedBy: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
       submission: {
         include: {
           decisions: {
@@ -361,5 +407,37 @@ export async function resolveAppeal(input: {
     },
   });
 
+  await safeNotifyAppealStatusTransition({
+    appealId: resolvedAppeal.id,
+    submissionId: latestDecision.submissionId,
+    previousStatus: appeal.appealStatus,
+    currentStatus: resolvedAppeal.appealStatus,
+    recipientUserId: appeal.appealedBy.id,
+    recipientEmail: appeal.appealedBy.email,
+    recipientName: appeal.appealedBy.name,
+    locale: env.DEFAULT_LOCALE,
+  });
+
   return { appeal: resolvedAppeal, resolutionDecision };
+}
+
+async function safeNotifyAppealStatusTransition(
+  input: Parameters<typeof notifyAppealStatusTransition>[0],
+) {
+  try {
+    await notifyAppealStatusTransition(input);
+  } catch (error) {
+    logOperationalEvent(
+      "participant_notification_pipeline_failed",
+      {
+        appealId: input.appealId,
+        submissionId: input.submissionId,
+        currentStatus: input.currentStatus,
+        recipientUserId: input.recipientUserId,
+        recipientEmail: input.recipientEmail,
+        errorMessage: error instanceof Error ? error.message : "Unknown notification error",
+      },
+      "error",
+    );
+  }
 }

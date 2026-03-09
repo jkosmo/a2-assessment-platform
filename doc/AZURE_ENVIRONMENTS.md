@@ -43,6 +43,7 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
+- `PARTICIPANT_NOTIFICATION_WEBHOOK_URL` (optional; required when channel=`webhook`)
 - Variables:
 - `AZURE_LOCATION`
 - `AZURE_RESOURCE_GROUP`
@@ -64,6 +65,8 @@ For each environment, define variables/secrets used by workflow:
 - `LATENCY_ALERT_THRESHOLD_SECONDS` (optional, default `3`)
 - `APPEAL_OVERDUE_ALERT_THRESHOLD` (optional, default `1`)
 - `APPEAL_SLA_MONITOR_INTERVAL_MS` (optional, default `600000`)
+- `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, default `log`)
+- `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS` (optional, default `5000`)
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
 
