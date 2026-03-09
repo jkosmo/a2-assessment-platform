@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.42 - 2026-03-09
+### Summary
+Simplified participant flow between MCQ and assessment by starting assessment automatically after MCQ submission, showing countdown-based progress, and auto-loading result when ready.
+
+### Included
+- Auto assessment flow in participant UI:
+  - `public/participant.js`
+  - After `Send MCQ`, UI now automatically:
+    - starts assessment (`POST /api/assessments/:submissionId/run`)
+    - polls status on interval
+    - shows countdown/status text inline in assessment section
+    - fetches and renders result automatically when ready
+- Improved MCQ transition clarity:
+  - keeps last `Attempt ID` visible after MCQ submit instead of resetting to `-`.
+- New config-driven participant flow settings:
+  - `src/config/participantConsole.ts`
+  - `config/participant-console.json`
+  - `flow.autoStartAfterMcq`
+  - `flow.pollIntervalSeconds`
+  - `flow.maxWaitSeconds`
+- Localization updates for auto-assessment status texts:
+  - `public/i18n/participant-translations.js` (`en-GB`, `nb`, `nn`)
+- Documentation and tests:
+  - `README.md` updated with new `flow.*` config keys.
+  - `test/participant-console-config.test.ts` updated to verify `flow` runtime config payload.
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.41 - 2026-03-09
 ### Summary
 Hardened participant flow sequencing and feedback, localized more of the result summary, and made test-console identities config-driven per workspace.

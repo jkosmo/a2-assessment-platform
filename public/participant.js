@@ -73,6 +73,11 @@ let participantRuntimeConfig = {
     availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
     defaultStatuses: ["OPEN", "IN_REVIEW"],
   },
+  flow: {
+    autoStartAfterMcq: true,
+    pollIntervalSeconds: 2,
+    maxWaitSeconds: 90,
+  },
   identityDefaults: {
     participant: {
       userId: "participant-1",
@@ -95,6 +100,13 @@ let flowState = {
 };
 let latestAppeal = null;
 let assessmentProgressKey = "assessment.progress.idle";
+let assessmentProgressDetailKey = "";
+let assessmentProgressDetailCountdown = null;
+let autoAssessmentTicker = null;
+let autoAssessmentSubmissionId = "";
+let autoAssessmentElapsedSeconds = 0;
+let autoAssessmentNextPollInSeconds = 0;
+let autoAssessmentRequestInFlight = false;
 
 const defaultFieldBindings = [
   { id: "rawText", key: "defaults.rawText" },
@@ -292,6 +304,7 @@ function renderModules() {
 }
 
 function resetFlowStateForModuleContext() {
+  stopAutoAssessmentLoop(true);
   flowState = {
     hasSubmission: false,
     hasMcqSubmission: false,
@@ -300,6 +313,7 @@ function resetFlowStateForModuleContext() {
   };
   latestAppeal = null;
   assessmentProgressKey = "assessment.progress.idle";
+  setAssessmentProgressDetail();
   submissionIdLabel.textContent = "-";
   attemptIdLabel.textContent = "-";
   appealIdLabel.textContent = "-";
@@ -332,6 +346,132 @@ function renderFlowGating() {
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
   appealGateHint.textContent = t(gate.appealHintKey);
   renderAppealState();
+}
+
+function getFlowSettings() {
+  const configured = participantRuntimeConfig?.flow ?? {};
+  const pollIntervalSeconds = Math.max(1, Math.min(30, Number(configured.pollIntervalSeconds) || 2));
+  const maxWaitSeconds = Math.max(pollIntervalSeconds, Math.min(600, Number(configured.maxWaitSeconds) || 90));
+  return {
+    autoStartAfterMcq: configured.autoStartAfterMcq !== false,
+    pollIntervalSeconds,
+    maxWaitSeconds,
+  };
+}
+
+function setAssessmentProgressDetail(detailKey = "", countdown = null) {
+  assessmentProgressDetailKey = detailKey;
+  assessmentProgressDetailCountdown = typeof countdown === "number" ? Math.max(0, Math.floor(countdown)) : null;
+}
+
+function stopAutoAssessmentLoop(clearDetail = true) {
+  if (autoAssessmentTicker) {
+    clearInterval(autoAssessmentTicker);
+    autoAssessmentTicker = null;
+  }
+  autoAssessmentSubmissionId = "";
+  autoAssessmentElapsedSeconds = 0;
+  autoAssessmentNextPollInSeconds = 0;
+  autoAssessmentRequestInFlight = false;
+
+  if (clearDetail) {
+    setAssessmentProgressDetail();
+    renderAssessmentProgress();
+  }
+}
+
+function isAssessmentResultReady(status) {
+  const normalized = typeof status === "string" ? status.toUpperCase() : "";
+  return normalized === "COMPLETED" || normalized === "UNDER_REVIEW" || normalized === "SCORED";
+}
+
+async function startAutomaticAssessmentFlow(submissionId) {
+  const settings = getFlowSettings();
+  if (!settings.autoStartAfterMcq || !submissionId || submissionId === "-") {
+    return;
+  }
+
+  stopAutoAssessmentLoop(true);
+  autoAssessmentSubmissionId = submissionId;
+  autoAssessmentElapsedSeconds = 0;
+  autoAssessmentNextPollInSeconds = settings.pollIntervalSeconds;
+
+  assessmentProgressKey = "assessment.progress.waiting";
+  setAssessmentProgressDetail("assessment.auto.starting");
+  renderAssessmentProgress();
+
+  try {
+    await api(`/api/assessments/${submissionId}/run`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  } catch (error) {
+    setAssessmentProgressDetail("assessment.auto.failedStart");
+    renderAssessmentProgress();
+    throw error;
+  }
+
+  flowState = {
+    ...flowState,
+    assessmentQueued: true,
+  };
+  setAssessmentProgressDetail("assessment.auto.started", settings.pollIntervalSeconds);
+  renderAssessmentProgress();
+  renderFlowGating();
+
+  autoAssessmentTicker = setInterval(async () => {
+    if (autoAssessmentRequestInFlight || autoAssessmentSubmissionId !== submissionId) {
+      return;
+    }
+
+    autoAssessmentElapsedSeconds += 1;
+    const remainingWaitSeconds = settings.maxWaitSeconds - autoAssessmentElapsedSeconds;
+    if (remainingWaitSeconds <= 0) {
+      stopAutoAssessmentLoop(false);
+      setAssessmentProgressDetail("assessment.auto.timeout");
+      renderAssessmentProgress();
+      return;
+    }
+
+    autoAssessmentNextPollInSeconds = Math.max(0, autoAssessmentNextPollInSeconds - 1);
+    setAssessmentProgressDetail("assessment.auto.nextCheckPrefix", autoAssessmentNextPollInSeconds);
+    renderAssessmentProgress();
+
+    if (autoAssessmentNextPollInSeconds > 0) {
+      return;
+    }
+
+    autoAssessmentNextPollInSeconds = settings.pollIntervalSeconds;
+    autoAssessmentRequestInFlight = true;
+
+    try {
+      const assessmentBody = await api(`/api/assessments/${submissionId}`);
+      assessmentProgressKey = deriveAssessmentProgressKeyFromSubmissionStatus(
+        assessmentBody.submissionStatus,
+        assessmentBody.latestJob?.status,
+      );
+      renderAssessmentProgress();
+
+      if (!isAssessmentResultReady(assessmentBody.submissionStatus)) {
+        return;
+      }
+
+      const resultBody = await api(`/api/submissions/${submissionId}/result`);
+      renderResultSummary(resultBody);
+      flowState = {
+        ...flowState,
+        resultStatus: typeof resultBody.status === "string" ? resultBody.status : null,
+      };
+      setAssessmentProgressDetail("assessment.auto.resultLoaded");
+      renderAssessmentProgress();
+      renderFlowGating();
+      stopAutoAssessmentLoop(false);
+    } catch (error) {
+      log(error.message);
+    } finally {
+      autoAssessmentRequestInFlight = false;
+    }
+  }, 1000);
 }
 
 function getDraftSettings() {
@@ -548,6 +688,10 @@ async function loadParticipantConsoleConfig() {
       drafts: {
         ...participantRuntimeConfig.drafts,
         ...(body?.drafts ?? {}),
+      },
+      flow: {
+        ...participantRuntimeConfig.flow,
+        ...(body?.flow ?? {}),
       },
     };
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
@@ -790,7 +934,19 @@ function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus
 }
 
 function renderAssessmentProgress() {
-  assessmentProgressStatus.textContent = t(assessmentProgressKey);
+  const base = t(assessmentProgressKey);
+  if (!assessmentProgressDetailKey) {
+    assessmentProgressStatus.textContent = base;
+    return;
+  }
+
+  const detail = t(assessmentProgressDetailKey);
+  if (typeof assessmentProgressDetailCountdown === "number") {
+    assessmentProgressStatus.textContent = `${base} ${detail} ${assessmentProgressDetailCountdown}s`;
+    return;
+  }
+
+  assessmentProgressStatus.textContent = `${base} ${detail}`;
 }
 
 function renderAppealState() {
@@ -940,8 +1096,10 @@ createSubmissionButton.addEventListener("click", async () => {
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
+      stopAutoAssessmentLoop(true);
       latestAppeal = null;
       assessmentProgressKey = "assessment.progress.idle";
+      setAssessmentProgressDetail();
       renderResultSummary(null);
       flowState = {
         hasSubmission: true,
@@ -1008,18 +1166,21 @@ submitMcqButton.addEventListener("click", async () => {
         }),
       });
       currentQuestions = [];
-      attemptIdLabel.textContent = "-";
       renderQuestions();
       flowState = {
         ...flowState,
         hasMcqSubmission: true,
-        assessmentQueued: false,
+        assessmentQueued: getFlowSettings().autoStartAfterMcq,
         resultStatus: null,
       };
       assessmentProgressKey = "assessment.progress.idle";
+      setAssessmentProgressDetail();
       renderAssessmentProgress();
       renderFlowGating();
       persistCurrentModuleDraft(true);
+      if (getFlowSettings().autoStartAfterMcq) {
+        await startAutomaticAssessmentFlow(submissionId);
+      }
       log(body);
     } catch (error) {
       log(error.message);
@@ -1030,6 +1191,7 @@ submitMcqButton.addEventListener("click", async () => {
 queueAssessmentButton.addEventListener("click", async () => {
   await runWithBusyButton(queueAssessmentButton, async () => {
     try {
+      stopAutoAssessmentLoop(true);
       const submissionId = submissionIdLabel.textContent;
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
@@ -1043,6 +1205,7 @@ queueAssessmentButton.addEventListener("click", async () => {
         assessmentQueued: true,
       };
       assessmentProgressKey = "assessment.progress.waiting";
+      setAssessmentProgressDetail();
       renderAssessmentProgress();
       renderFlowGating();
       log(body);
@@ -1064,6 +1227,7 @@ checkAssessmentButton.addEventListener("click", async () => {
         body.submissionStatus,
         body.latestJob?.status,
       );
+      setAssessmentProgressDetail();
       renderAssessmentProgress();
       log(body);
     } catch (error) {
@@ -1075,6 +1239,7 @@ checkAssessmentButton.addEventListener("click", async () => {
 checkResultButton.addEventListener("click", async () => {
   await runWithBusyButton(checkResultButton, async () => {
     try {
+      stopAutoAssessmentLoop(true);
       const submissionId = submissionIdLabel.textContent;
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
@@ -1179,6 +1344,7 @@ ackCheckbox.addEventListener("change", () => {
 });
 
 window.addEventListener("beforeunload", () => {
+  stopAutoAssessmentLoop(false);
   persistCurrentModuleDraft(false);
 });
 

@@ -17,6 +17,11 @@
     "defaultStatuses": ["OPEN", "IN_REVIEW"],
     "queuePageSize": 50
   },
+  "flow": {
+    "autoStartAfterMcq": true,
+    "pollIntervalSeconds": 2,
+    "maxWaitSeconds": 90
+  },
   "identityDefaults": {
     "participant": {
       "userId": "participant-1",

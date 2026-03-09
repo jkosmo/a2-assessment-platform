@@ -36,6 +36,11 @@ const participantConsoleConfigSchema = z.object({
       .min(1),
     queuePageSize: z.number().int().min(1).max(200).default(50),
   }),
+  flow: z.object({
+    autoStartAfterMcq: z.boolean().default(true),
+    pollIntervalSeconds: z.number().int().min(1).max(30).default(2),
+    maxWaitSeconds: z.number().int().min(5).max(600).default(90),
+  }),
   identityDefaults: z
     .object({
       participant: consoleIdentitySchema,
@@ -52,6 +57,7 @@ export type ParticipantConsoleRuntimeConfig = {
   mockRolePresets: ParticipantConsoleConfig["mockRolePresets"];
   drafts: ParticipantConsoleConfig["drafts"];
   appealWorkspace: ParticipantConsoleConfig["appealWorkspace"];
+  flow: ParticipantConsoleConfig["flow"];
   identityDefaults?: ParticipantConsoleConfig["identityDefaults"];
 };
 
@@ -76,6 +82,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     mockRolePresets: config.mockRolePresets,
     drafts: config.drafts,
     appealWorkspace: config.appealWorkspace,
+    flow: config.flow,
     identityDefaults: config.identityDefaults,
   };
 }

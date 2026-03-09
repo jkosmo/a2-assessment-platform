@@ -26,6 +26,11 @@ describe("participant console runtime config", () => {
       defaultStatuses: ["OPEN", "IN_REVIEW"],
       queuePageSize: 50,
     });
+    expect(response.body.flow).toEqual({
+      autoStartAfterMcq: true,
+      pollIntervalSeconds: 2,
+      maxWaitSeconds: 90,
+    });
     expect(response.body.identityDefaults).toEqual({
       participant: {
         userId: "participant-1",
