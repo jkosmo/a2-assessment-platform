@@ -7,7 +7,6 @@ import {
   pruneExpiredModuleDrafts,
   resolveRoleSwitchState,
   resolveSelectedModule,
-  sanitizeAppealStatuses,
   upsertModuleDraft,
 } from "/static/participant-console-state.js";
 
@@ -30,8 +29,17 @@ const resultSummary = document.getElementById("resultSummary");
 const historySummary = document.getElementById("historySummary");
 const draftStatus = document.getElementById("draftStatus");
 const clearDraftButton = document.getElementById("clearDraft");
+const loadMeButton = document.getElementById("loadMe");
+const loadModulesButton = document.getElementById("loadModules");
+const createSubmissionButton = document.getElementById("createSubmission");
+const startMcqButton = document.getElementById("startMcq");
+const submitMcqButton = document.getElementById("submitMcq");
+const loadHistoryButton = document.getElementById("loadHistory");
 const assessmentSection = document.getElementById("assessmentSection");
 const appealSection = document.getElementById("appealSection");
+const submissionSection = document.getElementById("submissionSection");
+const mcqSection = document.getElementById("mcqSection");
+const moduleSelectionHint = document.getElementById("moduleSelectionHint");
 const assessmentGateHint = document.getElementById("assessmentGateHint");
 const checkAssessmentHint = document.getElementById("checkAssessmentHint");
 const appealGateHint = document.getElementById("appealGateHint");
@@ -39,17 +47,6 @@ const queueAssessmentButton = document.getElementById("queueAssessment");
 const checkAssessmentButton = document.getElementById("checkAssessment");
 const checkResultButton = document.getElementById("checkResult");
 const createAppealButton = document.getElementById("createAppeal");
-const appealHandlerStatusFilter = document.getElementById("appealHandlerStatusFilter");
-const handlerSelectedAppealIdInput = document.getElementById("handlerSelectedAppealId");
-const loadAppealQueueButton = document.getElementById("loadAppealQueue");
-const appealQueueList = document.getElementById("appealQueueList");
-const appealHandlerDetails = document.getElementById("appealHandlerDetails");
-const claimAppealButton = document.getElementById("claimAppeal");
-const resolveAppealButton = document.getElementById("resolveAppeal");
-const handlerDecisionReasonInput = document.getElementById("handlerDecisionReason");
-const handlerResolutionNoteInput = document.getElementById("handlerResolutionNote");
-const handlerPassFailTotalInput = document.getElementById("handlerPassFailTotal");
-const appealHandlerMessage = document.getElementById("appealHandlerMessage");
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
@@ -79,8 +76,6 @@ let flowState = {
   assessmentQueued: false,
   resultStatus: null,
 };
-let latestAppealQueue = [];
-let selectedAppealId = "";
 
 const defaultFieldBindings = [
   { id: "rawText", key: "defaults.rawText" },
@@ -156,9 +151,6 @@ function applyTranslations() {
 
   const selectedTitle = resolveSelectedModule(loadedModules, selectedModuleId)?.title ?? "";
   setDraftStatus(draftStatus.dataset.state ?? "none", selectedTitle);
-  if (!selectedAppealId) {
-    renderAppealHandlerDetails(null);
-  }
   renderFlowGating();
 }
 
@@ -196,6 +188,13 @@ function renderSelectedModuleSummary() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   selectedModuleIdInput.value = selectedModule?.id ?? "";
   selectedModuleDisplay.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
+  updateModuleSelectionVisibility(Boolean(selectedModule));
+}
+
+function updateModuleSelectionVisibility(hasSelectedModule) {
+  submissionSection.classList.toggle("hidden", !hasSelectedModule);
+  mcqSection.classList.toggle("hidden", !hasSelectedModule);
+  moduleSelectionHint.hidden = hasSelectedModule;
 }
 
 function renderModules() {
@@ -488,7 +487,6 @@ async function loadParticipantConsoleConfig() {
   }
 
   renderRolePresetControl();
-  populateAppealStatusFilters();
 }
 
 function headers() {
@@ -533,6 +531,28 @@ async function api(url, options = {}) {
     throw new Error(`${response.status}: ${JSON.stringify(body)}`);
   }
   return body;
+}
+
+async function runWithBusyButton(button, action, after = () => {}) {
+  if (!button || button.dataset.busy === "true") {
+    return;
+  }
+
+  const wasDisabled = button.disabled;
+  button.dataset.busy = "true";
+  button.disabled = true;
+  button.classList.add("button-busy");
+  button.setAttribute("aria-busy", "true");
+
+  try {
+    await action();
+  } finally {
+    button.dataset.busy = "";
+    button.classList.remove("button-busy");
+    button.removeAttribute("aria-busy");
+    button.disabled = wasDisabled;
+    after();
+  }
 }
 
 async function loadVersion() {
@@ -628,424 +648,247 @@ function renderHistorySummary(body) {
   historySummary.textContent = lines.join("\n").trim();
 }
 
-function toActionableErrorMessage(error) {
-  if (!(error instanceof Error)) {
-    return "Unexpected error.";
-  }
-
-  const raw = error.message ?? "";
-  const splitIndex = raw.indexOf(":");
-  if (splitIndex === -1) {
-    return raw;
-  }
-
-  const payloadText = raw.slice(splitIndex + 1).trim();
-  try {
-    const payload = JSON.parse(payloadText);
-    if (typeof payload.message === "string" && payload.message.trim().length > 0) {
-      return payload.message;
+loadMeButton.addEventListener("click", async () => {
+  await runWithBusyButton(loadMeButton, async () => {
+    try {
+      const body = await api("/api/me");
+      log(body);
+    } catch (error) {
+      log(error.message);
     }
-    if (payload.error === "validation_error" && Array.isArray(payload.issues)) {
-      return payload.issues
-        .map((issue) => {
-          const path = Array.isArray(issue.path) ? issue.path.join(".") : "";
-          return `${path || "field"}: ${issue.message ?? "invalid value"}`;
-        })
-        .join("; ");
-    }
-    return raw;
-  } catch {
-    return raw;
-  }
-}
-
-function getAppealWorkspaceSettings() {
-  const configured = participantRuntimeConfig?.appealWorkspace ?? {};
-  const availableStatuses = sanitizeAppealStatuses(configured.availableStatuses, [
-    "OPEN",
-    "IN_REVIEW",
-    "RESOLVED",
-  ]);
-  const defaultStatuses = sanitizeAppealStatuses(configured.defaultStatuses, ["OPEN", "IN_REVIEW"])
-    .filter((status) => availableStatuses.includes(status));
-
-  return {
-    availableStatuses,
-    defaultStatuses: defaultStatuses.length > 0 ? defaultStatuses : availableStatuses.slice(0, 1),
-  };
-}
-
-function populateAppealStatusFilters() {
-  const settings = getAppealWorkspaceSettings();
-  appealHandlerStatusFilter.innerHTML = "";
-
-  for (const status of settings.availableStatuses) {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = status;
-    option.selected = settings.defaultStatuses.includes(status);
-    appealHandlerStatusFilter.appendChild(option);
-  }
-}
-
-function getSelectedAppealStatuses() {
-  const selected = Array.from(appealHandlerStatusFilter.selectedOptions).map((option) => option.value);
-  if (selected.length > 0) {
-    return selected;
-  }
-
-  return getAppealWorkspaceSettings().defaultStatuses;
-}
-
-function renderAppealHandlerDetails(appeal) {
-  if (!appeal) {
-    appealHandlerDetails.textContent = t("appealHandler.noSelection");
-    return;
-  }
-
-  const lines = [
-    `appealId: ${appeal.id}`,
-    `status: ${appeal.appealStatus}`,
-    `submissionId: ${appeal.submission?.id ?? "-"}`,
-    `createdAt: ${formatDateTime(appeal.createdAt)}`,
-    `claimedAt: ${formatDateTime(appeal.claimedAt)}`,
-    `resolvedAt: ${formatDateTime(appeal.resolvedAt)}`,
-    `handlerId: ${appeal.handlerId ?? "-"}`,
-    `resolutionNote: ${appeal.resolutionNote ?? "-"}`,
-  ];
-  appealHandlerDetails.textContent = lines.join("\n");
-}
-
-function renderAppealQueueList() {
-  appealQueueList.innerHTML = "";
-  if (!Array.isArray(latestAppealQueue) || latestAppealQueue.length === 0) {
-    handlerSelectedAppealIdInput.value = "-";
-    selectedAppealId = "";
-    renderAppealHandlerDetails(null);
-    appealHandlerMessage.textContent = t("appealHandler.queueEmpty");
-    return;
-  }
-
-  for (const appeal of latestAppealQueue) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = appeal.id === selectedAppealId ? "appeal-row selected" : "appeal-row";
-    button.addEventListener("click", () => {
-      selectedAppealId = appeal.id;
-      handlerSelectedAppealIdInput.value = appeal.id;
-      renderAppealQueueList();
-      renderAppealHandlerDetails(appeal);
-    });
-
-    button.textContent =
-      `${appeal.id} | ${appeal.appealStatus} | ` +
-      `created ${formatDateTime(appeal.createdAt)} | ` +
-      `claimed ${formatDateTime(appeal.claimedAt)} | ` +
-      `resolved ${formatDateTime(appeal.resolvedAt)}`;
-
-    appealQueueList.appendChild(button);
-  }
-
-  if (!selectedAppealId || !latestAppealQueue.some((item) => item.id === selectedAppealId)) {
-    selectedAppealId = latestAppealQueue[0].id;
-  }
-
-  const selectedAppeal = latestAppealQueue.find((item) => item.id === selectedAppealId);
-  handlerSelectedAppealIdInput.value = selectedAppeal?.id ?? "-";
-  renderAppealHandlerDetails(selectedAppeal ?? null);
-}
-
-async function loadAppealQueue() {
-  try {
-    const statuses = getSelectedAppealStatuses();
-    const body = await api(`/api/appeals?status=${encodeURIComponent(statuses.join(","))}`);
-    latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
-    renderAppealQueueList();
-    if (latestAppealQueue.length > 0) {
-      appealHandlerMessage.textContent = `${latestAppealQueue.length} appeal(s) loaded.`;
-    }
-    log(body);
-  } catch (error) {
-    appealHandlerMessage.textContent = toActionableErrorMessage(error);
-    log(error.message);
-  }
-}
-
-document.getElementById("loadMe").addEventListener("click", async () => {
-  try {
-    const body = await api("/api/me");
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
+  });
 });
 
-document.getElementById("loadModules").addEventListener("click", async () => {
-  try {
-    const body = await api("/api/modules");
-    loadedModules = Array.isArray(body.modules) ? body.modules : [];
-    if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
-      selectedModuleId = "";
-      resetFlowStateForModuleContext();
+loadModulesButton.addEventListener("click", async () => {
+  await runWithBusyButton(loadModulesButton, async () => {
+    try {
+      const body = await api("/api/modules");
+      loadedModules = Array.isArray(body.modules) ? body.modules : [];
+      if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
+        selectedModuleId = "";
+        resetFlowStateForModuleContext();
+      }
+      renderModules();
+      renderSelectedModuleSummary();
+      if (selectedModuleId) {
+        restoreDraftForSelectedModule(false);
+      }
+      log(body);
+    } catch (error) {
+      log(error.message);
     }
-    renderModules();
-    renderSelectedModuleSummary();
-    if (selectedModuleId) {
-      restoreDraftForSelectedModule(false);
-    }
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
+  });
 });
 
-document.getElementById("createSubmission").addEventListener("click", async () => {
-  try {
-    const moduleId = selectedModuleId;
-    if (!moduleId) {
-      throw new Error(t("errors.selectModuleFirst"));
-    }
-    const body = await api("/api/submissions", {
-      method: "POST",
-      body: JSON.stringify({
-        moduleId,
-        deliveryType: "text",
-        rawText: document.getElementById("rawText").value,
-        reflectionText: document.getElementById("reflectionText").value,
-        promptExcerpt: document.getElementById("promptExcerpt").value,
-        responsibilityAcknowledged: document.getElementById("ack").checked,
-      }),
-    });
-    submissionIdLabel.textContent = body.submission.id;
-    flowState = {
-      hasSubmission: true,
-      hasMcqSubmission: false,
-      assessmentQueued: false,
-      resultStatus: null,
-    };
-    renderFlowGating();
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("startMcq").addEventListener("click", async () => {
-  try {
-    const moduleId = selectedModuleId;
-    const submissionId = submissionIdLabel.textContent;
-    if (!moduleId || !submissionId || submissionId === "-") {
-      throw new Error(t("errors.createSubmissionFirst"));
-    }
-    const body = await api(
-      `/api/modules/${moduleId}/mcq/start?submissionId=${encodeURIComponent(submissionId)}`,
-    );
-    attemptIdLabel.textContent = body.attemptId;
-    currentQuestions = body.questions;
-    renderQuestions();
-    scheduleDraftAutosave();
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("submitMcq").addEventListener("click", async () => {
-  try {
-    const moduleId = selectedModuleId;
-    const submissionId = submissionIdLabel.textContent;
-    const attemptId = attemptIdLabel.textContent;
-    if (!moduleId || !submissionId || !attemptId || attemptId === "-") {
-      throw new Error(t("errors.startMcqFirst"));
-    }
-
-    const responses = currentQuestions.map((q) => {
-      const selected = document.querySelector(`input[name='q_${q.id}']:checked`);
-      return {
-        questionId: q.id,
-        selectedAnswer: selected ? selected.value : "",
+createSubmissionButton.addEventListener("click", async () => {
+  await runWithBusyButton(createSubmissionButton, async () => {
+    try {
+      const moduleId = selectedModuleId;
+      if (!moduleId) {
+        throw new Error(t("errors.selectModuleFirst"));
+      }
+      const body = await api("/api/submissions", {
+        method: "POST",
+        body: JSON.stringify({
+          moduleId,
+          deliveryType: "text",
+          rawText: document.getElementById("rawText").value,
+          reflectionText: document.getElementById("reflectionText").value,
+          promptExcerpt: document.getElementById("promptExcerpt").value,
+          responsibilityAcknowledged: document.getElementById("ack").checked,
+        }),
+      });
+      submissionIdLabel.textContent = body.submission.id;
+      flowState = {
+        hasSubmission: true,
+        hasMcqSubmission: false,
+        assessmentQueued: false,
+        resultStatus: null,
       };
-    });
+      renderFlowGating();
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  });
+});
 
-    const body = await api(`/api/modules/${moduleId}/mcq/submit`, {
-      method: "POST",
-      body: JSON.stringify({
-        submissionId,
-        attemptId,
-        responses,
-      }),
-    });
+startMcqButton.addEventListener("click", async () => {
+  await runWithBusyButton(startMcqButton, async () => {
+    try {
+      const moduleId = selectedModuleId;
+      const submissionId = submissionIdLabel.textContent;
+      if (!moduleId || !submissionId || submissionId === "-") {
+        throw new Error(t("errors.createSubmissionFirst"));
+      }
+      const body = await api(
+        `/api/modules/${moduleId}/mcq/start?submissionId=${encodeURIComponent(submissionId)}`,
+      );
+      attemptIdLabel.textContent = body.attemptId;
+      currentQuestions = body.questions;
+      renderQuestions();
+      scheduleDraftAutosave();
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  });
+});
+
+submitMcqButton.addEventListener("click", async () => {
+  await runWithBusyButton(submitMcqButton, async () => {
+    try {
+      const moduleId = selectedModuleId;
+      const submissionId = submissionIdLabel.textContent;
+      const attemptId = attemptIdLabel.textContent;
+      if (!moduleId || !submissionId || !attemptId || attemptId === "-") {
+        throw new Error(t("errors.startMcqFirst"));
+      }
+
+      const responses = currentQuestions.map((q) => {
+        const selected = document.querySelector(`input[name='q_${q.id}']:checked`);
+        return {
+          questionId: q.id,
+          selectedAnswer: selected ? selected.value : "",
+        };
+      });
+
+      const body = await api(`/api/modules/${moduleId}/mcq/submit`, {
+        method: "POST",
+        body: JSON.stringify({
+          submissionId,
+          attemptId,
+          responses,
+        }),
+      });
+      currentQuestions = [];
+      attemptIdLabel.textContent = "-";
+      renderQuestions();
+      flowState = {
+        ...flowState,
+        hasMcqSubmission: true,
+        assessmentQueued: false,
+        resultStatus: null,
+      };
+      renderFlowGating();
+      persistCurrentModuleDraft(true);
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  });
+});
+
+queueAssessmentButton.addEventListener("click", async () => {
+  await runWithBusyButton(queueAssessmentButton, async () => {
+    try {
+      const submissionId = submissionIdLabel.textContent;
+      if (!submissionId || submissionId === "-") {
+        throw new Error(t("errors.createSubmissionFirst"));
+      }
+      const body = await api(`/api/assessments/${submissionId}/run`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      flowState = {
+        ...flowState,
+        assessmentQueued: true,
+      };
+      renderFlowGating();
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  }, renderFlowGating);
+});
+
+checkAssessmentButton.addEventListener("click", async () => {
+  await runWithBusyButton(checkAssessmentButton, async () => {
+    try {
+      const submissionId = submissionIdLabel.textContent;
+      if (!submissionId || submissionId === "-") {
+        throw new Error(t("errors.createSubmissionFirst"));
+      }
+      const body = await api(`/api/assessments/${submissionId}`);
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  }, renderFlowGating);
+});
+
+checkResultButton.addEventListener("click", async () => {
+  await runWithBusyButton(checkResultButton, async () => {
+    try {
+      const submissionId = submissionIdLabel.textContent;
+      if (!submissionId || submissionId === "-") {
+        throw new Error(t("errors.createSubmissionFirst"));
+      }
+      const body = await api(`/api/submissions/${submissionId}/result`);
+      renderResultSummary(body);
+      flowState = {
+        ...flowState,
+        resultStatus: typeof body.status === "string" ? body.status : null,
+      };
+      renderFlowGating();
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  }, renderFlowGating);
+});
+
+createAppealButton.addEventListener("click", async () => {
+  await runWithBusyButton(createAppealButton, async () => {
+    try {
+      const submissionId = submissionIdLabel.textContent;
+      if (!submissionId || submissionId === "-") {
+        throw new Error(t("errors.createSubmissionFirst"));
+      }
+      const appealReason = document.getElementById("appealReason").value;
+      const body = await api(`/api/submissions/${submissionId}/appeals`, {
+        method: "POST",
+        body: JSON.stringify({ appealReason }),
+      });
+      appealIdLabel.textContent = body.appeal.id;
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  }, renderFlowGating);
+});
+
+loadHistoryButton.addEventListener("click", async () => {
+  await runWithBusyButton(loadHistoryButton, async () => {
+    try {
+      const body = await api("/api/submissions/history?limit=20");
+      renderHistorySummary(body);
+      log(body);
+    } catch (error) {
+      log(error.message);
+    }
+  });
+});
+
+clearDraftButton.addEventListener("click", async () => {
+  await runWithBusyButton(clearDraftButton, async () => {
+    const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+    if (!selectedModule) {
+      setDraftStatus("none", "");
+      return;
+    }
+
+    const moduleDrafts = readModuleDraftMap();
+    delete moduleDrafts[selectedModule.id];
+    writeModuleDraftMap(moduleDrafts);
+
+    resetModuleDraftInputsToDefaultLocaleValues();
     currentQuestions = [];
     attemptIdLabel.textContent = "-";
     renderQuestions();
-    flowState = {
-      ...flowState,
-      hasMcqSubmission: true,
-      assessmentQueued: false,
-      resultStatus: null,
-    };
-    renderFlowGating();
-    persistCurrentModuleDraft(true);
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("queueAssessment").addEventListener("click", async () => {
-  try {
-    const submissionId = submissionIdLabel.textContent;
-    if (!submissionId || submissionId === "-") {
-      throw new Error(t("errors.createSubmissionFirst"));
-    }
-    const body = await api(`/api/assessments/${submissionId}/run`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    flowState = {
-      ...flowState,
-      assessmentQueued: true,
-    };
-    renderFlowGating();
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("checkAssessment").addEventListener("click", async () => {
-  try {
-    const submissionId = submissionIdLabel.textContent;
-    if (!submissionId || submissionId === "-") {
-      throw new Error(t("errors.createSubmissionFirst"));
-    }
-    const body = await api(`/api/assessments/${submissionId}`);
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("checkResult").addEventListener("click", async () => {
-  try {
-    const submissionId = submissionIdLabel.textContent;
-    if (!submissionId || submissionId === "-") {
-      throw new Error(t("errors.createSubmissionFirst"));
-    }
-    const body = await api(`/api/submissions/${submissionId}/result`);
-    renderResultSummary(body);
-    flowState = {
-      ...flowState,
-      resultStatus: typeof body.status === "string" ? body.status : null,
-    };
-    renderFlowGating();
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("createAppeal").addEventListener("click", async () => {
-  try {
-    const submissionId = submissionIdLabel.textContent;
-    if (!submissionId || submissionId === "-") {
-      throw new Error(t("errors.createSubmissionFirst"));
-    }
-    const appealReason = document.getElementById("appealReason").value;
-    const body = await api(`/api/submissions/${submissionId}/appeals`, {
-      method: "POST",
-      body: JSON.stringify({ appealReason }),
-    });
-    appealIdLabel.textContent = body.appeal.id;
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-document.getElementById("loadHistory").addEventListener("click", async () => {
-  try {
-    const body = await api("/api/submissions/history?limit=20");
-    renderHistorySummary(body);
-    log(body);
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-clearDraftButton.addEventListener("click", () => {
-  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
-  if (!selectedModule) {
-    setDraftStatus("none", "");
-    return;
-  }
-
-  const moduleDrafts = readModuleDraftMap();
-  delete moduleDrafts[selectedModule.id];
-  writeModuleDraftMap(moduleDrafts);
-
-  resetModuleDraftInputsToDefaultLocaleValues();
-  currentQuestions = [];
-  attemptIdLabel.textContent = "-";
-  renderQuestions();
-  resetFlowStateForModuleContext();
-  setDraftStatus("cleared", selectedModule.title);
-});
-
-loadAppealQueueButton.addEventListener("click", async () => {
-  await loadAppealQueue();
-});
-
-appealHandlerStatusFilter.addEventListener("change", async () => {
-  await loadAppealQueue();
-});
-
-claimAppealButton.addEventListener("click", async () => {
-  if (!selectedAppealId) {
-    appealHandlerMessage.textContent = t("appealHandler.noSelection");
-    return;
-  }
-
-  try {
-    const body = await api(`/api/appeals/${selectedAppealId}/claim`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    appealHandlerMessage.textContent = t("appealHandler.claimed");
-    await loadAppealQueue();
-    renderAppealHandlerDetails(body.appeal);
-    log(body);
-  } catch (error) {
-    appealHandlerMessage.textContent = toActionableErrorMessage(error);
-    log(error.message);
-  }
-});
-
-resolveAppealButton.addEventListener("click", async () => {
-  if (!selectedAppealId) {
-    appealHandlerMessage.textContent = t("appealHandler.noSelection");
-    return;
-  }
-
-  try {
-    const body = await api(`/api/appeals/${selectedAppealId}/resolve`, {
-      method: "POST",
-      body: JSON.stringify({
-        passFailTotal: handlerPassFailTotalInput.value === "true",
-        decisionReason: handlerDecisionReasonInput.value,
-        resolutionNote: handlerResolutionNoteInput.value,
-      }),
-    });
-    appealHandlerMessage.textContent = t("appealHandler.resolved");
-    await loadAppealQueue();
-    if (body.appeal) {
-      renderAppealHandlerDetails(body.appeal);
-    }
-    log(body);
-  } catch (error) {
-    appealHandlerMessage.textContent = toActionableErrorMessage(error);
-    log(error.message);
-  }
+    resetFlowStateForModuleContext();
+    setDraftStatus("cleared", selectedModule.title);
+  });
 });
 
 localeSelect.addEventListener("change", () => {

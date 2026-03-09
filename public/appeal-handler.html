@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A2 Appeal Handler Workspace</title>
+    <style>
+      body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f7f8fb; color: #222; }
+      .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      label { display: block; margin-bottom: 6px; font-size: 13px; color: #444; }
+      input, textarea, select, button { width: 100%; padding: 8px; box-sizing: border-box; }
+      button { cursor: pointer; }
+      .small { font-size: 12px; color: #666; }
+      .inline { display: inline-block; width: auto; }
+      .button-busy { opacity: 0.75; position: relative; }
+      .button-busy::after { content: " ..."; }
+      .queue-table-wrap { overflow-x: auto; border: 1px solid #d8dfeb; border-radius: 8px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
+      table { width: 100%; border-collapse: collapse; min-width: 980px; }
+      th, td { border-bottom: 1px solid #ebeff5; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
+      tr.selected { background: #eef4ff; }
+      tr:hover { background: #f8fbff; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
+      .queue-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: end; }
+    </style>
+  </head>
+  <body>
+    <h1 data-i18n="appealPage.title"></h1>
+    <p class="small" data-i18n="appealPage.subtitle"></p>
+    <p class="small"><span data-i18n="appealPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <p class="small"><a href="/participant" data-i18n="appealPage.participantLink"></a></p>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <label for="localeSelect" data-i18n="locale.label"></label>
+          <select id="localeSelect"></select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="identity.title"></h3>
+      <div class="row">
+        <div><label data-i18n="identity.userId"></label><input id="userId" value="handler-1" /></div>
+        <div><label data-i18n="identity.email"></label><input id="email" value="appeal.handler@company.com" /></div>
+      </div>
+      <div class="row">
+        <div><label data-i18n="identity.name"></label><input id="name" value="Platform Appeal Handler" /></div>
+        <div><label data-i18n="identity.department"></label><input id="department" value="Quality" /></div>
+      </div>
+      <div>
+        <label data-i18n="identity.roles"></label>
+        <input id="roles" value="APPEAL_HANDLER" />
+      </div>
+      <div id="mockRolePresetContainer">
+        <label for="mockRolePreset" data-i18n="identity.rolePreset"></label>
+        <select id="mockRolePreset"></select>
+        <div class="small" id="mockRolePresetHint"></div>
+      </div>
+      <button id="loadMe" data-i18n="identity.loadMe"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="appealHandler.title"></h3>
+      <div class="queue-toolbar">
+        <div>
+          <label for="appealHandlerStatusFilter" data-i18n="appealHandler.statusFilter"></label>
+          <select id="appealHandlerStatusFilter" multiple size="4"></select>
+          <div class="small" data-i18n="appealHandler.statusHint"></div>
+        </div>
+        <div>
+          <label for="queueSearch" data-i18n="appealHandler.search"></label>
+          <input id="queueSearch" data-i18n-placeholder="appealHandler.searchPlaceholder" />
+        </div>
+        <div>
+          <label data-i18n="appealHandler.queueLimit"></label>
+          <input id="queueLimit" readonly value="50" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div><button id="loadAppealQueue" data-i18n="appealHandler.loadQueue"></button></div>
+        <div class="small"><span data-i18n="appealHandler.queueCount"></span> <strong id="queueCount">0</strong></div>
+      </div>
+      <div id="appealHandlerMessage" class="small"></div>
+      <div class="queue-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="appealHandler.table.appealId"></th>
+              <th data-i18n="appealHandler.table.status"></th>
+              <th data-i18n="appealHandler.table.participant"></th>
+              <th data-i18n="appealHandler.table.module"></th>
+              <th data-i18n="appealHandler.table.submittedAt"></th>
+              <th data-i18n="appealHandler.table.createdAt"></th>
+              <th data-i18n="appealHandler.table.claimedAt"></th>
+              <th data-i18n="appealHandler.table.resolvedAt"></th>
+              <th data-i18n="appealHandler.table.sla"></th>
+            </tr>
+          </thead>
+          <tbody id="appealQueueBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="appealHandler.detailsTitle"></h3>
+      <div><label data-i18n="appealHandler.selectedAppeal"></label><input id="handlerSelectedAppealId" readonly value="-" /></div>
+      <pre id="appealHandlerDetails"></pre>
+      <div><label data-i18n="appealHandler.resolveDecision"></label><textarea id="handlerDecisionReason" rows="2"></textarea></div>
+      <div><label data-i18n="appealHandler.resolveNote"></label><textarea id="handlerResolutionNote" rows="2"></textarea></div>
+      <div>
+        <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail"></label>
+        <select id="handlerPassFailTotal">
+          <option value="true" data-i18n="appealHandler.pass"></option>
+          <option value="false" data-i18n="appealHandler.fail"></option>
+        </select>
+      </div>
+      <div class="row">
+        <div><button id="claimAppeal" data-i18n="appealHandler.claim"></button></div>
+        <div><button id="resolveAppeal" data-i18n="appealHandler.resolve"></button></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="output.title"></h3>
+      <pre id="output"></pre>
+    </section>
+
+    <script src="/static/i18n/appeal-handler-translations.js" type="module"></script>
+    <script src="/static/appeal-handler.js" type="module"></script>
+  </body>
+</html>

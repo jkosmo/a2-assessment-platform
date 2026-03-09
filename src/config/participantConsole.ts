@@ -26,6 +26,7 @@ const participantConsoleConfigSchema = z.object({
     defaultStatuses: z
       .array(z.enum(["OPEN", "IN_REVIEW", "RESOLVED", "REJECTED"]))
       .min(1),
+    queuePageSize: z.number().int().min(1).max(200).default(50),
   }),
 });
 

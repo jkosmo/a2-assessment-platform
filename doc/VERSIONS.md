@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.39 - 2026-03-09
+### Summary
+Refined phase-2 participant and appeal-handler UX by separating role-specific workspaces, hardening module-selection flow, and preventing duplicate button submissions.
+
+### Included
+- Issue #51 follow-up (`mock` role switch):
+  - role-preset behavior reused in dedicated `/appeal-handler` workspace.
+  - added busy-state protection on identity/API action buttons to prevent accidental repeated requests.
+- Issue #49 follow-up (module selection UX hardening):
+  - `/participant` now hides `Submission` and `MCQ` sections until a module is selected.
+  - added explicit module-selection unlock hint in module section.
+- Issue #50 follow-up (module-scoped drafts):
+  - preserved module-scoped autosave/restore behavior while introducing module-dependent section visibility.
+- Issue #52 follow-up (progressive flow gating):
+  - async action buttons now use consistent in-flight busy/disabled state to reduce duplicate submissions/queue calls.
+- Issue #48 follow-up (appeal handler workspace):
+  - moved workspace out of `/participant` into dedicated `/appeal-handler` page.
+  - added queue table with search/filtering, configurable queue fetch limit, and clearer participant/timestamp visibility.
+  - added queue limit config key: `appealWorkspace.queuePageSize`.
+- Runtime/config/documentation updates:
+  - `src/app.ts` serves `/appeal-handler`.
+  - `src/config/participantConsole.ts` + `config/participant-console.json` include `queuePageSize`.
+  - docs updated in `README.md` and `doc/PHASE2_PARTICIPANT_UI_DESIGN.md`.
+- Automated tests:
+  - updated `test/participant-console-config.test.ts` for `queuePageSize`.
+  - added route coverage for `/appeal-handler`.
+
+### Notes
+- Backend appeal APIs are unchanged; this release is UI/workspace and runtime-config hardening.
+
 ## 0.3.38 - 2026-03-09
 ### Summary
 Hardened mock-identity reconciliation and non-production bootstrap seed resilience to recover from user identity conflicts and ensure module-seed completion.

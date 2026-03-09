@@ -98,7 +98,8 @@ npm run build
 - `POST /api/admin/content/modules/:moduleId/mcq-set-versions`
 - `POST /api/admin/content/modules/:moduleId/module-versions`
 - `POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish`
-- `GET /participant` (manual test UI)
+- `GET /participant` (manual participant test UI)
+- `GET /appeal-handler` (manual appeal-handler workspace UI)
 
 ## Auth modes
 - `AUTH_MODE=mock` (default for local development)
@@ -131,14 +132,19 @@ http://localhost:3000/participant
 - Check result
 - Create participant appeal (after `COMPLETED` result)
 
-4. Optional handler flow in same console (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
+4. Optional handler flow in dedicated workspace (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
+```text
+http://localhost:3000/appeal-handler
+```
 - Load appeal queue with status filters (`OPEN`, `IN_REVIEW`, optional `RESOLVED`)
-- Select an appeal and run `Claim Appeal`
+- Use queue search for participant/module/appeal filtering
+- Select an appeal row and run `Claim Appeal`
 - Resolve using decision reason + resolution note + pass/fail value
 
 Participant console behavior is config-driven via:
 - `config/participant-console.json`
 - env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
+- `appealWorkspace.queuePageSize` controls `/appeal-handler` queue fetch limit (max `200`)
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

@@ -14,6 +14,7 @@
   },
   "appealWorkspace": {
     "availableStatuses": ["OPEN", "IN_REVIEW", "RESOLVED"],
-    "defaultStatuses": ["OPEN", "IN_REVIEW"]
+    "defaultStatuses": ["OPEN", "IN_REVIEW"],
+    "queuePageSize": 50
   }
 }

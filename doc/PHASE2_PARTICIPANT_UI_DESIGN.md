@@ -99,3 +99,30 @@ Date: 2026-03-09
 ### Rollout and rollback
 - Rollout: additive test-console section that calls already-existing APIs.
 - Rollback: remove workspace section and retain participant appeal-create section only.
+
+## Follow-up refinement pass (2026-03-09, v0.3.39 target)
+
+### Issue #51 - Mock-mode role switch dropdown
+- Design check: keep one runtime config source (`GET /participant/config`) and reuse in both participant and handler UIs.
+- Refactor check: reuse existing role-switch helper functions; no backend role model changes needed.
+- Chosen approach: keep config contract stable and add busy-state on `Load /api/me` to avoid repeated clicks while request is in flight.
+
+### Issue #49 - Participant module selection UX hardening
+- Design check: module-specific actions should not appear before a module context exists.
+- Refactor check: use selected-module state already in place; avoid introducing extra client store.
+- Chosen approach: hide submission + MCQ sections until module is selected and show explicit unlock hint near module list.
+
+### Issue #50 - Module-scoped draft autosave and restore
+- Design check: hiding/showing module-dependent sections must not break module-scoped draft restore semantics.
+- Refactor check: retain existing storage envelope and helper utilities.
+- Chosen approach: keep draft model unchanged, only ensure module visibility changes do not mutate scoped draft keys or TTL behavior.
+
+### Issue #52 - Progressive flow gating
+- Design check: duplicate click protection should be aligned with existing gating rules, not separate hardcoded flags.
+- Refactor check: add a small reusable busy-button helper in UI, keep existing gate derivation logic.
+- Chosen approach: disable/mark active API buttons while requests run and restore gating state after completion.
+
+### Issue #48 - Appeal handler workspace
+- Design check: workspace is role-specific and should be isolated from participant flow.
+- Refactor check: split to dedicated `/appeal-handler` page while reusing shared config and role helper utilities.
+- Chosen approach: move handler UI out of `/participant`, add scalable queue table with search + configurable limit, and surface participant names with timestamps.

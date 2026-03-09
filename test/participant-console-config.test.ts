@@ -24,6 +24,14 @@ describe("participant console runtime config", () => {
     expect(response.body.appealWorkspace).toEqual({
       availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
       defaultStatuses: ["OPEN", "IN_REVIEW"],
+      queuePageSize: 50,
     });
+  });
+
+  it("serves dedicated appeal-handler workspace page", async () => {
+    const response = await request(app).get("/appeal-handler");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("appeal-handler.js");
   });
 });

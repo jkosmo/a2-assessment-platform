@@ -39,6 +39,10 @@ app.get("/participant", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant.html"));
 });
 
+app.get("/appeal-handler", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "appeal-handler.html"));
+});
+
 app.get("/participant/config", (_request, response) => {
   response.json(getParticipantConsoleRuntimeConfig());
 });

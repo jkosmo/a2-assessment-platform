@@ -24,15 +24,16 @@
       .selected-badge { display: inline-block; margin-top: 8px; font-size: 11px; font-weight: 600; color: #0d3f9e; }
       .selected-module-summary { border: 1px solid #cfd7e6; background: #f8fbff; border-radius: 8px; padding: 8px; min-height: 37px; }
       .section-locked { opacity: 0.75; }
-      .appeal-queue-list { display: grid; gap: 8px; margin-top: 10px; }
-      .appeal-row { text-align: left; border: 1px solid #ccd4e5; border-radius: 8px; background: #fbfcff; padding: 8px; }
-      .appeal-row.selected { border-color: #1c56c5; background: #eef4ff; }
+      .hidden { display: none; }
+      .button-busy { opacity: 0.75; position: relative; }
+      .button-busy::after { content: " ..."; }
     </style>
   </head>
   <body>
     <h1 data-i18n="page.title"></h1>
     <p class="small" data-i18n="page.subtitle"></p>
     <p class="small"><span data-i18n="page.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <p class="small"><a href="/appeal-handler" data-i18n="page.appealWorkspaceLink"></a></p>
     <div class="card">
       <div class="row">
         <div>
@@ -68,10 +69,11 @@
       <h3 data-i18n="modules.title"></h3>
       <button id="loadModules" data-i18n="modules.load"></button>
       <div class="small" data-i18n="modules.summaryHint"></div>
+      <div class="small" id="moduleSelectionHint" data-i18n="modules.selectToUnlock"></div>
       <div id="moduleList" class="module-list"></div>
     </section>
 
-    <section class="card">
+    <section class="card hidden" id="submissionSection">
       <h3 data-i18n="submission.title"></h3>
       <div>
         <label data-i18n="submission.selectedModule"></label>
@@ -88,7 +90,7 @@
       <div class="small"><span data-i18n="submission.submissionId"></span> <span id="submissionId">-</span></div>
     </section>
 
-    <section class="card">
+    <section class="card hidden" id="mcqSection">
       <h3 data-i18n="mcq.title"></h3>
       <button id="startMcq" data-i18n="mcq.start"></button>
       <div id="mcqQuestions"></div>
@@ -113,36 +115,6 @@
       <div><label data-i18n="appeal.reason"></label><textarea id="appealReason" rows="3"></textarea></div>
       <button id="createAppeal" data-i18n="appeal.create"></button>
       <div class="small"><span data-i18n="appeal.appealId"></span> <span id="appealId">-</span></div>
-    </section>
-
-    <section class="card" id="appealHandlerSection">
-      <h3 data-i18n="appealHandler.title"></h3>
-      <div class="row">
-        <div>
-          <label for="appealHandlerStatusFilter" data-i18n="appealHandler.statusFilter"></label>
-          <select id="appealHandlerStatusFilter" multiple size="4"></select>
-          <div class="small" data-i18n="appealHandler.statusHint"></div>
-        </div>
-        <div>
-          <label data-i18n="appealHandler.selectedAppeal"></label>
-          <input id="handlerSelectedAppealId" readonly value="-" />
-          <button id="loadAppealQueue" data-i18n="appealHandler.loadQueue"></button>
-        </div>
-      </div>
-      <div id="appealHandlerMessage" class="small"></div>
-      <div id="appealQueueList" class="appeal-queue-list"></div>
-      <pre id="appealHandlerDetails"></pre>
-      <div><label data-i18n="appealHandler.resolveDecision"></label><textarea id="handlerDecisionReason" rows="2"></textarea></div>
-      <div><label data-i18n="appealHandler.resolveNote"></label><textarea id="handlerResolutionNote" rows="2"></textarea></div>
-      <div>
-        <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail"></label>
-        <select id="handlerPassFailTotal">
-          <option value="true" data-i18n="appealHandler.pass"></option>
-          <option value="false" data-i18n="appealHandler.fail"></option>
-        </select>
-      </div>
-      <button id="claimAppeal" data-i18n="appealHandler.claim"></button>
-      <button id="resolveAppeal" data-i18n="appealHandler.resolve"></button>
     </section>
 
     <section class="card">
