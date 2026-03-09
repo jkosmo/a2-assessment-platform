@@ -129,6 +129,10 @@ http://localhost:3000/participant
 - Queue/check assessment
 - Check result
 
+Seed baseline now includes two modules for multi-module flow checks:
+- `Generative AI Foundations`
+- `AI Governance and Risk Essentials`
+
 ## Discovery output
 Borderline/manual review routing baseline is documented in:
 - `doc/M0_BORDERLINE_ROUTING.md`

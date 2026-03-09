@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.35 - 2026-03-09
+### Summary
+Extended non-production bootstrap seed to include two modules so module-switch scenarios can be verified in stage/local runtime.
+
+### Included
+- Runtime bootstrap seed update:
+  - `scripts/runtime/bootstrapSeed.mjs` now upserts two module graphs:
+    - `Generative AI Foundations`
+    - `AI Governance and Risk Essentials`
+  - Both modules include rubric, prompt template, MCQ set, and published module version.
+- Documentation update:
+  - `README.md` manual testing section now explicitly lists both seeded modules.
+- Backlog update:
+  - Created usability discovery issue `#47` covering moderated UX testing and module-switch behavior.
+
+### Notes
+- This change targets non-production bootstrap behavior (`BOOTSTRAP_SEED=true`) and does not alter production runtime behavior.
+
 ## 0.3.34 - 2026-03-09
 ### Summary
 Added second seeded module for multi-module flow verification and created dedicated usability discovery backlog item.
