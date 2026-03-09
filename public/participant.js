@@ -28,11 +28,9 @@ const appVersionLabel = document.getElementById("appVersion");
 const resultSummary = document.getElementById("resultSummary");
 const historySummary = document.getElementById("historySummary");
 const draftStatus = document.getElementById("draftStatus");
-const clearDraftButton = document.getElementById("clearDraft");
 const loadMeButton = document.getElementById("loadMe");
 const loadModulesButton = document.getElementById("loadModules");
 const createSubmissionButton = document.getElementById("createSubmission");
-const startMcqButton = document.getElementById("startMcq");
 const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
 const rawTextInput = document.getElementById("rawText");
@@ -55,6 +53,7 @@ const queueAssessmentButton = document.getElementById("queueAssessment");
 const checkAssessmentButton = document.getElementById("checkAssessment");
 const checkResultButton = document.getElementById("checkResult");
 const createAppealButton = document.getElementById("createAppeal");
+const resetSubmissionFlowButton = document.getElementById("resetSubmissionFlow");
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
@@ -228,9 +227,9 @@ function renderSelectedModuleSummary() {
 
 function updateModuleSelectionVisibility(hasSelectedModule) {
   submissionSection.classList.toggle("hidden", !hasSelectedModule);
-  mcqSection.classList.toggle("hidden", !hasSelectedModule);
   moduleSelectionHint.hidden = hasSelectedModule;
   updateCreateSubmissionAvailability();
+  renderFlowGating();
 }
 
 function validateSubmissionInputState() {
@@ -328,8 +327,10 @@ function renderFlowGating() {
   const hasAssessmentContext =
     flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus);
   const autoAssessmentEnabled = getFlowSettings().autoStartAfterMcq;
+  const hasSelectedModule = Boolean(resolveSelectedModule(loadedModules, selectedModuleId));
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
+  mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission);
   assessmentSection.classList.toggle("section-locked", !gate.assessmentUnlocked);
   appealSection.classList.toggle("section-locked", !gate.appealUnlocked);
   queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
@@ -1053,6 +1054,40 @@ function renderHistorySummary(body) {
   historySummary.textContent = lines.join("\n").trim();
 }
 
+async function startMcqForSubmission(moduleId, submissionId) {
+  if (!moduleId || !submissionId || submissionId === "-") {
+    throw new Error(t("errors.createSubmissionFirst"));
+  }
+
+  const body = await api(
+    `/api/modules/${moduleId}/mcq/start?submissionId=${encodeURIComponent(submissionId)}`,
+  );
+  attemptIdLabel.textContent = body.attemptId;
+  currentQuestions = body.questions;
+  renderQuestions();
+  scheduleDraftAutosave();
+  return body;
+}
+
+function clearCurrentModuleDraft() {
+  const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+  if (!selectedModule) {
+    setDraftStatus("none", "");
+    return;
+  }
+
+  const moduleDrafts = readModuleDraftMap();
+  delete moduleDrafts[selectedModule.id];
+  writeModuleDraftMap(moduleDrafts);
+
+  resetModuleDraftInputsToDefaultLocaleValues();
+  currentQuestions = [];
+  attemptIdLabel.textContent = "-";
+  renderQuestions();
+  resetFlowStateForModuleContext();
+  setDraftStatus("cleared", selectedModule.title);
+}
+
 loadMeButton.addEventListener("click", async () => {
   await runWithBusyButton(loadMeButton, async () => {
     try {
@@ -1121,33 +1156,18 @@ createSubmissionButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       renderAppealState();
       renderFlowGating();
-      log(body);
+      const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id);
+      log({
+        submission: body.submission,
+        mcqStarted: {
+          attemptId: mcqStartBody.attemptId,
+          questionCount: Array.isArray(mcqStartBody.questions) ? mcqStartBody.questions.length : 0,
+        },
+      });
     } catch (error) {
       log(error.message);
     }
   }, updateCreateSubmissionAvailability);
-});
-
-startMcqButton.addEventListener("click", async () => {
-  await runWithBusyButton(startMcqButton, async () => {
-    try {
-      const moduleId = selectedModuleId;
-      const submissionId = submissionIdLabel.textContent;
-      if (!moduleId || !submissionId || submissionId === "-") {
-        throw new Error(t("errors.createSubmissionFirst"));
-      }
-      const body = await api(
-        `/api/modules/${moduleId}/mcq/start?submissionId=${encodeURIComponent(submissionId)}`,
-      );
-      attemptIdLabel.textContent = body.attemptId;
-      currentQuestions = body.questions;
-      renderQuestions();
-      scheduleDraftAutosave();
-      log(body);
-    } catch (error) {
-      log(error.message);
-    }
-  });
 });
 
 submitMcqButton.addEventListener("click", async () => {
@@ -1303,24 +1323,9 @@ loadHistoryButton.addEventListener("click", async () => {
   });
 });
 
-clearDraftButton.addEventListener("click", async () => {
-  await runWithBusyButton(clearDraftButton, async () => {
-    const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
-    if (!selectedModule) {
-      setDraftStatus("none", "");
-      return;
-    }
-
-    const moduleDrafts = readModuleDraftMap();
-    delete moduleDrafts[selectedModule.id];
-    writeModuleDraftMap(moduleDrafts);
-
-    resetModuleDraftInputsToDefaultLocaleValues();
-    currentQuestions = [];
-    attemptIdLabel.textContent = "-";
-    renderQuestions();
-    resetFlowStateForModuleContext();
-    setDraftStatus("cleared", selectedModule.title);
+resetSubmissionFlowButton.addEventListener("click", async () => {
+  await runWithBusyButton(resetSubmissionFlowButton, async () => {
+    clearCurrentModuleDraft();
     updateCreateSubmissionAvailability();
   });
 });

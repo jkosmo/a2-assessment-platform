@@ -126,8 +126,8 @@ http://localhost:3000/participant
 
 3. Run flow:
 - Load modules
-- Create submission
-- Start and submit MCQ
+- Create submission (MCQ starts automatically)
+- Submit MCQ
 - Queue/check assessment
 - Check result
 - Create participant appeal (after `COMPLETED` result)
@@ -136,7 +136,7 @@ http://localhost:3000/participant
 ```text
 http://localhost:3000/appeal-handler
 ```
-- Load appeal queue with status filters (`OPEN`, `IN_REVIEW`, optional `RESOLVED`)
+- Queue auto-loads open/in-review appeals on page load; use status filter (`OPEN`, `IN_REVIEW`, optional `RESOLVED`) as needed
 - Use queue search for participant/module/appeal filtering
 - Select an appeal row and run `Claim Appeal`
 - Resolve using decision reason + resolution note + pass/fail value

@@ -102,6 +102,7 @@ function applyTranslations() {
     output.textContent = t("defaults.ready");
   }
 
+  populateAppealStatusFilters();
   renderRolePresetControl();
   renderAppealQueue();
   renderAppealHandlerDetails(selectedAppealDetails);
@@ -304,16 +305,25 @@ function getAppealWorkspaceSettings() {
 
 function populateAppealStatusFilters() {
   const settings = getAppealWorkspaceSettings();
+  const selectedBeforeRefresh = new Set(Array.from(statusFilter.selectedOptions).map((option) => option.value));
   statusFilter.innerHTML = "";
   queueLimitInput.value = String(settings.queuePageSize);
 
   for (const status of settings.availableStatuses) {
     const option = document.createElement("option");
     option.value = status;
-    option.textContent = status;
-    option.selected = settings.defaultStatuses.includes(status);
+    option.textContent = localizeAppealStatus(status);
+    option.selected =
+      selectedBeforeRefresh.size > 0
+        ? selectedBeforeRefresh.has(status)
+        : settings.defaultStatuses.includes(status);
     statusFilter.appendChild(option);
   }
+}
+
+function localizeAppealStatus(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
 }
 
 function getSelectedAppealStatuses() {
@@ -403,7 +413,7 @@ function renderAppealQueue() {
 
     const values = [
       appeal.id,
-      appeal.appealStatus,
+      localizeAppealStatus(appeal.appealStatus),
       `${participantName}\n${participantEmail}`,
       `${appeal.submission?.module?.title ?? "-"}\n${appeal.submission?.module?.id ?? "-"}`,
       formatDateTime(appeal.submission?.submittedAt),
@@ -462,7 +472,7 @@ function renderAppealHandlerDetails(details) {
   const lines = [
     `=== ${t("appealHandler.details.section.appeal")} ===`,
     `${t("appealHandler.details.appealId")}: ${appeal.id}`,
-    `${t("appealHandler.details.appealStatus")}: ${appeal.appealStatus}`,
+    `${t("appealHandler.details.appealStatus")}: ${localizeAppealStatus(appeal.appealStatus)}`,
     `${t("appealHandler.details.appealReason")}: ${normalizeMultilineText(appeal.appealReason)}`,
     `${t("appealHandler.details.participant")}: ${appeal.appealedBy?.name ?? "-"} (${appeal.appealedBy?.email ?? "-"})`,
     `${t("appealHandler.details.submissionParticipant")}: ${submission.user?.name ?? "-"} (${submission.user?.email ?? "-"})`,
@@ -586,6 +596,7 @@ async function loadParticipantConsoleConfig() {
   applyIdentityDefaults();
   renderRolePresetControl();
   populateAppealStatusFilters();
+  await loadAppealQueue();
 }
 
 function applyIdentityDefaults() {

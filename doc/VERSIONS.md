@@ -7,6 +7,38 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.46 - 2026-03-09
+### Summary
+Delivered additional participant/appeal workspace simplifications: auto-loaded appeal queue, localized status filter labels, streamlined participant controls, and automatic MCQ start on submission.
+
+### Included
+- Appeal-handler UX simplification:
+  - `public/appeal-handler.js`
+  - Auto-loads appeal queue on page load using configured default statuses (`OPEN`, `IN_REVIEW`) without clicking `Load appeals`.
+  - Localizes status labels in status filter and queue/detail displays based on selected UI language.
+  - Preserves selected statuses while re-rendering localized filter labels.
+- Participant flow simplification:
+  - `public/participant.html`
+  - `public/participant.js`
+  - Removed `Clear module draft` button from submission section.
+  - Added `Delete submission and start over` action in assessment section:
+    - clears module draft
+    - resets flow state and related IDs
+    - prepares module for new submission cycle
+  - Removed `Start MCQ` button.
+  - MCQ now starts automatically immediately after successful `Create submission`.
+  - MCQ section visibility is now gated by submission creation (not just module selection).
+- Translation updates:
+  - `public/i18n/participant-translations.js`
+  - `public/i18n/appeal-handler-translations.js`
+  - Added wording for new reset action and updated module/MCQ hint/error text.
+- Documentation:
+  - `README.md` manual flow updated to reflect automatic MCQ start and appeal queue auto-load behavior.
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
 ## 0.3.45 - 2026-03-09
 ### Summary
 Expanded appeal-handler case details so handlers can review full submission context directly in the workspace: participant submission content, MCQ result metrics, and evaluation details.
