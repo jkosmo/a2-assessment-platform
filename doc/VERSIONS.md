@@ -7,6 +7,34 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.40 - 2026-03-09
+### Summary
+Implemented UX text clarity improvements across participant and appeal-handler interfaces, with clearer actions, less technical wording, improved Norwegian readability, and more actionable appeal error messaging.
+
+### Included
+- Updated participant and workspace translation wording in:
+  - `public/i18n/participant-translations.js`
+  - `public/i18n/appeal-handler-translations.js`
+- Text improvements include:
+  - API/technical label cleanup (`Load /api/me` -> user-facing phrasing).
+  - Replaced `Mock` terminology with plain test-user wording.
+  - Simplified submission field labels (`Raw Text`, `Prompt Excerpt`).
+  - Action-oriented assessment buttons and helper text.
+  - Removed internal status-code wording (`COMPLETED`) from participant guidance.
+  - Standardized claim/assignment wording in appeal workspace (especially `nb`/`nn`).
+  - Improved appeal workspace subtitle, queue-limit wording, and empty-state guidance.
+  - Renamed generic `Output` heading to clearer user-facing wording.
+  - Corrected Norwegian character/transliteration issues in locale text.
+- Updated appeal route error messages for clearer next-step guidance in:
+  - `src/routes/appeals.ts`
+
+### Verification
+- `npm run lint`
+- `npm test` (39 tests passing, 16 test files)
+
+### Notes
+- Scope is wording-only UX improvement; no API contract changes.
+
 ## 0.3.39 - 2026-03-09
 ### Summary
 Refined phase-2 participant and appeal-handler UX by separating role-specific workspaces, hardening module-selection flow, and preventing duplicate button submissions.

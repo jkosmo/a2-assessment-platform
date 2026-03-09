@@ -84,14 +84,14 @@ appealsRouter.post("/:appealId/claim", async (request, response) => {
       if (error.message === "already_assigned") {
         response.status(409).json({
           error: "appeal_already_assigned",
-          message: "Appeal is already assigned to another appeal handler.",
+          message: "This appeal is already assigned to another handler. Refresh the queue and open another case.",
         });
         return;
       }
       if (error.message === "already_resolved") {
         response.status(409).json({
           error: "appeal_already_resolved",
-          message: "Appeal is already resolved.",
+          message: "This appeal is already resolved. Refresh the queue to view the latest status.",
         });
         return;
       }
@@ -99,7 +99,7 @@ appealsRouter.post("/:appealId/claim", async (request, response) => {
 
     response.status(400).json({
       error: "appeal_claim_failed",
-      message: error instanceof Error ? error.message : "Could not claim appeal.",
+      message: error instanceof Error ? error.message : "Could not assign this appeal. Refresh the queue and try again.",
     });
   }
 });
@@ -133,21 +133,21 @@ appealsRouter.post("/:appealId/resolve", async (request, response) => {
       if (error.message === "already_assigned") {
         response.status(409).json({
           error: "appeal_already_assigned",
-          message: "Appeal is already assigned to another appeal handler.",
+          message: "This appeal is already assigned to another handler. Refresh the queue and open another case.",
         });
         return;
       }
       if (error.message === "already_resolved") {
         response.status(409).json({
           error: "appeal_already_resolved",
-          message: "Appeal is already resolved.",
+          message: "This appeal is already resolved. Refresh the queue to view the latest status.",
         });
         return;
       }
       if (error.message === "missing_decision") {
         response.status(409).json({
           error: "missing_decision",
-          message: "Cannot resolve appeal because no decision exists for submission.",
+          message: "This appeal cannot be resolved yet because the submission has no decision.",
         });
         return;
       }
@@ -155,7 +155,7 @@ appealsRouter.post("/:appealId/resolve", async (request, response) => {
 
     response.status(400).json({
       error: "appeal_resolution_failed",
-      message: error instanceof Error ? error.message : "Could not resolve appeal.",
+      message: error instanceof Error ? error.message : "Could not resolve this appeal. Refresh the queue and try again.",
     });
   }
 });
