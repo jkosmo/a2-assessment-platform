@@ -7,6 +7,43 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.49 - 2026-03-09
+### Summary
+Implemented issue #31 by adding config-driven secondary LLM assessment with trigger/disagreement rules, manual-review routing on disagreement, and end-to-end traceability.
+
+### Included
+- Added `secondaryAssessment` policy in assessment rules config:
+  - `config/assessment-rules.json`
+  - `src/config/assessmentRules.ts`
+  - `enabledByDefault`, `moduleOverrides`
+  - configurable `triggerRules` and `disagreementRules`
+- Added secondary-assessment policy service:
+  - `src/services/secondaryAssessmentService.ts`
+  - evaluates when second pass should run
+  - evaluates disagreement between primary/secondary outcomes
+- Assessment orchestration updates:
+  - `src/services/assessmentJobService.ts`
+  - runs primary pass + optional secondary pass
+  - stores separate LLM evaluations for each pass
+  - emits audit events:
+    - `secondary_assessment_triggered`
+    - `secondary_assessment_completed`
+  - forces manual-review routing when disagreement rules are hit
+- Decision pipeline update:
+  - `src/services/decisionService.ts`
+  - supports forced manual-review reason for secondary-pass disagreement routing
+- LLM stub support for pass context:
+  - `src/services/llmAssessmentService.ts` now accepts `assessmentPass` context (`primary` / `secondary`)
+- Tests/docs:
+  - new unit tests: `test/secondary-assessment.test.ts`
+  - updated integration assertions: `test/m2-audit-pipeline.test.ts`
+  - design note: `doc/PHASE2_SECONDARY_ASSESSMENT_DESIGN.md`
+  - README updated with secondary-assessment config guidance
+
+### Verification
+- `npm run lint`
+- `npm test` (44 tests passing, 18 test files)
+
 ## 0.3.48 - 2026-03-09
 ### Summary
 Implemented issue #29 with config-driven sensitive-data detection/masking before LLM evaluation, including per-module enablement and audit traceability.

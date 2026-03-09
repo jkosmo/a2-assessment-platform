@@ -39,6 +39,7 @@ type AssessmentContext = {
   rawText: string;
   reflectionText: string;
   promptExcerpt: string;
+  assessmentPass?: "primary" | "secondary";
 };
 
 export async function evaluatePracticalWithLlm(input: AssessmentContext): Promise<LlmStructuredAssessment> {
@@ -57,6 +58,7 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
 
   const baseScore = length > 800 ? 4 : length > 350 ? 3 : length > 150 ? 2 : 1;
   const responsibleUseScore = /sensitive|pii|client data/i.test(content) ? 1 : baseScore;
+  const passAdjustment = input.assessmentPass === "secondary" ? -1 : 0;
   const redFlags =
     responsibleUseScore <= 1
       ? [
@@ -69,10 +71,10 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
       : [];
 
   const rubricScores = {
-    relevance_for_case: baseScore,
-    quality_and_utility: baseScore,
-    iteration_and_improvement: Math.max(1, baseScore - 1),
-    human_quality_assurance: baseScore,
+    relevance_for_case: Math.max(0, Math.min(4, baseScore + passAdjustment)),
+    quality_and_utility: Math.max(0, Math.min(4, baseScore + passAdjustment)),
+    iteration_and_improvement: Math.max(0, Math.min(4, baseScore - 1 + passAdjustment)),
+    human_quality_assurance: Math.max(0, Math.min(4, baseScore + passAdjustment)),
     responsible_use: responsibleUseScore,
   };
 
@@ -106,8 +108,9 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
     manual_review_recommended: redFlags.length > 0,
     confidence_note:
       redFlags.length > 0
-        ? "Medium confidence due to potential responsible-use ambiguity."
+        ? input.assessmentPass === "secondary"
+          ? "Low confidence due to potential responsible-use ambiguity."
+          : "Medium confidence due to potential responsible-use ambiguity."
         : "High confidence: structured and sufficiently detailed submission.",
   };
 }
-

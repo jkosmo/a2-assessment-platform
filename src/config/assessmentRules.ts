@@ -53,6 +53,50 @@ const rulesSchema = z.object({
       moduleOverrides: {},
       rules: [],
     }),
+  secondaryAssessment: z
+    .object({
+      enabledByDefault: z.boolean().default(true),
+      moduleOverrides: z.record(z.string(), z.boolean()).default({}),
+      triggerRules: z
+        .object({
+          manualReviewRecommended: z.boolean().default(true),
+          confidenceNotePatterns: z.array(z.string().min(1)).default(["medium confidence", "low confidence"]),
+          redFlagSeverities: z.array(z.string().min(1)).default(["medium", "high"]),
+        })
+        .default({
+          manualReviewRecommended: true,
+          confidenceNotePatterns: ["medium confidence", "low confidence"],
+          redFlagSeverities: ["medium", "high"],
+        }),
+      disagreementRules: z
+        .object({
+          practicalScoreDeltaMin: z.number().min(0).default(8),
+          rubricTotalDeltaMin: z.number().min(0).default(3),
+          passFailMismatch: z.boolean().default(true),
+          manualReviewRecommendationMismatch: z.boolean().default(true),
+        })
+        .default({
+          practicalScoreDeltaMin: 8,
+          rubricTotalDeltaMin: 3,
+          passFailMismatch: true,
+          manualReviewRecommendationMismatch: true,
+        }),
+    })
+    .default({
+      enabledByDefault: true,
+      moduleOverrides: {},
+      triggerRules: {
+        manualReviewRecommended: true,
+        confidenceNotePatterns: ["medium confidence", "low confidence"],
+        redFlagSeverities: ["medium", "high"],
+      },
+      disagreementRules: {
+        practicalScoreDeltaMin: 8,
+        rubricTotalDeltaMin: 3,
+        passFailMismatch: true,
+        manualReviewRecommendationMismatch: true,
+      },
+    }),
 });
 
 export type AssessmentRules = z.infer<typeof rulesSchema>;

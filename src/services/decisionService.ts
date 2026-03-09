@@ -13,6 +13,7 @@ type BuildDecisionInput = {
   mcqScaledScore: number;
   mcqPercentScore: number;
   llmResult: LlmStructuredAssessment;
+  forceManualReviewReason?: string;
 };
 
 export async function createAssessmentDecision(input: BuildDecisionInput) {
@@ -35,7 +36,10 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     !hasOpenRedFlag;
 
   const needsManualReview =
-    hasOpenRedFlag || input.llmResult.manual_review_recommended || inBorderlineWindow;
+    Boolean(input.forceManualReviewReason) ||
+    hasOpenRedFlag ||
+    input.llmResult.manual_review_recommended ||
+    inBorderlineWindow;
 
   const decision = await prisma.assessmentDecision.create({
     data: {
@@ -50,7 +54,8 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       passFailTotal: passesThresholds,
       decisionType: DecisionType.AUTOMATIC,
       decisionReason: needsManualReview
-        ? "Automatically routed to manual review due to red flag / confidence / borderline rule."
+        ? input.forceManualReviewReason ??
+          "Automatically routed to manual review due to red flag / confidence / borderline rule."
         : passesThresholds
           ? "Automatic pass by threshold rules."
           : "Automatic fail by threshold rules.",
@@ -94,6 +99,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       submissionId: input.submissionId,
       totalScore,
       needsManualReview,
+      forceManualReviewReason: input.forceManualReviewReason ?? null,
       passFailTotal: decision.passFailTotal,
     },
   });

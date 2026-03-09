@@ -46,5 +46,26 @@
         "replacement": "[MASKED_ID]"
       }
     ]
+  },
+  "secondaryAssessment": {
+    "enabledByDefault": true,
+    "moduleOverrides": {},
+    "triggerRules": {
+      "manualReviewRecommended": true,
+      "confidenceNotePatterns": [
+        "medium confidence",
+        "low confidence"
+      ],
+      "redFlagSeverities": [
+        "medium",
+        "high"
+      ]
+    },
+    "disagreementRules": {
+      "practicalScoreDeltaMin": 8,
+      "rubricTotalDeltaMin": 3,
+      "passFailMismatch": true,
+      "manualReviewRecommendationMismatch": true
+    }
   }
 }

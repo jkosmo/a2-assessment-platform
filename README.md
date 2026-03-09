@@ -156,6 +156,13 @@ Sensitive-data preprocessing before LLM evaluation is config-driven via:
 - `sensitiveData.moduleOverrides.<moduleId>` enables/disables masking per module
 - `sensitiveData.rules[]` defines detection regex patterns and replacement tokens
 
+Secondary LLM assessment policy is config-driven via:
+- `config/assessment-rules.json`
+- `secondaryAssessment.enabledByDefault` toggles second-pass behavior globally
+- `secondaryAssessment.moduleOverrides.<moduleId>` enables/disables second-pass per module
+- `secondaryAssessment.triggerRules` controls when a second pass should run
+- `secondaryAssessment.disagreementRules` controls when pass disagreement must route to manual review
+
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`
 - `AI Governance and Risk Essentials`
