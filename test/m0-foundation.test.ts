@@ -22,7 +22,7 @@ describe("M0 foundation APIs", () => {
 
   it("returns published modules and active version metadata", async () => {
     const modulesResponse = await request(app)
-      .get("/api/modules")
+      .get("/api/modules?includeCompleted=true")
       .set("x-user-id", "participant-1")
       .set("x-user-email", "participant@company.com")
       .set("x-user-name", "Platform Participant");

@@ -1,8 +1,17 @@
-import type { AppRole as AppRoleType, Prisma } from "@prisma/client";
+import type {
+  AppRole as AppRoleType,
+  Prisma,
+  SubmissionStatus as SubmissionStatusType,
+  DecisionType as DecisionTypeType,
+} from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 import type { SupportedLocale } from "../i18n/locale.js";
 import { localizeContentText } from "../i18n/content.js";
+import {
+  getCompletedSubmissionStatuses,
+  isSubmissionStatusCompleted,
+} from "../services/moduleCompletionPolicyService.js";
 
 const ADMIN_READ_ROLES: AppRoleType[] = [
   AppRole.ADMINISTRATOR,
@@ -35,7 +44,16 @@ const moduleSummarySelect = {
   },
 } satisfies Prisma.ModuleSelect;
 
-export async function listModules(roles: AppRoleType[], userId?: string, locale: SupportedLocale = "en-GB") {
+type ListModulesOptions = {
+  includeCompleted?: boolean;
+};
+
+export async function listModules(
+  roles: AppRoleType[],
+  userId?: string,
+  locale: SupportedLocale = "en-GB",
+  options: ListModulesOptions = {},
+) {
   const now = new Date();
   const adminRead = hasAdminRead(roles);
 
@@ -61,31 +79,144 @@ export async function listModules(roles: AppRoleType[], userId?: string, locale:
     }));
   }
 
-  return Promise.all(
-    modules.map(async (module) => {
-      const latest = await prisma.submission.findFirst({
-        where: { userId, moduleId: module.id },
-        orderBy: { submittedAt: "desc" },
+  const latestByModule = new Map<
+    string,
+    {
+      id: string;
+      submittedAt: Date;
+      submissionStatus: SubmissionStatusType;
+    }
+  >();
+
+  if (modules.length > 0) {
+    const latestSubmissions = await prisma.submission.findMany({
+      where: {
+        userId,
+        moduleId: { in: modules.map((module) => module.id) },
+      },
+      orderBy: [{ moduleId: "asc" }, { submittedAt: "desc" }],
+      select: {
+        id: true,
+        moduleId: true,
+        submittedAt: true,
+        submissionStatus: true,
+      },
+    });
+
+    for (const submission of latestSubmissions) {
+      if (!latestByModule.has(submission.moduleId)) {
+        latestByModule.set(submission.moduleId, {
+          id: submission.id,
+          submittedAt: submission.submittedAt,
+          submissionStatus: submission.submissionStatus,
+        });
+      }
+    }
+  }
+
+  const mapped = modules.map((module) => {
+    const latest = latestByModule.get(module.id);
+    return {
+      ...module,
+      title: localizeContentText(locale, module.title) ?? module.title,
+      description: localizeContentText(locale, module.description),
+      participantStatus: latest
+        ? {
+            latestSubmissionId: latest.id,
+            latestSubmittedAt: latest.submittedAt,
+            latestStatus: latest.submissionStatus,
+          }
+        : null,
+    };
+  });
+
+  if (options.includeCompleted === true) {
+    return mapped;
+  }
+
+  return mapped.filter(
+    (module) => !isSubmissionStatusCompleted(module.participantStatus?.latestStatus ?? null),
+  );
+}
+
+export async function listCompletedModulesForUser(userId: string, locale: SupportedLocale = "en-GB", limit = 50) {
+  const completedStatuses = getCompletedSubmissionStatuses();
+  const submissions = await prisma.submission.findMany({
+    where: {
+      userId,
+      submissionStatus: {
+        in: completedStatuses,
+      },
+    },
+    orderBy: { submittedAt: "desc" },
+    select: {
+      id: true,
+      moduleId: true,
+      submittedAt: true,
+      submissionStatus: true,
+      module: {
         select: {
           id: true,
-          submittedAt: true,
-          submissionStatus: true,
+          title: true,
         },
-      });
-      return {
-        ...module,
-        title: localizeContentText(locale, module.title) ?? module.title,
-        description: localizeContentText(locale, module.description),
-        participantStatus: latest
-          ? {
-              latestSubmissionId: latest.id,
-              latestSubmittedAt: latest.submittedAt,
-              latestStatus: latest.submissionStatus,
-            }
-          : null,
-      };
-    }),
-  );
+      },
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: {
+          totalScore: true,
+          passFailTotal: true,
+          decisionType: true,
+          finalisedAt: true,
+        },
+      },
+    },
+  });
+
+  const modules = new Map<
+    string,
+    {
+      moduleId: string;
+      moduleTitle: string;
+      latestSubmissionId: string;
+      latestCompletedAt: Date;
+      latestStatus: string;
+      latestDecision: {
+        totalScore: number;
+        passFailTotal: boolean;
+        decisionType: DecisionTypeType;
+        finalisedAt: Date;
+      } | null;
+    }
+  >();
+
+  for (const submission of submissions) {
+    if (modules.has(submission.moduleId)) {
+      continue;
+    }
+
+    modules.set(submission.moduleId, {
+      moduleId: submission.module.id,
+      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
+      latestSubmissionId: submission.id,
+      latestCompletedAt: submission.submittedAt,
+      latestStatus: submission.submissionStatus,
+      latestDecision: submission.decisions[0]
+        ? {
+            totalScore: submission.decisions[0].totalScore,
+            passFailTotal: submission.decisions[0].passFailTotal,
+            decisionType: submission.decisions[0].decisionType,
+            finalisedAt: submission.decisions[0].finalisedAt,
+          }
+        : null,
+    });
+
+    if (modules.size >= limit) {
+      break;
+    }
+  }
+
+  return Array.from(modules.values());
 }
 
 export async function getModuleById(

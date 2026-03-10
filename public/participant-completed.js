@@ -1,4 +1,4 @@
-import { localeLabels, supportedLocales, translations } from "/static/i18n/calibration-translations.js";
+import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-completed-translations.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -14,19 +14,11 @@ const mockRolePresetContainer = document.getElementById("mockRolePresetContainer
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
-const moduleIdInput = document.getElementById("calibrationModuleId");
-const moduleVersionIdInput = document.getElementById("calibrationModuleVersionId");
-const statusesSelect = document.getElementById("calibrationStatuses");
-const limitInput = document.getElementById("calibrationLimit");
-const dateFromInput = document.getElementById("calibrationDateFrom");
-const dateToInput = document.getElementById("calibrationDateTo");
-const loadCalibrationButton = document.getElementById("loadCalibration");
-const calibrationMeta = document.getElementById("calibrationMeta");
-const calibrationSignals = document.getElementById("calibrationSignals");
-const outcomesBody = document.getElementById("calibrationOutcomesBody");
-const anchorsBody = document.getElementById("calibrationAnchorsBody");
+const loadCompletedButton = document.getElementById("loadCompleted");
+const completedMeta = document.getElementById("completedMeta");
+const completedBody = document.getElementById("completedBody");
+const completedLimit = document.getElementById("completedLimit");
 
-const allSubmissionStatuses = ["SUBMITTED", "PROCESSING", "SCORED", "UNDER_REVIEW", "COMPLETED", "REJECTED"];
 const defaultWorkspaceNavigationItems = [
   {
     id: "participant",
@@ -55,7 +47,6 @@ const defaultWorkspaceNavigationItems = [
 ];
 
 let currentLocale = resolveInitialLocale();
-let latestWorkspaceBody = null;
 let participantRuntimeConfig = {
   authMode: "mock",
   mockRoleSwitchEnabled: true,
@@ -63,26 +54,13 @@ let participantRuntimeConfig = {
   navigation: {
     items: defaultWorkspaceNavigationItems,
   },
-  calibrationWorkspace: {
-    accessRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
-    defaults: {
-      statuses: ["COMPLETED", "UNDER_REVIEW"],
-      lookbackDays: 90,
-      maxRows: 120,
-    },
-    signalThresholds: {
-      passRateMinimum: 0.6,
-      manualReviewRateMaximum: 0.35,
-      benchmarkCoverageMinimum: 0.5,
-    },
-  },
   identityDefaults: {
-    calibrationOwner: {
-      userId: "smo-1",
-      email: "smo@company.com",
-      name: "Platform Subject Matter Owner",
-      department: "Learning",
-      roles: ["SUBJECT_MATTER_OWNER"],
+    participant: {
+      userId: "participant-1",
+      email: "participant@company.com",
+      name: "Platform Participant",
+      department: "Consulting",
+      roles: ["PARTICIPANT"],
     },
   },
 };
@@ -131,22 +109,12 @@ function applyTranslations() {
     element.textContent = t(key);
   }
 
-  for (const element of document.querySelectorAll("[data-i18n-placeholder]")) {
-    const key = element.getAttribute("data-i18n-placeholder");
-    if (!key) {
-      continue;
-    }
-    element.placeholder = t(key);
-  }
-
   if (!output.dataset.hasContent) {
     output.textContent = t("defaults.ready");
   }
 
   renderRolePresetControl();
   renderWorkspaceNavigation();
-  populateStatusOptions();
-  renderWorkspace(latestWorkspaceBody);
 }
 
 function populateLocaleSelect() {
@@ -313,109 +281,37 @@ function renderWorkspaceNavigation() {
   }
 }
 
-function getSelectedStatuses() {
-  const selected = Array.from(statusesSelect.selectedOptions).map((option) => option.value);
-  if (selected.length > 0) {
-    return selected;
-  }
-  return participantRuntimeConfig?.calibrationWorkspace?.defaults?.statuses ?? ["COMPLETED", "UNDER_REVIEW"];
-}
+function renderCompletedModules(body) {
+  const modules = Array.isArray(body?.modules) ? body.modules : [];
+  completedBody.innerHTML = "";
+  completedMeta.textContent = `${t("completed.meta.loadedPrefix")}: ${modules.length}`;
 
-function populateStatusOptions() {
-  const selected = new Set(getSelectedStatuses());
-  statusesSelect.innerHTML = "";
-
-  for (const status of allSubmissionStatuses) {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = localizeSubmissionStatus(status);
-    option.selected = selected.has(status);
-    statusesSelect.appendChild(option);
-  }
-}
-
-function renderWorkspace(body) {
-  latestWorkspaceBody = body;
-
-  if (!body) {
-    calibrationSignals.textContent = t("calibration.signals.none");
-    calibrationMeta.textContent = "";
-    outcomesBody.innerHTML = `<tr><td colspan="7">${t("calibration.outcomes.empty")}</td></tr>`;
-    anchorsBody.innerHTML = `<tr><td colspan="5">${t("calibration.anchors.empty")}</td></tr>`;
+  if (modules.length === 0) {
+    completedBody.innerHTML = `<tr><td colspan="5">${t("completed.empty")}</td></tr>`;
     return;
   }
 
-  const signals = body.signals ?? {};
-  const flags = Array.isArray(signals.flags) ? signals.flags : [];
-  const flagLines = flags.length > 0
-    ? flags.map((flag) => `- ${flag.code}: ${flag.message} (${formatNumber(flag.actual)} / ${formatNumber(flag.threshold)})`)
-    : [t("calibration.flags.none")];
-  calibrationSignals.textContent = [
-    `${t("calibration.outcomes.title")}: ${signals.outcomeCount ?? 0}`,
-    `${t("calibration.signals.passRate")}: ${formatNumber(signals.passRate)}`,
-    `${t("calibration.signals.manualReviewRate")}: ${formatNumber(signals.manualReviewRate)}`,
-    `${t("calibration.signals.averageTotalScore")}: ${formatNumber(signals.averageTotalScore)}`,
-    `${t("calibration.signals.benchmarkPromptTemplates")}: ${signals.benchmarkPromptTemplateCount ?? 0}`,
-    `${t("calibration.signals.coveredPromptTemplates")}: ${signals.coveredPromptTemplateCount ?? 0}`,
-    `${t("calibration.signals.benchmarkCoverageRate")}: ${formatNumber(signals.benchmarkCoverageRate)}`,
-    `${t("calibration.signals.flags")}:`,
-    ...flagLines,
-  ].join("\n");
+  for (const module of modules) {
+    const row = document.createElement("tr");
+    const passFailValue = module?.latestDecision?.passFailTotal === true
+      ? t("completed.value.pass")
+      : module?.latestDecision?.passFailTotal === false
+        ? t("completed.value.fail")
+        : "-";
+    const values = [
+      `${module.moduleTitle ?? "-"}\n(${module.moduleId ?? "-"})`,
+      formatDateTime(module.latestCompletedAt),
+      localizeSubmissionStatus(module.latestStatus),
+      formatNumber(module?.latestDecision?.totalScore),
+      passFailValue,
+    ];
 
-  calibrationMeta.textContent = `${t("calibration.meta.loadedPrefix")}: ${body.module?.title ?? "-"} (${body.module?.id ?? "-"})`;
-
-  const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [];
-  outcomesBody.innerHTML = "";
-  if (outcomes.length === 0) {
-    outcomesBody.innerHTML = `<tr><td colspan="7">${t("calibration.outcomes.empty")}</td></tr>`;
-  } else {
-    for (const outcome of outcomes) {
-      const row = document.createElement("tr");
-      const passFail = outcome?.decision?.passFailTotal === true
-        ? t("calibration.value.pass")
-        : outcome?.decision?.passFailTotal === false
-          ? t("calibration.value.fail")
-          : "-";
-      const manualReview = outcome?.llm?.manualReviewRecommended === true ? t("calibration.value.yes") : t("calibration.value.no");
-      const values = [
-        outcome.submissionId ?? "-",
-        formatDateTime(outcome.submittedAt),
-        localizeSubmissionStatus(outcome.submissionStatus),
-        `${outcome.moduleVersionNo ?? "-"} (${outcome.moduleVersionId ?? "-"})`,
-        formatNumber(outcome?.decision?.totalScore),
-        passFail,
-        manualReview,
-      ];
-      for (const value of values) {
-        const cell = document.createElement("td");
-        cell.textContent = String(value);
-        row.appendChild(cell);
-      }
-      outcomesBody.appendChild(row);
+    for (const value of values) {
+      const cell = document.createElement("td");
+      cell.textContent = String(value);
+      row.appendChild(cell);
     }
-  }
-
-  const anchors = Array.isArray(body.benchmarkAnchors) ? body.benchmarkAnchors : [];
-  anchorsBody.innerHTML = "";
-  if (anchors.length === 0) {
-    anchorsBody.innerHTML = `<tr><td colspan="5">${t("calibration.anchors.empty")}</td></tr>`;
-  } else {
-    for (const anchor of anchors) {
-      const row = document.createElement("tr");
-      const values = [
-        `${anchor.promptTemplateVersionNo ?? "-"} (${anchor.promptTemplateVersionId ?? "-"})`,
-        String(anchor.benchmarkExampleCount ?? "-"),
-        anchor.sourcePromptTemplateVersionId ?? "-",
-        anchor.sourceModuleVersionId ?? "-",
-        formatDateTime(anchor.createdAt),
-      ];
-      for (const value of values) {
-        const cell = document.createElement("td");
-        cell.textContent = String(value);
-        row.appendChild(cell);
-      }
-      anchorsBody.appendChild(row);
-    }
+    completedBody.appendChild(row);
   }
 }
 
@@ -423,7 +319,7 @@ async function loadVersion() {
   try {
     const body = await api("/version", { headers: {} });
     const version = body.version ?? "unknown";
-    document.title = `A2 Calibration Workspace v${version}`;
+    document.title = `A2 Completed Modules v${version}`;
     appVersionLabel.textContent = `v${version}`;
   } catch {
     appVersionLabel.textContent = "unknown";
@@ -431,7 +327,7 @@ async function loadVersion() {
 }
 
 function applyIdentityDefaults() {
-  const identityDefaults = participantRuntimeConfig?.identityDefaults?.calibrationOwner;
+  const identityDefaults = participantRuntimeConfig?.identityDefaults?.participant;
   if (!identityDefaults) {
     return;
   }
@@ -458,10 +354,6 @@ async function loadParticipantConsoleConfig() {
         ...participantRuntimeConfig.navigation,
         ...(body?.navigation ?? {}),
       },
-      calibrationWorkspace: {
-        ...participantRuntimeConfig.calibrationWorkspace,
-        ...(body?.calibrationWorkspace ?? {}),
-      },
     };
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   } catch {
@@ -469,11 +361,8 @@ async function loadParticipantConsoleConfig() {
   }
 
   applyIdentityDefaults();
-  const maxRows = participantRuntimeConfig?.calibrationWorkspace?.defaults?.maxRows ?? 120;
-  limitInput.value = String(maxRows);
   renderRolePresetControl();
   renderWorkspaceNavigation();
-  populateStatusOptions();
 }
 
 loadMeButton.addEventListener("click", async () => {
@@ -487,41 +376,13 @@ loadMeButton.addEventListener("click", async () => {
   });
 });
 
-loadCalibrationButton.addEventListener("click", async () => {
-  await runWithBusyButton(loadCalibrationButton, async () => {
+loadCompletedButton.addEventListener("click", async () => {
+  await runWithBusyButton(loadCompletedButton, async () => {
     try {
-      const moduleId = moduleIdInput.value.trim();
-      if (!moduleId) {
-        throw new Error(t("calibration.errors.moduleRequired"));
-      }
-
-      const params = new URLSearchParams();
-      params.set("moduleId", moduleId);
-
-      const moduleVersionId = moduleVersionIdInput.value.trim();
-      if (moduleVersionId) {
-        params.set("moduleVersionId", moduleVersionId);
-      }
-
-      const statuses = getSelectedStatuses();
-      if (statuses.length > 0) {
-        params.set("status", statuses.join(","));
-      }
-
-      const limit = Number(limitInput.value);
-      if (Number.isFinite(limit) && limit > 0) {
-        params.set("limit", String(limit));
-      }
-
-      if (dateFromInput.value) {
-        params.set("dateFrom", dateFromInput.value);
-      }
-      if (dateToInput.value) {
-        params.set("dateTo", dateToInput.value);
-      }
-
-      const body = await api(`/api/calibration/workspace?${params.toString()}`);
-      renderWorkspace(body);
+      const limit = Number(completedLimit.value);
+      const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
+      const body = await api(`/api/modules/completed${query}`);
+      renderCompletedModules(body);
       log(body);
     } catch (error) {
       log(error.message);
@@ -548,12 +409,8 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-statusesSelect.addEventListener("change", () => {
-  populateStatusOptions();
-});
-
 populateLocaleSelect();
 setLocale(currentLocale);
 loadVersion();
 loadParticipantConsoleConfig();
-renderWorkspace(null);
+renderCompletedModules(null);

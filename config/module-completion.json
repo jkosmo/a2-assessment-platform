@@ -1,0 +1,6 @@
+{
+  "completedSubmissionStatuses": ["COMPLETED"],
+  "hideCompletedInAvailableByDefault": true,
+  "defaultCompletedHistoryLimit": 50,
+  "maxCompletedHistoryLimit": 200
+}

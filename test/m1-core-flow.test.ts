@@ -14,7 +14,7 @@ describe("M1 core flow", () => {
   });
 
   it("creates submission, runs MCQ, and generates assessment result", async () => {
-    const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
+    const modulesResponse = await request(app).get("/api/modules?includeCompleted=true").set(participantHeaders);
     expect(modulesResponse.status).toBe(200);
     const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
       (module) => module.title === "Generative AI Foundations",

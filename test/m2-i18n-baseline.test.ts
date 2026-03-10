@@ -74,7 +74,7 @@ describe("MVP i18n baseline", () => {
 
   it("localizes module title and MCQ content for nb locale", async () => {
     const modulesEn = await request(app)
-      .get("/api/modules")
+      .get("/api/modules?includeCompleted=true")
       .set({
         ...participantHeaders,
         "x-locale": "en-GB",

@@ -1,10 +1,26 @@
 import { Router } from "express";
 import { z } from "zod";
-import { listModules, getModuleById, getActiveModuleVersion } from "../repositories/moduleRepository.js";
+import {
+  listModules,
+  getModuleById,
+  getActiveModuleVersion,
+  listCompletedModulesForUser,
+} from "../repositories/moduleRepository.js";
 import { startMcqAttempt, submitMcqAttempt } from "../services/mcqService.js";
+import {
+  getCompletedSubmissionStatuses,
+  resolveCompletedHistoryLimit,
+  resolveIncludeCompletedForAvailableModules,
+} from "../services/moduleCompletionPolicyService.js";
 import { t } from "../i18n/messages.js";
 
 const modulesRouter = Router();
+const modulesListQuerySchema = z.object({
+  includeCompleted: z.string().trim().optional(),
+});
+const completedModulesQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().optional(),
+});
 const mcqStartQuerySchema = z.object({
   submissionId: z.string().min(1),
 });
@@ -20,11 +36,62 @@ const mcqSubmitBodySchema = z.object({
 });
 
 modulesRouter.get("/", async (request, response) => {
+  const parsed = modulesListQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  let requestedIncludeCompleted: boolean | undefined;
+  if (parsed.data.includeCompleted !== undefined) {
+    const normalized = parsed.data.includeCompleted.toLowerCase();
+    if (normalized !== "true" && normalized !== "false") {
+      response.status(400).json({
+        error: "validation_error",
+        message: "includeCompleted must be true or false.",
+      });
+      return;
+    }
+    requestedIncludeCompleted = normalized === "true";
+  }
+
+  const includeCompleted = resolveIncludeCompletedForAvailableModules(requestedIncludeCompleted);
   const roles = request.context?.roles ?? [];
   const userId = request.context?.userId;
   const locale = request.context?.locale ?? "en-GB";
-  const modules = await listModules(roles, userId, locale);
-  response.json({ modules });
+  const modules = await listModules(roles, userId, locale, { includeCompleted });
+  response.json({
+    modules,
+    filters: {
+      includeCompleted,
+      completedSubmissionStatuses: getCompletedSubmissionStatuses(),
+    },
+  });
+});
+
+modulesRouter.get("/completed", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const parsed = completedModulesQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  const locale = request.context?.locale ?? "en-GB";
+  const limit = resolveCompletedHistoryLimit(parsed.data.limit);
+  const modules = await listCompletedModulesForUser(userId, locale, limit);
+  response.json({
+    modules,
+    filters: {
+      limit,
+      completedSubmissionStatuses: getCompletedSubmissionStatuses(),
+    },
+  });
 });
 
 modulesRouter.get("/:moduleId", async (request, response) => {

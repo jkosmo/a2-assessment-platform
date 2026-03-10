@@ -68,6 +68,7 @@ npm run build
 - `GET /participant/config`
 - `GET /api/me`
 - `GET /api/modules`
+- `GET /api/modules/completed?limit=<n>`
 - `GET /api/modules/:moduleId`
 - `GET /api/modules/:moduleId/active-version`
 - `GET /api/modules/:moduleId/mcq/start?submissionId=<id>`
@@ -109,6 +110,7 @@ npm run build
 - `POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish`
 - `POST /api/admin/sync/org/delta`
 - `GET /participant` (manual participant test UI)
+- `GET /participant/completed` (manual completed-modules UI)
 - `GET /appeal-handler` (manual appeal-handler workspace UI)
 - `GET /calibration` (manual calibration workspace UI)
 
@@ -152,7 +154,13 @@ Submission parser behavior:
 - If parsing fails and `rawText` is provided, `rawText` is used as fallback.
 - If parsing fails without fallback text, API returns a clear parse error message.
 
-4. Optional handler flow in dedicated workspace (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
+4. Optional completed-modules view (`PARTICIPANT` role):
+```text
+http://localhost:3000/participant/completed
+```
+- Load module history and verify latest completion score/status per module
+
+5. Optional handler flow in dedicated workspace (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
 ```text
 http://localhost:3000/appeal-handler
 ```
@@ -161,7 +169,7 @@ http://localhost:3000/appeal-handler
 - Select an appeal row and run `Claim Appeal`
 - Resolve using decision reason + resolution note + pass/fail value
 
-5. Optional calibration flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
+6. Optional calibration flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
 ```text
 http://localhost:3000/calibration
 ```
@@ -238,6 +246,12 @@ Org delta sync policy is config-driven via:
 - `config/org-sync.json`
 - `conflictStrategy` controls identity collision handling (`merge_by_email` / `skip_conflict`)
 - `allowDepartmentOverwrite`, `allowManagerOverwrite`, `defaultActiveStatus` control update behavior
+
+Module completion policy is config-driven via:
+- `config/module-completion.json`
+- `completedSubmissionStatuses` defines what counts as completed
+- `hideCompletedInAvailableByDefault` controls `/api/modules` default filtering
+- `defaultCompletedHistoryLimit`, `maxCompletedHistoryLimit` control `/api/modules/completed` pagination defaults/bounds
 
 Seed baseline now includes two modules for multi-module flow checks:
 - `Generative AI Foundations`

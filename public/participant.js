@@ -75,6 +75,12 @@ let participantRuntimeConfig = {
         requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
       },
       {
+        id: "participant-completed",
+        path: "/participant/completed",
+        labelKey: "nav.completedModules",
+        requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
+      },
+      {
         id: "appeal-handler",
         path: "/appeal-handler",
         labelKey: "nav.appealHandler",
@@ -145,6 +151,12 @@ const defaultWorkspaceNavigationItems = [
     id: "participant",
     path: "/participant",
     labelKey: "nav.participant",
+    requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
+  },
+  {
+    id: "participant-completed",
+    path: "/participant/completed",
+    labelKey: "nav.completedModules",
     requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
   },
   {

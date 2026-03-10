@@ -25,6 +25,12 @@ describe("participant console runtime config", () => {
           requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
         },
         {
+          id: "participant-completed",
+          path: "/participant/completed",
+          labelKey: "nav.completedModules",
+          requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
+        },
+        {
           id: "appeal-handler",
           path: "/appeal-handler",
           labelKey: "nav.appealHandler",
@@ -103,5 +109,12 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("calibration.js");
+  });
+
+  it("serves dedicated participant completed-modules page", async () => {
+    const response = await request(app).get("/participant/completed");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("participant-completed.js");
   });
 });

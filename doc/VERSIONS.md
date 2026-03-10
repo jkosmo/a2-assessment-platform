@@ -7,6 +7,64 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.63 - 2026-03-10
+### Summary
+Implemented issue #66 with a dedicated participant completed-modules workspace, config-driven completion policy, and default filtering of completed modules from the active module list.
+
+### Included
+- Added central completion-policy config:
+  - `config/module-completion.json`
+  - keys:
+    - `completedSubmissionStatuses`
+    - `hideCompletedInAvailableByDefault`
+    - `defaultCompletedHistoryLimit`
+    - `maxCompletedHistoryLimit`
+- Added completion config/policy runtime support:
+  - `src/config/moduleCompletion.ts`
+  - `src/services/moduleCompletionPolicyService.ts`
+  - centralizes completed-status classification and include/limit resolution
+- Updated module repository behavior:
+  - `src/repositories/moduleRepository.ts`
+  - `/api/modules` available list now excludes completed modules by default (config-driven)
+  - added `listCompletedModulesForUser(...)` for module-level completion history with latest score/status
+- Extended modules API:
+  - `src/routes/modules.ts`
+  - `GET /api/modules` now supports `includeCompleted=true|false` (explicit filter metadata in response)
+  - new `GET /api/modules/completed?limit=<n>`
+- Added participant completed-modules UI:
+  - `public/participant-completed.html`
+  - `public/participant-completed.js`
+  - `public/i18n/participant-completed-translations.js`
+  - new route `GET /participant/completed` in `src/app.ts`
+- Navigation + i18n updates:
+  - `config/participant-console.json`
+  - `public/participant.js`
+  - `public/appeal-handler.js`
+  - `public/calibration.js`
+  - `public/i18n/participant-translations.js` (`nav.completedModules`)
+- Design/documentation updates:
+  - `doc/PHASE2_PARTICIPANT_COMPLETED_MODULES_DESIGN.md`
+  - `README.md` updated with new API/UI/config documentation
+- Test updates:
+  - new tests:
+    - `test/m2-completed-modules.test.ts`
+    - `test/module-completion-policy.test.ts`
+    - `test/participant-completed-translations.test.js`
+  - updated route/config coverage:
+    - `test/participant-console-config.test.ts`
+  - updated existing seed-module tests to use `includeCompleted=true` where required for deterministic baseline lookup:
+    - `test/m0-foundation.test.ts`
+    - `test/m1-core-flow.test.ts`
+    - `test/m2-audit-pipeline.test.ts`
+    - `test/m2-i18n-baseline.test.ts`
+  - increased timeout for two long-running integration tests to stabilize full suite execution:
+    - `test/m2-participant-results-history.test.ts`
+    - `test/m2-reporting.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test` (73 tests passing, 28 test files)
+
 ## 0.3.62 - 2026-03-10
 ### Summary
 Implemented issue #67 (Phase A of #32) with a new read-only calibration workspace for SMEs/admins, including module-scoped historical outcomes, benchmark-anchor visibility, config-driven quality signals, and access auditing.

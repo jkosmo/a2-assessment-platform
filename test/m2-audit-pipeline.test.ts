@@ -27,7 +27,7 @@ describe("MVP audit event pipeline", () => {
   });
 
   it("captures audit trail across submission -> mcq -> assessment decision and supports retrieval by submission", async () => {
-    const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
+    const modulesResponse = await request(app).get("/api/modules?includeCompleted=true").set(participantHeaders);
     expect(modulesResponse.status).toBe(200);
     const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
       (module) => module.title === "Generative AI Foundations",
@@ -103,7 +103,7 @@ describe("MVP audit event pipeline", () => {
   });
 
   it("blocks non-owner participant from reading submission audit trail while allowing admin", async () => {
-    const ownerModulesResponse = await request(app).get("/api/modules").set(participantHeaders);
+    const ownerModulesResponse = await request(app).get("/api/modules?includeCompleted=true").set(participantHeaders);
     expect(ownerModulesResponse.status).toBe(200);
     const seedModule = (ownerModulesResponse.body.modules as Array<{ id: string; title: string }>).find(
       (module) => module.title === "Generative AI Foundations",
