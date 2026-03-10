@@ -7,6 +7,39 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.61 - 2026-03-10
+### Summary
+Implemented issue #65 with a shared, config-driven top navigation for role-specific workspaces, including role-aware menu visibility and i18n labels.
+
+### Included
+- Added config-driven workspace navigation model:
+  - `config/participant-console.json`
+  - `src/config/participantConsole.ts`
+  - new `navigation.items[]` runtime config (id/path/labelKey/requiredRoles)
+- Added shared navigation resolution helpers:
+  - `public/participant-console-state.js`
+  - `sanitizeWorkspaceNavigationItems(...)`
+  - `resolveWorkspaceNavigationItems(...)`
+  - supports fallback menu behavior when configured items are invalid/missing
+- Wired shared top nav into participant and appeal-handler pages:
+  - `public/participant.html`
+  - `public/appeal-handler.html`
+  - `public/participant.js`
+  - `public/appeal-handler.js`
+  - both pages now render a top navigation bar based on current roles and locale
+- i18n label support for navigation:
+  - `public/i18n/participant-translations.js`
+  - added `nav.participant` and `nav.appealHandler` in `en-GB`, `nb`, and `nn`
+- Test coverage updates:
+  - `test/participant-console-state.test.js`
+    - added tests for navigation sanitization, role-based visibility, and fallback behavior
+  - `test/participant-console-config.test.ts`
+    - validates `/participant/config` includes `navigation` contract
+
+### Verification
+- `npm run lint`
+- `npm test` (61 tests passing, 23 test files)
+
 ## 0.3.60 - 2026-03-10
 ### Summary
 Refined participant assessment/result UX by removing redundant next-check messaging, improving localization coverage for additional OpenAI guidance text, and updating MCQ wording in Norwegian locales.

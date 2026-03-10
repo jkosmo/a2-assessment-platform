@@ -15,6 +15,11 @@
       button:not(:disabled):active { transform: translateY(1px); }
       button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .small { font-size: 12px; color: #666; }
+      .workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+      .workspace-nav-link { display: inline-block; width: auto; padding: 7px 12px; border: 1px solid #c7d0de; border-radius: 999px; text-decoration: none; background: #fff; color: #1c2d4f; font-size: 13px; }
+      .workspace-nav-link:hover { border-color: #4361ee; background: #f4f7ff; }
+      .workspace-nav-link.active { border-color: #134ec9; background: #eaf1ff; color: #0f3d9c; font-weight: 600; }
+      .workspace-nav-link:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .inline { display: inline-block; width: auto; }
       .button-busy { opacity: 0.75; position: relative; border-color: #134ec9; background: #eaf1ff; }
       .button-busy::after { content: " ..."; }
@@ -31,7 +36,7 @@
     <h1 data-i18n="appealPage.title"></h1>
     <p class="small" data-i18n="appealPage.subtitle"></p>
     <p class="small"><span data-i18n="appealPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
-    <p class="small"><a href="/participant" data-i18n="appealPage.participantLink"></a></p>
+    <nav id="workspaceNav" class="workspace-nav"></nav>
 
     <section class="card">
       <div class="row">

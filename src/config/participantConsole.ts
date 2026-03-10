@@ -20,8 +20,18 @@ const consoleIdentitySchema = z.object({
   roles: z.array(mockRoleSchema).min(1),
 });
 
+const workspaceNavigationItemSchema = z.object({
+  id: z.string().trim().min(1),
+  path: z.string().trim().min(1).regex(/^\//, "Navigation path must start with '/'."),
+  labelKey: z.string().trim().min(1),
+  requiredRoles: z.array(mockRoleSchema).default([]),
+});
+
 const participantConsoleConfigSchema = z.object({
   mockRolePresets: z.array(mockRoleSchema).min(1),
+  navigation: z.object({
+    items: z.array(workspaceNavigationItemSchema).min(1),
+  }),
   drafts: z.object({
     storageKey: z.string().trim().min(1),
     ttlMinutes: z.number().int().positive(),
@@ -55,6 +65,7 @@ export type ParticipantConsoleRuntimeConfig = {
   authMode: "mock" | "entra";
   mockRoleSwitchEnabled: boolean;
   mockRolePresets: ParticipantConsoleConfig["mockRolePresets"];
+  navigation: ParticipantConsoleConfig["navigation"];
   drafts: ParticipantConsoleConfig["drafts"];
   appealWorkspace: ParticipantConsoleConfig["appealWorkspace"];
   flow: ParticipantConsoleConfig["flow"];
@@ -80,6 +91,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     authMode: env.AUTH_MODE,
     mockRoleSwitchEnabled: env.AUTH_MODE === "mock",
     mockRolePresets: config.mockRolePresets,
+    navigation: config.navigation,
     drafts: config.drafts,
     appealWorkspace: config.appealWorkspace,
     flow: config.flow,

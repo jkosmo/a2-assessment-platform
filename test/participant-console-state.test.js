@@ -6,7 +6,9 @@ import {
   parseDraftEnvelope,
   pruneExpiredModuleDrafts,
   resolveRoleSwitchState,
+  resolveWorkspaceNavigationItems,
   resolveSelectedModule,
+  sanitizeWorkspaceNavigationItems,
   sanitizeAppealStatuses,
   sanitizeMockRolePresets,
   upsertModuleDraft,
@@ -138,5 +140,97 @@ describe("participant console state helpers", () => {
     ]);
 
     expect(statuses).toEqual(["OPEN", "IN_REVIEW"]);
+  });
+
+  it("sanitizes workspace navigation items and removes invalid entries", () => {
+    const items = sanitizeWorkspaceNavigationItems([
+      { id: "participant", path: "/participant", labelKey: "nav.participant", requiredRoles: ["participant"] },
+      { id: "participant", path: "/duplicate", labelKey: "nav.duplicate" },
+      { id: "", path: "/missing-id", labelKey: "nav.missing" },
+      { id: "bad-path", path: "participant", labelKey: "nav.badPath" },
+      { id: "appeals", path: "/appeal-handler", labelKey: "nav.appeals", requiredRoles: ["APPEAL_HANDLER", "invalid"] },
+    ]);
+
+    expect(items).toEqual([
+      {
+        id: "participant",
+        path: "/participant",
+        labelKey: "nav.participant",
+        requiredRoles: ["PARTICIPANT"],
+      },
+      {
+        id: "appeals",
+        path: "/appeal-handler",
+        labelKey: "nav.appeals",
+        requiredRoles: ["APPEAL_HANDLER"],
+      },
+    ]);
+  });
+
+  it("resolves workspace navigation visibility by role", () => {
+    const items = resolveWorkspaceNavigationItems(
+      [
+        {
+          id: "participant",
+          path: "/participant",
+          labelKey: "nav.participant",
+          requiredRoles: ["PARTICIPANT", "ADMINISTRATOR"],
+        },
+        {
+          id: "appeals",
+          path: "/appeal-handler",
+          labelKey: "nav.appeals",
+          requiredRoles: ["APPEAL_HANDLER"],
+        },
+      ],
+      "participant",
+      "/participant",
+    );
+
+    expect(items).toEqual([
+      {
+        id: "participant",
+        path: "/participant",
+        labelKey: "nav.participant",
+        requiredRoles: ["PARTICIPANT", "ADMINISTRATOR"],
+        visible: true,
+        active: true,
+      },
+      {
+        id: "appeals",
+        path: "/appeal-handler",
+        labelKey: "nav.appeals",
+        requiredRoles: ["APPEAL_HANDLER"],
+        visible: false,
+        active: false,
+      },
+    ]);
+  });
+
+  it("falls back to default navigation when configured items are invalid", () => {
+    const items = resolveWorkspaceNavigationItems(
+      [{ id: "", path: "invalid", labelKey: "" }],
+      "APPEAL_HANDLER",
+      "/appeal-handler",
+      [
+        {
+          id: "appeals",
+          path: "/appeal-handler",
+          labelKey: "nav.appeals",
+          requiredRoles: ["APPEAL_HANDLER"],
+        },
+      ],
+    );
+
+    expect(items).toEqual([
+      {
+        id: "appeals",
+        path: "/appeal-handler",
+        labelKey: "nav.appeals",
+        requiredRoles: ["APPEAL_HANDLER"],
+        visible: true,
+        active: true,
+      },
+    ]);
   });
 });

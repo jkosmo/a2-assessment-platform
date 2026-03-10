@@ -16,6 +16,22 @@ describe("participant console runtime config", () => {
       "REPORT_READER",
       "SUBJECT_MATTER_OWNER",
     ]);
+    expect(response.body.navigation).toEqual({
+      items: [
+        {
+          id: "participant",
+          path: "/participant",
+          labelKey: "nav.participant",
+          requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
+        },
+        {
+          id: "appeal-handler",
+          path: "/appeal-handler",
+          labelKey: "nav.appealHandler",
+          requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
+        },
+      ],
+    });
     expect(response.body.drafts).toEqual({
       storageKey: "participant.moduleDrafts.v1",
       ttlMinutes: 240,

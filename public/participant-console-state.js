@@ -58,6 +58,91 @@ export function findMatchingPreset(rolesValue, presets) {
   return presets.includes(parts[0]) ? parts[0] : "";
 }
 
+export function sanitizeWorkspaceNavigationItems(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const uniqueIds = new Set();
+  const items = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    const path = typeof item.path === "string" ? item.path.trim() : "";
+    const labelKey = typeof item.labelKey === "string" ? item.labelKey.trim() : "";
+    if (!id || !path || !labelKey || !path.startsWith("/") || uniqueIds.has(id)) {
+      continue;
+    }
+
+    const requiredRoles = Array.isArray(item.requiredRoles)
+      ? Array.from(
+        new Set(
+          item.requiredRoles
+            .map((role) => (typeof role === "string" ? role.trim().toUpperCase() : ""))
+            .filter((role) => allowedMockRoles.has(role)),
+        ),
+      )
+      : [];
+
+    items.push({ id, path, labelKey, requiredRoles });
+    uniqueIds.add(id);
+  }
+
+  return items;
+}
+
+function normalizePath(pathValue) {
+  if (typeof pathValue !== "string") {
+    return "";
+  }
+
+  const trimmed = pathValue.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const withoutFragment = trimmed.split("#", 1)[0];
+  const withoutQuery = withoutFragment.split("?", 1)[0];
+  if (withoutQuery.length > 1 && withoutQuery.endsWith("/")) {
+    return withoutQuery.slice(0, -1);
+  }
+
+  return withoutQuery;
+}
+
+export function resolveWorkspaceNavigationItems(navigationItems, rolesValue, currentPath, fallbackItems = []) {
+  const configured = sanitizeWorkspaceNavigationItems(navigationItems);
+  const fallback = sanitizeWorkspaceNavigationItems(fallbackItems);
+  const sourceItems = configured.length > 0 ? configured : fallback;
+
+  const normalizedPath = normalizePath(currentPath);
+  const roleSet = new Set(
+    typeof rolesValue === "string"
+      ? rolesValue
+        .split(",")
+        .map((value) => value.trim().toUpperCase())
+        .filter(Boolean)
+      : [],
+  );
+
+  return sourceItems.map((item) => {
+    const requiredRoles = Array.isArray(item.requiredRoles) ? item.requiredRoles : [];
+    const visible =
+      requiredRoles.length === 0 ||
+      requiredRoles.some((role) => roleSet.has(role));
+
+    return {
+      ...item,
+      visible,
+      active: normalizePath(item.path) === normalizedPath,
+    };
+  });
+}
+
 export function buildModuleCardViewModels(modules, selectedModuleId) {
   if (!Array.isArray(modules)) {
     return [];

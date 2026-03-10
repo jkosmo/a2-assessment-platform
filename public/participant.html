@@ -15,6 +15,11 @@
       button:not(:disabled):active { transform: translateY(1px); }
       button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .small { font-size: 12px; color: #666; }
+      .workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+      .workspace-nav-link { display: inline-block; width: auto; padding: 7px 12px; border: 1px solid #c7d0de; border-radius: 999px; text-decoration: none; background: #fff; color: #1c2d4f; font-size: 13px; }
+      .workspace-nav-link:hover { border-color: #4361ee; background: #f4f7ff; }
+      .workspace-nav-link.active { border-color: #134ec9; background: #eaf1ff; color: #0f3d9c; font-weight: 600; }
+      .workspace-nav-link:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .assessment-progress { margin-top: 10px; font-size: 16px; font-weight: 600; color: #1b2a4a; }
       .assessment-progress-seconds { margin-top: 6px; font-size: 28px; font-weight: 800; color: #134ec9; letter-spacing: 0.3px; }
       pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
@@ -38,7 +43,7 @@
     <h1 data-i18n="page.title"></h1>
     <p class="small" data-i18n="page.subtitle"></p>
     <p class="small"><span data-i18n="page.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
-    <p class="small"><a href="/appeal-handler" data-i18n="page.appealWorkspaceLink"></a></p>
+    <nav id="workspaceNav" class="workspace-nav"></nav>
     <div class="card">
       <div class="row">
         <div>

@@ -2,6 +2,7 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/appea
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
+  resolveWorkspaceNavigationItems,
   sanitizeAppealStatuses,
 } from "/static/participant-console-state.js";
 
@@ -9,6 +10,7 @@ const output = document.getElementById("output");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
+const workspaceNav = document.getElementById("workspaceNav");
 const mockRolePresetContainer = document.getElementById("mockRolePresetContainer");
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
@@ -36,6 +38,22 @@ let participantRuntimeConfig = {
   authMode: "mock",
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
+  navigation: {
+    items: [
+      {
+        id: "participant",
+        path: "/participant",
+        labelKey: "nav.participant",
+        requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
+      },
+      {
+        id: "appeal-handler",
+        path: "/appeal-handler",
+        labelKey: "nav.appealHandler",
+        requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
+      },
+    ],
+  },
   appealWorkspace: {
     availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
     defaultStatuses: ["OPEN", "IN_REVIEW"],
@@ -53,6 +71,20 @@ let participantRuntimeConfig = {
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 const defaultResolutionPassFailValue = "true";
+const defaultWorkspaceNavigationItems = [
+  {
+    id: "participant",
+    path: "/participant",
+    labelKey: "nav.participant",
+    requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
+  },
+  {
+    id: "appeal-handler",
+    path: "/appeal-handler",
+    labelKey: "nav.appealHandler",
+    requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
+  },
+];
 
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
@@ -104,6 +136,7 @@ function applyTranslations() {
 
   populateAppealStatusFilters();
   renderRolePresetControl();
+  renderWorkspaceNavigation();
   renderAppealQueue();
   renderAppealHandlerDetails(selectedAppealDetails);
 }
@@ -572,6 +605,36 @@ function renderRolePresetControl() {
   mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
 }
 
+function renderWorkspaceNavigation() {
+  if (!workspaceNav) {
+    return;
+  }
+
+  const items = resolveWorkspaceNavigationItems(
+    participantRuntimeConfig?.navigation?.items,
+    rolesInput.value,
+    window.location.pathname,
+    defaultWorkspaceNavigationItems,
+  ).filter((item) => item.visible);
+
+  workspaceNav.innerHTML = "";
+  workspaceNav.hidden = items.length === 0;
+  if (items.length === 0) {
+    return;
+  }
+
+  for (const item of items) {
+    const link = document.createElement("a");
+    link.href = item.path;
+    link.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
+    link.textContent = t(item.labelKey);
+    if (item.active) {
+      link.setAttribute("aria-current", "page");
+    }
+    workspaceNav.appendChild(link);
+  }
+}
+
 async function loadParticipantConsoleConfig() {
   try {
     const response = await fetch("/participant/config");
@@ -583,6 +646,10 @@ async function loadParticipantConsoleConfig() {
     participantRuntimeConfig = {
       ...participantRuntimeConfig,
       ...body,
+      navigation: {
+        ...participantRuntimeConfig.navigation,
+        ...(body?.navigation ?? {}),
+      },
       appealWorkspace: {
         ...participantRuntimeConfig.appealWorkspace,
         ...(body?.appealWorkspace ?? {}),
@@ -595,6 +662,7 @@ async function loadParticipantConsoleConfig() {
 
   applyIdentityDefaults();
   renderRolePresetControl();
+  renderWorkspaceNavigation();
   populateAppealStatusFilters();
   await loadAppealQueue();
 }
@@ -757,11 +825,13 @@ mockRolePresetSelect.addEventListener("change", () => {
   }
 
   rolesInput.value = mockRolePresetSelect.value;
+  renderWorkspaceNavigation();
 });
 
 rolesInput.addEventListener("input", () => {
   const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
   mockRolePresetSelect.value = matchingPreset;
+  renderWorkspaceNavigation();
 });
 
 populateLocaleSelect();
