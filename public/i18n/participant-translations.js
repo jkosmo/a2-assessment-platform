@@ -108,7 +108,7 @@ export const translations = {
     "assessment.progress.underReview": "Submission is under manual review.",
     "assessment.progress.failed": "Assessment failed. Try checking progress again.",
     "assessment.auto.starting": "Starting assessment automatically.",
-    "assessment.auto.started": "Assessment started. Next status check in",
+    "assessment.auto.started": "Assessment started automatically.",
     "assessment.auto.nextCheckPrefix": "Next status check in",
     "assessment.auto.resultLoaded": "Result loaded automatically.",
     "assessment.auto.failedStart": "Could not start assessment automatically.",
@@ -169,6 +169,26 @@ export const translations = {
       "Provide a concrete improvement loop with iterations and feedback capture.",
     "result.improvementAdviceValue.promptLeakage":
       "Clarify responsible-use guidelines and safeguards against prompt leakage.",
+    "result.improvementAdviceValue.governanceScope":
+      "Define governance scope, risk owners, and monitoring cadence.",
+    "result.improvementAdviceValue.riskCategories":
+      "Map content to risk categories (STRIDE, CIA triad, or equivalent).",
+    "result.improvementAdviceValue.qaChecklist":
+      "Incorporate a concrete QA process with checklists and independent review.",
+    "result.improvementAdviceValue.dataControls":
+      "Specify data handling, privacy, retention, and security controls.",
+    "result.improvementAdviceValue.qualityThresholds":
+      "Articulate acceptance criteria and thresholds for quality and risk.",
+    "result.improvementAdviceValue.iterationVersioning":
+      "Outline an iteration plan with feedback loops and versioning.",
+    "result.improvementAdviceValue.escalationDecisionRights":
+      "Clarify escalation procedures and decision rights.",
+    "result.improvementAdviceValue.artifactsEvidence":
+      "Include artefacts like risk register, control mapping, and audit trails.",
+    "result.improvementAdviceValue.responsibleAiMisuse":
+      "Align prompts with responsible AI principles and misuse safeguards.",
+    "result.improvementAdviceValue.examplesFailureModes":
+      "Provide example outputs and mitigations for common failure modes.",
     "result.rationales": "Criterion rationales",
     "result.criterion.relevance_for_case": "Relevance for case",
     "result.criterion.quality_and_utility": "Quality and utility",
@@ -236,9 +256,9 @@ export const translations = {
     "submission.create": "Opprett innlevering",
     "submission.resetFlow": "Slett innlevering, og start på nytt",
     "submission.submissionId": "Innleverings-ID:",
-    "mcq.title": "MCQ",
+    "mcq.title": "Flervalgstest",
     "mcq.start": "Start MCQ",
-    "mcq.submit": "Send MCQ",
+    "mcq.submit": "Send test",
     "mcq.attemptId": "Forsøks-ID:",
     "assessment.title": "Vurdering",
     "assessment.queue": "Start vurdering",
@@ -292,7 +312,7 @@ export const translations = {
     "assessment.progress.underReview": "Innleveringen er under manuell vurdering.",
     "assessment.progress.failed": "Vurdering feilet. Prøv å sjekke framdrift igjen.",
     "assessment.auto.starting": "Starter vurdering automatisk.",
-    "assessment.auto.started": "Vurdering startet. Neste sjekk om",
+    "assessment.auto.started": "Vurdering startet automatisk.",
     "assessment.auto.nextCheckPrefix": "Neste sjekk om",
     "assessment.auto.resultLoaded": "Resultat ble lastet automatisk.",
     "assessment.auto.failedStart": "Kunne ikke starte vurdering automatisk.",
@@ -356,6 +376,26 @@ export const translations = {
       "Beskriv en konkret forbedringssløyfe med iterasjoner og tilbakemeldinger.",
     "result.improvementAdviceValue.promptLeakage":
       "Presiser retningslinjer for ansvarlig bruk og vern mot prompt-lekkasje.",
+    "result.improvementAdviceValue.governanceScope":
+      "Beskriv styringsomfang, risikoeiere og rytme for oppfølging.",
+    "result.improvementAdviceValue.riskCategories":
+      "Knytt innholdet til risikokategorier (STRIDE, CIA-triaden eller tilsvarende).",
+    "result.improvementAdviceValue.qaChecklist":
+      "Bruk en konkret QA-prosess med sjekklister og uavhengig gjennomgang.",
+    "result.improvementAdviceValue.dataControls":
+      "Beskriv datahåndtering, personvern, lagringstid og sikkerhetskontroller.",
+    "result.improvementAdviceValue.qualityThresholds":
+      "Definer akseptansekriterier og terskler for kvalitet og risiko.",
+    "result.improvementAdviceValue.iterationVersioning":
+      "Skisser en iterasjonsplan med tilbakemeldingssløyfer og versjonering.",
+    "result.improvementAdviceValue.escalationDecisionRights":
+      "Klartgjør eskaleringsrutiner og beslutningsmyndighet.",
+    "result.improvementAdviceValue.artifactsEvidence":
+      "Legg ved artefakter som risikoregister, kontrollkartlegging og revisjonsspor.",
+    "result.improvementAdviceValue.responsibleAiMisuse":
+      "Sørg for at promptene følger prinsipper for ansvarlig KI og vern mot misbruk.",
+    "result.improvementAdviceValue.examplesFailureModes":
+      "Ta med eksempelutdata og tiltak for vanlige feilmønstre.",
     "result.rationales": "Kriteriebegrunnelser",
     "result.criterion.relevance_for_case": "Relevans for oppgaven",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",
@@ -423,9 +463,9 @@ export const translations = {
     "submission.create": "Opprett innlevering",
     "submission.resetFlow": "Slett innlevering, og start på nytt",
     "submission.submissionId": "Innleverings-ID:",
-    "mcq.title": "MCQ",
+    "mcq.title": "Flervalgstest",
     "mcq.start": "Start MCQ",
-    "mcq.submit": "Send MCQ",
+    "mcq.submit": "Send test",
     "mcq.attemptId": "Forsøks-ID:",
     "assessment.title": "Vurdering",
     "assessment.queue": "Start vurdering",
@@ -479,7 +519,7 @@ export const translations = {
     "assessment.progress.underReview": "Innleveringa er under manuell vurdering.",
     "assessment.progress.failed": "Vurdering feila. Prøv å sjekke framdrift igjen.",
     "assessment.auto.starting": "Startar vurdering automatisk.",
-    "assessment.auto.started": "Vurdering starta. Neste sjekk om",
+    "assessment.auto.started": "Vurdering starta automatisk.",
     "assessment.auto.nextCheckPrefix": "Neste sjekk om",
     "assessment.auto.resultLoaded": "Resultat vart lasta automatisk.",
     "assessment.auto.failedStart": "Klarte ikkje starte vurdering automatisk.",
@@ -543,6 +583,26 @@ export const translations = {
       "Skildr ei konkret forbetringssløyfe med iterasjonar og tilbakemeldingar.",
     "result.improvementAdviceValue.promptLeakage":
       "Presiser retningslinjer for ansvarleg bruk og vern mot prompt-lekkasje.",
+    "result.improvementAdviceValue.governanceScope":
+      "Skildr styringsomfang, risikoeigarar og rytme for oppfølging.",
+    "result.improvementAdviceValue.riskCategories":
+      "Knyt innhaldet til risikokategoriar (STRIDE, CIA-triaden eller tilsvarande).",
+    "result.improvementAdviceValue.qaChecklist":
+      "Bruk ein konkret QA-prosess med sjekklister og uavhengig gjennomgang.",
+    "result.improvementAdviceValue.dataControls":
+      "Skildr datahandsaming, personvern, lagringstid og tryggleikskontrollar.",
+    "result.improvementAdviceValue.qualityThresholds":
+      "Definer akseptkriterium og tersklar for kvalitet og risiko.",
+    "result.improvementAdviceValue.iterationVersioning":
+      "Skisser ein iterasjonsplan med tilbakemeldingssløyfer og versjonering.",
+    "result.improvementAdviceValue.escalationDecisionRights":
+      "Klårgjer eskaleringsrutinar og avgjerdsmynde.",
+    "result.improvementAdviceValue.artifactsEvidence":
+      "Legg ved artefaktar som risikoregister, kontrollkartlegging og revisjonsspor.",
+    "result.improvementAdviceValue.responsibleAiMisuse":
+      "Sørg for at promptane følgjer prinsipp for ansvarleg KI og vern mot misbruk.",
+    "result.improvementAdviceValue.examplesFailureModes":
+      "Ta med eksempelutdata og tiltak for vanlege feilmønster.",
     "result.rationales": "Kriteriegrunngjevingar",
     "result.criterion.relevance_for_case": "Relevans for oppgåva",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",

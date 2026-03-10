@@ -440,7 +440,7 @@ async function startAutomaticAssessmentFlow(submissionId) {
     ...flowState,
     assessmentQueued: true,
   };
-  setAssessmentProgressDetail("assessment.auto.started", settings.pollIntervalSeconds);
+  setAssessmentProgressDetail("assessment.auto.started");
   renderAssessmentProgress();
   renderFlowGating();
 
@@ -459,7 +459,6 @@ async function startAutomaticAssessmentFlow(submissionId) {
     }
 
     autoAssessmentNextPollInSeconds = Math.max(0, autoAssessmentNextPollInSeconds - 1);
-    setAssessmentProgressDetail("assessment.auto.nextCheckPrefix", autoAssessmentNextPollInSeconds);
     renderAssessmentProgress();
 
     if (autoAssessmentNextPollInSeconds > 0) {
@@ -922,8 +921,22 @@ function localizeDecisionReason(value) {
 }
 
 function localizeConfidence(value) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized.includes("low confidence") &&
+      (normalized.includes("sparse") ||
+        normalized.includes("limited cues") ||
+        normalized.includes("partial evidence"))
+    ) {
+      return t("result.confidenceValue.low");
+    }
+  }
+
   return localizeKnownContent(value, {
     "Low confidence due to sparse content; assessment based on partial evidence; more details would improve accuracy.":
+      "result.confidenceValue.low",
+    "Low confidence in alignment due to sparse content; assessment based on limited cues.":
       "result.confidenceValue.low",
     "Medium confidence due to potential responsible-use ambiguity.":
       "result.confidenceValue.medium",
@@ -955,6 +968,26 @@ function localizeImprovementAdvice(values) {
       "result.improvementAdviceValue.improvementLoop",
     "Clarify responsible-use guidelines and safeguards against prompt leakage.":
       "result.improvementAdviceValue.promptLeakage",
+    "Define governance scope, risk owners, and monitoring cadence.":
+      "result.improvementAdviceValue.governanceScope",
+    "Map content to risk categories (STRIDE, CIA triad, or equivalent).":
+      "result.improvementAdviceValue.riskCategories",
+    "Incorporate a concrete QA process with checklists and independent review.":
+      "result.improvementAdviceValue.qaChecklist",
+    "Specify data handling, privacy, retention, and security controls.":
+      "result.improvementAdviceValue.dataControls",
+    "Articulate acceptance criteria and thresholds for quality and risk.":
+      "result.improvementAdviceValue.qualityThresholds",
+    "Outline an iteration plan with feedback loops and versioning.":
+      "result.improvementAdviceValue.iterationVersioning",
+    "Clarify escalation procedures and decision rights.":
+      "result.improvementAdviceValue.escalationDecisionRights",
+    "Include artefacts like risk register, control mapping, and audit trails.":
+      "result.improvementAdviceValue.artifactsEvidence",
+    "Align prompts with responsible AI principles and misuse safeguards.":
+      "result.improvementAdviceValue.responsibleAiMisuse",
+    "Provide example outputs and mitigations for common failure modes.":
+      "result.improvementAdviceValue.examplesFailureModes",
   };
 
   return values.map((value) => localizeKnownContent(value, mapping)).join("; ");

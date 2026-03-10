@@ -7,6 +7,44 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.60 - 2026-03-10
+### Summary
+Refined participant assessment/result UX by removing redundant next-check messaging, improving localization coverage for additional OpenAI guidance text, and updating MCQ wording in Norwegian locales.
+
+### Included
+- Participant progress messaging:
+  - `public/participant.js`
+  - Removed UI display of `Next status check in ...` countdown during automatic assessment polling.
+  - Progress now relies on clear status + prominent elapsed-seconds indicator.
+- Extended localization mapping for OpenAI response text:
+  - `public/participant.js`
+  - Added normalization/mapping support for additional confidence variant:
+    - `Low confidence in alignment due to sparse content; assessment based on limited cues.`
+  - Added mapping coverage for additional improvement-advice phrases:
+    - governance scope / risk owners / cadence
+    - risk categories
+    - QA checklist + independent review
+    - data/privacy/retention/security controls
+    - quality thresholds
+    - iteration + versioning
+    - escalation procedures + decision rights
+    - artifacts/evidence
+    - responsible AI + misuse safeguards
+    - failure-mode examples + mitigations
+- Translation resource updates:
+  - `public/i18n/participant-translations.js`
+  - Added matching translation keys in `en-GB`, `nb`, and `nn`.
+  - Updated Norwegian MCQ wording:
+    - section label: `Flervalgstest`
+    - submit button: `Send test`
+- Translation test coverage:
+  - `test/participant-translations.test.js`
+  - Added assertions for newly introduced translation keys.
+
+### Verification
+- `npm run lint`
+- `npm test` (58 tests passing, 23 test files)
+
 ## 0.3.59 - 2026-03-10
 ### Summary
 Fixed participant MCQ action state so `Send MCQ` becomes enabled immediately after MCQ questions are loaded.

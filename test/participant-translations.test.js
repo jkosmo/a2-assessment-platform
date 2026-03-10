@@ -22,6 +22,16 @@ describe("participant translation resources", () => {
       "result.improvementAdviceValue.qaMetrics",
       "result.improvementAdviceValue.improvementLoop",
       "result.improvementAdviceValue.promptLeakage",
+      "result.improvementAdviceValue.governanceScope",
+      "result.improvementAdviceValue.riskCategories",
+      "result.improvementAdviceValue.qaChecklist",
+      "result.improvementAdviceValue.dataControls",
+      "result.improvementAdviceValue.qualityThresholds",
+      "result.improvementAdviceValue.iterationVersioning",
+      "result.improvementAdviceValue.escalationDecisionRights",
+      "result.improvementAdviceValue.artifactsEvidence",
+      "result.improvementAdviceValue.responsibleAiMisuse",
+      "result.improvementAdviceValue.examplesFailureModes",
     ];
 
     for (const locale of supportedLocales) {
