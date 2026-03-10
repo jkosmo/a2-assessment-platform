@@ -131,5 +131,31 @@ describe("MVP i18n baseline", () => {
       (question) => question.options,
     );
     expect(options).toContain("Backend eier endelig beslutning");
+
+    const translatedBoundaryQuestion = (
+      mcqStartResponse.body.questions as Array<{ id: string; stem: string }>
+    ).find((question) => question.stem === "Hva er anbefalt ansvarsgrense for modellen?");
+    if (!translatedBoundaryQuestion) {
+      throw new Error("Translated MCQ question not found.");
+    }
+
+    const mcqSubmitResponse = await request(app)
+      .post(`/api/modules/${seedModule.id}/mcq/submit`)
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      })
+      .send({
+        submissionId,
+        attemptId: mcqStartResponse.body.attemptId,
+        responses: [
+          {
+            questionId: translatedBoundaryQuestion.id,
+            selectedAnswer: "Backend eier endelig beslutning",
+          },
+        ],
+      });
+    expect(mcqSubmitResponse.status).toBe(200);
+    expect(mcqSubmitResponse.body.rawScore).toBeGreaterThanOrEqual(1);
   });
 });

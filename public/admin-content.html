@@ -66,15 +66,19 @@
 
     <section class="card">
       <h3 data-i18n="adminContent.module.title"></h3>
+      <div class="small" data-i18n="adminContent.help.moduleOverview"></div>
       <div class="row">
         <div><label data-i18n="adminContent.module.name"></label><input id="moduleTitle" /></div>
         <div><label data-i18n="adminContent.module.certificationLevel"></label><input id="moduleCertificationLevel" /></div>
       </div>
+      <div class="small" data-i18n="adminContent.help.moduleName"></div>
       <div><label data-i18n="adminContent.module.description"></label><textarea id="moduleDescription" rows="2"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.moduleDescription"></div>
       <div class="row">
         <div><label data-i18n="adminContent.module.validFrom"></label><input id="moduleValidFrom" type="date" /></div>
         <div><label data-i18n="adminContent.module.validTo"></label><input id="moduleValidTo" type="date" /></div>
       </div>
+      <div class="small" data-i18n="adminContent.help.moduleValidity"></div>
       <button id="createModule" data-i18n="adminContent.module.create"></button>
     </section>
 
@@ -96,41 +100,57 @@
 
     <section class="card">
       <h3 data-i18n="adminContent.rubric.title"></h3>
+      <div class="small" data-i18n="adminContent.help.rubricOverview"></div>
       <div><label data-i18n="adminContent.rubric.criteria"></label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.rubricCriteria"></div>
       <div><label data-i18n="adminContent.rubric.scalingRule"></label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.rubricScalingRule"></div>
       <div><label data-i18n="adminContent.rubric.passRule"></label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.rubricPassRule"></div>
       <button id="createRubricVersion" data-i18n="adminContent.rubric.create"></button>
     </section>
 
     <section class="card">
       <h3 data-i18n="adminContent.prompt.title"></h3>
+      <div class="small" data-i18n="adminContent.help.promptOverview"></div>
       <div><label data-i18n="adminContent.prompt.systemPrompt"></label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.promptSystemPrompt"></div>
       <div><label data-i18n="adminContent.prompt.userPromptTemplate"></label><textarea id="promptUserPromptTemplate" rows="3"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.promptUserTemplate"></div>
       <div><label data-i18n="adminContent.prompt.examplesJson"></label><textarea id="promptExamplesJson" rows="4"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.promptExamples"></div>
       <button id="createPromptTemplateVersion" data-i18n="adminContent.prompt.create"></button>
     </section>
 
     <section class="card">
       <h3 data-i18n="adminContent.mcq.title"></h3>
+      <div class="small" data-i18n="adminContent.help.mcqOverview"></div>
       <div><label data-i18n="adminContent.mcq.setTitle"></label><input id="mcqSetTitle" /></div>
+      <div class="small" data-i18n="adminContent.help.mcqTitle"></div>
       <div><label data-i18n="adminContent.mcq.questionsJson"></label><textarea id="mcqQuestionsJson" rows="7"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.mcqQuestions"></div>
       <button id="createMcqSetVersion" data-i18n="adminContent.mcq.create"></button>
     </section>
 
     <section class="card">
       <h3 data-i18n="adminContent.moduleVersion.title"></h3>
+      <div class="small" data-i18n="adminContent.help.moduleVersionOverview"></div>
       <div><label data-i18n="adminContent.moduleVersion.taskText"></label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.moduleTaskText"></div>
       <div><label data-i18n="adminContent.moduleVersion.guidanceText"></label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.moduleGuidanceText"></div>
       <div class="row">
         <div><label data-i18n="adminContent.moduleVersion.rubricVersionId"></label><input id="moduleVersionRubricVersionId" /></div>
         <div><label data-i18n="adminContent.moduleVersion.promptTemplateVersionId"></label><input id="moduleVersionPromptTemplateVersionId" /></div>
       </div>
+      <div class="small" data-i18n="adminContent.help.moduleVersionIds"></div>
       <div><label data-i18n="adminContent.moduleVersion.mcqSetVersionId"></label><input id="moduleVersionMcqSetVersionId" /></div>
       <button id="createModuleVersion" data-i18n="adminContent.moduleVersion.create"></button>
     </section>
 
     <section class="card">
       <h3 data-i18n="adminContent.publish.title"></h3>
+      <div class="small" data-i18n="adminContent.help.publishOverview"></div>
       <div><label data-i18n="adminContent.publish.moduleVersionId"></label><input id="publishModuleVersionId" /></div>
       <button id="publishModuleVersion" data-i18n="adminContent.publish.publish"></button>
     </section>

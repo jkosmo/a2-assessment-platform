@@ -188,6 +188,10 @@ http://localhost:3000/admin-content
 - Create rubric/prompt/MCQ versions from JSON fields
 - Create module version by linking created version IDs
 - Publish module version
+- Text fields support either:
+  - plain text
+  - locale JSON object: `{"en-GB":"...","nb":"...","nn":"..."}`
+- For MCQ, `stem`, each `options` item, `correctAnswer`, and `rationale` can use plain text or locale JSON
 
 Participant console behavior is config-driven via:
 - `config/participant-console.json`

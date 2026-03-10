@@ -7,6 +7,49 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.65 - 2026-03-10
+### Summary
+Improved admin content usability with clearer field naming and helper guidance, and added explicit multi-locale content authoring support (including MCQ locale-aware answer matching).
+
+### Included
+- Admin content UX text revision and helper guidance:
+  - `public/admin-content.html`
+  - `public/i18n/admin-content-translations.js`
+  - clearer section names, field labels, and instructional helper text
+  - explicit guidance for plain text vs locale-JSON content format
+  - clarified which field is participant-facing module task text
+- Added inline locale-JSON content support:
+  - `src/i18n/content.ts`
+  - supports content values in format:
+    - `{"en-GB":"...","nb":"...","nn":"..."}`
+  - locale resolution now supports:
+    - plain text + dictionary lookup
+    - inline locale JSON values
+  - added localized variant matching helper for answer equivalence
+- Extended admin content API text-field flexibility:
+  - `src/routes/adminContent.ts`
+  - text inputs now accept plain text or locale JSON object for:
+    - module create fields (`title`, `description`, `certificationLevel`)
+    - prompt template fields (`systemPrompt`, `userPromptTemplate`)
+    - MCQ fields (`title`, `stem`, `options`, `correctAnswer`, `rationale`)
+    - module version fields (`taskText`, `guidanceText`)
+  - values are serialized consistently for storage
+- Fixed locale-aware MCQ correctness matching:
+  - `src/services/mcqService.ts`
+  - answer validation now accepts translated variants (not only exact source string)
+- Documentation updates:
+  - `doc/I18N.md`
+  - `README.md`
+  - added explicit admin content localization format and behavior
+- Automated tests added/updated:
+  - new `test/content-localization.test.ts`
+  - updated `test/m2-i18n-baseline.test.ts` to verify localized MCQ submit correctness
+  - updated `test/admin-content-translations.test.js` for new helper-label coverage
+
+### Verification
+- `npm run lint`
+- `npm test` (79 tests passing, 30 test files)
+
 ## 0.3.64 - 2026-03-10
 ### Summary
 Implemented admin content workspace enablement with end-to-end UI/API support for creating base modules and managing versioned rubric/prompt/MCQ/module content from a dedicated role-scoped page.

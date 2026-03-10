@@ -16,10 +16,15 @@ describe("admin content translation resources", () => {
       "nav.adminContent",
       "adminContentPage.title",
       "adminContent.module.title",
+      "adminContent.help.moduleOverview",
       "adminContent.rubric.title",
+      "adminContent.help.rubricOverview",
       "adminContent.prompt.title",
+      "adminContent.help.promptUserTemplate",
       "adminContent.mcq.title",
+      "adminContent.help.mcqQuestions",
       "adminContent.moduleVersion.title",
+      "adminContent.help.moduleTaskText",
       "adminContent.publish.title",
     ];
 

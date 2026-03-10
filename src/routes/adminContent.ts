@@ -12,10 +12,38 @@ import {
 
 const adminContentRouter = Router();
 
+const localizedTextObjectSchema = z.object({
+  "en-GB": z.string().trim().min(1),
+  nb: z.string().trim().min(1),
+  nn: z.string().trim().min(1),
+});
+const localizedTextSchema = z.union([z.string().trim().min(1), localizedTextObjectSchema]);
+type LocalizedTextInput = z.infer<typeof localizedTextSchema>;
+
+function serializeLocalizedText(value: LocalizedTextInput): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  return JSON.stringify({
+    "en-GB": value["en-GB"].trim(),
+    nb: value.nb.trim(),
+    nn: value.nn.trim(),
+  });
+}
+
+function localizedTextIdentity(value: LocalizedTextInput): string {
+  if (typeof value === "string") {
+    return `plain:${value.trim()}`;
+  }
+
+  return `locale:${value["en-GB"].trim()}|${value.nb.trim()}|${value.nn.trim()}`;
+}
+
 const moduleCreateBodySchema = z.object({
-  title: z.string().trim().min(3),
-  description: z.string().trim().min(1).optional(),
-  certificationLevel: z.string().trim().min(1).optional(),
+  title: localizedTextSchema,
+  description: localizedTextSchema.optional(),
+  certificationLevel: localizedTextSchema.optional(),
   validFrom: z.string().trim().optional(),
   validTo: z.string().trim().optional(),
 });
@@ -28,21 +56,22 @@ const rubricBodySchema = z.object({
 });
 
 const promptTemplateBodySchema = z.object({
-  systemPrompt: z.string().trim().min(5),
-  userPromptTemplate: z.string().trim().min(5),
+  systemPrompt: localizedTextSchema,
+  userPromptTemplate: localizedTextSchema,
   examples: z.array(z.record(z.unknown())).optional().default([]),
   active: z.boolean().optional().default(true),
 });
 
 const mcqQuestionSchema = z
   .object({
-    stem: z.string().trim().min(5),
-    options: z.array(z.string().trim().min(1)).min(2),
-    correctAnswer: z.string().trim().min(1),
-    rationale: z.string().trim().min(1).optional(),
+    stem: localizedTextSchema,
+    options: z.array(localizedTextSchema).min(2),
+    correctAnswer: localizedTextSchema,
+    rationale: localizedTextSchema.optional(),
   })
   .superRefine((question, context) => {
-    if (!question.options.includes(question.correctAnswer)) {
+    const normalizedOptions = question.options.map((option) => localizedTextIdentity(option));
+    if (!normalizedOptions.includes(localizedTextIdentity(question.correctAnswer))) {
       context.addIssue({
         code: "custom",
         message: "correctAnswer must be one of options.",
@@ -52,14 +81,14 @@ const mcqQuestionSchema = z
   });
 
 const mcqSetBodySchema = z.object({
-  title: z.string().trim().min(3),
+  title: localizedTextSchema,
   questions: z.array(mcqQuestionSchema).min(1),
   active: z.boolean().optional().default(true),
 });
 
 const moduleVersionBodySchema = z.object({
-  taskText: z.string().trim().min(5),
-  guidanceText: z.string().trim().min(1).optional(),
+  taskText: localizedTextSchema,
+  guidanceText: localizedTextSchema.optional(),
   rubricVersionId: z.string().min(1),
   promptTemplateVersionId: z.string().min(1),
   mcqSetVersionId: z.string().min(1),
@@ -112,9 +141,11 @@ adminContentRouter.post("/modules", async (request, response) => {
 
   try {
     const module = await createModule({
-      title: parsed.data.title,
-      description: parsed.data.description,
-      certificationLevel: parsed.data.certificationLevel,
+      title: serializeLocalizedText(parsed.data.title),
+      description: parsed.data.description ? serializeLocalizedText(parsed.data.description) : undefined,
+      certificationLevel: parsed.data.certificationLevel
+        ? serializeLocalizedText(parsed.data.certificationLevel)
+        : undefined,
       validFrom: validFrom ?? undefined,
       validTo: validTo ?? undefined,
       actorId: request.context?.userId,
@@ -162,8 +193,8 @@ adminContentRouter.post("/modules/:moduleId/prompt-template-versions", async (re
   try {
     const promptTemplateVersion = await createPromptTemplateVersion({
       moduleId: request.params.moduleId,
-      systemPrompt: parsed.data.systemPrompt,
-      userPromptTemplate: parsed.data.userPromptTemplate,
+      systemPrompt: serializeLocalizedText(parsed.data.systemPrompt),
+      userPromptTemplate: serializeLocalizedText(parsed.data.userPromptTemplate),
       examples: parsed.data.examples ?? [],
       active: parsed.data.active ?? true,
     });
@@ -186,8 +217,13 @@ adminContentRouter.post("/modules/:moduleId/mcq-set-versions", async (request, r
   try {
     const mcqSetVersion = await createMcqSetVersion({
       moduleId: request.params.moduleId,
-      title: parsed.data.title,
-      questions: parsed.data.questions,
+      title: serializeLocalizedText(parsed.data.title),
+      questions: parsed.data.questions.map((question) => ({
+        stem: serializeLocalizedText(question.stem),
+        options: question.options.map((option) => serializeLocalizedText(option)),
+        correctAnswer: serializeLocalizedText(question.correctAnswer),
+        rationale: question.rationale ? serializeLocalizedText(question.rationale) : undefined,
+      })),
       active: parsed.data.active ?? true,
     });
     response.status(201).json({ mcqSetVersion });
@@ -209,7 +245,11 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
   try {
     const moduleVersion = await createModuleVersion({
       moduleId: request.params.moduleId,
-      ...parsed.data,
+      taskText: serializeLocalizedText(parsed.data.taskText),
+      guidanceText: parsed.data.guidanceText ? serializeLocalizedText(parsed.data.guidanceText) : undefined,
+      rubricVersionId: parsed.data.rubricVersionId,
+      promptTemplateVersionId: parsed.data.promptTemplateVersionId,
+      mcqSetVersionId: parsed.data.mcqSetVersionId,
     });
     response.status(201).json({ moduleVersion });
   } catch (error) {

@@ -4,7 +4,11 @@ import { getAssessmentRules } from "../config/assessmentRules.js";
 import { enqueueAssessmentJob } from "./assessmentJobService.js";
 import { recordAuditEvent } from "./auditService.js";
 import type { SupportedLocale } from "../i18n/locale.js";
-import { localizeContentArray, localizeContentText } from "../i18n/content.js";
+import {
+  localizeContentArray,
+  localizeContentText,
+  matchesLocalizedContentVariant,
+} from "../i18n/content.js";
 
 export async function startMcqAttempt(
   moduleId: string,
@@ -52,7 +56,7 @@ export async function startMcqAttempt(
     questions: questions.map((question) => ({
       id: question.id,
       stem: localizeContentText(locale, question.stem) ?? question.stem,
-      options: localizeContentArray(locale, JSON.parse(question.optionsJson) as string[]),
+      options: localizeContentArray(locale, JSON.parse(question.optionsJson) as unknown[]),
     })),
   };
 }
@@ -96,7 +100,7 @@ export async function submitMcqAttempt(input: {
       return {
         questionId: response.questionId,
         selectedAnswer: response.selectedAnswer,
-        isCorrect: question.correctAnswer === response.selectedAnswer,
+        isCorrect: matchesLocalizedContentVariant(question.correctAnswer, response.selectedAnswer),
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
