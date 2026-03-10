@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole.js";
+import { AppError } from "../errors/AppError.js";
 import { getCalibrationWorkspaceSnapshot } from "../services/calibrationWorkspaceService.js";
 
 const calibrationRouter = Router();
@@ -58,7 +59,7 @@ function parseDate(input: string | undefined, inclusiveEndOfDay: boolean) {
   return parsed;
 }
 
-calibrationRouter.get("/workspace", async (request, response) => {
+calibrationRouter.get("/workspace", async (request, response, next) => {
   const parsed = calibrationQuerySchema.safeParse(request.query);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -107,8 +108,8 @@ calibrationRouter.get("/workspace", async (request, response) => {
     });
     response.json(body);
   } catch (error) {
-    if (error instanceof Error && error.message === "module_not_found") {
-      response.status(404).json({ error: "not_found", message: "Module not found." });
+    if (error instanceof AppError) {
+      next(error);
       return;
     }
 

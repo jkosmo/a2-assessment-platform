@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import { getOrgSyncConfig } from "../config/orgSync.js";
+import { ConflictError } from "../errors/AppError.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { recordAuditEvent } from "./auditService.js";
 
@@ -146,7 +147,10 @@ async function syncSingleUser(
       if (config.conflictStrategy === "skip_conflict") {
         return "skipped_conflict";
       }
-      throw new Error("email_conflict_with_different_external_id");
+      throw new ConflictError(
+        "email_conflict_with_different_external_id",
+        "Email conflicts with a different external ID.",
+      );
     }
 
     await prisma.user.update({

@@ -7,6 +7,7 @@ import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
 import { generalApiLimiter } from "./middleware/rateLimiting.js";
+import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { meRouter } from "./routes/me.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
@@ -122,9 +123,6 @@ app.use(
 );
 app.use("/api/admin/sync/org", requireAnyRole([AppRole.ADMINISTRATOR]), orgSyncRouter);
 
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  const message = error instanceof Error ? error.message : "Unexpected server error.";
-  response.status(500).json({ error: "internal_error", message });
-});
+app.use(errorHandlingMiddleware);
 
 export { app };

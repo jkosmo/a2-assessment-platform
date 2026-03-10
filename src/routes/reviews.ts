@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { AppError } from "../errors/AppError.js";
 import {
   claimManualReview,
   finalizeManualReviewOverride,
@@ -59,7 +60,7 @@ reviewsRouter.get("/:reviewId", async (request, response) => {
   response.json({ review: workspace });
 });
 
-reviewsRouter.post("/:reviewId/claim", async (request, response) => {
+reviewsRouter.post("/:reviewId/claim", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
@@ -70,25 +71,9 @@ reviewsRouter.post("/:reviewId/claim", async (request, response) => {
     const review = await claimManualReview(request.params.reviewId, userId);
     response.json({ review });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "not_found") {
-        response.status(404).json({ error: "not_found", message: "Manual review not found." });
-        return;
-      }
-      if (error.message === "already_assigned") {
-        response.status(409).json({
-          error: "review_already_assigned",
-          message: "Manual review is already assigned to another reviewer.",
-        });
-        return;
-      }
-      if (error.message === "already_resolved") {
-        response.status(409).json({
-          error: "review_already_resolved",
-          message: "Manual review is already resolved.",
-        });
-        return;
-      }
+    if (error instanceof AppError) {
+      next(error);
+      return;
     }
 
     response.status(400).json({
@@ -98,7 +83,7 @@ reviewsRouter.post("/:reviewId/claim", async (request, response) => {
   }
 });
 
-reviewsRouter.post("/:reviewId/override", async (request, response) => {
+reviewsRouter.post("/:reviewId/override", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
@@ -119,32 +104,9 @@ reviewsRouter.post("/:reviewId/override", async (request, response) => {
     });
     response.json(result);
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "not_found") {
-        response.status(404).json({ error: "not_found", message: "Manual review not found." });
-        return;
-      }
-      if (error.message === "already_assigned") {
-        response.status(409).json({
-          error: "review_already_assigned",
-          message: "Manual review is already assigned to another reviewer.",
-        });
-        return;
-      }
-      if (error.message === "already_resolved") {
-        response.status(409).json({
-          error: "review_already_resolved",
-          message: "Manual review is already resolved.",
-        });
-        return;
-      }
-      if (error.message === "missing_decision") {
-        response.status(409).json({
-          error: "missing_decision",
-          message: "Cannot override review because no decision exists for submission.",
-        });
-        return;
-      }
+    if (error instanceof AppError) {
+      next(error);
+      return;
     }
 
     response.status(400).json({

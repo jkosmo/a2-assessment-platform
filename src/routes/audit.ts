@@ -1,9 +1,10 @@
 import { Router } from "express";
+import { AppError } from "../errors/AppError.js";
 import { getSubmissionAuditTrail } from "../services/auditService.js";
 
 const auditRouter = Router();
 
-auditRouter.get("/submissions/:submissionId", async (request, response) => {
+auditRouter.get("/submissions/:submissionId", async (request, response, next) => {
   const userId = request.context?.userId;
   const roles = request.context?.roles ?? [];
 
@@ -26,11 +27,8 @@ auditRouter.get("/submissions/:submissionId", async (request, response) => {
 
     response.json(trail);
   } catch (error) {
-    if (error instanceof Error && error.message === "forbidden") {
-      response.status(403).json({
-        error: "forbidden",
-        message: "You do not have access to this submission audit trail.",
-      });
+    if (error instanceof AppError) {
+      next(error);
       return;
     }
 

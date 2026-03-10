@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { ForbiddenError } from "../errors/AppError.js";
 import { sha256 } from "../utils/hash.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
@@ -55,7 +56,7 @@ export async function getSubmissionAuditTrail(input: SubmissionAuditTrailInput) 
   }
 
   if (!hasAuditReadAccess(input.roles) && submission.userId !== input.requestorUserId) {
-    throw new Error("forbidden");
+    throw new ForbiddenError("You do not have access to this submission audit trail.");
   }
 
   const events = await prisma.auditEvent.findMany({

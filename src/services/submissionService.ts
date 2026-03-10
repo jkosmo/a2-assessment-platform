@@ -1,5 +1,6 @@
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import { ValidationError } from "../errors/AppError.js";
 import type { SupportedLocale } from "../i18n/locale.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
@@ -27,7 +28,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
   });
 
   if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
-    throw new Error("Module active version is not available.");
+    throw new ValidationError("Module active version is not available.");
   }
 
   const parseOutcome = await resolveSubmissionRawTextFromAttachment({

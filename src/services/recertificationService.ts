@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
+import { NotFoundError } from "../errors/AppError.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { recordAuditEvent } from "./auditService.js";
 
@@ -27,7 +28,7 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
   });
 
   if (!decision) {
-    throw new Error("decision_not_found");
+    throw new NotFoundError("Decision", "decision_not_found", "Decision not found.");
   }
 
   const rules = getAssessmentRules().recertification;

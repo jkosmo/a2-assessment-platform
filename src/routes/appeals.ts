@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { AppError } from "../errors/AppError.js";
 import { claimAppeal, getAppealWorkspace, listAppealQueue, resolveAppeal } from "../services/appealService.js";
 import { buildAppealSlaSnapshot } from "../services/appealSla.js";
 
@@ -65,7 +66,7 @@ appealsRouter.get("/:appealId", async (request, response) => {
   });
 });
 
-appealsRouter.post("/:appealId/claim", async (request, response) => {
+appealsRouter.post("/:appealId/claim", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
@@ -76,25 +77,9 @@ appealsRouter.post("/:appealId/claim", async (request, response) => {
     const appeal = await claimAppeal(request.params.appealId, userId);
     response.json({ appeal });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "not_found") {
-        response.status(404).json({ error: "not_found", message: "Appeal not found." });
-        return;
-      }
-      if (error.message === "already_assigned") {
-        response.status(409).json({
-          error: "appeal_already_assigned",
-          message: "This appeal is already assigned to another handler. Refresh the queue and open another case.",
-        });
-        return;
-      }
-      if (error.message === "already_resolved") {
-        response.status(409).json({
-          error: "appeal_already_resolved",
-          message: "This appeal is already resolved. Refresh the queue to view the latest status.",
-        });
-        return;
-      }
+    if (error instanceof AppError) {
+      next(error);
+      return;
     }
 
     response.status(400).json({
@@ -104,7 +89,7 @@ appealsRouter.post("/:appealId/claim", async (request, response) => {
   }
 });
 
-appealsRouter.post("/:appealId/resolve", async (request, response) => {
+appealsRouter.post("/:appealId/resolve", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
@@ -125,32 +110,9 @@ appealsRouter.post("/:appealId/resolve", async (request, response) => {
     });
     response.json(result);
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "not_found") {
-        response.status(404).json({ error: "not_found", message: "Appeal not found." });
-        return;
-      }
-      if (error.message === "already_assigned") {
-        response.status(409).json({
-          error: "appeal_already_assigned",
-          message: "This appeal is already assigned to another handler. Refresh the queue and open another case.",
-        });
-        return;
-      }
-      if (error.message === "already_resolved") {
-        response.status(409).json({
-          error: "appeal_already_resolved",
-          message: "This appeal is already resolved. Refresh the queue to view the latest status.",
-        });
-        return;
-      }
-      if (error.message === "missing_decision") {
-        response.status(409).json({
-          error: "missing_decision",
-          message: "This appeal cannot be resolved yet because the submission has no decision.",
-        });
-        return;
-      }
+    if (error instanceof AppError) {
+      next(error);
+      return;
     }
 
     response.status(400).json({

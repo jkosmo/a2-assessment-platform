@@ -1,5 +1,6 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { recordAuditEvent } from "./auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "./participantNotificationService.js";
@@ -26,10 +27,13 @@ export async function createSubmissionAppeal(input: {
   });
 
   if (!submission) {
-    throw new Error("not_found");
+    throw new NotFoundError("Submission");
   }
   if (!submission.decisions[0]) {
-    throw new Error("missing_decision");
+    throw new ConflictError(
+      "missing_decision",
+      "Submission must have an assessment decision before an appeal can be created.",
+    );
   }
 
   const activeAppeal = await prisma.appeal.findFirst({
@@ -41,7 +45,7 @@ export async function createSubmissionAppeal(input: {
   });
 
   if (activeAppeal) {
-    throw new Error("already_open");
+    throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
   }
 
   const appeal = await prisma.appeal.create({
@@ -254,17 +258,23 @@ export async function claimAppeal(appealId: string, handlerId: string) {
   });
 
   if (!appeal) {
-    throw new Error("not_found");
+    throw new NotFoundError("Appeal");
   }
   if (appeal.appealStatus === AppealStatus.RESOLVED || appeal.appealStatus === AppealStatus.REJECTED) {
-    throw new Error("already_resolved");
+    throw new ConflictError(
+      "appeal_already_resolved",
+      "This appeal is already resolved. Refresh the queue to view the latest status.",
+    );
   }
   if (
     appeal.appealStatus === AppealStatus.IN_REVIEW &&
     appeal.resolvedById &&
     appeal.resolvedById !== handlerId
   ) {
-    throw new Error("already_assigned");
+    throw new ConflictError(
+      "appeal_already_assigned",
+      "This appeal is already assigned to another handler. Refresh the queue and open another case.",
+    );
   }
 
   const claimed = await prisma.appeal.update({
@@ -330,22 +340,31 @@ export async function resolveAppeal(input: {
   });
 
   if (!appeal) {
-    throw new Error("not_found");
+    throw new NotFoundError("Appeal");
   }
   if (appeal.appealStatus === AppealStatus.RESOLVED || appeal.appealStatus === AppealStatus.REJECTED) {
-    throw new Error("already_resolved");
+    throw new ConflictError(
+      "appeal_already_resolved",
+      "This appeal is already resolved. Refresh the queue to view the latest status.",
+    );
   }
   if (
     appeal.appealStatus === AppealStatus.IN_REVIEW &&
     appeal.resolvedById &&
     appeal.resolvedById !== input.handlerId
   ) {
-    throw new Error("already_assigned");
+    throw new ConflictError(
+      "appeal_already_assigned",
+      "This appeal is already assigned to another handler. Refresh the queue and open another case.",
+    );
   }
 
   const latestDecision = appeal.submission.decisions[0];
   if (!latestDecision) {
-    throw new Error("missing_decision");
+    throw new ConflictError(
+      "missing_decision",
+      "This appeal cannot be resolved yet because the submission has no decision.",
+    );
   }
 
   const finalisedAt = new Date();

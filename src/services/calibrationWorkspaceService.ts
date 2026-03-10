@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { NotFoundError } from "../errors/AppError.js";
 import { recordAuditEvent } from "./auditService.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 
@@ -114,7 +115,7 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
   });
 
   if (!module) {
-    throw new Error("module_not_found");
+    throw new NotFoundError("Module");
   }
 
   const submissions = await prisma.submission.findMany({

@@ -7,6 +7,42 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.73 - 2026-03-10
+### Summary
+Replaced string-coded service errors with a typed `AppError` hierarchy, removed route-level `error.message` decoding, and centralized HTTP status mapping in shared error middleware.
+
+### Included
+- Typed application error model:
+  - `src/errors/AppError.ts`
+  - added `AppError`, `NotFoundError`, `ConflictError`, `ValidationError`, and `ForbiddenError`
+- Shared error middleware:
+  - `src/middleware/errorHandling.ts`
+  - `src/app.ts`
+  - global middleware now maps `AppError` subclasses to their configured HTTP status and API error code
+- Service migration away from string-coded domain errors:
+  - `src/services/appealService.ts`
+  - `src/services/manualReviewService.ts`
+  - `src/services/submissionService.ts`
+  - `src/services/auditService.ts`
+  - `src/services/calibrationWorkspaceService.ts`
+  - `src/services/orgSyncService.ts`
+  - `src/services/recertificationService.ts`
+  - removed string-coded `throw new Error("...")` contracts from the migrated services
+- Route cleanup:
+  - `src/routes/submissions.ts`
+  - `src/routes/appeals.ts`
+  - `src/routes/reviews.ts`
+  - `src/routes/audit.ts`
+  - `src/routes/calibration.ts`
+  - removed route-level `error.message === "..."` decoding and delegated typed errors via `next(error)`
+- Test coverage:
+  - `test/app-error-middleware.test.ts`
+  - added explicit middleware mapping tests for 400/403/404/409/500 behavior
+
+### Verification
+- `npm run lint`
+- `npm test -- test/app-error-middleware.test.ts test/m2-appeal-flow.test.ts test/m2-manual-review.test.ts test/m2-audit-pipeline.test.ts test/m2-calibration-workspace.test.ts`
+
 ## 0.3.72 - 2026-03-10
 ### Summary
 Removed direct database access from the assessments route so submission ownership checks and assessment-view queries now stay inside the service layer.

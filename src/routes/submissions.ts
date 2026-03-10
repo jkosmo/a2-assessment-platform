@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { AppError, ValidationError } from "../errors/AppError.js";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
 import { createSubmissionAppeal } from "../services/appealService.js";
 import { env } from "../config/env.js";
@@ -28,7 +29,7 @@ const historyQuerySchema = z.object({
 
 const submissionsRouter = Router();
 
-submissionsRouter.post("/", submissionCreateLimiter, async (request, response) => {
+submissionsRouter.post("/", submissionCreateLimiter, async (request, response, next) => {
   const parsed = createSubmissionSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -49,14 +50,16 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response) =
     });
     response.status(201).json({ submission });
   } catch (error) {
-    response.status(400).json({
-      error: "submission_create_failed",
-      message: error instanceof Error ? error.message : "Failed to create submission.",
-    });
+    if (error instanceof AppError) {
+      next(error);
+      return;
+    }
+
+    next(new ValidationError(error instanceof Error ? error.message : "Failed to create submission."));
   }
 });
 
-submissionsRouter.post("/:submissionId/appeals", async (request, response) => {
+submissionsRouter.post("/:submissionId/appeals", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
@@ -77,25 +80,9 @@ submissionsRouter.post("/:submissionId/appeals", async (request, response) => {
     });
     response.status(201).json({ appeal });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "not_found") {
-        response.status(404).json({ error: "not_found", message: "Submission not found." });
-        return;
-      }
-      if (error.message === "missing_decision") {
-        response.status(409).json({
-          error: "missing_decision",
-          message: "Submission must have an assessment decision before an appeal can be created.",
-        });
-        return;
-      }
-      if (error.message === "already_open") {
-        response.status(409).json({
-          error: "appeal_already_open",
-          message: "Submission already has an open or in-review appeal.",
-        });
-        return;
-      }
+    if (error instanceof AppError) {
+      next(error);
+      return;
     }
 
     response.status(400).json({

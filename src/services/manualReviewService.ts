@@ -1,5 +1,6 @@
 import { DecisionType, ReviewStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
 
@@ -135,13 +136,13 @@ export async function claimManualReview(reviewId: string, reviewerId: string) {
     },
   });
   if (!review) {
-    throw new Error("not_found");
+    throw new NotFoundError("Manual review");
   }
   if (review.reviewStatus === ReviewStatus.RESOLVED) {
-    throw new Error("already_resolved");
+    throw new ConflictError("review_already_resolved", "Manual review is already resolved.");
   }
   if (review.reviewerId && review.reviewerId !== reviewerId) {
-    throw new Error("already_assigned");
+    throw new ConflictError("review_already_assigned", "Manual review is already assigned to another reviewer.");
   }
 
   const claimed = await prisma.manualReview.update({
@@ -186,18 +187,18 @@ export async function finalizeManualReviewOverride(input: {
     },
   });
   if (!review) {
-    throw new Error("not_found");
+    throw new NotFoundError("Manual review");
   }
   if (review.reviewStatus === ReviewStatus.RESOLVED) {
-    throw new Error("already_resolved");
+    throw new ConflictError("review_already_resolved", "Manual review is already resolved.");
   }
   if (review.reviewerId && review.reviewerId !== input.reviewerId) {
-    throw new Error("already_assigned");
+    throw new ConflictError("review_already_assigned", "Manual review is already assigned to another reviewer.");
   }
 
   const latestDecision = review.submission.decisions[0];
   if (!latestDecision) {
-    throw new Error("missing_decision");
+    throw new ConflictError("missing_decision", "Cannot override review because no decision exists for submission.");
   }
 
   const finalisedAt = new Date();
