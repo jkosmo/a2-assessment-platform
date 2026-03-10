@@ -666,6 +666,7 @@ function renderAppealHandlerDetails(details) {
   const submission = appeal.submission ?? {};
   const latestDecision = submission.decisions?.[0] ?? submission.latestDecision ?? null;
   const latestLlmEvaluation = Array.isArray(submission.llmEvaluations) ? submission.llmEvaluations[0] ?? null : null;
+  const latestManualReview = Array.isArray(submission.manualReviews) ? submission.manualReviews[0] ?? null : null;
   const completedMcqAttempts = Array.isArray(submission.mcqAttempts)
     ? submission.mcqAttempts.filter((attempt) => attempt?.completedAt)
     : [];
@@ -727,6 +728,16 @@ function renderAppealHandlerDetails(details) {
       : [t("appealHandler.details.none")]),
     `${t("appealHandler.details.criterionRationales")}:`,
     ...criterionRationales,
+    "",
+    `=== ${t("appealHandler.details.section.manualReview")} ===`,
+    `${t("appealHandler.details.manualReviewId")}: ${latestManualReview?.id ?? t("appealHandler.details.none")}`,
+    `${t("appealHandler.details.manualReviewStatus")}: ${latestManualReview?.reviewStatus ?? "-"}`,
+    `${t("appealHandler.details.manualReviewTriggerReason")}: ${normalizeMultilineText(latestManualReview?.triggerReason)}`,
+    `${t("appealHandler.details.manualReviewReviewerId")}: ${latestManualReview?.reviewerId ?? "-"}`,
+    `${t("appealHandler.details.manualReviewCreatedAt")}: ${formatDateTime(latestManualReview?.createdAt)}`,
+    `${t("appealHandler.details.manualReviewReviewedAt")}: ${formatDateTime(latestManualReview?.reviewedAt)}`,
+    `${t("appealHandler.details.manualReviewOverrideDecision")}: ${latestManualReview?.overrideDecision ?? "-"}`,
+    `${t("appealHandler.details.manualReviewOverrideReason")}: ${normalizeMultilineText(latestManualReview?.overrideReason)}`,
   ];
 
   if (sla) {

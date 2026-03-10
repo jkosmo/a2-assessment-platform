@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.77 - 2026-03-10
+### Summary
+Exposed manual review data inside the appeal handler detail panel so appeal handlers can see the latest manual treatment for the underlying submission.
+
+### Included
+- Appeal handler detail panel update:
+  - `public/appeal-handler.js`
+  - added a `Manual review` section to the selected appeal details
+  - now shows latest manual review ID, status, trigger reason, reviewer ID, timestamps, and override outcome
+- Translation update:
+  - `public/i18n/appeal-handler-translations.js`
+  - added English labels for the new manual review detail fields, used as fallback for other locales
+
+### Verification
+- `npm run lint`
+- `npm test -- test/m2-appeal-flow.test.ts test/m2-manual-review.test.ts`
+
 ## 0.3.76 - 2026-03-10
 ### Summary
 Moved `appeal-handler` resolve validation feedback into the resolve form itself so short input errors no longer surface in the generic system response area.
