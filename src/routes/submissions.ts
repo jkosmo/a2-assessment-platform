@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
 import { createSubmissionAppeal } from "../services/appealService.js";
+import { env } from "../config/env.js";
 import { localizeContentText } from "../i18n/content.js";
 import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
 
@@ -43,6 +44,7 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response) =
   try {
     const submission = await createSubmission({
       userId,
+      locale: request.context?.locale ?? env.DEFAULT_LOCALE,
       ...parsed.data,
     });
     response.status(201).json({ submission });

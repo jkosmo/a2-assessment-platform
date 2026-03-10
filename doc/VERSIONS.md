@@ -7,6 +7,32 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.71 - 2026-03-10
+### Summary
+Propagated participant locale into stored submissions and the LLM assessment pipeline, so localized module task and guidance context now follows the participant's actual request locale.
+
+### Included
+- Submission locale persistence:
+  - `prisma/schema.prisma`
+  - `prisma/migrations/2026031001_add_submission_locale/migration.sql`
+  - `src/services/submissionService.ts`
+  - `src/routes/submissions.ts`
+  - added `Submission.locale` with default `en-GB`
+  - submission creation now stores `request.context.locale ?? env.DEFAULT_LOCALE`
+- LLM locale propagation:
+  - `src/services/assessmentJobService.ts`
+  - replaced hardcoded `en-GB` localization in assessment prompts with the stored submission locale
+  - submission locale is normalized before task/guidance text localization
+- Test coverage:
+  - `test/m2-i18n-baseline.test.ts`
+  - added assertion that `/api/submissions` stores `locale`
+  - added integration coverage proving Norwegian submission locale reaches the Azure OpenAI request payload as localized task/guidance context
+
+### Verification
+- `npm run prisma:generate`
+- `npm run lint`
+- `npm test -- test/m2-i18n-baseline.test.ts test/m1-core-flow.test.ts`
+
 ## 0.3.70 - 2026-03-10
 ### Summary
 Hardened runtime safety and abuse controls, added server-controlled debug-panel gating with Azure environment override support, and documented the new deployment-facing configuration.

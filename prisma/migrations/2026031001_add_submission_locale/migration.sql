@@ -1,0 +1,1 @@
+ALTER TABLE "Submission" ADD COLUMN "locale" TEXT NOT NULL DEFAULT 'en-GB';

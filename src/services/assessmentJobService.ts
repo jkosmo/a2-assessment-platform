@@ -12,6 +12,7 @@ import {
   evaluateSecondaryAssessmentTrigger,
 } from "./secondaryAssessmentService.js";
 import { localizeContentText } from "../i18n/content.js";
+import { normalizeLocale } from "../i18n/locale.js";
 
 let workerTimer: NodeJS.Timeout | null = null;
 let workerRunning = false;
@@ -201,6 +202,7 @@ async function runAssessment(jobId: string) {
   });
 
   const submission = job.submission;
+  const submissionLocale = normalizeLocale(submission.locale) ?? "en-GB";
   const mcqAttempt = submission.mcqAttempts[0];
   if (!mcqAttempt || mcqAttempt.scaledScore == null || mcqAttempt.percentScore == null) {
     throw new Error("Cannot assess submission before MCQ completion.");
@@ -300,8 +302,8 @@ async function runAssessment(jobId: string) {
       promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
       promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
       promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
-      moduleTaskText: localizeContentText("en-GB", submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
-      moduleGuidanceText: localizeContentText("en-GB", submission.moduleVersion.guidanceText) ?? undefined,
+      moduleTaskText: localizeContentText(submissionLocale, submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
+      moduleGuidanceText: localizeContentText(submissionLocale, submission.moduleVersion.guidanceText) ?? undefined,
     });
   } catch (error) {
     logOperationalEvent(
@@ -350,8 +352,8 @@ async function runAssessment(jobId: string) {
         promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
         promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
         promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
-        moduleTaskText: localizeContentText("en-GB", submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
-        moduleGuidanceText: localizeContentText("en-GB", submission.moduleVersion.guidanceText) ?? undefined,
+        moduleTaskText: localizeContentText(submissionLocale, submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
+        moduleGuidanceText: localizeContentText(submissionLocale, submission.moduleVersion.guidanceText) ?? undefined,
       });
     } catch (error) {
       logOperationalEvent(

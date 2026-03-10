@@ -135,6 +135,7 @@ model Submission {
   userId            String
   moduleId          String
   moduleVersionId   String
+  locale            String             @default("en-GB")
   deliveryType      String
   rawText           String?
   reflectionText    String

@@ -1,5 +1,6 @@
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import type { SupportedLocale } from "../i18n/locale.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { resolveSubmissionRawTextFromAttachment } from "./documentParsingService.js";
@@ -7,6 +8,7 @@ import { resolveSubmissionRawTextFromAttachment } from "./documentParsingService
 export type CreateSubmissionInput = {
   userId: string;
   moduleId: string;
+  locale: SupportedLocale;
   deliveryType: string;
   rawText?: string;
   reflectionText: string;
@@ -40,6 +42,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
       userId: input.userId,
       moduleId: module.id,
       moduleVersionId: module.activeVersion.id,
+      locale: input.locale,
       deliveryType: input.deliveryType,
       rawText: parseOutcome.resolvedRawText,
       reflectionText: input.reflectionText,
