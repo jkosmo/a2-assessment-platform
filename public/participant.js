@@ -339,7 +339,7 @@ function renderModules() {
   for (const module of modules) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = module.selected ? "module-card selected" : "module-card";
+    button.className = module.selected ? "btn-secondary module-card selected" : "btn-secondary module-card";
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
       persistCurrentModuleDraft(false);

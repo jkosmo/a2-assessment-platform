@@ -4,35 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2 Appeal Handler Workspace</title>
+    <link rel="stylesheet" href="/static/shared.css" />
     <style>
-      body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f7f8fb; color: #222; }
-      .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      label { display: block; margin-bottom: 6px; font-size: 13px; color: #444; }
-      input, textarea, select, button { width: 100%; padding: 8px; box-sizing: border-box; }
-      button { cursor: pointer; }
-      button:disabled { cursor: not-allowed; opacity: 0.55; }
-      button:not(:disabled):active { transform: translateY(1px); }
-      button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
-      .small { font-size: 12px; color: #666; }
-      .workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-      .workspace-nav-link { display: inline-block; width: auto; padding: 7px 12px; border: 1px solid #c7d0de; border-radius: 999px; text-decoration: none; background: #fff; color: #1c2d4f; font-size: 13px; }
-      .workspace-nav-link:hover { border-color: #4361ee; background: #f4f7ff; }
-      .workspace-nav-link.active { border-color: #134ec9; background: #eaf1ff; color: #0f3d9c; font-weight: 600; }
-      .workspace-nav-link:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .inline { display: inline-block; width: auto; }
-      .button-busy { opacity: 0.75; position: relative; border-color: #134ec9; background: #eaf1ff; }
-      .button-busy::after { content: " ..."; }
-      .queue-table-wrap { overflow-x: auto; border: 1px solid #d8dfeb; border-radius: 8px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
+      .queue-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 420px; overflow-y: auto; }
       table { width: 100%; border-collapse: collapse; min-width: 980px; }
-      th, td { border-bottom: 1px solid #ebeff5; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
-      tr.selected { background: #eef4ff; }
-      tr:hover { background: #f8fbff; }
-      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
-      .queue-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: end; }
+      th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
+      tr.selected { background: var(--color-row-selected); }
+      tr:hover { background: var(--color-row-hover); }
+      .queue-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--space-2); align-items: end; }
     </style>
   </head>
   <body>
+    <div class="layout-container">
     <h1 data-i18n="appealPage.title"></h1>
     <p class="small" data-i18n="appealPage.subtitle"></p>
     <p class="small"><span data-i18n="appealPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
@@ -66,7 +50,7 @@
         <select id="mockRolePreset"></select>
         <div class="small" id="mockRolePresetHint"></div>
       </div>
-      <button id="loadMe" data-i18n="identity.loadMe"></button>
+      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe"></button>
     </section>
 
     <section class="card">
@@ -86,8 +70,8 @@
           <input id="queueLimit" readonly value="50" />
         </div>
       </div>
-      <div class="row" style="margin-top: 10px;">
-        <div><button id="loadAppealQueue" data-i18n="appealHandler.loadQueue"></button></div>
+      <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
+        <div><button id="loadAppealQueue" class="btn-secondary" data-i18n="appealHandler.loadQueue"></button></div>
         <div class="small"><span data-i18n="appealHandler.queueCount"></span> <strong id="queueCount">0</strong></div>
       </div>
       <div id="appealHandlerMessage" class="small"></div>
@@ -125,8 +109,8 @@
         </select>
       </div>
       <div class="row">
-        <div><button id="claimAppeal" data-i18n="appealHandler.claim"></button></div>
-        <div><button id="resolveAppeal" data-i18n="appealHandler.resolve"></button></div>
+        <div><button id="claimAppeal" class="btn-secondary" data-i18n="appealHandler.claim"></button></div>
+        <div><button id="resolveAppeal" class="btn-primary" data-i18n="appealHandler.resolve"></button></div>
       </div>
     </section>
 
@@ -135,6 +119,7 @@
       <pre id="output"></pre>
     </section>
 
+    </div>
     <script src="/static/i18n/appeal-handler-translations.js" type="module"></script>
     <script src="/static/appeal-handler.js" type="module"></script>
   </body>

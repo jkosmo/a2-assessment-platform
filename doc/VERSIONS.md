@@ -7,6 +7,40 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.67 - 2026-03-10
+### Summary
+Implemented foundational UX/style refactor items by extracting shared workspace CSS, introducing brand design tokens, adding centered max-width layout containers, and applying semantic button variants across all workspace pages.
+
+### Included
+- Shared stylesheet extraction (`#70`):
+  - added `public/static/shared.css`
+  - all five workspace pages now link `/static/shared.css`
+  - moved common rules out of inline `<style>` blocks (`body`, `.card`, `.row`, form controls, `.small`, workspace nav styles, `.button-busy`, `pre`, `.hidden`)
+  - included responsive `@media (max-width: 900px)` row-collapse rule in shared stylesheet
+- Static asset serving hardening:
+  - `src/app.ts`
+  - `/static` now serves `public/static` first and falls back to `public` to keep existing script paths stable
+- Brand tokenization and card elevation (`#77`):
+  - `public/static/shared.css`
+  - added tokenized spacing/color/elevation model in `:root`
+  - replaced legacy hardcoded color usage in workspace page-specific CSS with token variables
+  - switched shared `.card` style from flat border to `box-shadow: var(--shadow-card)`
+- Max-width layout container and responsive baseline (`#78`):
+  - all five pages now wrap content in `.layout-container`
+  - added centered max-width layout (`1100px`) and mobile padding override in shared CSS
+  - enabled workspace nav horizontal overflow handling for small screens
+- Semantic button variants (`#71`):
+  - added `.btn-primary`, `.btn-secondary`, `.btn-danger` in shared CSS
+  - mapped static buttons across all five pages to semantic variants
+  - participant module selection cards (dynamic buttons) now include semantic secondary button class (`public/participant.js`)
+- Tests and docs:
+  - `test/participant-console-config.test.ts` extended to verify shared stylesheet linking/serving, layout container presence, tokenized stylesheet markers, and button class coverage
+  - `README.md` updated with shared stylesheet/design-token/layout/button-variant notes
+
+### Verification
+- `npm run lint`
+- `npm test` (80 tests passing, 30 test files)
+
 ## 0.3.66 - 2026-03-10
 ### Summary
 Simplified the admin content authoring flow with one bundled save action, improved wording/help text and locale defaults, and extended LLM assessment context with explicit assignment and expected-answer guidance.

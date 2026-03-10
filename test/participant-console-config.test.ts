@@ -137,4 +137,42 @@ describe("participant console runtime config", () => {
     expect(response.status).toBe(200);
     expect(response.text).toContain("admin-content.js");
   });
+
+  it("serves shared stylesheet and links it from all workspace pages", async () => {
+    const workspacePages = [
+      "/participant",
+      "/participant/completed",
+      "/admin-content",
+      "/appeal-handler",
+      "/calibration",
+    ];
+
+    for (const pagePath of workspacePages) {
+      const response = await request(app).get(pagePath);
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('href="/static/shared.css"');
+      expect(response.text).toContain('class="layout-container"');
+
+      const buttonTags = response.text.match(/<button\b[^>]*>/g) ?? [];
+      for (const buttonTag of buttonTags) {
+        expect(buttonTag).toContain("class=");
+      }
+    }
+
+    const cssResponse = await request(app).get("/static/shared.css");
+    expect(cssResponse.status).toBe(200);
+    expect(cssResponse.text).toContain(".row");
+    expect(cssResponse.text).toContain("@media (max-width: 900px)");
+    expect(cssResponse.text).toContain(":root");
+    expect(cssResponse.text).toContain("--space-1: 8px;");
+    expect(cssResponse.text).toContain("--color-blue: #134ec9;");
+    expect(cssResponse.text).toContain("--shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);");
+    expect(cssResponse.text).toContain(".layout-container");
+    expect(cssResponse.text).toContain("max-width: 1100px;");
+    expect(cssResponse.text).toContain("box-shadow: var(--shadow-card);");
+    expect(cssResponse.text).toContain(".btn-primary");
+    expect(cssResponse.text).toContain(".btn-secondary");
+    expect(cssResponse.text).toContain(".btn-danger");
+    expect(cssResponse.text).not.toContain("border: 1px solid #ddd;");
+  });
 });

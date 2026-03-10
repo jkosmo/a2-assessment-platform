@@ -4,32 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2 Completed Modules</title>
+    <link rel="stylesheet" href="/static/shared.css" />
     <style>
-      body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f7f8fb; color: #222; }
-      .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      label { display: block; margin-bottom: 6px; font-size: 13px; color: #444; }
-      input, select, button { width: 100%; padding: 8px; box-sizing: border-box; }
-      button { cursor: pointer; }
-      button:disabled { cursor: not-allowed; opacity: 0.55; }
-      button:not(:disabled):active { transform: translateY(1px); }
-      button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
-      .small { font-size: 12px; color: #666; }
-      .workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-      .workspace-nav-link { display: inline-block; width: auto; padding: 7px 12px; border: 1px solid #c7d0de; border-radius: 999px; text-decoration: none; background: #fff; color: #1c2d4f; font-size: 13px; }
-      .workspace-nav-link:hover { border-color: #4361ee; background: #f4f7ff; }
-      .workspace-nav-link.active { border-color: #134ec9; background: #eaf1ff; color: #0f3d9c; font-weight: 600; }
-      .workspace-nav-link:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
-      .button-busy { opacity: 0.75; position: relative; border-color: #134ec9; background: #eaf1ff; }
-      .button-busy::after { content: " ..."; }
-      .table-wrap { overflow-x: auto; border: 1px solid #d8dfeb; border-radius: 8px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
+      .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 420px; overflow-y: auto; }
       table { width: 100%; border-collapse: collapse; min-width: 760px; }
-      th, td { border-bottom: 1px solid #ebeff5; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
-      tr:hover { background: #f8fbff; }
-      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
+      th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
+      tr:hover { background: var(--color-row-hover); }
     </style>
   </head>
   <body>
+    <div class="layout-container">
     <h1 data-i18n="completedPage.title"></h1>
     <p class="small" data-i18n="completedPage.subtitle"></p>
     <p class="small"><span data-i18n="completedPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
@@ -63,7 +47,7 @@
         <select id="mockRolePreset"></select>
         <div class="small" id="mockRolePresetHint"></div>
       </div>
-      <button id="loadMe" data-i18n="identity.loadMe"></button>
+      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe"></button>
     </section>
 
     <section class="card">
@@ -75,7 +59,7 @@
         </div>
         <div>
           <label>&nbsp;</label>
-          <button id="loadCompleted" data-i18n="completed.load"></button>
+          <button id="loadCompleted" class="btn-secondary" data-i18n="completed.load"></button>
         </div>
       </div>
       <div class="small" id="completedMeta"></div>
@@ -100,6 +84,7 @@
       <pre id="output"></pre>
     </section>
 
+    </div>
     <script src="/static/i18n/participant-completed-translations.js" type="module"></script>
     <script src="/static/participant-completed.js" type="module"></script>
   </body>

@@ -20,11 +20,14 @@ import { calibrationRouter } from "./routes/calibration.js";
 
 const app = express();
 const participantConsoleRuntimeConfig = getParticipantConsoleRuntimeConfig();
+const publicRootPath = path.resolve(process.cwd(), "public");
+const publicStaticPath = path.resolve(publicRootPath, "static");
 
 app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
 app.use(express.json({ limit: "1mb" }));
-app.use("/static", express.static(path.resolve(process.cwd(), "public")));
+app.use("/static", express.static(publicStaticPath));
+app.use("/static", express.static(publicRootPath));
 
 app.get("/", (_request, response) => {
   response.status(200).send("a2-assessment-platform");
