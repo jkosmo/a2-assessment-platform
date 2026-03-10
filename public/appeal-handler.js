@@ -372,21 +372,68 @@ function getAppealWorkspaceSettings() {
   };
 }
 
+function getCheckedPillValues(container) {
+  if (!container) {
+    return [];
+  }
+
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+}
+
+function enablePillArrowNavigation(container) {
+  if (!container) {
+    return;
+  }
+
+  container.addEventListener("keydown", (event) => {
+    const isPrevious = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
+    if (!isPrevious && !isNext) {
+      return;
+    }
+
+    const checkboxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
+    if (checkboxes.length === 0) {
+      return;
+    }
+
+    const currentIndex = checkboxes.indexOf(document.activeElement);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    event.preventDefault();
+    const direction = isPrevious ? -1 : 1;
+    const nextIndex = (currentIndex + direction + checkboxes.length) % checkboxes.length;
+    checkboxes[nextIndex].focus();
+  });
+}
+
 function populateAppealStatusFilters() {
   const settings = getAppealWorkspaceSettings();
-  const selectedBeforeRefresh = new Set(Array.from(statusFilter.selectedOptions).map((option) => option.value));
+  const selectedBeforeRefresh = new Set(getCheckedPillValues(statusFilter));
   statusFilter.innerHTML = "";
   queueLimitInput.value = String(settings.queuePageSize);
 
   for (const status of settings.availableStatuses) {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = localizeAppealStatus(status);
-    option.selected =
+    const optionLabel = document.createElement("label");
+    optionLabel.className = "pill-option";
+
+    const optionInput = document.createElement("input");
+    optionInput.type = "checkbox";
+    optionInput.value = status;
+    optionInput.checked =
       selectedBeforeRefresh.size > 0
         ? selectedBeforeRefresh.has(status)
         : settings.defaultStatuses.includes(status);
-    statusFilter.appendChild(option);
+    optionInput.setAttribute("aria-label", localizeAppealStatus(status));
+
+    const optionText = document.createElement("span");
+    optionText.textContent = localizeAppealStatus(status);
+
+    optionLabel.appendChild(optionInput);
+    optionLabel.appendChild(optionText);
+    statusFilter.appendChild(optionLabel);
   }
 }
 
@@ -396,7 +443,7 @@ function localizeAppealStatus(value) {
 }
 
 function getSelectedAppealStatuses() {
-  const selected = Array.from(statusFilter.selectedOptions).map((option) => option.value);
+  const selected = getCheckedPillValues(statusFilter);
   if (selected.length > 0) {
     return selected;
   }
@@ -872,6 +919,7 @@ rolesInput.addEventListener("input", () => {
 
 populateLocaleSelect();
 setLocale(currentLocale);
+enablePillArrowNavigation(statusFilter);
 loadVersion();
 loadParticipantConsoleConfig();
 renderAppealQueue();

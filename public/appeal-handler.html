@@ -57,8 +57,15 @@
       <h3 data-i18n="appealHandler.title"></h3>
       <div class="queue-toolbar">
         <div>
-          <label for="appealHandlerStatusFilter" data-i18n="appealHandler.statusFilter"></label>
-          <select id="appealHandlerStatusFilter" multiple size="4"></select>
+          <fieldset class="pill-group-fieldset">
+            <legend id="appealHandlerStatusFilterLegend" data-i18n="appealHandler.statusFilter"></legend>
+            <div
+              id="appealHandlerStatusFilter"
+              class="pill-group"
+              role="group"
+              aria-labelledby="appealHandlerStatusFilterLegend"
+            ></div>
+          </fieldset>
           <div class="small" data-i18n="appealHandler.statusHint"></div>
         </div>
         <div>

@@ -64,8 +64,15 @@
       </div>
       <div class="row">
         <div>
-          <label for="calibrationStatuses" data-i18n="calibration.filters.statuses"></label>
-          <select id="calibrationStatuses" multiple size="6"></select>
+          <fieldset class="pill-group-fieldset">
+            <legend id="calibrationStatusesLegend" data-i18n="calibration.filters.statuses"></legend>
+            <div
+              id="calibrationStatuses"
+              class="pill-group"
+              role="group"
+              aria-labelledby="calibrationStatusesLegend"
+            ></div>
+          </fieldset>
         </div>
         <div>
           <label for="calibrationLimit" data-i18n="calibration.filters.limit"></label>

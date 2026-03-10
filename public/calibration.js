@@ -319,8 +319,45 @@ function renderWorkspaceNavigation() {
   }
 }
 
+function getCheckedPillValues(container) {
+  if (!container) {
+    return [];
+  }
+
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+}
+
+function enablePillArrowNavigation(container) {
+  if (!container) {
+    return;
+  }
+
+  container.addEventListener("keydown", (event) => {
+    const isPrevious = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
+    if (!isPrevious && !isNext) {
+      return;
+    }
+
+    const checkboxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
+    if (checkboxes.length === 0) {
+      return;
+    }
+
+    const currentIndex = checkboxes.indexOf(document.activeElement);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    event.preventDefault();
+    const direction = isPrevious ? -1 : 1;
+    const nextIndex = (currentIndex + direction + checkboxes.length) % checkboxes.length;
+    checkboxes[nextIndex].focus();
+  });
+}
+
 function getSelectedStatuses() {
-  const selected = Array.from(statusesSelect.selectedOptions).map((option) => option.value);
+  const selected = getCheckedPillValues(statusesSelect);
   if (selected.length > 0) {
     return selected;
   }
@@ -332,11 +369,21 @@ function populateStatusOptions() {
   statusesSelect.innerHTML = "";
 
   for (const status of allSubmissionStatuses) {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = localizeSubmissionStatus(status);
-    option.selected = selected.has(status);
-    statusesSelect.appendChild(option);
+    const optionLabel = document.createElement("label");
+    optionLabel.className = "pill-option";
+
+    const optionInput = document.createElement("input");
+    optionInput.type = "checkbox";
+    optionInput.value = status;
+    optionInput.checked = selected.has(status);
+    optionInput.setAttribute("aria-label", localizeSubmissionStatus(status));
+
+    const optionText = document.createElement("span");
+    optionText.textContent = localizeSubmissionStatus(status);
+
+    optionLabel.appendChild(optionInput);
+    optionLabel.appendChild(optionText);
+    statusesSelect.appendChild(optionLabel);
   }
 }
 
@@ -554,12 +601,9 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-statusesSelect.addEventListener("change", () => {
-  populateStatusOptions();
-});
-
 populateLocaleSelect();
 setLocale(currentLocale);
+enablePillArrowNavigation(statusesSelect);
 loadVersion();
 loadParticipantConsoleConfig();
 renderWorkspace(null);

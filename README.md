@@ -168,6 +168,7 @@ http://localhost:3000/participant/completed
 http://localhost:3000/appeal-handler
 ```
 - Queue auto-loads open/in-review appeals on page load; use status filter (`OPEN`, `IN_REVIEW`, optional `RESOLVED`) as needed
+- Status filter uses checkbox pill groups (keyboard: `Tab` + `Space`; arrow keys move between pills)
 - Use queue search for participant/module/appeal filtering
 - Select an appeal row and run `Claim Appeal`
 - Resolve using decision reason + resolution note + pass/fail value
@@ -177,7 +178,7 @@ http://localhost:3000/appeal-handler
 http://localhost:3000/calibration
 ```
 - Enter `moduleId` and load calibration snapshot
-- Use status/date/module-version filters to inspect historical outcomes
+- Use status/date/module-version filters to inspect historical outcomes (status filter uses checkbox pills)
 - Review benchmark-anchor coverage and quality-signal flags
 
 7. Optional admin content flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):

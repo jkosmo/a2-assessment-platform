@@ -7,6 +7,46 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.69 - 2026-03-10
+### Summary
+Replaced status multi-select controls with accessible checkbox-pill groups in appeal-handler and calibration workspaces while preserving existing API filter behavior.
+
+### Included
+- Replaced native multi-select status filters with pill-based checkbox groups (`#75`):
+  - `public/appeal-handler.html`
+  - `public/calibration.html`
+  - both pages now use `<fieldset>` + `<legend>` + checkbox-pill container instead of `<select multiple>`
+- Added shared pill-group styling in workspace stylesheet:
+  - `public/static/shared.css`
+  - new classes:
+    - `.pill-group-fieldset`
+    - `.pill-group`
+    - `.pill-option`
+  - includes checked-state styling and keyboard focus visibility for each pill option
+- Updated appeal-handler filter logic for checkbox pills:
+  - `public/appeal-handler.js`
+  - reads selected statuses from checked checkboxes
+  - preserves existing status query behavior (`status=<csv>`)
+  - adds arrow-key navigation support between checkbox pills
+- Updated calibration filter logic for checkbox pills:
+  - `public/calibration.js`
+  - reads selected statuses from checked checkboxes
+  - preserves existing calibration status query parameter behavior
+  - adds arrow-key navigation support between checkbox pills
+- Updated status-filter helper text:
+  - `public/i18n/participant-translations.js`
+  - replaced legacy Ctrl/Cmd-click multi-select guidance with checkbox-based guidance (`en-GB`, `nb`, `nn`)
+- Test and documentation updates:
+  - `test/participant-console-config.test.ts`
+    - validates that status filters are pill groups and that native multi-select ids are removed
+    - validates `.pill-group` style presence in shared stylesheet
+  - `README.md`
+    - updated handler/calibration manual test notes to reflect checkbox pill filters and keyboard usage
+
+### Verification
+- `npm run lint`
+- `npm test` (80 tests passing, 30 test files)
+
 ## 0.3.68 - 2026-03-10
 ### Summary
 Implemented participant-form accessibility and validation UX hardening by adding explicit hint/error/success styles, ARIA hint linking, and field-level validation feedback.

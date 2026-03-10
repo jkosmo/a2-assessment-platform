@@ -163,6 +163,18 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('aria-describedby="promptExcerpt-hint"');
         expect(response.text).toContain('aria-describedby="ack-hint"');
       }
+
+      if (pagePath === "/appeal-handler") {
+        expect(response.text).toContain('id="appealHandlerStatusFilter"');
+        expect(response.text).toContain('class="pill-group"');
+        expect(response.text).not.toContain('<select id="appealHandlerStatusFilter"');
+      }
+
+      if (pagePath === "/calibration") {
+        expect(response.text).toContain('id="calibrationStatuses"');
+        expect(response.text).toContain('class="pill-group"');
+        expect(response.text).not.toContain('<select id="calibrationStatuses"');
+      }
     }
 
     const cssResponse = await request(app).get("/static/shared.css");
@@ -182,6 +194,7 @@ describe("participant console runtime config", () => {
     expect(cssResponse.text).toContain(".hint");
     expect(cssResponse.text).toContain(".field-error");
     expect(cssResponse.text).toContain(".field-success");
+    expect(cssResponse.text).toContain(".pill-group");
     expect(cssResponse.text).not.toContain("border: 1px solid #ddd;");
   });
 });
