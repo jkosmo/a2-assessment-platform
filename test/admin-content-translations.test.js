@@ -24,8 +24,10 @@ describe("admin content translation resources", () => {
       "adminContent.mcq.title",
       "adminContent.help.mcqQuestions",
       "adminContent.moduleVersion.title",
+      "adminContent.moduleVersion.saveBundle",
       "adminContent.help.moduleTaskText",
       "adminContent.publish.title",
+      "adminContent.errors.valueRequiredPrefix",
     ];
 
     for (const locale of supportedLocales) {

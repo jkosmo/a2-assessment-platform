@@ -8,6 +8,8 @@ const baseInput = {
   rawText: "Candidate practical response with concrete implementation details.",
   reflectionText: "Candidate reflection with validation and iteration notes.",
   promptExcerpt: "Focus on practical utility and responsible use.",
+  moduleTaskText: "Participant assignment context.",
+  moduleGuidanceText: "Expected answer context.",
   assessmentPass: "primary" as const,
 };
 
@@ -83,6 +85,9 @@ describe("llmAssessmentService azure_openai adapter", () => {
     const payload = JSON.parse(String(requestInit.body)) as Record<string, unknown>;
     expect(payload.max_tokens).toBe(1200);
     expect(payload.max_completion_tokens).toBeUndefined();
+    const messages = payload.messages as Array<{ content: string }>;
+    expect(messages[1].content).toContain("Participant assignment context:");
+    expect(messages[1].content).toContain("Expected submission content context:");
   });
 
   it("supports max_completion_tokens when configured", async () => {

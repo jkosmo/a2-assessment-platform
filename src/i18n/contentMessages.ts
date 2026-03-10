@@ -1,4 +1,4 @@
-import type { SupportedLocale } from "./locale.js";
+﻿import type { SupportedLocale } from "./locale.js";
 
 type ContentLocaleMap = Record<Exclude<SupportedLocale, "en-GB">, Record<string, string>>;
 
@@ -36,3 +36,4 @@ export const contentMessages: ContentLocaleMap = {
     "Hardcoded policy values": "Hardkoda policy-verdiar",
   },
 };
+

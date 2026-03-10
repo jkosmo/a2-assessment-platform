@@ -185,8 +185,8 @@ http://localhost:3000/admin-content
 ```
 - Create a base module (title/description/certification/validity window)
 - Load/select module
-- Create rubric/prompt/MCQ versions from JSON fields
-- Create module version by linking created version IDs
+- Fill rubric, evaluation-instruction, and test fields
+- Save setup once with one action for steps 2-5
 - Publish module version
 - Text fields support either:
   - plain text

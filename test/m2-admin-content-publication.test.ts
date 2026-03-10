@@ -24,8 +24,16 @@ describe("MVP admin content management and publication", () => {
       .post("/api/admin/content/modules")
       .set(adminHeaders)
       .send({
-        title: `Admin Content Test Module ${Date.now()}`,
-        description: "Isolated module for admin content publication test.",
+        title: {
+          "en-GB": `Admin Content Test Module ${Date.now()}`,
+          nb: "Admin innholdsmodul test",
+          nn: "Admin innhaldsmodul test",
+        },
+        description: {
+          "en-GB": "Isolated module for admin content publication test.",
+          nb: "Isolert modul for admin innholds test.",
+          nn: "Isolert modul for admin innhalds test.",
+        },
         certificationLevel: "foundation",
         validFrom: "2026-03-01",
         validTo: "2028-03-01",
@@ -59,8 +67,16 @@ describe("MVP admin content management and publication", () => {
       .post(`/api/admin/content/modules/${moduleId}/prompt-template-versions`)
       .set(adminHeaders)
       .send({
-        systemPrompt: "You are an assessment assistant. Return strict JSON only.",
-        userPromptTemplate: "Evaluate submission against rubric and provide criterion rationales.",
+        systemPrompt: {
+          "en-GB": "You are an assessment assistant. Return strict JSON only.",
+          nb: "Du er en vurderingsassistent. Returner kun streng JSON.",
+          nn: "Du er ein vurderingsassistent. Returner berre streng JSON.",
+        },
+        userPromptTemplate: {
+          "en-GB": "Evaluate submission against rubric and provide criterion rationales.",
+          nb: "Vurder innlevering mot kriterier og gi begrunnelser per kriterium.",
+          nn: "Vurder innlevering mot kriterium og gi grunngjeving per kriterium.",
+        },
         examples: [{ example: "Good response with quality controls and iteration." }],
       });
     expect(promptResponse.status).toBe(201);
@@ -70,12 +86,33 @@ describe("MVP admin content management and publication", () => {
       .post(`/api/admin/content/modules/${moduleId}/mcq-set-versions`)
       .set(adminHeaders)
       .send({
-        title: "MVP Admin Content Test MCQ",
+        title: {
+          "en-GB": "MVP Admin Content Test",
+          nb: "MVP admin innholdstest",
+          nn: "MVP admin innhaldstest",
+        },
         questions: [
           {
-            stem: "Who owns final scoring and decision logic?",
-            options: ["LLM service", "Backend service", "Frontend", "External reviewer only"],
-            correctAnswer: "Backend service",
+            stem: {
+              "en-GB": "Who owns final scoring and decision logic?",
+              nb: "Hvem eier endelig vurderings- og beslutningslogikk?",
+              nn: "Kven eig endeleg vurderings- og avgjerdslogikk?",
+            },
+            options: [
+              "LLM service",
+              {
+                "en-GB": "Backend service",
+                nb: "Backend-tjeneste",
+                nn: "Backend-teneste",
+              },
+              "Frontend",
+              "External reviewer only",
+            ],
+            correctAnswer: {
+              "en-GB": "Backend service",
+              nb: "Backend-tjeneste",
+              nn: "Backend-teneste",
+            },
             rationale: "Backend must own final scoring and decision logic.",
           },
           {
@@ -93,8 +130,16 @@ describe("MVP admin content management and publication", () => {
       .post(`/api/admin/content/modules/${moduleId}/module-versions`)
       .set(adminHeaders)
       .send({
-        taskText: "Submit practical reflection with documented iteration and QA checks.",
-        guidanceText: "Keep references to prompt evolution and validation checks.",
+        taskText: {
+          "en-GB": "Submit practical reflection with documented iteration and QA checks.",
+          nb: "Lever praktisk refleksjon med dokumentert iterasjon og QA-kontroller.",
+          nn: "Lever praktisk refleksjon med dokumentert iterasjon og QA-kontrollar.",
+        },
+        guidanceText: {
+          "en-GB": "Keep references to prompt evolution and validation checks.",
+          nb: "Beskriv forventet svar med tydelige valideringskontroller.",
+          nn: "Skildra forventa svar med tydelege valideringskontrollar.",
+        },
         rubricVersionId,
         promptTemplateVersionId,
         mcqSetVersionId,

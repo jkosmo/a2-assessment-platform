@@ -39,6 +39,8 @@ type AssessmentContext = {
   rawText: string;
   reflectionText: string;
   promptExcerpt: string;
+  moduleTaskText?: string;
+  moduleGuidanceText?: string;
   assessmentPass?: "primary" | "secondary";
   promptTemplateSystem?: string;
   promptTemplateUserTemplate?: string;
@@ -255,6 +257,8 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
     "Assess the candidate submission and return one strict JSON object only.",
     passContext,
     REQUIRED_RESPONSE_CONTRACT,
+    input.moduleTaskText ? `Participant assignment context:\n${input.moduleTaskText}` : null,
+    input.moduleGuidanceText ? `Expected submission content context:\n${input.moduleGuidanceText}` : null,
     userPromptTemplate ? `Prompt template context:\n${userPromptTemplate}` : null,
     examplesJson ? `Prompt examples context (JSON):\n${examplesJson}` : null,
     `Module ID: ${input.moduleId}`,

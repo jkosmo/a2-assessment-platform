@@ -7,6 +7,46 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.66 - 2026-03-10
+### Summary
+Simplified the admin content authoring flow with one bundled save action, improved wording/help text and locale defaults, and extended LLM assessment context with explicit assignment and expected-answer guidance.
+
+### Included
+- Admin content flow simplification:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - removed intermediate save buttons in steps 2-4
+  - added one combined save action in step 5 (`saveContentBundle`)
+  - bundled save now creates rubric + prompt + test + module version in one flow
+- Improved admin-content defaults and text clarity:
+  - `public/i18n/admin-content-translations.js`
+  - default JSON examples are now multiline/pretty-printed for readability
+  - clearer helper text and field naming across locales
+  - Norwegian wording updated to avoid `MCQ` label in UI copy
+  - terminology aligned around `Innlevering`/`innlevering` for participant-facing task wording
+- Locale-text parsing flexibility in admin content form:
+  - `public/admin-content.js`
+  - text fields now support plain text or locale JSON object input in a consistent parser path
+- LLM context enrichment for better assessment grounding:
+  - `src/services/assessmentJobService.ts`
+  - `src/services/llmAssessmentService.ts`
+  - assessment calls now include module assignment context (`taskText`) and expected-answer context (`guidanceText`)
+- Norwegian charset/message cleanup:
+  - `src/i18n/contentMessages.ts`
+  - corrected mojibake/encoding artifacts in localized validation messages
+- Documentation update:
+  - `README.md`
+  - reflects single bundled save flow in admin content setup
+- Test updates:
+  - `test/m2-admin-content-publication.test.ts`
+  - `test/admin-content-translations.test.js`
+  - `test/llm-assessment-service.test.ts`
+  - coverage now includes locale-object payloads, new translation keys, and LLM context propagation
+
+### Verification
+- `npm run lint`
+- `npm test` (79 tests passing, 30 test files)
+
 ## 0.3.65 - 2026-03-10
 ### Summary
 Improved admin content usability with clearer field naming and helper guidance, and added explicit multi-locale content authoring support (including MCQ locale-aware answer matching).

@@ -30,23 +30,20 @@ const selectedModuleMeta = document.getElementById("selectedModuleMeta");
 const rubricCriteriaJsonInput = document.getElementById("rubricCriteriaJson");
 const rubricScalingRuleJsonInput = document.getElementById("rubricScalingRuleJson");
 const rubricPassRuleJsonInput = document.getElementById("rubricPassRuleJson");
-const createRubricVersionButton = document.getElementById("createRubricVersion");
 
 const promptSystemPromptInput = document.getElementById("promptSystemPrompt");
 const promptUserPromptTemplateInput = document.getElementById("promptUserPromptTemplate");
 const promptExamplesJsonInput = document.getElementById("promptExamplesJson");
-const createPromptTemplateVersionButton = document.getElementById("createPromptTemplateVersion");
 
 const mcqSetTitleInput = document.getElementById("mcqSetTitle");
 const mcqQuestionsJsonInput = document.getElementById("mcqQuestionsJson");
-const createMcqSetVersionButton = document.getElementById("createMcqSetVersion");
 
 const moduleVersionTaskTextInput = document.getElementById("moduleVersionTaskText");
 const moduleVersionGuidanceTextInput = document.getElementById("moduleVersionGuidanceText");
 const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersionRubricVersionId");
 const moduleVersionPromptTemplateVersionIdInput = document.getElementById("moduleVersionPromptTemplateVersionId");
 const moduleVersionMcqSetVersionIdInput = document.getElementById("moduleVersionMcqSetVersionId");
-const createModuleVersionButton = document.getElementById("createModuleVersion");
+const saveContentBundleButton = document.getElementById("saveContentBundle");
 
 const publishModuleVersionIdInput = document.getElementById("publishModuleVersionId");
 const publishModuleVersionButton = document.getElementById("publishModuleVersion");
@@ -283,6 +280,38 @@ function parseJsonField(value, fieldLabelKey) {
   }
 }
 
+function parseLocalizedTextField(value, fieldLabelKey, options = { required: true }) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) {
+    if (options.required) {
+      throw new Error(`${t("adminContent.errors.valueRequiredPrefix")} ${t(fieldLabelKey)}`);
+    }
+    return undefined;
+  }
+
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const parsed = parseJsonField(trimmed, fieldLabelKey);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return trimmed;
+  }
+
+  const localeKeys = ["en-GB", "nb", "nn"];
+  const isLocaleObject = localeKeys.every((key) => typeof parsed[key] === "string" && parsed[key].trim().length > 0);
+  return isLocaleObject ? parsed : trimmed;
+}
+
+function formatJsonDefault(key) {
+  const raw = t(key);
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
 function renderRolePresetControl() {
   mockRolePresetSelect.innerHTML = "";
 
@@ -353,13 +382,13 @@ function applyIdentityDefaults() {
 }
 
 function setDefaultFormValues() {
-  rubricCriteriaJsonInput.value = t("adminContent.defaults.criteriaJson");
-  rubricScalingRuleJsonInput.value = t("adminContent.defaults.scalingRuleJson");
-  rubricPassRuleJsonInput.value = t("adminContent.defaults.passRuleJson");
+  rubricCriteriaJsonInput.value = formatJsonDefault("adminContent.defaults.criteriaJson");
+  rubricScalingRuleJsonInput.value = formatJsonDefault("adminContent.defaults.scalingRuleJson");
+  rubricPassRuleJsonInput.value = formatJsonDefault("adminContent.defaults.passRuleJson");
   promptSystemPromptInput.value = t("adminContent.defaults.systemPrompt");
   promptUserPromptTemplateInput.value = t("adminContent.defaults.userPromptTemplate");
-  promptExamplesJsonInput.value = t("adminContent.defaults.examplesJson");
-  mcqQuestionsJsonInput.value = t("adminContent.defaults.questionsJson");
+  promptExamplesJsonInput.value = formatJsonDefault("adminContent.defaults.examplesJson");
+  mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
 }
@@ -436,7 +465,7 @@ async function loadVersion() {
   try {
     const body = await api("/version", { headers: {} });
     const version = body.version ?? "unknown";
-    document.title = `A2 Content Management Workspace v${version}`;
+    document.title = `A2 Content Setup Workspace v${version}`;
     appVersionLabel.textContent = `v${version}`;
   } catch {
     appVersionLabel.textContent = "unknown";
@@ -494,16 +523,17 @@ async function loadModules() {
   log(body);
 }
 
-async function handleCreateModule() {
-  const title = moduleTitleInput.value.trim();
-  if (!title) {
-    throw new Error(t("adminContent.errors.titleRequired"));
-  }
-
+async function handleCreateModule(options = { silent: false }) {
   const payload = {
-    title,
-    description: moduleDescriptionInput.value.trim() || undefined,
-    certificationLevel: moduleCertificationLevelInput.value.trim() || undefined,
+    title: parseLocalizedTextField(moduleTitleInput.value, "adminContent.module.name"),
+    description: parseLocalizedTextField(moduleDescriptionInput.value, "adminContent.module.description", {
+      required: false,
+    }),
+    certificationLevel: parseLocalizedTextField(
+      moduleCertificationLevelInput.value,
+      "adminContent.module.certificationLevel",
+      { required: false },
+    ),
     validFrom: moduleValidFromInput.value || undefined,
     validTo: moduleValidToInput.value || undefined,
   };
@@ -519,11 +549,14 @@ async function handleCreateModule() {
     setSelectedModule(module.id);
   }
 
-  setMessage(t("adminContent.message.moduleCreated"));
-  log(body);
+  if (!options.silent) {
+    setMessage(t("adminContent.message.moduleCreated"));
+    log(body);
+  }
+  return body;
 }
 
-async function handleCreateRubricVersion() {
+async function handleCreateRubricVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
     criteria: parseJsonField(rubricCriteriaJsonInput.value, "adminContent.rubric.criteria"),
@@ -536,15 +569,21 @@ async function handleCreateRubricVersion() {
     body: JSON.stringify(payload),
   });
   moduleVersionRubricVersionIdInput.value = body?.rubricVersion?.id ?? "";
-  setMessage(t("adminContent.message.rubricCreated"));
-  log(body);
+  if (!options.silent) {
+    setMessage(t("adminContent.message.rubricCreated"));
+    log(body);
+  }
+  return body;
 }
 
-async function handleCreatePromptTemplateVersion() {
+async function handleCreatePromptTemplateVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
-    systemPrompt: promptSystemPromptInput.value.trim(),
-    userPromptTemplate: promptUserPromptTemplateInput.value.trim(),
+    systemPrompt: parseLocalizedTextField(promptSystemPromptInput.value, "adminContent.prompt.systemPrompt"),
+    userPromptTemplate: parseLocalizedTextField(
+      promptUserPromptTemplateInput.value,
+      "adminContent.prompt.userPromptTemplate",
+    ),
     examples: parseJsonField(promptExamplesJsonInput.value, "adminContent.prompt.examplesJson"),
   };
 
@@ -553,14 +592,17 @@ async function handleCreatePromptTemplateVersion() {
     body: JSON.stringify(payload),
   });
   moduleVersionPromptTemplateVersionIdInput.value = body?.promptTemplateVersion?.id ?? "";
-  setMessage(t("adminContent.message.promptCreated"));
-  log(body);
+  if (!options.silent) {
+    setMessage(t("adminContent.message.promptCreated"));
+    log(body);
+  }
+  return body;
 }
 
-async function handleCreateMcqSetVersion() {
+async function handleCreateMcqSetVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
-    title: mcqSetTitleInput.value.trim(),
+    title: parseLocalizedTextField(mcqSetTitleInput.value, "adminContent.mcq.setTitle"),
     questions: parseJsonField(mcqQuestionsJsonInput.value, "adminContent.mcq.questionsJson"),
   };
 
@@ -569,15 +611,22 @@ async function handleCreateMcqSetVersion() {
     body: JSON.stringify(payload),
   });
   moduleVersionMcqSetVersionIdInput.value = body?.mcqSetVersion?.id ?? "";
-  setMessage(t("adminContent.message.mcqCreated"));
-  log(body);
+  if (!options.silent) {
+    setMessage(t("adminContent.message.mcqCreated"));
+    log(body);
+  }
+  return body;
 }
 
-async function handleCreateModuleVersion() {
+async function handleCreateModuleVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
-    taskText: moduleVersionTaskTextInput.value.trim(),
-    guidanceText: moduleVersionGuidanceTextInput.value.trim() || undefined,
+    taskText: parseLocalizedTextField(moduleVersionTaskTextInput.value, "adminContent.moduleVersion.taskText"),
+    guidanceText: parseLocalizedTextField(
+      moduleVersionGuidanceTextInput.value,
+      "adminContent.moduleVersion.guidanceText",
+      { required: false },
+    ),
     rubricVersionId: moduleVersionRubricVersionIdInput.value.trim(),
     promptTemplateVersionId: moduleVersionPromptTemplateVersionIdInput.value.trim(),
     mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
@@ -588,8 +637,26 @@ async function handleCreateModuleVersion() {
     body: JSON.stringify(payload),
   });
   publishModuleVersionIdInput.value = body?.moduleVersion?.id ?? "";
-  setMessage(t("adminContent.message.moduleVersionCreated"));
-  log(body);
+  if (!options.silent) {
+    setMessage(t("adminContent.message.moduleVersionCreated"));
+    log(body);
+  }
+  return body;
+}
+
+async function handleSaveContentBundle() {
+  const rubricBody = await handleCreateRubricVersion({ silent: true });
+  const promptBody = await handleCreatePromptTemplateVersion({ silent: true });
+  const mcqBody = await handleCreateMcqSetVersion({ silent: true });
+  const moduleVersionBody = await handleCreateModuleVersion({ silent: true });
+
+  setMessage(t("adminContent.message.bundleSaved"));
+  log({
+    rubricVersion: rubricBody.rubricVersion,
+    promptTemplateVersion: promptBody.promptTemplateVersion,
+    mcqSetVersion: mcqBody.mcqSetVersion,
+    moduleVersion: moduleVersionBody.moduleVersion,
+  });
 }
 
 async function handlePublishModuleVersion() {
@@ -644,46 +711,10 @@ loadModulesButton.addEventListener("click", async () => {
   });
 });
 
-createRubricVersionButton.addEventListener("click", async () => {
-  await runWithBusyButton(createRubricVersionButton, async () => {
+saveContentBundleButton.addEventListener("click", async () => {
+  await runWithBusyButton(saveContentBundleButton, async () => {
     try {
-      await handleCreateRubricVersion();
-    } catch (error) {
-      const message = parseActionableErrorMessage(error);
-      setMessage(message);
-      log(message);
-    }
-  });
-});
-
-createPromptTemplateVersionButton.addEventListener("click", async () => {
-  await runWithBusyButton(createPromptTemplateVersionButton, async () => {
-    try {
-      await handleCreatePromptTemplateVersion();
-    } catch (error) {
-      const message = parseActionableErrorMessage(error);
-      setMessage(message);
-      log(message);
-    }
-  });
-});
-
-createMcqSetVersionButton.addEventListener("click", async () => {
-  await runWithBusyButton(createMcqSetVersionButton, async () => {
-    try {
-      await handleCreateMcqSetVersion();
-    } catch (error) {
-      const message = parseActionableErrorMessage(error);
-      setMessage(message);
-      log(message);
-    }
-  });
-});
-
-createModuleVersionButton.addEventListener("click", async () => {
-  await runWithBusyButton(createModuleVersionButton, async () => {
-    try {
-      await handleCreateModuleVersion();
+      await handleSaveContentBundle();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
       setMessage(message);

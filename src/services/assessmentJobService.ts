@@ -11,6 +11,7 @@ import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
 } from "./secondaryAssessmentService.js";
+import { localizeContentText } from "../i18n/content.js";
 
 let workerTimer: NodeJS.Timeout | null = null;
 let workerRunning = false;
@@ -299,6 +300,8 @@ async function runAssessment(jobId: string) {
       promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
       promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
       promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
+      moduleTaskText: localizeContentText("en-GB", submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
+      moduleGuidanceText: localizeContentText("en-GB", submission.moduleVersion.guidanceText) ?? undefined,
     });
   } catch (error) {
     logOperationalEvent(
@@ -347,6 +350,8 @@ async function runAssessment(jobId: string) {
         promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
         promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
         promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
+        moduleTaskText: localizeContentText("en-GB", submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
+        moduleGuidanceText: localizeContentText("en-GB", submission.moduleVersion.guidanceText) ?? undefined,
       });
     } catch (error) {
       logOperationalEvent(
