@@ -6,6 +6,7 @@ import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
+import { generalApiLimiter } from "./middleware/rateLimiting.js";
 import { meRouter } from "./routes/me.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
@@ -65,7 +66,7 @@ app.get("/participant/config", (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });
 
-app.use("/api", authenticate);
+app.use("/api", authenticate, generalApiLimiter);
 
 app.use("/api/me", meRouter);
 app.use(

@@ -4,8 +4,31 @@ import { startAssessmentWorker, stopAssessmentWorker } from "./services/assessme
 import { startAppealSlaMonitor, stopAppealSlaMonitor } from "./services/appealSlaMonitorService.js";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js";
 
-const server = app.listen(env.PORT, () => {
+let server: ReturnType<typeof app.listen> | null = null;
+let shuttingDown = false;
+
+const gracefulShutdown = (exitCode = 0) => {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  stopAppealSlaMonitor();
+  stopAssessmentWorker();
+
+  if (!server) {
+    process.exit(exitCode);
+    return;
+  }
+
+  server.close(() => process.exit(exitCode));
+};
+
+registerProcessErrorHandlers(gracefulShutdown);
+
+server = app.listen(env.PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`a2-assessment-platform listening on port ${env.PORT}`);
   startBootstrapSeed();
@@ -36,11 +59,5 @@ function startBootstrapSeed() {
   });
 }
 
-const gracefulShutdown = () => {
-  stopAppealSlaMonitor();
-  stopAssessmentWorker();
-  server.close(() => process.exit(0));
-};
-
-process.on("SIGINT", gracefulShutdown);
-process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", () => gracefulShutdown(0));
+process.on("SIGTERM", () => gracefulShutdown(0));

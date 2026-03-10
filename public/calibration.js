@@ -6,6 +6,8 @@ import {
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
+const outputDetails = document.getElementById("outputDetails");
+const outputStatus = document.getElementById("outputStatus");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
@@ -64,6 +66,7 @@ let currentLocale = resolveInitialLocale();
 let latestWorkspaceBody = null;
 let participantRuntimeConfig = {
   authMode: "mock",
+  debugMode: true,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
   navigation: {
@@ -145,14 +148,44 @@ function applyTranslations() {
     element.placeholder = t(key);
   }
 
+  applyOutputVisibility();
   if (!output.dataset.hasContent) {
     output.textContent = t("defaults.ready");
+  }
+  if (!outputStatus.dataset.hasContent) {
+    outputStatus.textContent = t("defaults.ready");
   }
 
   renderRolePresetControl();
   renderWorkspaceNavigation();
   populateStatusOptions();
   renderWorkspace(latestWorkspaceBody);
+}
+
+function isDebugModeEnabled() {
+  return participantRuntimeConfig?.debugMode !== false;
+}
+
+function applyOutputVisibility() {
+  output.hidden = !isDebugModeEnabled();
+  outputDetails.hidden = !isDebugModeEnabled();
+}
+
+function formatOutputStatus(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.message === "string" && data.message.trim().length > 0) {
+      return data.message;
+    }
+    const preferredKeys = ["signals", "outcomes", "benchmarkAnchors", "module"];
+    const matchedKey = preferredKeys.find((key) => key in data);
+    if (matchedKey) {
+      return `Updated: ${matchedKey}`;
+    }
+  }
+  return "Request completed.";
 }
 
 function populateLocaleSelect() {
@@ -168,6 +201,14 @@ function populateLocaleSelect() {
 
 function log(data) {
   output.dataset.hasContent = "true";
+  outputStatus.dataset.hasContent = "true";
+  outputStatus.textContent = formatOutputStatus(data);
+
+  if (!isDebugModeEnabled()) {
+    output.textContent = "";
+    return;
+  }
+
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
@@ -521,6 +562,7 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  applyOutputVisibility();
   applyIdentityDefaults();
   const maxRows = participantRuntimeConfig?.calibrationWorkspace?.defaults?.maxRows ?? 120;
   limitInput.value = String(maxRows);

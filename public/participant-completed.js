@@ -6,6 +6,7 @@ import {
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
+const outputStatus = document.getElementById("outputStatus");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
@@ -55,6 +56,7 @@ const defaultWorkspaceNavigationItems = [
 let currentLocale = resolveInitialLocale();
 let participantRuntimeConfig = {
   authMode: "mock",
+  debugMode: true,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
   navigation: {
@@ -115,12 +117,41 @@ function applyTranslations() {
     element.textContent = t(key);
   }
 
+  applyOutputVisibility();
   if (!output.dataset.hasContent) {
     output.textContent = t("defaults.ready");
+  }
+  if (!outputStatus.dataset.hasContent) {
+    outputStatus.textContent = t("defaults.ready");
   }
 
   renderRolePresetControl();
   renderWorkspaceNavigation();
+}
+
+function isDebugModeEnabled() {
+  return participantRuntimeConfig?.debugMode !== false;
+}
+
+function applyOutputVisibility() {
+  output.hidden = !isDebugModeEnabled();
+}
+
+function formatOutputStatus(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.message === "string" && data.message.trim().length > 0) {
+      return data.message;
+    }
+    const preferredKeys = ["modules", "history", "status"];
+    const matchedKey = preferredKeys.find((key) => key in data);
+    if (matchedKey) {
+      return `Updated: ${matchedKey}`;
+    }
+  }
+  return "Request completed.";
 }
 
 function populateLocaleSelect() {
@@ -136,6 +167,14 @@ function populateLocaleSelect() {
 
 function log(data) {
   output.dataset.hasContent = "true";
+  outputStatus.dataset.hasContent = "true";
+  outputStatus.textContent = formatOutputStatus(data);
+
+  if (!isDebugModeEnabled()) {
+    output.textContent = "";
+    return;
+  }
+
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
@@ -366,6 +405,7 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  applyOutputVisibility();
   applyIdentityDefaults();
   renderRolePresetControl();
   renderWorkspaceNavigation();

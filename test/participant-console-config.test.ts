@@ -7,6 +7,7 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.authMode).toBe("mock");
+    expect(response.body.debugMode).toBe(true);
     expect(response.body.mockRoleSwitchEnabled).toBe(true);
     expect(response.body.mockRolePresets).toEqual([
       "PARTICIPANT",
@@ -168,12 +169,29 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="appealHandlerStatusFilter"');
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).not.toContain('<select id="appealHandlerStatusFilter"');
+        expect(response.text).toContain('id="outputStatus"');
       }
 
       if (pagePath === "/calibration") {
         expect(response.text).toContain('id="calibrationStatuses"');
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).not.toContain('<select id="calibrationStatuses"');
+        expect(response.text).toContain('<details id="outputDetails">');
+        expect(response.text).toContain("<summary>Raw response</summary>");
+      }
+
+      if (pagePath === "/participant") {
+        expect(response.text).toContain('id="outputStatus"');
+      }
+
+      if (pagePath === "/participant/completed") {
+        expect(response.text).toContain('id="outputStatus"');
+      }
+
+      if (pagePath === "/admin-content") {
+        expect(response.text).toContain('id="outputStatus"');
+        expect(response.text).toContain('<details id="outputDetails">');
+        expect(response.text).toContain("<summary>Raw response</summary>");
       }
     }
 

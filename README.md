@@ -198,6 +198,10 @@ http://localhost:3000/admin-content
 Participant console behavior is config-driven via:
 - `config/participant-console.json`
 - env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
+- env key `PARTICIPANT_CONSOLE_DEBUG_MODE` controls whether raw debug panels are exposed in workspace UIs:
+  - `auto` = enabled unless `NODE_ENV=production`
+  - `true` = force enabled (useful in Azure staging)
+  - `false` = force disabled (recommended in Azure production)
 - shared workspace baseline styles live in `public/static/shared.css` and are loaded from `/static/shared.css` by all workspace pages
 - shared CSS exposes brand tokens in `:root` (spacing, colors, card elevation) and a common `.layout-container` for centered max-width page layout
 - semantic button variants are available globally: `.btn-primary`, `.btn-secondary`, `.btn-danger`

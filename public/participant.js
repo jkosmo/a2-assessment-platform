@@ -12,6 +12,7 @@ import {
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
+const outputStatus = document.getElementById("outputStatus");
 const moduleList = document.getElementById("moduleList");
 const mcqQuestions = document.getElementById("mcqQuestions");
 const localeSelect = document.getElementById("localeSelect");
@@ -74,6 +75,7 @@ let latestResult = null;
 let latestHistory = null;
 let participantRuntimeConfig = {
   authMode: "mock",
+  debugMode: true,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
   navigation: {
@@ -246,7 +248,13 @@ function applyTranslations() {
     element.textContent = t(key);
   }
 
-  output.textContent = t("defaults.ready");
+  applyOutputVisibility();
+  if (!output.dataset.hasContent) {
+    output.textContent = t("defaults.ready");
+  }
+  if (outputStatus && !outputStatus.dataset.hasContent) {
+    outputStatus.textContent = t("defaults.ready");
+  }
   if (!resultSummary.dataset.hasResult) {
     resultSummary.textContent = t("defaults.noResult");
   }
@@ -265,6 +273,34 @@ function applyTranslations() {
   renderAppealState();
   updateCreateSubmissionAvailability();
   renderFlowGating();
+}
+
+function isDebugModeEnabled() {
+  return participantRuntimeConfig?.debugMode !== false;
+}
+
+function applyOutputVisibility() {
+  output.hidden = !isDebugModeEnabled();
+}
+
+function formatOutputStatus(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.message === "string" && data.message.trim().length > 0) {
+      return data.message;
+    }
+    if (typeof data.status === "string" && data.status.trim().length > 0) {
+      return `Status: ${data.status}`;
+    }
+    const preferredKeys = ["submission", "appeal", "history", "modules", "module", "assessment", "decision"];
+    const matchedKey = preferredKeys.find((key) => key in data);
+    if (matchedKey) {
+      return `Updated: ${matchedKey}`;
+    }
+  }
+  return "Request completed.";
 }
 
 function setDefaultFieldValues(previousLocale, nextLocale) {
@@ -903,6 +939,7 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  applyOutputVisibility();
   applyIdentityDefaults();
   renderRolePresetControl();
   renderWorkspaceNavigation();
@@ -940,6 +977,15 @@ function headers() {
 }
 
 function log(data) {
+  output.dataset.hasContent = "true";
+  outputStatus.dataset.hasContent = "true";
+  outputStatus.textContent = formatOutputStatus(data);
+
+  if (!isDebugModeEnabled()) {
+    output.textContent = "";
+    return;
+  }
+
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 

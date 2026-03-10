@@ -43,6 +43,7 @@ const envSchema = z.object({
   ),
   PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   PARTICIPANT_CONSOLE_CONFIG_FILE: z.string().default("config/participant-console.json"),
+  PARTICIPANT_CONSOLE_DEBUG_MODE: z.enum(["auto", "true", "false"]).default("auto"),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),

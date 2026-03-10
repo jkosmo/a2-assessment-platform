@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
 import { createSubmissionAppeal } from "../services/appealService.js";
 import { localizeContentText } from "../i18n/content.js";
+import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
 
 const createSubmissionSchema = z.object({
   moduleId: z.string().min(1),
@@ -26,7 +27,7 @@ const historyQuerySchema = z.object({
 
 const submissionsRouter = Router();
 
-submissionsRouter.post("/", async (request, response) => {
+submissionsRouter.post("/", submissionCreateLimiter, async (request, response) => {
   const parsed = createSubmissionSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });

@@ -7,6 +7,63 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.70 - 2026-03-10
+### Summary
+Hardened runtime safety and abuse controls, added server-controlled debug-panel gating with Azure environment override support, and documented the new deployment-facing configuration.
+
+### Included
+- Runtime/process hardening:
+  - `src/index.ts`
+  - `src/process/processErrorHandlers.ts`
+  - added structured logging for `unhandledRejection` and `uncaughtException`
+  - graceful shutdown now stops background workers before exit
+- API rate limiting:
+  - `src/middleware/rateLimiting.ts`
+  - `src/app.ts`
+  - `src/routes/assessments.ts`
+  - `src/routes/submissions.ts`
+  - `src/routes/modules.ts`
+  - added:
+    - general API limiter
+    - tighter limiter for assessment queueing
+    - limiter for submission creation
+    - limiter for MCQ submission
+  - rate-limited responses now return HTTP `429` with `Retry-After`
+- Debug output gating for workspace UIs:
+  - `src/config/participantConsole.ts`
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/appeal-handler.html`
+  - `public/appeal-handler.js`
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/calibration.html`
+  - `public/calibration.js`
+  - `public/participant-completed.html`
+  - `public/participant-completed.js`
+  - `/participant/config` now includes `debugMode`
+  - participant and appeal-handler pages hide raw JSON output when debug is disabled
+  - admin-content and calibration pages now wrap raw responses in collapsible `<details>`
+  - all workspace pages now show a lightweight status line even when raw JSON is hidden
+- Azure/app-setting debug override:
+  - `src/config/env.ts`
+  - `.env.example`
+  - `.azure/environments/staging.env.example`
+  - `.azure/environments/production.env.example`
+  - `README.md`
+  - added `PARTICIPANT_CONSOLE_DEBUG_MODE=auto|true|false`
+  - supports enabling debug panels in Azure staging while forcing them off in production
+- Test coverage:
+  - `test/process-error-handlers.test.ts`
+  - `test/rate-limiting.test.ts`
+  - `test/participant-console-config.test.ts`
+  - `test/participant-console-production-config.test.ts`
+  - added coverage for process error logging, rate limiting, and debug-mode config behavior
+
+### Verification
+- `npm run lint`
+- `npm test -- test/process-error-handlers.test.ts test/rate-limiting.test.ts test/participant-console-config.test.ts test/participant-console-production-config.test.ts test/m1-core-flow.test.ts`
+
 ## 0.3.69 - 2026-03-10
 ### Summary
 Replaced status multi-select controls with accessible checkbox-pill groups in appeal-handler and calibration workspaces while preserving existing API filter behavior.

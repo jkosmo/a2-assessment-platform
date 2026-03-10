@@ -7,6 +7,7 @@ import {
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
+const outputStatus = document.getElementById("outputStatus");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
@@ -36,6 +37,7 @@ let selectedAppealId = "";
 let selectedAppealDetails = null;
 let participantRuntimeConfig = {
   authMode: "mock",
+  debugMode: true,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
   navigation: {
@@ -166,8 +168,12 @@ function applyTranslations() {
     element.placeholder = t(key);
   }
 
+  applyOutputVisibility();
   if (!output.dataset.hasContent) {
     output.textContent = t("defaults.ready");
+  }
+  if (!outputStatus.dataset.hasContent) {
+    outputStatus.textContent = t("defaults.ready");
   }
 
   populateAppealStatusFilters();
@@ -175,6 +181,34 @@ function applyTranslations() {
   renderWorkspaceNavigation();
   renderAppealQueue();
   renderAppealHandlerDetails(selectedAppealDetails);
+}
+
+function isDebugModeEnabled() {
+  return participantRuntimeConfig?.debugMode !== false;
+}
+
+function applyOutputVisibility() {
+  output.hidden = !isDebugModeEnabled();
+}
+
+function formatOutputStatus(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.message === "string" && data.message.trim().length > 0) {
+      return data.message;
+    }
+    if (typeof data.status === "string" && data.status.trim().length > 0) {
+      return `Status: ${data.status}`;
+    }
+    const preferredKeys = ["appeal", "appeals", "review", "status", "submission"];
+    const matchedKey = preferredKeys.find((key) => key in data);
+    if (matchedKey) {
+      return `Updated: ${matchedKey}`;
+    }
+  }
+  return "Request completed.";
 }
 
 function setLocale(locale) {
@@ -197,6 +231,14 @@ function populateLocaleSelect() {
 
 function log(data) {
   output.dataset.hasContent = "true";
+  outputStatus.dataset.hasContent = "true";
+  outputStatus.textContent = formatOutputStatus(data);
+
+  if (!isDebugModeEnabled()) {
+    output.textContent = "";
+    return;
+  }
+
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
@@ -743,6 +785,7 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  applyOutputVisibility();
   applyIdentityDefaults();
   renderRolePresetControl();
   renderWorkspaceNavigation();

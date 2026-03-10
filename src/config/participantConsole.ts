@@ -86,6 +86,7 @@ type ParticipantConsoleConfig = z.infer<typeof participantConsoleConfigSchema>;
 
 export type ParticipantConsoleRuntimeConfig = {
   authMode: "mock" | "entra";
+  debugMode: boolean;
   mockRoleSwitchEnabled: boolean;
   mockRolePresets: ParticipantConsoleConfig["mockRolePresets"];
   navigation: ParticipantConsoleConfig["navigation"];
@@ -97,6 +98,16 @@ export type ParticipantConsoleRuntimeConfig = {
 };
 
 let cached: ParticipantConsoleConfig | null = null;
+
+function resolveParticipantConsoleDebugMode() {
+  if (env.PARTICIPANT_CONSOLE_DEBUG_MODE === "true") {
+    return true;
+  }
+  if (env.PARTICIPANT_CONSOLE_DEBUG_MODE === "false") {
+    return false;
+  }
+  return env.NODE_ENV !== "production";
+}
 
 function getParticipantConsoleConfig(): ParticipantConsoleConfig {
   if (cached) {
@@ -113,6 +124,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
   const config = getParticipantConsoleConfig();
   return {
     authMode: env.AUTH_MODE,
+    debugMode: resolveParticipantConsoleDebugMode(),
     mockRoleSwitchEnabled: env.AUTH_MODE === "mock",
     mockRolePresets: config.mockRolePresets,
     navigation: config.navigation,

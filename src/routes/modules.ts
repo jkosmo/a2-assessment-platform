@@ -13,6 +13,7 @@ import {
   resolveIncludeCompletedForAvailableModules,
 } from "../services/moduleCompletionPolicyService.js";
 import { t } from "../i18n/messages.js";
+import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
 
 const modulesRouter = Router();
 const modulesListQuerySchema = z.object({
@@ -97,7 +98,8 @@ modulesRouter.get("/completed", async (request, response) => {
 modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const locale = request.context?.locale ?? "en-GB";
-  const module = await getModuleById(request.params.moduleId, roles, locale);
+  const moduleId = request.params.moduleId as string;
+  const module = await getModuleById(moduleId, roles, locale);
 
   if (!module) {
     response.status(404).json({ error: "not_found", message: t(locale, "module_not_found") });
@@ -110,7 +112,8 @@ modulesRouter.get("/:moduleId", async (request, response) => {
 modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const locale = request.context?.locale ?? "en-GB";
-  const activeVersion = await getActiveModuleVersion(request.params.moduleId, roles, locale);
+  const moduleId = request.params.moduleId as string;
+  const activeVersion = await getActiveModuleVersion(moduleId, roles, locale);
 
   if (!activeVersion) {
     response
@@ -124,6 +127,7 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
 
 modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
   const userId = request.context?.userId;
+  const moduleId = request.params.moduleId as string;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
     return;
@@ -137,7 +141,7 @@ modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
 
   try {
     const locale = request.context?.locale ?? "en-GB";
-    const result = await startMcqAttempt(request.params.moduleId, parsed.data.submissionId, userId, locale);
+    const result = await startMcqAttempt(moduleId, parsed.data.submissionId, userId, locale);
     response.json(result);
   } catch (error) {
     response.status(400).json({
@@ -147,8 +151,9 @@ modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
   }
 });
 
-modulesRouter.post("/:moduleId/mcq/submit", async (request, response) => {
+modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, response) => {
   const userId = request.context?.userId;
+  const moduleId = request.params.moduleId as string;
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
     return;
@@ -162,7 +167,7 @@ modulesRouter.post("/:moduleId/mcq/submit", async (request, response) => {
 
   try {
     const result = await submitMcqAttempt({
-      moduleId: request.params.moduleId,
+      moduleId,
       userId,
       ...parsed.data,
     });
