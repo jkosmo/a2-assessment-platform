@@ -114,6 +114,7 @@ export const translations = {
     "assessment.auto.failedStart": "Could not start assessment automatically.",
     "assessment.auto.timeout": "Automatic check timed out. You can use Check progress.",
     "assessment.auto.elapsedPrefix": "(elapsed)",
+    "assessment.auto.elapsedLabel": "Elapsed",
     "appeal.submittedPrefix": "Appeal submitted",
     "appeal.readyForSubmission": "You can submit one appeal for this result.",
     "appeal.statusValue.OPEN": "Open",
@@ -138,6 +139,7 @@ export const translations = {
     "result.practicalScore": "Practical score",
     "result.decision": "Decision",
     "result.decisionValue.AUTOMATIC": "Automatic",
+    "result.decisionValue.MANUAL_REVIEW_PENDING": "Sent to manual review",
     "result.decisionValue.MANUAL_OVERRIDE": "Manual review",
     "result.decisionValue.APPEAL_RESOLUTION": "Appeal resolution",
     "result.decisionValue.UNKNOWN": "Unknown",
@@ -147,12 +149,26 @@ export const translations = {
     "result.decisionReasonValue.autoPass": "Automatically passed based on threshold rules.",
     "result.decisionReasonValue.autoFail": "Automatically failed based on threshold rules.",
     "result.confidence": "Confidence note",
+    "result.confidenceValue.low":
+      "Low confidence due to sparse content; assessment is based on partial evidence.",
     "result.confidenceValue.medium": "Medium confidence due to potential responsible-use ambiguity.",
     "result.confidenceValue.high": "High confidence: structured and sufficiently detailed submission.",
     "result.improvementAdvice": "Improvement advice",
     "result.improvementAdviceValue.beforeAfter": "Provide clearer before/after examples.",
     "result.improvementAdviceValue.validationChecks": "Describe specific validation checks you performed.",
     "result.improvementAdviceValue.responsibleUse": "Reference responsible-use constraints explicitly.",
+    "result.improvementAdviceValue.riskScenarios":
+      "Specify concrete risk scenarios, owners, and mitigations tied to the module.",
+    "result.improvementAdviceValue.dataHandling":
+      "Add a data handling and privacy section, including logging and retention.",
+    "result.improvementAdviceValue.humanInLoop":
+      "Define a human-in-the-loop process and approval steps.",
+    "result.improvementAdviceValue.qaMetrics":
+      "Include measurable QA metrics and acceptance criteria.",
+    "result.improvementAdviceValue.improvementLoop":
+      "Provide a concrete improvement loop with iterations and feedback capture.",
+    "result.improvementAdviceValue.promptLeakage":
+      "Clarify responsible-use guidelines and safeguards against prompt leakage.",
     "result.rationales": "Criterion rationales",
     "result.criterion.relevance_for_case": "Relevance for case",
     "result.criterion.quality_and_utility": "Quality and utility",
@@ -282,6 +298,7 @@ export const translations = {
     "assessment.auto.failedStart": "Kunne ikke starte vurdering automatisk.",
     "assessment.auto.timeout": "Automatisk sjekk tidsavbrøt. Du kan bruke Sjekk framdrift.",
     "assessment.auto.elapsedPrefix": "(forløpt)",
+    "assessment.auto.elapsedLabel": "Forløpt",
     "appeal.submittedPrefix": "Anke innsendt",
     "appeal.readyForSubmission": "Du kan sende inn én anke for dette resultatet.",
     "appeal.statusValue.OPEN": "Åpen",
@@ -306,6 +323,7 @@ export const translations = {
     "result.practicalScore": "Praktisk poeng",
     "result.decision": "Beslutning",
     "result.decisionValue.AUTOMATIC": "Automatisk",
+    "result.decisionValue.MANUAL_REVIEW_PENDING": "Sendt til manuell vurdering",
     "result.decisionValue.MANUAL_OVERRIDE": "Manuell vurdering",
     "result.decisionValue.APPEAL_RESOLUTION": "Ankeavgjørelse",
     "result.decisionValue.UNKNOWN": "Ukjent",
@@ -315,6 +333,8 @@ export const translations = {
     "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelregler.",
     "result.decisionReasonValue.autoFail": "Automatisk ikke bestått etter terskelregler.",
     "result.confidence": "Konfidensnotat",
+    "result.confidenceValue.low":
+      "Lav konfidens på grunn av lite innhold; vurderingen bygger på delvis dokumentasjon.",
     "result.confidenceValue.medium":
       "Middels konfidens på grunn av mulig uklarhet i ansvarlig bruk.",
     "result.confidenceValue.high": "Høy konfidens: strukturert og tilstrekkelig detaljert innlevering.",
@@ -324,6 +344,18 @@ export const translations = {
       "Beskriv konkrete kvalitetssjekker du gjennomførte.",
     "result.improvementAdviceValue.responsibleUse":
       "Vis tydelig hvilke rammer for ansvarlig bruk du fulgte.",
+    "result.improvementAdviceValue.riskScenarios":
+      "Beskriv konkrete risikoscenarioer, eiere og tiltak knyttet til modulen.",
+    "result.improvementAdviceValue.dataHandling":
+      "Legg til en seksjon om datahåndtering og personvern, inkludert logging og lagringstid.",
+    "result.improvementAdviceValue.humanInLoop":
+      "Beskriv en human-in-the-loop-prosess med godkjenningstrinn.",
+    "result.improvementAdviceValue.qaMetrics":
+      "Ta med målbare QA-metrikker og akseptansekriterier.",
+    "result.improvementAdviceValue.improvementLoop":
+      "Beskriv en konkret forbedringssløyfe med iterasjoner og tilbakemeldinger.",
+    "result.improvementAdviceValue.promptLeakage":
+      "Presiser retningslinjer for ansvarlig bruk og vern mot prompt-lekkasje.",
     "result.rationales": "Kriteriebegrunnelser",
     "result.criterion.relevance_for_case": "Relevans for oppgaven",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",
@@ -453,6 +485,7 @@ export const translations = {
     "assessment.auto.failedStart": "Klarte ikkje starte vurdering automatisk.",
     "assessment.auto.timeout": "Automatisk sjekk gjekk ut på tid. Du kan bruke Sjekk framdrift.",
     "assessment.auto.elapsedPrefix": "(forløpt)",
+    "assessment.auto.elapsedLabel": "Forløpt",
     "appeal.submittedPrefix": "Anke sendt inn",
     "appeal.readyForSubmission": "Du kan sende inn éi anke for dette resultatet.",
     "appeal.statusValue.OPEN": "Open",
@@ -477,6 +510,7 @@ export const translations = {
     "result.practicalScore": "Praktisk poeng",
     "result.decision": "Avgjerd",
     "result.decisionValue.AUTOMATIC": "Automatisk",
+    "result.decisionValue.MANUAL_REVIEW_PENDING": "Sendt til manuell vurdering",
     "result.decisionValue.MANUAL_OVERRIDE": "Manuell vurdering",
     "result.decisionValue.APPEAL_RESOLUTION": "Ankeavgjerd",
     "result.decisionValue.UNKNOWN": "Ukjend",
@@ -486,6 +520,8 @@ export const translations = {
     "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelreglar.",
     "result.decisionReasonValue.autoFail": "Automatisk ikkje bestått etter terskelreglar.",
     "result.confidence": "Konfidensnotat",
+    "result.confidenceValue.low":
+      "Låg konfidens på grunn av lite innhald; vurderinga byggjer på delvis dokumentasjon.",
     "result.confidenceValue.medium":
       "Middels konfidens på grunn av mogleg uklarheit i ansvarleg bruk.",
     "result.confidenceValue.high": "Høg konfidens: strukturert og tilstrekkeleg detaljert innlevering.",
@@ -495,6 +531,18 @@ export const translations = {
       "Skildr konkrete kvalitetssjekkar du gjennomførte.",
     "result.improvementAdviceValue.responsibleUse":
       "Vis tydeleg kva rammer for ansvarleg bruk du følgde.",
+    "result.improvementAdviceValue.riskScenarios":
+      "Skildr konkrete risikoscenario, eigarar og tiltak knytte til modulen.",
+    "result.improvementAdviceValue.dataHandling":
+      "Legg til ein seksjon om datahandsaming og personvern, inkludert logging og lagringstid.",
+    "result.improvementAdviceValue.humanInLoop":
+      "Skildr ein human-in-the-loop-prosess med godkjenningstrinn.",
+    "result.improvementAdviceValue.qaMetrics":
+      "Ta med målbare QA-metrikkar og akseptkriterium.",
+    "result.improvementAdviceValue.improvementLoop":
+      "Skildr ei konkret forbetringssløyfe med iterasjonar og tilbakemeldingar.",
+    "result.improvementAdviceValue.promptLeakage":
+      "Presiser retningslinjer for ansvarleg bruk og vern mot prompt-lekkasje.",
     "result.rationales": "Kriteriegrunngjevingar",
     "result.criterion.relevance_for_case": "Relevans for oppgåva",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",

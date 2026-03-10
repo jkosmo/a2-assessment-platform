@@ -47,6 +47,7 @@ const submissionValidationHint = document.getElementById("submissionValidationHi
 const assessmentGateHint = document.getElementById("assessmentGateHint");
 const checkAssessmentHint = document.getElementById("checkAssessmentHint");
 const assessmentProgressStatus = document.getElementById("assessmentProgressStatus");
+const assessmentProgressSeconds = document.getElementById("assessmentProgressSeconds");
 const appealGateHint = document.getElementById("appealGateHint");
 const appealSubmittedStatus = document.getElementById("appealSubmittedStatus");
 const queueAssessmentButton = document.getElementById("queueAssessment");
@@ -258,7 +259,7 @@ function validateSubmissionInputState() {
 function updateCreateSubmissionAvailability() {
   const validation = validateSubmissionInputState();
   const isBusy = createSubmissionButton.dataset.busy === "true";
-  createSubmissionButton.disabled = isBusy || !validation.valid;
+  createSubmissionButton.disabled = isBusy || flowState.hasSubmission || !validation.valid;
   submissionValidationHint.textContent = t(validation.hintKey);
 }
 
@@ -337,16 +338,34 @@ function renderFlowGating() {
   checkAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
   checkResultButton.classList.toggle("hidden", autoAssessmentEnabled);
   checkAssessmentHint.classList.toggle("hidden", autoAssessmentEnabled);
+  createSubmissionButton.classList.toggle("hidden", flowState.hasSubmission);
+  submitMcqButton.classList.toggle("hidden", !flowState.hasSubmission || flowState.hasMcqSubmission);
 
+  const hasResultStatus = isAssessmentResultReady(flowState.resultStatus);
+  resetSubmissionFlowButton.classList.toggle("hidden", !hasResultStatus);
+
+  const createSubmissionBusy = createSubmissionButton.dataset.busy === "true";
+  const submitMcqBusy = submitMcqButton.dataset.busy === "true";
   const queueBusy = queueAssessmentButton.dataset.busy === "true";
   const checkAssessmentBusy = checkAssessmentButton.dataset.busy === "true";
   const checkResultBusy = checkResultButton.dataset.busy === "true";
   const createAppealBusy = createAppealButton.dataset.busy === "true";
+  const resetFlowBusy = resetSubmissionFlowButton.dataset.busy === "true";
 
+  createSubmissionButton.disabled =
+    createSubmissionBusy ||
+    flowState.hasSubmission ||
+    !validateSubmissionInputState().valid;
+  submitMcqButton.disabled =
+    submitMcqBusy ||
+    !flowState.hasSubmission ||
+    flowState.hasMcqSubmission ||
+    currentQuestions.length === 0;
   queueAssessmentButton.disabled = autoAssessmentEnabled || queueBusy || !gate.assessmentUnlocked;
   checkResultButton.disabled = autoAssessmentEnabled || checkResultBusy || !gate.assessmentUnlocked;
   checkAssessmentButton.disabled = autoAssessmentEnabled || checkAssessmentBusy || !gate.checkAssessmentUnlocked;
   createAppealButton.disabled = createAppealBusy || !gate.appealUnlocked;
+  resetSubmissionFlowButton.disabled = resetFlowBusy || !hasResultStatus;
 
   assessmentGateHint.textContent = t(gate.assessmentHintKey);
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
@@ -835,7 +854,12 @@ function localizeAppealStatus(value) {
   return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
 }
 
-function localizeDecisionType(value) {
+function localizeDecisionType(value, submissionStatus) {
+  const normalizedStatus = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
+  if (normalizedStatus === "UNDER_REVIEW") {
+    return t("result.decisionValue.MANUAL_REVIEW_PENDING");
+  }
+
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
   return t(`result.decisionValue.${normalized || "UNKNOWN"}`);
 }
@@ -862,13 +886,35 @@ function localizeKnownContent(value, map) {
   if (typeof value !== "string") {
     return value ?? "-";
   }
-  const key = map[value.trim()];
-  return key ? t(key) : value;
+
+  const trimmed = value.trim();
+  const directKey = map[trimmed];
+  if (directKey) {
+    return t(directKey);
+  }
+
+  const normalize = (text) =>
+    text
+      .trim()
+      .replace(/[.;!]+$/g, "")
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+
+  const normalized = normalize(trimmed);
+  for (const [candidate, translationKey] of Object.entries(map)) {
+    if (normalize(candidate) === normalized) {
+      return t(translationKey);
+    }
+  }
+
+  return value;
 }
 
 function localizeDecisionReason(value) {
   return localizeKnownContent(value, {
     "Automatically routed to manual review due to red flag / confidence / borderline rule.":
+      "result.decisionReasonValue.autoManualReview",
+    "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.":
       "result.decisionReasonValue.autoManualReview",
     "Automatic pass by threshold rules.": "result.decisionReasonValue.autoPass",
     "Automatic fail by threshold rules.": "result.decisionReasonValue.autoFail",
@@ -877,6 +923,8 @@ function localizeDecisionReason(value) {
 
 function localizeConfidence(value) {
   return localizeKnownContent(value, {
+    "Low confidence due to sparse content; assessment based on partial evidence; more details would improve accuracy.":
+      "result.confidenceValue.low",
     "Medium confidence due to potential responsible-use ambiguity.":
       "result.confidenceValue.medium",
     "High confidence: structured and sufficiently detailed submission.":
@@ -895,6 +943,18 @@ function localizeImprovementAdvice(values) {
       "result.improvementAdviceValue.validationChecks",
     "Reference responsible-use constraints explicitly.":
       "result.improvementAdviceValue.responsibleUse",
+    "Specify concrete risk scenarios, owners, and mitigations tied to the module.":
+      "result.improvementAdviceValue.riskScenarios",
+    "Add a data handling and privacy section, including logging and retention.":
+      "result.improvementAdviceValue.dataHandling",
+    "Define a human-in-the-loop process and approval steps.":
+      "result.improvementAdviceValue.humanInLoop",
+    "Include measurable QA metrics and acceptance criteria.":
+      "result.improvementAdviceValue.qaMetrics",
+    "Provide a concrete improvement loop with iterations and feedback capture.":
+      "result.improvementAdviceValue.improvementLoop",
+    "Clarify responsible-use guidelines and safeguards against prompt leakage.":
+      "result.improvementAdviceValue.promptLeakage",
   };
 
   return values.map((value) => localizeKnownContent(value, mapping)).join("; ");
@@ -941,24 +1001,33 @@ function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus
 
 function renderAssessmentProgress() {
   const base = t(assessmentProgressKey);
+  let statusText = base;
+
+  if (!assessmentProgressDetailKey) {
+    statusText = base;
+  } else {
+    const detail = t(assessmentProgressDetailKey);
+    if (typeof assessmentProgressDetailCountdown === "number") {
+      statusText = `${base} ${detail} ${assessmentProgressDetailCountdown}s`;
+    } else {
+      statusText = `${base} ${detail}`;
+    }
+  }
+  assessmentProgressStatus.textContent = statusText;
+
   const hasAutoTimer =
     autoAssessmentTicker !== null &&
     typeof autoAssessmentElapsedSeconds === "number" &&
     autoAssessmentElapsedSeconds >= 0;
-  const timerText = hasAutoTimer ? ` ${t("assessment.auto.elapsedPrefix")} ${autoAssessmentElapsedSeconds}s` : "";
 
-  if (!assessmentProgressDetailKey) {
-    assessmentProgressStatus.textContent = `${base}${timerText}`;
+  if (!hasAutoTimer) {
+    assessmentProgressSeconds.textContent = "";
+    assessmentProgressSeconds.classList.add("hidden");
     return;
   }
 
-  const detail = t(assessmentProgressDetailKey);
-  if (typeof assessmentProgressDetailCountdown === "number") {
-    assessmentProgressStatus.textContent = `${base} ${detail} ${assessmentProgressDetailCountdown}s${timerText}`;
-    return;
-  }
-
-  assessmentProgressStatus.textContent = `${base} ${detail}${timerText}`;
+  assessmentProgressSeconds.textContent = `${t("assessment.auto.elapsedLabel")} ${autoAssessmentElapsedSeconds}s`;
+  assessmentProgressSeconds.classList.remove("hidden");
 }
 
 function renderAppealState() {
@@ -1012,7 +1081,7 @@ function renderResultSummary(body) {
     `${t("result.totalScore")}: ${formatNumber(body.scoreComponents?.totalScore)}`,
     `${t("result.mcqScore")}: ${formatNumber(body.scoreComponents?.mcqScaledScore)}`,
     `${t("result.practicalScore")}: ${formatNumber(body.scoreComponents?.practicalScaledScore)}`,
-    `${t("result.decision")}: ${localizeDecisionType(body.decision?.decisionType)}`,
+    `${t("result.decision")}: ${localizeDecisionType(body.decision?.decisionType, body.status)}`,
     `${t("result.decisionReason")}: ${localizeDecisionReason(body.participantGuidance?.decisionReason)}`,
     `${t("result.confidence")}: ${localizeConfidence(body.participantGuidance?.confidenceNote)}`,
     `${t("result.improvementAdvice")}: ${localizeImprovementAdvice(body.participantGuidance?.improvementAdvice)}`,
@@ -1045,7 +1114,7 @@ function renderHistorySummary(body) {
     lines.push(`${t("history.module")}: ${item.module?.title ?? "-"} (${item.module?.id ?? "-"})`);
     lines.push(`${t("history.submittedAt")}: ${formatDateTime(item.submittedAt)}`);
     lines.push(`${t("history.latestStatus")}: ${localizeSubmissionStatus(item.status)}`);
-    lines.push(`${t("history.latestDecision")}: ${localizeDecisionType(item.latestDecision?.decisionType)}`);
+    lines.push(`${t("history.latestDecision")}: ${localizeDecisionType(item.latestDecision?.decisionType, item.status)}`);
     lines.push(`${t("history.latestScore")}: ${formatNumber(item.latestDecision?.totalScore)}`);
     lines.push("");
   }

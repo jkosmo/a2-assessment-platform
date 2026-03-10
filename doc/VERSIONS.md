@@ -7,6 +7,35 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.58 - 2026-03-10
+### Summary
+Forenklet deltakerflyten videre ved å skjule ugyldige handlinger i riktig fase, gjøre nedtelling tydeligere, og forbedre konsistens/lokalisering i resultatoppsummering for manuell vurdering og OpenAI-råd.
+
+### Included
+- Participant UI flow gating hardening:
+  - `public/participant.js`
+  - `Opprett innlevering` skjules etter første vellykkede innlevering og vises igjen først etter reset.
+  - `Send MCQ` skjules etter første vellykkede MCQ-innsending.
+  - `Slett innlevering, og start på nytt` vises først når vurderingsresultat er mottatt (`UNDER_REVIEW`/`COMPLETED`/`SCORED`).
+- Assessment progress visibility improvements:
+  - `public/participant.html`
+  - `public/participant.js`
+  - lagt til tydelig, stor sekundteller under framdriftsstatus under automatisk vurdering.
+- Result consistency + localization improvements:
+  - `public/participant.js`
+  - viser `Sendt til manuell vurdering` som beslutningstekst når status er `UNDER_REVIEW`, for å unngå konflikt mellom beslutning og begrunnelse.
+  - utvidet lokalisering av kjente OpenAI confidence/improvement-tekster (nb/nn/en) med robust normalisering av strengmatching.
+- Translation resource updates:
+  - `public/i18n/participant-translations.js`
+  - nye nøkler for manuell-vurdering-beslutning, lav konfidens og ekstra forbedringsråd.
+- Added translation regression tests:
+  - `test/participant-translations.test.js`
+  - validerer nøkkelparitet mellom `en-GB`, `nb`, `nn` og at nye nøkler finnes i alle språk.
+
+### Verification
+- `npm run lint`
+- `npm test` (58 tests passing, 23 test files)
+
 ## 0.3.57 - 2026-03-10
 ### Summary
 Documented Azure OpenAI staging/production configuration profiles and operationalized the current staging runtime profile for `gpt-5-nano`.

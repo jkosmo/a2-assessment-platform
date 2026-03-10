@@ -15,6 +15,8 @@
       button:not(:disabled):active { transform: translateY(1px); }
       button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
       .small { font-size: 12px; color: #666; }
+      .assessment-progress { margin-top: 10px; font-size: 16px; font-weight: 600; color: #1b2a4a; }
+      .assessment-progress-seconds { margin-top: 6px; font-size: 28px; font-weight: 800; color: #134ec9; letter-spacing: 0.3px; }
       pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
       .inline { display: inline-block; width: auto; }
       .module-list { display: grid; gap: 10px; margin-top: 12px; }
@@ -106,7 +108,8 @@
       <button id="queueAssessment" data-i18n="assessment.queue"></button>
       <button id="checkAssessment" data-i18n="assessment.checkAssessment"></button>
       <div class="small" id="checkAssessmentHint"></div>
-      <div class="small" id="assessmentProgressStatus"></div>
+      <div id="assessmentProgressStatus" class="assessment-progress"></div>
+      <div id="assessmentProgressSeconds" class="assessment-progress-seconds hidden"></div>
       <button id="checkResult" data-i18n="assessment.checkResult"></button>
       <div class="small" data-i18n="assessment.resultSummary"></div>
       <pre id="resultSummary"></pre>
