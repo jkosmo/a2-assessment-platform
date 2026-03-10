@@ -72,6 +72,14 @@ param azureOpenAiTemperature string = '0'
 @description('Azure OpenAI max output tokens.')
 param azureOpenAiMaxTokens int = 1200
 
+@description('Azure OpenAI token limit parameter strategy (max_tokens, max_completion_tokens, auto).')
+@allowed([
+  'max_tokens'
+  'max_completion_tokens'
+  'auto'
+])
+param azureOpenAiTokenLimitParameter string = 'auto'
+
 @description('Assessment worker polling interval in milliseconds.')
 param assessmentJobPollIntervalMs int = 4000
 
@@ -287,6 +295,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_MAX_TOKENS'
           value: string(azureOpenAiMaxTokens)
+        }
+        {
+          name: 'AZURE_OPENAI_TOKEN_LIMIT_PARAMETER'
+          value: azureOpenAiTokenLimitParameter
         }
         {
           name: 'ASSESSMENT_RULES_FILE'

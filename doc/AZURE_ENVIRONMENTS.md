@@ -65,6 +65,7 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_OPENAI_TIMEOUT_MS` (optional, default `30000`)
 - `AZURE_OPENAI_TEMPERATURE` (optional, default `0`)
 - `AZURE_OPENAI_MAX_TOKENS` (optional, default `1200`)
+- `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (optional, `max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
 - `ASSESSMENT_JOB_POLL_INTERVAL_MS`
 - `ASSESSMENT_JOB_MAX_ATTEMPTS`
 - `OBSERVABILITY_ALERT_EMAIL` (optional)

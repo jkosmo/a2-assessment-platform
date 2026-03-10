@@ -75,6 +75,7 @@ jobs:
             -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '30000' }}" `
             -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
             -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
+            -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
@@ -141,6 +142,7 @@ jobs:
             -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '30000' }}" `
             -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
             -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
+            -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `

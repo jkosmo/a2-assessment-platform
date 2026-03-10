@@ -26,6 +26,7 @@ Option 2, using the existing `evaluatePracticalWithLlm` boundary:
 - No database schema changes.
 - Runtime env contract expanded with Azure OpenAI settings:
   - endpoint, api key, deployment, api version, timeout, temperature, max tokens
+  - token-limit parameter strategy (`max_tokens`, `max_completion_tokens`, or `auto` fallback)
 - Azure infrastructure/deploy pipeline updated to pass new settings.
 - Assessment job now passes versioned prompt-template content into LLM context.
 

@@ -53,6 +53,7 @@ type AzureOpenAiRuntimeConfig = {
   timeoutMs: number;
   temperature: number;
   maxTokens: number;
+  tokenLimitParameter: "max_tokens" | "max_completion_tokens" | "auto";
 };
 
 export async function evaluatePracticalWithLlm(input: AssessmentContext): Promise<LlmStructuredAssessment> {
@@ -69,6 +70,7 @@ export async function evaluatePracticalWithLlm(input: AssessmentContext): Promis
       timeoutMs: env.AZURE_OPENAI_TIMEOUT_MS,
       temperature: env.AZURE_OPENAI_TEMPERATURE,
       maxTokens: env.AZURE_OPENAI_MAX_TOKENS,
+      tokenLimitParameter: env.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER,
     });
   }
 
@@ -81,39 +83,51 @@ export async function evaluatePracticalWithAzureOpenAi(
 ): Promise<LlmStructuredAssessment> {
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), config.timeoutMs);
+  const tokenParameterSequence = resolveTokenParameterSequence(config.tokenLimitParameter);
+  let lastProviderError: Error | null = null;
 
   try {
-    const response = await fetch(buildAzureOpenAiCompletionsUrl(config), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "api-key": config.apiKey,
-      },
-      body: JSON.stringify({
-        messages: buildAzureOpenAiMessages(input),
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        response_format: {
-          type: "json_object",
+    for (let index = 0; index < tokenParameterSequence.length; index += 1) {
+      const tokenParameter = tokenParameterSequence[index];
+      const response = await fetch(buildAzureOpenAiCompletionsUrl(config), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "api-key": config.apiKey,
         },
-      }),
-      signal: timeoutController.signal,
-    });
+        body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter)),
+        signal: timeoutController.signal,
+      });
 
-    const rawBody = await response.text();
-    const responseBody = parseJsonBody(rawBody);
+      const rawBody = await response.text();
+      const responseBody = parseJsonBody(rawBody);
 
-    if (!response.ok) {
-      const providerMessage = extractProviderErrorMessage(responseBody);
-      throw new Error(
-        `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
-      );
+      if (!response.ok) {
+        if (
+          config.tokenLimitParameter === "auto" &&
+          index < tokenParameterSequence.length - 1 &&
+          isUnsupportedTokenParameterError(responseBody, tokenParameter)
+        ) {
+          continue;
+        }
+
+        const providerMessage = extractProviderErrorMessage(responseBody);
+        lastProviderError = new Error(
+          `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
+        );
+        throw lastProviderError;
+      }
+
+      const assistantContent = extractAssistantContent(responseBody);
+      const parsedStructuredPayload = parseStructuredPayload(assistantContent);
+
+      return llmResponseSchema.parse(parsedStructuredPayload);
     }
 
-    const assistantContent = extractAssistantContent(responseBody);
-    const parsedStructuredPayload = parseStructuredPayload(assistantContent);
-
-    return llmResponseSchema.parse(parsedStructuredPayload);
+    throw (
+      lastProviderError ??
+      new Error("Azure OpenAI request failed for all configured token parameter strategies.")
+    );
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Azure OpenAI request timed out after ${config.timeoutMs}ms.`);
@@ -201,6 +215,33 @@ function buildAzureOpenAiCompletionsUrl(config: AzureOpenAiRuntimeConfig): strin
   return `${trimmedEndpoint}/openai/deployments/${encodedDeployment}/chat/completions?api-version=${encodedApiVersion}`;
 }
 
+function buildAzureOpenAiRequestBody(
+  input: AssessmentContext,
+  config: AzureOpenAiRuntimeConfig,
+  tokenParameter: "max_tokens" | "max_completion_tokens",
+): Record<string, unknown> {
+  return {
+    messages: buildAzureOpenAiMessages(input),
+    temperature: config.temperature,
+    [tokenParameter]: config.maxTokens,
+    response_format: {
+      type: "json_object",
+    },
+  };
+}
+
+function resolveTokenParameterSequence(
+  preference: AzureOpenAiRuntimeConfig["tokenLimitParameter"],
+): Array<"max_tokens" | "max_completion_tokens"> {
+  if (preference === "max_tokens") {
+    return ["max_tokens"];
+  }
+  if (preference === "max_completion_tokens") {
+    return ["max_completion_tokens"];
+  }
+  return ["max_completion_tokens", "max_tokens"];
+}
+
 function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "system" | "user"; content: string }> {
   const systemPrompt = (input.promptTemplateSystem ?? "").trim() || DEFAULT_SYSTEM_PROMPT;
   const userPromptTemplate = (input.promptTemplateUserTemplate ?? "").trim();
@@ -243,6 +284,26 @@ function extractProviderErrorMessage(payload: unknown): string {
 
   const candidate = payload as { error?: { message?: unknown } };
   return typeof candidate.error?.message === "string" ? candidate.error.message : "";
+}
+
+function isUnsupportedTokenParameterError(
+  payload: unknown,
+  tokenParameter: "max_tokens" | "max_completion_tokens",
+): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const candidate = payload as { error?: { code?: unknown; param?: unknown; message?: unknown } };
+  const code = typeof candidate.error?.code === "string" ? candidate.error.code : "";
+  const param = typeof candidate.error?.param === "string" ? candidate.error.param : "";
+  const message = typeof candidate.error?.message === "string" ? candidate.error.message : "";
+
+  if (code !== "unsupported_parameter") {
+    return false;
+  }
+
+  return param === tokenParameter || message.toLowerCase().includes(tokenParameter);
 }
 
 function extractAssistantContent(payload: unknown): string {

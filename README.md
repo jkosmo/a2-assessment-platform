@@ -179,6 +179,7 @@ LLM provider mode is env-driven via:
   - `AZURE_OPENAI_TIMEOUT_MS` (default `30000`)
   - `AZURE_OPENAI_TEMPERATURE` (default `0`)
   - `AZURE_OPENAI_MAX_TOKENS` (default `1200`)
+  - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (`max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
 
 Sensitive-data preprocessing before LLM evaluation is config-driven via:
 - `config/assessment-rules.json`

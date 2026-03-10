@@ -19,6 +19,7 @@ const baseConfig = {
   timeoutMs: 5000,
   temperature: 0,
   maxTokens: 1200,
+  tokenLimitParameter: "max_tokens" as const,
 };
 
 const validPayload = {
@@ -79,6 +80,37 @@ describe("llmAssessmentService azure_openai adapter", () => {
       "https://example.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21",
     );
     expect(requestInit.method).toBe("POST");
+    const payload = JSON.parse(String(requestInit.body)) as Record<string, unknown>;
+    expect(payload.max_tokens).toBe(1200);
+    expect(payload.max_completion_tokens).toBeUndefined();
+  });
+
+  it("supports max_completion_tokens when configured", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(validPayload),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await evaluatePracticalWithAzureOpenAi(baseInput, {
+      ...baseConfig,
+      tokenLimitParameter: "max_completion_tokens",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(requestInit.body)) as Record<string, unknown>;
+    expect(payload.max_completion_tokens).toBe(1200);
+    expect(payload.max_tokens).toBeUndefined();
   });
 
   it("parses fenced JSON payloads from assistant content", async () => {
@@ -142,5 +174,55 @@ describe("llmAssessmentService azure_openai adapter", () => {
     await expect(evaluatePracticalWithAzureOpenAi(baseInput, baseConfig)).rejects.toThrow(
       "Azure OpenAI did not return parseable JSON content.",
     );
+  });
+
+  it("retries with alternate token parameter when auto mode gets unsupported_parameter", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              message:
+                "Unsupported parameter: 'max_completion_tokens' is not supported with this model. Use 'max_tokens' instead.",
+              type: "invalid_request_error",
+              param: "max_completion_tokens",
+              code: "unsupported_parameter",
+            },
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify(validPayload),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await evaluatePracticalWithAzureOpenAi(baseInput, {
+      ...baseConfig,
+      tokenLimitParameter: "auto",
+    });
+
+    expect(result.module_id).toBe("module-1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const [, firstInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const firstPayload = JSON.parse(String(firstInit.body)) as Record<string, unknown>;
+    expect(firstPayload.max_completion_tokens).toBe(1200);
+
+    const [, secondInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const secondPayload = JSON.parse(String(secondInit.body)) as Record<string, unknown>;
+    expect(secondPayload.max_tokens).toBe(1200);
   });
 });

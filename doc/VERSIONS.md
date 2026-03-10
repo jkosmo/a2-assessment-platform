@@ -7,6 +7,40 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.56 - 2026-03-10
+### Summary
+Hardened Azure OpenAI token-limit compatibility by adding config-driven token parameter strategy (`max_tokens` / `max_completion_tokens` / `auto`) with automatic fallback for model-specific unsupported-parameter responses.
+
+### Included
+- Added new Azure OpenAI env/config key:
+  - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER`
+  - supported values: `max_tokens`, `max_completion_tokens`, `auto`
+  - default: `auto`
+- Implemented token-parameter strategy in Azure adapter:
+  - `src/services/llmAssessmentService.ts`
+  - request now uses configured token key
+  - `auto` mode tries modern-first (`max_completion_tokens`) and retries with `max_tokens` when provider returns `unsupported_parameter`
+- Updated runtime/deploy configuration wiring:
+  - `src/config/env.ts`
+  - `.env.example`
+  - `.azure/environments/staging.env.example`
+  - `.azure/environments/production.env.example`
+  - `infra/azure/main.bicep`
+  - `scripts/azure/deploy-environment.ps1`
+  - `.github/workflows/deploy-azure.yml`
+- Documentation updates:
+  - `README.md`
+  - `doc/AZURE_ENVIRONMENTS.md`
+  - `doc/PHASE2_AZURE_OPENAI_INTEGRATION.md`
+- Test coverage updates:
+  - `test/llm-assessment-service.test.ts`
+  - verifies `max_tokens` path, `max_completion_tokens` path, and `auto` fallback retry behavior
+
+### Verification
+- `npm run lint`
+- `npm test` (56 tests passing, 22 test files)
+- `npm run build`
+
 ## 0.3.55 - 2026-03-10
 ### Summary
 Implemented Azure OpenAI assessment-provider integration for `LLM_MODE=azure_openai` with strict structured-output validation, versioned prompt-template context wiring, and deploy/runtime configuration support.

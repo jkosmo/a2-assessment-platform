@@ -28,6 +28,9 @@ const envSchema = z.object({
   AZURE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   AZURE_OPENAI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0),
   AZURE_OPENAI_MAX_TOKENS: z.coerce.number().int().positive().default(1200),
+  AZURE_OPENAI_TOKEN_LIMIT_PARAMETER: z
+    .enum(["max_tokens", "max_completion_tokens", "auto"])
+    .default("auto"),
   APPEAL_FIRST_RESPONSE_SLA_HOURS: z.coerce.number().positive().default(24),
   APPEAL_RESOLUTION_SLA_HOURS: z.coerce.number().positive().default(72),
   APPEAL_AT_RISK_RATIO: z.coerce.number().positive().max(1).default(0.75),
