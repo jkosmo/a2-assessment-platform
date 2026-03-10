@@ -54,7 +54,7 @@
   "flow": {
     "autoStartAfterMcq": true,
     "pollIntervalSeconds": 2,
-    "maxWaitSeconds": 90
+    "maxWaitSeconds": 180
   },
   "calibrationWorkspace": {
     "accessRoles": ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],

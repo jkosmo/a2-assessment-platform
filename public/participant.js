@@ -518,9 +518,6 @@ function renderFlowGating() {
   assessmentSection.classList.toggle("section-locked", !gate.assessmentUnlocked);
   appealSection.classList.toggle("section-locked", !gate.appealUnlocked);
   queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
-  checkAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
-  checkResultButton.classList.toggle("hidden", autoAssessmentEnabled);
-  checkAssessmentHint.classList.toggle("hidden", autoAssessmentEnabled);
   createSubmissionButton.classList.toggle("hidden", flowState.hasSubmission);
   submitMcqButton.classList.toggle("hidden", !flowState.hasSubmission || flowState.hasMcqSubmission);
 

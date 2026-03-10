@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.75 - 2026-03-10
+### Summary
+Adjusted the participant assessment UX so auto-started assessments keep manual follow-up controls visible and wait longer before showing a timeout.
+
+### Included
+- Participant workspace fallback improvements:
+  - `public/participant.js`
+  - manual `Check progress` and `Check result` controls remain available even when auto-start after MCQ is enabled
+- Assessment wait tuning:
+  - `config/participant-console.json`
+  - increased `flow.maxWaitSeconds` from `90` to `180`
+- Participant copy update:
+  - `public/i18n/participant-translations.js`
+  - timeout text now points to the visible manual fallback controls below the status area
+- Config verification update:
+  - `test/participant-console-config.test.ts`
+  - updated runtime-config expectation for the longer wait window
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/m1-core-flow.test.ts`
+
 ## 0.3.74 - 2026-03-10
 ### Summary
 Extracted the duplicated frontend API/config fetch logic into a shared `api-client` module and migrated all five workspace pages to use it.
