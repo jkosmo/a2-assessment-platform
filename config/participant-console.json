@@ -22,6 +22,12 @@
         "requiredRoles": ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"]
       },
       {
+        "id": "manual-review",
+        "path": "/manual-review",
+        "labelKey": "nav.manualReview",
+        "requiredRoles": ["REVIEWER", "ADMINISTRATOR"]
+      },
+      {
         "id": "appeal-handler",
         "path": "/appeal-handler",
         "labelKey": "nav.appealHandler",
@@ -47,6 +53,11 @@
     "maxModules": 30
   },
   "appealWorkspace": {
+    "availableStatuses": ["OPEN", "IN_REVIEW", "RESOLVED"],
+    "defaultStatuses": ["OPEN", "IN_REVIEW"],
+    "queuePageSize": 50
+  },
+  "manualReviewWorkspace": {
     "availableStatuses": ["OPEN", "IN_REVIEW", "RESOLVED"],
     "defaultStatuses": ["OPEN", "IN_REVIEW"],
     "queuePageSize": 50
@@ -83,6 +94,13 @@
       "name": "Platform Appeal Handler",
       "department": "Quality",
       "roles": ["APPEAL_HANDLER"]
+    },
+    "reviewer": {
+      "userId": "reviewer-user-1",
+      "email": "reviewer1@company.com",
+      "name": "Platform Reviewer",
+      "department": "Quality",
+      "roles": ["REVIEWER"]
     },
     "calibrationOwner": {
       "userId": "smo-1",

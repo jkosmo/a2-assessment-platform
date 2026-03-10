@@ -94,6 +94,12 @@ let participantRuntimeConfig = {
         requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
       },
       {
+        id: "manual-review",
+        path: "/manual-review",
+        labelKey: "nav.manualReview",
+        requiredRoles: ["REVIEWER", "ADMINISTRATOR"],
+      },
+      {
         id: "appeal-handler",
         path: "/appeal-handler",
         labelKey: "nav.appealHandler",

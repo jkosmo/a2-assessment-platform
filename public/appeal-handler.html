@@ -12,13 +12,14 @@
       th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
       tr.selected { background: var(--color-row-selected); }
       tr:hover { background: var(--color-row-hover); }
-      .queue-toolbar { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: var(--space-2); align-items: end; }
+      .queue-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--space-2); align-items: end; }
     </style>
   </head>
   <body>
     <div class="layout-container">
     <h1 data-i18n="appealPage.title"></h1>
     <p class="small" data-i18n="appealPage.subtitle"></p>
+    <p class="small" data-i18n="appealPage.scopeNote"></p>
     <p class="small"><span data-i18n="appealPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
 
@@ -69,18 +70,6 @@
           <div class="small" data-i18n="appealHandler.statusHint"></div>
         </div>
         <div>
-          <fieldset class="pill-group-fieldset">
-            <legend id="appealHandlerManualReviewFilterLegend" data-i18n="appealHandler.manualReviewFilter"></legend>
-            <div
-              id="appealHandlerManualReviewFilter"
-              class="pill-group"
-              role="group"
-              aria-labelledby="appealHandlerManualReviewFilterLegend"
-            ></div>
-          </fieldset>
-          <div class="small" data-i18n="appealHandler.manualReviewHint"></div>
-        </div>
-        <div>
           <label for="queueSearch" data-i18n="appealHandler.search"></label>
           <input id="queueSearch" data-i18n-placeholder="appealHandler.searchPlaceholder" />
         </div>
@@ -100,7 +89,6 @@
             <tr>
               <th data-i18n="appealHandler.table.appealId"></th>
               <th data-i18n="appealHandler.table.status"></th>
-              <th data-i18n="appealHandler.table.manualReview"></th>
               <th data-i18n="appealHandler.table.participant"></th>
               <th data-i18n="appealHandler.table.module"></th>
               <th data-i18n="appealHandler.table.submittedAt"></th>

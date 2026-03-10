@@ -32,6 +32,12 @@ describe("participant console runtime config", () => {
           requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
         },
         {
+          id: "manual-review",
+          path: "/manual-review",
+          labelKey: "nav.manualReview",
+          requiredRoles: ["REVIEWER", "ADMINISTRATOR"],
+        },
+        {
           id: "appeal-handler",
           path: "/appeal-handler",
           labelKey: "nav.appealHandler",
@@ -57,6 +63,11 @@ describe("participant console runtime config", () => {
       maxModules: 30,
     });
     expect(response.body.appealWorkspace).toEqual({
+      availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
+      defaultStatuses: ["OPEN", "IN_REVIEW"],
+      queuePageSize: 50,
+    });
+    expect(response.body.manualReviewWorkspace).toEqual({
       availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
       defaultStatuses: ["OPEN", "IN_REVIEW"],
       queuePageSize: 50,
@@ -94,6 +105,13 @@ describe("participant console runtime config", () => {
         department: "Quality",
         roles: ["APPEAL_HANDLER"],
       },
+      reviewer: {
+        userId: "reviewer-user-1",
+        email: "reviewer1@company.com",
+        name: "Platform Reviewer",
+        department: "Quality",
+        roles: ["REVIEWER"],
+      },
       calibrationOwner: {
         userId: "smo-1",
         email: "smo@company.com",
@@ -116,6 +134,13 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("appeal-handler.js");
+  });
+
+  it("serves dedicated manual-review workspace page", async () => {
+    const response = await request(app).get("/manual-review");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("manual-review.js");
   });
 
   it("serves dedicated calibration workspace page", async () => {
@@ -143,6 +168,7 @@ describe("participant console runtime config", () => {
     const workspacePages = [
       "/participant",
       "/participant/completed",
+      "/manual-review",
       "/admin-content",
       "/appeal-handler",
       "/calibration",
@@ -169,6 +195,12 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="appealHandlerStatusFilter"');
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).not.toContain('<select id="appealHandlerStatusFilter"');
+        expect(response.text).toContain('id="outputStatus"');
+      }
+
+      if (pagePath === "/manual-review") {
+        expect(response.text).toContain('id="manualReviewStatusFilter"');
+        expect(response.text).toContain('class="pill-group"');
         expect(response.text).toContain('id="outputStatus"');
       }
 

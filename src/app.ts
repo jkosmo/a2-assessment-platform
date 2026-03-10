@@ -55,6 +55,10 @@ app.get("/admin-content", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content.html"));
 });
 
+app.get("/manual-review", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "manual-review.html"));
+});
+
 app.get("/appeal-handler", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "appeal-handler.html"));
 });

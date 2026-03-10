@@ -54,6 +54,11 @@ const participantConsoleConfigSchema = z.object({
       .min(1),
     queuePageSize: z.number().int().min(1).max(200).default(50),
   }),
+  manualReviewWorkspace: z.object({
+    availableStatuses: z.array(z.enum(["OPEN", "IN_REVIEW", "RESOLVED"])).min(1),
+    defaultStatuses: z.array(z.enum(["OPEN", "IN_REVIEW", "RESOLVED"])).min(1),
+    queuePageSize: z.number().int().min(1).max(200).default(50),
+  }),
   flow: z.object({
     autoStartAfterMcq: z.boolean().default(true),
     pollIntervalSeconds: z.number().int().min(1).max(30).default(2),
@@ -76,6 +81,7 @@ const participantConsoleConfigSchema = z.object({
     .object({
       participant: consoleIdentitySchema,
       appealHandler: consoleIdentitySchema,
+      reviewer: consoleIdentitySchema.optional(),
       calibrationOwner: consoleIdentitySchema.optional(),
       contentAdmin: consoleIdentitySchema.optional(),
     })
@@ -92,6 +98,7 @@ export type ParticipantConsoleRuntimeConfig = {
   navigation: ParticipantConsoleConfig["navigation"];
   drafts: ParticipantConsoleConfig["drafts"];
   appealWorkspace: ParticipantConsoleConfig["appealWorkspace"];
+  manualReviewWorkspace: ParticipantConsoleConfig["manualReviewWorkspace"];
   flow: ParticipantConsoleConfig["flow"];
   calibrationWorkspace: ParticipantConsoleConfig["calibrationWorkspace"];
   identityDefaults?: ParticipantConsoleConfig["identityDefaults"];
@@ -130,6 +137,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     navigation: config.navigation,
     drafts: config.drafts,
     appealWorkspace: config.appealWorkspace,
+    manualReviewWorkspace: config.manualReviewWorkspace,
     flow: config.flow,
     calibrationWorkspace: config.calibrationWorkspace,
     identityDefaults: config.identityDefaults,

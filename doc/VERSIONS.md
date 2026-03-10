@@ -7,6 +7,46 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.79 - 2026-03-10
+### Summary
+Separated manual review from appeals into its own reviewer workspace, restored `appeal-handler` to an appeals-only queue, clarified the workspace scope in UI copy, and seeded a pending manual-review case so the reviewer queue is not empty in a standard environment.
+
+### Included
+- Dedicated manual review workspace:
+  - `public/manual-review.html`
+  - `public/manual-review.js`
+  - `public/i18n/manual-review-translations.js`
+  - added a standalone queue and detail workspace for `/api/reviews`
+  - supports reviewer identity, queue filtering, claim, and override flows
+- Runtime config and navigation:
+  - `config/participant-console.json`
+  - `src/config/participantConsole.ts`
+  - `src/app.ts`
+  - added `manual-review` navigation item, `manualReviewWorkspace` runtime config, reviewer identity defaults, and a `/manual-review` page route
+- Appeal workspace clarification:
+  - `public/appeal-handler.html`
+  - `public/appeal-handler.js`
+  - `public/i18n/appeal-handler-translations.js`
+  - removed manual-review queue filtering from `appeal-handler`
+  - clarified that appeal handling only covers appeals
+  - simplified manual-review context in appeal details so submissions without manual-review history no longer show a full block of placeholder fields
+- Appeal queue payload rollback:
+  - `src/services/appealService.ts`
+  - removed latest-manual-review data from the appeal queue list payload
+- Seeded reviewer workflow visibility:
+  - `prisma/seed.ts`
+  - added explicit reviewer and appeal-handler users with role assignments
+  - added one seeded pending `OPEN` manual review with supporting submission, MCQ, LLM evaluation, and decision data
+- Tests:
+  - `test/participant-console-config.test.ts`
+  - `test/m2-manual-review.test.ts`
+  - added route/config coverage for `/manual-review`
+  - added assertion that seeded environments expose at least one pending manual review in the reviewer queue
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/participant-console-production-config.test.ts test/m2-manual-review.test.ts test/m2-appeal-flow.test.ts`
+
 ## 0.3.78 - 2026-03-10
 ### Summary
 Made manual review state visible and filterable in the appeal handler queue so appeal handlers can find appeals tied to submissions that are under manual review.

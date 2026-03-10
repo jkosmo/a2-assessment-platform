@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A2 Manual Review Workspace</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <style>
+      .inline { display: inline-block; width: auto; }
+      .queue-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 420px; overflow-y: auto; }
+      table { width: 100%; border-collapse: collapse; min-width: 980px; }
+      th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
+      tr.selected { background: var(--color-row-selected); }
+      tr:hover { background: var(--color-row-hover); }
+      .queue-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--space-2); align-items: end; }
+    </style>
+  </head>
+  <body>
+    <div class="layout-container">
+      <h1 data-i18n="reviewPage.title">Manual Review Workspace</h1>
+      <p class="small" data-i18n="reviewPage.subtitle">Handle submissions routed to human review before the final result is confirmed.</p>
+      <p class="small" data-i18n="reviewPage.scopeNote">This queue shows submissions waiting for reviewer action. Appeals are handled separately.</p>
+      <p class="small"><span data-i18n="reviewPage.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
+      <nav id="workspaceNav" class="workspace-nav"></nav>
+
+      <section class="card">
+        <div class="row">
+          <div>
+            <label for="localeSelect" data-i18n="locale.label">Language</label>
+            <select id="localeSelect"></select>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3 data-i18n="identity.title">Test User</h3>
+        <div class="row">
+          <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" /></div>
+          <div><label data-i18n="identity.email">Email</label><input id="email" value="reviewer1@company.com" /></div>
+        </div>
+        <div class="row">
+          <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Reviewer" /></div>
+          <div><label data-i18n="identity.department">Department</label><input id="department" value="Quality" /></div>
+        </div>
+        <div>
+          <label data-i18n="identity.roles">Roles</label>
+          <input id="roles" value="REVIEWER" />
+        </div>
+        <div id="mockRolePresetContainer">
+          <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
+          <select id="mockRolePreset"></select>
+          <div class="small" id="mockRolePresetHint"></div>
+        </div>
+        <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
+      </section>
+
+      <section class="card">
+        <h3 data-i18n="manualReview.title">Manual Review Queue</h3>
+        <div class="queue-toolbar">
+          <div>
+            <fieldset class="pill-group-fieldset">
+              <legend id="manualReviewStatusFilterLegend" data-i18n="manualReview.statusFilter">Status</legend>
+              <div
+                id="manualReviewStatusFilter"
+                class="pill-group"
+                role="group"
+                aria-labelledby="manualReviewStatusFilterLegend"
+              ></div>
+            </fieldset>
+            <div class="small" data-i18n="manualReview.statusHint">Choose which review statuses to show in the queue.</div>
+          </div>
+          <div>
+            <label for="queueSearch" data-i18n="manualReview.search">Search queue</label>
+            <input id="queueSearch" data-i18n-placeholder="manualReview.searchPlaceholder" placeholder="Filter by participant, module, review ID, or status" />
+          </div>
+          <div>
+            <label data-i18n="manualReview.queueLimit">Max reviews to load</label>
+            <input id="queueLimit" readonly value="50" />
+          </div>
+        </div>
+        <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
+          <div><button id="loadReviewQueue" class="btn-secondary" data-i18n="manualReview.loadQueue">Load reviews</button></div>
+          <div class="small"><span data-i18n="manualReview.queueCount">Reviews shown:</span> <strong id="queueCount">0</strong></div>
+        </div>
+        <div id="manualReviewMessage" class="small"></div>
+        <div class="queue-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="manualReview.table.reviewId">Review</th>
+                <th data-i18n="manualReview.table.status">Status</th>
+                <th data-i18n="manualReview.table.participant">Participant</th>
+                <th data-i18n="manualReview.table.module">Module</th>
+                <th data-i18n="manualReview.table.submittedAt">Submitted</th>
+                <th data-i18n="manualReview.table.createdAt">Created</th>
+                <th data-i18n="manualReview.table.reviewer">Reviewer</th>
+                <th data-i18n="manualReview.table.reviewedAt">Reviewed</th>
+              </tr>
+            </thead>
+            <tbody id="manualReviewQueueBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3 data-i18n="manualReview.detailsTitle">Selected review details</h3>
+        <div><label data-i18n="manualReview.selectedReview">Selected review</label><input id="selectedReviewId" readonly value="-" /></div>
+        <pre id="manualReviewDetails"></pre>
+        <div><label data-i18n="manualReview.overrideDecision">Decision reason</label><textarea id="reviewDecisionReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
+        <div><label data-i18n="manualReview.overrideReason">Override note</label><textarea id="reviewOverrideReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
+        <div>
+          <label for="reviewPassFailTotal" data-i18n="manualReview.passFail">Final result</label>
+          <select id="reviewPassFailTotal">
+            <option value="true" data-i18n="manualReview.pass">Pass</option>
+            <option value="false" data-i18n="manualReview.fail">Fail</option>
+          </select>
+        </div>
+        <div class="small" id="overrideValidationMessage"></div>
+        <div class="row">
+          <div><button id="claimReview" class="btn-secondary" data-i18n="manualReview.claim">Claim review</button></div>
+          <div><button id="overrideReview" class="btn-primary" data-i18n="manualReview.override">Finalize override</button></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3 data-i18n="output.title">System response</h3>
+        <div class="small" id="outputStatus"></div>
+        <pre id="output"></pre>
+      </section>
+    </div>
+    <script src="/static/i18n/manual-review-translations.js" type="module"></script>
+    <script src="/static/manual-review.js" type="module"></script>
+  </body>
+</html>

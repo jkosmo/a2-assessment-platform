@@ -9,8 +9,9 @@ export const localeLabels = baseLocaleLabels;
 
 const extraTranslations = {
   "en-GB": {
-    "appealPage.title": "Appeal Handler Workspace",
-    "appealPage.subtitle": "Review appeals: filter the list, open a case, then assign and resolve it.",
+    "appealPage.title": "Appeals Workspace",
+    "appealPage.subtitle": "Review participant appeals: filter the list, open a case, then assign and resolve it.",
+    "appealPage.scopeNote": "This workspace only handles appeals. Submissions waiting for human review belong in Manual Review.",
     "appealPage.versionLabel": "Version:",
     "appealPage.participantLink": "Open Participant Console",
     "appealHandler.queueLimit": "Max appeals to load",
@@ -40,7 +41,7 @@ const extraTranslations = {
     "appealHandler.details.section.submission": "Submission",
     "appealHandler.details.section.mcq": "MCQ",
     "appealHandler.details.section.evaluation": "Evaluation",
-    "appealHandler.details.section.manualReview": "Manual review",
+    "appealHandler.details.section.manualReview": "Manual review context",
     "appealHandler.details.section.sla": "SLA",
     "appealHandler.details.none": "None",
     "appealHandler.details.noCriteria": "No criterion rationales.",
@@ -88,6 +89,7 @@ const extraTranslations = {
     "appealHandler.details.manualReviewReviewedAt": "Manual review reviewed at",
     "appealHandler.details.manualReviewOverrideDecision": "Manual review override decision",
     "appealHandler.details.manualReviewOverrideReason": "Manual review override reason",
+    "appealHandler.details.noManualReviewHistory": "No manual review history exists for this submission.",
     "appealHandler.details.slaStatus": "SLA status",
     "appealHandler.details.firstResponseHours": "First response (hours)",
     "appealHandler.details.resolutionHours": "Resolution (hours)",
@@ -98,8 +100,9 @@ const extraTranslations = {
     "manualReview.statusValue.UNKNOWN": "Unknown",
   },
   nb: {
-    "appealPage.title": "Ankehandler arbeidsflate",
+    "appealPage.title": "Ankebehandling",
     "appealPage.subtitle": "Behandle anker: filtrer listen, åpne en sak, og tildel og avgjør den.",
+    "appealPage.scopeNote": "Denne arbeidsflaten er bare for anker. Innleveringer som venter på manuell vurdering hører hjemme i Manuell vurdering.",
     "appealPage.versionLabel": "Versjon:",
     "appealPage.participantLink": "Åpne deltakerkonsoll",
     "appealHandler.queueLimit": "Maks antall anker som lastes",
@@ -120,10 +123,13 @@ const extraTranslations = {
     "appealHandler.table.sla": "SLA",
     "appealHandler.loadedPrefix": "Anker lastet",
     "defaults.noQueue": "Ingen anker er lastet ennå. Klikk Last anker for å hente saker.",
+    "appealHandler.details.section.manualReview": "Manuell vurdering (bakgrunn)",
+    "appealHandler.details.noManualReviewHistory": "Det finnes ingen historikk for manuell vurdering på denne innleveringen.",
   },
   nn: {
-    "appealPage.title": "Ankehandsamar arbeidsflate",
+    "appealPage.title": "Ankebehandling",
     "appealPage.subtitle": "Behandle ankar: filtrer lista, opne ei sak, og tildel og avgjer ho.",
+    "appealPage.scopeNote": "Denne arbeidsflata er berre for ankar. Innleveringar som ventar på manuell vurdering høyrer heime i Manuell vurdering.",
     "appealPage.versionLabel": "Versjon:",
     "appealPage.participantLink": "Opne deltakarkonsoll",
     "appealHandler.queueLimit": "Maks tal ankar som blir lasta",
@@ -144,6 +150,8 @@ const extraTranslations = {
     "appealHandler.table.sla": "SLA",
     "appealHandler.loadedPrefix": "Ankar lasta",
     "defaults.noQueue": "Ingen ankar er lasta enno. Klikk Last ankar for å hente saker.",
+    "appealHandler.details.section.manualReview": "Manuell vurdering (bakgrunn)",
+    "appealHandler.details.noManualReviewHistory": "Det finst ingen historikk for manuell vurdering på denne innleveringa.",
   },
 };
 

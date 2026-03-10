@@ -47,10 +47,34 @@ async function main() {
     },
   });
 
+  const reviewer = await prisma.user.upsert({
+    where: { email: "reviewer1@company.com" },
+    update: { name: "Platform Reviewer", externalId: "reviewer-user-1" },
+    create: {
+      externalId: "reviewer-user-1",
+      name: "Platform Reviewer",
+      email: "reviewer1@company.com",
+      department: "Quality",
+    },
+  });
+
+  const appealHandler = await prisma.user.upsert({
+    where: { email: "appeal.handler@company.com" },
+    update: { name: "Platform Appeal Handler", externalId: "handler-1" },
+    create: {
+      externalId: "handler-1",
+      name: "Platform Appeal Handler",
+      email: "appeal.handler@company.com",
+      department: "Quality",
+    },
+  });
+
   for (const [userId, appRole] of [
     [admin.id, AppRole.ADMINISTRATOR],
     [admin.id, AppRole.REPORT_READER],
     [participant.id, AppRole.PARTICIPANT],
+    [reviewer.id, AppRole.REVIEWER],
+    [appealHandler.id, AppRole.APPEAL_HANDLER],
   ] as const) {
     await prisma.roleAssignment.deleteMany({
       where: { userId, appRole },
@@ -139,9 +163,23 @@ async function main() {
     ],
   });
 
+  await createSeedPendingManualReview({
+    now,
+    participantId: participant.id,
+    reviewerId: reviewer.id,
+    moduleId: firstModule.moduleId,
+    moduleVersionId: firstModule.moduleVersionId,
+    rubricVersionId: firstModule.rubricVersionId,
+    promptTemplateVersionId: firstModule.promptTemplateVersionId,
+    mcqSetVersionId: firstModule.mcqSetVersionId,
+    mcqQuestionIds: firstModule.mcqQuestionIds,
+  });
+
   console.log("Seed completed", {
     adminEmail: admin.email,
     participantEmail: participant.email,
+    reviewerEmail: reviewer.email,
+    appealHandlerEmail: appealHandler.email,
     modules: [
       { moduleId: firstModule.moduleId, moduleVersionId: firstModule.moduleVersionId },
       { moduleId: secondModule.moduleId, moduleVersionId: secondModule.moduleVersionId },
@@ -232,7 +270,135 @@ async function createSeedModuleBundle(adminId: string, now: Date, input: SeedMod
   return {
     moduleId: module.id,
     moduleVersionId: moduleVersion.id,
+    rubricVersionId: rubric.id,
+    promptTemplateVersionId: prompt.id,
+    mcqSetVersionId: mcqSet.id,
+    mcqQuestionIds: mcqSet.questions.map((question) => question.id),
   };
+}
+
+async function createSeedPendingManualReview(input: {
+  now: Date;
+  participantId: string;
+  reviewerId: string;
+  moduleId: string;
+  moduleVersionId: string;
+  rubricVersionId: string;
+  promptTemplateVersionId: string;
+  mcqSetVersionId: string;
+  mcqQuestionIds: string[];
+}) {
+  const submittedAt = new Date(input.now.getTime() - 3 * 60 * 60 * 1000);
+  const completedAt = new Date(input.now.getTime() - 2 * 60 * 60 * 1000);
+  const evaluatedAt = new Date(input.now.getTime() - 110 * 60 * 1000);
+  const decisionAt = new Date(input.now.getTime() - 105 * 60 * 1000);
+  const reviewCreatedAt = new Date(input.now.getTime() - 100 * 60 * 1000);
+
+  const submission = await prisma.submission.create({
+    data: {
+      userId: input.participantId,
+      moduleId: input.moduleId,
+      moduleVersionId: input.moduleVersionId,
+      locale: "nb",
+      deliveryType: "text",
+      rawText:
+        "Seeded response for manual review queue visibility. The answer is useful, but contains enough ambiguity to require a human decision.",
+      reflectionText:
+        "I iterated several times and documented quality checks, but I am not fully confident in the governance section.",
+      promptExcerpt: "Assess governance quality, risk handling, and human oversight.",
+      responsibilityAcknowledged: true,
+      submittedAt,
+      submissionStatus: "UNDER_REVIEW",
+    },
+  });
+
+  const attempt = await prisma.mCQAttempt.create({
+    data: {
+      submissionId: submission.id,
+      mcqSetVersionId: input.mcqSetVersionId,
+      startedAt: new Date(submittedAt.getTime() + 2 * 60 * 1000),
+      completedAt,
+      rawScore: input.mcqQuestionIds.length,
+      scaledScore: 100,
+      percentScore: 100,
+      passFailMcq: true,
+    },
+  });
+
+  await prisma.mCQResponse.createMany({
+    data: input.mcqQuestionIds.map((questionId) => ({
+      mcqAttemptId: attempt.id,
+      questionId,
+      selectedAnswer: "Seeded correct answer",
+      isCorrect: true,
+    })),
+  });
+
+  await prisma.lLMEvaluation.create({
+    data: {
+      submissionId: submission.id,
+      moduleVersionId: input.moduleVersionId,
+      modelName: "seed-manual-review-model",
+      promptTemplateVersionId: input.promptTemplateVersionId,
+      requestPayloadHash: "seed-pending-manual-review",
+      responseJson: JSON.stringify({
+        criterion_rationales: {
+          relevance_for_case: "Relevant, but governance controls are only partially evidenced.",
+          quality_and_utility: "Useful answer with uneven depth.",
+          iteration_and_improvement: "Some iteration is visible.",
+          human_quality_assurance: "Manual checks are described, but not fully evidenced.",
+          responsible_use: "Responsible-use section is ambiguous and needs a human reviewer.",
+        },
+        improvement_advice: [
+          "Clarify who approves the final output before release.",
+          "Explain the concrete human quality gate and escalation path.",
+        ],
+        manual_review_recommended: true,
+      }),
+      rubricTotal: 13,
+      practicalScoreScaled: 62,
+      passFailPractical: true,
+      manualReviewRecommended: true,
+      confidenceNote: "Medium confidence due to ambiguous human oversight evidence.",
+      evaluatedAt,
+      createdAt: evaluatedAt,
+    },
+  });
+
+  await prisma.assessmentDecision.create({
+    data: {
+      submissionId: submission.id,
+      moduleVersionId: input.moduleVersionId,
+      rubricVersionId: input.rubricVersionId,
+      promptTemplateVersionId: input.promptTemplateVersionId,
+      mcqScaledScore: 100,
+      practicalScaledScore: 62,
+      totalScore: 74,
+      redFlagsJson: JSON.stringify([
+        {
+          code: "ambiguous_human_oversight",
+          severity: "medium",
+          message: "Human quality gate is not described clearly enough for automatic approval.",
+        },
+      ]),
+      passFailTotal: true,
+      decisionType: "AUTOMATIC",
+      decisionReason:
+        "Seeded automatic decision created before manual review. Final result is pending human review.",
+      finalisedAt: decisionAt,
+    },
+  });
+
+  await prisma.manualReview.create({
+    data: {
+      submissionId: submission.id,
+      reviewerId: input.reviewerId,
+      reviewStatus: "OPEN",
+      createdAt: reviewCreatedAt,
+      triggerReason:
+        "Seeded pending review for workspace visibility. Human review is required because governance and oversight evidence is ambiguous.",
+    },
+  });
 }
 
 main()

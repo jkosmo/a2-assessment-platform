@@ -20,6 +20,15 @@ describe("MVP manual review workspace", () => {
     await prisma.$disconnect();
   });
 
+  it("exposes at least one seeded pending manual review in the reviewer queue", async () => {
+    const queueResponse = await request(app).get("/api/reviews?status=OPEN").set(reviewerHeaders);
+    expect(queueResponse.status).toBe(200);
+    expect(Array.isArray(queueResponse.body.reviews)).toBe(true);
+    expect(queueResponse.body.reviews.length).toBeGreaterThan(0);
+    expect(queueResponse.body.reviews[0].reviewStatus).toBe("OPEN");
+    expect(queueResponse.body.reviews[0].submission?.id).toBeTruthy();
+  });
+
   it("creates immutable override decision layer through reviewer workspace", async () => {
     const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
     expect(modulesResponse.status).toBe(200);
