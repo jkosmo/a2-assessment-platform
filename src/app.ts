@@ -16,8 +16,10 @@ import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
 import { adminContentRouter } from "./routes/adminContent.js";
 import { orgSyncRouter } from "./routes/orgSync.js";
+import { calibrationRouter } from "./routes/calibration.js";
 
 const app = express();
+const participantConsoleRuntimeConfig = getParticipantConsoleRuntimeConfig();
 
 app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
@@ -44,8 +46,12 @@ app.get("/appeal-handler", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "appeal-handler.html"));
 });
 
+app.get("/calibration", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "calibration.html"));
+});
+
 app.get("/participant/config", (_request, response) => {
-  response.json(getParticipantConsoleRuntimeConfig());
+  response.json(participantConsoleRuntimeConfig);
 });
 
 app.use("/api", authenticate);
@@ -91,6 +97,11 @@ app.use(
   "/api/reports",
   requireAnyRole([AppRole.ADMINISTRATOR, AppRole.REPORT_READER, AppRole.SUBJECT_MATTER_OWNER]),
   reportsRouter,
+);
+app.use(
+  "/api/calibration",
+  requireAnyRole(participantConsoleRuntimeConfig.calibrationWorkspace.accessRoles),
+  calibrationRouter,
 );
 app.use(
   "/api/admin/content",

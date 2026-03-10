@@ -80,6 +80,12 @@ let participantRuntimeConfig = {
         labelKey: "nav.appealHandler",
         requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
       },
+      {
+        id: "calibration",
+        path: "/calibration",
+        labelKey: "nav.calibration",
+        requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+      },
     ],
   },
   drafts: {
@@ -146,6 +152,12 @@ const defaultWorkspaceNavigationItems = [
     path: "/appeal-handler",
     labelKey: "nav.appealHandler",
     requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
+  },
+  {
+    id: "calibration",
+    path: "/calibration",
+    labelKey: "nav.calibration",
+    requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
   },
 ];
 

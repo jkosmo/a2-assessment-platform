@@ -30,6 +30,12 @@ describe("participant console runtime config", () => {
           labelKey: "nav.appealHandler",
           requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
         },
+        {
+          id: "calibration",
+          path: "/calibration",
+          labelKey: "nav.calibration",
+          requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+        },
       ],
     });
     expect(response.body.drafts).toEqual({
@@ -47,6 +53,19 @@ describe("participant console runtime config", () => {
       pollIntervalSeconds: 2,
       maxWaitSeconds: 90,
     });
+    expect(response.body.calibrationWorkspace).toEqual({
+      accessRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+      defaults: {
+        statuses: ["COMPLETED", "UNDER_REVIEW"],
+        lookbackDays: 90,
+        maxRows: 120,
+      },
+      signalThresholds: {
+        passRateMinimum: 0.6,
+        manualReviewRateMaximum: 0.35,
+        benchmarkCoverageMinimum: 0.5,
+      },
+    });
     expect(response.body.identityDefaults).toEqual({
       participant: {
         userId: "participant-1",
@@ -62,6 +81,13 @@ describe("participant console runtime config", () => {
         department: "Quality",
         roles: ["APPEAL_HANDLER"],
       },
+      calibrationOwner: {
+        userId: "smo-1",
+        email: "smo@company.com",
+        name: "Platform Subject Matter Owner",
+        department: "Learning",
+        roles: ["SUBJECT_MATTER_OWNER"],
+      },
     });
   });
 
@@ -70,5 +96,12 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("appeal-handler.js");
+  });
+
+  it("serves dedicated calibration workspace page", async () => {
+    const response = await request(app).get("/calibration");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("calibration.js");
   });
 });

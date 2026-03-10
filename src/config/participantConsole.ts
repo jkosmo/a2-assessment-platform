@@ -11,6 +11,14 @@ const mockRoleSchema = z.enum([
   "REPORT_READER",
   "SUBJECT_MATTER_OWNER",
 ]);
+const submissionStatusSchema = z.enum([
+  "SUBMITTED",
+  "PROCESSING",
+  "SCORED",
+  "UNDER_REVIEW",
+  "COMPLETED",
+  "REJECTED",
+]);
 
 const consoleIdentitySchema = z.object({
   userId: z.string().trim().min(1),
@@ -51,10 +59,24 @@ const participantConsoleConfigSchema = z.object({
     pollIntervalSeconds: z.number().int().min(1).max(30).default(2),
     maxWaitSeconds: z.number().int().min(5).max(600).default(90),
   }),
+  calibrationWorkspace: z.object({
+    accessRoles: z.array(mockRoleSchema).min(1),
+    defaults: z.object({
+      statuses: z.array(submissionStatusSchema).min(1),
+      lookbackDays: z.number().int().min(1).max(365).default(90),
+      maxRows: z.number().int().min(10).max(500).default(200),
+    }),
+    signalThresholds: z.object({
+      passRateMinimum: z.number().min(0).max(1).default(0.6),
+      manualReviewRateMaximum: z.number().min(0).max(1).default(0.35),
+      benchmarkCoverageMinimum: z.number().min(0).max(1).default(0.5),
+    }),
+  }),
   identityDefaults: z
     .object({
       participant: consoleIdentitySchema,
       appealHandler: consoleIdentitySchema,
+      calibrationOwner: consoleIdentitySchema.optional(),
     })
     .optional(),
 });
@@ -69,6 +91,7 @@ export type ParticipantConsoleRuntimeConfig = {
   drafts: ParticipantConsoleConfig["drafts"];
   appealWorkspace: ParticipantConsoleConfig["appealWorkspace"];
   flow: ParticipantConsoleConfig["flow"];
+  calibrationWorkspace: ParticipantConsoleConfig["calibrationWorkspace"];
   identityDefaults?: ParticipantConsoleConfig["identityDefaults"];
 };
 
@@ -95,6 +118,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     drafts: config.drafts,
     appealWorkspace: config.appealWorkspace,
     flow: config.flow,
+    calibrationWorkspace: config.calibrationWorkspace,
     identityDefaults: config.identityDefaults,
   };
 }

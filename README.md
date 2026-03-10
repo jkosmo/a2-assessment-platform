@@ -88,6 +88,7 @@ npm run build
 - `GET /api/appeals/:appealId`
 - `POST /api/appeals/:appealId/claim`
 - `POST /api/appeals/:appealId/resolve`
+- `GET /api/calibration/workspace?moduleId=<id>&status=<csv>&moduleVersionId=<id>&dateFrom=<ISO>&dateTo=<ISO>&limit=<n>`
 - `GET /api/reports/completion`
 - `GET /api/reports/pass-rates`
 - `GET /api/reports/manual-review-queue`
@@ -109,6 +110,7 @@ npm run build
 - `POST /api/admin/sync/org/delta`
 - `GET /participant` (manual participant test UI)
 - `GET /appeal-handler` (manual appeal-handler workspace UI)
+- `GET /calibration` (manual calibration workspace UI)
 
 ## Auth modes
 - `AUTH_MODE=mock` (default for local development)
@@ -159,13 +161,25 @@ http://localhost:3000/appeal-handler
 - Select an appeal row and run `Claim Appeal`
 - Resolve using decision reason + resolution note + pass/fail value
 
+5. Optional calibration flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
+```text
+http://localhost:3000/calibration
+```
+- Enter `moduleId` and load calibration snapshot
+- Use status/date/module-version filters to inspect historical outcomes
+- Review benchmark-anchor coverage and quality-signal flags
+
 Participant console behavior is config-driven via:
 - `config/participant-console.json`
 - env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
+- `navigation.items[]` controls shared top-menu entries and per-role visibility
 - `appealWorkspace.queuePageSize` controls `/appeal-handler` queue fetch limit (max `200`)
 - `flow.autoStartAfterMcq`, `flow.pollIntervalSeconds`, `flow.maxWaitSeconds` control auto assessment start/polling in participant UI
   - when `flow.autoStartAfterMcq=true`, manual assessment buttons are hidden in participant UI
-- `identityDefaults.participant` and `identityDefaults.appealHandler` set default test identity per workspace
+- `calibrationWorkspace.accessRoles` controls API access roles for `/api/calibration/workspace`
+- `calibrationWorkspace.defaults.statuses`, `lookbackDays`, `maxRows` control default query behavior
+- `calibrationWorkspace.signalThresholds` controls pass/manual-review/benchmark-coverage flags
+- `identityDefaults.participant`, `identityDefaults.appealHandler`, and `identityDefaults.calibrationOwner` set default test identity per workspace
 
 LLM provider mode is env-driven via:
 - `LLM_MODE=stub|azure_openai`

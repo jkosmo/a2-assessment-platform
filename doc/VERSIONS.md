@@ -7,6 +7,54 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.62 - 2026-03-10
+### Summary
+Implemented issue #67 (Phase A of #32) with a new read-only calibration workspace for SMEs/admins, including module-scoped historical outcomes, benchmark-anchor visibility, config-driven quality signals, and access auditing.
+
+### Included
+- New calibration workspace UI:
+  - `public/calibration.html`
+  - `public/calibration.js`
+  - `public/i18n/calibration-translations.js`
+  - route `GET /calibration` in `src/app.ts`
+- New calibration API (read/analyze only):
+  - `src/routes/calibration.ts`
+  - `GET /api/calibration/workspace`
+  - role-gated via config-driven access roles (`SUBJECT_MATTER_OWNER`, `ADMINISTRATOR`)
+- New calibration data service:
+  - `src/services/calibrationWorkspaceService.ts`
+  - returns:
+    - filtered module outcomes (`status`, `date`, `moduleVersion`)
+    - benchmark anchor summary from prompt template examples
+    - aggregate quality signals and threshold flags
+  - records audit event:
+    - `entityType=calibration_workspace`
+    - `action=calibration_workspace_session_started`
+- Config-driven calibration model extension:
+  - `config/participant-console.json`
+  - `src/config/participantConsole.ts`
+  - new keys:
+    - `calibrationWorkspace.accessRoles`
+    - `calibrationWorkspace.defaults`
+    - `calibrationWorkspace.signalThresholds`
+    - `identityDefaults.calibrationOwner`
+  - shared top-nav config expanded with `nav.calibration`
+- Shared navigation + i18n updates:
+  - `public/participant.js`
+  - `public/appeal-handler.js`
+  - `public/i18n/participant-translations.js`
+- Documentation:
+  - `doc/PHASE2_CALIBRATION_WORKSPACE_PHASE_A_DESIGN.md`
+  - `README.md` (new UI/API endpoints and config keys)
+- Automated tests:
+  - `test/m2-calibration-workspace.test.ts`
+  - `test/calibration-translations.test.js`
+  - updated `test/participant-console-config.test.ts` for expanded runtime config contract
+
+### Verification
+- `npm run lint`
+- `npm test` (66 tests passing, 25 test files)
+
 ## 0.3.61 - 2026-03-10
 ### Summary
 Implemented issue #65 with a shared, config-driven top navigation for role-specific workspaces, including role-aware menu visibility and i18n labels.
