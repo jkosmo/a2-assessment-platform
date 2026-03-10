@@ -46,6 +46,9 @@ const submissionSection = document.getElementById("submissionSection");
 const mcqSection = document.getElementById("mcqSection");
 const moduleSelectionHint = document.getElementById("moduleSelectionHint");
 const submissionValidationHint = document.getElementById("submissionValidationHint");
+const reflectionHint = document.getElementById("reflectionText-hint");
+const promptExcerptHint = document.getElementById("promptExcerpt-hint");
+const ackHint = document.getElementById("ack-hint");
 const assessmentGateHint = document.getElementById("assessmentGateHint");
 const checkAssessmentHint = document.getElementById("checkAssessmentHint");
 const assessmentProgressStatus = document.getElementById("assessmentProgressStatus");
@@ -57,6 +60,13 @@ const checkAssessmentButton = document.getElementById("checkAssessment");
 const checkResultButton = document.getElementById("checkResult");
 const createAppealButton = document.getElementById("createAppeal");
 const resetSubmissionFlowButton = document.getElementById("resetSubmissionFlow");
+
+const submissionValidationTargets = [
+  { fieldElement: selectedModuleDisplay, hintElement: moduleSelectionHint },
+  { fieldElement: reflectionTextInput, hintElement: reflectionHint },
+  { fieldElement: promptExcerptInput, hintElement: promptExcerptHint },
+  { fieldElement: ackCheckbox, hintElement: ackHint },
+];
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
@@ -310,26 +320,93 @@ function validateSubmissionInputState() {
   const hasAcknowledgement = ackCheckbox.checked === true;
 
   if (!hasModule) {
-    return { valid: false, hintKey: "submission.validation.selectModule" };
+    return {
+      valid: false,
+      hintKey: "submission.validation.selectModule",
+      invalidFieldElement: selectedModuleDisplay,
+      invalidHintElement: moduleSelectionHint,
+    };
   }
   if (!hasReflection) {
-    return { valid: false, hintKey: "submission.validation.reflectionMin" };
+    return {
+      valid: false,
+      hintKey: "submission.validation.reflectionMin",
+      invalidFieldElement: reflectionTextInput,
+      invalidHintElement: reflectionHint,
+    };
   }
   if (!hasPromptExcerpt) {
-    return { valid: false, hintKey: "submission.validation.promptMin" };
+    return {
+      valid: false,
+      hintKey: "submission.validation.promptMin",
+      invalidFieldElement: promptExcerptInput,
+      invalidHintElement: promptExcerptHint,
+    };
   }
   if (!hasAcknowledgement) {
-    return { valid: false, hintKey: "submission.validation.ackRequired" };
+    return {
+      valid: false,
+      hintKey: "submission.validation.ackRequired",
+      invalidFieldElement: ackCheckbox,
+      invalidHintElement: ackHint,
+    };
   }
 
   return { valid: true, hintKey: "submission.validation.ready" };
+}
+
+function resetSubmissionValidationVisuals() {
+  for (const target of submissionValidationTargets) {
+    target.fieldElement?.classList.remove("is-invalid");
+    if (!target.hintElement) {
+      continue;
+    }
+
+    target.hintElement.classList.remove("field-error", "field-success");
+    target.hintElement.classList.add("hint");
+    target.hintElement.removeAttribute("role");
+
+    const hintKey = target.hintElement.dataset.hintKey;
+    if (hintKey) {
+      target.hintElement.textContent = t(hintKey);
+    }
+  }
+}
+
+function applySubmissionValidationFeedback(validation) {
+  resetSubmissionValidationVisuals();
+
+  submissionValidationHint.classList.remove("field-error", "field-success");
+  submissionValidationHint.classList.add("hint");
+  submissionValidationHint.removeAttribute("role");
+
+  if (validation.valid) {
+    submissionValidationHint.classList.remove("hint");
+    submissionValidationHint.classList.add("field-success");
+    submissionValidationHint.textContent = t("submission.validation.ready");
+    return;
+  }
+
+  validation.invalidFieldElement?.classList.add("is-invalid");
+
+  if (validation.invalidHintElement) {
+    validation.invalidHintElement.classList.remove("hint", "field-success");
+    validation.invalidHintElement.classList.add("field-error");
+    validation.invalidHintElement.setAttribute("role", "alert");
+    validation.invalidHintElement.textContent = t(validation.hintKey);
+  }
+
+  submissionValidationHint.classList.remove("hint", "field-success");
+  submissionValidationHint.classList.add("field-error");
+  submissionValidationHint.setAttribute("role", "alert");
+  submissionValidationHint.textContent = t(validation.hintKey);
 }
 
 function updateCreateSubmissionAvailability() {
   const validation = validateSubmissionInputState();
   const isBusy = createSubmissionButton.dataset.busy === "true";
   createSubmissionButton.disabled = isBusy || flowState.hasSubmission || !validation.valid;
-  submissionValidationHint.textContent = t(validation.hintKey);
+  applySubmissionValidationFeedback(validation);
 }
 
 function renderModules() {

@@ -62,7 +62,7 @@
       <h3 data-i18n="modules.title"></h3>
       <button id="loadModules" class="btn-secondary" data-i18n="modules.load"></button>
       <div class="small" data-i18n="modules.summaryHint"></div>
-      <div class="small" id="moduleSelectionHint" data-i18n="modules.selectToUnlock"></div>
+      <div class="hint" id="moduleSelectionHint" data-i18n="modules.selectToUnlock" data-hint-key="modules.selectToUnlock"></div>
       <div id="moduleList" class="module-list"></div>
     </section>
 
@@ -70,16 +70,25 @@
       <h3 data-i18n="submission.title"></h3>
       <div>
         <label data-i18n="submission.selectedModule"></label>
-        <div id="selectedModuleDisplay" class="selected-module-summary"></div>
+        <div id="selectedModuleDisplay" class="selected-module-summary" aria-describedby="moduleSelectionHint"></div>
         <input id="selectedModuleId" type="hidden" />
       </div>
       <div><label data-i18n="submission.rawText"></label><textarea id="rawText" rows="5"></textarea></div>
-      <div><label data-i18n="submission.reflection"></label><textarea id="reflectionText" rows="4"></textarea></div>
-      <div><label data-i18n="submission.promptExcerpt"></label><textarea id="promptExcerpt" rows="3"></textarea></div>
+      <div>
+        <label data-i18n="submission.reflection"></label>
+        <textarea id="reflectionText" rows="4" aria-describedby="reflectionText-hint"></textarea>
+        <div class="hint" id="reflectionText-hint" data-i18n="submission.hint.reflection" data-hint-key="submission.hint.reflection"></div>
+      </div>
+      <div>
+        <label data-i18n="submission.promptExcerpt"></label>
+        <textarea id="promptExcerpt" rows="3" aria-describedby="promptExcerpt-hint"></textarea>
+        <div class="hint" id="promptExcerpt-hint" data-i18n="submission.hint.promptExcerpt" data-hint-key="submission.hint.promptExcerpt"></div>
+      </div>
       <div class="small" id="draftStatus"></div>
-      <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack"></span></label>
+      <label><input class="inline" type="checkbox" id="ack" aria-describedby="ack-hint" checked /> <span data-i18n="submission.ack"></span></label>
+      <div class="hint" id="ack-hint" data-i18n="submission.hint.ack" data-hint-key="submission.hint.ack"></div>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create"></button>
-      <div class="small" id="submissionValidationHint"></div>
+      <div class="hint" id="submissionValidationHint" data-hint-key="submission.validation.ready"></div>
       <div class="small"><span data-i18n="submission.submissionId"></span> <span id="submissionId">-</span></div>
     </section>
 

@@ -157,6 +157,12 @@ describe("participant console runtime config", () => {
       for (const buttonTag of buttonTags) {
         expect(buttonTag).toContain("class=");
       }
+
+      if (pagePath === "/participant") {
+        expect(response.text).toContain('aria-describedby="reflectionText-hint"');
+        expect(response.text).toContain('aria-describedby="promptExcerpt-hint"');
+        expect(response.text).toContain('aria-describedby="ack-hint"');
+      }
     }
 
     const cssResponse = await request(app).get("/static/shared.css");
@@ -173,6 +179,9 @@ describe("participant console runtime config", () => {
     expect(cssResponse.text).toContain(".btn-primary");
     expect(cssResponse.text).toContain(".btn-secondary");
     expect(cssResponse.text).toContain(".btn-danger");
+    expect(cssResponse.text).toContain(".hint");
+    expect(cssResponse.text).toContain(".field-error");
+    expect(cssResponse.text).toContain(".field-success");
     expect(cssResponse.text).not.toContain("border: 1px solid #ddd;");
   });
 });

@@ -123,6 +123,33 @@ button:focus-visible {
   color: var(--color-meta);
 }
 
+.hint {
+  font-size: 12px;
+  color: var(--color-meta);
+  margin-top: calc(var(--space-1) * 0.5);
+}
+
+.hint::before {
+  content: "\2139  ";
+}
+
+.field-error {
+  color: var(--color-error);
+  border-left: 3px solid var(--color-error);
+  padding-left: var(--space-1);
+  margin-top: calc(var(--space-1) * 0.5);
+}
+
+.field-success {
+  color: var(--color-success);
+  margin-top: calc(var(--space-1) * 0.5);
+}
+
+.is-invalid {
+  outline: 2px solid var(--color-error);
+  outline-offset: 2px;
+}
+
 .workspace-nav {
   display: flex;
   flex-wrap: wrap;

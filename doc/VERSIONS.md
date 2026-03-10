@@ -7,6 +7,50 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.68 - 2026-03-10
+### Summary
+Implemented participant-form accessibility and validation UX hardening by adding explicit hint/error/success styles, ARIA hint linking, and field-level validation feedback.
+
+### Included
+- Added semantic validation text styles in shared workspace CSS:
+  - `public/static/shared.css`
+  - new classes:
+    - `.hint`
+    - `.field-error`
+    - `.field-success`
+    - `.is-invalid`
+  - `.field-error` supports clear left-border error affordance for visual distinction
+- Participant form hinting and ARIA linkage:
+  - `public/participant.html`
+  - added field-specific hint elements and `aria-describedby` links for:
+    - `reflectionText`
+    - `promptExcerpt`
+    - `ack`
+  - module selection hint upgraded to hint styling with base hint key metadata
+- Participant validation behavior updates:
+  - `public/participant.js`
+  - submission validation now returns field/hint targets
+  - introduced field-level invalid highlighting (`.is-invalid`)
+  - introduced role-aware alerting on invalid hints (`role="alert"`)
+  - validation summary now toggles between `.field-error` and `.field-success`
+  - hint text resets to localized baseline when validation state changes
+- Translation updates for new participant hint copy:
+  - `public/i18n/participant-translations.js`
+  - added:
+    - `submission.hint.reflection`
+    - `submission.hint.promptExcerpt`
+    - `submission.hint.ack`
+  - parity maintained for `en-GB`, `nb`, `nn`
+- Test coverage updates:
+  - `test/participant-console-config.test.ts`
+  - validates participant page `aria-describedby` links and new shared CSS class markers
+- Documentation:
+  - `README.md` updated with participant validation-feedback note in manual flow section
+
+### Verification
+- `npm run lint`
+- `npm test` (80 tests passing, 30 test files)
+
 ## 0.3.67 - 2026-03-10
 ### Summary
 Implemented foundational UX/style refactor items by extracting shared workspace CSS, introducing brand design tokens, adding centered max-width layout containers, and applying semantic button variants across all workspace pages.
