@@ -102,6 +102,7 @@ npm run build
 - `GET /api/reports/analytics/cohorts?cohortBy=<month|department>`
 - `GET /api/reports/analytics/data-quality`
 - `GET /api/reports/export?type=<report>&format=csv`
+- `POST /api/admin/content/modules`
 - `POST /api/admin/content/modules/:moduleId/rubric-versions`
 - `POST /api/admin/content/modules/:moduleId/prompt-template-versions`
 - `POST /api/admin/content/modules/:moduleId/benchmark-example-versions`
@@ -113,6 +114,7 @@ npm run build
 - `GET /participant/completed` (manual completed-modules UI)
 - `GET /appeal-handler` (manual appeal-handler workspace UI)
 - `GET /calibration` (manual calibration workspace UI)
+- `GET /admin-content` (manual content-management workspace UI)
 
 ## Auth modes
 - `AUTH_MODE=mock` (default for local development)
@@ -177,6 +179,16 @@ http://localhost:3000/calibration
 - Use status/date/module-version filters to inspect historical outcomes
 - Review benchmark-anchor coverage and quality-signal flags
 
+7. Optional admin content flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
+```text
+http://localhost:3000/admin-content
+```
+- Create a base module (title/description/certification/validity window)
+- Load/select module
+- Create rubric/prompt/MCQ versions from JSON fields
+- Create module version by linking created version IDs
+- Publish module version
+
 Participant console behavior is config-driven via:
 - `config/participant-console.json`
 - env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
@@ -187,7 +199,7 @@ Participant console behavior is config-driven via:
 - `calibrationWorkspace.accessRoles` controls API access roles for `/api/calibration/workspace`
 - `calibrationWorkspace.defaults.statuses`, `lookbackDays`, `maxRows` control default query behavior
 - `calibrationWorkspace.signalThresholds` controls pass/manual-review/benchmark-coverage flags
-- `identityDefaults.participant`, `identityDefaults.appealHandler`, and `identityDefaults.calibrationOwner` set default test identity per workspace
+- `identityDefaults.participant`, `identityDefaults.appealHandler`, `identityDefaults.calibrationOwner`, and `identityDefaults.contentAdmin` set default test identity per workspace
 
 LLM provider mode is env-driven via:
 - `LLM_MODE=stub|azure_openai`
@@ -302,3 +314,6 @@ Org sync conflict/override strategy:
 
 Phase-2 design note for Azure OpenAI assessment integration:
 - `doc/PHASE2_AZURE_OPENAI_INTEGRATION.md`
+
+Phase-2 design note for admin content workspace:
+- `doc/PHASE2_ADMIN_CONTENT_WORKSPACE_DESIGN.md`

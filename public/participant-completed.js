@@ -44,6 +44,12 @@ const defaultWorkspaceNavigationItems = [
     labelKey: "nav.calibration",
     requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
   },
+  {
+    id: "admin-content",
+    path: "/admin-content",
+    labelKey: "nav.adminContent",
+    requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+  },
 ];
 
 let currentLocale = resolveInitialLocale();

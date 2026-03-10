@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A2 Content Management Workspace</title>
+    <style>
+      body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f7f8fb; color: #222; }
+      .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+      label { display: block; margin-bottom: 6px; font-size: 13px; color: #444; }
+      input, textarea, select, button { width: 100%; padding: 8px; box-sizing: border-box; }
+      button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
+      button:not(:disabled):active { transform: translateY(1px); }
+      button:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
+      .small { font-size: 12px; color: #666; }
+      .workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+      .workspace-nav-link { display: inline-block; width: auto; padding: 7px 12px; border: 1px solid #c7d0de; border-radius: 999px; text-decoration: none; background: #fff; color: #1c2d4f; font-size: 13px; }
+      .workspace-nav-link:hover { border-color: #4361ee; background: #f4f7ff; }
+      .workspace-nav-link.active { border-color: #134ec9; background: #eaf1ff; color: #0f3d9c; font-weight: 600; }
+      .workspace-nav-link:focus-visible { outline: 3px solid #8db0ff; outline-offset: 2px; }
+      .button-busy { opacity: 0.75; position: relative; border-color: #134ec9; background: #eaf1ff; }
+      .button-busy::after { content: " ..."; }
+      .selected-module-summary { border: 1px solid #cfd7e6; background: #f8fbff; border-radius: 8px; padding: 8px; min-height: 37px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #d9ffd9; padding: 10px; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1 data-i18n="adminContentPage.title"></h1>
+    <p class="small" data-i18n="adminContentPage.subtitle"></p>
+    <p class="small"><span data-i18n="adminContentPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <nav id="workspaceNav" class="workspace-nav"></nav>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <label for="localeSelect" data-i18n="locale.label"></label>
+          <select id="localeSelect"></select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="identity.title"></h3>
+      <div class="row">
+        <div><label data-i18n="identity.userId"></label><input id="userId" value="content-owner-1" /></div>
+        <div><label data-i18n="identity.email"></label><input id="email" value="content.owner@company.com" /></div>
+      </div>
+      <div class="row">
+        <div><label data-i18n="identity.name"></label><input id="name" value="Platform Content Owner" /></div>
+        <div><label data-i18n="identity.department"></label><input id="department" value="Learning" /></div>
+      </div>
+      <div>
+        <label data-i18n="identity.roles"></label>
+        <input id="roles" value="SUBJECT_MATTER_OWNER" />
+      </div>
+      <div id="mockRolePresetContainer">
+        <label for="mockRolePreset" data-i18n="identity.rolePreset"></label>
+        <select id="mockRolePreset"></select>
+        <div class="small" id="mockRolePresetHint"></div>
+      </div>
+      <button id="loadMe" data-i18n="identity.loadMe"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.module.title"></h3>
+      <div class="row">
+        <div><label data-i18n="adminContent.module.name"></label><input id="moduleTitle" /></div>
+        <div><label data-i18n="adminContent.module.certificationLevel"></label><input id="moduleCertificationLevel" /></div>
+      </div>
+      <div><label data-i18n="adminContent.module.description"></label><textarea id="moduleDescription" rows="2"></textarea></div>
+      <div class="row">
+        <div><label data-i18n="adminContent.module.validFrom"></label><input id="moduleValidFrom" type="date" /></div>
+        <div><label data-i18n="adminContent.module.validTo"></label><input id="moduleValidTo" type="date" /></div>
+      </div>
+      <button id="createModule" data-i18n="adminContent.module.create"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.select.title"></h3>
+      <div class="row">
+        <div>
+          <label for="selectedModuleId" data-i18n="adminContent.select.moduleId"></label>
+          <input id="selectedModuleId" />
+        </div>
+        <div>
+          <label for="moduleDropdown" data-i18n="adminContent.select.moduleDropdown"></label>
+          <select id="moduleDropdown"></select>
+        </div>
+      </div>
+      <button id="loadModules" data-i18n="adminContent.select.loadModules"></button>
+      <div class="small" id="selectedModuleMeta"></div>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.rubric.title"></h3>
+      <div><label data-i18n="adminContent.rubric.criteria"></label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
+      <div><label data-i18n="adminContent.rubric.scalingRule"></label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
+      <div><label data-i18n="adminContent.rubric.passRule"></label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
+      <button id="createRubricVersion" data-i18n="adminContent.rubric.create"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.prompt.title"></h3>
+      <div><label data-i18n="adminContent.prompt.systemPrompt"></label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
+      <div><label data-i18n="adminContent.prompt.userPromptTemplate"></label><textarea id="promptUserPromptTemplate" rows="3"></textarea></div>
+      <div><label data-i18n="adminContent.prompt.examplesJson"></label><textarea id="promptExamplesJson" rows="4"></textarea></div>
+      <button id="createPromptTemplateVersion" data-i18n="adminContent.prompt.create"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.mcq.title"></h3>
+      <div><label data-i18n="adminContent.mcq.setTitle"></label><input id="mcqSetTitle" /></div>
+      <div><label data-i18n="adminContent.mcq.questionsJson"></label><textarea id="mcqQuestionsJson" rows="7"></textarea></div>
+      <button id="createMcqSetVersion" data-i18n="adminContent.mcq.create"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.moduleVersion.title"></h3>
+      <div><label data-i18n="adminContent.moduleVersion.taskText"></label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
+      <div><label data-i18n="adminContent.moduleVersion.guidanceText"></label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
+      <div class="row">
+        <div><label data-i18n="adminContent.moduleVersion.rubricVersionId"></label><input id="moduleVersionRubricVersionId" /></div>
+        <div><label data-i18n="adminContent.moduleVersion.promptTemplateVersionId"></label><input id="moduleVersionPromptTemplateVersionId" /></div>
+      </div>
+      <div><label data-i18n="adminContent.moduleVersion.mcqSetVersionId"></label><input id="moduleVersionMcqSetVersionId" /></div>
+      <button id="createModuleVersion" data-i18n="adminContent.moduleVersion.create"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.publish.title"></h3>
+      <div><label data-i18n="adminContent.publish.moduleVersionId"></label><input id="publishModuleVersionId" /></div>
+      <button id="publishModuleVersion" data-i18n="adminContent.publish.publish"></button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="output.title"></h3>
+      <div class="small" id="adminContentMessage"></div>
+      <pre id="output"></pre>
+    </section>
+
+    <script src="/static/i18n/admin-content-translations.js" type="module"></script>
+    <script src="/static/admin-content.js" type="module"></script>
+  </body>
+</html>

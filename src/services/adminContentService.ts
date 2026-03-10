@@ -39,6 +39,15 @@ type CreateModuleVersionInput = {
   mcqSetVersionId: string;
 };
 
+type CreateModuleInput = {
+  title: string;
+  description?: string;
+  certificationLevel?: string;
+  validFrom?: Date;
+  validTo?: Date;
+  actorId?: string;
+};
+
 type CreateBenchmarkExampleVersionInput = {
   moduleId: string;
   basePromptTemplateVersionId: string;
@@ -57,6 +66,47 @@ async function ensureModuleExists(moduleId: string) {
   if (!module) {
     throw new Error("Module not found.");
   }
+
+  return module;
+}
+
+export async function createModule(input: CreateModuleInput) {
+  if (input.validFrom && input.validTo && input.validTo < input.validFrom) {
+    throw new Error("validTo must be on or after validFrom.");
+  }
+
+  const module = await prisma.module.create({
+    data: {
+      title: input.title,
+      description: input.description,
+      certificationLevel: input.certificationLevel,
+      validFrom: input.validFrom,
+      validTo: input.validTo,
+    },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      certificationLevel: true,
+      validFrom: true,
+      validTo: true,
+      createdAt: true,
+    },
+  });
+
+  await recordAuditEvent({
+    entityType: "module",
+    entityId: module.id,
+    action: "module_created",
+    actorId: input.actorId,
+    metadata: {
+      moduleId: module.id,
+      title: module.title,
+      certificationLevel: module.certificationLevel ?? null,
+      validFrom: module.validFrom?.toISOString() ?? null,
+      validTo: module.validTo?.toISOString() ?? null,
+    },
+  });
 
   return module;
 }

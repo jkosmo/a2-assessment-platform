@@ -20,15 +20,18 @@ describe("MVP admin content management and publication", () => {
   });
 
   it("creates linked content versions, creates module version, and publishes it with audit log", async () => {
-    const module = await prisma.module.create({
-      data: {
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
         title: `Admin Content Test Module ${Date.now()}`,
         description: "Isolated module for admin content publication test.",
         certificationLevel: "foundation",
-      },
-      select: { id: true },
-    });
-    const moduleId = module.id;
+        validFrom: "2026-03-01",
+        validTo: "2028-03-01",
+      });
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
 
     const rubricResponse = await request(app)
       .post(`/api/admin/content/modules/${moduleId}/rubric-versions`)
@@ -179,6 +182,15 @@ describe("MVP admin content management and publication", () => {
       },
     });
     expect(benchmarkAuditEvent).toBeTruthy();
+
+    const moduleCreatedAuditEvent = await prisma.auditEvent.findFirst({
+      where: {
+        entityType: "module",
+        entityId: moduleId,
+        action: "module_created",
+      },
+    });
+    expect(moduleCreatedAuditEvent).toBeTruthy();
   });
 
   it("blocks participant role from admin content routes", async () => {
@@ -192,5 +204,18 @@ describe("MVP admin content management and publication", () => {
       });
 
     expect(response.status).toBe(403);
+  });
+
+  it("validates module create date fields", async () => {
+    const response = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: "Date validation module",
+        validFrom: "not-a-date",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("validation_error");
   });
 });

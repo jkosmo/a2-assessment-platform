@@ -42,6 +42,12 @@ describe("participant console runtime config", () => {
           labelKey: "nav.calibration",
           requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
         },
+        {
+          id: "admin-content",
+          path: "/admin-content",
+          labelKey: "nav.adminContent",
+          requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+        },
       ],
     });
     expect(response.body.drafts).toEqual({
@@ -94,6 +100,13 @@ describe("participant console runtime config", () => {
         department: "Learning",
         roles: ["SUBJECT_MATTER_OWNER"],
       },
+      contentAdmin: {
+        userId: "content-owner-1",
+        email: "content.owner@company.com",
+        name: "Platform Content Owner",
+        department: "Learning",
+        roles: ["SUBJECT_MATTER_OWNER"],
+      },
     });
   });
 
@@ -116,5 +129,12 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("participant-completed.js");
+  });
+
+  it("serves dedicated admin content workspace page", async () => {
+    const response = await request(app).get("/admin-content");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("admin-content.js");
   });
 });

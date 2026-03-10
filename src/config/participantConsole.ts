@@ -77,6 +77,7 @@ const participantConsoleConfigSchema = z.object({
       participant: consoleIdentitySchema,
       appealHandler: consoleIdentitySchema,
       calibrationOwner: consoleIdentitySchema.optional(),
+      contentAdmin: consoleIdentitySchema.optional(),
     })
     .optional(),
 });

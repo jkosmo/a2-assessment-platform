@@ -7,6 +7,54 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.64 - 2026-03-10
+### Summary
+Implemented admin content workspace enablement with end-to-end UI/API support for creating base modules and managing versioned rubric/prompt/MCQ/module content from a dedicated role-scoped page.
+
+### Included
+- Added base module creation to admin content API:
+  - `POST /api/admin/content/modules`
+  - `src/routes/adminContent.ts`
+  - `src/services/adminContentService.ts`
+  - validates optional validity dates and emits `module_created` audit event
+- Added dedicated admin content workspace UI:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+  - route `GET /admin-content` in `src/app.ts`
+  - supports:
+    - module creation
+    - module loading/selection
+    - rubric/prompt/MCQ version creation from JSON fields
+    - module-version creation and publish
+- Extended shared role-aware workspace navigation/config:
+  - `config/participant-console.json`
+  - `src/config/participantConsole.ts`
+  - added `navigation.items[]` entry for `/admin-content`
+  - added `identityDefaults.contentAdmin`
+  - updated fallback nav in:
+    - `public/participant.js`
+    - `public/participant-completed.js`
+    - `public/appeal-handler.js`
+    - `public/calibration.js`
+  - added shared i18n nav key `nav.adminContent` in `public/i18n/participant-translations.js`
+- Added design/documentation updates:
+  - `doc/PHASE2_ADMIN_CONTENT_WORKSPACE_DESIGN.md`
+  - `README.md` updated with new UI/API/config/testing details
+- Added/updated automated tests:
+  - new translation parity test:
+    - `test/admin-content-translations.test.js`
+  - extended admin content integration coverage:
+    - `test/m2-admin-content-publication.test.ts`
+    - now creates module via API and verifies `module_created` audit event
+    - includes date validation failure case for module create
+  - updated runtime config/page route coverage:
+    - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test` (77 tests passing, 29 test files)
+
 ## 0.3.63 - 2026-03-10
 ### Summary
 Implemented issue #66 with a dedicated participant completed-modules workspace, config-driven completion policy, and default filtering of completed modules from the active module list.

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  createModule,
   createBenchmarkExampleVersion,
   createMcqSetVersion,
   createModuleVersion,
@@ -10,6 +11,14 @@ import {
 } from "../services/adminContentService.js";
 
 const adminContentRouter = Router();
+
+const moduleCreateBodySchema = z.object({
+  title: z.string().trim().min(3),
+  description: z.string().trim().min(1).optional(),
+  certificationLevel: z.string().trim().min(1).optional(),
+  validFrom: z.string().trim().optional(),
+  validTo: z.string().trim().optional(),
+});
 
 const rubricBodySchema = z.object({
   criteria: z.record(z.unknown()),
@@ -70,6 +79,54 @@ function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {
   }
   return { data: parsed.data };
 }
+
+function parseOptionalDate(input?: string) {
+  if (!input) {
+    return undefined;
+  }
+
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+adminContentRouter.post("/modules", async (request, response) => {
+  const parsed = parseRequest(moduleCreateBodySchema, request.body);
+  if (parsed.error) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error });
+    return;
+  }
+
+  const validFrom = parseOptionalDate(parsed.data.validFrom);
+  const validTo = parseOptionalDate(parsed.data.validTo);
+  if ((parsed.data.validFrom && !validFrom) || (parsed.data.validTo && !validTo)) {
+    response.status(400).json({
+      error: "validation_error",
+      message: "validFrom/validTo must be valid ISO date or datetime values.",
+    });
+    return;
+  }
+
+  try {
+    const module = await createModule({
+      title: parsed.data.title,
+      description: parsed.data.description,
+      certificationLevel: parsed.data.certificationLevel,
+      validFrom: validFrom ?? undefined,
+      validTo: validTo ?? undefined,
+      actorId: request.context?.userId,
+    });
+    response.status(201).json({ module });
+  } catch (error) {
+    response.status(400).json({
+      error: "create_module_failed",
+      message: error instanceof Error ? error.message : "Could not create module.",
+    });
+  }
+});
 
 adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, response) => {
   const parsed = parseRequest(rubricBodySchema, request.body);

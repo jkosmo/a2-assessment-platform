@@ -32,6 +32,12 @@
         "path": "/calibration",
         "labelKey": "nav.calibration",
         "requiredRoles": ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"]
+      },
+      {
+        "id": "admin-content",
+        "path": "/admin-content",
+        "labelKey": "nav.adminContent",
+        "requiredRoles": ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"]
       }
     ]
   },
@@ -82,6 +88,13 @@
       "userId": "smo-1",
       "email": "smo@company.com",
       "name": "Platform Subject Matter Owner",
+      "department": "Learning",
+      "roles": ["SUBJECT_MATTER_OWNER"]
+    },
+    "contentAdmin": {
+      "userId": "content-owner-1",
+      "email": "content.owner@company.com",
+      "name": "Platform Content Owner",
       "department": "Learning",
       "roles": ["SUBJECT_MATTER_OWNER"]
     }
