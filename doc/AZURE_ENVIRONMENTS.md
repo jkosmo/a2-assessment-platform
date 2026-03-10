@@ -86,6 +86,61 @@ For each environment, define variables/secrets used by workflow:
 - Waits for `production` environment approval.
 - Deploys `production` after approval.
 
+## Azure OpenAI runtime profiles
+Use environment variables to switch model cost/quality profile without code changes.
+
+### Recommended staging profile (`gpt-5-nano`)
+- `LLM_MODE=azure_openai`
+- `AZURE_OPENAI_DEPLOYMENT=a2-assessment-stage-gpt-5-nano` (or your staging deployment name)
+- `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
+- `AZURE_OPENAI_TEMPERATURE=1`
+- `AZURE_OPENAI_MAX_TOKENS=4000`
+- `AZURE_OPENAI_TIMEOUT_MS=45000`
+
+Why:
+- `gpt-5-nano` may reject `temperature=0` and require default behavior.
+- Larger token limit avoids empty assistant content on long structured prompts.
+- `auto` token parameter supports both `max_completion_tokens` and `max_tokens` model families.
+
+### Recommended production baseline (`balanced`)
+- `LLM_MODE=azure_openai`
+- `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
+- `AZURE_OPENAI_TEMPERATURE=1` (or model-supported value)
+- `AZURE_OPENAI_MAX_TOKENS=2500`
+- `AZURE_OPENAI_TIMEOUT_MS=45000`
+- `AZURE_OPENAI_DEPLOYMENT=<prod-balanced-deployment>`
+
+### Recommended production high-quality profile (`quality`)
+- `LLM_MODE=azure_openai`
+- `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
+- `AZURE_OPENAI_TEMPERATURE=1` (or model-supported value)
+- `AZURE_OPENAI_MAX_TOKENS=5000`
+- `AZURE_OPENAI_TIMEOUT_MS=90000`
+- `AZURE_OPENAI_DEPLOYMENT=<prod-quality-deployment>`
+
+## Production onboarding checklist for Azure OpenAI
+1. Create production GitHub environment (`production`) if missing.
+2. Add required environment secrets:
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_OPENAI_API_KEY`
+3. Add production variables:
+- `LLM_MODE=azure_openai`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_OPENAI_API_VERSION=2024-10-21`
+- `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
+- `AZURE_OPENAI_TEMPERATURE` (model-compatible)
+- `AZURE_OPENAI_MAX_TOKENS` (profile-dependent)
+- `AZURE_OPENAI_TIMEOUT_MS` (profile-dependent)
+4. Trigger `workflow_dispatch` deploy with production approval.
+5. Verify:
+- `/version` and `/healthz`
+- end-to-end submission -> MCQ -> assessment -> result
+- `llmEvaluation.modelName` references expected deployment
+- no sustained `llm_evaluation_failed` alerts
+
 ## Cost guardrails
 - Resource tags: `environment`, `costCenter`, `owner`.
 - Optional monthly budget + alert via `configure-cost-guardrails.ps1`.

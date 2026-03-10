@@ -181,6 +181,12 @@ LLM provider mode is env-driven via:
   - `AZURE_OPENAI_MAX_TOKENS` (default `1200`)
   - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (`max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
 
+Azure OpenAI compatibility note:
+- for `gpt-5-nano`, use:
+  - `AZURE_OPENAI_TEMPERATURE=1`
+  - `AZURE_OPENAI_MAX_TOKENS=4000`
+  - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
+
 Sensitive-data preprocessing before LLM evaluation is config-driven via:
 - `config/assessment-rules.json`
 - `sensitiveData.enabledByDefault` toggles masking baseline

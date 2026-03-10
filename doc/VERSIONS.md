@@ -7,6 +7,31 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.57 - 2026-03-10
+### Summary
+Documented Azure OpenAI staging/production configuration profiles and operationalized the current staging runtime profile for `gpt-5-nano`.
+
+### Included
+- Documentation updates for OpenAI operations:
+  - `doc/AZURE_ENVIRONMENTS.md`
+  - added recommended runtime profiles for:
+    - staging (`gpt-5-nano`)
+    - production balanced
+    - production quality
+  - added production onboarding checklist for Azure OpenAI variables/secrets and verification steps
+- README update:
+  - `README.md`
+  - added explicit `gpt-5-nano` compatibility guidance (`temperature=1`, `max tokens=4000`, token parameter `auto`)
+- Staging environment runtime configuration applied:
+  - `AZURE_OPENAI_TEMPERATURE=1`
+  - `AZURE_OPENAI_MAX_TOKENS=4000`
+  - `AZURE_OPENAI_TIMEOUT_MS=45000`
+  - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
+
+### Verification
+- `npm run lint`
+- `npm test` (56 tests passing, 22 test files)
+
 ## 0.3.56 - 2026-03-10
 ### Summary
 Hardened Azure OpenAI token-limit compatibility by adding config-driven token parameter strategy (`max_tokens` / `max_completion_tokens` / `auto`) with automatic fallback for model-specific unsupported-parameter responses.
