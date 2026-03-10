@@ -21,6 +21,13 @@ const envSchema = z.object({
   DEFAULT_LOCALE: z.enum(["en-GB", "nb", "nn"]).default("en-GB"),
   LLM_MODE: z.enum(["stub", "azure_openai"]).default("stub"),
   LLM_STUB_MODEL_NAME: z.string().default("stub-model-v1"),
+  AZURE_OPENAI_ENDPOINT: z.string().optional(),
+  AZURE_OPENAI_API_KEY: z.string().optional(),
+  AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
+  AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
+  AZURE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  AZURE_OPENAI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0),
+  AZURE_OPENAI_MAX_TOKENS: z.coerce.number().int().positive().default(1200),
   APPEAL_FIRST_RESPONSE_SLA_HOURS: z.coerce.number().positive().default(24),
   APPEAL_RESOLUTION_SLA_HOURS: z.coerce.number().positive().default(72),
   APPEAL_AT_RISK_RATIO: z.coerce.number().positive().max(1).default(0.75),
@@ -49,6 +56,16 @@ const env = parsed.data;
 
 if (env.AUTH_MODE === "entra" && (!env.ENTRA_TENANT_ID || !env.ENTRA_AUDIENCE)) {
   console.error("ENTRA_TENANT_ID and ENTRA_AUDIENCE are required when AUTH_MODE=entra");
+  process.exit(1);
+}
+
+if (
+  env.LLM_MODE === "azure_openai" &&
+  (!env.AZURE_OPENAI_ENDPOINT || !env.AZURE_OPENAI_API_KEY || !env.AZURE_OPENAI_DEPLOYMENT)
+) {
+  console.error(
+    "AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT are required when LLM_MODE=azure_openai",
+  );
   process.exit(1);
 }
 

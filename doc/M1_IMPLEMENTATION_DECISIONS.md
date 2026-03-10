@@ -19,6 +19,7 @@ This document captures implementation decisions for:
 - Use asynchronous assessment jobs to decouple submission/MCQ flow from LLM + decision execution.
 - Keep thresholds/weights/manual-review rules in JSON configuration (`config/assessment-rules.json`) instead of hardcoded logic.
 - Support Entra group claims to app-role synchronization behind explicit config flags.
+- Implement `LLM_MODE=azure_openai` behind env-gated runtime configuration while preserving strict JSON-schema validation before downstream decisioning.
 
 ## Refactor Decisions
 - Introduced service layer (`submissionService`, `mcqService`, `assessmentJobService`, `decisionService`) to keep route handlers thin and reduce complexity growth.
@@ -38,7 +39,5 @@ This document captures implementation decisions for:
 - Existing M0 tests retained.
 
 ## Known Limitations
-- `LLM_MODE=azure_openai` is currently scaffolded but intentionally not implemented yet.
 - Submission attachment upload is URI-based in this phase; object storage upload pipeline is not implemented yet.
 - Worker uses single-process polling; distributed locking strategy is a future hardening step.
-

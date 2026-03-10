@@ -44,6 +44,7 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_URL` (optional; required when channel=`webhook`)
+- `AZURE_OPENAI_API_KEY` (required when `LLM_MODE=azure_openai`)
 - Variables:
 - `AZURE_LOCATION`
 - `AZURE_RESOURCE_GROUP`
@@ -58,6 +59,12 @@ For each environment, define variables/secrets used by workflow:
 - `ENTRA_GROUP_ROLE_MAP_JSON`
 - `LLM_MODE`
 - `LLM_STUB_MODEL_NAME`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_OPENAI_API_VERSION` (optional, default `2024-10-21`)
+- `AZURE_OPENAI_TIMEOUT_MS` (optional, default `30000`)
+- `AZURE_OPENAI_TEMPERATURE` (optional, default `0`)
+- `AZURE_OPENAI_MAX_TOKENS` (optional, default `1200`)
 - `ASSESSMENT_JOB_POLL_INTERVAL_MS`
 - `ASSESSMENT_JOB_MAX_ATTEMPTS`
 - `OBSERVABILITY_ALERT_EMAIL` (optional)

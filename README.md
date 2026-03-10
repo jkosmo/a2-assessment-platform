@@ -167,6 +167,19 @@ Participant console behavior is config-driven via:
   - when `flow.autoStartAfterMcq=true`, manual assessment buttons are hidden in participant UI
 - `identityDefaults.participant` and `identityDefaults.appealHandler` set default test identity per workspace
 
+LLM provider mode is env-driven via:
+- `LLM_MODE=stub|azure_openai`
+- Stub mode:
+  - `LLM_STUB_MODEL_NAME`
+- Azure OpenAI mode:
+  - `AZURE_OPENAI_ENDPOINT`
+  - `AZURE_OPENAI_API_KEY`
+  - `AZURE_OPENAI_DEPLOYMENT`
+  - `AZURE_OPENAI_API_VERSION` (default `2024-10-21`)
+  - `AZURE_OPENAI_TIMEOUT_MS` (default `30000`)
+  - `AZURE_OPENAI_TEMPERATURE` (default `0`)
+  - `AZURE_OPENAI_MAX_TOKENS` (default `1200`)
+
 Sensitive-data preprocessing before LLM evaluation is config-driven via:
 - `config/assessment-rules.json`
 - `sensitiveData.enabledByDefault` toggles masking baseline
@@ -251,3 +264,6 @@ Phase-2 design note for participant appeal notifications:
 
 Org sync conflict/override strategy:
 - `doc/ORG_SYNC_CONFLICT_STRATEGY.md`
+
+Phase-2 design note for Azure OpenAI assessment integration:
+- `doc/PHASE2_AZURE_OPENAI_INTEGRATION.md`

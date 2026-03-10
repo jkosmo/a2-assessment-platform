@@ -50,6 +50,28 @@ param llmMode string = 'stub'
 @description('LLM stub model name.')
 param llmStubModelName string = 'stub-model-v1'
 
+@description('Azure OpenAI endpoint URL (for example https://resource.openai.azure.com).')
+param azureOpenAiEndpoint string = ''
+
+@description('Azure OpenAI API key.')
+@secure()
+param azureOpenAiApiKey string = ''
+
+@description('Azure OpenAI deployment name.')
+param azureOpenAiDeployment string = ''
+
+@description('Azure OpenAI API version.')
+param azureOpenAiApiVersion string = '2024-10-21'
+
+@description('Azure OpenAI request timeout in milliseconds.')
+param azureOpenAiTimeoutMs int = 30000
+
+@description('Azure OpenAI temperature (0-2).')
+param azureOpenAiTemperature string = '0'
+
+@description('Azure OpenAI max output tokens.')
+param azureOpenAiMaxTokens int = 1200
+
 @description('Assessment worker polling interval in milliseconds.')
 param assessmentJobPollIntervalMs int = 4000
 
@@ -237,6 +259,34 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'LLM_STUB_MODEL_NAME'
           value: llmStubModelName
+        }
+        {
+          name: 'AZURE_OPENAI_ENDPOINT'
+          value: azureOpenAiEndpoint
+        }
+        {
+          name: 'AZURE_OPENAI_API_KEY'
+          value: azureOpenAiApiKey
+        }
+        {
+          name: 'AZURE_OPENAI_DEPLOYMENT'
+          value: azureOpenAiDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_API_VERSION'
+          value: azureOpenAiApiVersion
+        }
+        {
+          name: 'AZURE_OPENAI_TIMEOUT_MS'
+          value: string(azureOpenAiTimeoutMs)
+        }
+        {
+          name: 'AZURE_OPENAI_TEMPERATURE'
+          value: azureOpenAiTemperature
+        }
+        {
+          name: 'AZURE_OPENAI_MAX_TOKENS'
+          value: string(azureOpenAiMaxTokens)
         }
         {
           name: 'ASSESSMENT_RULES_FILE'

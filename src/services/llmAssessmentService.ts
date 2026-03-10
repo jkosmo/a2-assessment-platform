@@ -40,6 +40,19 @@ type AssessmentContext = {
   reflectionText: string;
   promptExcerpt: string;
   assessmentPass?: "primary" | "secondary";
+  promptTemplateSystem?: string;
+  promptTemplateUserTemplate?: string;
+  promptTemplateExamplesJson?: string;
+};
+
+type AzureOpenAiRuntimeConfig = {
+  endpoint: string;
+  apiKey: string;
+  deployment: string;
+  apiVersion: string;
+  timeoutMs: number;
+  temperature: number;
+  maxTokens: number;
 };
 
 export async function evaluatePracticalWithLlm(input: AssessmentContext): Promise<LlmStructuredAssessment> {
@@ -47,9 +60,68 @@ export async function evaluatePracticalWithLlm(input: AssessmentContext): Promis
     return llmResponseSchema.parse(buildStubResponse(input));
   }
 
-  // The real provider integration can be plugged in without changing downstream
-  // flow because strict schema validation is enforced here.
-  throw new Error("LLM_MODE=azure_openai is not implemented yet.");
+  if (env.LLM_MODE === "azure_openai") {
+    return evaluatePracticalWithAzureOpenAi(input, {
+      endpoint: env.AZURE_OPENAI_ENDPOINT ?? "",
+      apiKey: env.AZURE_OPENAI_API_KEY ?? "",
+      deployment: env.AZURE_OPENAI_DEPLOYMENT ?? "",
+      apiVersion: env.AZURE_OPENAI_API_VERSION,
+      timeoutMs: env.AZURE_OPENAI_TIMEOUT_MS,
+      temperature: env.AZURE_OPENAI_TEMPERATURE,
+      maxTokens: env.AZURE_OPENAI_MAX_TOKENS,
+    });
+  }
+
+  throw new Error(`Unsupported LLM mode: ${env.LLM_MODE}`);
+}
+
+export async function evaluatePracticalWithAzureOpenAi(
+  input: AssessmentContext,
+  config: AzureOpenAiRuntimeConfig,
+): Promise<LlmStructuredAssessment> {
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), config.timeoutMs);
+
+  try {
+    const response = await fetch(buildAzureOpenAiCompletionsUrl(config), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "api-key": config.apiKey,
+      },
+      body: JSON.stringify({
+        messages: buildAzureOpenAiMessages(input),
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        response_format: {
+          type: "json_object",
+        },
+      }),
+      signal: timeoutController.signal,
+    });
+
+    const rawBody = await response.text();
+    const responseBody = parseJsonBody(rawBody);
+
+    if (!response.ok) {
+      const providerMessage = extractProviderErrorMessage(responseBody);
+      throw new Error(
+        `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
+      );
+    }
+
+    const assistantContent = extractAssistantContent(responseBody);
+    const parsedStructuredPayload = parseStructuredPayload(assistantContent);
+
+    return llmResponseSchema.parse(parsedStructuredPayload);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Azure OpenAI request timed out after ${config.timeoutMs}ms.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
@@ -114,3 +186,148 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
         : "High confidence: structured and sufficiently detailed submission.",
   };
 }
+
+function buildAzureOpenAiCompletionsUrl(config: AzureOpenAiRuntimeConfig): string {
+  const trimmedEndpoint = config.endpoint.trim().replace(/\/+$/, "");
+  if (!trimmedEndpoint) {
+    throw new Error("Azure OpenAI endpoint is not configured.");
+  }
+  if (!config.deployment.trim()) {
+    throw new Error("Azure OpenAI deployment is not configured.");
+  }
+
+  const encodedDeployment = encodeURIComponent(config.deployment.trim());
+  const encodedApiVersion = encodeURIComponent(config.apiVersion.trim());
+  return `${trimmedEndpoint}/openai/deployments/${encodedDeployment}/chat/completions?api-version=${encodedApiVersion}`;
+}
+
+function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "system" | "user"; content: string }> {
+  const systemPrompt = (input.promptTemplateSystem ?? "").trim() || DEFAULT_SYSTEM_PROMPT;
+  const userPromptTemplate = (input.promptTemplateUserTemplate ?? "").trim();
+  const passContext =
+    input.assessmentPass === "secondary"
+      ? "This is a secondary, independent assessment pass."
+      : "This is the primary assessment pass.";
+  const examplesJson = (input.promptTemplateExamplesJson ?? "").trim();
+
+  const userSections = [
+    "Assess the candidate submission and return one strict JSON object only.",
+    passContext,
+    REQUIRED_RESPONSE_CONTRACT,
+    userPromptTemplate ? `Prompt template context:\n${userPromptTemplate}` : null,
+    examplesJson ? `Prompt examples context (JSON):\n${examplesJson}` : null,
+    `Module ID: ${input.moduleId}`,
+    `Candidate practical answer:\n${input.rawText}`,
+    `Candidate reflection:\n${input.reflectionText}`,
+    `Candidate prompt excerpt:\n${input.promptExcerpt}`,
+  ].filter((value): value is string => Boolean(value));
+
+  return [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userSections.join("\n\n") },
+  ];
+}
+
+function parseJsonBody(rawBody: string): unknown {
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    throw new Error("Azure OpenAI returned a non-JSON response.");
+  }
+}
+
+function extractProviderErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const candidate = payload as { error?: { message?: unknown } };
+  return typeof candidate.error?.message === "string" ? candidate.error.message : "";
+}
+
+function extractAssistantContent(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Azure OpenAI completion payload is missing.");
+  }
+
+  const candidate = payload as {
+    choices?: Array<{
+      message?: {
+        content?: unknown;
+      };
+    }>;
+  };
+
+  const firstContent = candidate.choices?.[0]?.message?.content;
+  if (typeof firstContent === "string" && firstContent.trim().length > 0) {
+    return firstContent;
+  }
+
+  if (Array.isArray(firstContent)) {
+    const joined = firstContent
+      .map((entry) => {
+        if (typeof entry === "string") {
+          return entry;
+        }
+        if (entry && typeof entry === "object" && "text" in entry && typeof entry.text === "string") {
+          return entry.text;
+        }
+        return "";
+      })
+      .join("\n")
+      .trim();
+
+    if (joined.length > 0) {
+      return joined;
+    }
+  }
+
+  throw new Error("Azure OpenAI response does not include assistant content.");
+}
+
+function parseStructuredPayload(content: string): unknown {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("Azure OpenAI returned empty assistant content.");
+  }
+
+  const unfenced = trimmed.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(unfenced);
+  } catch {
+    const firstBrace = unfenced.indexOf("{");
+    const lastBrace = unfenced.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const candidateJson = unfenced.slice(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(candidateJson);
+      } catch {
+        // Fall through to final error.
+      }
+    }
+
+    throw new Error("Azure OpenAI did not return parseable JSON content.");
+  }
+}
+
+const DEFAULT_SYSTEM_PROMPT = "You are an assessment assistant. Return strict JSON only.";
+
+const REQUIRED_RESPONSE_CONTRACT = `
+JSON response contract:
+- module_id: string
+- rubric_scores: object with integer values 0..4 for:
+  - relevance_for_case
+  - quality_and_utility
+  - iteration_and_improvement
+  - human_quality_assurance
+  - responsible_use
+- rubric_total: integer 0..20 and equal to sum of rubric_scores
+- practical_score_scaled: number 0..70
+- pass_fail_practical: boolean
+- criterion_rationales: object with one concise string rationale per rubric criterion key
+- improvement_advice: array of up to 10 concise strings
+- red_flags: array of objects with fields: code (string), severity (string), description (string)
+- manual_review_recommended: boolean
+- confidence_note: string
+Do not include markdown, comments, or any wrapper text outside JSON.
+`.trim();

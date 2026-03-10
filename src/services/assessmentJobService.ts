@@ -188,7 +188,11 @@ async function runAssessment(jobId: string) {
     include: {
       submission: {
         include: {
-          moduleVersion: true,
+          moduleVersion: {
+            include: {
+              promptTemplateVersion: true,
+            },
+          },
           mcqAttempts: { where: { completedAt: { not: null } }, orderBy: { completedAt: "desc" } },
         },
       },
@@ -254,7 +258,7 @@ async function runAssessment(jobId: string) {
         modelName:
           env.LLM_MODE === "stub"
             ? `${env.LLM_STUB_MODEL_NAME}:${assessmentPass}`
-            : `azure_openai:${assessmentPass}`,
+            : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
         promptTemplateVersionId: submission.moduleVersion.promptTemplateVersionId,
         requestPayloadHash: sha256(JSON.stringify(requestPayload)),
         responseJson: JSON.stringify(llmResult),
@@ -292,6 +296,9 @@ async function runAssessment(jobId: string) {
       reflectionText: sensitiveDataPreprocess.payload.reflectionText,
       promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
       assessmentPass: "primary",
+      promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
+      promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
+      promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
     });
   } catch (error) {
     logOperationalEvent(
@@ -337,6 +344,9 @@ async function runAssessment(jobId: string) {
         reflectionText: sensitiveDataPreprocess.payload.reflectionText,
         promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
         assessmentPass: "secondary",
+        promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
+        promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
+        promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
       });
     } catch (error) {
       logOperationalEvent(

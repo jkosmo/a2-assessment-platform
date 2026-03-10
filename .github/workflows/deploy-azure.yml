@@ -68,6 +68,13 @@ jobs:
             -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `
             -LlmMode "${{ vars.LLM_MODE }}" `
             -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
+            -AzureOpenAiEndpoint "${{ vars.AZURE_OPENAI_ENDPOINT }}" `
+            -AzureOpenAiApiKey "${{ secrets.AZURE_OPENAI_API_KEY }}" `
+            -AzureOpenAiDeployment "${{ vars.AZURE_OPENAI_DEPLOYMENT }}" `
+            -AzureOpenAiApiVersion "${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}" `
+            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '30000' }}" `
+            -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
+            -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
@@ -127,6 +134,13 @@ jobs:
             -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `
             -LlmMode "${{ vars.LLM_MODE }}" `
             -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
+            -AzureOpenAiEndpoint "${{ vars.AZURE_OPENAI_ENDPOINT }}" `
+            -AzureOpenAiApiKey "${{ secrets.AZURE_OPENAI_API_KEY }}" `
+            -AzureOpenAiDeployment "${{ vars.AZURE_OPENAI_DEPLOYMENT }}" `
+            -AzureOpenAiApiVersion "${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}" `
+            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '30000' }}" `
+            -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
+            -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `

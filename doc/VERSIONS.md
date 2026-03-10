@@ -7,6 +7,48 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.55 - 2026-03-10
+### Summary
+Implemented Azure OpenAI assessment-provider integration for `LLM_MODE=azure_openai` with strict structured-output validation, versioned prompt-template context wiring, and deploy/runtime configuration support.
+
+### Included
+- Implemented Azure OpenAI adapter in LLM service:
+  - `src/services/llmAssessmentService.ts`
+  - added provider call for `chat/completions` deployment endpoint
+  - added timeout handling, provider-error surfacing, JSON extraction/parsing hardening, and existing `zod` schema validation reuse
+  - retained `stub` mode behavior unchanged
+- Expanded env contract for Azure OpenAI runtime config:
+  - `src/config/env.ts`
+  - `.env.example`
+  - keys:
+    - `AZURE_OPENAI_ENDPOINT`
+    - `AZURE_OPENAI_API_KEY`
+    - `AZURE_OPENAI_DEPLOYMENT`
+    - `AZURE_OPENAI_API_VERSION`
+    - `AZURE_OPENAI_TIMEOUT_MS`
+    - `AZURE_OPENAI_TEMPERATURE`
+    - `AZURE_OPENAI_MAX_TOKENS`
+  - added fail-fast validation when `LLM_MODE=azure_openai`
+- Assessment orchestration updates:
+  - `src/services/assessmentJobService.ts`
+  - LLM call now includes versioned prompt-template context (`systemPrompt`, `userPromptTemplate`, `examplesJson`)
+  - persisted `LLMEvaluation.modelName` now records configured Azure deployment in `azure_openai` mode
+- Azure deploy/runtime configuration wiring:
+  - `infra/azure/main.bicep`
+  - `scripts/azure/deploy-environment.ps1`
+  - `.github/workflows/deploy-azure.yml`
+  - `.azure/environments/staging.env.example`
+  - `.azure/environments/production.env.example`
+- Documentation:
+  - added design note `doc/PHASE2_AZURE_OPENAI_INTEGRATION.md`
+  - updated `README.md`, `doc/AZURE_ENVIRONMENTS.md`, and `doc/M1_IMPLEMENTATION_DECISIONS.md`
+- Test coverage:
+  - added `test/llm-assessment-service.test.ts` for Azure adapter success/failure parsing paths
+
+### Verification
+- `npm run lint`
+- `npm test` (54 tests passing, 22 test files)
+
 ## 0.3.54 - 2026-03-09
 ### Summary
 Implemented issue #28 with an admin-driven HR/LMS delta sync pipeline for users/org metadata, configurable conflict strategy, and audit/observability-based recovery tracing.
