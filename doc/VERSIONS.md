@@ -7,6 +7,31 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.78 - 2026-03-10
+### Summary
+Made manual review state visible and filterable in the appeal handler queue so appeal handlers can find appeals tied to submissions that are under manual review.
+
+### Included
+- Appeal queue data expansion:
+  - `src/services/appealService.ts`
+  - queue payload now includes the latest manual review record for each submission in the appeal list
+- Appeal handler queue UI:
+  - `public/appeal-handler.html`
+  - added a dedicated `Manual review status` filter group and a `Manual review` table column
+  - expanded the queue toolbar layout to accommodate the extra filter controls
+- Appeal handler queue logic:
+  - `public/appeal-handler.js`
+  - added local filtering by latest manual review status (`None`, `Open`, `In review`, `Resolved`)
+  - included manual review status in queue search matching
+  - rendered latest manual review status directly in the queue table
+- Translation update:
+  - `public/i18n/appeal-handler-translations.js`
+  - added English fallback copy for the new queue filter, column, and manual review status labels
+
+### Verification
+- `npm run lint`
+- `npm test -- test/m2-appeal-flow.test.ts test/m2-manual-review.test.ts`
+
 ## 0.3.77 - 2026-03-10
 ### Summary
 Exposed manual review data inside the appeal handler detail panel so appeal handlers can see the latest manual treatment for the underlying submission.

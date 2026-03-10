@@ -18,6 +18,7 @@ const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
 const statusFilter = document.getElementById("appealHandlerStatusFilter");
+const manualReviewFilter = document.getElementById("appealHandlerManualReviewFilter");
 const queueSearchInput = document.getElementById("queueSearch");
 const queueLimitInput = document.getElementById("queueLimit");
 const loadAppealQueueButton = document.getElementById("loadAppealQueue");
@@ -93,6 +94,7 @@ let participantRuntimeConfig = {
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 const defaultResolutionPassFailValue = "true";
+const manualReviewFilterOptions = ["NONE", "OPEN", "IN_REVIEW", "RESOLVED"];
 const defaultWorkspaceNavigationItems = [
   {
     id: "participant",
@@ -179,6 +181,7 @@ function applyTranslations() {
   }
 
   populateAppealStatusFilters();
+  populateManualReviewFilters();
   renderRolePresetControl();
   renderWorkspaceNavigation();
   renderAppealQueue();
@@ -484,9 +487,37 @@ function populateAppealStatusFilters() {
   }
 }
 
+function populateManualReviewFilters() {
+  const selectedBeforeRefresh = new Set(getCheckedPillValues(manualReviewFilter));
+  manualReviewFilter.innerHTML = "";
+
+  for (const status of manualReviewFilterOptions) {
+    const optionLabel = document.createElement("label");
+    optionLabel.className = "pill-option";
+
+    const optionInput = document.createElement("input");
+    optionInput.type = "checkbox";
+    optionInput.value = status;
+    optionInput.checked = selectedBeforeRefresh.size > 0 ? selectedBeforeRefresh.has(status) : true;
+    optionInput.setAttribute("aria-label", localizeManualReviewStatus(status));
+
+    const optionText = document.createElement("span");
+    optionText.textContent = localizeManualReviewStatus(status);
+
+    optionLabel.appendChild(optionInput);
+    optionLabel.appendChild(optionText);
+    manualReviewFilter.appendChild(optionLabel);
+  }
+}
+
 function localizeAppealStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
   return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
+}
+
+function localizeManualReviewStatus(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  return t(`manualReview.statusValue.${normalized || "UNKNOWN"}`);
 }
 
 function getSelectedAppealStatuses() {
@@ -496,6 +527,15 @@ function getSelectedAppealStatuses() {
   }
 
   return getAppealWorkspaceSettings().defaultStatuses;
+}
+
+function getSelectedManualReviewStatuses() {
+  const selected = getCheckedPillValues(manualReviewFilter);
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  return manualReviewFilterOptions;
 }
 
 function filterAppealsBySearch(appeals) {
@@ -508,6 +548,7 @@ function filterAppealsBySearch(appeals) {
     const haystack = [
       appeal.id,
       appeal.appealStatus,
+      appeal.submission?.latestManualReview?.reviewStatus,
       appeal.appealedBy?.name,
       appeal.appealedBy?.email,
       appeal.submission?.user?.name,
@@ -523,6 +564,16 @@ function filterAppealsBySearch(appeals) {
   });
 }
 
+function filterAppealsByManualReviewStatus(appeals) {
+  const selectedStatuses = new Set(getSelectedManualReviewStatuses());
+  return appeals.filter((appeal) => {
+    const latestManualReviewStatus = appeal.submission?.latestManualReview?.reviewStatus;
+    const normalizedStatus =
+      typeof latestManualReviewStatus === "string" ? latestManualReviewStatus.toUpperCase() : "NONE";
+    return selectedStatuses.has(normalizedStatus);
+  });
+}
+
 function renderAppealQueue() {
   appealQueueBody.innerHTML = "";
 
@@ -533,14 +584,14 @@ function renderAppealQueue() {
     renderAppealHandlerDetails(null);
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     cell.textContent = t("defaults.noQueue");
     row.appendChild(cell);
     appealQueueBody.appendChild(row);
     return;
   }
 
-  const filtered = filterAppealsBySearch(latestAppealQueue);
+  const filtered = filterAppealsBySearch(filterAppealsByManualReviewStatus(latestAppealQueue));
   queueCountLabel.textContent = `${filtered.length} / ${latestAppealQueue.length}`;
 
   if (filtered.length === 0) {
@@ -549,7 +600,7 @@ function renderAppealQueue() {
     renderAppealHandlerDetails(null);
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     cell.textContent = t("appealHandler.noRows");
     row.appendChild(cell);
     appealQueueBody.appendChild(row);
@@ -573,10 +624,12 @@ function renderAppealQueue() {
 
     const participantName = appeal.appealedBy?.name ?? appeal.submission?.user?.name ?? "-";
     const participantEmail = appeal.appealedBy?.email ?? appeal.submission?.user?.email ?? "-";
+    const latestManualReviewStatus = appeal.submission?.latestManualReview?.reviewStatus ?? "NONE";
 
     const values = [
       appeal.id,
       localizeAppealStatus(appeal.appealStatus),
+      localizeManualReviewStatus(latestManualReviewStatus),
       `${participantName}\n${participantEmail}`,
       `${appeal.submission?.module?.title ?? "-"}\n${appeal.submission?.module?.id ?? "-"}`,
       formatDateTime(appeal.submission?.submittedAt),
@@ -843,6 +896,7 @@ async function loadParticipantConsoleConfig() {
   renderRolePresetControl();
   renderWorkspaceNavigation();
   populateAppealStatusFilters();
+  populateManualReviewFilters();
   await loadAppealQueue();
 }
 
@@ -923,6 +977,10 @@ statusFilter.addEventListener("change", async () => {
   await runWithBusyButton(loadAppealQueueButton, async () => {
     await loadAppealQueue();
   });
+});
+
+manualReviewFilter.addEventListener("change", () => {
+  renderAppealQueue();
 });
 
 queueSearchInput.addEventListener("input", () => {
@@ -1041,7 +1099,9 @@ rolesInput.addEventListener("input", () => {
 
 populateLocaleSelect();
 setLocale(currentLocale);
+populateManualReviewFilters();
 enablePillArrowNavigation(statusFilter);
+enablePillArrowNavigation(manualReviewFilter);
 loadVersion();
 loadParticipantConsoleConfig();
 renderAppealQueue();

@@ -122,6 +122,16 @@ export async function listAppealQueue(input: {
           id: true,
           submittedAt: true,
           submissionStatus: true,
+          manualReviews: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              reviewStatus: true,
+              createdAt: true,
+              reviewedAt: true,
+            },
+          },
           user: {
             select: {
               id: true,
@@ -170,6 +180,7 @@ export async function listAppealQueue(input: {
       id: appeal.submission.id,
       submittedAt: appeal.submission.submittedAt,
       submissionStatus: appeal.submission.submissionStatus,
+      latestManualReview: appeal.submission.manualReviews[0] ?? null,
       user: appeal.submission.user,
       module: appeal.submission.module,
       latestDecision: appeal.submission.decisions[0] ?? null,
