@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.74 - 2026-03-10
+### Summary
+Extracted the duplicated frontend API/config fetch logic into a shared `api-client` module and migrated all five workspace pages to use it.
+
+### Included
+- Shared frontend API client:
+  - `public/api-client.js`
+  - added shared `apiFetch()`, `getConsoleConfig()`, and `buildConsoleHeaders()`
+  - centralized response parsing and non-OK error normalization
+  - cached `/participant/config` loading in-module
+- Workspace page migration:
+  - `public/participant.js`
+  - `public/admin-content.js`
+  - `public/appeal-handler.js`
+  - `public/calibration.js`
+  - `public/participant-completed.js`
+  - removed local `api()` wrappers from all five files
+  - replaced per-page `/participant/config` fetch logic with `getConsoleConfig()`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/participant-console-production-config.test.ts`
+
 ## 0.3.73 - 2026-03-10
 ### Summary
 Replaced string-coded service errors with a typed `AppError` hierarchy, removed route-level `error.message` decoding, and centralized HTTP status mapping in shared error middleware.

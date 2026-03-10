@@ -1,4 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
@@ -608,7 +609,7 @@ async function startAutomaticAssessmentFlow(submissionId) {
   renderAssessmentProgress();
 
   try {
-    await api(`/api/assessments/${submissionId}/run`, {
+    await apiFetch(`/api/assessments/${submissionId}/run`, headers, {
       method: "POST",
       body: JSON.stringify({}),
     });
@@ -651,7 +652,7 @@ async function startAutomaticAssessmentFlow(submissionId) {
     autoAssessmentRequestInFlight = true;
 
     try {
-      const assessmentBody = await api(`/api/assessments/${submissionId}`);
+      const assessmentBody = await apiFetch(`/api/assessments/${submissionId}`, headers);
       assessmentProgressKey = deriveAssessmentProgressKeyFromSubmissionStatus(
         assessmentBody.submissionStatus,
         assessmentBody.latestJob?.status,
@@ -662,7 +663,7 @@ async function startAutomaticAssessmentFlow(submissionId) {
         return;
       }
 
-      const resultBody = await api(`/api/submissions/${submissionId}/result`);
+      const resultBody = await apiFetch(`/api/submissions/${submissionId}/result`, headers);
       renderResultSummary(resultBody);
       flowState = {
         ...flowState,
@@ -912,12 +913,7 @@ function renderWorkspaceNavigation() {
 
 async function loadParticipantConsoleConfig() {
   try {
-    const response = await fetch("/participant/config");
-    if (!response.ok) {
-      throw new Error("participant_config_unavailable");
-    }
-
-    const body = await response.json();
+    const body = await getConsoleConfig();
     participantRuntimeConfig = {
       ...participantRuntimeConfig,
       ...body,
@@ -965,15 +961,14 @@ function headers() {
     .filter(Boolean)
     .join(",");
 
-  return {
-    "Content-Type": "application/json",
-    "x-user-id": document.getElementById("userId").value,
-    "x-user-email": document.getElementById("email").value,
-    "x-user-name": document.getElementById("name").value,
-    "x-user-department": document.getElementById("department").value,
-    "x-user-roles": roles,
-    "x-locale": currentLocale,
-  };
+  return buildConsoleHeaders({
+    userId: document.getElementById("userId").value,
+    email: document.getElementById("email").value,
+    name: document.getElementById("name").value,
+    department: document.getElementById("department").value,
+    roles,
+    locale: currentLocale,
+  });
 }
 
 function log(data) {
@@ -987,28 +982,6 @@ function log(data) {
   }
 
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: { ...headers(), ...(options.headers ?? {}) },
-  });
-
-  const text = await response.text();
-  let body = {};
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { raw: text };
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${JSON.stringify(body)}`);
-  }
-  return body;
 }
 
 async function runWithBusyButton(button, action, after = () => {}) {
@@ -1035,7 +1008,7 @@ async function runWithBusyButton(button, action, after = () => {}) {
 
 async function loadVersion() {
   try {
-    const body = await api("/version", { headers: {} });
+    const body = await apiFetch("/version", { headers: {} });
     const version = body.version ?? "unknown";
     document.title = `A2 Participant Test Console v${version}`;
     appVersionLabel.textContent = `v${version}`;
@@ -1388,8 +1361,9 @@ async function startMcqForSubmission(moduleId, submissionId) {
     throw new Error(t("errors.createSubmissionFirst"));
   }
 
-  const body = await api(
+  const body = await apiFetch(
     `/api/modules/${moduleId}/mcq/start?submissionId=${encodeURIComponent(submissionId)}`,
+    headers,
   );
   attemptIdLabel.textContent = body.attemptId;
   currentQuestions = body.questions;
@@ -1420,7 +1394,7 @@ function clearCurrentModuleDraft() {
 loadMeButton.addEventListener("click", async () => {
   await runWithBusyButton(loadMeButton, async () => {
     try {
-      const body = await api("/api/me");
+      const body = await apiFetch("/api/me", headers);
       log(body);
     } catch (error) {
       log(error.message);
@@ -1431,7 +1405,7 @@ loadMeButton.addEventListener("click", async () => {
 loadModulesButton.addEventListener("click", async () => {
   await runWithBusyButton(loadModulesButton, async () => {
     try {
-      const body = await api("/api/modules");
+      const body = await apiFetch("/api/modules", headers);
       loadedModules = Array.isArray(body.modules) ? body.modules : [];
       if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
         selectedModuleId = "";
@@ -1459,7 +1433,7 @@ createSubmissionButton.addEventListener("click", async () => {
       }
 
       const moduleId = selectedModuleId;
-      const body = await api("/api/submissions", {
+      const body = await apiFetch("/api/submissions", headers, {
         method: "POST",
         body: JSON.stringify({
           moduleId,
@@ -1517,7 +1491,7 @@ submitMcqButton.addEventListener("click", async () => {
         };
       });
 
-      const body = await api(`/api/modules/${moduleId}/mcq/submit`, {
+      const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
         method: "POST",
         body: JSON.stringify({
           submissionId,
@@ -1556,7 +1530,7 @@ queueAssessmentButton.addEventListener("click", async () => {
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
       }
-      const body = await api(`/api/assessments/${submissionId}/run`, {
+      const body = await apiFetch(`/api/assessments/${submissionId}/run`, headers, {
         method: "POST",
         body: JSON.stringify({}),
       });
@@ -1582,7 +1556,7 @@ checkAssessmentButton.addEventListener("click", async () => {
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
       }
-      const body = await api(`/api/assessments/${submissionId}`);
+      const body = await apiFetch(`/api/assessments/${submissionId}`, headers);
       assessmentProgressKey = deriveAssessmentProgressKeyFromSubmissionStatus(
         body.submissionStatus,
         body.latestJob?.status,
@@ -1604,7 +1578,7 @@ checkResultButton.addEventListener("click", async () => {
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
       }
-      const body = await api(`/api/submissions/${submissionId}/result`);
+      const body = await apiFetch(`/api/submissions/${submissionId}/result`, headers);
       renderResultSummary(body);
       flowState = {
         ...flowState,
@@ -1626,7 +1600,7 @@ createAppealButton.addEventListener("click", async () => {
         throw new Error(t("errors.createSubmissionFirst"));
       }
       const appealReason = appealReasonInput.value;
-      const body = await api(`/api/submissions/${submissionId}/appeals`, {
+      const body = await apiFetch(`/api/submissions/${submissionId}/appeals`, headers, {
         method: "POST",
         body: JSON.stringify({ appealReason }),
       });
@@ -1643,7 +1617,7 @@ createAppealButton.addEventListener("click", async () => {
 loadHistoryButton.addEventListener("click", async () => {
   await runWithBusyButton(loadHistoryButton, async () => {
     try {
-      const body = await api("/api/submissions/history?limit=20");
+      const body = await apiFetch("/api/submissions/history?limit=20", headers);
       renderHistorySummary(body);
       log(body);
     } catch (error) {

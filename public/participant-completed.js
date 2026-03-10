@@ -1,4 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-completed-translations.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -185,37 +186,14 @@ function headers() {
     .filter(Boolean)
     .join(",");
 
-  return {
-    "Content-Type": "application/json",
-    "x-user-id": document.getElementById("userId").value,
-    "x-user-email": document.getElementById("email").value,
-    "x-user-name": document.getElementById("name").value,
-    "x-user-department": document.getElementById("department").value,
-    "x-user-roles": roles,
-    "x-locale": currentLocale,
-  };
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: { ...headers(), ...(options.headers ?? {}) },
+  return buildConsoleHeaders({
+    userId: document.getElementById("userId").value,
+    email: document.getElementById("email").value,
+    name: document.getElementById("name").value,
+    department: document.getElementById("department").value,
+    roles,
+    locale: currentLocale,
   });
-
-  const text = await response.text();
-  let body = {};
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { raw: text };
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${JSON.stringify(body)}`);
-  }
-  return body;
 }
 
 async function runWithBusyButton(button, action) {
@@ -362,7 +340,7 @@ function renderCompletedModules(body) {
 
 async function loadVersion() {
   try {
-    const body = await api("/version", { headers: {} });
+    const body = await apiFetch("/version", { headers: {} });
     const version = body.version ?? "unknown";
     document.title = `A2 Completed Modules v${version}`;
     appVersionLabel.textContent = `v${version}`;
@@ -386,12 +364,7 @@ function applyIdentityDefaults() {
 
 async function loadParticipantConsoleConfig() {
   try {
-    const response = await fetch("/participant/config");
-    if (!response.ok) {
-      throw new Error("participant_config_unavailable");
-    }
-
-    const body = await response.json();
+    const body = await getConsoleConfig();
     participantRuntimeConfig = {
       ...participantRuntimeConfig,
       ...body,
@@ -414,7 +387,7 @@ async function loadParticipantConsoleConfig() {
 loadMeButton.addEventListener("click", async () => {
   await runWithBusyButton(loadMeButton, async () => {
     try {
-      const body = await api("/api/me");
+      const body = await apiFetch("/api/me", headers);
       log(body);
     } catch (error) {
       log(error.message);
@@ -427,7 +400,7 @@ loadCompletedButton.addEventListener("click", async () => {
     try {
       const limit = Number(completedLimit.value);
       const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
-      const body = await api(`/api/modules/completed${query}`);
+      const body = await apiFetch(`/api/modules/completed${query}`, headers);
       renderCompletedModules(body);
       log(body);
     } catch (error) {
