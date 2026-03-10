@@ -101,6 +101,17 @@ export async function getOwnedSubmission(submissionId: string, userId: string) {
   });
 }
 
+export async function getSubmissionForAssessmentView(submissionId: string, userId: string) {
+  return prisma.submission.findFirst({
+    where: { id: submissionId, userId },
+    include: {
+      assessmentJobs: { orderBy: { createdAt: "desc" } },
+      llmEvaluations: { orderBy: { createdAt: "desc" } },
+      decisions: { orderBy: { finalisedAt: "desc" } },
+    },
+  });
+}
+
 export async function getOwnedSubmissionHistory(input: {
   userId: string;
   limit: number;

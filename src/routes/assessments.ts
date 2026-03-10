@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "../db/prisma.js";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "../services/assessmentJobService.js";
 import { assessmentRunLimiter } from "../middleware/rateLimiting.js";
+import { getOwnedSubmission, getSubmissionForAssessmentView } from "../services/submissionService.js";
 
 const assessmentsRouter = Router();
 const runBodySchema = z.object({
@@ -23,9 +23,7 @@ assessmentsRouter.post("/:submissionId/run", assessmentRunLimiter, async (reques
     return;
   }
 
-  const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, userId },
-  });
+  const submission = await getOwnedSubmission(submissionId, userId);
   if (!submission) {
     response.status(404).json({ error: "not_found", message: "Submission not found." });
     return;
@@ -46,14 +44,7 @@ assessmentsRouter.get("/:submissionId", async (request, response) => {
     return;
   }
 
-  const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, userId },
-    include: {
-      assessmentJobs: { orderBy: { createdAt: "desc" } },
-      llmEvaluations: { orderBy: { createdAt: "desc" } },
-      decisions: { orderBy: { finalisedAt: "desc" } },
-    },
-  });
+  const submission = await getSubmissionForAssessmentView(submissionId, userId);
   if (!submission) {
     response.status(404).json({ error: "not_found", message: "Submission not found." });
     return;

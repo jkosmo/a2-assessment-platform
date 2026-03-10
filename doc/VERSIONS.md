@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.72 - 2026-03-10
+### Summary
+Removed direct database access from the assessments route so submission ownership checks and assessment-view queries now stay inside the service layer.
+
+### Included
+- Layering cleanup for assessments endpoints:
+  - `src/routes/assessments.ts`
+  - `src/services/submissionService.ts`
+  - removed direct `prisma` import from `assessments.ts`
+  - `POST /api/assessments/:submissionId/run` now uses `getOwnedSubmission()`
+  - `GET /api/assessments/:submissionId` now uses the new `getSubmissionForAssessmentView()`
+- Service extraction:
+  - `src/services/submissionService.ts`
+  - added `getSubmissionForAssessmentView(submissionId, userId)` for the assessment workspace response shape
+
+### Verification
+- `npm run lint`
+- `npm test -- test/m1-core-flow.test.ts test/rate-limiting.test.ts`
+
 ## 0.3.71 - 2026-03-10
 ### Summary
 Propagated participant locale into stored submissions and the LLM assessment pipeline, so localized module task and guidance context now follows the participant's actual request locale.
