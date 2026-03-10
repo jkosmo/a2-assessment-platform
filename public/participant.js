@@ -1460,6 +1460,9 @@ function renderQuestions(selectedResponses = {}) {
 
     mcqQuestions.appendChild(wrapper);
   }
+
+  // Re-evaluate button state after MCQ questions are loaded/cleared.
+  renderFlowGating();
 }
 
 populateLocaleSelect();

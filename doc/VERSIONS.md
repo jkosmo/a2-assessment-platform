@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.59 - 2026-03-10
+### Summary
+Fixed participant MCQ action state so `Send MCQ` becomes enabled immediately after MCQ questions are loaded.
+
+### Included
+- Participant UI flow-state fix:
+  - `public/participant.js`
+  - `renderQuestions()` now triggers `renderFlowGating()` after MCQ questions are rendered/cleared.
+  - This ensures button enablement is recalculated from the updated `currentQuestions` state.
+
+### Verification
+- `npm run lint`
+- `npm test` (58 tests passing, 23 test files)
+
 ## 0.3.58 - 2026-03-10
 ### Summary
 Forenklet deltakerflyten videre ved å skjule ugyldige handlinger i riktig fase, gjøre nedtelling tydeligere, og forbedre konsistens/lokalisering i resultatoppsummering for manuell vurdering og OpenAI-råd.
