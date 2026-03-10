@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.76 - 2026-03-10
+### Summary
+Moved `appeal-handler` resolve validation feedback into the resolve form itself so short input errors no longer surface in the generic system response area.
+
+### Included
+- Resolve form UX fix:
+  - `public/appeal-handler.html`
+  - `public/appeal-handler.js`
+  - added inline validation message area for resolve fields
+  - added client-side minimum-length checks for decision reason and resolution note
+  - resolve-related `validation_error` responses now render inline near the form
+- Translation update:
+  - `public/i18n/appeal-handler-translations.js`
+  - added English validation copy for the resolve fields, used as fallback for other locales
+
+### Verification
+- `npm run lint`
+- `npm test -- test/m2-appeal-flow.test.ts`
+
 ## 0.3.75 - 2026-03-10
 ### Summary
 Adjusted the participant assessment UX so auto-started assessments keep manual follow-up controls visible and wait longer before showing a timeout.

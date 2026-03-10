@@ -31,6 +31,7 @@ const resolveAppealButton = document.getElementById("resolveAppeal");
 const handlerDecisionReasonInput = document.getElementById("handlerDecisionReason");
 const handlerResolutionNoteInput = document.getElementById("handlerResolutionNote");
 const handlerPassFailTotalInput = document.getElementById("handlerPassFailTotal");
+const resolveValidationMessage = document.getElementById("resolveValidationMessage");
 
 let currentLocale = resolveInitialLocale();
 let latestAppealQueue = [];
@@ -374,6 +375,32 @@ function toActionableErrorMessage(error) {
   }
 }
 
+function toValidationErrorMessage(error) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const raw = error.message ?? "";
+  const splitIndex = raw.indexOf(":");
+  if (splitIndex === -1) {
+    return null;
+  }
+
+  const payloadText = raw.slice(splitIndex + 1).trim();
+  try {
+    const payload = JSON.parse(payloadText);
+    if (payload?.error !== "validation_error" || !Array.isArray(payload.issues) || payload.issues.length === 0) {
+      return null;
+    }
+
+    return payload.issues
+      .map((issue) => (typeof issue?.message === "string" ? issue.message : "Validation error."))
+      .join(" ");
+  } catch {
+    return null;
+  }
+}
+
 function getAppealWorkspaceSettings() {
   const configured = participantRuntimeConfig?.appealWorkspace ?? {};
   const availableStatuses = sanitizeAppealStatuses(configured.availableStatuses, [
@@ -573,6 +600,48 @@ function resetResolutionInputs() {
   handlerDecisionReasonInput.value = "";
   handlerResolutionNoteInput.value = "";
   handlerPassFailTotalInput.value = defaultResolutionPassFailValue;
+  resetResolveValidationFeedback();
+}
+
+function resetResolveValidationFeedback() {
+  handlerDecisionReasonInput.classList.remove("is-invalid");
+  handlerResolutionNoteInput.classList.remove("is-invalid");
+  resolveValidationMessage.classList.remove("field-error");
+  resolveValidationMessage.removeAttribute("role");
+  resolveValidationMessage.textContent = "";
+}
+
+function setResolveValidationError(message, field = null) {
+  resetResolveValidationFeedback();
+  if (field) {
+    field.classList.add("is-invalid");
+  }
+  resolveValidationMessage.classList.add("field-error");
+  resolveValidationMessage.setAttribute("role", "alert");
+  resolveValidationMessage.textContent = message;
+}
+
+function validateResolveAppealInput() {
+  const decisionReason = handlerDecisionReasonInput.value.trim();
+  const resolutionNote = handlerResolutionNoteInput.value.trim();
+
+  if (decisionReason.length < 5) {
+    return {
+      valid: false,
+      message: t("appealHandler.validation.decisionReasonMin"),
+      field: handlerDecisionReasonInput,
+    };
+  }
+
+  if (resolutionNote.length < 5) {
+    return {
+      valid: false,
+      message: t("appealHandler.validation.resolutionNoteMin"),
+      field: handlerResolutionNoteInput,
+    };
+  }
+
+  return { valid: true, decisionReason, resolutionNote };
 }
 
 function setSelectedAppeal(appealId, resetInputs = false) {
@@ -857,6 +926,7 @@ claimAppealButton.addEventListener("click", async () => {
 
   await runWithBusyButton(claimAppealButton, async () => {
     try {
+      resetResolveValidationFeedback();
       const body = await apiFetch(`/api/appeals/${selectedAppealId}/claim`, headers, {
         method: "POST",
         body: JSON.stringify({}),
@@ -881,12 +951,19 @@ resolveAppealButton.addEventListener("click", async () => {
 
   await runWithBusyButton(resolveAppealButton, async () => {
     try {
+      const validation = validateResolveAppealInput();
+      if (!validation.valid) {
+        setResolveValidationError(validation.message, validation.field);
+        return;
+      }
+
+      resetResolveValidationFeedback();
       const body = await apiFetch(`/api/appeals/${selectedAppealId}/resolve`, headers, {
         method: "POST",
         body: JSON.stringify({
           passFailTotal: handlerPassFailTotalInput.value === "true",
-          decisionReason: handlerDecisionReasonInput.value,
-          resolutionNote: handlerResolutionNoteInput.value,
+          decisionReason: validation.decisionReason,
+          resolutionNote: validation.resolutionNote,
         }),
       });
       appealHandlerMessage.textContent = t("appealHandler.resolved");
@@ -909,10 +986,27 @@ resolveAppealButton.addEventListener("click", async () => {
         await loadAppealDetails(selectedAppealId);
       }
     } catch (error) {
-      appealHandlerMessage.textContent = toActionableErrorMessage(error);
+      const validationMessage = toValidationErrorMessage(error);
+      if (validationMessage) {
+        setResolveValidationError(validationMessage);
+      } else {
+        appealHandlerMessage.textContent = toActionableErrorMessage(error);
+      }
       log(error.message);
     }
   });
+});
+
+handlerDecisionReasonInput.addEventListener("input", () => {
+  if (resolveValidationMessage.textContent) {
+    resetResolveValidationFeedback();
+  }
+});
+
+handlerResolutionNoteInput.addEventListener("input", () => {
+  if (resolveValidationMessage.textContent) {
+    resetResolveValidationFeedback();
+  }
 });
 
 localeSelect.addEventListener("change", () => {

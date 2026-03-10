@@ -106,8 +106,8 @@
       <h3 data-i18n="appealHandler.detailsTitle"></h3>
       <div><label data-i18n="appealHandler.selectedAppeal"></label><input id="handlerSelectedAppealId" readonly value="-" /></div>
       <pre id="appealHandlerDetails"></pre>
-      <div><label data-i18n="appealHandler.resolveDecision"></label><textarea id="handlerDecisionReason" rows="2"></textarea></div>
-      <div><label data-i18n="appealHandler.resolveNote"></label><textarea id="handlerResolutionNote" rows="2"></textarea></div>
+      <div><label data-i18n="appealHandler.resolveDecision"></label><textarea id="handlerDecisionReason" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
+      <div><label data-i18n="appealHandler.resolveNote"></label><textarea id="handlerResolutionNote" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
       <div>
         <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail"></label>
         <select id="handlerPassFailTotal">
@@ -115,6 +115,7 @@
           <option value="false" data-i18n="appealHandler.fail"></option>
         </select>
       </div>
+      <div class="small" id="resolveValidationMessage"></div>
       <div class="row">
         <div><button id="claimAppeal" class="btn-secondary" data-i18n="appealHandler.claim"></button></div>
         <div><button id="resolveAppeal" class="btn-primary" data-i18n="appealHandler.resolve"></button></div>

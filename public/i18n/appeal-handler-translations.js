@@ -31,6 +31,8 @@ const extraTranslations = {
     "appealHandler.table.sla": "SLA",
     "appealHandler.loadedPrefix": "Appeals loaded",
     "defaults.noQueue": "No appeals loaded yet. Click Load appeals to fetch cases.",
+    "appealHandler.validation.decisionReasonMin": "Decision reason must be at least 5 characters.",
+    "appealHandler.validation.resolutionNoteMin": "Resolution note must be at least 5 characters.",
     "appealHandler.details.section.appeal": "Appeal",
     "appealHandler.details.section.submission": "Submission",
     "appealHandler.details.section.mcq": "MCQ",
