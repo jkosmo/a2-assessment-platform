@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.104 - 2026-03-11
+### Summary
+Progressed `#36` with a retention/deletion policy hardening draft that maps current assessment data categories to proposed retention windows, technical controls, ownership, and implementation slices pending legal approval.
+
+### Included
+- Added retention policy hardening draft:
+  - `doc/PHASE2_RETENTION_POLICY_HARDENING.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.103 - 2026-03-11
 ### Summary
 Completed `#42` by finishing the Azure environment runbook with explicit redeploy, teardown, and cost-review procedures to match the existing IaC/workflow automation baseline.
