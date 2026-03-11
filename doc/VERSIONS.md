@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.80 - 2026-03-11
+### Summary
+Refreshed README documentation so the documented workspace routes, manual-review workflow, reviewer defaults, and participant auto-assessment behavior now match the current implementation.
+
+### Included
+- README accuracy updates:
+  - `README.md`
+  - corrected manual-review API action from `POST /api/reviews/:reviewId/resolve` to `POST /api/reviews/:reviewId/override`
+  - added the dedicated `/manual-review` workspace route to the documented UI surface
+  - added a manual testing section for the reviewer workspace
+  - documented `manualReviewWorkspace.queuePageSize` and `identityDefaults.reviewer`
+  - corrected participant auto-start documentation to reflect that manual fallback assessment controls remain visible
+
+### Verification
+- Documentation-only update; no code-path changes were made
+
 ## 0.3.79 - 2026-03-10
 ### Summary
 Separated manual review from appeals into its own reviewer workspace, restored `appeal-handler` to an appeals-only queue, clarified the workspace scope in UI copy, and seeded a pending manual-review case so the reviewer queue is not empty in a standard environment.

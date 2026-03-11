@@ -84,7 +84,7 @@ npm run build
 - `GET /api/reviews`
 - `GET /api/reviews/:reviewId`
 - `POST /api/reviews/:reviewId/claim`
-- `POST /api/reviews/:reviewId/resolve`
+- `POST /api/reviews/:reviewId/override`
 - `GET /api/appeals`
 - `GET /api/appeals/:appealId`
 - `POST /api/appeals/:appealId/claim`
@@ -112,6 +112,7 @@ npm run build
 - `POST /api/admin/sync/org/delta`
 - `GET /participant` (manual participant test UI)
 - `GET /participant/completed` (manual completed-modules UI)
+- `GET /manual-review` (manual reviewer workspace UI)
 - `GET /appeal-handler` (manual appeal-handler workspace UI)
 - `GET /calibration` (manual calibration workspace UI)
 - `GET /admin-content` (manual content-management workspace UI)
@@ -173,7 +174,15 @@ http://localhost:3000/appeal-handler
 - Select an appeal row and run `Claim Appeal`
 - Resolve using decision reason + resolution note + pass/fail value
 
-6. Optional calibration flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
+6. Optional reviewer flow in dedicated workspace (`REVIEWER`/`ADMINISTRATOR` role):
+```text
+http://localhost:3000/manual-review
+```
+- Queue auto-loads open/in-review manual reviews on page load; use status pills to expand to `RESOLVED` when needed
+- Select a review row and run `Claim review`
+- Finalize using decision reason + override note + pass/fail value
+
+7. Optional calibration flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
 ```text
 http://localhost:3000/calibration
 ```
@@ -181,7 +190,7 @@ http://localhost:3000/calibration
 - Use status/date/module-version filters to inspect historical outcomes (status filter uses checkbox pills)
 - Review benchmark-anchor coverage and quality-signal flags
 
-7. Optional admin content flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
+8. Optional admin content flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
 ```text
 http://localhost:3000/admin-content
 ```
@@ -206,13 +215,14 @@ Participant console behavior is config-driven via:
 - shared CSS exposes brand tokens in `:root` (spacing, colors, card elevation) and a common `.layout-container` for centered max-width page layout
 - semantic button variants are available globally: `.btn-primary`, `.btn-secondary`, `.btn-danger`
 - `navigation.items[]` controls shared top-menu entries and per-role visibility
+- `manualReviewWorkspace.queuePageSize` controls `/manual-review` queue fetch limit (max `200`)
 - `appealWorkspace.queuePageSize` controls `/appeal-handler` queue fetch limit (max `200`)
 - `flow.autoStartAfterMcq`, `flow.pollIntervalSeconds`, `flow.maxWaitSeconds` control auto assessment start/polling in participant UI
-  - when `flow.autoStartAfterMcq=true`, manual assessment buttons are hidden in participant UI
+  - when `flow.autoStartAfterMcq=true`, participant UI still keeps manual `Check progress` / `View result` fallback controls available
 - `calibrationWorkspace.accessRoles` controls API access roles for `/api/calibration/workspace`
 - `calibrationWorkspace.defaults.statuses`, `lookbackDays`, `maxRows` control default query behavior
 - `calibrationWorkspace.signalThresholds` controls pass/manual-review/benchmark-coverage flags
-- `identityDefaults.participant`, `identityDefaults.appealHandler`, `identityDefaults.calibrationOwner`, and `identityDefaults.contentAdmin` set default test identity per workspace
+- `identityDefaults.participant`, `identityDefaults.reviewer`, `identityDefaults.appealHandler`, `identityDefaults.calibrationOwner`, and `identityDefaults.contentAdmin` set default test identity per workspace
 
 LLM provider mode is env-driven via:
 - `LLM_MODE=stub|azure_openai`
