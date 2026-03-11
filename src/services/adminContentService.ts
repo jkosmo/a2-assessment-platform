@@ -97,6 +97,48 @@ export async function createModule(input: CreateModuleInput) {
   return module;
 }
 
+export async function deleteModule(moduleId: string, actorId: string) {
+  const module = await adminContentRepository.findModuleDeleteSummary(moduleId);
+
+  if (!module) {
+    throw new Error("Module not found.");
+  }
+
+  const dependencyChecks = [
+    ["module versions", module._count.versions],
+    ["rubric versions", module._count.rubricVersions],
+    ["prompt template versions", module._count.promptTemplateVersions],
+    ["MCQ set versions", module._count.mcqSetVersions],
+    ["submissions", module._count.submissions],
+    ["certification statuses", module._count.certificationStatuses],
+  ].filter(([, count]) => typeof count === "number" && count > 0);
+
+  if (module.activeVersionId || dependencyChecks.length > 0) {
+    const dependencySummary = [
+      module.activeVersionId ? "active published version" : null,
+      ...dependencyChecks.map(([label, count]) => `${count} ${label}`),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(`Module cannot be deleted because it still has dependencies: ${dependencySummary}.`);
+  }
+
+  const deletedModule = await adminContentRepository.deleteModule(moduleId);
+
+  await recordAuditEvent({
+    entityType: "module",
+    entityId: moduleId,
+    action: "module_deleted",
+    actorId,
+    metadata: {
+      moduleId,
+      title: deletedModule.title,
+    },
+  });
+
+  return deletedModule;
+}
+
 async function getNextVersionNo(model: "rubric" | "prompt" | "mcq" | "module", moduleId: string) {
   if (model === "rubric") {
     const latest = await adminContentRepository.findLatestRubricVersion(moduleId);

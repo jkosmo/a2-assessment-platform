@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findModuleSummary = vi.fn();
+const findModuleDeleteSummary = vi.fn();
 const createModuleRecord = vi.fn();
 const findLatestRubricVersion = vi.fn();
 const findLatestPromptTemplateVersion = vi.fn();
@@ -14,11 +15,13 @@ const createModuleVersionRecord = vi.fn();
 const findPromptTemplateSummary = vi.fn();
 const findModuleVersionSummary = vi.fn();
 const publishModuleVersionRecord = vi.fn();
+const deleteModuleRecord = vi.fn();
 const recordAuditEvent = vi.fn();
 
 vi.mock("../../src/repositories/adminContentRepository.js", () => ({
   adminContentRepository: {
     findModuleSummary,
+    findModuleDeleteSummary,
     createModule: createModuleRecord,
     findLatestRubricVersion,
     findLatestPromptTemplateVersion,
@@ -32,6 +35,7 @@ vi.mock("../../src/repositories/adminContentRepository.js", () => ({
     findPromptTemplateSummary,
     findModuleVersionSummary,
     publishModuleVersion: publishModuleVersionRecord,
+    deleteModule: deleteModuleRecord,
   },
 }));
 
@@ -50,6 +54,7 @@ vi.mock("../../src/config/benchmarkExamples.js", () => ({
 describe("admin content service", () => {
   beforeEach(() => {
     findModuleSummary.mockReset();
+    findModuleDeleteSummary.mockReset();
     createModuleRecord.mockReset();
     findLatestRubricVersion.mockReset();
     findLatestPromptTemplateVersion.mockReset();
@@ -63,6 +68,7 @@ describe("admin content service", () => {
     findPromptTemplateSummary.mockReset();
     findModuleVersionSummary.mockReset();
     publishModuleVersionRecord.mockReset();
+    deleteModuleRecord.mockReset();
     recordAuditEvent.mockReset();
   });
 
@@ -117,6 +123,70 @@ describe("admin content service", () => {
       validFrom: new Date("2026-03-01T00:00:00.000Z"),
       validTo: new Date("2027-03-01T00:00:00.000Z"),
     });
+  });
+
+  it("deletes an empty module and records module_deleted audit metadata", async () => {
+    findModuleDeleteSummary.mockResolvedValue({
+      id: "module-1",
+      title: "Module One",
+      activeVersionId: null,
+      _count: {
+        versions: 0,
+        submissions: 0,
+        mcqSetVersions: 0,
+        certificationStatuses: 0,
+        rubricVersions: 0,
+        promptTemplateVersions: 0,
+      },
+    });
+    deleteModuleRecord.mockResolvedValue({
+      id: "module-1",
+      title: "Module One",
+    });
+
+    const { deleteModule } = await import("../../src/services/adminContentService.js");
+
+    const result = await deleteModule("module-1", "admin-1");
+
+    expect(deleteModuleRecord).toHaveBeenCalledWith("module-1");
+    expect(recordAuditEvent).toHaveBeenCalledWith({
+      entityType: "module",
+      entityId: "module-1",
+      action: "module_deleted",
+      actorId: "admin-1",
+      metadata: {
+        moduleId: "module-1",
+        title: "Module One",
+      },
+    });
+    expect(result).toEqual({
+      id: "module-1",
+      title: "Module One",
+    });
+  });
+
+  it("blocks module deletion when the module has dependencies", async () => {
+    findModuleDeleteSummary.mockResolvedValue({
+      id: "module-1",
+      title: "Module One",
+      activeVersionId: "module-version-1",
+      _count: {
+        versions: 1,
+        submissions: 0,
+        mcqSetVersions: 1,
+        certificationStatuses: 0,
+        rubricVersions: 1,
+        promptTemplateVersions: 1,
+      },
+    });
+
+    const { deleteModule } = await import("../../src/services/adminContentService.js");
+
+    await expect(deleteModule("module-1", "admin-1")).rejects.toThrow(
+      "Module cannot be deleted because it still has dependencies:",
+    );
+
+    expect(deleteModuleRecord).not.toHaveBeenCalled();
   });
 
   it("rejects module-version creation when a dependency belongs to another module", async () => {

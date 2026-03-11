@@ -7,6 +7,30 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.109 - 2026-03-11
+### Summary
+Improved the admin content workspace for multilingual module setup by making the module title field JSON-friendly, and added guarded module deletion so empty modules can be cleaned up safely.
+
+### Included
+- Replaced the module title input with a multiline textarea in the admin content workspace:
+  - `public/admin-content.html`
+- Added delete-selected-module action in the admin content workspace UI:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Added guarded backend delete support for modules with dependency checks and audit logging:
+  - `src/routes/adminContent.ts`
+  - `src/services/adminContentService.ts`
+  - `src/repositories/adminContentRepository.ts`
+- Added regression coverage for translations, service behavior, and integration behavior:
+  - `test/admin-content-translations.test.js`
+  - `test/unit/admin-content-service.test.ts`
+  - `test/m2-admin-content-publication.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/m2-admin-content-publication.test.ts test/unit/admin-content-service.test.ts test/admin-content-translations.test.js`
+
 ## 0.3.108 - 2026-03-11
 ### Summary
 Added a V2 readiness checklist to support a go/no-go decision on whether the current platform state should stay in `0.3.x`, move to an internal-pilot `0.4.x`, or be promoted to a clearer V2 milestone such as `0.5.0`.

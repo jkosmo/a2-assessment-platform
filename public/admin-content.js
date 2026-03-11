@@ -27,6 +27,7 @@ const moduleValidToInput = document.getElementById("moduleValidTo");
 const createModuleButton = document.getElementById("createModule");
 const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const loadModulesButton = document.getElementById("loadModules");
+const deleteModuleButton = document.getElementById("deleteModule");
 const moduleDropdown = document.getElementById("moduleDropdown");
 const selectedModuleMeta = document.getElementById("selectedModuleMeta");
 
@@ -577,6 +578,33 @@ async function handleCreateModule(options = { silent: false }) {
   return body;
 }
 
+async function handleDeleteSelectedModule() {
+  if (!selectedModuleId) {
+    throw new Error(t("adminContent.errors.moduleIdRequired"));
+  }
+
+  const module = modules.find((item) => item.id === selectedModuleId) ?? null;
+  const moduleLabel = module?.title ?? selectedModuleId;
+  const confirmed = window.confirm(
+    t("adminContent.confirm.deleteModule").replace("{module}", moduleLabel),
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}`, headers, {
+    method: "DELETE",
+  });
+
+  modules = modules.filter((item) => item.id !== selectedModuleId);
+  const nextModuleId = modules[0]?.id ?? "";
+  setSelectedModule(nextModuleId);
+  renderModuleDropdown();
+  renderModuleMeta();
+  setMessage(t("adminContent.message.moduleDeleted"));
+  log(body);
+}
+
 async function handleCreateRubricVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
@@ -725,6 +753,18 @@ loadModulesButton.addEventListener("click", async () => {
   await runWithBusyButton(loadModulesButton, async () => {
     try {
       await loadModules();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message);
+      log(message);
+    }
+  });
+});
+
+deleteModuleButton.addEventListener("click", async () => {
+  await runWithBusyButton(deleteModuleButton, async () => {
+    try {
+      await handleDeleteSelectedModule();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
       setMessage(message);

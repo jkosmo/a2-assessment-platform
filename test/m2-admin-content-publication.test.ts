@@ -263,4 +263,64 @@ describe("MVP admin content management and publication", () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toBe("validation_error");
   });
+
+  it("allows deleting an empty module and blocks deleting a module with dependencies", async () => {
+    const createEmptyModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": `Disposable Module ${Date.now()}`,
+          nb: "Slettbar modul",
+          nn: "Slettbar modul",
+        },
+      });
+
+    expect(createEmptyModuleResponse.status).toBe(201);
+    const emptyModuleId = createEmptyModuleResponse.body.module.id as string;
+
+    const deleteEmptyResponse = await request(app)
+      .delete(`/api/admin/content/modules/${emptyModuleId}`)
+      .set(adminHeaders);
+
+    expect(deleteEmptyResponse.status).toBe(200);
+    expect(deleteEmptyResponse.body.deletedModule.id).toBe(emptyModuleId);
+
+    const createProtectedModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": `Protected Module ${Date.now()}`,
+          nb: "Beskyttet modul",
+          nn: "Verna modul",
+        },
+      });
+
+    expect(createProtectedModuleResponse.status).toBe(201);
+    const protectedModuleId = createProtectedModuleResponse.body.module.id as string;
+
+    const rubricResponse = await request(app)
+      .post(`/api/admin/content/modules/${protectedModuleId}/rubric-versions`)
+      .set(adminHeaders)
+      .send({
+        criteria: { relevance_for_case: "0-4" },
+        scalingRule: { practical_weight: 70, max_total: 20 },
+        passRule: {
+          total_min: 70,
+          practical_min_percent: 50,
+          mcq_min_percent: 60,
+          no_open_red_flags: true,
+        },
+      });
+
+    expect(rubricResponse.status).toBe(201);
+
+    const blockedDeleteResponse = await request(app)
+      .delete(`/api/admin/content/modules/${protectedModuleId}`)
+      .set(adminHeaders);
+
+    expect(blockedDeleteResponse.status).toBe(400);
+    expect(blockedDeleteResponse.body.error).toBe("delete_module_failed");
+  });
 });

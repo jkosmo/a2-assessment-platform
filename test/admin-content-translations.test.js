@@ -17,6 +17,8 @@ describe("admin content translation resources", () => {
       "adminContentPage.title",
       "adminContent.module.title",
       "adminContent.help.moduleOverview",
+      "adminContent.select.deleteModule",
+      "adminContent.help.deleteModule",
       "adminContent.rubric.title",
       "adminContent.help.rubricOverview",
       "adminContent.prompt.title",
@@ -28,6 +30,7 @@ describe("admin content translation resources", () => {
       "adminContent.help.moduleTaskText",
       "adminContent.publish.title",
       "adminContent.errors.valueRequiredPrefix",
+      "adminContent.confirm.deleteModule",
     ];
 
     for (const locale of supportedLocales) {

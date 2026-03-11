@@ -51,7 +51,7 @@
       <h3 data-i18n="adminContent.module.title">1) Create module shell</h3>
       <div class="small" data-i18n="adminContent.help.moduleOverview">Start here. This creates the base module container before adding scoring, evaluation instruction, and test.</div>
       <div class="row">
-        <div><label data-i18n="adminContent.module.name">Module name shown to participants</label><input id="moduleTitle" /></div>
+        <div><label data-i18n="adminContent.module.name">Module name shown to participants</label><textarea id="moduleTitle" rows="3"></textarea></div>
         <div><label data-i18n="adminContent.module.certificationLevel">Level (for example foundation)</label><input id="moduleCertificationLevel" /></div>
       </div>
       <div class="small" data-i18n="adminContent.help.moduleName">Use plain text or locale JSON: {&quot;en-GB&quot;:&quot;...&quot;,&quot;nb&quot;:&quot;...&quot;,&quot;nn&quot;:&quot;...&quot;}.</div>
@@ -78,6 +78,8 @@
         </div>
       </div>
       <button id="loadModules" class="btn-secondary" data-i18n="adminContent.select.loadModules">Load modules</button>
+      <button id="deleteModule" class="btn-danger" data-i18n="adminContent.select.deleteModule">Delete selected module</button>
+      <div class="small" data-i18n="adminContent.help.deleteModule">Deletes only empty modules without submissions, versions, or published content.</div>
       <div class="small" id="selectedModuleMeta"></div>
     </section>
 

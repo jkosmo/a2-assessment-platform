@@ -11,6 +11,27 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    findModuleDeleteSummary(moduleId: string) {
+      return client.module.findUnique({
+        where: { id: moduleId },
+        select: {
+          id: true,
+          title: true,
+          activeVersionId: true,
+          _count: {
+            select: {
+              versions: true,
+              submissions: true,
+              mcqSetVersions: true,
+              certificationStatuses: true,
+              rubricVersions: true,
+              promptTemplateVersions: true,
+            },
+          },
+        },
+      });
+    },
+
     createModule(data: {
       title: string;
       description?: string;
@@ -28,6 +49,16 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           validFrom: true,
           validTo: true,
           createdAt: true,
+        },
+      });
+    },
+
+    deleteModule(moduleId: string) {
+      return client.module.delete({
+        where: { id: moduleId },
+        select: {
+          id: true,
+          title: true,
         },
       });
     },

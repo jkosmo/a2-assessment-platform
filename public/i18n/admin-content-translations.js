@@ -22,6 +22,7 @@ const extraTranslations = {
     "adminContent.select.title": "Select module to configure",
     "adminContent.select.moduleId": "Module ID",
     "adminContent.select.loadModules": "Load modules",
+    "adminContent.select.deleteModule": "Delete selected module",
     "adminContent.select.moduleDropdown": "Available modules",
     "adminContent.rubric.title": "2) Submission scoring rules",
     "adminContent.rubric.criteria": "Criteria JSON",
@@ -52,6 +53,7 @@ const extraTranslations = {
     "adminContent.meta.noneSelected": "none",
     "adminContent.meta.loadedCountPrefix": "Loaded modules",
     "adminContent.message.moduleCreated": "Module created.",
+    "adminContent.message.moduleDeleted": "Module deleted.",
     "adminContent.message.rubricCreated": "Scoring rules saved.",
     "adminContent.message.promptCreated": "Evaluation instruction saved.",
     "adminContent.message.mcqCreated": "Test saved.",
@@ -63,12 +65,15 @@ const extraTranslations = {
     "adminContent.errors.moduleIdRequired": "Module ID is required.",
     "adminContent.errors.moduleVersionIdRequired": "Module version ID is required.",
     "adminContent.errors.invalidJsonPrefix": "Invalid JSON in",
+    "adminContent.confirm.deleteModule": "Delete module \"{module}\"? This only works for empty modules without dependencies.",
     "adminContent.help.moduleOverview":
       "Start here. This creates the base module container before adding scoring, evaluation instruction, and test.",
     "adminContent.help.moduleName":
       "Use plain text or locale JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
     "adminContent.help.moduleDescription":
       "Shown in module lists. Supports the same locale JSON format.",
+    "adminContent.help.deleteModule":
+      "Deletes only empty modules without submissions, versions, or published content.",
     "adminContent.help.moduleValidity":
       "Leave empty for always available. Dates are interpreted as UTC midnight.",
     "adminContent.help.rubricOverview":
@@ -135,6 +140,7 @@ const extraTranslations = {
     "adminContent.select.title": "Velg modul som skal konfigureres",
     "adminContent.select.moduleId": "Modul-ID",
     "adminContent.select.loadModules": "Last moduler",
+    "adminContent.select.deleteModule": "Slett valgt modul",
     "adminContent.select.moduleDropdown": "Tilgjengelige moduler",
     "adminContent.rubric.title": "2) Vurderingsregler for innlevering",
     "adminContent.rubric.criteria": "Kriterier JSON",
@@ -165,6 +171,7 @@ const extraTranslations = {
     "adminContent.meta.noneSelected": "ingen",
     "adminContent.meta.loadedCountPrefix": "Lastede moduler",
     "adminContent.message.moduleCreated": "Modul opprettet.",
+    "adminContent.message.moduleDeleted": "Modul slettet.",
     "adminContent.message.rubricCreated": "Vurderingsregler lagret.",
     "adminContent.message.promptCreated": "Vurderingsinstruks lagret.",
     "adminContent.message.mcqCreated": "Test lagret.",
@@ -176,12 +183,16 @@ const extraTranslations = {
     "adminContent.errors.moduleIdRequired": "Modul-ID er påkrevd.",
     "adminContent.errors.moduleVersionIdRequired": "Modulversjon-ID er påkrevd.",
     "adminContent.errors.invalidJsonPrefix": "Ugyldig JSON i",
+    "adminContent.confirm.deleteModule":
+      "Slette modulen \"{module}\"? Dette virker bare for tomme moduler uten avhengigheter.",
     "adminContent.help.moduleOverview":
       "Start her. Dette oppretter modulbeholderen før du legger til regler, vurderingsinstruks og test.",
     "adminContent.help.moduleName":
       "Bruk vanlig tekst eller locale-JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
     "adminContent.help.moduleDescription":
       "Vises i modullister. Støtter samme locale-JSON-format.",
+    "adminContent.help.deleteModule":
+      "Sletter bare tomme moduler uten innleveringer, versjoner eller publisert innhold.",
     "adminContent.help.moduleValidity":
       "Tomme felter betyr alltid tilgjengelig. Dato tolkes som UTC midnatt.",
     "adminContent.help.rubricOverview":
@@ -248,6 +259,7 @@ const extraTranslations = {
     "adminContent.select.title": "Vel modul som skal konfigurerast",
     "adminContent.select.moduleId": "Modul-ID",
     "adminContent.select.loadModules": "Last modular",
+    "adminContent.select.deleteModule": "Slett vald modul",
     "adminContent.select.moduleDropdown": "Tilgjengelege modular",
     "adminContent.rubric.title": "2) Vurderingsreglar for innlevering",
     "adminContent.rubric.criteria": "Kriterium JSON",
@@ -278,6 +290,7 @@ const extraTranslations = {
     "adminContent.meta.noneSelected": "ingen",
     "adminContent.meta.loadedCountPrefix": "Lasta modular",
     "adminContent.message.moduleCreated": "Modul oppretta.",
+    "adminContent.message.moduleDeleted": "Modul sletta.",
     "adminContent.message.rubricCreated": "Vurderingsreglar lagra.",
     "adminContent.message.promptCreated": "Vurderingsinstruks lagra.",
     "adminContent.message.mcqCreated": "Test lagra.",
@@ -289,12 +302,16 @@ const extraTranslations = {
     "adminContent.errors.moduleIdRequired": "Modul-ID er påkravd.",
     "adminContent.errors.moduleVersionIdRequired": "Modulversjon-ID er påkravd.",
     "adminContent.errors.invalidJsonPrefix": "Ugyldig JSON i",
+    "adminContent.confirm.deleteModule":
+      "Slette modulen \"{module}\"? Dette verkar berre for tomme modular utan avhengigheiter.",
     "adminContent.help.moduleOverview":
       "Start her. Dette opprettar modulbehaldaren før du legg til reglar, vurderingsinstruks og test.",
     "adminContent.help.moduleName":
       "Bruk vanleg tekst eller locale-JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
     "adminContent.help.moduleDescription":
       "Blir vist i modullister. Støttar same locale-JSON-format.",
+    "adminContent.help.deleteModule":
+      "Slettar berre tomme modular utan innleveringar, versjonar eller publisert innhald.",
     "adminContent.help.moduleValidity":
       "Tomme felt betyr alltid tilgjengeleg. Dato blir tolka som UTC midnatt.",
     "adminContent.help.rubricOverview":

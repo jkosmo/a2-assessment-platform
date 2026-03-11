@@ -5,6 +5,7 @@ import {
   createBenchmarkExampleVersion,
   createMcqSetVersion,
   createModuleVersion,
+  deleteModule,
   createPromptTemplateVersion,
   createRubricVersion,
   publishModuleVersion,
@@ -155,6 +156,24 @@ adminContentRouter.post("/modules", async (request, response) => {
     response.status(400).json({
       error: "create_module_failed",
       message: error instanceof Error ? error.message : "Could not create module.",
+    });
+  }
+});
+
+adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const deletedModule = await deleteModule(request.params.moduleId, actorId);
+    response.json({ deletedModule });
+  } catch (error) {
+    response.status(400).json({
+      error: "delete_module_failed",
+      message: error instanceof Error ? error.message : "Could not delete module.",
     });
   }
 });
