@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.103 - 2026-03-11
+### Summary
+Completed `#42` by finishing the Azure environment runbook with explicit redeploy, teardown, and cost-review procedures to match the existing IaC/workflow automation baseline.
+
+### Included
+- Extended Azure environment runbook with:
+  - redeploy steps for staging and production
+  - teardown commands for dedicated staging/production resource groups
+  - recurring cost-review checklist
+  - `doc/AZURE_ENVIRONMENTS.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.102 - 2026-03-11
 ### Summary
 Progressed `#68` with a discovery note for composite certifications built from module sets, covering architecture options, risk/mitigation, phased rollout, rollback, complexity assessment, and recommended issue splitting.

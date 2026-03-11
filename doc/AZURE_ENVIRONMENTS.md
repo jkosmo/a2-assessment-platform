@@ -86,6 +86,36 @@ For each environment, define variables/secrets used by workflow:
 - Waits for `production` environment approval.
 - Deploys `production` after approval.
 
+## Redeploy runbook
+Redeploy staging:
+1. Push the desired commit to `main` or trigger `.github/workflows/deploy-azure.yml`.
+2. Confirm the `deploy-staging` job completes.
+3. Verify `/healthz`, `/version`, and a minimal participant flow in staging.
+
+Redeploy production:
+1. Trigger `.github/workflows/deploy-azure.yml` with `deploy_production=true` and the desired `ref`.
+2. Wait for `deploy-staging` to complete first.
+3. Approve the `production` GitHub Environment gate.
+4. Verify `/healthz`, `/version`, and one end-to-end production smoke path after deploy.
+
+## Teardown runbook
+Teardown should remove the whole environment resource group to avoid orphaned cost.
+
+Staging example:
+```powershell
+az group delete --name rg-a2-assessment-staging --yes --no-wait
+```
+
+Production example:
+```powershell
+az group delete --name rg-a2-assessment-production --yes --no-wait
+```
+
+After teardown:
+1. Confirm the resource group no longer exists.
+2. Confirm budget/alert objects tied to the deleted scope are removed.
+3. Recreate the environment only through `deploy-environment.ps1` or the GitHub Actions workflow, never by manual portal drift.
+
 ## Azure OpenAI runtime profiles
 Use environment variables to switch model cost/quality profile without code changes.
 
@@ -145,6 +175,17 @@ Why:
 - Resource tags: `environment`, `costCenter`, `owner`.
 - Optional monthly budget + alert via `configure-cost-guardrails.ps1`.
 - Budget setup requires suitable billing permissions.
+
+## Cost review runbook
+Run cost review at least monthly and after any SKU/config change.
+
+Checklist:
+1. Review current spend and forecast for each environment resource group.
+2. Confirm budget still matches intended non-critical baseline.
+3. Confirm App Service SKU is still the intended low-cost tier.
+4. Confirm no unexpected always-on, premium, or duplicate resources have appeared.
+5. Confirm resource tags (`environment`, `costCenter`, `owner`) remain present for chargeback filtering.
+6. If cost drift is found, update environment variables or Bicep parameters and redeploy rather than editing resources manually.
 
 ## Manual verification checklist
 1. Confirm RG exists per environment.
