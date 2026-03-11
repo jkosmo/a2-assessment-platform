@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.105 - 2026-03-11
+### Summary
+Progressed `#47` with a moderated usability test plan covering participant and admin/reviewer journeys, module-switch/resume behavior, evidence capture, severity scoring, and backlog conversion guidance.
+
+### Included
+- Added usability test plan:
+  - `doc/PHASE2_USABILITY_TEST_PLAN.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.104 - 2026-03-11
 ### Summary
 Progressed `#36` with a retention/deletion policy hardening draft that maps current assessment data categories to proposed retention windows, technical controls, ownership, and implementation slices pending legal approval.
