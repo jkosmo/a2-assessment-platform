@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.89 - 2026-03-11
+### Summary
+Continued `#84` by adding focused unit coverage for `reportingService.ts`, targeting service-layer aggregation, filtering, MCQ quality flagging, and CSV serialization behavior.
+
+### Included
+- New unit test:
+  - `test/unit/reporting-service.test.ts`
+- Added service-level unit coverage for:
+  - pass-rate aggregation filtered by requested outcome
+  - MCQ quality flagging for easy/low-discrimination questions
+  - CSV export escaping for commas, quotes, and null values
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.88 - 2026-03-11
 ### Summary
 Continued `#84` by adding focused unit coverage for `submissionService.ts`, especially the submission-creation path that combines module lookup, document parsing, persistence, audit logging, and operational logging.
