@@ -178,7 +178,7 @@ Current deployment model:
 - production deploy behind manual approval
 - Azure Monitor / runbook support for operations
 
-Development currently uses SQLite bootstrap, while production-oriented deployment targets PostgreSQL-compatible infrastructure. That mismatch is already tracked as architectural debt.
+Development currently uses SQLite bootstrap, while production-oriented deployment targets PostgreSQL-compatible infrastructure. That mismatch is tracked as architectural debt, but is currently an accepted backlog deferment for the present workload profile.
 
 ## Known Architectural Debt
 
@@ -186,6 +186,11 @@ The most important currently known gaps are:
 - development database engine does not match production target architecture
 - some broader unit-test coverage still depends too much on integration setup
 - several architecture decisions live across design notes and release notes rather than one permanent reference
+
+Current posture on database engine mismatch:
+- keep SQLite for now because the expected user base is small and the workload is non-critical
+- re-evaluate if concurrency, latency, scale-out, backup/recovery, or operational fragility symptoms appear
+- see `doc/POSTGRES_MIGRATION_PLAN.md` for symptom list and migration sequence
 
 ## Related Documents
 

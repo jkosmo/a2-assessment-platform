@@ -7,6 +7,21 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.107 - 2026-03-11
+### Summary
+Updated the PostgreSQL migration backlog stance for `#91`: SQLite remains the chosen runtime for now, with PostgreSQL deferred to `Pri-4 / Version X` unless concrete operational symptoms appear.
+
+### Included
+- Extended PostgreSQL migration note with:
+  - explicit defer decision for the current small, non-critical workload
+  - symptom list that should trigger re-evaluation
+  - `doc/POSTGRES_MIGRATION_PLAN.md`
+- Updated architecture note to reflect the accepted temporary deferment:
+  - `doc/ARCHITECTURE.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.106 - 2026-03-11
 ### Summary
 Progressed `#91` with a repo-specific PostgreSQL migration plan covering Prisma provider alignment, script replacement, CI changes, Azure runtime wiring, rollback boundaries, and phased verification.

@@ -11,6 +11,23 @@ At the same time, the architecture documentation states PostgreSQL-compatible pr
 
 This note defines a safe migration plan. It is not the migration itself.
 
+## Current backlog decision
+Decision date: `2026-03-11`
+
+Current recommendation:
+- stay on SQLite for now
+- treat PostgreSQL migration as backlog only
+- priority: `Pri-4`
+- target: `Version X`
+
+Reasoning for deferral:
+- expected scale is modest, approximately 60 total users
+- the solution is explicitly non-critical
+- current SQLite path is already deployed and operational
+- introducing PostgreSQL now would increase cost and migration risk before there is observed need
+
+This means `#91` should be treated as an option kept ready in the backlog, not as active implementation work.
+
 ## Current coupling points
 Files that currently assume SQLite:
 - `prisma/schema.prisma`
@@ -34,6 +51,52 @@ Operational consequence:
 - manual migration scripts based on `node:sqlite` will stop working immediately
 - CI may fail before replacement database orchestration exists
 - runtime deploy can break if Azure still points to a file-backed `DATABASE_URL`
+
+## Reasons to stay on SQLite now
+For the current workload profile, SQLite still has real advantages:
+- lowest runtime cost because there is no separate managed database service
+- simpler operational footprint
+- fewer moving parts in deploy and recovery for a non-critical internal tool
+- acceptable performance for low concurrency if the current symptoms remain absent
+
+The threshold for moving should therefore be observed pain, not architectural preference alone.
+
+## Symptoms that should trigger re-evaluation
+Re-open active PostgreSQL implementation work if one or more of these appear in staging or production:
+
+### Concurrency and correctness symptoms
+- frequent `SQLITE_BUSY`, `database is locked`, or equivalent write-contention failures
+- queue-processing delays that correlate with concurrent writes
+- requests that intermittently fail only under overlapping submission/review/appeal activity
+
+### Performance symptoms
+- sustained increase in API latency during normal work hours with database access as the likely bottleneck
+- participant flow feels slow specifically on write-heavy steps such as submission creation, MCQ submit, manual-review override, or appeal resolution
+- background jobs lag even when CPU and network look healthy
+
+### Operational symptoms
+- inability to run more than one app instance safely because of file-backed database constraints
+- difficulty backing up, restoring, or inspecting production data confidently
+- deploys or restarts create database-file risk, corruption concern, or operational fragility
+- database file growth becomes awkward to manage operationally
+
+### Product and reporting symptoms
+- reporting/export workloads start interfering with normal transactional use
+- calibration, reporting, or admin workflows need heavier querying than SQLite handles comfortably
+- audit/compliance or retention tooling becomes too hard to implement safely on the current engine
+
+## Symptom watch list
+Practical signals to monitor:
+- error logs containing SQLite lock/busy messages
+- increased request duration on:
+  - `POST /api/submissions`
+  - `POST /api/modules/:moduleId/mcq/submit`
+  - `POST /api/reviews/:reviewId/override`
+  - `POST /api/appeals/:appealId/resolve`
+- assessment queue backlog growth without corresponding CPU saturation
+- staging/production pressure to scale out App Service horizontally
+
+If these stay absent, staying on SQLite remains the lower-risk choice.
 
 ## Recommended migration strategy
 Do this in controlled slices, not one large branch.
@@ -180,7 +243,12 @@ Unsafe rollback:
 - switching production/staging runtime to PostgreSQL without a reversible deploy plan or verified backup/export path
 
 ## Recommendation
-Implement `#91` as a sequence of small issues or commits, not one large migration.
+Current recommendation:
+- defer PostgreSQL migration
+- keep `#91` in backlog as `Pri-4 / Version X`
+- continue running SQLite until concrete symptoms justify change
+
+If the symptoms above appear, then implement `#91` as a sequence of small issues or commits, not one large migration.
 
 Recommended order:
 1. CI/test PostgreSQL bootstrap
