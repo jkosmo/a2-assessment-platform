@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.83 - 2026-03-11
+### Summary
+Added a permanent architecture overview and clarified the README introduction so the system purpose and core functional scope are easier to understand.
+
+### Included
+- Documentation additions:
+  - `doc/ARCHITECTURE.md`
+  - added a stable architecture reference covering purpose, core domain flow, main components, workspaces, technologies/products/standards, deployment shape, and known architectural debt
+- README clarification:
+  - `README.md`
+  - added explicit sections for solution purpose and core functionality
+  - added a direct link to `doc/ARCHITECTURE.md`
+
+### Verification
+- Documentation-only update; no code-path changes were made
+
 ## 0.3.82 - 2026-03-11
 ### Summary
 Expanded the unit-test path with SLA and decision-service coverage and added dedicated unit/integration Vitest entrypoints.

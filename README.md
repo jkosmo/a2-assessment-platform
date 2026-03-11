@@ -1,5 +1,23 @@
 # A2 Assessment Platform
 
+This is an internal assessment platform for delivering modules, evaluating participant submissions, routing borderline cases to human handling, and preserving an auditable decision trail from first assessment to appeal resolution.
+
+## Purpose
+- support module-based participant assessment with both automated and human-assisted decision steps
+- separate operational work by role: participant, reviewer, appeal handler, calibrator, and administrator
+- keep assessment decisions traceable through immutable lineage, audit events, and reporting
+- make the platform deployable and operable in Azure with configuration-driven behaviour
+
+## Core functionality
+- module delivery with active/published version control
+- participant submission flow for free-text work and MCQ
+- asynchronous assessment job processing and decision creation
+- manual review workflow for cases that need human intervention
+- appeal workflow for disputed completed decisions
+- calibration and reporting surfaces for governance and quality follow-up
+- admin content management for rubrics, prompts, benchmark examples, MCQ sets, and module versions
+- localization baseline for `en-GB`, `nb`, and `nn`
+
 Current implementation includes MVP core flow, governance flow, and observability baseline:
 - Foundation auth/RBAC with mock + Entra modes.
 - Module/version retrieval and participant flow (submission + MCQ + assessment result).
@@ -9,6 +27,8 @@ Current implementation includes MVP core flow, governance flow, and observabilit
 - Admin content publication flow for rubric/prompt/MCQ/module versions.
 - Internationalization baseline (`en-GB`, `nb`, `nn`) for participant UI and key API payloads.
 - Azure deployment baseline (staging auto deploy, production approval gate, alerts/runbooks).
+
+Architecture overview: `doc/ARCHITECTURE.md`
 
 ## Tech
 - Node.js + TypeScript + Express
