@@ -21,6 +21,18 @@
       .selected-badge { display: inline-block; margin-top: var(--space-1); font-size: 11px; font-weight: 600; color: var(--color-selected-badge); }
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); }
       .section-locked { opacity: 0.75; }
+      .flow-progress { margin: 0 0 var(--space-2); }
+      .flow-progress-summary { font-size: 13px; font-weight: 600; color: var(--color-navy); margin-bottom: var(--space-1); }
+      .flow-progress-steps { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); padding: 0; margin: 0; }
+      .flow-step { display: grid; gap: calc(var(--space-1) * 0.5); padding: var(--space-1); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-surface); color: var(--color-meta); }
+      .flow-step-number { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; background: #e6ebf5; color: var(--color-navy); font-size: 12px; font-weight: 700; }
+      .flow-step-label { font-size: 12px; font-weight: 600; line-height: 1.4; }
+      .flow-step.is-active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); }
+      .flow-step.is-active .flow-step-number { background: var(--color-blue); color: var(--color-surface); }
+      .flow-step.is-completed { border-color: var(--color-success); background: #f4fbf7; color: #1f7a4d; }
+      .flow-step.is-completed .flow-step-number { background: var(--color-success); color: var(--color-surface); }
+      .flow-step.is-pending { opacity: 0.8; }
+      @media (max-width: 900px) { .flow-progress-steps { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
@@ -29,6 +41,31 @@
     <p class="small" data-i18n="page.subtitle">Manual flow: modules -&gt; submission -&gt; MCQ -&gt; assessment/result.</p>
     <p class="small"><span data-i18n="page.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
+    <section id="flowProgress" class="card flow-progress" aria-label="Assessment flow progress: Step 2 of 5">
+      <div id="flowProgressSummary" class="flow-progress-summary">Step 2 of 5</div>
+      <ol id="flowProgressSteps" class="flow-progress-steps">
+        <li class="flow-step" data-step="1">
+          <span class="flow-step-number">1</span>
+          <span class="flow-step-label" data-i18n="progress.identity">Identity</span>
+        </li>
+        <li class="flow-step" data-step="2">
+          <span class="flow-step-number">2</span>
+          <span class="flow-step-label" data-i18n="progress.selectModule">Select Module</span>
+        </li>
+        <li class="flow-step" data-step="3">
+          <span class="flow-step-number">3</span>
+          <span class="flow-step-label" data-i18n="progress.submitWork">Submit Work</span>
+        </li>
+        <li class="flow-step" data-step="4">
+          <span class="flow-step-number">4</span>
+          <span class="flow-step-label" data-i18n="progress.completeMcq">Complete MCQ</span>
+        </li>
+        <li class="flow-step" data-step="5">
+          <span class="flow-step-number">5</span>
+          <span class="flow-step-label" data-i18n="progress.assessment">Assessment</span>
+        </li>
+      </ol>
+    </section>
     <div class="card">
       <div class="row">
         <div>

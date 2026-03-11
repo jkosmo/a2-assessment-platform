@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.99 - 2026-03-11
+### Summary
+Implemented `#79` by adding an accessible step progress indicator to the participant assessment flow so users can see where they are in the sequence from identity to assessment.
+
+### Included
+- Added participant-only progress indicator markup and styles:
+  - `public/participant.html`
+- Updated participant flow rendering so the active/completed/pending step updates as the flow advances:
+  - `public/participant.js`
+- Added participant translation keys for step labels and progress summary text:
+  - `public/i18n/participant-translations.js`
+- Added regression coverage ensuring the progress indicator is present only on the participant page:
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/participant-translations.test.js test/workspace-html-fallbacks.test.js test/workspace-validation-accessibility.test.js`
+
 ## 0.3.98 - 2026-03-11
 ### Summary
 Completed `#73` by locking accessible validation hint and error styling into the shared workspace CSS and adding regression tests for hint/error/ARIA wiring across participant, appeal-handler, and manual-review.
