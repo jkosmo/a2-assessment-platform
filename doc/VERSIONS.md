@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.106 - 2026-03-11
+### Summary
+Progressed `#91` with a repo-specific PostgreSQL migration plan covering Prisma provider alignment, script replacement, CI changes, Azure runtime wiring, rollback boundaries, and phased verification.
+
+### Included
+- Added PostgreSQL migration plan:
+  - `doc/POSTGRES_MIGRATION_PLAN.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.105 - 2026-03-11
 ### Summary
 Progressed `#47` with a moderated usability test plan covering participant and admin/reviewer journeys, module-switch/resume behavior, evidence capture, severity scoring, and backlog conversion guidance.
