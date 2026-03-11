@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.88 - 2026-03-11
+### Summary
+Continued `#84` by adding focused unit coverage for `submissionService.ts`, especially the submission-creation path that combines module lookup, document parsing, persistence, audit logging, and operational logging.
+
+### Included
+- New unit test:
+  - `test/unit/submission-service.test.ts`
+- Added service-level unit coverage for:
+  - validation failure when no published active module version exists
+  - successful submission creation from parsed attachment text
+  - propagation of locale, attachment, and submission status into repository persistence
+  - audit and operational logging side effects after successful submission creation
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.87 - 2026-03-11
 ### Summary
 Expanded `#84` with the first additional unit-test slice for workflow-heavy services by covering `appealService.ts` and `manualReviewService.ts`.
