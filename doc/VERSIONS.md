@@ -9,11 +9,15 @@ This document tracks release versions and what each version includes.
 
 ## 0.3.85 - 2026-03-11
 ### Summary
-Extended the repository migration in `#80` to recertification, org-sync, and appeal-SLA monitoring, reducing the remaining direct Prisma usage to reporting, calibration, and admin-content flows.
+Completed the service-layer repository migration in `#80`, so service files no longer import Prisma directly, and updated the architecture documentation to match the new data-access boundary.
 
 ### Included
 - New repository:
   - `src/repositories/certificationRepository.ts`
+- Additional repositories:
+  - `src/repositories/reportingRepository.ts`
+  - `src/repositories/calibrationRepository.ts`
+  - `src/repositories/adminContentRepository.ts`
 - Repository extensions:
   - `src/repositories/decisionRepository.ts`
   - `src/repositories/auditRepository.ts`
@@ -23,17 +27,28 @@ Extended the repository migration in `#80` to recertification, org-sync, and app
   - `src/services/recertificationService.ts`
   - `src/services/orgSyncService.ts`
   - `src/services/appealSlaMonitorService.ts`
-  - removed direct Prisma access from the three services above
+  - `src/services/reportingService.ts`
+  - `src/services/calibrationWorkspaceService.ts`
+  - `src/services/adminContentService.ts`
+  - removed direct Prisma access from all remaining service files
   - routed recertification status reads/writes through repository boundaries
   - routed org delta sync user lookup/update/create through `userRepository`
   - routed SLA monitor backlog queries through `appealRepository`
+  - routed reporting, calibration, and admin-content reads/writes through dedicated repositories
 - Unit coverage:
   - `test/unit/certification-repository.test.ts`
+- Documentation update:
+  - `doc/ARCHITECTURE.md`
+  - updated the data-access section to reflect that services now depend on repositories rather than direct Prisma imports
 
 ### Verification
 - `npm run lint`
 - `npm run test:unit`
+- `npm run pretest`
+- `npm run test:integration`
 - `npx dotenv -e .env.test -- vitest run --config vitest.integration.config.ts test/m2-org-sync.test.ts test/m2-recertification-flow.test.ts test/m2-appeal-sla-monitor.test.ts`
+- `npx dotenv -e .env.test -- vitest run --config vitest.integration.config.ts test/m2-reporting.test.ts`
+- `npx dotenv -e .env.test -- vitest run --config vitest.integration.config.ts test/m2-calibration-workspace.test.ts test/m2-admin-content-publication.test.ts`
 
 ## 0.3.84 - 2026-03-11
 ### Summary

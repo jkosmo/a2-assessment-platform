@@ -1,5 +1,5 @@
-import { prisma } from "../db/prisma.js";
 import { NotFoundError } from "../errors/AppError.js";
+import { calibrationRepository } from "../repositories/calibrationRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 
@@ -109,95 +109,24 @@ function buildBenchmarkAnchors(
 }
 
 export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspaceInput) {
-  const module = await prisma.module.findUnique({
-    where: { id: input.filters.moduleId },
-    select: { id: true, title: true },
-  });
+  const module = await calibrationRepository.findModuleSummary(input.filters.moduleId);
 
   if (!module) {
     throw new NotFoundError("Module");
   }
 
-  const submissions = await prisma.submission.findMany({
-    where: {
-      moduleId: input.filters.moduleId,
-      ...(input.filters.moduleVersionId ? { moduleVersionId: input.filters.moduleVersionId } : {}),
-      ...(input.filters.statuses.length > 0 ? { submissionStatus: { in: input.filters.statuses } } : {}),
-      ...(input.filters.dateFrom || input.filters.dateTo
-        ? {
-            submittedAt: {
-              ...(input.filters.dateFrom ? { gte: input.filters.dateFrom } : {}),
-              ...(input.filters.dateTo ? { lte: input.filters.dateTo } : {}),
-            },
-          }
-        : {}),
-    },
-    orderBy: { submittedAt: "desc" },
-    take: input.filters.limit,
-    select: {
-      id: true,
-      submittedAt: true,
-      submissionStatus: true,
-      moduleVersion: {
-        select: {
-          id: true,
-          versionNo: true,
-          promptTemplateVersionId: true,
-        },
-      },
-      user: {
-        select: {
-          id: true,
-        },
-      },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          decisionType: true,
-          totalScore: true,
-          passFailTotal: true,
-          practicalScaledScore: true,
-          mcqScaledScore: true,
-          finalisedAt: true,
-          redFlagsJson: true,
-        },
-      },
-      llmEvaluations: {
-        orderBy: { evaluatedAt: "desc" },
-        take: 1,
-        select: {
-          manualReviewRecommended: true,
-          confidenceNote: true,
-          evaluatedAt: true,
-        },
-      },
-      mcqAttempts: {
-        where: {
-          completedAt: { not: null },
-        },
-        orderBy: { completedAt: "desc" },
-        take: 1,
-        select: {
-          percentScore: true,
-          scaledScore: true,
-          passFailMcq: true,
-          completedAt: true,
-        },
-      },
-    },
+  const submissions = await calibrationRepository.findSubmissionsForWorkspace({
+    moduleId: input.filters.moduleId,
+    moduleVersionId: input.filters.moduleVersionId,
+    statuses: input.filters.statuses,
+    dateFrom: input.filters.dateFrom,
+    dateTo: input.filters.dateTo,
+    limit: input.filters.limit,
   });
 
-  const promptTemplateVersions = await prisma.promptTemplateVersion.findMany({
-    where: { moduleId: input.filters.moduleId },
-    orderBy: { versionNo: "desc" },
-    select: {
-      id: true,
-      versionNo: true,
-      createdAt: true,
-      examplesJson: true,
-    },
-  });
+  const promptTemplateVersions = await calibrationRepository.findPromptTemplateVersionsForBenchmarkAnchors(
+    input.filters.moduleId,
+  );
 
   const benchmarkAnchors = buildBenchmarkAnchors(promptTemplateVersions);
 

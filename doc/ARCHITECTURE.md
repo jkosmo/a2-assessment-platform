@@ -43,8 +43,8 @@ The important architectural rule is that decisions are append-only. Later stages
 
 ### Data access
 - Prisma client in `src/db/prisma.ts`
-- partial repository abstraction in `src/repositories/`
-- some domains still access Prisma directly from services; that remains known technical debt
+- repository boundary in `src/repositories/` for service-layer data access
+- services use repositories instead of importing Prisma directly
 
 ### Background processing
 - assessment worker processes queued assessment jobs
@@ -181,7 +181,6 @@ Development currently uses SQLite bootstrap, while production-oriented deploymen
 ## Known Architectural Debt
 
 The most important currently known gaps are:
-- repository pattern is incomplete across service domains
 - development database engine does not match production target architecture
 - some broader unit-test coverage still depends too much on integration setup
 - several architecture decisions live across design notes and release notes rather than one permanent reference

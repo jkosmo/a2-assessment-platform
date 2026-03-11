@@ -1,7 +1,7 @@
-import { prisma } from "../db/prisma.js";
 import { ReviewStatus, AppealStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import { getReportingAnalyticsConfig } from "../config/reportingAnalytics.js";
+import { reportingRepository } from "../repositories/reportingRepository.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { deriveRecertificationStatus } from "./recertificationService.js";
 import type {
@@ -149,14 +149,7 @@ export async function getCompletionReport(filters: ReportFilters) {
       : {}),
   } as const;
 
-  const submissions = await prisma.submission.findMany({
-    where,
-    select: {
-      moduleId: true,
-      submissionStatus: true,
-      module: { select: { id: true, title: true } },
-    },
-  });
+  const submissions = await reportingRepository.findSubmissionsForCompletionReport(where);
 
   const rowsByModule = new Map<string, CompletionRow>();
   for (const submission of submissions) {
@@ -215,21 +208,7 @@ export async function getPassRatesReport(filters: ReportFilters) {
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
   } as const;
 
-  const submissions = await prisma.submission.findMany({
-    where,
-    select: {
-      id: true,
-      submissionStatus: true,
-      module: { select: { id: true, title: true } },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          passFailTotal: true,
-        },
-      },
-    },
-  });
+  const submissions = await reportingRepository.findSubmissionsForPassRatesReport(where);
 
   const outcomeFilter = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
   const rowsByModule = new Map<string, PassRatesRow>();
@@ -296,51 +275,12 @@ export async function getPassRatesReport(filters: ReportFilters) {
 
 export async function getManualReviewQueueReport(filters: ReportFilters) {
   const statuses = asReviewStatuses(filters.statuses);
-  const rows = await prisma.manualReview.findMany({
-    where: {
-      ...(statuses.length > 0 ? { reviewStatus: { in: statuses } } : {}),
-      ...(filters.dateFrom || filters.dateTo
-        ? {
-            createdAt: {
-              ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-              ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-            },
-          }
-        : {}),
-      submission: {
-        ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
-        ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-      },
-    },
-    orderBy: { createdAt: "asc" },
-    include: {
-      submission: {
-        select: {
-          id: true,
-          submissionStatus: true,
-          user: {
-            select: {
-              email: true,
-              department: true,
-            },
-          },
-          module: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-          decisions: {
-            orderBy: { finalisedAt: "desc" },
-            take: 1,
-            select: {
-              decisionType: true,
-              passFailTotal: true,
-            },
-          },
-        },
-      },
-    },
+  const rows = await reportingRepository.findManualReviewsForQueueReport({
+    statuses,
+    moduleId: filters.moduleId,
+    orgUnit: filters.orgUnit,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
   });
 
   const mappedRows: ManualReviewQueueRow[] = rows.map((review) => ({
@@ -374,52 +314,12 @@ export async function getManualReviewQueueReport(filters: ReportFilters) {
 
 export async function getAppealsReport(filters: ReportFilters) {
   const statuses = asAppealStatuses(filters.statuses);
-  const appeals = await prisma.appeal.findMany({
-    where: {
-      ...(statuses.length > 0 ? { appealStatus: { in: statuses } } : {}),
-      ...(filters.dateFrom || filters.dateTo
-        ? {
-            createdAt: {
-              ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-              ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-            },
-          }
-        : {}),
-      submission: {
-        ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
-        ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-      },
-    },
-    orderBy: { createdAt: "asc" },
-    include: {
-      appealedBy: {
-        select: {
-          email: true,
-        },
-      },
-      resolvedBy: {
-        select: {
-          email: true,
-        },
-      },
-      submission: {
-        select: {
-          id: true,
-          user: {
-            select: {
-              email: true,
-              department: true,
-            },
-          },
-          module: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
-      },
-    },
+  const appeals = await reportingRepository.findAppealsForReport({
+    statuses,
+    moduleId: filters.moduleId,
+    orgUnit: filters.orgUnit,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
   });
 
   const rows: AppealRow[] = appeals.map((appeal) => ({
@@ -482,31 +382,7 @@ export async function getMcqQualityReport(filters: ReportFilters) {
     },
   } as const;
 
-  const responses = await prisma.mCQResponse.findMany({
-    where,
-    select: {
-      questionId: true,
-      isCorrect: true,
-      question: {
-        select: {
-          id: true,
-          stem: true,
-          module: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
-      },
-      mcqAttempt: {
-        select: {
-          id: true,
-          percentScore: true,
-        },
-      },
-    },
-  });
+  const responses = await reportingRepository.findMcqResponsesForQualityReport(where);
 
   const perQuestion = new Map<string, {
     moduleId: string;
@@ -616,35 +492,11 @@ export async function getRecertificationStatusReport(filters: ReportFilters) {
   const now = new Date();
   const statuses = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
 
-  const certifications = await prisma.certificationStatus.findMany({
-    where: {
-      ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
-      ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-      ...(filters.dateFrom || filters.dateTo
-        ? {
-            updatedAt: {
-              ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-              ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-            },
-          }
-        : {}),
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          department: true,
-        },
-      },
-      module: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-    },
-    orderBy: [{ moduleId: "asc" }, { updatedAt: "desc" }],
+  const certifications = await reportingRepository.findCertificationsForStatusReport({
+    moduleId: filters.moduleId,
+    orgUnit: filters.orgUnit,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
   });
 
   const rows = certifications
@@ -710,21 +562,7 @@ export async function getAnalyticsSemanticModel(filters: ReportFilters) {
       : {}),
   } as const;
 
-  const submissions = await prisma.submission.findMany({
-    where,
-    select: {
-      id: true,
-      submissionStatus: true,
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: { passFailTotal: true },
-      },
-      appeals: {
-        select: { id: true },
-      },
-    },
-  });
+  const submissions = await reportingRepository.findSubmissionsForAnalyticsSemanticModel(where);
 
   const totalSubmissions = submissions.length;
   const completedSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.COMPLETED).length;
@@ -779,18 +617,7 @@ export async function getAnalyticsTrendsReport(
       : {}),
   } as const;
 
-  const submissions = await prisma.submission.findMany({
-    where,
-    select: {
-      submittedAt: true,
-      submissionStatus: true,
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: { passFailTotal: true },
-      },
-    },
-  });
+  const submissions = await reportingRepository.findSubmissionsForAnalyticsTrends(where);
 
   const buckets = new Map<string, AnalyticsTrendRow>();
   for (const submission of submissions) {
@@ -861,24 +688,7 @@ export async function getAnalyticsCohortsReport(
       : {}),
   } as const;
 
-  const submissions = await prisma.submission.findMany({
-    where,
-    select: {
-      userId: true,
-      submittedAt: true,
-      submissionStatus: true,
-      user: {
-        select: {
-          department: true,
-        },
-      },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: { passFailTotal: true },
-      },
-    },
-  });
+  const submissions = await reportingRepository.findSubmissionsForAnalyticsCohorts(where);
 
   const cohorts = new Map<string, AnalyticsCohortRow>();
   const cohortParticipantSets = new Map<string, Set<string>>();
@@ -957,23 +767,7 @@ export async function getReportingDataQualityReport(filters: ReportFilters) {
       : {}),
   } as const;
 
-  const submissions = await prisma.submission.findMany({
-    where,
-    select: {
-      id: true,
-      submissionStatus: true,
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: { id: true },
-      },
-      llmEvaluations: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { id: true },
-      },
-    },
-  });
+  const submissions = await reportingRepository.findSubmissionsForDataQuality(where);
 
   const completedSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.COMPLETED);
   const missingDecisionCount = completedSubmissions.filter((submission) => !submission.decisions[0]).length;
