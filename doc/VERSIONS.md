@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.93 - 2026-03-11
+### Summary
+Continued `#84` by adding unit coverage for `recertificationService.ts`, focusing on decision-driven status upserts, lifecycle status derivation, and scheduled reminder delivery with duplicate-send protection.
+
+### Included
+- New unit test:
+  - `test/unit/recertification-service.test.ts`
+- Added service-level unit coverage for:
+  - missing-decision validation during recertification upsert
+  - passing-decision recertification date/status computation
+  - `deriveRecertificationStatus()` due-soon lifecycle behavior
+  - reminder-schedule processing with sent/skipped counters and duplicate-send protection
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.92 - 2026-03-11
 ### Summary
 Continued `#84` by adding unit coverage for `orgSyncService.ts`, focusing on delta-sync outcome counting, create/update behavior, strict conflict failure handling, and org-sync audit/operational logging.
