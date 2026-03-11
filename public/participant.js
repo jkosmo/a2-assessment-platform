@@ -1811,16 +1811,30 @@ window.addEventListener("beforeunload", () => {
 
 function renderQuestions(selectedResponses = {}) {
   mcqQuestions.innerHTML = "";
-  for (const question of currentQuestions) {
-    const wrapper = document.createElement("div");
-    wrapper.style.marginBottom = "12px";
-    const title = document.createElement("div");
+  for (const [index, question] of currentQuestions.entries()) {
+    const wrapper = document.createElement("fieldset");
+    wrapper.className = "mcq-question-card";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "mcq-question-header";
+
+    const numberBadge = document.createElement("span");
+    numberBadge.className = "mcq-question-index";
+    numberBadge.textContent = String(index + 1);
+    titleRow.appendChild(numberBadge);
+
+    const title = document.createElement("legend");
+    title.className = "mcq-question-title";
     title.textContent = question.stem;
-    wrapper.appendChild(title);
+    titleRow.appendChild(title);
+    wrapper.appendChild(titleRow);
+
+    const optionList = document.createElement("div");
+    optionList.className = "mcq-option-list";
 
     for (const option of question.options) {
       const label = document.createElement("label");
-      label.style.display = "block";
+      label.className = "mcq-option";
       const input = document.createElement("input");
       input.type = "radio";
       input.name = `q_${question.id}`;
@@ -1829,11 +1843,16 @@ function renderQuestions(selectedResponses = {}) {
       input.addEventListener("change", () => {
         scheduleDraftAutosave();
       });
+      input.className = "mcq-option-input";
+      const text = document.createElement("span");
+      text.className = "mcq-option-label";
+      text.textContent = option;
       label.appendChild(input);
-      label.append(` ${option}`);
-      wrapper.appendChild(label);
+      label.appendChild(text);
+      optionList.appendChild(label);
     }
 
+    wrapper.appendChild(optionList);
     mcqQuestions.appendChild(wrapper);
   }
 

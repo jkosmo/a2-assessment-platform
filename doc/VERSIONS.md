@@ -7,6 +7,32 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.110 - 2026-03-11
+### Summary
+Added admin-content readback/export support for saved module configuration and improved participant MCQ readability with clearer question grouping and option alignment.
+
+### Included
+- Added module export/readback support in the admin content backend:
+  - `src/routes/adminContent.ts`
+  - `src/services/adminContentService.ts`
+  - `src/repositories/adminContentRepository.ts`
+- Added `Load selected content` and `Export selected module` actions in the admin content workspace:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Improved MCQ presentation in the participant workspace with structured question cards and aligned answer options:
+  - `public/participant.js`
+  - `public/static/shared.css`
+- Added regression coverage for module export/readback and participant/admin workspace assets:
+  - `test/unit/admin-content-service.test.ts`
+  - `test/m2-admin-content-publication.test.ts`
+  - `test/admin-content-translations.test.js`
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/m2-admin-content-publication.test.ts test/unit/admin-content-service.test.ts test/admin-content-translations.test.js test/participant-console-config.test.ts`
+
 ## 0.3.109 - 2026-03-11
 ### Summary
 Improved the admin content workspace for multilingual module setup by making the module title field JSON-friendly, and added guarded module deletion so empty modules can be cleaned up safely.

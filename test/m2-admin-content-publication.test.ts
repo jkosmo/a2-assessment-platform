@@ -210,6 +210,19 @@ describe("MVP admin content management and publication", () => {
     expect(activeVersionResponse.body.activeVersion.promptTemplateVersionId).toBe(benchmarkPromptTemplateVersionId);
     expect(activeVersionResponse.body.activeVersion.mcqSetVersionId).toBe(mcqSetVersionId);
 
+    const exportResponse = await request(app)
+      .get(`/api/admin/content/modules/${moduleId}/export`)
+      .set(adminHeaders);
+    expect(exportResponse.status).toBe(200);
+    expect(exportResponse.body.moduleExport.module.id).toBe(moduleId);
+    expect(exportResponse.body.moduleExport.selectedConfiguration.source).toBe("activeModuleVersion");
+    expect(exportResponse.body.moduleExport.selectedConfiguration.moduleVersion.id).toBe(benchmarkModuleVersionId);
+    expect(exportResponse.body.moduleExport.selectedConfiguration.promptTemplateVersion.id).toBe(
+      benchmarkPromptTemplateVersionId,
+    );
+    expect(exportResponse.body.moduleExport.selectedConfiguration.mcqSetVersion.questions.length).toBeGreaterThan(0);
+    expect(exportResponse.body.moduleExport.versions.rubricVersions.length).toBeGreaterThan(0);
+
     const auditEvent = await prisma.auditEvent.findFirst({
       where: {
         entityType: "module_version",

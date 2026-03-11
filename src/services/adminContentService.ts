@@ -57,6 +57,95 @@ type CreateBenchmarkExampleVersionInput = {
   actorId?: string;
 };
 
+type InlineLocalizedText = Partial<Record<"en-GB" | "nb" | "nn", string>>;
+
+function decodeLocalizedText(input: string | null | undefined) {
+  if (typeof input !== "string") {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return input;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return input;
+    }
+
+    const localized: InlineLocalizedText = {};
+    for (const locale of ["en-GB", "nb", "nn"] as const) {
+      const value = parsed[locale];
+      if (typeof value === "string" && value.trim().length > 0) {
+        localized[locale] = value.trim();
+      }
+    }
+
+    return Object.keys(localized).length > 0 ? localized : input;
+  } catch {
+    return input;
+  }
+}
+
+function safeParseJson(input: string) {
+  try {
+    return JSON.parse(input);
+  } catch {
+    return input;
+  }
+}
+
+function decodeMcqOption(option: unknown) {
+  if (typeof option === "string") {
+    return decodeLocalizedText(option) ?? option;
+  }
+
+  return option;
+}
+
+function mapMcqSetVersion(version: {
+  id: string;
+  versionNo: number;
+  title: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  questions: Array<{
+    id: string;
+    stem: string;
+    optionsJson: string;
+    correctAnswer: string;
+    rationale: string | null;
+    active: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+}) {
+  return {
+    id: version.id,
+    versionNo: version.versionNo,
+    title: decodeLocalizedText(version.title) ?? version.title,
+    active: version.active,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+    questions: version.questions.map((question) => {
+      const parsedOptions = safeParseJson(question.optionsJson);
+      return {
+        id: question.id,
+        stem: decodeLocalizedText(question.stem) ?? question.stem,
+        options: Array.isArray(parsedOptions) ? parsedOptions.map((option) => decodeMcqOption(option)) : [],
+        correctAnswer: decodeLocalizedText(question.correctAnswer) ?? question.correctAnswer,
+        rationale: decodeLocalizedText(question.rationale) ?? question.rationale,
+        active: question.active,
+        createdAt: question.createdAt,
+        updatedAt: question.updatedAt,
+      };
+    }),
+  };
+}
+
 async function ensureModuleExists(moduleId: string) {
   const module = await adminContentRepository.findModuleSummary(moduleId);
 
@@ -95,6 +184,100 @@ export async function createModule(input: CreateModuleInput) {
   });
 
   return module;
+}
+
+export async function getModuleContentBundle(moduleId: string) {
+  const module = await adminContentRepository.findModuleContentBundle(moduleId);
+
+  if (!module) {
+    throw new Error("Module not found.");
+  }
+
+  const moduleVersions = module.versions.map((version) => ({
+    id: version.id,
+    versionNo: version.versionNo,
+    taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
+    guidanceText: decodeLocalizedText(version.guidanceText) ?? version.guidanceText,
+    rubricVersionId: version.rubricVersionId,
+    promptTemplateVersionId: version.promptTemplateVersionId,
+    mcqSetVersionId: version.mcqSetVersionId,
+    publishedBy: version.publishedBy,
+    publishedAt: version.publishedAt,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  }));
+
+  const rubricVersions = module.rubricVersions.map((version) => ({
+    id: version.id,
+    versionNo: version.versionNo,
+    criteria: safeParseJson(version.criteriaJson),
+    scalingRule: safeParseJson(version.scalingRuleJson),
+    passRule: safeParseJson(version.passRuleJson),
+    active: version.active,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  }));
+
+  const promptTemplateVersions = module.promptTemplateVersions.map((version) => ({
+    id: version.id,
+    versionNo: version.versionNo,
+    systemPrompt: decodeLocalizedText(version.systemPrompt) ?? version.systemPrompt,
+    userPromptTemplate: decodeLocalizedText(version.userPromptTemplate) ?? version.userPromptTemplate,
+    examples: safeParseJson(version.examplesJson),
+    active: version.active,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  }));
+
+  const mcqSetVersions = module.mcqSetVersions.map((version) => mapMcqSetVersion(version));
+
+  const selectedModuleVersion =
+    moduleVersions.find((version) => version.id === module.activeVersionId) ?? moduleVersions[0] ?? null;
+  const selectedConfigurationSource =
+    selectedModuleVersion && module.activeVersionId === selectedModuleVersion.id
+      ? "activeModuleVersion"
+      : selectedModuleVersion
+        ? "latestModuleVersion"
+        : rubricVersions.length > 0 || promptTemplateVersions.length > 0 || mcqSetVersions.length > 0
+          ? "latestIndividualVersions"
+          : "moduleShellOnly";
+
+  const selectedRubricVersion = selectedModuleVersion
+    ? rubricVersions.find((version) => version.id === selectedModuleVersion.rubricVersionId) ?? null
+    : rubricVersions[0] ?? null;
+  const selectedPromptTemplateVersion = selectedModuleVersion
+    ? promptTemplateVersions.find((version) => version.id === selectedModuleVersion.promptTemplateVersionId) ?? null
+    : promptTemplateVersions[0] ?? null;
+  const selectedMcqSetVersion = selectedModuleVersion
+    ? mcqSetVersions.find((version) => version.id === selectedModuleVersion.mcqSetVersionId) ?? null
+    : mcqSetVersions[0] ?? null;
+
+  return {
+    module: {
+      id: module.id,
+      title: decodeLocalizedText(module.title) ?? module.title,
+      description: decodeLocalizedText(module.description) ?? module.description,
+      certificationLevel: decodeLocalizedText(module.certificationLevel) ?? module.certificationLevel,
+      validFrom: module.validFrom,
+      validTo: module.validTo,
+      activeVersionId: module.activeVersionId,
+      createdAt: module.createdAt,
+      updatedAt: module.updatedAt,
+    },
+    selectedConfiguration: {
+      source: selectedConfigurationSource,
+      moduleVersion: selectedModuleVersion,
+      rubricVersion: selectedRubricVersion,
+      promptTemplateVersion: selectedPromptTemplateVersion,
+      mcqSetVersion: selectedMcqSetVersion,
+    },
+    versions: {
+      moduleVersions,
+      rubricVersions,
+      promptTemplateVersions,
+      mcqSetVersions,
+    },
+  };
 }
 
 export async function deleteModule(moduleId: string, actorId: string) {

@@ -27,6 +27,8 @@ const moduleValidToInput = document.getElementById("moduleValidTo");
 const createModuleButton = document.getElementById("createModule");
 const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const loadModulesButton = document.getElementById("loadModules");
+const loadModuleContentButton = document.getElementById("loadModuleContent");
+const exportModuleButton = document.getElementById("exportModule");
 const deleteModuleButton = document.getElementById("deleteModule");
 const moduleDropdown = document.getElementById("moduleDropdown");
 const selectedModuleMeta = document.getElementById("selectedModuleMeta");
@@ -338,6 +340,61 @@ function formatJsonDefault(key) {
   }
 }
 
+function formatEditorValue(value, fallback = "") {
+  if (value == null) {
+    return fallback;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
+function populateFormFromModuleExport(moduleExport) {
+  const selectedConfiguration = moduleExport?.selectedConfiguration ?? {};
+  const moduleVersion = selectedConfiguration.moduleVersion ?? null;
+  const rubricVersion = selectedConfiguration.rubricVersion ?? null;
+  const promptTemplateVersion = selectedConfiguration.promptTemplateVersion ?? null;
+  const mcqSetVersion = selectedConfiguration.mcqSetVersion ?? null;
+
+  rubricCriteriaJsonInput.value = formatEditorValue(rubricVersion?.criteria, "");
+  rubricScalingRuleJsonInput.value = formatEditorValue(rubricVersion?.scalingRule, "");
+  rubricPassRuleJsonInput.value = formatEditorValue(rubricVersion?.passRule, "");
+
+  promptSystemPromptInput.value = formatEditorValue(promptTemplateVersion?.systemPrompt, "");
+  promptUserPromptTemplateInput.value = formatEditorValue(promptTemplateVersion?.userPromptTemplate, "");
+  promptExamplesJsonInput.value = formatEditorValue(promptTemplateVersion?.examples, "[]");
+
+  mcqSetTitleInput.value = formatEditorValue(mcqSetVersion?.title, "");
+  mcqQuestionsJsonInput.value = formatEditorValue(mcqSetVersion?.questions, "[]");
+
+  moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
+  moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
+  moduleVersionRubricVersionIdInput.value = rubricVersion?.id ?? "";
+  moduleVersionPromptTemplateVersionIdInput.value = promptTemplateVersion?.id ?? "";
+  moduleVersionMcqSetVersionIdInput.value = mcqSetVersion?.id ?? "";
+  publishModuleVersionIdInput.value = moduleVersion?.id ?? "";
+}
+
+async function fetchModuleExport() {
+  const moduleId = resolveModuleIdOrThrow();
+  const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, headers);
+  return body?.moduleExport ?? null;
+}
+
+function downloadJsonFile(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
 function renderRolePresetControl() {
   mockRolePresetSelect.innerHTML = "";
 
@@ -605,6 +662,31 @@ async function handleDeleteSelectedModule() {
   log(body);
 }
 
+async function handleLoadSelectedModuleContent() {
+  const moduleExport = await fetchModuleExport();
+  if (!moduleExport) {
+    throw new Error("Module export payload was empty.");
+  }
+
+  populateFormFromModuleExport(moduleExport);
+  setMessage(
+    `${t("adminContent.message.moduleContentLoaded")} (${moduleExport.selectedConfiguration?.source ?? "unknown"})`,
+  );
+  log({ moduleExport });
+}
+
+async function handleExportSelectedModule() {
+  const moduleExport = await fetchModuleExport();
+  if (!moduleExport) {
+    throw new Error("Module export payload was empty.");
+  }
+
+  const filename = `module-${selectedModuleId || moduleExport.module?.id || "export"}.json`;
+  downloadJsonFile(filename, moduleExport);
+  setMessage(t("adminContent.message.moduleExported"));
+  log({ moduleExport });
+}
+
 async function handleCreateRubricVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
@@ -757,6 +839,28 @@ loadModulesButton.addEventListener("click", async () => {
       const message = parseActionableErrorMessage(error);
       setMessage(message);
       log(message);
+    }
+  });
+});
+
+loadModuleContentButton.addEventListener("click", async () => {
+  await runWithBusyButton(loadModuleContentButton, async () => {
+    try {
+      await handleLoadSelectedModuleContent();
+    } catch (error) {
+      setMessage(parseActionableErrorMessage(error));
+      throw error;
+    }
+  });
+});
+
+exportModuleButton.addEventListener("click", async () => {
+  await runWithBusyButton(exportModuleButton, async () => {
+    try {
+      await handleExportSelectedModule();
+    } catch (error) {
+      setMessage(parseActionableErrorMessage(error));
+      throw error;
     }
   });
 });

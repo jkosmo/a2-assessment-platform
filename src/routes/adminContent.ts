@@ -6,6 +6,7 @@ import {
   createMcqSetVersion,
   createModuleVersion,
   deleteModule,
+  getModuleContentBundle,
   createPromptTemplateVersion,
   createRubricVersion,
   publishModuleVersion,
@@ -174,6 +175,18 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
     response.status(400).json({
       error: "delete_module_failed",
       message: error instanceof Error ? error.message : "Could not delete module.",
+    });
+  }
+});
+
+adminContentRouter.get("/modules/:moduleId/export", async (request, response) => {
+  try {
+    const moduleExport = await getModuleContentBundle(request.params.moduleId);
+    response.json({ moduleExport });
+  } catch (error) {
+    response.status(404).json({
+      error: "module_export_failed",
+      message: error instanceof Error ? error.message : "Could not export module.",
     });
   }
 });

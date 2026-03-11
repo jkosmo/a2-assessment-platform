@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const findModuleSummary = vi.fn();
 const findModuleDeleteSummary = vi.fn();
 const createModuleRecord = vi.fn();
+const findModuleContentBundle = vi.fn();
 const findLatestRubricVersion = vi.fn();
 const findLatestPromptTemplateVersion = vi.fn();
 const findLatestMcqSetVersion = vi.fn();
@@ -23,6 +24,7 @@ vi.mock("../../src/repositories/adminContentRepository.js", () => ({
     findModuleSummary,
     findModuleDeleteSummary,
     createModule: createModuleRecord,
+    findModuleContentBundle,
     findLatestRubricVersion,
     findLatestPromptTemplateVersion,
     findLatestMcqSetVersion,
@@ -56,6 +58,7 @@ describe("admin content service", () => {
     findModuleSummary.mockReset();
     findModuleDeleteSummary.mockReset();
     createModuleRecord.mockReset();
+    findModuleContentBundle.mockReset();
     findLatestRubricVersion.mockReset();
     findLatestPromptTemplateVersion.mockReset();
     findLatestMcqSetVersion.mockReset();
@@ -123,6 +126,100 @@ describe("admin content service", () => {
       validFrom: new Date("2026-03-01T00:00:00.000Z"),
       validTo: new Date("2027-03-01T00:00:00.000Z"),
     });
+  });
+
+  it("exports module content with decoded localized values and selected active configuration", async () => {
+    findModuleContentBundle.mockResolvedValue({
+      id: "module-1",
+      title: "{\"en-GB\":\"Module One\",\"nb\":\"Modul En\",\"nn\":\"Modul Ein\"}",
+      description: "Description",
+      certificationLevel: "foundation",
+      validFrom: null,
+      validTo: null,
+      activeVersionId: "module-version-2",
+      createdAt: new Date("2026-03-10T00:00:00.000Z"),
+      updatedAt: new Date("2026-03-11T00:00:00.000Z"),
+      versions: [
+        {
+          id: "module-version-2",
+          versionNo: 2,
+          taskText: "{\"en-GB\":\"Task\",\"nb\":\"Oppgave\",\"nn\":\"Oppgaave\"}",
+          guidanceText: "Guidance",
+          rubricVersionId: "rubric-2",
+          promptTemplateVersionId: "prompt-2",
+          mcqSetVersionId: "mcq-2",
+          publishedBy: "admin-1",
+          publishedAt: new Date("2026-03-11T08:00:00.000Z"),
+          createdAt: new Date("2026-03-11T07:00:00.000Z"),
+          updatedAt: new Date("2026-03-11T07:30:00.000Z"),
+        },
+      ],
+      rubricVersions: [
+        {
+          id: "rubric-2",
+          versionNo: 2,
+          criteriaJson: "{\"criterion\":1}",
+          scalingRuleJson: "{\"practical_weight\":70}",
+          passRuleJson: "{\"total_min\":70}",
+          active: true,
+          createdAt: new Date("2026-03-10T01:00:00.000Z"),
+          updatedAt: new Date("2026-03-10T01:00:00.000Z"),
+        },
+      ],
+      promptTemplateVersions: [
+        {
+          id: "prompt-2",
+          versionNo: 2,
+          systemPrompt: "{\"en-GB\":\"System\",\"nb\":\"System nb\",\"nn\":\"System nn\"}",
+          userPromptTemplate: "Template",
+          examplesJson: "[{\"example\":\"Anchor\"}]",
+          active: true,
+          createdAt: new Date("2026-03-10T02:00:00.000Z"),
+          updatedAt: new Date("2026-03-10T02:00:00.000Z"),
+        },
+      ],
+      mcqSetVersions: [
+        {
+          id: "mcq-2",
+          versionNo: 2,
+          title: "{\"en-GB\":\"Quiz\",\"nb\":\"Quiz nb\",\"nn\":\"Quiz nn\"}",
+          active: true,
+          createdAt: new Date("2026-03-10T03:00:00.000Z"),
+          updatedAt: new Date("2026-03-10T03:00:00.000Z"),
+          questions: [
+            {
+              id: "question-1",
+              stem: "{\"en-GB\":\"Question?\",\"nb\":\"Sporsmaal?\",\"nn\":\"Sporsmaal?\"}",
+              optionsJson:
+                "[\"{\\\"en-GB\\\":\\\"Yes\\\",\\\"nb\\\":\\\"Ja\\\",\\\"nn\\\":\\\"Ja\\\"}\",\"No\"]",
+              correctAnswer: "{\"en-GB\":\"Yes\",\"nb\":\"Ja\",\"nn\":\"Ja\"}",
+              rationale: "Because",
+              active: true,
+              createdAt: new Date("2026-03-10T04:00:00.000Z"),
+              updatedAt: new Date("2026-03-10T04:00:00.000Z"),
+            },
+          ],
+        },
+      ],
+    });
+
+    const { getModuleContentBundle } = await import("../../src/services/adminContentService.js");
+
+    const result = await getModuleContentBundle("module-1");
+
+    expect(result.module.title).toEqual({
+      "en-GB": "Module One",
+      nb: "Modul En",
+      nn: "Modul Ein",
+    });
+    expect(result.selectedConfiguration.source).toBe("activeModuleVersion");
+    expect(result.selectedConfiguration.moduleVersion?.id).toBe("module-version-2");
+    expect(result.selectedConfiguration.rubricVersion?.criteria).toEqual({ criterion: 1 });
+    expect(result.selectedConfiguration.promptTemplateVersion?.examples).toEqual([{ example: "Anchor" }]);
+    expect(result.selectedConfiguration.mcqSetVersion?.questions[0]?.options).toEqual([
+      { "en-GB": "Yes", nb: "Ja", nn: "Ja" },
+      "No",
+    ]);
   });
 
   it("deletes an empty module and records module_deleted audit metadata", async () => {

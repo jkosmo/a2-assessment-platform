@@ -22,6 +22,8 @@ const extraTranslations = {
     "adminContent.select.title": "Select module to configure",
     "adminContent.select.moduleId": "Module ID",
     "adminContent.select.loadModules": "Load modules",
+    "adminContent.select.loadContent": "Load selected content",
+    "adminContent.select.exportModule": "Export selected module",
     "adminContent.select.deleteModule": "Delete selected module",
     "adminContent.select.moduleDropdown": "Available modules",
     "adminContent.rubric.title": "2) Submission scoring rules",
@@ -53,6 +55,8 @@ const extraTranslations = {
     "adminContent.meta.noneSelected": "none",
     "adminContent.meta.loadedCountPrefix": "Loaded modules",
     "adminContent.message.moduleCreated": "Module created.",
+    "adminContent.message.moduleContentLoaded": "Selected module content loaded.",
+    "adminContent.message.moduleExported": "Selected module exported.",
     "adminContent.message.moduleDeleted": "Module deleted.",
     "adminContent.message.rubricCreated": "Scoring rules saved.",
     "adminContent.message.promptCreated": "Evaluation instruction saved.",
@@ -72,6 +76,8 @@ const extraTranslations = {
       "Use plain text or locale JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
     "adminContent.help.moduleDescription":
       "Shown in module lists. Supports the same locale JSON format.",
+    "adminContent.help.loadContent":
+      "Loads the saved rubric, prompt, MCQ, and module version into steps 2-6.",
     "adminContent.help.deleteModule":
       "Deletes only empty modules without submissions, versions, or published content.",
     "adminContent.help.moduleValidity":
@@ -140,6 +146,8 @@ const extraTranslations = {
     "adminContent.select.title": "Velg modul som skal konfigureres",
     "adminContent.select.moduleId": "Modul-ID",
     "adminContent.select.loadModules": "Last moduler",
+    "adminContent.select.loadContent": "Last valgt innhold",
+    "adminContent.select.exportModule": "Eksporter valgt modul",
     "adminContent.select.deleteModule": "Slett valgt modul",
     "adminContent.select.moduleDropdown": "Tilgjengelige moduler",
     "adminContent.rubric.title": "2) Vurderingsregler for innlevering",
@@ -171,6 +179,8 @@ const extraTranslations = {
     "adminContent.meta.noneSelected": "ingen",
     "adminContent.meta.loadedCountPrefix": "Lastede moduler",
     "adminContent.message.moduleCreated": "Modul opprettet.",
+    "adminContent.message.moduleContentLoaded": "Valgt modulinnhold er lastet inn.",
+    "adminContent.message.moduleExported": "Valgt modul er eksportert.",
     "adminContent.message.moduleDeleted": "Modul slettet.",
     "adminContent.message.rubricCreated": "Vurderingsregler lagret.",
     "adminContent.message.promptCreated": "Vurderingsinstruks lagret.",
@@ -191,6 +201,8 @@ const extraTranslations = {
       "Bruk vanlig tekst eller locale-JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
     "adminContent.help.moduleDescription":
       "Vises i modullister. Støtter samme locale-JSON-format.",
+    "adminContent.help.loadContent":
+      "Laster lagret vurderingsregel, prompt, MCQ og modulversjon inn i steg 2-6.",
     "adminContent.help.deleteModule":
       "Sletter bare tomme moduler uten innleveringer, versjoner eller publisert innhold.",
     "adminContent.help.moduleValidity":
@@ -259,6 +271,8 @@ const extraTranslations = {
     "adminContent.select.title": "Vel modul som skal konfigurerast",
     "adminContent.select.moduleId": "Modul-ID",
     "adminContent.select.loadModules": "Last modular",
+    "adminContent.select.loadContent": "Last valt innhald",
+    "adminContent.select.exportModule": "Eksporter vald modul",
     "adminContent.select.deleteModule": "Slett vald modul",
     "adminContent.select.moduleDropdown": "Tilgjengelege modular",
     "adminContent.rubric.title": "2) Vurderingsreglar for innlevering",
@@ -290,6 +304,8 @@ const extraTranslations = {
     "adminContent.meta.noneSelected": "ingen",
     "adminContent.meta.loadedCountPrefix": "Lasta modular",
     "adminContent.message.moduleCreated": "Modul oppretta.",
+    "adminContent.message.moduleContentLoaded": "Valt modulinnhald er lasta inn.",
+    "adminContent.message.moduleExported": "Vald modul er eksportert.",
     "adminContent.message.moduleDeleted": "Modul sletta.",
     "adminContent.message.rubricCreated": "Vurderingsreglar lagra.",
     "adminContent.message.promptCreated": "Vurderingsinstruks lagra.",
@@ -310,6 +326,8 @@ const extraTranslations = {
       "Bruk vanleg tekst eller locale-JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
     "adminContent.help.moduleDescription":
       "Blir vist i modullister. Støttar same locale-JSON-format.",
+    "adminContent.help.loadContent":
+      "Lastar lagra vurderingsreglar, prompt, MCQ og modulversjon inn i steg 2-6.",
     "adminContent.help.deleteModule":
       "Slettar berre tomme modular utan innleveringar, versjonar eller publisert innhald.",
     "adminContent.help.moduleValidity":

@@ -63,6 +63,89 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    findModuleContentBundle(moduleId: string) {
+      return client.module.findUnique({
+        where: { id: moduleId },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          certificationLevel: true,
+          validFrom: true,
+          validTo: true,
+          activeVersionId: true,
+          createdAt: true,
+          updatedAt: true,
+          versions: {
+            orderBy: { versionNo: "desc" },
+            select: {
+              id: true,
+              versionNo: true,
+              taskText: true,
+              guidanceText: true,
+              rubricVersionId: true,
+              promptTemplateVersionId: true,
+              mcqSetVersionId: true,
+              publishedBy: true,
+              publishedAt: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          rubricVersions: {
+            orderBy: { versionNo: "desc" },
+            select: {
+              id: true,
+              versionNo: true,
+              criteriaJson: true,
+              scalingRuleJson: true,
+              passRuleJson: true,
+              active: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          promptTemplateVersions: {
+            orderBy: { versionNo: "desc" },
+            select: {
+              id: true,
+              versionNo: true,
+              systemPrompt: true,
+              userPromptTemplate: true,
+              examplesJson: true,
+              active: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          mcqSetVersions: {
+            orderBy: { versionNo: "desc" },
+            select: {
+              id: true,
+              versionNo: true,
+              title: true,
+              active: true,
+              createdAt: true,
+              updatedAt: true,
+              questions: {
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  stem: true,
+                  optionsJson: true,
+                  correctAnswer: true,
+                  rationale: true,
+                  active: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+
     findLatestRubricVersion(moduleId: string) {
       return client.rubricVersion.findFirst({
         where: { moduleId },

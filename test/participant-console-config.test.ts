@@ -239,6 +239,8 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('<details id="outputDetails">');
         expect(response.text).toContain("<summary>View raw response</summary>");
+        expect(response.text).toContain('id="loadModuleContent"');
+        expect(response.text).toContain('id="exportModule"');
         expect(response.text).not.toContain('id="flowProgress"');
       }
     }
@@ -261,6 +263,8 @@ describe("participant console runtime config", () => {
     expect(cssResponse.text).toContain(".field-error");
     expect(cssResponse.text).toContain(".field-success");
     expect(cssResponse.text).toContain(".pill-group");
+    expect(cssResponse.text).toContain(".mcq-question-card");
+    expect(cssResponse.text).toContain(".mcq-option");
     expect(cssResponse.text).not.toContain("border: 1px solid #ddd;");
 
     const loadingCssResponse = await request(app).get("/static/loading.css");
@@ -282,5 +286,10 @@ describe("participant console runtime config", () => {
     expect(toastJsResponse.status).toBe(200);
     expect(toastJsResponse.text).toContain("export function showToast");
     expect(toastJsResponse.text).toContain("AUTO_DISMISS_MS = 5000");
+
+    const participantJsResponse = await request(app).get("/static/participant.js");
+    expect(participantJsResponse.status).toBe(200);
+    expect(participantJsResponse.text).toContain('document.createElement("fieldset")');
+    expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
   });
 });
