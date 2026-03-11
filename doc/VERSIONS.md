@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.90 - 2026-03-11
+### Summary
+Continued `#84` by adding unit coverage for `adminContentService.ts`, focusing on validation, dependency checks, benchmark prompt enrichment, and publication auditing.
+
+### Included
+- New unit test:
+  - `test/unit/admin-content-service.test.ts`
+- Added service-level unit coverage for:
+  - module date validation
+  - module creation audit logging
+  - module-version dependency mismatch validation
+  - benchmark example prompt enrichment and audit logging
+  - module-version publication audit metadata including previous active version
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.89 - 2026-03-11
 ### Summary
 Continued `#84` by adding focused unit coverage for `reportingService.ts`, targeting service-layer aggregation, filtering, MCQ quality flagging, and CSV serialization behavior.
