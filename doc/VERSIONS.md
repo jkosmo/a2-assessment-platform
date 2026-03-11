@@ -7,6 +7,27 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.87 - 2026-03-11
+### Summary
+Expanded `#84` with the first additional unit-test slice for workflow-heavy services by covering `appealService.ts` and `manualReviewService.ts`.
+
+### Included
+- New unit tests:
+  - `test/unit/appeal-service.test.ts`
+  - `test/unit/manual-review-service.test.ts`
+- Added service-level unit coverage for:
+  - appeal creation validation when the submission is missing
+  - appeal creation happy path with notification failure tolerance
+  - appeal claim conflict when a case is already assigned
+  - appeal resolution happy path with immutable decision creation and recertification update
+  - manual review claim validation for missing/already-assigned cases
+  - manual review override validation when no decision exists
+  - manual review override happy path with decision creation, completion update, and audit side effects
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.86 - 2026-03-11
 ### Summary
 Refactored background processing for `#90` so the assessment worker and appeal SLA monitor use injectable lifecycle classes instead of module-level singleton state in service files.
