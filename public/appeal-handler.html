@@ -17,49 +17,49 @@
   </head>
   <body>
     <div class="layout-container">
-    <h1 data-i18n="appealPage.title"></h1>
-    <p class="small" data-i18n="appealPage.subtitle"></p>
-    <p class="small" data-i18n="appealPage.scopeNote"></p>
-    <p class="small"><span data-i18n="appealPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <h1 data-i18n="appealPage.title">Appeals Workspace</h1>
+    <p class="small" data-i18n="appealPage.subtitle">Review participant appeals: filter the list, open a case, then assign and resolve it.</p>
+    <p class="small" data-i18n="appealPage.scopeNote">This workspace only handles appeals. Submissions waiting for human review belong in Manual Review.</p>
+    <p class="small"><span data-i18n="appealPage.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
 
     <section class="card">
       <div class="row">
         <div>
-          <label for="localeSelect" data-i18n="locale.label"></label>
+          <label for="localeSelect" data-i18n="locale.label">Language</label>
           <select id="localeSelect"></select>
         </div>
       </div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="identity.title"></h3>
+      <h3 data-i18n="identity.title">Test User</h3>
       <div class="row">
-        <div><label data-i18n="identity.userId"></label><input id="userId" value="handler-1" /></div>
-        <div><label data-i18n="identity.email"></label><input id="email" value="appeal.handler@company.com" /></div>
+        <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="handler-1" /></div>
+        <div><label data-i18n="identity.email">Email</label><input id="email" value="appeal.handler@company.com" /></div>
       </div>
       <div class="row">
-        <div><label data-i18n="identity.name"></label><input id="name" value="Platform Appeal Handler" /></div>
-        <div><label data-i18n="identity.department"></label><input id="department" value="Quality" /></div>
+        <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Appeal Handler" /></div>
+        <div><label data-i18n="identity.department">Department</label><input id="department" value="Quality" /></div>
       </div>
       <div>
-        <label data-i18n="identity.roles"></label>
+        <label data-i18n="identity.roles">Roles (comma-separated)</label>
         <input id="roles" value="APPEAL_HANDLER" />
       </div>
       <div id="mockRolePresetContainer">
-        <label for="mockRolePreset" data-i18n="identity.rolePreset"></label>
+        <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
         <select id="mockRolePreset"></select>
         <div class="small" id="mockRolePresetHint"></div>
       </div>
-      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe"></button>
+      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="appealHandler.title"></h3>
+      <h3 data-i18n="appealHandler.title">Appeal Handler Workspace</h3>
       <div class="queue-toolbar">
         <div>
           <fieldset class="pill-group-fieldset">
-            <legend id="appealHandlerStatusFilterLegend" data-i18n="appealHandler.statusFilter"></legend>
+            <legend id="appealHandlerStatusFilterLegend" data-i18n="appealHandler.statusFilter">Queue status filter</legend>
             <div
               id="appealHandlerStatusFilter"
               class="pill-group"
@@ -67,35 +67,35 @@
               aria-labelledby="appealHandlerStatusFilterLegend"
             ></div>
           </fieldset>
-          <div class="small" data-i18n="appealHandler.statusHint"></div>
+          <div class="small" data-i18n="appealHandler.statusHint">Select one or more statuses using the checkboxes.</div>
         </div>
         <div>
-          <label for="queueSearch" data-i18n="appealHandler.search"></label>
-          <input id="queueSearch" data-i18n-placeholder="appealHandler.searchPlaceholder" />
+          <label for="queueSearch" data-i18n="appealHandler.search">Search queue</label>
+          <input id="queueSearch" data-i18n-placeholder="appealHandler.searchPlaceholder" placeholder="Filter by participant, module, appeal ID, or status" />
         </div>
         <div>
-          <label data-i18n="appealHandler.queueLimit"></label>
+          <label data-i18n="appealHandler.queueLimit">Max appeals to load</label>
           <input id="queueLimit" readonly value="50" />
         </div>
       </div>
       <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
-        <div><button id="loadAppealQueue" class="btn-secondary" data-i18n="appealHandler.loadQueue"></button></div>
-        <div class="small"><span data-i18n="appealHandler.queueCount"></span> <strong id="queueCount">0</strong></div>
+        <div><button id="loadAppealQueue" class="btn-secondary" data-i18n="appealHandler.loadQueue">Load appeals</button></div>
+        <div class="small"><span data-i18n="appealHandler.queueCount">Appeals shown:</span> <strong id="queueCount">0</strong></div>
       </div>
       <div id="appealHandlerMessage" class="small"></div>
       <div class="queue-table-wrap">
         <table>
           <thead>
             <tr>
-              <th data-i18n="appealHandler.table.appealId"></th>
-              <th data-i18n="appealHandler.table.status"></th>
-              <th data-i18n="appealHandler.table.participant"></th>
-              <th data-i18n="appealHandler.table.module"></th>
-              <th data-i18n="appealHandler.table.submittedAt"></th>
-              <th data-i18n="appealHandler.table.createdAt"></th>
-              <th data-i18n="appealHandler.table.claimedAt"></th>
-              <th data-i18n="appealHandler.table.resolvedAt"></th>
-              <th data-i18n="appealHandler.table.sla"></th>
+              <th data-i18n="appealHandler.table.appealId">Appeal</th>
+              <th data-i18n="appealHandler.table.status">Status</th>
+              <th data-i18n="appealHandler.table.participant">Participant</th>
+              <th data-i18n="appealHandler.table.module">Module</th>
+              <th data-i18n="appealHandler.table.submittedAt">Submitted</th>
+              <th data-i18n="appealHandler.table.createdAt">Created</th>
+              <th data-i18n="appealHandler.table.claimedAt">Assigned</th>
+              <th data-i18n="appealHandler.table.resolvedAt">Resolved</th>
+              <th data-i18n="appealHandler.table.sla">SLA</th>
             </tr>
           </thead>
           <tbody id="appealQueueBody"></tbody>
@@ -104,27 +104,27 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="appealHandler.detailsTitle"></h3>
-      <div><label data-i18n="appealHandler.selectedAppeal"></label><input id="handlerSelectedAppealId" readonly value="-" /></div>
+      <h3 data-i18n="appealHandler.detailsTitle">Selected appeal details</h3>
+      <div><label data-i18n="appealHandler.selectedAppeal">Selected appeal ID</label><input id="handlerSelectedAppealId" readonly value="-" /></div>
       <pre id="appealHandlerDetails"></pre>
-      <div><label data-i18n="appealHandler.resolveDecision"></label><textarea id="handlerDecisionReason" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
-      <div><label data-i18n="appealHandler.resolveNote"></label><textarea id="handlerResolutionNote" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
+      <div><label data-i18n="appealHandler.resolveDecision">Decision reason</label><textarea id="handlerDecisionReason" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
+      <div><label data-i18n="appealHandler.resolveNote">Resolution note</label><textarea id="handlerResolutionNote" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
       <div>
-        <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail"></label>
+        <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail">Pass/fail total</label>
         <select id="handlerPassFailTotal">
-          <option value="true" data-i18n="appealHandler.pass"></option>
-          <option value="false" data-i18n="appealHandler.fail"></option>
+          <option value="true" data-i18n="appealHandler.pass">Pass</option>
+          <option value="false" data-i18n="appealHandler.fail">Fail</option>
         </select>
       </div>
       <div class="small" id="resolveValidationMessage"></div>
       <div class="row">
-        <div><button id="claimAppeal" class="btn-secondary" data-i18n="appealHandler.claim"></button></div>
-        <div><button id="resolveAppeal" class="btn-primary" data-i18n="appealHandler.resolve"></button></div>
+        <div><button id="claimAppeal" class="btn-secondary" data-i18n="appealHandler.claim">Assign to me</button></div>
+        <div><button id="resolveAppeal" class="btn-primary" data-i18n="appealHandler.resolve">Resolve appeal</button></div>
       </div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="output.title"></h3>
+      <h3 data-i18n="output.title">System response</h3>
       <div class="small" id="outputStatus"></div>
       <pre id="output"></pre>
     </section>

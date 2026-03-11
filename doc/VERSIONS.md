@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.94 - 2026-03-11
+### Summary
+Implemented `#88` by adding inline `en-GB` fallback copy to workspace HTML so `data-i18n` content is legible on initial render before JavaScript runs.
+
+### Included
+- Updated static workspace HTML with inline English fallback copy:
+  - `public/participant.html`
+  - `public/admin-content.html`
+  - `public/appeal-handler.html`
+  - `public/calibration.html`
+  - `public/participant-completed.html`
+- Added regression coverage:
+  - `test/workspace-html-fallbacks.test.js`
+- Verified placeholder fallbacks for workspace filters that depend on `data-i18n-placeholder`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/workspace-html-fallbacks.test.js test/participant-console-config.test.ts`
+
 ## 0.3.93 - 2026-03-11
 ### Summary
 Continued `#84` by adding unit coverage for `recertificationService.ts`, focusing on decision-driven status upserts, lifecycle status derivation, and scheduled reminder delivery with duplicate-send protection.

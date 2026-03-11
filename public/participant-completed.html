@@ -14,52 +14,52 @@
   </head>
   <body>
     <div class="layout-container">
-    <h1 data-i18n="completedPage.title"></h1>
-    <p class="small" data-i18n="completedPage.subtitle"></p>
-    <p class="small"><span data-i18n="completedPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <h1 data-i18n="completedPage.title">Completed Modules</h1>
+    <p class="small" data-i18n="completedPage.subtitle">See what you have finished and your latest score per module.</p>
+    <p class="small"><span data-i18n="completedPage.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
 
     <section class="card">
       <div class="row">
         <div>
-          <label for="localeSelect" data-i18n="locale.label"></label>
+          <label for="localeSelect" data-i18n="locale.label">Language</label>
           <select id="localeSelect"></select>
         </div>
       </div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="identity.title"></h3>
+      <h3 data-i18n="identity.title">Test User</h3>
       <div class="row">
-        <div><label data-i18n="identity.userId"></label><input id="userId" value="participant-1" /></div>
-        <div><label data-i18n="identity.email"></label><input id="email" value="participant@company.com" /></div>
+        <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="participant-1" /></div>
+        <div><label data-i18n="identity.email">Email</label><input id="email" value="participant@company.com" /></div>
       </div>
       <div class="row">
-        <div><label data-i18n="identity.name"></label><input id="name" value="Platform Participant" /></div>
-        <div><label data-i18n="identity.department"></label><input id="department" value="Consulting" /></div>
+        <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Participant" /></div>
+        <div><label data-i18n="identity.department">Department</label><input id="department" value="Consulting" /></div>
       </div>
       <div>
-        <label data-i18n="identity.roles"></label>
+        <label data-i18n="identity.roles">Roles (comma-separated)</label>
         <input id="roles" value="PARTICIPANT" />
       </div>
       <div id="mockRolePresetContainer">
-        <label for="mockRolePreset" data-i18n="identity.rolePreset"></label>
+        <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
         <select id="mockRolePreset"></select>
         <div class="small" id="mockRolePresetHint"></div>
       </div>
-      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe"></button>
+      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="completed.title"></h3>
+      <h3 data-i18n="completed.title">My completed modules</h3>
       <div class="row">
         <div>
-          <label for="completedLimit" data-i18n="completed.limit"></label>
+          <label for="completedLimit" data-i18n="completed.limit">Max modules</label>
           <input id="completedLimit" type="number" min="1" max="200" value="50" />
         </div>
         <div>
           <label>&nbsp;</label>
-          <button id="loadCompleted" class="btn-secondary" data-i18n="completed.load"></button>
+          <button id="loadCompleted" class="btn-secondary" data-i18n="completed.load">Load completed modules</button>
         </div>
       </div>
       <div class="small" id="completedMeta"></div>
@@ -67,11 +67,11 @@
         <table>
           <thead>
             <tr>
-              <th data-i18n="completed.table.module"></th>
-              <th data-i18n="completed.table.completedAt"></th>
-              <th data-i18n="completed.table.status"></th>
-              <th data-i18n="completed.table.score"></th>
-              <th data-i18n="completed.table.passFail"></th>
+              <th data-i18n="completed.table.module">Module</th>
+              <th data-i18n="completed.table.completedAt">Completed</th>
+              <th data-i18n="completed.table.status">Status</th>
+              <th data-i18n="completed.table.score">Total score</th>
+              <th data-i18n="completed.table.passFail">Pass/fail</th>
             </tr>
           </thead>
           <tbody id="completedBody"></tbody>
@@ -80,7 +80,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="output.title"></h3>
+      <h3 data-i18n="output.title">System response</h3>
       <div class="small" id="outputStatus"></div>
       <pre id="output"></pre>
     </section>

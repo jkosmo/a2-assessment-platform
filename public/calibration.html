@@ -14,58 +14,58 @@
   </head>
   <body>
     <div class="layout-container">
-    <h1 data-i18n="calibrationPage.title"></h1>
-    <p class="small" data-i18n="calibrationPage.subtitle"></p>
-    <p class="small"><span data-i18n="calibrationPage.versionLabel"></span> <strong id="appVersion">loading...</strong></p>
+    <h1 data-i18n="calibrationPage.title">Calibration Workspace</h1>
+    <p class="small" data-i18n="calibrationPage.subtitle">Analyze historical module outcomes and benchmark anchors to tune quality consistency.</p>
+    <p class="small"><span data-i18n="calibrationPage.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
 
     <section class="card">
       <div class="row">
         <div>
-          <label for="localeSelect" data-i18n="locale.label"></label>
+          <label for="localeSelect" data-i18n="locale.label">Language</label>
           <select id="localeSelect"></select>
         </div>
       </div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="identity.title"></h3>
+      <h3 data-i18n="identity.title">Test User</h3>
       <div class="row">
-        <div><label data-i18n="identity.userId"></label><input id="userId" value="smo-1" /></div>
-        <div><label data-i18n="identity.email"></label><input id="email" value="smo@company.com" /></div>
+        <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="smo-1" /></div>
+        <div><label data-i18n="identity.email">Email</label><input id="email" value="smo@company.com" /></div>
       </div>
       <div class="row">
-        <div><label data-i18n="identity.name"></label><input id="name" value="Platform Subject Matter Owner" /></div>
-        <div><label data-i18n="identity.department"></label><input id="department" value="Learning" /></div>
+        <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Subject Matter Owner" /></div>
+        <div><label data-i18n="identity.department">Department</label><input id="department" value="Learning" /></div>
       </div>
       <div>
-        <label data-i18n="identity.roles"></label>
+        <label data-i18n="identity.roles">Roles (comma-separated)</label>
         <input id="roles" value="SUBJECT_MATTER_OWNER" />
       </div>
       <div id="mockRolePresetContainer">
-        <label for="mockRolePreset" data-i18n="identity.rolePreset"></label>
+        <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
         <select id="mockRolePreset"></select>
         <div class="small" id="mockRolePresetHint"></div>
       </div>
-      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe"></button>
+      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="calibration.filters.title"></h3>
+      <h3 data-i18n="calibration.filters.title">Calibration filters</h3>
       <div class="row">
         <div>
-          <label for="calibrationModuleId" data-i18n="calibration.filters.moduleId"></label>
-          <input id="calibrationModuleId" data-i18n-placeholder="calibration.filters.modulePlaceholder" />
+          <label for="calibrationModuleId" data-i18n="calibration.filters.moduleId">Module ID</label>
+          <input id="calibrationModuleId" data-i18n-placeholder="calibration.filters.modulePlaceholder" placeholder="Enter module ID" />
         </div>
         <div>
-          <label for="calibrationModuleVersionId" data-i18n="calibration.filters.moduleVersionId"></label>
-          <input id="calibrationModuleVersionId" data-i18n-placeholder="calibration.filters.moduleVersionPlaceholder" />
+          <label for="calibrationModuleVersionId" data-i18n="calibration.filters.moduleVersionId">Module version ID</label>
+          <input id="calibrationModuleVersionId" data-i18n-placeholder="calibration.filters.moduleVersionPlaceholder" placeholder="Optional module version ID" />
         </div>
       </div>
       <div class="row">
         <div>
           <fieldset class="pill-group-fieldset">
-            <legend id="calibrationStatusesLegend" data-i18n="calibration.filters.statuses"></legend>
+            <legend id="calibrationStatusesLegend" data-i18n="calibration.filters.statuses">Submission statuses</legend>
             <div
               id="calibrationStatuses"
               class="pill-group"
@@ -75,44 +75,44 @@
           </fieldset>
         </div>
         <div>
-          <label for="calibrationLimit" data-i18n="calibration.filters.limit"></label>
+          <label for="calibrationLimit" data-i18n="calibration.filters.limit">Max outcomes</label>
           <input id="calibrationLimit" type="number" min="1" max="500" />
         </div>
       </div>
       <div class="row">
         <div>
-          <label for="calibrationDateFrom" data-i18n="calibration.filters.dateFrom"></label>
+          <label for="calibrationDateFrom" data-i18n="calibration.filters.dateFrom">Date from</label>
           <input id="calibrationDateFrom" type="date" />
         </div>
         <div>
-          <label for="calibrationDateTo" data-i18n="calibration.filters.dateTo"></label>
+          <label for="calibrationDateTo" data-i18n="calibration.filters.dateTo">Date to</label>
           <input id="calibrationDateTo" type="date" />
         </div>
       </div>
       <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
-        <div><button id="loadCalibration" class="btn-secondary" data-i18n="calibration.filters.load"></button></div>
+        <div><button id="loadCalibration" class="btn-secondary" data-i18n="calibration.filters.load">Load calibration snapshot</button></div>
         <div class="small" id="calibrationMeta"></div>
       </div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="calibration.signals.title"></h3>
+      <h3 data-i18n="calibration.signals.title">Quality signals</h3>
       <pre id="calibrationSignals"></pre>
     </section>
 
     <section class="card">
-      <h3 data-i18n="calibration.outcomes.title"></h3>
+      <h3 data-i18n="calibration.outcomes.title">Historical outcomes</h3>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th data-i18n="calibration.outcomes.submissionId"></th>
-              <th data-i18n="calibration.outcomes.submittedAt"></th>
-              <th data-i18n="calibration.outcomes.status"></th>
-              <th data-i18n="calibration.outcomes.moduleVersion"></th>
-              <th data-i18n="calibration.outcomes.totalScore"></th>
-              <th data-i18n="calibration.outcomes.passFail"></th>
-              <th data-i18n="calibration.outcomes.manualReview"></th>
+              <th data-i18n="calibration.outcomes.submissionId">Submission</th>
+              <th data-i18n="calibration.outcomes.submittedAt">Submitted</th>
+              <th data-i18n="calibration.outcomes.status">Status</th>
+              <th data-i18n="calibration.outcomes.moduleVersion">Module version</th>
+              <th data-i18n="calibration.outcomes.totalScore">Total score</th>
+              <th data-i18n="calibration.outcomes.passFail">Pass/fail</th>
+              <th data-i18n="calibration.outcomes.manualReview">Manual review signal</th>
             </tr>
           </thead>
           <tbody id="calibrationOutcomesBody"></tbody>
@@ -121,16 +121,16 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="calibration.anchors.title"></h3>
+      <h3 data-i18n="calibration.anchors.title">Benchmark anchors</h3>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th data-i18n="calibration.anchors.promptVersion"></th>
-              <th data-i18n="calibration.anchors.benchmarkCount"></th>
-              <th data-i18n="calibration.anchors.sourcePromptVersion"></th>
-              <th data-i18n="calibration.anchors.sourceModuleVersion"></th>
-              <th data-i18n="calibration.anchors.createdAt"></th>
+              <th data-i18n="calibration.anchors.promptVersion">Prompt version</th>
+              <th data-i18n="calibration.anchors.benchmarkCount">Benchmark examples</th>
+              <th data-i18n="calibration.anchors.sourcePromptVersion">Source prompt version</th>
+              <th data-i18n="calibration.anchors.sourceModuleVersion">Source module version</th>
+              <th data-i18n="calibration.anchors.createdAt">Created</th>
             </tr>
           </thead>
           <tbody id="calibrationAnchorsBody"></tbody>
@@ -139,7 +139,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="output.title"></h3>
+      <h3 data-i18n="output.title">System response</h3>
       <div class="small" id="outputStatus"></div>
       <details id="outputDetails">
         <summary>Raw response</summary>
