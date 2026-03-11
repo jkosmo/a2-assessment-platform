@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.92 - 2026-03-11
+### Summary
+Continued `#84` by adding unit coverage for `orgSyncService.ts`, focusing on delta-sync outcome counting, create/update behavior, strict conflict failure handling, and org-sync audit/operational logging.
+
+### Included
+- New unit test:
+  - `test/unit/org-sync-service.test.ts`
+- Added service-level unit coverage for:
+  - create/update/re-key behavior during delta sync
+  - strict conflict failure handling when email and external ID disagree
+  - org-sync completion summary counts
+  - failed-record audit logging and operational event logging
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.91 - 2026-03-11
 ### Summary
 Continued `#84` by adding unit coverage for `calibrationWorkspaceService.ts`, targeting snapshot assembly, benchmark-anchor extraction, signal calculation, and calibration audit logging.
