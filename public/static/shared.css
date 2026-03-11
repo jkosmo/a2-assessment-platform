@@ -140,6 +140,13 @@ button:focus-visible {
   margin-top: calc(var(--space-1) * 0.5);
 }
 
+.field-warning {
+  color: var(--color-warning);
+  border-left: 3px solid var(--color-warning);
+  padding-left: var(--space-1);
+  margin-top: calc(var(--space-1) * 0.5);
+}
+
 .field-success {
   color: var(--color-success);
   margin-top: calc(var(--space-1) * 0.5);

@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.98 - 2026-03-11
+### Summary
+Completed `#73` by locking accessible validation hint and error styling into the shared workspace CSS and adding regression tests for hint/error/ARIA wiring across participant, appeal-handler, and manual-review.
+
+### Included
+- Added a shared warning-state helper class alongside the existing hint, error, success, and invalid-field styles:
+  - `public/static/shared.css`
+- Added regression coverage verifying:
+  - hint/error/success/invalid styles remain present in shared CSS
+  - `aria-describedby` wiring remains intact for participant and reviewer validation fields
+  - runtime code keeps `role="alert"` and invalid-field hooks for validation errors
+  - `test/workspace-validation-accessibility.test.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-html-fallbacks.test.js test/participant-translations.test.js test/workspace-validation-accessibility.test.js`
+
 ## 0.3.97 - 2026-03-11
 ### Summary
 Implemented `#74` by replacing default raw JSON output on the participant and appeal-handler pages with toast notifications, while keeping expandable raw response details for admin-content and calibration.
