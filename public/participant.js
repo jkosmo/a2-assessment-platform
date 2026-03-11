@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
@@ -145,6 +146,7 @@ let participantRuntimeConfig = {
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let loadedModules = [];
+let hasLoadedModules = false;
 let selectedModuleId = "";
 let autosaveTimer = null;
 let flowState = {
@@ -453,9 +455,15 @@ function updateCreateSubmissionAvailability() {
 }
 
 function renderModules() {
+  hideLoading(moduleList);
   moduleList.innerHTML = "";
 
   const modules = buildModuleCardViewModels(loadedModules, selectedModuleId);
+  if (modules.length === 0) {
+    showEmpty(moduleList, hasLoadedModules ? t("modules.empty") : t("modules.emptyInitial"));
+    return;
+  }
+
   for (const module of modules) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1236,6 +1244,7 @@ function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus
 }
 
 function renderAssessmentProgress() {
+  hideLoading(assessmentProgressStatus);
   const base = t(assessmentProgressKey);
   let statusText = base;
 
@@ -1335,12 +1344,13 @@ function renderResultSummary(body) {
 }
 
 function renderHistorySummary(body) {
+  hideLoading(historySummary);
   latestHistory = body;
   const history = body?.history ?? [];
 
   if (!Array.isArray(history) || history.length === 0) {
     historySummary.dataset.hasHistory = "";
-    historySummary.textContent = t("history.empty");
+    showEmpty(historySummary, t("history.empty"));
     return;
   }
 
@@ -1408,8 +1418,10 @@ loadMeButton.addEventListener("click", async () => {
 loadModulesButton.addEventListener("click", async () => {
   await runWithBusyButton(loadModulesButton, async () => {
     try {
+      showLoading(moduleList, { rows: 3, variant: "cards" });
       const body = await apiFetch("/api/modules", headers);
       loadedModules = Array.isArray(body.modules) ? body.modules : [];
+      hasLoadedModules = true;
       if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
         selectedModuleId = "";
         resetFlowStateForModuleContext();
@@ -1422,6 +1434,7 @@ loadModulesButton.addEventListener("click", async () => {
       updateCreateSubmissionAvailability();
       log(body);
     } catch (error) {
+      showEmpty(moduleList, error.message);
       log(error.message);
     }
   });
@@ -1555,6 +1568,9 @@ queueAssessmentButton.addEventListener("click", async () => {
 checkAssessmentButton.addEventListener("click", async () => {
   await runWithBusyButton(checkAssessmentButton, async () => {
     try {
+      showLoading(assessmentProgressStatus, { rows: 1 });
+      assessmentProgressSeconds.textContent = "";
+      assessmentProgressSeconds.classList.add("hidden");
       const submissionId = submissionIdLabel.textContent;
       if (!submissionId || submissionId === "-") {
         throw new Error(t("errors.createSubmissionFirst"));
@@ -1568,6 +1584,9 @@ checkAssessmentButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       log(body);
     } catch (error) {
+      showEmpty(assessmentProgressStatus, error.message);
+      assessmentProgressSeconds.textContent = "";
+      assessmentProgressSeconds.classList.add("hidden");
       log(error.message);
     }
   }, renderFlowGating);
@@ -1620,10 +1639,12 @@ createAppealButton.addEventListener("click", async () => {
 loadHistoryButton.addEventListener("click", async () => {
   await runWithBusyButton(loadHistoryButton, async () => {
     try {
+      showLoading(historySummary, { rows: 4 });
       const body = await apiFetch("/api/submissions/history?limit=20", headers);
       renderHistorySummary(body);
       log(body);
     } catch (error) {
+      showEmpty(historySummary, error.message);
       log(error.message);
     }
   });

@@ -7,6 +7,33 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.96 - 2026-03-11
+### Summary
+Implemented `#72` by adding reusable loading and empty-state feedback for data-fetching sections in the participant, appeal-handler, and calibration workspaces.
+
+### Included
+- Added shared loading helpers and styles:
+  - `public/static/loading.css`
+  - `public/static/loading.js`
+- Added loading skeletons and empty-state messages to participant data-fetch sections:
+  - module loading
+  - assessment progress checks
+  - submission history
+- Added queue loading and empty-state rendering to the appeal-handler queue:
+  - `public/appeal-handler.js`
+  - `public/appeal-handler.html`
+- Added loading and empty-state rendering to calibration signals, outcomes, and benchmark anchors:
+  - `public/calibration.js`
+  - `public/calibration.html`
+- Added participant translation keys for initial and post-load module empty states:
+  - `public/i18n/participant-translations.js`
+- Added regression coverage for loading assets and workspace page linkage:
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-html-fallbacks.test.js test/participant-translations.test.js`
+
 ## 0.3.95 - 2026-03-11
 ### Summary
 Implemented `#92` by removing the redundant manual queue-load controls from the appeal-handler and manual-review workspaces, keeping queue refresh automatic and filter-driven.

@@ -180,6 +180,10 @@ describe("participant console runtime config", () => {
       expect(response.text).toContain('href="/static/shared.css"');
       expect(response.text).toContain('class="layout-container"');
 
+      if (["/participant", "/appeal-handler", "/calibration"].includes(pagePath)) {
+        expect(response.text).toContain('href="/static/loading.css"');
+      }
+
       const buttonTags = response.text.match(/<button\b[^>]*>/g) ?? [];
       for (const buttonTag of buttonTags) {
         expect(buttonTag).toContain("class=");
@@ -248,5 +252,15 @@ describe("participant console runtime config", () => {
     expect(cssResponse.text).toContain(".field-success");
     expect(cssResponse.text).toContain(".pill-group");
     expect(cssResponse.text).not.toContain("border: 1px solid #ddd;");
+
+    const loadingCssResponse = await request(app).get("/static/loading.css");
+    expect(loadingCssResponse.status).toBe(200);
+    expect(loadingCssResponse.text).toContain(".button-busy::after");
+    expect(loadingCssResponse.text).toContain(".loading-skeleton");
+
+    const loadingJsResponse = await request(app).get("/static/loading.js");
+    expect(loadingJsResponse.status).toBe(200);
+    expect(loadingJsResponse.text).toContain("export function showLoading");
+    expect(loadingJsResponse.text).toContain("export function showEmpty");
   });
 });

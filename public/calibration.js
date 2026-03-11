@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/calibration-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -413,13 +414,16 @@ function populateStatusOptions() {
 }
 
 function renderWorkspace(body) {
+  hideLoading(calibrationSignals);
+  hideLoading(outcomesBody);
+  hideLoading(anchorsBody);
   latestWorkspaceBody = body;
 
   if (!body) {
-    calibrationSignals.textContent = t("calibration.signals.none");
+    showEmpty(calibrationSignals, t("calibration.signals.none"));
     calibrationMeta.textContent = "";
-    outcomesBody.innerHTML = `<tr><td colspan="7">${t("calibration.outcomes.empty")}</td></tr>`;
-    anchorsBody.innerHTML = `<tr><td colspan="5">${t("calibration.anchors.empty")}</td></tr>`;
+    showEmpty(outcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
+    showEmpty(anchorsBody, t("calibration.anchors.empty"), { columns: 5 });
     return;
   }
 
@@ -445,7 +449,7 @@ function renderWorkspace(body) {
   const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [];
   outcomesBody.innerHTML = "";
   if (outcomes.length === 0) {
-    outcomesBody.innerHTML = `<tr><td colspan="7">${t("calibration.outcomes.empty")}</td></tr>`;
+    showEmpty(outcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
   } else {
     for (const outcome of outcomes) {
       const row = document.createElement("tr");
@@ -476,7 +480,7 @@ function renderWorkspace(body) {
   const anchors = Array.isArray(body.benchmarkAnchors) ? body.benchmarkAnchors : [];
   anchorsBody.innerHTML = "";
   if (anchors.length === 0) {
-    anchorsBody.innerHTML = `<tr><td colspan="5">${t("calibration.anchors.empty")}</td></tr>`;
+    showEmpty(anchorsBody, t("calibration.anchors.empty"), { columns: 5 });
   } else {
     for (const anchor of anchors) {
       const row = document.createElement("tr");
@@ -564,6 +568,10 @@ loadMeButton.addEventListener("click", async () => {
 loadCalibrationButton.addEventListener("click", async () => {
   await runWithBusyButton(loadCalibrationButton, async () => {
     try {
+      calibrationMeta.textContent = "";
+      showLoading(calibrationSignals, { rows: 6 });
+      showLoading(outcomesBody, { rows: 4, columns: 7 });
+      showLoading(anchorsBody, { rows: 3, columns: 5 });
       const moduleId = moduleIdInput.value.trim();
       if (!moduleId) {
         throw new Error(t("calibration.errors.moduleRequired"));
@@ -598,6 +606,10 @@ loadCalibrationButton.addEventListener("click", async () => {
       renderWorkspace(body);
       log(body);
     } catch (error) {
+      calibrationMeta.textContent = "";
+      showEmpty(calibrationSignals, error.message);
+      showEmpty(outcomesBody, error.message, { columns: 7 });
+      showEmpty(anchorsBody, error.message, { columns: 5 });
       log(error.message);
     }
   });

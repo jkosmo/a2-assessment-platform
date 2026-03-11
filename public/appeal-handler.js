@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/appeal-handler-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -541,6 +542,7 @@ function filterAppealsBySearch(appeals) {
 }
 
 function renderAppealQueue() {
+  hideLoading(appealQueueBody);
   appealQueueBody.innerHTML = "";
 
   if (!Array.isArray(latestAppealQueue) || latestAppealQueue.length === 0) {
@@ -548,12 +550,7 @@ function renderAppealQueue() {
     setSelectedAppeal("", true);
     selectedAppealDetails = null;
     renderAppealHandlerDetails(null);
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 9;
-    cell.textContent = t("appealHandler.noQueue");
-    row.appendChild(cell);
-    appealQueueBody.appendChild(row);
+    showEmpty(appealQueueBody, t("appealHandler.noQueue"), { columns: 9 });
     return;
   }
 
@@ -564,12 +561,7 @@ function renderAppealQueue() {
     setSelectedAppeal("", true);
     selectedAppealDetails = null;
     renderAppealHandlerDetails(null);
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 9;
-    cell.textContent = t("appealHandler.noRows");
-    row.appendChild(cell);
-    appealQueueBody.appendChild(row);
+    showEmpty(appealQueueBody, t("appealHandler.noRows"), { columns: 9 });
     return;
   }
 
@@ -908,6 +900,7 @@ async function loadAppealQueue() {
 
   activeAppealQueueLoad = (async () => {
     try {
+      showLoading(appealQueueBody, { rows: 5, columns: 9 });
       const statuses = getSelectedAppealStatuses();
       const limit = getAppealWorkspaceSettings().queuePageSize;
       const body = await apiFetch(
@@ -927,6 +920,10 @@ async function loadAppealQueue() {
       }
       log(body);
     } catch (error) {
+      queueCountLabel.textContent = "0";
+      selectedAppealDetails = null;
+      renderAppealHandlerDetails(null);
+      showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
       appealHandlerMessage.textContent = toActionableErrorMessage(error);
       log(error.message);
     } finally {
