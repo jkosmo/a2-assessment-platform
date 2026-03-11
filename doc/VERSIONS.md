@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.102 - 2026-03-11
+### Summary
+Progressed `#68` with a discovery note for composite certifications built from module sets, covering architecture options, risk/mitigation, phased rollout, rollback, complexity assessment, and recommended issue splitting.
+
+### Included
+- Added composite-certification discovery note:
+  - `doc/V3_COMPOSITE_CERTIFICATIONS_DISCOVERY.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.101 - 2026-03-11
 ### Summary
 Progressed `#69` with a design note for dynamic rubric criteria, including options/trade-offs, legacy migration strategy, phased rollout, rollback, complexity assessment, and test strategy.
