@@ -7,6 +7,38 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.86 - 2026-03-11
+### Summary
+Refactored background processing for `#90` so the assessment worker and appeal SLA monitor use injectable lifecycle classes instead of module-level singleton state in service files.
+
+### Included
+- New background lifecycle classes:
+  - `src/services/AssessmentWorker.ts`
+  - `src/services/AppealSlaMonitor.ts`
+- Service-layer refactor:
+  - `src/services/assessmentJobService.ts`
+  - removed module-level worker timer/running state
+  - exported `processNextJob()` for direct worker execution
+  - `src/services/appealSlaMonitorService.ts`
+  - removed module-level monitor timer/running state
+- Bootstrap update:
+  - `src/index.ts`
+  - application startup now instantiates `AssessmentWorker` and `AppealSlaMonitor`
+  - graceful shutdown stops the instantiated worker and monitor
+- Test coverage:
+  - `test/unit/assessment-worker.test.ts`
+  - `test/unit/appeal-sla-monitor.test.ts`
+  - `test/assessment-worker-process-error.test.ts`
+  - updated to verify the new instanced worker contract
+- Documentation update:
+  - `doc/ARCHITECTURE.md`
+  - background-processing section now reflects injectable lifecycle ownership
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+- `npx dotenv -e .env.test -- vitest run --config vitest.integration.config.ts test/assessment-worker-process-error.test.ts test/m2-appeal-sla-monitor.test.ts test/m1-core-flow.test.ts`
+
 ## 0.3.85 - 2026-03-11
 ### Summary
 Completed the service-layer repository migration in `#80`, so service files no longer import Prisma directly, and updated the architecture documentation to match the new data-access boundary.

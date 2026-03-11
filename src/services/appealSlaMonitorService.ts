@@ -18,9 +18,6 @@ export type AppealSlaMonitorSnapshot = {
   oldestOverdueHours: number | null;
 };
 
-let monitorTimer: NodeJS.Timeout | null = null;
-let monitorRunning = false;
-
 export async function collectAppealSlaMonitorSnapshot(now = new Date()): Promise<AppealSlaMonitorSnapshot> {
   const appeals = await appealRepository.findAppealsForSlaMonitor();
 
@@ -95,43 +92,6 @@ export async function runAppealSlaMonitorNow(now = new Date()) {
   }
 
   return snapshot;
-}
-
-export function startAppealSlaMonitor() {
-  if (monitorTimer || process.env.NODE_ENV === "test") {
-    return;
-  }
-
-  const runMonitor = async () => {
-    if (monitorRunning) {
-      return;
-    }
-    monitorRunning = true;
-    try {
-      await runAppealSlaMonitorNow();
-    } catch (error) {
-      logOperationalEvent(
-        "appeal_sla_monitor_failed",
-        {
-          errorMessage: error instanceof Error ? error.message : "Unknown monitor error",
-        },
-        "error",
-      );
-    } finally {
-      monitorRunning = false;
-    }
-  };
-
-  void runMonitor();
-  monitorTimer = setInterval(runMonitor, env.APPEAL_SLA_MONITOR_INTERVAL_MS);
-}
-
-export function stopAppealSlaMonitor() {
-  if (!monitorTimer) {
-    return;
-  }
-  clearInterval(monitorTimer);
-  monitorTimer = null;
 }
 
 function incrementSlaCounter(

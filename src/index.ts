@@ -1,13 +1,15 @@
 import { env } from "./config/env.js";
 import { app } from "./app.js";
-import { startAssessmentWorker, stopAssessmentWorker } from "./services/assessmentJobService.js";
-import { startAppealSlaMonitor, stopAppealSlaMonitor } from "./services/appealSlaMonitorService.js";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js";
+import { AssessmentWorker } from "./services/AssessmentWorker.js";
+import { AppealSlaMonitor } from "./services/AppealSlaMonitor.js";
 
 let server: ReturnType<typeof app.listen> | null = null;
 let shuttingDown = false;
+const assessmentWorker = new AssessmentWorker(env.ASSESSMENT_JOB_POLL_INTERVAL_MS);
+const appealSlaMonitor = new AppealSlaMonitor(env.APPEAL_SLA_MONITOR_INTERVAL_MS);
 
 const gracefulShutdown = (exitCode = 0) => {
   if (shuttingDown) {
@@ -15,8 +17,8 @@ const gracefulShutdown = (exitCode = 0) => {
   }
 
   shuttingDown = true;
-  stopAppealSlaMonitor();
-  stopAssessmentWorker();
+  appealSlaMonitor.stop();
+  assessmentWorker.stop();
 
   if (!server) {
     process.exit(exitCode);
@@ -34,8 +36,8 @@ server = app.listen(env.PORT, () => {
   startBootstrapSeed();
 });
 
-startAssessmentWorker();
-startAppealSlaMonitor();
+assessmentWorker.start();
+appealSlaMonitor.start();
 
 function startBootstrapSeed() {
   const scriptPath = path.resolve(process.cwd(), "scripts", "runtime", "bootstrapSeed.mjs");

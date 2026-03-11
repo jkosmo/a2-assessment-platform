@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const assessmentJobFindFirst = vi.fn();
+const findNextRunnableJob = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../src/db/prisma.js", () => ({
-  prisma: {
-    assessmentJob: {
-      findFirst: assessmentJobFindFirst,
-    },
+vi.mock("../src/repositories/assessmentJobRepository.js", () => ({
+  assessmentJobRepository: {
+    findNextRunnableJob,
   },
 }));
 
@@ -19,29 +17,28 @@ describe("assessment worker process error handling", () => {
   const originalNodeEnv = process.env.NODE_ENV;
 
   beforeEach(() => {
-    process.env.NODE_ENV = "development";
-    assessmentJobFindFirst.mockReset();
+    process.env.NODE_ENV = "test";
+    findNextRunnableJob.mockReset();
     logOperationalEvent.mockReset();
     vi.resetModules();
   });
 
-  afterEach(async () => {
-    const { stopAssessmentWorker } = await import("../src/services/assessmentJobService.js");
-    stopAssessmentWorker();
+  afterEach(() => {
     process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("records an unhandled rejection when the worker interval tick rejects", async () => {
     const error = new Error("worker tick failed");
-    assessmentJobFindFirst.mockRejectedValue(error);
+    findNextRunnableJob.mockRejectedValue(error);
 
     const { registerProcessErrorHandlers } = await import("../src/process/processErrorHandlers.js");
-    const { startAssessmentWorker } = await import("../src/services/assessmentJobService.js");
+    const { AssessmentWorker } = await import("../src/services/AssessmentWorker.js");
 
     const detachHandlers = registerProcessErrorHandlers(vi.fn());
+    const worker = new AssessmentWorker(10);
 
     try {
-      startAssessmentWorker();
+      worker.start();
 
       await vi.waitFor(() => {
         expect(logOperationalEvent).toHaveBeenCalledWith(
@@ -54,6 +51,7 @@ describe("assessment worker process error handling", () => {
         );
       });
     } finally {
+      worker.stop();
       detachHandlers();
     }
   });

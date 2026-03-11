@@ -14,9 +14,6 @@ import {
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 
-let workerTimer: NodeJS.Timeout | null = null;
-let workerRunning = false;
-
 export async function enqueueAssessmentJob(submissionId: string) {
   const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(submissionId, [
     AssessmentJobStatus.PENDING,
@@ -42,32 +39,6 @@ export async function enqueueAssessmentJob(submissionId: string) {
   await logQueueBacklog("enqueue", submissionId);
 
   return job;
-}
-
-export function startAssessmentWorker() {
-  if (workerTimer || process.env.NODE_ENV === "test") {
-    return;
-  }
-
-  workerTimer = setInterval(async () => {
-    if (workerRunning) {
-      return;
-    }
-    workerRunning = true;
-    try {
-      await processNextJob();
-    } finally {
-      workerRunning = false;
-    }
-  }, env.ASSESSMENT_JOB_POLL_INTERVAL_MS);
-}
-
-export function stopAssessmentWorker() {
-  if (!workerTimer) {
-    return;
-  }
-  clearInterval(workerTimer);
-  workerTimer = null;
 }
 
 export async function processAssessmentJobsNow(maxJobs = 1) {
@@ -107,7 +78,7 @@ export async function processSubmissionJobNow(submissionId: string, maxCycles = 
   }
 }
 
-async function processNextJob(submissionId?: string): Promise<boolean> {
+export async function processNextJob(submissionId?: string): Promise<boolean> {
   const now = new Date();
   const candidate = await assessmentJobRepository.findNextRunnableJob(
     now,

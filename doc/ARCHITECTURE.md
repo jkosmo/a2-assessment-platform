@@ -49,6 +49,7 @@ The important architectural rule is that decisions are append-only. Later stages
 ### Background processing
 - assessment worker processes queued assessment jobs
 - SLA monitoring watches appeal aging and emits operational events
+- background-process lifecycle is owned by injectable classes rather than module-level singletons
 - process-level failure handling and graceful shutdown are wired in `src/index.ts`
 
 ### Frontend workspaces
@@ -166,6 +167,7 @@ The platform separates human tasks by workspace and role.
 ### Audit and observability are first-class concerns
 - audit events, operational logs, and reporting endpoints are part of the system design, not afterthoughts
 - background workers and SLA monitors must produce structured runtime evidence
+- runtime lifecycles should remain instantiable and testable without `NODE_ENV`-specific production code branches
 
 ## Deployment Shape
 
