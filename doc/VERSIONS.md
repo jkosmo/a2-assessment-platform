@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.95 - 2026-03-11
+### Summary
+Implemented `#92` by removing the redundant manual queue-load controls from the appeal-handler and manual-review workspaces, keeping queue refresh automatic and filter-driven.
+
+### Included
+- Removed redundant queue-load buttons from:
+  - `public/appeal-handler.html`
+  - `public/manual-review.html`
+- Kept queue loading automatic on page load and status-filter changes while preserving guarded reload behavior in:
+  - `public/appeal-handler.js`
+  - `public/manual-review.js`
+- Updated workspace copy so it no longer implies a manual load step:
+  - automatic-refresh hint text
+  - queue empty-state messages
+  - queue updated status messages
+- Added markup regression checks ensuring the removed buttons do not reappear:
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-html-fallbacks.test.js test/participant-translations.test.js`
+
 ## 0.3.94 - 2026-03-11
 ### Summary
 Implemented `#88` by adding inline `en-GB` fallback copy to workspace HTML so `data-i18n` content is legible on initial render before JavaScript runs.

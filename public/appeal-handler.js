@@ -20,7 +20,6 @@ const loadMeButton = document.getElementById("loadMe");
 const statusFilter = document.getElementById("appealHandlerStatusFilter");
 const queueSearchInput = document.getElementById("queueSearch");
 const queueLimitInput = document.getElementById("queueLimit");
-const loadAppealQueueButton = document.getElementById("loadAppealQueue");
 const queueCountLabel = document.getElementById("queueCount");
 const appealQueueBody = document.getElementById("appealQueueBody");
 const appealHandlerMessage = document.getElementById("appealHandlerMessage");
@@ -37,6 +36,7 @@ let currentLocale = resolveInitialLocale();
 let latestAppealQueue = [];
 let selectedAppealId = "";
 let selectedAppealDetails = null;
+let activeAppealQueueLoad = null;
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
@@ -551,7 +551,7 @@ function renderAppealQueue() {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 9;
-    cell.textContent = t("defaults.noQueue");
+    cell.textContent = t("appealHandler.noQueue");
     row.appendChild(cell);
     appealQueueBody.appendChild(row);
     return;
@@ -902,29 +902,39 @@ async function loadAppealDetails(appealId) {
 }
 
 async function loadAppealQueue() {
-  try {
-    const statuses = getSelectedAppealStatuses();
-    const limit = getAppealWorkspaceSettings().queuePageSize;
-    const body = await apiFetch(
-      `/api/appeals?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
-      headers,
-    );
-    latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
-    renderAppealQueue();
-    appealHandlerMessage.textContent = `${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`;
-
-    if (selectedAppealId && latestAppealQueue.some((appeal) => appeal.id === selectedAppealId)) {
-      await loadAppealDetails(selectedAppealId);
-    } else {
-      setSelectedAppeal("", false);
-      selectedAppealDetails = null;
-      renderAppealHandlerDetails(null);
-    }
-    log(body);
-  } catch (error) {
-    appealHandlerMessage.textContent = toActionableErrorMessage(error);
-    log(error.message);
+  if (activeAppealQueueLoad) {
+    return activeAppealQueueLoad;
   }
+
+  activeAppealQueueLoad = (async () => {
+    try {
+      const statuses = getSelectedAppealStatuses();
+      const limit = getAppealWorkspaceSettings().queuePageSize;
+      const body = await apiFetch(
+        `/api/appeals?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
+        headers,
+      );
+      latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
+      renderAppealQueue();
+      appealHandlerMessage.textContent = `${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`;
+
+      if (selectedAppealId && latestAppealQueue.some((appeal) => appeal.id === selectedAppealId)) {
+        await loadAppealDetails(selectedAppealId);
+      } else {
+        setSelectedAppeal("", false);
+        selectedAppealDetails = null;
+        renderAppealHandlerDetails(null);
+      }
+      log(body);
+    } catch (error) {
+      appealHandlerMessage.textContent = toActionableErrorMessage(error);
+      log(error.message);
+    } finally {
+      activeAppealQueueLoad = null;
+    }
+  })();
+
+  return activeAppealQueueLoad;
 }
 
 loadMeButton.addEventListener("click", async () => {
@@ -938,16 +948,8 @@ loadMeButton.addEventListener("click", async () => {
   });
 });
 
-loadAppealQueueButton.addEventListener("click", async () => {
-  await runWithBusyButton(loadAppealQueueButton, async () => {
-    await loadAppealQueue();
-  });
-});
-
 statusFilter.addEventListener("change", async () => {
-  await runWithBusyButton(loadAppealQueueButton, async () => {
-    await loadAppealQueue();
-  });
+  await loadAppealQueue();
 });
 
 queueSearchInput.addEventListener("input", () => {

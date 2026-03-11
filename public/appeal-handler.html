@@ -67,7 +67,7 @@
               aria-labelledby="appealHandlerStatusFilterLegend"
             ></div>
           </fieldset>
-          <div class="small" data-i18n="appealHandler.statusHint">Select one or more statuses using the checkboxes.</div>
+          <div class="small" data-i18n="appealHandler.statusHint">Select one or more statuses using the checkboxes. The queue updates automatically when filters change.</div>
         </div>
         <div>
           <label for="queueSearch" data-i18n="appealHandler.search">Search queue</label>
@@ -78,10 +78,7 @@
           <input id="queueLimit" readonly value="50" />
         </div>
       </div>
-      <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
-        <div><button id="loadAppealQueue" class="btn-secondary" data-i18n="appealHandler.loadQueue">Load appeals</button></div>
-        <div class="small"><span data-i18n="appealHandler.queueCount">Appeals shown:</span> <strong id="queueCount">0</strong></div>
-      </div>
+      <div class="small" style="margin-top: calc(var(--space-1) * 1.25);"><span data-i18n="appealHandler.queueCount">Appeals shown:</span> <strong id="queueCount">0</strong></div>
       <div id="appealHandlerMessage" class="small"></div>
       <div class="queue-table-wrap">
         <table>

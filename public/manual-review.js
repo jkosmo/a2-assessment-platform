@@ -19,7 +19,6 @@ const loadMeButton = document.getElementById("loadMe");
 const statusFilter = document.getElementById("manualReviewStatusFilter");
 const queueSearchInput = document.getElementById("queueSearch");
 const queueLimitInput = document.getElementById("queueLimit");
-const loadReviewQueueButton = document.getElementById("loadReviewQueue");
 const queueCountLabel = document.getElementById("queueCount");
 const manualReviewQueueBody = document.getElementById("manualReviewQueueBody");
 const manualReviewMessage = document.getElementById("manualReviewMessage");
@@ -77,6 +76,7 @@ let currentLocale = resolveInitialLocale();
 let latestReviewQueue = [];
 let selectedReviewId = "";
 let selectedReviewDetails = null;
+let activeReviewQueueLoad = null;
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
@@ -509,7 +509,7 @@ function renderReviewQueue() {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 8;
-    cell.textContent = t("defaults.noQueue");
+    cell.textContent = t("manualReview.noQueue");
     row.appendChild(cell);
     manualReviewQueueBody.appendChild(row);
     return;
@@ -839,29 +839,39 @@ async function loadReviewDetails(reviewId) {
 }
 
 async function loadReviewQueue() {
-  try {
-    const statuses = getSelectedReviewStatuses();
-    const limit = getWorkspaceSettings().queuePageSize;
-    const body = await apiFetch(
-      `/api/reviews?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
-      headers,
-    );
-    latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
-    renderReviewQueue();
-    manualReviewMessage.textContent = `${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`;
-
-    if (selectedReviewId && latestReviewQueue.some((review) => review.id === selectedReviewId)) {
-      await loadReviewDetails(selectedReviewId);
-    } else {
-      setSelectedReview("", false);
-      selectedReviewDetails = null;
-      renderManualReviewDetails(null);
-    }
-    log(body);
-  } catch (error) {
-    manualReviewMessage.textContent = toActionableErrorMessage(error);
-    log(error.message);
+  if (activeReviewQueueLoad) {
+    return activeReviewQueueLoad;
   }
+
+  activeReviewQueueLoad = (async () => {
+    try {
+      const statuses = getSelectedReviewStatuses();
+      const limit = getWorkspaceSettings().queuePageSize;
+      const body = await apiFetch(
+        `/api/reviews?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
+        headers,
+      );
+      latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
+      renderReviewQueue();
+      manualReviewMessage.textContent = `${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`;
+
+      if (selectedReviewId && latestReviewQueue.some((review) => review.id === selectedReviewId)) {
+        await loadReviewDetails(selectedReviewId);
+      } else {
+        setSelectedReview("", false);
+        selectedReviewDetails = null;
+        renderManualReviewDetails(null);
+      }
+      log(body);
+    } catch (error) {
+      manualReviewMessage.textContent = toActionableErrorMessage(error);
+      log(error.message);
+    } finally {
+      activeReviewQueueLoad = null;
+    }
+  })();
+
+  return activeReviewQueueLoad;
 }
 
 loadMeButton.addEventListener("click", async () => {
@@ -875,16 +885,8 @@ loadMeButton.addEventListener("click", async () => {
   });
 });
 
-loadReviewQueueButton.addEventListener("click", async () => {
-  await runWithBusyButton(loadReviewQueueButton, async () => {
-    await loadReviewQueue();
-  });
-});
-
 statusFilter.addEventListener("change", async () => {
-  await runWithBusyButton(loadReviewQueueButton, async () => {
-    await loadReviewQueue();
-  });
+  await loadReviewQueue();
 });
 
 queueSearchInput.addEventListener("input", () => {

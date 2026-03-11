@@ -195,12 +195,14 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="appealHandlerStatusFilter"');
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).not.toContain('<select id="appealHandlerStatusFilter"');
+        expect(response.text).not.toContain('id="loadAppealQueue"');
         expect(response.text).toContain('id="outputStatus"');
       }
 
       if (pagePath === "/manual-review") {
         expect(response.text).toContain('id="manualReviewStatusFilter"');
         expect(response.text).toContain('class="pill-group"');
+        expect(response.text).not.toContain('id="loadReviewQueue"');
         expect(response.text).toContain('id="outputStatus"');
       }
 
