@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.91 - 2026-03-11
+### Summary
+Continued `#84` by adding unit coverage for `calibrationWorkspaceService.ts`, targeting snapshot assembly, benchmark-anchor extraction, signal calculation, and calibration audit logging.
+
+### Included
+- New unit test:
+  - `test/unit/calibration-workspace-service.test.ts`
+- Added service-level unit coverage for:
+  - missing-module validation
+  - outcome mapping from submission data
+  - benchmark-anchor extraction from prompt-template example payloads
+  - calibration signal and threshold-flag computation
+  - calibration workspace access audit logging
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+
 ## 0.3.90 - 2026-03-11
 ### Summary
 Continued `#84` by adding unit coverage for `adminContentService.ts`, focusing on validation, dependency checks, benchmark prompt enrichment, and publication auditing.
