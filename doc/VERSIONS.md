@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.108 - 2026-03-11
+### Summary
+Added a V2 readiness checklist to support a go/no-go decision on whether the current platform state should stay in `0.3.x`, move to an internal-pilot `0.4.x`, or be promoted to a clearer V2 milestone such as `0.5.0`.
+
+### Included
+- Added release-readiness checklist covering:
+  - functional end-to-end validation
+  - auth/RBAC
+  - content ownership
+  - UX/usability validation
+  - policy and retention readiness
+  - deployment/observability
+  - SQLite acceptance criteria
+  - release decision outcomes
+  - `doc/V2_READINESS_CHECKLIST.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.107 - 2026-03-11
 ### Summary
 Updated the PostgreSQL migration backlog stance for `#91`: SQLite remains the chosen runtime for now, with PostgreSQL deferred to `Pri-4 / Version X` unless concrete operational symptoms appear.
