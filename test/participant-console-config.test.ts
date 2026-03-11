@@ -184,6 +184,11 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('href="/static/loading.css"');
       }
 
+      if (["/participant", "/appeal-handler"].includes(pagePath)) {
+        expect(response.text).toContain('href="/static/toast.css"');
+        expect(response.text).toContain('id="debugOutputSection" hidden');
+      }
+
       const buttonTags = response.text.match(/<button\b[^>]*>/g) ?? [];
       for (const buttonTag of buttonTags) {
         expect(buttonTag).toContain("class=");
@@ -215,7 +220,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).not.toContain('<select id="calibrationStatuses"');
         expect(response.text).toContain('<details id="outputDetails">');
-        expect(response.text).toContain("<summary>Raw response</summary>");
+        expect(response.text).toContain("<summary>View raw response</summary>");
       }
 
       if (pagePath === "/participant") {
@@ -229,7 +234,7 @@ describe("participant console runtime config", () => {
       if (pagePath === "/admin-content") {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('<details id="outputDetails">');
-        expect(response.text).toContain("<summary>Raw response</summary>");
+        expect(response.text).toContain("<summary>View raw response</summary>");
       }
     }
 
@@ -262,5 +267,15 @@ describe("participant console runtime config", () => {
     expect(loadingJsResponse.status).toBe(200);
     expect(loadingJsResponse.text).toContain("export function showLoading");
     expect(loadingJsResponse.text).toContain("export function showEmpty");
+
+    const toastCssResponse = await request(app).get("/static/toast.css");
+    expect(toastCssResponse.status).toBe(200);
+    expect(toastCssResponse.text).toContain(".toast-region");
+    expect(toastCssResponse.text).toContain(".toast__close");
+
+    const toastJsResponse = await request(app).get("/static/toast.js");
+    expect(toastJsResponse.status).toBe(200);
+    expect(toastJsResponse.text).toContain("export function showToast");
+    expect(toastJsResponse.text).toContain("AUTO_DISMISS_MS = 5000");
   });
 });

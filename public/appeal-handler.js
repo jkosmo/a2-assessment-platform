@@ -1,6 +1,7 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/appeal-handler-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { showToast } from "/static/toast.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -10,6 +11,7 @@ import {
 
 const output = document.getElementById("output");
 const outputStatus = document.getElementById("outputStatus");
+const debugOutputSection = document.getElementById("debugOutputSection");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
@@ -32,6 +34,7 @@ const handlerDecisionReasonInput = document.getElementById("handlerDecisionReaso
 const handlerResolutionNoteInput = document.getElementById("handlerResolutionNote");
 const handlerPassFailTotalInput = document.getElementById("handlerPassFailTotal");
 const resolveValidationMessage = document.getElementById("resolveValidationMessage");
+const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
 
 let currentLocale = resolveInitialLocale();
 let latestAppealQueue = [];
@@ -202,8 +205,15 @@ function isDebugModeEnabled() {
   return participantRuntimeConfig?.debugMode !== false;
 }
 
+function isRawDebugEnabled() {
+  return rawDebugEnabled;
+}
+
 function applyOutputVisibility() {
-  output.hidden = !isDebugModeEnabled();
+  if (debugOutputSection) {
+    debugOutputSection.hidden = !isRawDebugEnabled();
+  }
+  output.hidden = !isRawDebugEnabled();
 }
 
 function formatOutputStatus(data) {
@@ -226,6 +236,43 @@ function formatOutputStatus(data) {
   return "Request completed.";
 }
 
+function formatOutputDetail(data) {
+  return typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function summarizeAppealHandlerResponse(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (Array.isArray(data?.appeals)) {
+    return `${t("appealHandler.loadedPrefix")}: ${data.appeals.length}`;
+  }
+
+  if (data?.appeal?.id) {
+    const normalizedStatus = typeof data.appeal.appealStatus === "string" ? data.appeal.appealStatus.toUpperCase() : "";
+    if (normalizedStatus === "RESOLVED") {
+      return t("appealHandler.resolved");
+    }
+    if (data.appeal.claimedAt || data.appeal.resolvedById || data.appeal.resolvedBy?.id) {
+      return t("appealHandler.claimed");
+    }
+    return `${t("appealHandler.selectedAppeal")}: ${data.appeal.id}`;
+  }
+
+  return formatOutputStatus(data);
+}
+
+function inferAppealHandlerToastType(data) {
+  if (typeof data === "string") {
+    return "error";
+  }
+  if (Array.isArray(data?.appeals)) {
+    return "info";
+  }
+  return "success";
+}
+
 function setLocale(locale) {
   currentLocale = supportedLocales.includes(locale) ? locale : "en-GB";
   localStorage.setItem("participant.locale", currentLocale);
@@ -244,17 +291,24 @@ function populateLocaleSelect() {
   }
 }
 
-function log(data) {
+function log(data, options = {}) {
+  const { notify = true, detail = "" } = options;
+  const statusText = summarizeAppealHandlerResponse(data);
+
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
-  outputStatus.textContent = formatOutputStatus(data);
+  outputStatus.textContent = statusText;
 
-  if (!isDebugModeEnabled()) {
+  if (notify) {
+    showToast(statusText, inferAppealHandlerToastType(data), detail);
+  }
+
+  if (!isRawDebugEnabled()) {
     output.textContent = "";
     return;
   }
 
-  output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  output.textContent = formatOutputDetail(data);
 }
 
 function headers() {
@@ -876,7 +930,7 @@ function applyIdentityDefaults() {
   rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
 }
 
-async function loadAppealDetails(appealId) {
+async function loadAppealDetails(appealId, options = {}) {
   if (!appealId) {
     selectedAppealDetails = null;
     renderAppealHandlerDetails(null);
@@ -887,13 +941,14 @@ async function loadAppealDetails(appealId) {
     const body = await apiFetch(`/api/appeals/${appealId}`, headers);
     selectedAppealDetails = body;
     renderAppealHandlerDetails(body);
+    log(body, { notify: options.notify === true });
   } catch (error) {
     appealHandlerMessage.textContent = toActionableErrorMessage(error);
     log(error.message);
   }
 }
 
-async function loadAppealQueue() {
+async function loadAppealQueue(options = {}) {
   if (activeAppealQueueLoad) {
     return activeAppealQueueLoad;
   }
@@ -912,13 +967,13 @@ async function loadAppealQueue() {
       appealHandlerMessage.textContent = `${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`;
 
       if (selectedAppealId && latestAppealQueue.some((appeal) => appeal.id === selectedAppealId)) {
-        await loadAppealDetails(selectedAppealId);
+        await loadAppealDetails(selectedAppealId, { notify: false });
       } else {
         setSelectedAppeal("", false);
         selectedAppealDetails = null;
         renderAppealHandlerDetails(null);
       }
-      log(body);
+      log(body, { notify: options.notify === true });
     } catch (error) {
       queueCountLabel.textContent = "0";
       selectedAppealDetails = null;
@@ -946,7 +1001,7 @@ loadMeButton.addEventListener("click", async () => {
 });
 
 statusFilter.addEventListener("change", async () => {
-  await loadAppealQueue();
+  await loadAppealQueue({ notify: true });
 });
 
 queueSearchInput.addEventListener("input", () => {
@@ -969,8 +1024,8 @@ claimAppealButton.addEventListener("click", async () => {
       appealHandlerMessage.textContent = t("appealHandler.claimed");
       setSelectedAppeal(selectedAppealId, true);
       log(body);
-      await loadAppealQueue();
-      await loadAppealDetails(selectedAppealId);
+      await loadAppealQueue({ notify: false });
+      await loadAppealDetails(selectedAppealId, { notify: false });
     } catch (error) {
       appealHandlerMessage.textContent = toActionableErrorMessage(error);
       log(error.message);
@@ -1016,9 +1071,9 @@ resolveAppealButton.addEventListener("click", async () => {
       }
       renderAppealQueue();
       log(body);
-      await loadAppealQueue();
+      await loadAppealQueue({ notify: false });
       if (selectedAppealId) {
-        await loadAppealDetails(selectedAppealId);
+        await loadAppealDetails(selectedAppealId, { notify: false });
       }
     } catch (error) {
       const validationMessage = toValidationErrorMessage(error);

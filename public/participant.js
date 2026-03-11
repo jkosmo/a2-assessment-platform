@@ -1,6 +1,7 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { showToast } from "/static/toast.js";
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
@@ -15,6 +16,7 @@ import {
 
 const output = document.getElementById("output");
 const outputStatus = document.getElementById("outputStatus");
+const debugOutputSection = document.getElementById("debugOutputSection");
 const moduleList = document.getElementById("moduleList");
 const mcqQuestions = document.getElementById("mcqQuestions");
 const localeSelect = document.getElementById("localeSelect");
@@ -70,6 +72,7 @@ const submissionValidationTargets = [
   { fieldElement: promptExcerptInput, hintElement: promptExcerptHint },
   { fieldElement: ackCheckbox, hintElement: ackHint },
 ];
+const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
@@ -288,8 +291,15 @@ function isDebugModeEnabled() {
   return participantRuntimeConfig?.debugMode !== false;
 }
 
+function isRawDebugEnabled() {
+  return rawDebugEnabled;
+}
+
 function applyOutputVisibility() {
-  output.hidden = !isDebugModeEnabled();
+  if (debugOutputSection) {
+    debugOutputSection.hidden = !isRawDebugEnabled();
+  }
+  output.hidden = !isRawDebugEnabled();
 }
 
 function formatOutputStatus(data) {
@@ -310,6 +320,58 @@ function formatOutputStatus(data) {
     }
   }
   return "Request completed.";
+}
+
+function formatOutputDetail(data) {
+  return typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function summarizeParticipantResponse(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (data?.selectedModule?.title) {
+    return `${t("submission.selectedModule")}: ${data.selectedModule.title}`;
+  }
+
+  if (Array.isArray(data?.modules)) {
+    return `${t("modules.title")}: ${data.modules.length}`;
+  }
+
+  if (data?.submission?.id && data?.mcqStarted?.attemptId) {
+    return `${t("submission.create")}: ${data.submission.id}`;
+  }
+
+  if (data?.assessment?.latestJob || typeof data?.submissionStatus === "string") {
+    return t("assessment.checkAssessment");
+  }
+
+  if (Array.isArray(data?.history)) {
+    return `${t("history.title")}: ${data.history.length}`;
+  }
+
+  if (data?.appeal?.id) {
+    return `${t("appeal.submittedPrefix")}: ${data.appeal.id}`;
+  }
+
+  if (data?.scoreComponents || data?.decision || typeof data?.status === "string") {
+    return t("assessment.checkResult");
+  }
+
+  return formatOutputStatus(data);
+}
+
+function inferParticipantToastType(data) {
+  if (typeof data === "string") {
+    return "error";
+  }
+
+  if (data?.selectedModule) {
+    return "info";
+  }
+
+  return "success";
 }
 
 function setDefaultFieldValues(previousLocale, nextLocale) {
@@ -476,7 +538,7 @@ function renderModules() {
       renderModules();
       renderSelectedModuleSummary();
       restoreDraftForSelectedModule(true);
-      log({ selectedModule: { id: module.id, title: module.title } });
+      log({ selectedModule: { id: module.id, title: module.title } }, { notify: false });
     });
 
     const title = document.createElement("div");
@@ -982,17 +1044,24 @@ function headers() {
   });
 }
 
-function log(data) {
+function log(data, options = {}) {
+  const { notify = true, detail = "" } = options;
+  const statusText = summarizeParticipantResponse(data);
+
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
-  outputStatus.textContent = formatOutputStatus(data);
+  outputStatus.textContent = statusText;
 
-  if (!isDebugModeEnabled()) {
+  if (notify) {
+    showToast(statusText, inferParticipantToastType(data), detail);
+  }
+
+  if (!isRawDebugEnabled()) {
     output.textContent = "";
     return;
   }
 
-  output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  output.textContent = formatOutputDetail(data);
 }
 
 async function runWithBusyButton(button, action, after = () => {}) {

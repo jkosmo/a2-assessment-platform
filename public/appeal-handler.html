@@ -6,6 +6,7 @@
     <title>A2 Appeal Handler Workspace</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
     <style>
       .inline { display: inline-block; width: auto; }
       .queue-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 420px; overflow-y: auto; }
@@ -121,7 +122,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="debugOutputSection" hidden>
       <h3 data-i18n="output.title">System response</h3>
       <div class="small" id="outputStatus"></div>
       <pre id="output"></pre>

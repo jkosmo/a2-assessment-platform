@@ -7,6 +7,30 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.97 - 2026-03-11
+### Summary
+Implemented `#74` by replacing default raw JSON output on the participant and appeal-handler pages with toast notifications, while keeping expandable raw response details for admin-content and calibration.
+
+### Included
+- Added shared toast assets:
+  - `public/static/toast.css`
+  - `public/static/toast.js`
+- Replaced default participant response logging with toast notifications and moved raw response output behind `?debug=1`:
+  - `public/participant.html`
+  - `public/participant.js`
+- Replaced default appeal-handler response logging with toast notifications and moved raw response output behind `?debug=1`:
+  - `public/appeal-handler.html`
+  - `public/appeal-handler.js`
+- Kept admin-content and calibration raw responses as explicit expandable details:
+  - `public/admin-content.html`
+  - `public/calibration.html`
+- Added regression coverage for toast assets, hidden debug output sections, and raw response summaries:
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-html-fallbacks.test.js test/participant-translations.test.js`
+
 ## 0.3.96 - 2026-03-11
 ### Summary
 Implemented `#72` by adding reusable loading and empty-state feedback for data-fetching sections in the participant, appeal-handler, and calibration workspaces.
