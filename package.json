@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.3.80",
+  "version": "0.3.82",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -18,6 +18,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "pretest": "dotenv -e .env.test -- tsx src/scripts/resetDatabase.ts && dotenv -e .env.test -- tsx src/scripts/applyMigrations.ts && dotenv -e .env.test -- tsx prisma/seed.ts",
     "test": "dotenv -e .env.test -- vitest run",
+    "test:unit": "dotenv -e .env.test -- vitest run --config vitest.unit.config.ts",
+    "test:integration": "dotenv -e .env.test -- vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
   },

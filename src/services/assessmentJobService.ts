@@ -1,6 +1,6 @@
 import { AssessmentJobStatus, SubmissionStatus } from "../db/prismaRuntime.js";
-import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
+import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { evaluatePracticalWithLlm } from "./llmAssessmentService.js";
 import { sha256 } from "../utils/hash.js";
 import { createAssessmentDecision } from "./decisionService.js";
@@ -18,23 +18,19 @@ let workerTimer: NodeJS.Timeout | null = null;
 let workerRunning = false;
 
 export async function enqueueAssessmentJob(submissionId: string) {
-  const existingPending = await prisma.assessmentJob.findFirst({
-    where: {
-      submissionId,
-      status: { in: [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING] },
-    },
-  });
+  const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(submissionId, [
+    AssessmentJobStatus.PENDING,
+    AssessmentJobStatus.RUNNING,
+  ]);
 
   if (existingPending) {
     return existingPending;
   }
 
-  const job = await prisma.assessmentJob.create({
-    data: {
-      submissionId,
-      status: AssessmentJobStatus.PENDING,
-      maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
-    },
+  const job = await assessmentJobRepository.createAssessmentJob({
+    submissionId,
+    status: AssessmentJobStatus.PENDING,
+    maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
   });
 
   await recordAuditEvent({
@@ -85,19 +81,16 @@ export async function processAssessmentJobsNow(maxJobs = 1) {
 
 export async function processSubmissionJobNow(submissionId: string, maxCycles = 25) {
   for (let cycle = 0; cycle < maxCycles; cycle += 1) {
-    const submissionJob = await prisma.assessmentJob.findFirst({
-      where: {
-        submissionId,
-        status: { in: [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING] },
-      },
-      select: { id: true },
-    });
+    const submissionJob = await assessmentJobRepository.findPendingOrRunningJobIdForSubmission(submissionId, [
+      AssessmentJobStatus.PENDING,
+      AssessmentJobStatus.RUNNING,
+    ]);
 
     if (!submissionJob) {
       return;
     }
 
-    const processed = await processNextJob();
+    const processed = await processNextJob(submissionId);
     if (!processed) {
       await new Promise((resolve) => {
         setTimeout(resolve, 50);
@@ -105,45 +98,28 @@ export async function processSubmissionJobNow(submissionId: string, maxCycles = 
     }
   }
 
-  const unresolved = await prisma.assessmentJob.findFirst({
-    where: {
-      submissionId,
-      status: { in: [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING] },
-    },
-    select: { id: true },
-  });
+  const unresolved = await assessmentJobRepository.findPendingOrRunningJobIdForSubmission(submissionId, [
+    AssessmentJobStatus.PENDING,
+    AssessmentJobStatus.RUNNING,
+  ]);
   if (unresolved) {
     throw new Error("Timed out while synchronously processing submission assessment.");
   }
 }
 
-async function processNextJob(): Promise<boolean> {
+async function processNextJob(submissionId?: string): Promise<boolean> {
   const now = new Date();
-  const candidate = await prisma.assessmentJob.findFirst({
-    where: {
-      status: AssessmentJobStatus.PENDING,
-      availableAt: { lte: now },
-      attempts: { lt: env.ASSESSMENT_JOB_MAX_ATTEMPTS },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const candidate = await assessmentJobRepository.findNextRunnableJob(
+    now,
+    env.ASSESSMENT_JOB_MAX_ATTEMPTS,
+    submissionId,
+  );
 
   if (!candidate) {
     return false;
   }
 
-  const lockResult = await prisma.assessmentJob.updateMany({
-    where: {
-      id: candidate.id,
-      status: AssessmentJobStatus.PENDING,
-    },
-    data: {
-      status: AssessmentJobStatus.RUNNING,
-      lockedAt: now,
-      lockedBy: "default-worker",
-      attempts: { increment: 1 },
-    },
-  });
+  const lockResult = await assessmentJobRepository.tryLockPendingJob(candidate.id, now, "default-worker");
 
   if (lockResult.count === 0) {
     return false;
@@ -151,20 +127,14 @@ async function processNextJob(): Promise<boolean> {
 
   try {
     await runAssessment(candidate.id);
-    await prisma.assessmentJob.update({
-      where: { id: candidate.id },
-      data: { status: AssessmentJobStatus.SUCCEEDED, errorMessage: null },
-    });
+    await assessmentJobRepository.markJobSucceeded(candidate.id);
   } catch (error) {
-    const job = await prisma.assessmentJob.findUniqueOrThrow({ where: { id: candidate.id } });
+    const job = await assessmentJobRepository.findAssessmentJobOrThrow(candidate.id);
     const willRetry = job.attempts < job.maxAttempts;
-    await prisma.assessmentJob.update({
-      where: { id: candidate.id },
-      data: {
-        status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
-        availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
-        errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
-      },
+    await assessmentJobRepository.markJobForRetryOrFailure(candidate.id, {
+      status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
+      availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
+      errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
     });
 
     await recordAuditEvent({
@@ -185,21 +155,7 @@ async function processNextJob(): Promise<boolean> {
 }
 
 async function runAssessment(jobId: string) {
-  const job = await prisma.assessmentJob.findUniqueOrThrow({
-    where: { id: jobId },
-    include: {
-      submission: {
-        include: {
-          moduleVersion: {
-            include: {
-              promptTemplateVersion: true,
-            },
-          },
-          mcqAttempts: { where: { completedAt: { not: null } }, orderBy: { completedAt: "desc" } },
-        },
-      },
-    },
-  });
+  const job = await assessmentJobRepository.findAssessmentJobWithSubmissionOrThrow(jobId);
 
   const submission = job.submission;
   const submissionLocale = normalizeLocale(submission.locale) ?? "en-GB";
@@ -208,10 +164,7 @@ async function runAssessment(jobId: string) {
     throw new Error("Cannot assess submission before MCQ completion.");
   }
 
-  await prisma.submission.update({
-    where: { id: submission.id },
-    data: { submissionStatus: SubmissionStatus.PROCESSING },
-  });
+  await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
   const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({
     moduleId: submission.moduleId,
@@ -254,23 +207,21 @@ async function runAssessment(jobId: string) {
       },
     };
 
-    const llmEvaluation = await prisma.lLMEvaluation.create({
-      data: {
-        submissionId: submission.id,
-        moduleVersionId: submission.moduleVersionId,
-        modelName:
-          env.LLM_MODE === "stub"
-            ? `${env.LLM_STUB_MODEL_NAME}:${assessmentPass}`
-            : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
-        promptTemplateVersionId: submission.moduleVersion.promptTemplateVersionId,
-        requestPayloadHash: sha256(JSON.stringify(requestPayload)),
-        responseJson: JSON.stringify(llmResult),
-        rubricTotal: llmResult.rubric_total,
-        practicalScoreScaled: llmResult.practical_score_scaled,
-        passFailPractical: llmResult.pass_fail_practical,
-        manualReviewRecommended: llmResult.manual_review_recommended,
-        confidenceNote: llmResult.confidence_note,
-      },
+    const llmEvaluation = await assessmentJobRepository.createLlmEvaluation({
+      submissionId: submission.id,
+      moduleVersionId: submission.moduleVersionId,
+      modelName:
+        env.LLM_MODE === "stub"
+          ? `${env.LLM_STUB_MODEL_NAME}:${assessmentPass}`
+          : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
+      promptTemplateVersionId: submission.moduleVersion.promptTemplateVersionId,
+      requestPayloadHash: sha256(JSON.stringify(requestPayload)),
+      responseJson: JSON.stringify(llmResult),
+      rubricTotal: llmResult.rubric_total,
+      practicalScoreScaled: llmResult.practical_score_scaled,
+      passFailPractical: llmResult.pass_fail_practical,
+      manualReviewRecommended: llmResult.manual_review_recommended,
+      confidenceNote: llmResult.confidence_note,
     });
 
     await recordAuditEvent({
@@ -414,12 +365,8 @@ async function runAssessment(jobId: string) {
 }
 
 async function logQueueBacklog(trigger: string, submissionId: string) {
-  const pendingJobs = await prisma.assessmentJob.count({
-    where: { status: AssessmentJobStatus.PENDING },
-  });
-  const runningJobs = await prisma.assessmentJob.count({
-    where: { status: AssessmentJobStatus.RUNNING },
-  });
+  const pendingJobs = await assessmentJobRepository.countJobsByStatus(AssessmentJobStatus.PENDING);
+  const runningJobs = await assessmentJobRepository.countJobsByStatus(AssessmentJobStatus.RUNNING);
 
   logOperationalEvent("assessment_queue_backlog", {
     trigger,

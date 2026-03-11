@@ -1,6 +1,6 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
-import { prisma } from "../db/prisma.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
+import { appealRepository } from "../repositories/appealRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "./participantNotificationService.js";
@@ -13,18 +13,7 @@ export async function createSubmissionAppeal(input: {
   appealedById: string;
   appealReason: string;
 }) {
-  const submission = await prisma.submission.findFirst({
-    where: {
-      id: input.submissionId,
-      userId: input.appealedById,
-    },
-    include: {
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-      },
-    },
-  });
+  const submission = await appealRepository.findOwnedSubmissionWithLatestDecision(input.submissionId, input.appealedById);
 
   if (!submission) {
     throw new NotFoundError("Submission");
@@ -36,31 +25,23 @@ export async function createSubmissionAppeal(input: {
     );
   }
 
-  const activeAppeal = await prisma.appeal.findFirst({
-    where: {
-      submissionId: submission.id,
-      appealStatus: { in: [AppealStatus.OPEN, AppealStatus.IN_REVIEW] },
-    },
-    select: { id: true },
-  });
+  const activeAppeal = await appealRepository.findActiveAppealForSubmission(submission.id, [
+    AppealStatus.OPEN,
+    AppealStatus.IN_REVIEW,
+  ]);
 
   if (activeAppeal) {
     throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
   }
 
-  const appeal = await prisma.appeal.create({
-    data: {
-      submissionId: submission.id,
-      appealedById: input.appealedById,
-      appealReason: input.appealReason,
-      appealStatus: AppealStatus.OPEN,
-    },
+  const appeal = await appealRepository.createAppeal({
+    submissionId: submission.id,
+    appealedById: input.appealedById,
+    appealReason: input.appealReason,
+    appealStatus: AppealStatus.OPEN,
   });
 
-  await prisma.submission.update({
-    where: { id: submission.id },
-    data: { submissionStatus: SubmissionStatus.UNDER_REVIEW },
-  });
+  await appealRepository.updateSubmissionStatus(submission.id, SubmissionStatus.UNDER_REVIEW);
 
   await recordAuditEvent({
     entityType: "appeal",
@@ -73,10 +54,7 @@ export async function createSubmissionAppeal(input: {
     },
   });
 
-  const appealedBy = await prisma.user.findUnique({
-    where: { id: input.appealedById },
-    select: { id: true, email: true, name: true },
-  });
+  const appealedBy = await appealRepository.findUserNotificationRecipient(input.appealedById);
 
   if (appealedBy) {
     await safeNotifyAppealStatusTransition({
@@ -98,58 +76,7 @@ export async function listAppealQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED">;
   limit: number;
 }) {
-  const appeals = await prisma.appeal.findMany({
-    where: { appealStatus: { in: input.statuses } },
-    orderBy: { createdAt: "asc" },
-    take: input.limit,
-    include: {
-      appealedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      resolvedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      submission: {
-        select: {
-          id: true,
-          submittedAt: true,
-          submissionStatus: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          module: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-          decisions: {
-            orderBy: { finalisedAt: "desc" },
-            take: 1,
-            select: {
-              id: true,
-              decisionType: true,
-              passFailTotal: true,
-              totalScore: true,
-              finalisedAt: true,
-            },
-          },
-        },
-      },
-    },
-  });
+  const appeals = await appealRepository.findAppealsForQueue(input.statuses, input.limit);
 
   return appeals.map((appeal) => ({
     sla: buildAppealSlaSnapshot({
@@ -178,84 +105,11 @@ export async function listAppealQueue(input: {
 }
 
 export async function getAppealWorkspace(appealId: string) {
-  return prisma.appeal.findUnique({
-    where: { id: appealId },
-    include: {
-      appealedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          department: true,
-        },
-      },
-      resolvedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      submission: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              department: true,
-            },
-          },
-          module: {
-            select: {
-              id: true,
-              title: true,
-              description: true,
-            },
-          },
-          moduleVersion: true,
-          mcqAttempts: {
-            orderBy: { completedAt: "desc" },
-            include: {
-              responses: {
-                include: {
-                  question: {
-                    select: {
-                      id: true,
-                      stem: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          llmEvaluations: { orderBy: { createdAt: "desc" } },
-          decisions: { orderBy: { finalisedAt: "desc" } },
-          manualReviews: { orderBy: { createdAt: "desc" } },
-        },
-      },
-    },
-  });
+  return appealRepository.findAppealWorkspace(appealId);
 }
 
 export async function claimAppeal(appealId: string, handlerId: string) {
-  const appeal = await prisma.appeal.findUnique({
-    where: { id: appealId },
-    select: {
-      id: true,
-      submissionId: true,
-      appealStatus: true,
-      claimedAt: true,
-      resolvedById: true,
-      appealedBy: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-        },
-      },
-    },
-  });
+  const appeal = await appealRepository.findAppealForClaim(appealId);
 
   if (!appeal) {
     throw new NotFoundError("Appeal");
@@ -277,14 +131,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     );
   }
 
-  const claimed = await prisma.appeal.update({
-    where: { id: appealId },
-    data: {
-      appealStatus: AppealStatus.IN_REVIEW,
-      resolvedById: handlerId,
-      ...(appeal.claimedAt ? {} : { claimedAt: new Date() }),
-    },
-  });
+  const claimed = await appealRepository.markAppealInReview(appealId, handlerId, appeal.claimedAt);
 
   await recordAuditEvent({
     entityType: "appeal",
@@ -319,25 +166,7 @@ export async function resolveAppeal(input: {
   decisionReason: string;
   resolutionNote: string;
 }) {
-  const appeal = await prisma.appeal.findUnique({
-    where: { id: input.appealId },
-    include: {
-      appealedBy: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-        },
-      },
-      submission: {
-        include: {
-          decisions: {
-            orderBy: { finalisedAt: "desc" },
-          },
-        },
-      },
-    },
-  });
+  const appeal = await appealRepository.findAppealForResolution(input.appealId);
 
   if (!appeal) {
     throw new NotFoundError("Appeal");
@@ -368,39 +197,31 @@ export async function resolveAppeal(input: {
   }
 
   const finalisedAt = new Date();
-  const resolutionDecision = await prisma.assessmentDecision.create({
-    data: {
-      submissionId: latestDecision.submissionId,
-      moduleVersionId: latestDecision.moduleVersionId,
-      rubricVersionId: latestDecision.rubricVersionId,
-      promptTemplateVersionId: latestDecision.promptTemplateVersionId,
-      mcqScaledScore: latestDecision.mcqScaledScore,
-      practicalScaledScore: latestDecision.practicalScaledScore,
-      totalScore: latestDecision.totalScore,
-      redFlagsJson: latestDecision.redFlagsJson,
-      passFailTotal: input.passFailTotal,
-      decisionType: DecisionType.APPEAL_RESOLUTION,
-      decisionReason: input.decisionReason,
-      finalisedAt,
-      finalisedById: input.handlerId,
-      parentDecisionId: latestDecision.id,
-    },
+  const resolutionDecision = await appealRepository.createResolutionDecision({
+    submissionId: latestDecision.submissionId,
+    moduleVersionId: latestDecision.moduleVersionId,
+    rubricVersionId: latestDecision.rubricVersionId,
+    promptTemplateVersionId: latestDecision.promptTemplateVersionId,
+    mcqScaledScore: latestDecision.mcqScaledScore,
+    practicalScaledScore: latestDecision.practicalScaledScore,
+    totalScore: latestDecision.totalScore,
+    redFlagsJson: latestDecision.redFlagsJson,
+    passFailTotal: input.passFailTotal,
+    decisionType: DecisionType.APPEAL_RESOLUTION,
+    decisionReason: input.decisionReason,
+    finalisedAt,
+    finalisedById: input.handlerId,
+    parentDecisionId: latestDecision.id,
   });
 
-  const resolvedAppeal = await prisma.appeal.update({
-    where: { id: appeal.id },
-    data: {
-      appealStatus: AppealStatus.RESOLVED,
-      resolvedAt: finalisedAt,
-      resolvedById: input.handlerId,
-      resolutionNote: input.resolutionNote,
-    },
-  });
+  const resolvedAppeal = await appealRepository.markAppealResolved(
+    appeal.id,
+    input.handlerId,
+    finalisedAt,
+    input.resolutionNote,
+  );
 
-  await prisma.submission.update({
-    where: { id: latestDecision.submissionId },
-    data: { submissionStatus: SubmissionStatus.COMPLETED },
-  });
+  await appealRepository.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
 
   await upsertRecertificationStatusFromDecision({
     decisionId: resolutionDecision.id,

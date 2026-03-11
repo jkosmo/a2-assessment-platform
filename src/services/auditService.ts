@@ -1,5 +1,5 @@
-import { prisma } from "../db/prisma.js";
 import { ForbiddenError } from "../errors/AppError.js";
+import { auditRepository } from "../repositories/auditRepository.js";
 import { sha256 } from "../utils/hash.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
@@ -15,15 +15,13 @@ type AuditInput = {
 export async function recordAuditEvent(input: AuditInput) {
   const metadataJson = JSON.stringify(input.metadata ?? {});
 
-  await prisma.auditEvent.create({
-    data: {
-      entityType: input.entityType,
-      entityId: input.entityId,
-      action: input.action,
-      actorId: input.actorId,
-      metadataJson,
-      payloadHash: sha256(`${input.entityType}:${input.entityId}:${input.action}:${metadataJson}`),
-    },
+  await auditRepository.createAuditEvent({
+    entityType: input.entityType,
+    entityId: input.entityId,
+    action: input.action,
+    actorId: input.actorId,
+    metadataJson,
+    payloadHash: sha256(`${input.entityType}:${input.entityId}:${input.action}:${metadataJson}`),
   });
 }
 
@@ -46,10 +44,7 @@ type SubmissionAuditTrailInput = {
 };
 
 export async function getSubmissionAuditTrail(input: SubmissionAuditTrailInput) {
-  const submission = await prisma.submission.findUnique({
-    where: { id: input.submissionId },
-    select: { id: true, userId: true },
-  });
+  const submission = await auditRepository.findSubmissionAuditAccess(input.submissionId);
 
   if (!submission) {
     return null;
@@ -59,31 +54,7 @@ export async function getSubmissionAuditTrail(input: SubmissionAuditTrailInput) 
     throw new ForbiddenError("You do not have access to this submission audit trail.");
   }
 
-  const events = await prisma.auditEvent.findMany({
-    where: {
-      OR: [
-        {
-          entityType: "submission",
-          entityId: input.submissionId,
-        },
-        {
-          metadataJson: {
-            contains: `"submissionId":"${input.submissionId}"`,
-          },
-        },
-      ],
-    },
-    orderBy: { timestamp: "asc" },
-    include: {
-      actor: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-  });
+  const events = await auditRepository.findSubmissionAuditEvents(input.submissionId);
 
   return {
     submissionId: submission.id,

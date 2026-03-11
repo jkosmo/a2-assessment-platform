@@ -290,3 +290,10 @@ export async function getActiveModuleVersion(
     guidanceText: localizeContentText(locale, activeVersion.guidanceText),
   };
 }
+
+export async function getModuleWithActiveVersion(moduleId: string) {
+  return prisma.module.findUnique({
+    where: { id: moduleId },
+    include: { activeVersion: true },
+  });
+}

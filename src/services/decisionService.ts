@@ -1,6 +1,6 @@
 import { DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
-import { prisma } from "../db/prisma.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
+import { decisionRepository } from "../repositories/decisionRepository.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
@@ -42,35 +42,31 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     input.llmResult.manual_review_recommended ||
     inBorderlineWindow;
 
-  const decision = await prisma.assessmentDecision.create({
-    data: {
-      submissionId: input.submissionId,
-      moduleVersionId: input.moduleVersionId,
-      rubricVersionId: input.rubricVersionId,
-      promptTemplateVersionId: input.promptTemplateVersionId,
-      mcqScaledScore: input.mcqScaledScore,
-      practicalScaledScore: practicalScoreScaled,
-      totalScore,
-      redFlagsJson: JSON.stringify(input.llmResult.red_flags),
-      passFailTotal: passesThresholds,
-      decisionType: DecisionType.AUTOMATIC,
-      decisionReason: needsManualReview
-        ? input.forceManualReviewReason ??
-          "Automatically routed to manual review due to red flag / confidence / borderline rule."
-        : passesThresholds
-          ? "Automatic pass by threshold rules."
-          : "Automatic fail by threshold rules.",
-      finalisedById: input.userId,
-    },
+  const decision = await decisionRepository.createAssessmentDecision({
+    submissionId: input.submissionId,
+    moduleVersionId: input.moduleVersionId,
+    rubricVersionId: input.rubricVersionId,
+    promptTemplateVersionId: input.promptTemplateVersionId,
+    mcqScaledScore: input.mcqScaledScore,
+    practicalScaledScore: practicalScoreScaled,
+    totalScore,
+    redFlagsJson: JSON.stringify(input.llmResult.red_flags),
+    passFailTotal: passesThresholds,
+    decisionType: DecisionType.AUTOMATIC,
+    decisionReason: needsManualReview
+      ? input.forceManualReviewReason ??
+        "Automatically routed to manual review due to red flag / confidence / borderline rule."
+      : passesThresholds
+        ? "Automatic pass by threshold rules."
+        : "Automatic fail by threshold rules.",
+    finalisedById: input.userId,
   });
 
   if (needsManualReview) {
-    const review = await prisma.manualReview.create({
-      data: {
-        submissionId: input.submissionId,
-        triggerReason: decision.decisionReason,
-        reviewStatus: "OPEN",
-      },
+    const review = await decisionRepository.createManualReview({
+      submissionId: input.submissionId,
+      triggerReason: decision.decisionReason,
+      reviewStatus: "OPEN",
     });
 
     await recordAuditEvent({
@@ -86,10 +82,10 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     });
   }
 
-  await prisma.submission.update({
-    where: { id: input.submissionId },
-    data: { submissionStatus: needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED },
-  });
+  await decisionRepository.updateSubmissionStatus(
+    input.submissionId,
+    needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED,
+  );
 
   if (!needsManualReview) {
     await upsertRecertificationStatusFromDecision({

@@ -1,6 +1,7 @@
 import { SubmissionStatus } from "../db/prismaRuntime.js";
-import { prisma } from "../db/prisma.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
+import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
+import { mcqRepository } from "../repositories/mcqRepository.js";
 import { enqueueAssessmentJob } from "./assessmentJobService.js";
 import { recordAuditEvent } from "./auditService.js";
 import type { SupportedLocale } from "../i18n/locale.js";
@@ -16,40 +17,23 @@ export async function startMcqAttempt(
   userId: string,
   locale: SupportedLocale = "en-GB",
 ) {
-  const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, userId, moduleId },
-    include: { moduleVersion: true },
-  });
+  const submission = await mcqRepository.findSubmissionForModuleMcq(submissionId, userId, moduleId);
 
   if (!submission) {
     throw new Error("Submission not found for module.");
   }
 
-  let attempt = await prisma.mCQAttempt.findFirst({
-    where: {
-      submissionId: submission.id,
-      completedAt: null,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  let attempt = await mcqRepository.findOpenAttemptForSubmission(submission.id);
 
   if (!attempt) {
-    attempt = await prisma.mCQAttempt.create({
-      data: {
-        submissionId: submission.id,
-        mcqSetVersionId: submission.moduleVersion.mcqSetVersionId,
-        startedAt: new Date(),
-      },
+    attempt = await mcqRepository.createAttempt({
+      submissionId: submission.id,
+      mcqSetVersionId: submission.moduleVersion.mcqSetVersionId,
+      startedAt: new Date(),
     });
   }
 
-  const questions = await prisma.mCQQuestion.findMany({
-    where: {
-      mcqSetVersionId: attempt.mcqSetVersionId,
-      active: true,
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const questions = await mcqRepository.findActiveQuestionsForSet(attempt.mcqSetVersionId);
 
   return {
     attemptId: attempt.id,
@@ -68,17 +52,12 @@ export async function submitMcqAttempt(input: {
   userId: string;
   responses: Array<{ questionId: string; selectedAnswer: string }>;
 }) {
-  const submission = await prisma.submission.findFirst({
-    where: { id: input.submissionId, userId: input.userId, moduleId: input.moduleId },
-    include: { moduleVersion: true },
-  });
+  const submission = await mcqRepository.findSubmissionForModuleMcq(input.submissionId, input.userId, input.moduleId);
   if (!submission) {
     throw new Error("Submission not found for module.");
   }
 
-  const attempt = await prisma.mCQAttempt.findFirst({
-    where: { id: input.attemptId, submissionId: submission.id },
-  });
+  const attempt = await mcqRepository.findAttemptForSubmission(input.attemptId, submission.id);
   if (!attempt) {
     throw new Error("MCQ attempt not found.");
   }
@@ -86,9 +65,7 @@ export async function submitMcqAttempt(input: {
     throw new Error("MCQ attempt already submitted.");
   }
 
-  const questions = await prisma.mCQQuestion.findMany({
-    where: { mcqSetVersionId: attempt.mcqSetVersionId, active: true },
-  });
+  const questions = await mcqRepository.findActiveQuestionsForSet(attempt.mcqSetVersionId);
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const evaluated = input.responses
@@ -105,16 +82,16 @@ export async function submitMcqAttempt(input: {
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
-  await prisma.mCQResponse.deleteMany({ where: { mcqAttemptId: attempt.id } });
+  await mcqRepository.deleteResponsesForAttempt(attempt.id);
   if (evaluated.length > 0) {
-    await prisma.mCQResponse.createMany({
-      data: evaluated.map((item) => ({
+    await mcqRepository.createResponses(
+      evaluated.map((item) => ({
         mcqAttemptId: attempt.id,
         questionId: item.questionId,
         selectedAnswer: item.selectedAnswer,
         isCorrect: item.isCorrect,
       })),
-    });
+    );
   }
 
   const rawScore = evaluated.filter((response) => response.isCorrect).length;
@@ -124,21 +101,16 @@ export async function submitMcqAttempt(input: {
   const scaledScore = (rawScore / totalQuestions) * rules.weights.mcqMaxScore;
   const passFailMcq = percentScore >= rules.thresholds.mcqMinPercent;
 
-  const completedAttempt = await prisma.mCQAttempt.update({
-    where: { id: attempt.id },
-    data: {
-      completedAt: new Date(),
-      rawScore,
-      percentScore,
-      scaledScore,
-      passFailMcq,
-    },
+  const completedAttempt = await mcqRepository.completeAttempt({
+    attemptId: attempt.id,
+    completedAt: new Date(),
+    rawScore,
+    percentScore,
+    scaledScore,
+    passFailMcq,
   });
 
-  await prisma.submission.update({
-    where: { id: submission.id },
-    data: { submissionStatus: SubmissionStatus.PROCESSING },
-  });
+  await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
   await enqueueAssessmentJob(submission.id);
 

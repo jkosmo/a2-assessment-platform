@@ -7,6 +7,63 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.82 - 2026-03-11
+### Summary
+Expanded the unit-test path with SLA and decision-service coverage and added dedicated unit/integration Vitest entrypoints.
+
+### Included
+- Unit test additions:
+  - `test/unit/appeal-sla.test.ts`
+  - `test/unit/decision-service.test.ts`
+  - `test/unit/submission-repository.test.ts`
+  - `test/unit/appeal-repository.test.ts`
+  - `test/unit/assessment-job-repository.test.ts`
+  - `test/unit/manual-review-repository.test.ts`
+  - `test/unit/mcq-repository.test.ts`
+  - `test/unit/decision-repository.test.ts`
+  - `test/unit/audit-repository.test.ts`
+  - added SLA boundary coverage for on-track, at-risk, overdue, and resolved appeals
+  - added mocked Prisma coverage for `createAssessmentDecision()`
+- Repository migration slice:
+  - `src/repositories/submissionRepository.ts`
+  - `src/repositories/appealRepository.ts`
+  - `src/repositories/assessmentJobRepository.ts`
+  - `src/repositories/manualReviewRepository.ts`
+  - `src/repositories/mcqRepository.ts`
+  - `src/repositories/decisionRepository.ts`
+  - `src/repositories/auditRepository.ts`
+  - `src/repositories/moduleRepository.ts`
+  - `src/services/submissionService.ts`
+  - `src/services/appealService.ts`
+  - `src/services/assessmentJobService.ts`
+  - `src/services/manualReviewService.ts`
+  - `src/services/mcqService.ts`
+  - `src/services/decisionService.ts`
+  - `src/services/auditService.ts`
+  - migrated submission, appeal, assessment-job, manual-review, MCQ, decision, and audit data access out of services into repositories
+- Test execution split:
+  - `vitest.unit.config.ts`
+  - `vitest.integration.config.ts`
+  - `package.json`
+  - added `test:unit` and `test:integration` scripts while leaving `test` unchanged
+
+### Verification
+- Focused unit validation planned for the new unit suite and related no-DB tests
+
+## 0.3.81 - 2026-03-11
+### Summary
+Clarified the AI workflow so GitHub issues must be updated when work is partially implemented and only closed after human verification.
+
+### Included
+- Workflow policy updates:
+  - `doc/AI_WORKFLOW.md`
+  - added explicit issue-status hygiene rules before implementation, after partial implementation, and after completion
+  - required the issue tracker to reflect actual implementation status rather than the original plan
+  - clarified that human-verified complete issues should be updated and then closed
+
+### Verification
+- Documentation-only update; no code-path changes were made
+
 ## 0.3.80 - 2026-03-11
 ### Summary
 Refreshed README documentation so the documented workspace routes, manual-review workflow, reviewer defaults, and participant auto-assessment behavior now match the current implementation.

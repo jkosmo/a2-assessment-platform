@@ -1,7 +1,8 @@
 import { SubmissionStatus } from "../db/prismaRuntime.js";
-import { prisma } from "../db/prisma.js";
 import { ValidationError } from "../errors/AppError.js";
 import type { SupportedLocale } from "../i18n/locale.js";
+import { getModuleWithActiveVersion } from "../repositories/moduleRepository.js";
+import { submissionRepository } from "../repositories/submissionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { resolveSubmissionRawTextFromAttachment } from "./documentParsingService.js";
@@ -22,10 +23,7 @@ export type CreateSubmissionInput = {
 };
 
 export async function createSubmission(input: CreateSubmissionInput) {
-  const module = await prisma.module.findUnique({
-    where: { id: input.moduleId },
-    include: { activeVersion: true },
-  });
+  const module = await getModuleWithActiveVersion(input.moduleId);
 
   if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
     throw new ValidationError("Module active version is not available.");
@@ -38,20 +36,18 @@ export async function createSubmission(input: CreateSubmissionInput) {
     attachmentMimeType: input.attachmentMimeType,
   });
 
-  const submission = await prisma.submission.create({
-    data: {
-      userId: input.userId,
-      moduleId: module.id,
-      moduleVersionId: module.activeVersion.id,
-      locale: input.locale,
-      deliveryType: input.deliveryType,
-      rawText: parseOutcome.resolvedRawText,
-      reflectionText: input.reflectionText,
-      promptExcerpt: input.promptExcerpt,
-      responsibilityAcknowledged: input.responsibilityAcknowledged,
-      attachmentUri: input.attachmentUri,
-      submissionStatus: SubmissionStatus.SUBMITTED,
-    },
+  const submission = await submissionRepository.create({
+    userId: input.userId,
+    moduleId: module.id,
+    moduleVersionId: module.activeVersion.id,
+    locale: input.locale,
+    deliveryType: input.deliveryType,
+    rawText: parseOutcome.resolvedRawText,
+    reflectionText: input.reflectionText,
+    promptExcerpt: input.promptExcerpt,
+    responsibilityAcknowledged: input.responsibilityAcknowledged,
+    attachmentUri: input.attachmentUri,
+    submissionStatus: SubmissionStatus.SUBMITTED,
   });
 
   await recordAuditEvent({
@@ -78,91 +74,16 @@ export async function createSubmission(input: CreateSubmissionInput) {
 }
 
 export async function getOwnedSubmission(submissionId: string, userId: string) {
-  return prisma.submission.findFirst({
-    where: { id: submissionId, userId },
-    include: {
-      moduleVersion: true,
-      appeals: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          appealStatus: true,
-          createdAt: true,
-          resolvedAt: true,
-        },
-      },
-      mcqAttempts: {
-        orderBy: { createdAt: "desc" },
-        include: { responses: true },
-      },
-      llmEvaluations: { orderBy: { createdAt: "desc" } },
-      decisions: { orderBy: { finalisedAt: "desc" } },
-    },
-  });
+  return submissionRepository.findOwnedSubmission(submissionId, userId);
 }
 
 export async function getSubmissionForAssessmentView(submissionId: string, userId: string) {
-  return prisma.submission.findFirst({
-    where: { id: submissionId, userId },
-    include: {
-      assessmentJobs: { orderBy: { createdAt: "desc" } },
-      llmEvaluations: { orderBy: { createdAt: "desc" } },
-      decisions: { orderBy: { finalisedAt: "desc" } },
-    },
-  });
+  return submissionRepository.findSubmissionForAssessmentView(submissionId, userId);
 }
 
 export async function getOwnedSubmissionHistory(input: {
   userId: string;
   limit: number;
 }) {
-  return prisma.submission.findMany({
-    where: { userId: input.userId },
-    orderBy: { submittedAt: "desc" },
-    take: input.limit,
-    include: {
-      module: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-      mcqAttempts: {
-        where: { completedAt: { not: null } },
-        orderBy: { completedAt: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          scaledScore: true,
-          percentScore: true,
-          passFailMcq: true,
-          completedAt: true,
-        },
-      },
-      llmEvaluations: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          practicalScoreScaled: true,
-          passFailPractical: true,
-          manualReviewRecommended: true,
-          createdAt: true,
-        },
-      },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          decisionType: true,
-          passFailTotal: true,
-          totalScore: true,
-          decisionReason: true,
-          finalisedAt: true,
-        },
-      },
-    },
-  });
+  return submissionRepository.findOwnedSubmissionHistory(input.userId, input.limit);
 }

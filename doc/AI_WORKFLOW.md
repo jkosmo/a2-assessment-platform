@@ -23,6 +23,7 @@ This workflow applies to:
 - Small, reviewable changes with clear acceptance criteria.
 - Automation-first CI/CD for build, test, security checks, and deployment.
 - Human approval gate before production deployment.
+- Keep GitHub issue status aligned with the real implementation state.
 
 ## Issue Execution Workflow
 
@@ -30,6 +31,8 @@ This workflow applies to:
 - Confirm purpose, scope, acceptance criteria, and dependencies.
 - Map impacted components and files.
 - Identify unknowns, assumptions, and risks.
+- Compare the issue description with the current codebase before starting implementation.
+- If the issue is already partially or fully implemented, update the issue status first instead of continuing from stale assumptions.
 
 ### 2. Design and architecture gate
 For every issue, explicitly evaluate whether design work is needed before coding.
@@ -105,6 +108,24 @@ For every issue, explicitly evaluate:
 
 If answer is yes, include the work in the same PR when feasible.
 If deferred, create a follow-up issue with reason and priority.
+
+### 9. Issue status hygiene
+GitHub issues must reflect the current implementation state, not only the original plan.
+
+Before implementation:
+- Verify whether the issue is still fully open, partially implemented, or already complete.
+- If the codebase no longer matches the issue description, update the issue body, checklist, or comments with the current status before doing more work.
+- If only part of the original scope remains, narrow the issue to the remaining work or split out follow-up issues.
+
+After partial implementation:
+- Update the issue with what was completed, what remains, and any acceptance criteria that are now satisfied.
+- Link the relevant PR, commit, design note, or deployment evidence.
+- If scope changed during implementation, record the reason and the new boundary clearly.
+
+After completion:
+- When all acceptance criteria appear implemented but have not yet been confirmed by a human, mark the issue as ready for human verification and keep it open.
+- Once a human has verified the implementation, update the issue with the verification result and close it.
+- If human verification finds gaps, reopen or keep the issue open and document the remaining work explicitly.
 
 ## Deploy/Runtime Incident Workflow (RCA-First)
 Use this flow for persistent staging/production deployment failures. Do not keep patching the latest visible symptom.
@@ -185,6 +206,7 @@ Update relevant docs when behavior changes:
 - Config keys and operational settings.
 - Runbooks and incident response notes.
 - User/admin workflow guidance.
+- GitHub issue status, checklist state, and close-out notes when implementation status has changed.
 
 ## Versioning Policy
 - A version number must be bumped before every push to remote.
@@ -201,10 +223,14 @@ Update relevant docs when behavior changes:
 - Staging deploy successful.
 - Production approval requirement respected.
 - Documentation updated or follow-up issue created.
+- GitHub issue updated to reflect actual implementation status.
+- If only partially complete, remaining scope is documented and the issue stays open.
+- If human-verified complete, verification result is recorded and the issue is closed.
 - Version number bumped for this push and `doc/VERSIONS.md` updated.
 
 ## Pull Request Checklist
 - Linked issue and scope are clear.
+- Linked issue status matches the actual implementation state.
 - Design decision is documented when required.
 - Refactor decision is documented.
 - Config updates are included and validated.

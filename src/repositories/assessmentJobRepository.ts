@@ -1,0 +1,117 @@
+import type { AssessmentJobStatus as AssessmentJobStatusType, Prisma, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
+
+type AssessmentJobRepositoryClient = Pick<typeof prisma, "assessmentJob" | "submission" | "lLMEvaluation">;
+
+export function createAssessmentJobRepository(client: AssessmentJobRepositoryClient = prisma) {
+  return {
+    findPendingOrRunningJobForSubmission(submissionId: string, statuses: AssessmentJobStatusType[]) {
+      return client.assessmentJob.findFirst({
+        where: {
+          submissionId,
+          status: { in: statuses },
+        },
+      });
+    },
+
+    findPendingOrRunningJobIdForSubmission(submissionId: string, statuses: AssessmentJobStatusType[]) {
+      return client.assessmentJob.findFirst({
+        where: {
+          submissionId,
+          status: { in: statuses },
+        },
+        select: { id: true },
+      });
+    },
+
+    createAssessmentJob(data: Prisma.AssessmentJobUncheckedCreateInput) {
+      return client.assessmentJob.create({ data });
+    },
+
+    findNextRunnableJob(now: Date, maxAttempts: number, submissionId?: string) {
+      return client.assessmentJob.findFirst({
+        where: {
+          ...(submissionId ? { submissionId } : {}),
+          status: "PENDING",
+          availableAt: { lte: now },
+          attempts: { lt: maxAttempts },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+    },
+
+    tryLockPendingJob(jobId: string, now: Date, lockedBy: string) {
+      return client.assessmentJob.updateMany({
+        where: {
+          id: jobId,
+          status: "PENDING",
+        },
+        data: {
+          status: "RUNNING",
+          lockedAt: now,
+          lockedBy,
+          attempts: { increment: 1 },
+        },
+      });
+    },
+
+    markJobSucceeded(jobId: string) {
+      return client.assessmentJob.update({
+        where: { id: jobId },
+        data: { status: "SUCCEEDED", errorMessage: null },
+      });
+    },
+
+    findAssessmentJobOrThrow(jobId: string) {
+      return client.assessmentJob.findUniqueOrThrow({ where: { id: jobId } });
+    },
+
+    markJobForRetryOrFailure(jobId: string, data: {
+      status: AssessmentJobStatusType;
+      availableAt: Date;
+      errorMessage: string;
+    }) {
+      return client.assessmentJob.update({
+        where: { id: jobId },
+        data,
+      });
+    },
+
+    findAssessmentJobWithSubmissionOrThrow(jobId: string) {
+      return client.assessmentJob.findUniqueOrThrow({
+        where: { id: jobId },
+        include: {
+          submission: {
+            include: {
+              moduleVersion: {
+                include: {
+                  promptTemplateVersion: true,
+                },
+              },
+              mcqAttempts: { where: { completedAt: { not: null } }, orderBy: { completedAt: "desc" } },
+            },
+          },
+        },
+      });
+    },
+
+    updateSubmissionStatus(submissionId: string, submissionStatus: SubmissionStatusType) {
+      return client.submission.update({
+        where: { id: submissionId },
+        data: { submissionStatus },
+      });
+    },
+
+    createLlmEvaluation(data: Prisma.LLMEvaluationUncheckedCreateInput) {
+      return client.lLMEvaluation.create({ data });
+    },
+
+    countJobsByStatus(status: AssessmentJobStatusType) {
+      return client.assessmentJob.count({
+        where: { status },
+      });
+    },
+  };
+}
+
+export const assessmentJobRepository = createAssessmentJobRepository();
