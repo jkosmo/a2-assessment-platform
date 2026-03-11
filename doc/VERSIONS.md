@@ -7,6 +7,34 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.85 - 2026-03-11
+### Summary
+Extended the repository migration in `#80` to recertification, org-sync, and appeal-SLA monitoring, reducing the remaining direct Prisma usage to reporting, calibration, and admin-content flows.
+
+### Included
+- New repository:
+  - `src/repositories/certificationRepository.ts`
+- Repository extensions:
+  - `src/repositories/decisionRepository.ts`
+  - `src/repositories/auditRepository.ts`
+  - `src/repositories/userRepository.ts`
+  - `src/repositories/appealRepository.ts`
+- Service migrations:
+  - `src/services/recertificationService.ts`
+  - `src/services/orgSyncService.ts`
+  - `src/services/appealSlaMonitorService.ts`
+  - removed direct Prisma access from the three services above
+  - routed recertification status reads/writes through repository boundaries
+  - routed org delta sync user lookup/update/create through `userRepository`
+  - routed SLA monitor backlog queries through `appealRepository`
+- Unit coverage:
+  - `test/unit/certification-repository.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm run test:unit`
+- `npx dotenv -e .env.test -- vitest run --config vitest.integration.config.ts test/m2-org-sync.test.ts test/m2-recertification-flow.test.ts test/m2-appeal-sla-monitor.test.ts`
+
 ## 0.3.84 - 2026-03-11
 ### Summary
 Clarified the verification split between Codex and the human reviewer in the AI workflow.

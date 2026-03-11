@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "../db/prisma.js";
 import { getOrgSyncConfig } from "../config/orgSync.js";
 import { ConflictError } from "../errors/AppError.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
+import {
+  createUserForOrgSync,
+  findUserForOrgSyncByEmail,
+  findUserForOrgSyncByExternalId,
+  updateUserForOrgSync,
+} from "../repositories/userRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 
 type OrgSyncDeltaRecord = {
@@ -116,31 +121,9 @@ async function syncSingleUser(
   record: OrgSyncDeltaRecord,
   config: ReturnType<typeof getOrgSyncConfig>,
 ): Promise<"created" | "updated" | "skipped_conflict"> {
-  const existingByExternalId = await prisma.user.findUnique({
-    where: { externalId: record.externalId },
-    select: {
-      id: true,
-      externalId: true,
-      email: true,
-      name: true,
-      department: true,
-      manager: true,
-      activeStatus: true,
-    },
-  });
+  const existingByExternalId = await findUserForOrgSyncByExternalId(record.externalId);
 
-  const existingByEmail = await prisma.user.findUnique({
-    where: { email: record.email },
-    select: {
-      id: true,
-      externalId: true,
-      email: true,
-      name: true,
-      department: true,
-      manager: true,
-      activeStatus: true,
-    },
-  });
+  const existingByEmail = await findUserForOrgSyncByEmail(record.email);
 
   if (existingByExternalId) {
     if (existingByEmail && existingByEmail.id !== existingByExternalId.id) {
@@ -153,10 +136,10 @@ async function syncSingleUser(
       );
     }
 
-    await prisma.user.update({
-      where: { id: existingByExternalId.id },
-      data: buildUserUpdateData(record, config, existingByExternalId),
-    });
+    await updateUserForOrgSync(
+      existingByExternalId.id,
+      buildUserUpdateData(record, config, existingByExternalId),
+    );
     return "updated";
   }
 
@@ -165,25 +148,20 @@ async function syncSingleUser(
       return "skipped_conflict";
     }
 
-    await prisma.user.update({
-      where: { id: existingByEmail.id },
-      data: {
+    await updateUserForOrgSync(existingByEmail.id, {
         externalId: record.externalId,
         ...buildUserUpdateData(record, config, existingByEmail),
-      },
     });
     return "updated";
   }
 
-  await prisma.user.create({
-    data: {
-      externalId: record.externalId,
-      email: record.email,
-      name: record.name,
-      department: record.department ?? null,
-      manager: record.manager ?? null,
-      activeStatus: record.activeStatus ?? config.defaultActiveStatus,
-    },
+  await createUserForOrgSync({
+    externalId: record.externalId,
+    email: record.email,
+    name: record.name,
+    department: record.department ?? null,
+    manager: record.manager ?? null,
+    activeStatus: record.activeStatus ?? config.defaultActiveStatus,
   });
   return "created";
 }

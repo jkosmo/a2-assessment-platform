@@ -1,8 +1,10 @@
-import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import { NotFoundError } from "../errors/AppError.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
+import { auditRepository } from "../repositories/auditRepository.js";
+import { certificationRepository } from "../repositories/certificationRepository.js";
+import { decisionRepository } from "../repositories/decisionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 
 export type RecertificationLifecycleStatus = "ACTIVE" | "DUE_SOON" | "DUE" | "EXPIRED" | "NOT_CERTIFIED";
@@ -15,17 +17,7 @@ type UpsertFromDecisionInput = {
 type ReminderChannel = "disabled" | "log" | "webhook";
 
 export async function upsertRecertificationStatusFromDecision(input: UpsertFromDecisionInput) {
-  const decision = await prisma.assessmentDecision.findUnique({
-    where: { id: input.decisionId },
-    include: {
-      submission: {
-        select: {
-          userId: true,
-          moduleId: true,
-        },
-      },
-    },
-  });
+  const decision = await decisionRepository.findDecisionWithSubmissionIdentifiers(input.decisionId);
 
   if (!decision) {
     throw new NotFoundError("Decision", "decision_not_found", "Decision not found.");
@@ -54,29 +46,14 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
     status = "NOT_CERTIFIED";
   }
 
-  const certification = await prisma.certificationStatus.upsert({
-    where: {
-      userId_moduleId: {
-        userId,
-        moduleId,
-      },
-    },
-    update: {
-      latestDecisionId: decision.id,
-      status,
-      passedAt,
-      expiryDate,
-      recertificationDueDate,
-    },
-    create: {
-      userId,
-      moduleId,
-      latestDecisionId: decision.id,
-      status,
-      passedAt,
-      expiryDate,
-      recertificationDueDate,
-    },
+  const certification = await certificationRepository.upsertCertificationStatus({
+    userId,
+    moduleId,
+    latestDecisionId: decision.id,
+    status,
+    passedAt,
+    expiryDate,
+    recertificationDueDate,
   });
 
   await recordAuditEvent({
@@ -141,26 +118,7 @@ export async function runRecertificationReminderSchedule(input?: { asOf?: Date }
     };
   }
 
-  const certifications = await prisma.certificationStatus.findMany({
-    where: {
-      expiryDate: { not: null },
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-        },
-      },
-      module: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-    },
-  });
+  const certifications = await certificationRepository.findCertificationsForReminderSchedule();
 
   let processed = 0;
   let sent = 0;
@@ -360,14 +318,11 @@ async function sendRecertificationReminder(input: {
 }
 
 async function hasReminderAuditEventForDay(certificationId: string, reminderDaysBefore: number, asOfDate: string) {
-  const existing = await prisma.auditEvent.findMany({
-    where: {
-      entityType: "certification_status",
-      entityId: certificationId,
-      action: "recertification_reminder_sent",
-    },
-    select: { metadataJson: true },
-  });
+  const existing = await auditRepository.findAuditEventMetadataByEntityAndAction(
+    "certification_status",
+    certificationId,
+    "recertification_reminder_sent",
+  );
   return existing.some(
     (event) =>
       event.metadataJson.includes(`"reminderDaysBefore":${reminderDaysBefore}`) &&

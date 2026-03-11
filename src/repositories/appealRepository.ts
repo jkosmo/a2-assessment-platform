@@ -112,6 +112,20 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
       });
     },
 
+    findAppealsForSlaMonitor() {
+      return client.appeal.findMany({
+        where: {
+          appealStatus: { in: ["OPEN", "IN_REVIEW"] },
+        },
+        select: {
+          createdAt: true,
+          claimedAt: true,
+          resolvedAt: true,
+          appealStatus: true,
+        },
+      });
+    },
+
     findAppealWorkspace(appealId: string) {
       return client.appeal.findUnique({
         where: { id: appealId },

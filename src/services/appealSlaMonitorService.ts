@@ -1,6 +1,6 @@
 import { AppealStatus } from "../db/prismaRuntime.js";
-import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
+import { appealRepository } from "../repositories/appealRepository.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 
@@ -22,17 +22,7 @@ let monitorTimer: NodeJS.Timeout | null = null;
 let monitorRunning = false;
 
 export async function collectAppealSlaMonitorSnapshot(now = new Date()): Promise<AppealSlaMonitorSnapshot> {
-  const appeals = await prisma.appeal.findMany({
-    where: {
-      appealStatus: { in: [AppealStatus.OPEN, AppealStatus.IN_REVIEW] },
-    },
-    select: {
-      createdAt: true,
-      claimedAt: true,
-      resolvedAt: true,
-      appealStatus: true,
-    },
-  });
+  const appeals = await appealRepository.findAppealsForSlaMonitor();
 
   let openAppeals = 0;
   let inReviewAppeals = 0;

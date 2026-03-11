@@ -67,6 +67,66 @@ export async function getActiveRoles(userId: string, at = new Date()): Promise<A
   return assignments.map((assignment) => assignment.appRole);
 }
 
+export async function findUserForOrgSyncByExternalId(externalId: string) {
+  return prisma.user.findUnique({
+    where: { externalId },
+    select: {
+      id: true,
+      externalId: true,
+      email: true,
+      name: true,
+      department: true,
+      manager: true,
+      activeStatus: true,
+    },
+  });
+}
+
+export async function findUserForOrgSyncByEmail(email: string) {
+  return prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      externalId: true,
+      email: true,
+      name: true,
+      department: true,
+      manager: true,
+      activeStatus: true,
+    },
+  });
+}
+
+export async function updateUserForOrgSync(
+  userId: string,
+  data: {
+    externalId?: string;
+    email: string;
+    name: string;
+    department: string | null;
+    manager: string | null;
+    activeStatus: boolean;
+  },
+) {
+  return prisma.user.update({
+    where: { id: userId },
+    data,
+  });
+}
+
+export async function createUserForOrgSync(data: {
+  externalId: string;
+  email: string;
+  name: string;
+  department: string | null;
+  manager: string | null;
+  activeStatus: boolean;
+}) {
+  return prisma.user.create({
+    data,
+  });
+}
+
 function parseRoleMap(): Record<string, AppRoleType> {
   if (env.ENTRA_GROUP_ROLE_MAP_FILE) {
     const roleMapPath = path.resolve(process.cwd(), env.ENTRA_GROUP_ROLE_MAP_FILE);

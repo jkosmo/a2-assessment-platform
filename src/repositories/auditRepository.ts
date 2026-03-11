@@ -49,6 +49,17 @@ export function createAuditRepository(client: AuditRepositoryClient = prisma) {
         },
       });
     },
+
+    findAuditEventMetadataByEntityAndAction(entityType: string, entityId: string, action: string) {
+      return client.auditEvent.findMany({
+        where: {
+          entityType,
+          entityId,
+          action,
+        },
+        select: { metadataJson: true },
+      });
+    },
   };
 }
 

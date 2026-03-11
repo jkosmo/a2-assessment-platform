@@ -9,6 +9,20 @@ type DecisionRepositoryClient = Pick<typeof prisma, "assessmentDecision" | "manu
 
 export function createDecisionRepository(client: DecisionRepositoryClient = prisma) {
   return {
+    findDecisionWithSubmissionIdentifiers(decisionId: string) {
+      return client.assessmentDecision.findUnique({
+        where: { id: decisionId },
+        include: {
+          submission: {
+            select: {
+              userId: true,
+              moduleId: true,
+            },
+          },
+        },
+      });
+    },
+
     createAssessmentDecision(data: Prisma.AssessmentDecisionUncheckedCreateInput) {
       return client.assessmentDecision.create({ data });
     },
