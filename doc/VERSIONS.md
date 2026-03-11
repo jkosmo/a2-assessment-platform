@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.100 - 2026-03-11
+### Summary
+Completed `#76` by extending the HTML i18n fallback regression coverage to the `manual-review` workspace and confirming there are no remaining blank `data-i18n` elements across the current workspace HTML pages.
+
+### Included
+- Extended workspace HTML fallback regression coverage to include:
+  - `public/manual-review.html`
+  - `test/workspace-html-fallbacks.test.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/workspace-html-fallbacks.test.js test/participant-console-config.test.ts test/participant-translations.test.js test/workspace-validation-accessibility.test.js`
+
 ## 0.3.99 - 2026-03-11
 ### Summary
 Implemented `#79` by adding an accessible step progress indicator to the participant assessment flow so users can see where they are in the sequence from identity to assessment.
