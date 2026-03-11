@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.101 - 2026-03-11
+### Summary
+Progressed `#69` with a design note for dynamic rubric criteria, including options/trade-offs, legacy migration strategy, phased rollout, rollback, complexity assessment, and test strategy.
+
+### Included
+- Added dynamic rubric criteria design note:
+  - `doc/PHASE2_DYNAMIC_RUBRIC_CRITERIA_DESIGN.md`
+
+### Verification
+- Documentation-only change; no code-path behavior changed locally.
+
 ## 0.3.100 - 2026-03-11
 ### Summary
 Completed `#76` by extending the HTML i18n fallback regression coverage to the `manual-review` workspace and confirming there are no remaining blank `data-i18n` elements across the current workspace HTML pages.
