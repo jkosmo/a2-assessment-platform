@@ -50,28 +50,34 @@ describe("participant console state helpers", () => {
   it("builds module card models with explicit selected state", () => {
     const models = buildModuleCardViewModels(
       [
-        { id: "m1", title: "Foundations" },
-        { id: "m2", title: "Governance" },
+        { id: "m1", title: "Foundations", taskText: "Task 1" },
+        { id: "m2", title: "Governance", guidanceText: "Guide 2" },
       ],
       "m2",
     );
 
     expect(models).toEqual([
-      { id: "m1", title: "Foundations", selected: false },
-      { id: "m2", title: "Governance", selected: true },
+      { id: "m1", title: "Foundations", taskText: "Task 1", selected: false },
+      { id: "m2", title: "Governance", guidanceText: "Guide 2", selected: true },
     ]);
   });
 
   it("resolves selected module by id for human-readable summary", () => {
     const selected = resolveSelectedModule(
       [
-        { id: "m1", title: "Foundations" },
+        { id: "m1", title: "Foundations", taskText: "Task 1", guidanceText: "Guide 1" },
         { id: "m2", title: "Governance" },
       ],
       "m1",
     );
 
-    expect(selected).toEqual({ id: "m1", title: "Foundations", selected: true });
+    expect(selected).toEqual({
+      id: "m1",
+      title: "Foundations",
+      taskText: "Task 1",
+      guidanceText: "Guide 1",
+      selected: true,
+    });
   });
 
   it("parses and prunes expired module drafts by ttl", () => {

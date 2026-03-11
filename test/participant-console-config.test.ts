@@ -200,6 +200,9 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('aria-describedby="ack-hint"');
         expect(response.text).toContain('id="flowProgress"');
         expect(response.text).toContain('id="flowProgressSteps"');
+        expect(response.text).toContain('id="selectedModuleBrief"');
+        expect(response.text).toContain('id="selectedModuleTaskText"');
+        expect(response.text).toContain('id="selectedModuleGuidanceText"');
         expect(response.text).toContain('data-step="5"');
       }
 

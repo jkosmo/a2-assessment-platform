@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.111 - 2026-03-11
+### Summary
+Fixed the participant workspace so published module assignment text and submission guidance are shown before a participant creates a submission.
+
+### Included
+- Extended module list responses with localized active-version task and guidance text:
+  - `src/repositories/moduleRepository.ts`
+- Preserved selected module content in participant state helpers:
+  - `public/participant-console-state.js`
+- Added an assignment brief block to the participant submission step:
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- Added regression coverage for participant state, translations, config HTML, and localized module payloads:
+  - `test/participant-console-state.test.js`
+  - `test/participant-translations.test.js`
+  - `test/participant-console-config.test.ts`
+  - `test/m2-i18n-baseline.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-state.test.js test/participant-translations.test.js test/participant-console-config.test.ts test/m2-i18n-baseline.test.ts`
+
 ## 0.3.110 - 2026-03-11
 ### Summary
 Added admin-content readback/export support for saved module configuration and improved participant MCQ readability with clearer question grouping and option alignment.

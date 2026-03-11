@@ -31,6 +31,9 @@ const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 
 const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const selectedModuleDisplay = document.getElementById("selectedModuleDisplay");
+const selectedModuleBrief = document.getElementById("selectedModuleBrief");
+const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
+const selectedModuleGuidanceText = document.getElementById("selectedModuleGuidanceText");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 const appealIdLabel = document.getElementById("appealId");
@@ -413,6 +416,12 @@ function renderSelectedModuleSummary() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   selectedModuleIdInput.value = selectedModule?.id ?? "";
   selectedModuleDisplay.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
+  selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
+  selectedModuleGuidanceText.textContent = selectedModule?.guidanceText ?? "";
+  selectedModuleBrief.classList.toggle(
+    "hidden",
+    !(selectedModule && (selectedModule.taskText || selectedModule.guidanceText)),
+  );
   updateModuleSelectionVisibility(Boolean(selectedModule));
 }
 

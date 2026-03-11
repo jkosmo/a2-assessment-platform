@@ -36,6 +36,8 @@ const moduleSummarySelect = {
     select: {
       id: true,
       versionNo: true,
+      taskText: true,
+      guidanceText: true,
       publishedAt: true,
       rubricVersionId: true,
       promptTemplateVersionId: true,
@@ -76,6 +78,8 @@ export async function listModules(
       ...module,
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
+      taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
+      guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
     }));
   }
 
@@ -120,6 +124,8 @@ export async function listModules(
       ...module,
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
+      taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
+      guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
       participantStatus: latest
         ? {
             latestSubmissionId: latest.id,
@@ -251,6 +257,8 @@ export async function getModuleById(
     ...module,
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
+    taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
+    guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
   };
 }
 

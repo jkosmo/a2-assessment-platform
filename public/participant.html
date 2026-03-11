@@ -20,6 +20,10 @@
       .module-meta { font-size: 12px; color: var(--color-meta); margin-top: calc(var(--space-1) * 0.5); }
       .selected-badge { display: inline-block; margin-top: var(--space-1); font-size: 11px; font-weight: 600; color: var(--color-selected-badge); }
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); }
+      .module-brief { display: grid; gap: var(--space-1); margin-top: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%); }
+      .module-brief-section { display: grid; gap: calc(var(--space-1) * 0.5); }
+      .module-brief-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--color-link-active); }
+      .module-brief-text { white-space: pre-wrap; line-height: 1.5; color: var(--color-text); }
       .section-locked { opacity: 0.75; }
       .flow-progress { margin: 0 0 var(--space-2); }
       .flow-progress-summary { font-size: 13px; font-weight: 600; color: var(--color-navy); margin-bottom: var(--space-1); }
@@ -111,6 +115,16 @@
         <label data-i18n="submission.selectedModule">Selected module</label>
         <div id="selectedModuleDisplay" class="selected-module-summary" aria-describedby="moduleSelectionHint"></div>
         <input id="selectedModuleId" type="hidden" />
+      </div>
+      <div id="selectedModuleBrief" class="module-brief hidden">
+        <div class="module-brief-section">
+          <div class="module-brief-label" data-i18n="submission.taskText">Assignment</div>
+          <div id="selectedModuleTaskText" class="module-brief-text"></div>
+        </div>
+        <div class="module-brief-section">
+          <div class="module-brief-label" data-i18n="submission.guidanceText">What good work should include</div>
+          <div id="selectedModuleGuidanceText" class="module-brief-text"></div>
+        </div>
       </div>
       <div><label data-i18n="submission.rawText">Your answer</label><textarea id="rawText" rows="5"></textarea></div>
       <div>

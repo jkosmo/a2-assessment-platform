@@ -214,6 +214,20 @@ describe("MVP i18n baseline", () => {
       },
     });
 
+    const modulesNb = await request(app)
+      .get("/api/modules?includeCompleted=true")
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      });
+    expect(modulesNb.status).toBe(200);
+
+    const localizedModule = (
+      modulesNb.body.modules as Array<{ id: string; taskText?: string; guidanceText?: string }>
+    ).find((module) => module.id === seedModule.id);
+    expect(localizedModule?.taskText).toBe("Norsk oppgavekontekst.");
+    expect(localizedModule?.guidanceText).toBe("Norsk veiledningskontekst.");
+
     env.LLM_MODE = "azure_openai";
     env.AZURE_OPENAI_ENDPOINT = "https://example.openai.azure.com";
     env.AZURE_OPENAI_API_KEY = "test-key";

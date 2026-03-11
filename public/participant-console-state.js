@@ -158,6 +158,7 @@ export function buildModuleCardViewModels(modules, selectedModuleId) {
         module.title.trim().length > 0,
     )
     .map((module) => ({
+      ...module,
       id: module.id,
       title: module.title,
       selected: module.id === selectedModuleId,

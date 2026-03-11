@@ -14,6 +14,8 @@ describe("participant translation resources", () => {
   it("includes localized keys for manual-review decision and LLM guidance text", () => {
     const requiredKeys = [
       "assessment.auto.elapsedLabel",
+      "submission.taskText",
+      "submission.guidanceText",
       "result.decisionValue.MANUAL_REVIEW_PENDING",
       "result.confidenceValue.low",
       "result.improvementAdviceValue.riskScenarios",
