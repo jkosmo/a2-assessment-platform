@@ -7,6 +7,21 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.84 - 2026-03-11
+### Summary
+Clarified the verification split between Codex and the human reviewer in the AI workflow.
+
+### Included
+- Workflow documentation update:
+  - `doc/AI_WORKFLOW.md`
+  - added explicit verification responsibilities:
+    - Codex verifies code structure, API behavior, and automated tests
+    - human verifies UI behavior and browser-observed outcomes
+    - mixed issues follow backend/API verification first, then final human UI verification
+
+### Verification
+- Documentation-only update; no code-path changes were made
+
 ## 0.3.83 - 2026-03-11
 ### Summary
 Added a permanent architecture overview and clarified the README introduction so the system purpose and core functional scope are easier to understand.

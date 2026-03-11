@@ -185,6 +185,11 @@ Do not hardcode:
 ## Testing Policy
 Testing is mandatory evaluation for each issue.
 
+Verification responsibilities:
+- Codex verifies code structure, API behavior, automated tests, and other non-visual runtime behavior that can be checked from the repository or terminal.
+- Human verifies UI behavior, layout, wording, interaction clarity, and other browser-observed outcomes.
+- For mixed issues, Codex completes backend/API verification first, then the human performs final UI verification before close-out.
+
 Minimum expectations:
 - Unit tests for core logic changes.
 - Integration tests for API, data, and workflow boundaries.
