@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.115 - 2026-03-12
+### Summary
+Added a persistent incident log and documented the staging SQLite corruption incident plus the requirement to record future incidents there.
+
+### Included
+- Added a dedicated incident history document with a reusable template and the 2026-03-12 staging SQLite corruption entry:
+  - `doc/INCIDENTS.md`
+- Updated the observability runbook so future operational incidents are recorded in the incident log:
+  - `doc/OBSERVABILITY_RUNBOOK.md`
+
+### Verification
+- Documentation-only change.
+
 ## 0.3.114 - 2026-03-12
 ### Summary
 Stopped authentication middleware from masking backend database/runtime failures as `401 unauthorized`, and added focused regression coverage for auth error handling.

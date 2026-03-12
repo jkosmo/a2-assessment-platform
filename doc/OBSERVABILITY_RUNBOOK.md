@@ -66,6 +66,7 @@ This baseline is implemented through:
    - acknowledge alert in operations channel/ticket system
    - capture expected resolution timestamp
 8. Record incident summary and follow-up issue.
+9. Add or update the relevant entry in [INCIDENTS.md](/C:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md).
 
 ## KQL Queries
 Replace `<workspace-id>` and adjust time window as needed.
