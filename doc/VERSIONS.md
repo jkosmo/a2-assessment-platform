@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.117 - 2026-03-12
+### Summary
+Moved admin-content draft import to the top of the authoring flow so JSON-based module creation is presented as a first-class entry path rather than a version-only step.
+
+### Included
+- Moved `Import draft JSON` ahead of manual module-shell creation in the admin-content workspace and renumbered the downstream steps to reflect the new flow:
+  - `public/admin-content.html`
+- Updated admin-content translations and help text so the top-level import path is described consistently across locales:
+  - `public/i18n/admin-content-translations.js`
+- Added a regression check that the import controls render before the manual module shell fields:
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/admin-content-translations.test.js test/participant-console-config.test.ts`
+
 ## 0.3.116 - 2026-03-12
 ### Summary
 Clarified the LLM authoring prompt for module draft JSON so it supports both downloadable `.json` output and copyable code-cell output, with clearer multilingual guidance.

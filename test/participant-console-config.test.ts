@@ -250,6 +250,7 @@ describe("participant console runtime config", () => {
         expect(response.text).not.toContain('id="applyImportFile"');
         expect(response.text).not.toContain('id="downloadImportTemplate"');
         expect(response.text).not.toContain('id="flowProgress"');
+        expect(response.text.indexOf('id="importDraftFile"')).toBeLessThan(response.text.indexOf('id="moduleTitle"'));
       }
     }
 

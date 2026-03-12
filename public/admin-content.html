@@ -76,9 +76,23 @@
       <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
     </section>
 
+    <section class="card import-panel">
+      <h3 data-i18n="adminContent.import.title">1) Start from draft JSON (optional)</h3>
+      <div class="small" data-i18n="adminContent.help.importOverview">Use this when your draft already includes both module shell fields and version content. Import only fills the editor. Review, save, and publish separately.</div>
+      <div class="row">
+        <div class="import-file">
+          <label for="importDraftFile" data-i18n="adminContent.import.file">Draft JSON file</label>
+          <input id="importDraftFile" type="file" accept=".json,application/json" />
+        </div>
+      </div>
+      <div><label for="importDraftJson" data-i18n="adminContent.import.json">Draft JSON</label><textarea id="importDraftJson" rows="12"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.importShape">Supports either exported module JSON or a simpler authoring draft with module, rubric, promptTemplate, mcqSet, and moduleVersion.</div>
+      <button id="applyImportDraft" class="btn-primary" data-i18n="adminContent.import.applyDraft">Apply draft JSON</button>
+    </section>
+
     <section class="card">
-      <h3 data-i18n="adminContent.module.title">1) Create module shell</h3>
-      <div class="small" data-i18n="adminContent.help.moduleOverview">Start here. This creates the base module container before adding scoring, evaluation instruction, and test.</div>
+      <h3 data-i18n="adminContent.module.title">2) Create module shell manually</h3>
+      <div class="small" data-i18n="adminContent.help.moduleOverview">Use this path when you want to create the module shell manually before adding scoring, evaluation instruction, and test.</div>
       <div class="row">
         <div><label data-i18n="adminContent.module.name">Module name shown to participants</label><textarea id="moduleTitle" rows="3"></textarea></div>
         <div><label data-i18n="adminContent.module.certificationLevel">Level (for example foundation)</label><input id="moduleCertificationLevel" /></div>
@@ -95,7 +109,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.select.title">Open existing module</h3>
+      <h3 data-i18n="adminContent.select.title">3) Open existing module</h3>
       <div class="small" data-i18n="adminContent.help.selectOverview">Load an existing module, inspect what is live, and decide whether you are preparing a new draft.</div>
       <div class="row">
         <div>
@@ -123,7 +137,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.status.title">Module status</h3>
+      <h3 data-i18n="adminContent.status.title">4) Module status</h3>
       <div id="moduleStatusCard" class="module-status-card">
         <div class="module-status-header">
           <div class="stack">
@@ -158,22 +172,8 @@
       </div>
     </section>
 
-    <section class="card import-panel">
-      <h3 data-i18n="adminContent.import.title">2) Import draft JSON</h3>
-      <div class="small" data-i18n="adminContent.help.importOverview">Import only fills the editor. Review, save a new draft version, and publish separately.</div>
-      <div class="row">
-        <div class="import-file">
-          <label for="importDraftFile" data-i18n="adminContent.import.file">Draft JSON file</label>
-          <input id="importDraftFile" type="file" accept=".json,application/json" />
-        </div>
-      </div>
-      <div><label for="importDraftJson" data-i18n="adminContent.import.json">Draft JSON</label><textarea id="importDraftJson" rows="12"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.importShape">Supports either exported module JSON or a simpler authoring draft with module, rubric, promptTemplate, mcqSet, and moduleVersion.</div>
-      <button id="applyImportDraft" class="btn-primary" data-i18n="adminContent.import.applyDraft">Apply draft JSON</button>
-    </section>
-
     <section class="card">
-      <h3 data-i18n="adminContent.rubric.title">3) Submission scoring rules</h3>
+      <h3 data-i18n="adminContent.rubric.title">5) Submission scoring rules</h3>
       <div class="small" data-i18n="adminContent.help.rubricOverview">Defines how the participant submission quality is scored.</div>
       <div><label data-i18n="adminContent.rubric.criteria">Criteria JSON</label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
       <div class="small" data-i18n="adminContent.help.rubricCriteria">Criterion keys should match the current evaluator contract unless code is changed.</div>
@@ -184,7 +184,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.prompt.title">4) LLM evaluation instruction</h3>
+      <h3 data-i18n="adminContent.prompt.title">6) LLM evaluation instruction</h3>
       <div class="small" data-i18n="adminContent.help.promptOverview">Instruction used by the LLM during evaluation.</div>
       <div><label data-i18n="adminContent.prompt.systemPrompt">System instruction to evaluator</label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.promptSystemPrompt">Global evaluator behavior and output constraints.</div>
@@ -195,7 +195,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.mcq.title">5) Multiple-choice test</h3>
+      <h3 data-i18n="adminContent.mcq.title">7) Multiple-choice test</h3>
       <div class="small" data-i18n="adminContent.help.mcqOverview">Defines the participant multiple-choice test.</div>
       <div><label data-i18n="adminContent.mcq.setTitle">Test title</label><input id="mcqSetTitle" /></div>
       <div class="small" data-i18n="adminContent.help.mcqTitle">Shown in admin context and can be localized using locale JSON.</div>
@@ -204,7 +204,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.moduleVersion.title">6) Participant-facing module version</h3>
+      <h3 data-i18n="adminContent.moduleVersion.title">8) Participant-facing module version</h3>
       <div class="small" data-i18n="adminContent.help.moduleVersionOverview">Binds assignment text + scoring rules + evaluation instruction + test.</div>
       <div><label data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
@@ -214,13 +214,13 @@
         <div><label data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
         <div><label data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>
       </div>
-      <div class="small" data-i18n="adminContent.help.moduleVersionIds">IDs are auto-filled when you save steps 3-6.</div>
+      <div class="small" data-i18n="adminContent.help.moduleVersionIds">IDs are auto-filled when you save steps 5-8.</div>
       <div><label data-i18n="adminContent.moduleVersion.mcqSetVersionId">Test version ID</label><input id="moduleVersionMcqSetVersionId" /></div>
-      <button id="saveContentBundle" class="btn-primary" data-i18n="adminContent.moduleVersion.saveBundle">Save new draft version (steps 3-6)</button>
+      <button id="saveContentBundle" class="btn-primary" data-i18n="adminContent.moduleVersion.saveBundle">Save new draft version (steps 5-8)</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.publish.title">7) Publish module version</h3>
+      <h3 data-i18n="adminContent.publish.title">9) Publish module version</h3>
       <div class="small" data-i18n="adminContent.help.publishOverview">Publishing makes this version active for participant submissions.</div>
       <div><label data-i18n="adminContent.publish.moduleVersionId">Module version ID to publish</label><input id="publishModuleVersionId" /></div>
       <button id="publishModuleVersion" class="btn-primary" data-i18n="adminContent.publish.publish">Publish version</button>
