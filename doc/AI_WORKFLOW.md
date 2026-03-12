@@ -189,6 +189,7 @@ Verification responsibilities:
 - Codex verifies code structure, API behavior, automated tests, and other non-visual runtime behavior that can be checked from the repository or terminal.
 - Human verifies UI behavior, layout, wording, interaction clarity, and other browser-observed outcomes.
 - For mixed issues, Codex completes backend/API verification first, then the human performs final UI verification before close-out.
+- When Codex provides a manual UI test script, the steps must be explicitly numbered so findings can be referenced back by step number.
 
 Minimum expectations:
 - Unit tests for core logic changes.

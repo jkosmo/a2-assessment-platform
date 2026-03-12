@@ -16,6 +16,7 @@ describe("participant translation resources", () => {
       "assessment.auto.elapsedLabel",
       "submission.taskText",
       "submission.guidanceText",
+      "submission.validation.rawTextMin",
       "result.decisionValue.MANUAL_REVIEW_PENDING",
       "result.confidenceValue.low",
       "result.improvementAdviceValue.riskScenarios",

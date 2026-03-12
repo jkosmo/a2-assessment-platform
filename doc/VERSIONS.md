@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.113 - 2026-03-12
+### Summary
+Closed the follow-up gaps from staging on participant submission validation and admin-content draft/import UX, and documented numbered manual UI test steps in the workflow guide.
+
+### Included
+- Required non-empty participant submission text before a submission can be created:
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- Fixed admin-content draft status so saved unpublished module versions are shown correctly, and simplified the import flow to one file picker plus one apply action:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Updated the workflow guidance so manual UI test scripts are always numbered:
+  - `doc/AI_WORKFLOW.md`
+- Refreshed regression coverage for the updated participant/admin UI and translations:
+  - `test/participant-console-config.test.ts`
+  - `test/participant-translations.test.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-validation-accessibility.test.js test/admin-content-translations.test.js test/participant-translations.test.js test/m2-admin-content-publication.test.ts`
+
 ## 0.3.112 - 2026-03-12
 ### Summary
 Improved participant submission UX, redesigned the admin content workspace around live/draft module status, and added draft JSON import plus LLM authoring guidance for content owners.

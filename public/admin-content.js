@@ -44,8 +44,6 @@ const moduleStatusDetails = document.getElementById("moduleStatusDetails");
 
 const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
-const applyImportFileButton = document.getElementById("applyImportFile");
-const downloadImportTemplateButton = document.getElementById("downloadImportTemplate");
 const applyImportDraftButton = document.getElementById("applyImportDraft");
 
 const rubricCriteriaJsonInput = document.getElementById("rubricCriteriaJson");
@@ -473,8 +471,23 @@ function deriveModuleStatusView(moduleExport) {
     ? findLinkedVersion(mcqSetVersions, liveModuleVersion.mcqSetVersionId)
     : null;
 
+  const latestDraftModuleVersion = liveModuleVersion
+    ? latestModuleVersion && latestModuleVersion.id !== liveModuleVersion.id
+      ? latestModuleVersion
+      : null
+    : latestModuleVersion;
+  const latestDraftRubricVersion = latestDraftModuleVersion
+    ? findLinkedVersion(rubricVersions, latestDraftModuleVersion.rubricVersionId)
+    : null;
+  const latestDraftPromptTemplateVersion = latestDraftModuleVersion
+    ? findLinkedVersion(promptTemplateVersions, latestDraftModuleVersion.promptTemplateVersionId)
+    : null;
+  const latestDraftMcqSetVersion = latestDraftModuleVersion
+    ? findLinkedVersion(mcqSetVersions, latestDraftModuleVersion.mcqSetVersionId)
+    : null;
+
   const hasLiveVersion = Boolean(liveModuleVersion);
-  const hasDraftVersion = Boolean(latestModuleVersion && latestModuleVersion.id !== liveModuleVersion?.id);
+  const hasDraftVersion = Boolean(latestDraftModuleVersion);
 
   let badgeKey = "adminContent.status.badge.none";
   let badgeClass = "shell";
@@ -499,6 +512,7 @@ function deriveModuleStatusView(moduleExport) {
     activeVersionId: module.activeVersionId ?? null,
     liveModuleVersionId: liveModuleVersion?.id ?? null,
     latestModuleVersionId: latestModuleVersion?.id ?? null,
+    latestDraftModuleVersionId: latestDraftModuleVersion?.id ?? null,
     liveRubricVersionId: liveRubricVersion?.id ?? null,
     livePromptTemplateVersionId: livePromptTemplateVersion?.id ?? null,
     liveMcqSetVersionId: liveMcqSetVersion?.id ?? null,
@@ -525,59 +539,17 @@ function deriveModuleStatusView(moduleExport) {
         liveMcqSetVersion ? { label: "MCQ", versionNo: liveMcqSetVersion.versionNo } : null,
       ].filter(Boolean)
       : [],
-    latestDraftChain: hasDraftVersion
+    latestDraftChain: latestDraftModuleVersion
       ? [
-        { label: "Module", versionNo: latestModuleVersion.versionNo },
-        latestRubricVersion ? { label: "Rubric", versionNo: latestRubricVersion.versionNo } : null,
-        latestPromptTemplateVersion ? { label: "Prompt", versionNo: latestPromptTemplateVersion.versionNo } : null,
-        latestMcqSetVersion ? { label: "MCQ", versionNo: latestMcqSetVersion.versionNo } : null,
+        { label: "Module", versionNo: latestDraftModuleVersion.versionNo },
+        latestDraftRubricVersion ? { label: "Rubric", versionNo: latestDraftRubricVersion.versionNo } : null,
+        latestDraftPromptTemplateVersion ? { label: "Prompt", versionNo: latestDraftPromptTemplateVersion.versionNo } : null,
+        latestDraftMcqSetVersion ? { label: "MCQ", versionNo: latestDraftMcqSetVersion.versionNo } : null,
       ].filter(Boolean)
       : [],
     publishedAt: liveModuleVersion?.publishedAt ?? null,
     countsText: `Module ${moduleVersions.length}, Rubric ${rubricVersions.length}, Prompt ${promptTemplateVersions.length}, MCQ ${mcqSetVersions.length}`,
     technicalDetails,
-  };
-}
-
-function buildImportDraftTemplate() {
-  return {
-    module: {
-      title: {
-        "en-GB": "Module title",
-        nb: "Modultittel",
-        nn: "Modultittel",
-      },
-      description: {
-        "en-GB": "Short module description",
-        nb: "Kort modulbeskrivelse",
-        nn: "Kort modulskildring",
-      },
-      certificationLevel: "foundation",
-      validFrom: "",
-      validTo: "",
-    },
-    rubric: {
-      criteria: JSON.parse(formatJsonDefault("adminContent.defaults.criteriaJson")),
-      scalingRule: JSON.parse(formatJsonDefault("adminContent.defaults.scalingRuleJson")),
-      passRule: JSON.parse(formatJsonDefault("adminContent.defaults.passRuleJson")),
-    },
-    promptTemplate: {
-      systemPrompt: t("adminContent.defaults.systemPrompt"),
-      userPromptTemplate: t("adminContent.defaults.userPromptTemplate"),
-      examples: JSON.parse(formatJsonDefault("adminContent.defaults.examplesJson")),
-    },
-    mcqSet: {
-      title: {
-        "en-GB": "Knowledge check",
-        nb: "Kunnskapstest",
-        nn: "Kunnskapstest",
-      },
-      questions: JSON.parse(formatJsonDefault("adminContent.defaults.questionsJson")),
-    },
-    moduleVersion: {
-      taskText: t("adminContent.defaults.taskText"),
-      guidanceText: t("adminContent.defaults.guidanceText"),
-    },
   };
 }
 
@@ -1380,20 +1352,6 @@ moduleDropdown.addEventListener("change", () => {
   });
 });
 
-applyImportFileButton.addEventListener("click", async () => {
-  await runWithBusyButton(applyImportFileButton, async () => {
-    try {
-      const rawValue = await readImportFileContents();
-      importDraftJsonInput.value = rawValue;
-      await handleApplyImportDraft(rawValue);
-    } catch (error) {
-      const message = parseActionableErrorMessage(error);
-      setMessage(message);
-      log(message);
-    }
-  });
-});
-
 applyImportDraftButton.addEventListener("click", async () => {
   await runWithBusyButton(applyImportDraftButton, async () => {
     try {
@@ -1406,13 +1364,16 @@ applyImportDraftButton.addEventListener("click", async () => {
   });
 });
 
-downloadImportTemplateButton.addEventListener("click", async () => {
-  await runWithBusyButton(downloadImportTemplateButton, async () => {
-    const template = buildImportDraftTemplate();
-    downloadJsonFile("module-draft-template.json", template);
-    setMessage(t("adminContent.message.importTemplateDownloaded"));
-    log({ importDraftTemplate: template });
-  });
+importDraftFileInput.addEventListener("change", async () => {
+  try {
+    const rawValue = await readImportFileContents();
+    importDraftJsonInput.value = rawValue;
+    await handleApplyImportDraft(rawValue);
+  } catch (error) {
+    const message = parseActionableErrorMessage(error);
+    setMessage(message);
+    log(message);
+  }
 });
 
 localeSelect.addEventListener("change", () => {

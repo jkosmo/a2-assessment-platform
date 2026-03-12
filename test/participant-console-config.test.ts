@@ -244,8 +244,11 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="loadModuleContent"');
         expect(response.text).toContain('id="exportModule"');
         expect(response.text).toContain('id="moduleStatusCard"');
+        expect(response.text).toContain('id="importDraftFile"');
         expect(response.text).toContain('id="importDraftJson"');
         expect(response.text).toContain('id="applyImportDraft"');
+        expect(response.text).not.toContain('id="applyImportFile"');
+        expect(response.text).not.toContain('id="downloadImportTemplate"');
         expect(response.text).not.toContain('id="flowProgress"');
       }
     }

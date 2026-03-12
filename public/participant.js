@@ -478,6 +478,7 @@ function updateModuleSelectionVisibility(hasSelectedModule) {
 function validateSubmissionInputState() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   const hasModule = Boolean(selectedModule);
+  const hasRawText = rawTextInput.value.trim().length >= 10;
   const hasReflection = reflectionTextInput.value.trim().length >= 10;
   const hasPromptExcerpt = promptExcerptInput.value.trim().length >= 5;
   const hasAcknowledgement = ackCheckbox.checked === true;
@@ -488,6 +489,13 @@ function validateSubmissionInputState() {
       hintKey: "submission.validation.selectModule",
       invalidFieldElement: selectedModuleDisplay,
       invalidHintElement: moduleSelectionHint,
+    };
+  }
+  if (!hasRawText) {
+    return {
+      valid: false,
+      hintKey: "submission.validation.rawTextMin",
+      invalidFieldElement: rawTextInput,
     };
   }
   if (!hasReflection) {
