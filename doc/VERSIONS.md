@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.118 - 2026-03-12
+### Summary
+Clarified module-level availability dates in admin-content and automatically refreshed the module list after module creation or draft-JSON application so localized module titles show correctly without a manual refresh.
+
+### Included
+- Updated admin-content to reload the server-backed module list after `Create module` and `Apply draft JSON`, preserving the current success message while reselecting the relevant module:
+  - `public/admin-content.js`
+- Clarified that `Available from date` / `Available until date` are module-level availability windows layered on top of published-version activation:
+  - `public/admin-content.html`
+  - `public/i18n/admin-content-translations.js`
+- Added focused regression coverage for the new admin-content help text and translation-key presence:
+  - `test/participant-console-config.test.ts`
+  - `test/admin-content-translations.test.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/admin-content-translations.test.js test/participant-console-config.test.ts`
+
 ## 0.3.117 - 2026-03-12
 ### Summary
 Moved admin-content draft import to the top of the authoring flow so JSON-based module creation is presented as a first-class entry path rather than a version-only step.

@@ -976,7 +976,11 @@ async function loadParticipantConsoleConfig() {
   renderWorkspaceNavigation();
 }
 
-async function loadModules() {
+async function loadModules(options = {}) {
+  const preferredModuleId =
+    typeof options.preferredModuleId === "string" ? options.preferredModuleId.trim() : selectedModuleId;
+  const preserveMessage = options.preserveMessage === true;
+  const logResponse = options.logResponse !== false;
   const body = await apiFetch("/api/modules?includeCompleted=true", headers);
   modules = Array.isArray(body.modules)
     ? body.modules
@@ -984,16 +988,17 @@ async function loadModules() {
       .filter(Boolean)
     : [];
 
-  if (!selectedModuleId && modules.length > 0) {
+  if (preferredModuleId && modules.some((module) => module.id === preferredModuleId)) {
+    setSelectedModule(preferredModuleId);
+  } else if (!preferredModuleId && modules.length > 0) {
     setSelectedModule(modules[0].id);
-  } else if (selectedModuleId && !modules.some((module) => module.id === selectedModuleId)) {
-    setSelectedModule(selectedModuleId);
   } else {
-    renderModuleDropdown();
-    renderModuleMeta();
+    setSelectedModule("");
   }
 
-  setMessage(`${t("adminContent.meta.loadedCountPrefix")}: ${modules.length}`);
+  if (!preserveMessage) {
+    setMessage(`${t("adminContent.meta.loadedCountPrefix")}: ${modules.length}`);
+  }
   if (selectedModuleId) {
     try {
       await refreshSelectedModuleStatus();
@@ -1004,7 +1009,11 @@ async function loadModules() {
   } else {
     renderModuleStatus();
   }
-  log(body);
+  if (logResponse) {
+    log(body);
+  }
+
+  return body;
 }
 
 async function handleCreateModule(options = { silent: false }) {
@@ -1027,11 +1036,12 @@ async function handleCreateModule(options = { silent: false }) {
     body: JSON.stringify(payload),
   });
 
-  const module = normalizeModuleSummary(body.module);
-  if (module) {
-    modules = [module, ...modules.filter((item) => item.id !== module.id)];
-    setSelectedModule(module.id);
-  }
+  const createdModuleId = typeof body?.module?.id === "string" ? body.module.id : "";
+  await loadModules({
+    preferredModuleId: createdModuleId,
+    preserveMessage: true,
+    logResponse: false,
+  });
 
   if (!options.silent) {
     setMessage(t("adminContent.message.moduleCreated"));
@@ -1241,6 +1251,11 @@ async function handleApplyImportDraft(rawValue) {
   const draft = normalizeImportDraftPayload(parsed);
   applyImportDraftToForm(draft);
   importDraftJsonInput.value = JSON.stringify(parsed, null, 2);
+  await loadModules({
+    preferredModuleId: selectedModuleId,
+    preserveMessage: true,
+    logResponse: false,
+  });
   setMessage(t("adminContent.message.importApplied"));
   log({ importedDraft: draft });
 }

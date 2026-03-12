@@ -251,6 +251,7 @@ describe("participant console runtime config", () => {
         expect(response.text).not.toContain('id="downloadImportTemplate"');
         expect(response.text).not.toContain('id="flowProgress"');
         expect(response.text.indexOf('id="importDraftFile"')).toBeLessThan(response.text.indexOf('id="moduleTitle"'));
+        expect(response.text).toContain("A published version must still be active");
       }
     }
 

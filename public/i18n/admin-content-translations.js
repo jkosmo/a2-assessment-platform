@@ -106,7 +106,8 @@ const adminContentBase = {
   "adminContent.help.moduleOverview": "Use this path when you want to create the module shell manually before adding scoring, evaluation instruction, and test.",
   "adminContent.help.moduleName": "Use plain text or locale JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
   "adminContent.help.moduleDescription": "Shown in module lists. Supports the same locale JSON format.",
-  "adminContent.help.moduleValidity": "Leave empty for always available. Dates are interpreted as UTC midnight.",
+  "adminContent.help.moduleValidity":
+    "Optional module-level availability window. A published version must still be active; these dates only control when the module is offered. Dates are interpreted as UTC midnight.",
   "adminContent.help.selectOverview": "Load an existing module, inspect what is live, and decide whether you are preparing a new draft.",
   "adminContent.help.importOverview": "Use this when your draft already includes both module shell fields and version content. Import only fills the editor. Review, save, and publish separately.",
   "adminContent.help.importShape": "Supports either exported module JSON or a simpler authoring draft with module, rubric, promptTemplate, mcqSet, and moduleVersion.",
@@ -237,7 +238,8 @@ const nbOverrides = {
   "adminContent.help.moduleOverview": "Start her. Dette oppretter modulbeholderen før du legger til regler, vurderingsinstruks og test.",
   "adminContent.help.moduleName": "Bruk vanlig tekst eller locale-JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
   "adminContent.help.moduleDescription": "Vises i modullister. Støtter samme locale-JSON-format.",
-  "adminContent.help.moduleValidity": "Tomme felter betyr alltid tilgjengelig. Dato tolkes som UTC midnatt.",
+  "adminContent.help.moduleValidity":
+    "Valgfritt tilgjengelighetsvindu på modulnivå. En publisert versjon må fortsatt være aktiv; datoene styrer bare når modulen tilbys. Dato tolkes som UTC midnatt.",
   "adminContent.help.selectOverview": "Last en eksisterende modul, se hva som er live, og avgjør om du jobber med et nytt utkast.",
   "adminContent.help.importOverview": "Import fyller bare editoren. Gå gjennom, lagre en ny utkastversjon og publiser separat.",
   "adminContent.help.importShape": "Støtter enten eksportert modul-JSON eller et enklere forfatterutkast med module, rubric, promptTemplate, mcqSet og moduleVersion.",
@@ -362,7 +364,8 @@ const nnOverrides = {
   "adminContent.help.moduleOverview": "Start her. Dette opprettar modulbehaldaren før du legg til reglar, vurderingsinstruks og test.",
   "adminContent.help.moduleName": "Bruk vanleg tekst eller locale-JSON: {\"en-GB\":\"...\",\"nb\":\"...\",\"nn\":\"...\"}.",
   "adminContent.help.moduleDescription": "Blir vist i modullister. Støttar same locale-JSON-format.",
-  "adminContent.help.moduleValidity": "Tomme felt betyr alltid tilgjengeleg. Dato blir tolka som UTC midnatt.",
+  "adminContent.help.moduleValidity":
+    "Valfritt tilgjengevindauge på modulnivå. Ei publisert versjon må framleis vere aktiv; datoane styrer berre når modulen blir tilbydd. Dato blir tolka som UTC midnatt.",
   "adminContent.help.selectOverview": "Last ei eksisterande modul, sjå kva som er live, og avgjer om du arbeider med eit nytt utkast.",
   "adminContent.help.importOverview": "Import fyller berre editoren. Gå gjennom, lagre ei ny utkastversjon og publiser separat.",
   "adminContent.help.importShape": "Støttar anten eksportert modul-JSON eller eit enklare forfattarutkast med module, rubric, promptTemplate, mcqSet og moduleVersion.",

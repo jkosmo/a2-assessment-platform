@@ -17,6 +17,7 @@ describe("admin content translation resources", () => {
       "adminContentPage.title",
       "adminContent.module.title",
       "adminContent.help.moduleOverview",
+      "adminContent.help.moduleValidity",
       "adminContent.status.title",
       "adminContent.status.liveChain",
       "adminContent.import.title",
