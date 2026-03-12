@@ -7,6 +7,28 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.119 - 2026-03-12
+### Summary
+Added a non-persistent participant preview flow for admin-content drafts so content authors can open the current draft in a participant-like view without saving, submitting, or scoring anything.
+
+### Included
+- Added `Open participant preview` to the admin-content workspace, storing the current draft in browser storage and opening `/participant?preview=1` in a new tab:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Added participant preview mode with a draft banner, local module loading, local MCQ progression, and explicit no-persistence/no-scoring behavior:
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- Added focused regression coverage for the new admin-content and participant preview controls/translations:
+  - `test/admin-content-translations.test.js`
+  - `test/participant-translations.test.js`
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/admin-content-translations.test.js test/participant-translations.test.js test/participant-console-config.test.ts`
+
 ## 0.3.118 - 2026-03-12
 ### Summary
 Clarified module-level availability dates in admin-content and automatically refreshed the module list after module creation or draft-JSON application so localized module titles show correctly without a manual refresh.

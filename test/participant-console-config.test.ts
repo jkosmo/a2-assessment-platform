@@ -230,6 +230,8 @@ describe("participant console runtime config", () => {
 
       if (pagePath === "/participant") {
         expect(response.text).toContain('id="outputStatus"');
+        expect(response.text).toContain('id="previewModeBanner"');
+        expect(response.text).toContain('id="historySection"');
       }
 
       if (pagePath === "/participant/completed") {
@@ -247,6 +249,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="importDraftFile"');
         expect(response.text).toContain('id="importDraftJson"');
         expect(response.text).toContain('id="applyImportDraft"');
+        expect(response.text).toContain('id="previewCurrentDraft"');
         expect(response.text).not.toContain('id="applyImportFile"');
         expect(response.text).not.toContain('id="downloadImportTemplate"');
         expect(response.text).not.toContain('id="flowProgress"');
@@ -301,5 +304,6 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.status).toBe(200);
     expect(participantJsResponse.text).toContain('document.createElement("fieldset")');
     expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
+    expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
   });
 });

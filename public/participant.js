@@ -17,6 +17,8 @@ import {
 const output = document.getElementById("output");
 const outputStatus = document.getElementById("outputStatus");
 const debugOutputSection = document.getElementById("debugOutputSection");
+const previewModeBanner = document.getElementById("previewModeBanner");
+const previewModeMessage = document.getElementById("previewModeMessage");
 const flowProgress = document.getElementById("flowProgress");
 const flowProgressSummary = document.getElementById("flowProgressSummary");
 const flowProgressSteps = document.getElementById("flowProgressSteps");
@@ -70,6 +72,7 @@ const checkAssessmentButton = document.getElementById("checkAssessment");
 const checkResultButton = document.getElementById("checkResult");
 const createAppealButton = document.getElementById("createAppeal");
 const resetSubmissionFlowButton = document.getElementById("resetSubmissionFlow");
+const historySection = document.getElementById("historySection");
 
 const submissionValidationTargets = [
   { fieldElement: selectedModuleDisplay, hintElement: moduleSelectionHint },
@@ -78,6 +81,8 @@ const submissionValidationTargets = [
   { fieldElement: ackCheckbox },
 ];
 const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
+const previewModeEnabled = new URLSearchParams(window.location.search).get("preview") === "1";
+const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
@@ -245,12 +250,109 @@ function tForLocale(locale, key) {
   return translations[locale]?.[key] ?? translations["en-GB"][key] ?? key;
 }
 
+function isLocaleObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function localizePreviewText(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!isLocaleObject(value)) {
+    return "";
+  }
+
+  const localized =
+    value[currentLocale] ??
+    value["en-GB"] ??
+    Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0);
+
+  return typeof localized === "string" ? localized : "";
+}
+
+function normalizePreviewQuestions(questions) {
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+
+  return questions
+    .map((question, index) => {
+      if (!question || typeof question !== "object") {
+        return null;
+      }
+
+      const stem = localizePreviewText(question.stem).trim();
+      const options = Array.isArray(question.options)
+        ? question.options
+          .map((option) => localizePreviewText(option).trim())
+          .filter(Boolean)
+        : [];
+
+      if (!stem || options.length === 0) {
+        return null;
+      }
+
+      return {
+        id: typeof question.id === "string" && question.id.trim().length > 0 ? question.id : `preview-q-${index + 1}`,
+        stem,
+        options,
+      };
+    })
+    .filter(Boolean);
+}
+
+function readParticipantPreviewPayload() {
+  if (!previewModeEnabled) {
+    return null;
+  }
+
+  const rawValue = localStorage.getItem(PARTICIPANT_PREVIEW_STORAGE_KEY);
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildPreviewModuleFromPayload(payload) {
+  const previewModule = payload?.module;
+  if (!previewModule || typeof previewModule !== "object") {
+    return null;
+  }
+
+  const title = localizePreviewText(previewModule.title).trim();
+  if (!title) {
+    return null;
+  }
+
+  return {
+    id:
+      typeof previewModule.id === "string" && previewModule.id.trim().length > 0
+        ? previewModule.id.trim()
+        : "draft-preview",
+    title,
+    description: localizePreviewText(previewModule.description).trim(),
+    taskText: localizePreviewText(previewModule.taskText).trim(),
+    guidanceText: localizePreviewText(previewModule.guidanceText).trim(),
+    previewQuestions: normalizePreviewQuestions(previewModule.questions),
+  };
+}
+
 function setLocale(locale) {
   const previousLocale = currentLocale;
   currentLocale = supportedLocales.includes(locale) ? locale : "en-GB";
   localStorage.setItem("participant.locale", currentLocale);
   document.documentElement.lang = currentLocale;
   applyTranslations();
+  if (previewModeEnabled) {
+    loadPreviewModules({ notify: false });
+  }
   setDefaultFieldValues(previousLocale, currentLocale);
   renderResultSummary(latestResult);
   renderHistorySummary(latestHistory);
@@ -291,6 +393,24 @@ function applyTranslations() {
   renderAppealState();
   updateCreateSubmissionAvailability();
   renderFlowGating();
+  applyPreviewModeUi();
+}
+
+function applyPreviewModeUi() {
+  if (!previewModeBanner || !previewModeMessage) {
+    return;
+  }
+
+  previewModeBanner.classList.toggle("hidden", !previewModeEnabled);
+  if (!previewModeEnabled) {
+    return;
+  }
+
+  previewModeMessage.textContent = t("preview.description");
+  loadModulesButton.textContent = t("preview.reload");
+  if (historySection) {
+    historySection.classList.add("hidden");
+  }
 }
 
 function isDebugModeEnabled() {
@@ -583,7 +703,12 @@ function renderModules() {
 
   const modules = buildModuleCardViewModels(loadedModules, selectedModuleId);
   if (modules.length === 0) {
-    showEmpty(moduleList, hasLoadedModules ? t("modules.empty") : t("modules.emptyInitial"));
+    const emptyKey = previewModeEnabled
+      ? "preview.empty"
+      : hasLoadedModules
+        ? "modules.empty"
+        : "modules.emptyInitial";
+    showEmpty(moduleList, t(emptyKey));
     return;
   }
 
@@ -656,6 +781,7 @@ function renderFlowGating() {
     flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus);
   const autoAssessmentEnabled = getFlowSettings().autoStartAfterMcq;
   const hasSelectedModule = Boolean(resolveSelectedModule(loadedModules, selectedModuleId));
+  const hasPreviewQuestions = currentQuestions.length > 0;
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
   mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission);
@@ -675,6 +801,40 @@ function renderFlowGating() {
   const checkResultBusy = checkResultButton.dataset.busy === "true";
   const createAppealBusy = createAppealButton.dataset.busy === "true";
   const resetFlowBusy = resetSubmissionFlowButton.dataset.busy === "true";
+
+  if (previewModeEnabled) {
+    assessmentSection.classList.toggle("hidden", !flowState.hasMcqSubmission);
+    mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission || (!hasPreviewQuestions && flowState.hasMcqSubmission));
+    assessmentSection.classList.remove("section-locked");
+    appealSection.classList.add("hidden");
+    if (historySection) {
+      historySection.classList.add("hidden");
+    }
+    queueAssessmentButton.classList.add("hidden");
+    checkAssessmentButton.classList.add("hidden");
+    checkResultButton.classList.add("hidden");
+    createAppealButton.classList.add("hidden");
+    createSubmissionButton.classList.toggle("hidden", flowState.hasSubmission);
+    submitMcqButton.classList.toggle("hidden", !flowState.hasSubmission || flowState.hasMcqSubmission || !hasPreviewQuestions);
+    createSubmissionButton.disabled =
+      createSubmissionBusy ||
+      flowState.hasSubmission ||
+      !validateSubmissionInputState().valid;
+    submitMcqButton.disabled =
+      submitMcqBusy ||
+      !flowState.hasSubmission ||
+      flowState.hasMcqSubmission ||
+      !hasPreviewQuestions;
+    resetSubmissionFlowButton.classList.toggle("hidden", !(flowState.hasSubmission || flowState.hasMcqSubmission));
+    resetSubmissionFlowButton.disabled = resetFlowBusy || !(flowState.hasSubmission || flowState.hasMcqSubmission);
+    assessmentGateHint.textContent = flowState.hasMcqSubmission
+      ? t("preview.assessmentUnavailable")
+      : t("preview.completeMcqFirst");
+    checkAssessmentHint.textContent = "";
+    appealGateHint.textContent = "";
+    renderFlowProgress();
+    return;
+  }
 
   createSubmissionButton.disabled =
     createSubmissionBusy ||
@@ -1414,6 +1574,14 @@ function renderAssessmentProgress() {
 }
 
 function renderAppealState() {
+  if (previewModeEnabled) {
+    appealSection.classList.add("hidden");
+    createAppealButton.classList.add("hidden");
+    appealSubmittedStatus.textContent = "";
+    appealIdLabel.textContent = "-";
+    return;
+  }
+
   const hasAppeal = latestAppeal && typeof latestAppeal.id === "string";
   const isNegativeResult = latestResult?.decision?.passFailTotal === false;
   const shouldShowAppealSection = hasAppeal || isNegativeResult;
@@ -1542,6 +1710,61 @@ function clearCurrentModuleDraft() {
   setDraftStatus("cleared", selectedModule.title);
 }
 
+function renderPreviewResultSummary(answeredCount, totalCount, hasMcq) {
+  resultSummary.dataset.hasResult = "true";
+
+  if (!hasMcq) {
+    resultSummary.textContent = t("preview.resultNoMcq");
+    return;
+  }
+
+  resultSummary.textContent = `${t("preview.resultPrefix")}: ${answeredCount}/${totalCount}. ${t("preview.resultSuffix")}`;
+}
+
+function loadPreviewModules(options = {}) {
+  const { notify = true } = options;
+  const previewPayload = readParticipantPreviewPayload();
+  const previewModule = buildPreviewModuleFromPayload(previewPayload);
+
+  hasLoadedModules = true;
+
+  if (!previewModule) {
+    loadedModules = [];
+    selectedModuleId = "";
+    resetFlowStateForModuleContext();
+    renderModules();
+    renderSelectedModuleSummary();
+    updateCreateSubmissionAvailability();
+    if (notify) {
+      log(t("preview.empty"));
+    }
+    return null;
+  }
+
+  loadedModules = [previewModule];
+  if (selectedModuleId !== previewModule.id) {
+    selectedModuleId = previewModule.id;
+    resetFlowStateForModuleContext();
+  }
+
+  renderModules();
+  renderSelectedModuleSummary();
+  restoreDraftForSelectedModule(false);
+  updateCreateSubmissionAvailability();
+
+  if (notify) {
+    log({
+      previewModule: {
+        id: previewModule.id,
+        title: previewModule.title,
+        questionCount: previewModule.previewQuestions.length,
+      },
+    });
+  }
+
+  return previewModule;
+}
+
 loadMeButton.addEventListener("click", async () => {
   await runWithBusyButton(loadMeButton, async () => {
     try {
@@ -1557,6 +1780,10 @@ loadModulesButton.addEventListener("click", async () => {
   await runWithBusyButton(loadModulesButton, async () => {
     try {
       showLoading(moduleList, { rows: 3, variant: "cards" });
+      if (previewModeEnabled) {
+        loadPreviewModules();
+        return;
+      }
       const body = await apiFetch("/api/modules", headers);
       loadedModules = Array.isArray(body.modules) ? body.modules : [];
       hasLoadedModules = true;
@@ -1584,6 +1811,45 @@ createSubmissionButton.addEventListener("click", async () => {
       const validation = validateSubmissionInputState();
       if (!validation.valid) {
         throw new Error(t(validation.hintKey));
+      }
+
+      if (previewModeEnabled) {
+        const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
+        if (!selectedModule) {
+          throw new Error(t("errors.selectModuleFirst"));
+        }
+
+        submissionIdLabel.textContent = `preview-${selectedModule.id}`;
+        attemptIdLabel.textContent = selectedModule.previewQuestions.length > 0 ? `preview-${selectedModule.id}-mcq` : "-";
+        currentQuestions = selectedModule.previewQuestions;
+        stopAutoAssessmentLoop(true);
+        latestAppeal = null;
+        assessmentProgressKey = selectedModule.previewQuestions.length > 0
+          ? "assessment.progress.idle"
+          : "assessment.progress.preview";
+        setAssessmentProgressDetail();
+        flowState = {
+          hasSubmission: true,
+          hasMcqSubmission: selectedModule.previewQuestions.length === 0,
+          assessmentQueued: false,
+          resultStatus: selectedModule.previewQuestions.length === 0 ? "PREVIEW" : null,
+        };
+        renderQuestions();
+        if (selectedModule.previewQuestions.length === 0) {
+          renderPreviewResultSummary(0, 0, false);
+        } else {
+          renderResultSummary(null);
+        }
+        renderAssessmentProgress();
+        renderAppealState();
+        renderFlowGating();
+        log({
+          previewSubmission: {
+            moduleId: selectedModule.id,
+            questionCount: selectedModule.previewQuestions.length,
+          },
+        });
+        return;
       }
 
       const moduleId = selectedModuleId;
@@ -1630,6 +1896,38 @@ createSubmissionButton.addEventListener("click", async () => {
 submitMcqButton.addEventListener("click", async () => {
   await runWithBusyButton(submitMcqButton, async () => {
     try {
+      if (previewModeEnabled) {
+        if (!flowState.hasSubmission) {
+          throw new Error(t("errors.startMcqFirst"));
+        }
+
+        const unanswered = currentQuestions.some(
+          (question) => !document.querySelector(`input[name='q_${question.id}']:checked`),
+        );
+        if (unanswered) {
+          throw new Error(t("preview.mcqCompleteAll"));
+        }
+
+        flowState = {
+          ...flowState,
+          hasMcqSubmission: true,
+          assessmentQueued: false,
+          resultStatus: "PREVIEW",
+        };
+        assessmentProgressKey = "assessment.progress.preview";
+        setAssessmentProgressDetail();
+        renderPreviewResultSummary(currentQuestions.length, currentQuestions.length, true);
+        renderAssessmentProgress();
+        renderFlowGating();
+        persistCurrentModuleDraft(true);
+        log({
+          previewMcq: {
+            questionCount: currentQuestions.length,
+          },
+        });
+        return;
+      }
+
       const moduleId = selectedModuleId;
       const submissionId = submissionIdLabel.textContent;
       const attemptId = attemptIdLabel.textContent;
@@ -1886,3 +2184,6 @@ populateLocaleSelect();
 setLocale(currentLocale);
 loadVersion();
 loadParticipantConsoleConfig();
+if (previewModeEnabled) {
+  loadPreviewModules({ notify: false });
+}

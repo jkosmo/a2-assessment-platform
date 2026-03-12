@@ -63,9 +63,12 @@ const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersion
 const moduleVersionPromptTemplateVersionIdInput = document.getElementById("moduleVersionPromptTemplateVersionId");
 const moduleVersionMcqSetVersionIdInput = document.getElementById("moduleVersionMcqSetVersionId");
 const saveContentBundleButton = document.getElementById("saveContentBundle");
+const previewCurrentDraftButton = document.getElementById("previewCurrentDraft");
 
 const publishModuleVersionIdInput = document.getElementById("publishModuleVersionId");
 const publishModuleVersionButton = document.getElementById("publishModuleVersion");
+
+const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
 
 const defaultWorkspaceNavigationItems = [
   {
@@ -344,6 +347,11 @@ function parseLocalizedTextField(value, fieldLabelKey, options = { required: tru
   const localeKeys = ["en-GB", "nb", "nn"];
   const isLocaleObject = localeKeys.every((key) => typeof parsed[key] === "string" && parsed[key].trim().length > 0);
   return isLocaleObject ? parsed : trimmed;
+}
+
+function parseLocalizedPreviewField(value, fieldLabelKey, options = { required: false }) {
+  const parsed = parseLocalizedTextField(value, fieldLabelKey, options);
+  return parsed ?? "";
 }
 
 function formatJsonDefault(key) {
@@ -682,6 +690,40 @@ function populateFormFromModuleExport(moduleExport) {
 
   selectedModuleStatus = moduleExport;
   renderModuleStatus();
+}
+
+function buildParticipantPreviewPayload() {
+  const moduleTitle = parseLocalizedPreviewField(moduleTitleInput.value, "adminContent.module.name");
+  const taskText = parseLocalizedPreviewField(moduleVersionTaskTextInput.value, "adminContent.moduleVersion.taskText");
+  const questions = parseJsonField(mcqQuestionsJsonInput.value || "[]", "adminContent.mcq.questionsJson");
+
+  if (!moduleTitle) {
+    throw new Error(`${t("adminContent.errors.valueRequiredPrefix")} ${t("adminContent.module.name")}`);
+  }
+
+  if (!taskText) {
+    throw new Error(`${t("adminContent.errors.valueRequiredPrefix")} ${t("adminContent.moduleVersion.taskText")}`);
+  }
+
+  if (!Array.isArray(questions)) {
+    throw new Error(t("adminContent.errors.previewQuestionArray"));
+  }
+
+  return {
+    createdAt: new Date().toISOString(),
+    source: "admin-content-draft",
+    module: {
+      id: selectedModuleIdInput.value.trim() || `draft-preview-${Date.now()}`,
+      title: moduleTitle,
+      description: parseLocalizedPreviewField(moduleDescriptionInput.value, "adminContent.module.description"),
+      taskText,
+      guidanceText: parseLocalizedPreviewField(
+        moduleVersionGuidanceTextInput.value,
+        "adminContent.moduleVersion.guidanceText",
+      ),
+      questions,
+    },
+  };
 }
 
 async function fetchModuleExport() {
@@ -1260,6 +1302,24 @@ async function handleApplyImportDraft(rawValue) {
   log({ importedDraft: draft });
 }
 
+async function handleOpenParticipantPreview() {
+  const payload = buildParticipantPreviewPayload();
+  localStorage.setItem(PARTICIPANT_PREVIEW_STORAGE_KEY, JSON.stringify(payload));
+  const previewWindow = window.open("/participant?preview=1", "_blank", "noopener");
+  if (!previewWindow) {
+    throw new Error(t("adminContent.errors.previewPopupBlocked"));
+  }
+
+  setMessage(t("adminContent.message.previewOpened"));
+  log({
+    participantPreview: {
+      moduleId: payload.module.id,
+      questionCount: payload.module.questions.length,
+      createdAt: payload.createdAt,
+    },
+  });
+}
+
 loadMeButton.addEventListener("click", async () => {
   await runWithBusyButton(loadMeButton, async () => {
     try {
@@ -1335,6 +1395,18 @@ saveContentBundleButton.addEventListener("click", async () => {
   await runWithBusyButton(saveContentBundleButton, async () => {
     try {
       await handleSaveContentBundle();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message);
+      log(message);
+    }
+  });
+});
+
+previewCurrentDraftButton.addEventListener("click", async () => {
+  await runWithBusyButton(previewCurrentDraftButton, async () => {
+    try {
+      await handleOpenParticipantPreview();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
       setMessage(message);

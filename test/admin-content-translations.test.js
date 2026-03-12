@@ -36,13 +36,17 @@ describe("admin content translation resources", () => {
       "adminContent.help.mcqQuestions",
       "adminContent.moduleVersion.title",
       "adminContent.moduleVersion.saveBundle",
+      "adminContent.moduleVersion.previewDraft",
       "adminContent.help.moduleTaskText",
+      "adminContent.help.previewDraft",
       "adminContent.publish.title",
       "adminContent.message.moduleContentLoaded",
       "adminContent.message.moduleExported",
       "adminContent.message.importApplied",
+      "adminContent.message.previewOpened",
       "adminContent.errors.valueRequiredPrefix",
       "adminContent.errors.importShape",
+      "adminContent.errors.previewPopupBlocked",
       "adminContent.confirm.deleteModule",
     ];
 

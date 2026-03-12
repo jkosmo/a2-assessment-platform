@@ -47,6 +47,10 @@
     <p class="small" data-i18n="page.subtitle">Manual flow: modules -&gt; submission -&gt; MCQ -&gt; assessment/result.</p>
     <p class="small"><span data-i18n="page.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
+    <section id="previewModeBanner" class="card hidden">
+      <h3 data-i18n="preview.title">Draft preview</h3>
+      <div id="previewModeMessage" class="small" data-i18n="preview.description">This page shows the current admin draft only. Nothing is saved, submitted, or scored.</div>
+    </section>
     <section id="flowProgress" class="card flow-progress" aria-label="Assessment flow progress: Step 2 of 5">
       <div id="flowProgressSummary" class="flow-progress-summary">Step 2 of 5</div>
       <ol id="flowProgressSteps" class="flow-progress-steps">
@@ -177,7 +181,7 @@
       <div class="small"><span data-i18n="appeal.appealId">Appeal ID:</span> <span id="appealId">-</span></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="historySection">
       <h3 data-i18n="history.title">My history</h3>
       <button id="loadHistory" class="btn-secondary" data-i18n="history.load">Load my submission history</button>
       <pre id="historySummary"></pre>
