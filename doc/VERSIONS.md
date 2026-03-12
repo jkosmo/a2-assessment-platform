@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.121 - 2026-03-12
+### Summary
+Bundled the participant-preview button copy refinement with a more execution-ready usability discovery pack for `#47`.
+
+### Included
+- Renamed the admin-content participant-preview action to simpler preview labels across locales:
+  - `public/i18n/admin-content-translations.js`
+- Added reusable templates for live moderated session notes and consolidated findings reporting:
+  - `doc/UX_SESSION_NOTES_TEMPLATE.md`
+  - `doc/UX_FINDINGS_REPORT_TEMPLATE.md`
+- Updated the Phase 2 usability plan to reference the new execution templates and make the discovery workflow more operational:
+  - `doc/PHASE2_USABILITY_TEST_PLAN.md`
+
+### Verification
+- Documentation and copy change.
+
 ## 0.3.120 - 2026-03-12
 ### Summary
 Fixed admin-content module status rendering for localized module titles and corrected the status badge/summary shown for module shells that exist without any saved versions yet.

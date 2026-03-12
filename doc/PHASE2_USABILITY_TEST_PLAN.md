@@ -9,6 +9,7 @@ What this note provides:
 - evidence capture model
 - severity model
 - backlog conversion template
+- execution templates for session notes and consolidated findings
 
 What still requires humans:
 - recruiting representative participants
@@ -115,6 +116,10 @@ For each task, record:
 - severity candidate
 - recommended change
 
+Reusable files:
+- `doc/UX_SESSION_NOTES_TEMPLATE.md`
+- `doc/UX_FINDINGS_REPORT_TEMPLATE.md`
+
 ## Severity model
 Use this scale:
 - `S1 Critical`: blocks task completion or creates high risk of incorrect irreversible action
@@ -184,6 +189,12 @@ Priority mapping:
 
 ## Recommendation
 Use this note as the operating script for the discovery work.
+
+Recommended execution pack:
+1. Use this plan to choose tasks and moderator prompts.
+2. Use `doc/UX_SESSION_NOTES_TEMPLATE.md` live during each session.
+3. Consolidate outcomes into `doc/UX_FINDINGS_REPORT_TEMPLATE.md`.
+4. Create follow-up issues only after the findings report is complete.
 
 The issue should remain open until:
 - sessions are actually run
