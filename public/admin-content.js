@@ -354,6 +354,27 @@ function parseLocalizedPreviewField(value, fieldLabelKey, options = { required: 
   return parsed ?? "";
 }
 
+function isLocalizedContentObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function localizeContentValue(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!isLocalizedContentObject(value)) {
+    return "";
+  }
+
+  const localized =
+    value[currentLocale] ??
+    value["en-GB"] ??
+    Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0);
+
+  return typeof localized === "string" ? localized : "";
+}
+
 function formatJsonDefault(key) {
   const raw = t(key);
   try {
@@ -496,6 +517,9 @@ function deriveModuleStatusView(moduleExport) {
 
   const hasLiveVersion = Boolean(liveModuleVersion);
   const hasDraftVersion = Boolean(latestDraftModuleVersion);
+  const hasAnySavedVersions = Boolean(
+    latestModuleVersion || latestRubricVersion || latestPromptTemplateVersion || latestMcqSetVersion,
+  );
 
   let badgeKey = "adminContent.status.badge.none";
   let badgeClass = "shell";
@@ -509,10 +533,14 @@ function deriveModuleStatusView(moduleExport) {
     badgeKey = "adminContent.status.badge.live";
     badgeClass = "live";
     summaryKey = "adminContent.status.summary.liveOnly";
-  } else if (latestModuleVersion || latestRubricVersion || latestPromptTemplateVersion || latestMcqSetVersion) {
+  } else if (hasAnySavedVersions) {
     badgeKey = "adminContent.status.badge.draftOnly";
     badgeClass = "draft";
     summaryKey = "adminContent.status.summary.draftOnly";
+  } else {
+    badgeKey = "adminContent.status.badge.shellOnly";
+    badgeClass = "shell";
+    summaryKey = "adminContent.status.summary.shellOnly";
   }
 
   const technicalDetails = {
@@ -531,9 +559,9 @@ function deriveModuleStatusView(moduleExport) {
   };
 
   return {
-    title: module.title,
-    description: module.description,
-    certificationLevel: module.certificationLevel,
+    title: localizeContentValue(module.title),
+    description: localizeContentValue(module.description),
+    certificationLevel: localizeContentValue(module.certificationLevel),
     validFrom: module.validFrom,
     validTo: module.validTo,
     badgeKey,

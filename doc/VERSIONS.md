@@ -7,6 +7,21 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.120 - 2026-03-12
+### Summary
+Fixed admin-content module status rendering for localized module titles and corrected the status badge/summary shown for module shells that exist without any saved versions yet.
+
+### Included
+- Localized module title, description, and certification level when the module status payload contains locale objects, preventing `[object Object]` from appearing in the status card:
+  - `public/admin-content.js`
+- Added a dedicated `module shell only` status instead of reusing `No module selected` when a module exists but no draft/published versions have been created yet:
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/admin-content-translations.test.js test/participant-console-config.test.ts`
+
 ## 0.3.119 - 2026-03-12
 ### Summary
 Added a non-persistent participant preview flow for admin-content drafts so content authors can open the current draft in a participant-like view without saving, submitting, or scoring anything.
