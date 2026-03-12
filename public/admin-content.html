@@ -7,6 +7,35 @@
     <link rel="stylesheet" href="/static/shared.css" />
     <style>
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); }
+      .stack { display: grid; gap: var(--space-2); }
+      .action-cluster { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+      .button-row { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+      .button-row .btn-primary,
+      .button-row .btn-secondary,
+      .button-row .btn-danger { width: auto; }
+      .module-status-card { display: grid; gap: var(--space-2); border: 1px solid var(--color-module-summary-border); background: linear-gradient(180deg, #f8fbff 0%, #fcfdff 100%); border-radius: var(--radius-card); padding: var(--space-2); }
+      .module-status-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); }
+      .module-status-title { font-size: 20px; font-weight: 700; color: var(--color-text); }
+      .module-status-summary { color: var(--color-text); line-height: 1.5; }
+      .module-status-description { color: var(--color-meta); line-height: 1.5; }
+      .module-status-badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+      .module-status-badge.live { background: #e6f4ea; color: #12613a; }
+      .module-status-badge.draft { background: #fff3db; color: #7a4b00; }
+      .module-status-badge.shell { background: #edf1f7; color: #42526b; }
+      .module-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+      .module-status-line { display: grid; gap: calc(var(--space-1) * 0.5); padding: var(--space-1); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-surface); }
+      .module-status-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--color-link-active); }
+      .module-status-value { line-height: 1.5; color: var(--color-text); }
+      .version-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; border-radius: 999px; padding: 4px 10px; background: var(--color-blue-light); color: var(--color-link-active); font-size: 12px; font-weight: 700; }
+      .status-chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .status-separator { color: var(--color-meta); }
+      .import-panel textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+      .import-controls { display: grid; gap: var(--space-1); }
+      .import-file { display: grid; gap: calc(var(--space-1) * 0.5); }
+      @media (max-width: 900px) {
+        .module-status-header { flex-direction: column; }
+        .module-status-grid { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -66,7 +95,8 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.select.title">Select module to configure</h3>
+      <h3 data-i18n="adminContent.select.title">Open existing module</h3>
+      <div class="small" data-i18n="adminContent.help.selectOverview">Load an existing module, inspect what is live, and decide whether you are preparing a new draft.</div>
       <div class="row">
         <div>
           <label for="selectedModuleId" data-i18n="adminContent.select.moduleId">Module ID</label>
@@ -77,17 +107,77 @@
           <select id="moduleDropdown"></select>
         </div>
       </div>
-      <button id="loadModules" class="btn-secondary" data-i18n="adminContent.select.loadModules">Load modules</button>
-      <button id="loadModuleContent" class="btn-secondary" data-i18n="adminContent.select.loadContent">Load selected content</button>
-      <button id="exportModule" class="btn-secondary" data-i18n="adminContent.select.exportModule">Export selected module</button>
-      <button id="deleteModule" class="btn-danger" data-i18n="adminContent.select.deleteModule">Delete selected module</button>
-      <div class="small" data-i18n="adminContent.help.loadContent">Loads the saved rubric, prompt, MCQ, and module version into steps 2-6.</div>
+      <div class="action-cluster">
+        <div class="button-row">
+          <button id="loadModules" class="btn-secondary" data-i18n="adminContent.select.loadModules">Refresh module list</button>
+          <button id="loadModuleContent" class="btn-primary" data-i18n="adminContent.select.loadContent">Load draft</button>
+        </div>
+        <div class="button-row">
+          <button id="exportModule" class="btn-secondary" data-i18n="adminContent.select.exportModule">Export selected module</button>
+          <button id="deleteModule" class="btn-danger" data-i18n="adminContent.select.deleteModule">Delete selected module</button>
+        </div>
+      </div>
+      <div class="small" data-i18n="adminContent.help.loadContent">Loads the saved rubric, prompt, MCQ, and module version into steps 3-7.</div>
       <div class="small" data-i18n="adminContent.help.deleteModule">Deletes only empty modules without submissions, versions, or published content.</div>
       <div class="small" id="selectedModuleMeta"></div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.rubric.title">2) Submission scoring rules</h3>
+      <h3 data-i18n="adminContent.status.title">Module status</h3>
+      <div id="moduleStatusCard" class="module-status-card">
+        <div class="module-status-header">
+          <div class="stack">
+            <div id="moduleStatusTitle" class="module-status-title" data-i18n="adminContent.status.noneTitle">No module selected</div>
+            <div id="moduleStatusSummary" class="module-status-summary" data-i18n="adminContent.status.noneSummary">Choose a module to inspect live and draft versions.</div>
+          </div>
+          <div id="moduleStatusBadge" class="module-status-badge shell" data-i18n="adminContent.status.badge.none">No module selected</div>
+        </div>
+        <div id="moduleStatusDescription" class="module-status-description"></div>
+        <div class="module-status-grid">
+          <div class="module-status-line">
+            <div class="module-status-label" data-i18n="adminContent.status.liveChain">Live now</div>
+            <div id="moduleStatusLive" class="module-status-value" data-i18n="adminContent.status.noPublishedVersion">No published version.</div>
+          </div>
+          <div class="module-status-line">
+            <div class="module-status-label" data-i18n="adminContent.status.latestDraft">Latest saved draft</div>
+            <div id="moduleStatusDraft" class="module-status-value" data-i18n="adminContent.status.noDraftVersion">No unpublished draft.</div>
+          </div>
+          <div class="module-status-line">
+            <div class="module-status-label" data-i18n="adminContent.status.publishInfo">Published</div>
+            <div id="moduleStatusPublishedAt" class="module-status-value">-</div>
+          </div>
+          <div class="module-status-line">
+            <div class="module-status-label" data-i18n="adminContent.status.versionCounts">Saved versions</div>
+            <div id="moduleStatusCounts" class="module-status-value">-</div>
+          </div>
+        </div>
+        <details>
+          <summary data-i18n="adminContent.status.technicalDetails">Technical details</summary>
+          <pre id="moduleStatusDetails">-</pre>
+        </details>
+      </div>
+    </section>
+
+    <section class="card import-panel">
+      <h3 data-i18n="adminContent.import.title">2) Import draft JSON</h3>
+      <div class="small" data-i18n="adminContent.help.importOverview">Import only fills the editor. Review, save a new draft version, and publish separately.</div>
+      <div class="row">
+        <div class="import-file">
+          <label for="importDraftFile" data-i18n="adminContent.import.file">Draft JSON file</label>
+          <input id="importDraftFile" type="file" accept=".json,application/json" />
+        </div>
+        <div class="import-controls">
+          <button id="applyImportFile" class="btn-secondary" data-i18n="adminContent.import.applyFile">Load file into editor</button>
+          <button id="downloadImportTemplate" class="btn-secondary" data-i18n="adminContent.import.downloadTemplate">Download draft template</button>
+        </div>
+      </div>
+      <div><label for="importDraftJson" data-i18n="adminContent.import.json">Draft JSON</label><textarea id="importDraftJson" rows="12"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.importShape">Supports either exported module JSON or a simpler authoring draft with module, rubric, promptTemplate, mcqSet, and moduleVersion.</div>
+      <button id="applyImportDraft" class="btn-primary" data-i18n="adminContent.import.applyDraft">Apply draft JSON</button>
+    </section>
+
+    <section class="card">
+      <h3 data-i18n="adminContent.rubric.title">3) Submission scoring rules</h3>
       <div class="small" data-i18n="adminContent.help.rubricOverview">Defines how the participant submission quality is scored.</div>
       <div><label data-i18n="adminContent.rubric.criteria">Criteria JSON</label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
       <div class="small" data-i18n="adminContent.help.rubricCriteria">Criterion keys should match the current evaluator contract unless code is changed.</div>
@@ -98,7 +188,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.prompt.title">3) LLM evaluation instruction</h3>
+      <h3 data-i18n="adminContent.prompt.title">4) LLM evaluation instruction</h3>
       <div class="small" data-i18n="adminContent.help.promptOverview">Instruction used by the LLM during evaluation.</div>
       <div><label data-i18n="adminContent.prompt.systemPrompt">System instruction to evaluator</label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.promptSystemPrompt">Global evaluator behavior and output constraints.</div>
@@ -109,7 +199,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.mcq.title">4) Multiple-choice test</h3>
+      <h3 data-i18n="adminContent.mcq.title">5) Multiple-choice test</h3>
       <div class="small" data-i18n="adminContent.help.mcqOverview">Defines the participant multiple-choice test.</div>
       <div><label data-i18n="adminContent.mcq.setTitle">Test title</label><input id="mcqSetTitle" /></div>
       <div class="small" data-i18n="adminContent.help.mcqTitle">Shown in admin context and can be localized using locale JSON.</div>
@@ -118,7 +208,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.moduleVersion.title">5) Participant-facing module version</h3>
+      <h3 data-i18n="adminContent.moduleVersion.title">6) Participant-facing module version</h3>
       <div class="small" data-i18n="adminContent.help.moduleVersionOverview">Binds assignment text + scoring rules + evaluation instruction + test.</div>
       <div><label data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
@@ -128,13 +218,13 @@
         <div><label data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
         <div><label data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>
       </div>
-      <div class="small" data-i18n="adminContent.help.moduleVersionIds">IDs are auto-filled when you save steps 2-5.</div>
+      <div class="small" data-i18n="adminContent.help.moduleVersionIds">IDs are auto-filled when you save steps 3-6.</div>
       <div><label data-i18n="adminContent.moduleVersion.mcqSetVersionId">Test version ID</label><input id="moduleVersionMcqSetVersionId" /></div>
-      <button id="saveContentBundle" class="btn-primary" data-i18n="adminContent.moduleVersion.saveBundle">Save setup (steps 2-5)</button>
+      <button id="saveContentBundle" class="btn-primary" data-i18n="adminContent.moduleVersion.saveBundle">Save new draft version (steps 3-6)</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.publish.title">6) Publish module version</h3>
+      <h3 data-i18n="adminContent.publish.title">7) Publish module version</h3>
       <div class="small" data-i18n="adminContent.help.publishOverview">Publishing makes this version active for participant submissions.</div>
       <div><label data-i18n="adminContent.publish.moduleVersionId">Module version ID to publish</label><input id="publishModuleVersionId" /></div>
       <button id="publishModuleVersion" class="btn-primary" data-i18n="adminContent.publish.publish">Publish version</button>

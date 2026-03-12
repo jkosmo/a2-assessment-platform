@@ -31,6 +31,8 @@ const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 
 const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const selectedModuleDisplay = document.getElementById("selectedModuleDisplay");
+const selectedModuleTitle = document.getElementById("selectedModuleTitle");
+const selectedModuleDescription = document.getElementById("selectedModuleDescription");
 const selectedModuleBrief = document.getElementById("selectedModuleBrief");
 const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
 const selectedModuleGuidanceText = document.getElementById("selectedModuleGuidanceText");
@@ -57,9 +59,6 @@ const submissionSection = document.getElementById("submissionSection");
 const mcqSection = document.getElementById("mcqSection");
 const moduleSelectionHint = document.getElementById("moduleSelectionHint");
 const submissionValidationHint = document.getElementById("submissionValidationHint");
-const reflectionHint = document.getElementById("reflectionText-hint");
-const promptExcerptHint = document.getElementById("promptExcerpt-hint");
-const ackHint = document.getElementById("ack-hint");
 const assessmentGateHint = document.getElementById("assessmentGateHint");
 const checkAssessmentHint = document.getElementById("checkAssessmentHint");
 const assessmentProgressStatus = document.getElementById("assessmentProgressStatus");
@@ -74,9 +73,9 @@ const resetSubmissionFlowButton = document.getElementById("resetSubmissionFlow")
 
 const submissionValidationTargets = [
   { fieldElement: selectedModuleDisplay, hintElement: moduleSelectionHint },
-  { fieldElement: reflectionTextInput, hintElement: reflectionHint },
-  { fieldElement: promptExcerptInput, hintElement: promptExcerptHint },
-  { fieldElement: ackCheckbox, hintElement: ackHint },
+  { fieldElement: reflectionTextInput },
+  { fieldElement: promptExcerptInput },
+  { fieldElement: ackCheckbox },
 ];
 const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
 
@@ -415,7 +414,9 @@ function populateLocaleSelect() {
 function renderSelectedModuleSummary() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   selectedModuleIdInput.value = selectedModule?.id ?? "";
-  selectedModuleDisplay.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
+  selectedModuleTitle.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
+  selectedModuleDescription.textContent = selectedModule?.description ?? "";
+  selectedModuleDescription.classList.toggle("hidden", !(selectedModule?.description ?? "").trim());
   selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
   selectedModuleGuidanceText.textContent = selectedModule?.guidanceText ?? "";
   selectedModuleBrief.classList.toggle(
@@ -494,7 +495,6 @@ function validateSubmissionInputState() {
       valid: false,
       hintKey: "submission.validation.reflectionMin",
       invalidFieldElement: reflectionTextInput,
-      invalidHintElement: reflectionHint,
     };
   }
   if (!hasPromptExcerpt) {
@@ -502,7 +502,6 @@ function validateSubmissionInputState() {
       valid: false,
       hintKey: "submission.validation.promptMin",
       invalidFieldElement: promptExcerptInput,
-      invalidHintElement: promptExcerptHint,
     };
   }
   if (!hasAcknowledgement) {
@@ -510,7 +509,6 @@ function validateSubmissionInputState() {
       valid: false,
       hintKey: "submission.validation.ackRequired",
       invalidFieldElement: ackCheckbox,
-      invalidHintElement: ackHint,
     };
   }
 
@@ -600,6 +598,13 @@ function renderModules() {
     title.className = "module-title";
     title.textContent = module.title;
     button.appendChild(title);
+
+    if (typeof module.description === "string" && module.description.trim().length > 0) {
+      const description = document.createElement("div");
+      description.className = "module-meta";
+      description.textContent = module.description;
+      button.appendChild(description);
+    }
 
     const moduleMeta = document.createElement("div");
     moduleMeta.className = "module-meta";

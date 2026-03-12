@@ -32,6 +32,21 @@ const exportModuleButton = document.getElementById("exportModule");
 const deleteModuleButton = document.getElementById("deleteModule");
 const moduleDropdown = document.getElementById("moduleDropdown");
 const selectedModuleMeta = document.getElementById("selectedModuleMeta");
+const moduleStatusTitle = document.getElementById("moduleStatusTitle");
+const moduleStatusSummary = document.getElementById("moduleStatusSummary");
+const moduleStatusBadge = document.getElementById("moduleStatusBadge");
+const moduleStatusDescription = document.getElementById("moduleStatusDescription");
+const moduleStatusLive = document.getElementById("moduleStatusLive");
+const moduleStatusDraft = document.getElementById("moduleStatusDraft");
+const moduleStatusPublishedAt = document.getElementById("moduleStatusPublishedAt");
+const moduleStatusCounts = document.getElementById("moduleStatusCounts");
+const moduleStatusDetails = document.getElementById("moduleStatusDetails");
+
+const importDraftFileInput = document.getElementById("importDraftFile");
+const importDraftJsonInput = document.getElementById("importDraftJson");
+const applyImportFileButton = document.getElementById("applyImportFile");
+const downloadImportTemplateButton = document.getElementById("downloadImportTemplate");
+const applyImportDraftButton = document.getElementById("applyImportDraft");
 
 const rubricCriteriaJsonInput = document.getElementById("rubricCriteriaJson");
 const rubricScalingRuleJsonInput = document.getElementById("rubricScalingRuleJson");
@@ -96,6 +111,7 @@ const defaultWorkspaceNavigationItems = [
 let currentLocale = resolveInitialLocale();
 let modules = [];
 let selectedModuleId = "";
+let selectedModuleStatus = null;
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
@@ -182,6 +198,7 @@ function applyTranslations() {
   renderRolePresetControl();
   renderWorkspaceNavigation();
   renderModuleMeta();
+  renderModuleStatus();
 }
 
 function isDebugModeEnabled() {
@@ -352,6 +369,320 @@ function formatEditorValue(value, fallback = "") {
   return JSON.stringify(value, null, 2);
 }
 
+function formatDateInputValue(value) {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function formatDateTimeValue(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat(currentLocale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function clearNode(node) {
+  if (node) {
+    node.textContent = "";
+  }
+}
+
+function renderStatusChain(element, versions) {
+  clearNode(element);
+  if (!element) {
+    return;
+  }
+
+  if (!Array.isArray(versions) || versions.length === 0) {
+    element.textContent = "-";
+    return;
+  }
+
+  element.classList.add("status-chain");
+
+  versions.forEach((version, index) => {
+    const badge = document.createElement("span");
+    badge.className = "version-badge";
+    badge.textContent = `${version.label} v${version.versionNo}`;
+    element.appendChild(badge);
+
+    if (index < versions.length - 1) {
+      const separator = document.createElement("span");
+      separator.className = "status-separator";
+      separator.textContent = ">";
+      element.appendChild(separator);
+    }
+  });
+}
+
+function findLinkedVersion(versions, id) {
+  if (!Array.isArray(versions) || !id) {
+    return null;
+  }
+
+  return versions.find((version) => version.id === id) ?? null;
+}
+
+function deriveModuleStatusView(moduleExport) {
+  if (!moduleExport?.module) {
+    return null;
+  }
+
+  const module = moduleExport.module;
+  const moduleVersions = moduleExport?.versions?.moduleVersions ?? [];
+  const rubricVersions = moduleExport?.versions?.rubricVersions ?? [];
+  const promptTemplateVersions = moduleExport?.versions?.promptTemplateVersions ?? [];
+  const mcqSetVersions = moduleExport?.versions?.mcqSetVersions ?? [];
+
+  const liveModuleVersion = module.activeVersionId
+    ? findLinkedVersion(moduleVersions, module.activeVersionId)
+    : null;
+  const latestModuleVersion = moduleVersions[0] ?? null;
+  const latestRubricVersion = rubricVersions[0] ?? null;
+  const latestPromptTemplateVersion = promptTemplateVersions[0] ?? null;
+  const latestMcqSetVersion = mcqSetVersions[0] ?? null;
+
+  const liveRubricVersion = liveModuleVersion
+    ? findLinkedVersion(rubricVersions, liveModuleVersion.rubricVersionId)
+    : null;
+  const livePromptTemplateVersion = liveModuleVersion
+    ? findLinkedVersion(promptTemplateVersions, liveModuleVersion.promptTemplateVersionId)
+    : null;
+  const liveMcqSetVersion = liveModuleVersion
+    ? findLinkedVersion(mcqSetVersions, liveModuleVersion.mcqSetVersionId)
+    : null;
+
+  const hasLiveVersion = Boolean(liveModuleVersion);
+  const hasDraftVersion = Boolean(latestModuleVersion && latestModuleVersion.id !== liveModuleVersion?.id);
+
+  let badgeKey = "adminContent.status.badge.none";
+  let badgeClass = "shell";
+  let summaryKey = "adminContent.status.noneSummary";
+
+  if (hasLiveVersion && hasDraftVersion) {
+    badgeKey = "adminContent.status.badge.draft";
+    badgeClass = "draft";
+    summaryKey = "adminContent.status.summary.liveWithDraft";
+  } else if (hasLiveVersion) {
+    badgeKey = "adminContent.status.badge.live";
+    badgeClass = "live";
+    summaryKey = "adminContent.status.summary.liveOnly";
+  } else if (latestModuleVersion || latestRubricVersion || latestPromptTemplateVersion || latestMcqSetVersion) {
+    badgeKey = "adminContent.status.badge.draftOnly";
+    badgeClass = "draft";
+    summaryKey = "adminContent.status.summary.draftOnly";
+  }
+
+  const technicalDetails = {
+    moduleId: module.id,
+    activeVersionId: module.activeVersionId ?? null,
+    liveModuleVersionId: liveModuleVersion?.id ?? null,
+    latestModuleVersionId: latestModuleVersion?.id ?? null,
+    liveRubricVersionId: liveRubricVersion?.id ?? null,
+    livePromptTemplateVersionId: livePromptTemplateVersion?.id ?? null,
+    liveMcqSetVersionId: liveMcqSetVersion?.id ?? null,
+    latestRubricVersionId: latestRubricVersion?.id ?? null,
+    latestPromptTemplateVersionId: latestPromptTemplateVersion?.id ?? null,
+    latestMcqSetVersionId: latestMcqSetVersion?.id ?? null,
+    exportSource: moduleExport?.selectedConfiguration?.source ?? null,
+  };
+
+  return {
+    title: module.title,
+    description: module.description,
+    certificationLevel: module.certificationLevel,
+    validFrom: module.validFrom,
+    validTo: module.validTo,
+    badgeKey,
+    badgeClass,
+    summaryKey,
+    liveChain: liveModuleVersion
+      ? [
+        { label: "Module", versionNo: liveModuleVersion.versionNo },
+        liveRubricVersion ? { label: "Rubric", versionNo: liveRubricVersion.versionNo } : null,
+        livePromptTemplateVersion ? { label: "Prompt", versionNo: livePromptTemplateVersion.versionNo } : null,
+        liveMcqSetVersion ? { label: "MCQ", versionNo: liveMcqSetVersion.versionNo } : null,
+      ].filter(Boolean)
+      : [],
+    latestDraftChain: hasDraftVersion
+      ? [
+        { label: "Module", versionNo: latestModuleVersion.versionNo },
+        latestRubricVersion ? { label: "Rubric", versionNo: latestRubricVersion.versionNo } : null,
+        latestPromptTemplateVersion ? { label: "Prompt", versionNo: latestPromptTemplateVersion.versionNo } : null,
+        latestMcqSetVersion ? { label: "MCQ", versionNo: latestMcqSetVersion.versionNo } : null,
+      ].filter(Boolean)
+      : [],
+    publishedAt: liveModuleVersion?.publishedAt ?? null,
+    countsText: `Module ${moduleVersions.length}, Rubric ${rubricVersions.length}, Prompt ${promptTemplateVersions.length}, MCQ ${mcqSetVersions.length}`,
+    technicalDetails,
+  };
+}
+
+function buildImportDraftTemplate() {
+  return {
+    module: {
+      title: {
+        "en-GB": "Module title",
+        nb: "Modultittel",
+        nn: "Modultittel",
+      },
+      description: {
+        "en-GB": "Short module description",
+        nb: "Kort modulbeskrivelse",
+        nn: "Kort modulskildring",
+      },
+      certificationLevel: "foundation",
+      validFrom: "",
+      validTo: "",
+    },
+    rubric: {
+      criteria: JSON.parse(formatJsonDefault("adminContent.defaults.criteriaJson")),
+      scalingRule: JSON.parse(formatJsonDefault("adminContent.defaults.scalingRuleJson")),
+      passRule: JSON.parse(formatJsonDefault("adminContent.defaults.passRuleJson")),
+    },
+    promptTemplate: {
+      systemPrompt: t("adminContent.defaults.systemPrompt"),
+      userPromptTemplate: t("adminContent.defaults.userPromptTemplate"),
+      examples: JSON.parse(formatJsonDefault("adminContent.defaults.examplesJson")),
+    },
+    mcqSet: {
+      title: {
+        "en-GB": "Knowledge check",
+        nb: "Kunnskapstest",
+        nn: "Kunnskapstest",
+      },
+      questions: JSON.parse(formatJsonDefault("adminContent.defaults.questionsJson")),
+    },
+    moduleVersion: {
+      taskText: t("adminContent.defaults.taskText"),
+      guidanceText: t("adminContent.defaults.guidanceText"),
+    },
+  };
+}
+
+function coerceModuleExportToImportDraft(payload) {
+  const selectedConfiguration = payload?.selectedConfiguration ?? {};
+
+  return {
+    module: {
+      title: payload?.module?.title,
+      description: payload?.module?.description,
+      certificationLevel: payload?.module?.certificationLevel,
+      validFrom: formatDateInputValue(payload?.module?.validFrom),
+      validTo: formatDateInputValue(payload?.module?.validTo),
+    },
+    rubric: {
+      criteria: selectedConfiguration?.rubricVersion?.criteria ?? {},
+      scalingRule: selectedConfiguration?.rubricVersion?.scalingRule ?? {},
+      passRule: selectedConfiguration?.rubricVersion?.passRule ?? {},
+    },
+    promptTemplate: {
+      systemPrompt: selectedConfiguration?.promptTemplateVersion?.systemPrompt ?? "",
+      userPromptTemplate: selectedConfiguration?.promptTemplateVersion?.userPromptTemplate ?? "",
+      examples: selectedConfiguration?.promptTemplateVersion?.examples ?? [],
+    },
+    mcqSet: {
+      title: selectedConfiguration?.mcqSetVersion?.title ?? "",
+      questions: selectedConfiguration?.mcqSetVersion?.questions ?? [],
+    },
+    moduleVersion: {
+      taskText: selectedConfiguration?.moduleVersion?.taskText ?? "",
+      guidanceText: selectedConfiguration?.moduleVersion?.guidanceText ?? "",
+    },
+  };
+}
+
+function normalizeImportDraftPayload(payload) {
+  const unwrappedPayload = isPlainObject(payload?.moduleExport) ? payload.moduleExport : payload;
+
+  if (!isPlainObject(unwrappedPayload)) {
+    throw new Error(t("adminContent.errors.importRootObject"));
+  }
+
+  const draft =
+    isPlainObject(unwrappedPayload.module) &&
+    isPlainObject(unwrappedPayload.rubric) &&
+    isPlainObject(unwrappedPayload.promptTemplate) &&
+    isPlainObject(unwrappedPayload.mcqSet) &&
+    isPlainObject(unwrappedPayload.moduleVersion)
+      ? unwrappedPayload
+      : isPlainObject(unwrappedPayload.module) &&
+          isPlainObject(unwrappedPayload.selectedConfiguration) &&
+          isPlainObject(unwrappedPayload.versions)
+        ? coerceModuleExportToImportDraft(unwrappedPayload)
+        : null;
+
+  if (!draft) {
+    throw new Error(t("adminContent.errors.importShape"));
+  }
+
+  if (!draft.module.title) {
+    throw new Error(t("adminContent.errors.importMissingModuleTitle"));
+  }
+  if (!isPlainObject(draft.rubric.criteria)) {
+    throw new Error(t("adminContent.errors.importMissingRubric"));
+  }
+  if (!draft.promptTemplate.systemPrompt || !draft.promptTemplate.userPromptTemplate) {
+    throw new Error(t("adminContent.errors.importMissingPrompt"));
+  }
+  if (!draft.mcqSet.title || !Array.isArray(draft.mcqSet.questions) || draft.mcqSet.questions.length === 0) {
+    throw new Error(t("adminContent.errors.importMissingMcq"));
+  }
+  if (!draft.moduleVersion.taskText) {
+    throw new Error(t("adminContent.errors.importMissingTaskText"));
+  }
+
+  return draft;
+}
+
+function applyImportDraftToForm(draft) {
+  moduleTitleInput.value = formatEditorValue(draft?.module?.title, "");
+  moduleDescriptionInput.value = formatEditorValue(draft?.module?.description, "");
+  moduleCertificationLevelInput.value = formatEditorValue(draft?.module?.certificationLevel, "");
+  moduleValidFromInput.value = typeof draft?.module?.validFrom === "string" ? draft.module.validFrom : "";
+  moduleValidToInput.value = typeof draft?.module?.validTo === "string" ? draft.module.validTo : "";
+
+  rubricCriteriaJsonInput.value = formatEditorValue(draft?.rubric?.criteria, "");
+  rubricScalingRuleJsonInput.value = formatEditorValue(draft?.rubric?.scalingRule, "");
+  rubricPassRuleJsonInput.value = formatEditorValue(draft?.rubric?.passRule, "");
+
+  promptSystemPromptInput.value = formatEditorValue(draft?.promptTemplate?.systemPrompt, "");
+  promptUserPromptTemplateInput.value = formatEditorValue(draft?.promptTemplate?.userPromptTemplate, "");
+  promptExamplesJsonInput.value = formatEditorValue(draft?.promptTemplate?.examples, "[]");
+
+  mcqSetTitleInput.value = formatEditorValue(draft?.mcqSet?.title, "");
+  mcqQuestionsJsonInput.value = formatEditorValue(draft?.mcqSet?.questions, "[]");
+
+  moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
+  moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
+
+  moduleVersionRubricVersionIdInput.value = "";
+  moduleVersionPromptTemplateVersionIdInput.value = "";
+  moduleVersionMcqSetVersionIdInput.value = "";
+  publishModuleVersionIdInput.value = "";
+}
+
 function populateFormFromModuleExport(moduleExport) {
   const selectedConfiguration = moduleExport?.selectedConfiguration ?? {};
   const moduleVersion = selectedConfiguration.moduleVersion ?? null;
@@ -376,12 +707,28 @@ function populateFormFromModuleExport(moduleExport) {
   moduleVersionPromptTemplateVersionIdInput.value = promptTemplateVersion?.id ?? "";
   moduleVersionMcqSetVersionIdInput.value = mcqSetVersion?.id ?? "";
   publishModuleVersionIdInput.value = moduleVersion?.id ?? "";
+
+  selectedModuleStatus = moduleExport;
+  renderModuleStatus();
 }
 
 async function fetchModuleExport() {
   const moduleId = resolveModuleIdOrThrow();
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, headers);
   return body?.moduleExport ?? null;
+}
+
+async function refreshSelectedModuleStatus() {
+  if (!selectedModuleId) {
+    selectedModuleStatus = null;
+    renderModuleStatus();
+    return null;
+  }
+
+  const moduleExport = await fetchModuleExport();
+  selectedModuleStatus = moduleExport;
+  renderModuleStatus();
+  return moduleExport;
 }
 
 function downloadJsonFile(filename, payload) {
@@ -393,6 +740,15 @@ function downloadJsonFile(filename, payload) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
+}
+
+async function readImportFileContents() {
+  const file = importDraftFileInput.files?.[0];
+  if (!file) {
+    throw new Error(t("adminContent.errors.importFileRequired"));
+  }
+
+  return file.text();
 }
 
 function renderRolePresetControl() {
@@ -488,6 +844,10 @@ function normalizeModuleSummary(module) {
     id: module.id,
     title: module.title,
     description: typeof module.description === "string" ? module.description : "",
+    taskText: typeof module.taskText === "string" ? module.taskText : "",
+    guidanceText: typeof module.guidanceText === "string" ? module.guidanceText : "",
+    activeVersionId: typeof module.activeVersion?.id === "string" ? module.activeVersion.id : "",
+    activeVersionNo: Number.isFinite(module.activeVersion?.versionNo) ? module.activeVersion.versionNo : null,
   };
 }
 
@@ -524,13 +884,76 @@ function renderModuleMeta() {
   selectedModuleMeta.textContent = `${t("adminContent.meta.selectedModulePrefix")}: ${t("adminContent.meta.noneSelected")}`;
 }
 
+function renderModuleStatus() {
+  if (!selectedModuleStatus?.module) {
+    const module = modules.find((item) => item.id === selectedModuleId) ?? null;
+
+    moduleStatusTitle.textContent = module?.title ?? t("adminContent.status.noneTitle");
+    moduleStatusSummary.textContent = module
+      ? t("adminContent.status.loadingSummary")
+      : t("adminContent.status.noneSummary");
+    moduleStatusBadge.textContent = module
+      ? t("adminContent.status.badge.loading")
+      : t("adminContent.status.badge.none");
+    moduleStatusBadge.className = "module-status-badge shell";
+    moduleStatusDescription.textContent = module?.description ?? "";
+    moduleStatusLive.textContent = t("adminContent.status.noPublishedVersion");
+    moduleStatusDraft.textContent = t("adminContent.status.noDraftVersion");
+    moduleStatusPublishedAt.textContent = "-";
+    moduleStatusCounts.textContent = module?.activeVersionNo ? `Module ${module.activeVersionNo}` : "-";
+    moduleStatusDetails.textContent = module
+      ? JSON.stringify({ moduleId: module.id, activeVersionNo: module.activeVersionNo }, null, 2)
+      : "-";
+    return;
+  }
+
+  const view = deriveModuleStatusView(selectedModuleStatus);
+  if (!view) {
+    return;
+  }
+
+  moduleStatusTitle.textContent = view.title ?? t("adminContent.status.noneTitle");
+  moduleStatusSummary.textContent = t(view.summaryKey);
+  moduleStatusBadge.textContent = t(view.badgeKey);
+  moduleStatusBadge.className = `module-status-badge ${view.badgeClass}`;
+
+  const descriptionParts = [
+    typeof view.description === "string" && view.description.trim().length > 0 ? view.description.trim() : null,
+    typeof view.certificationLevel === "string" && view.certificationLevel.trim().length > 0
+      ? `${t("adminContent.status.levelPrefix")}: ${view.certificationLevel.trim()}`
+      : null,
+    view.validFrom || view.validTo
+      ? `${t("adminContent.status.validityPrefix")}: ${formatDateInputValue(view.validFrom) || "-"} -> ${formatDateInputValue(view.validTo) || "-"}`
+      : null,
+  ].filter(Boolean);
+  moduleStatusDescription.textContent = descriptionParts.join(" | ");
+
+  if (view.liveChain.length > 0) {
+    renderStatusChain(moduleStatusLive, view.liveChain);
+  } else {
+    moduleStatusLive.textContent = t("adminContent.status.noPublishedVersion");
+  }
+
+  if (view.latestDraftChain.length > 0) {
+    renderStatusChain(moduleStatusDraft, view.latestDraftChain);
+  } else {
+    moduleStatusDraft.textContent = t("adminContent.status.noDraftVersion");
+  }
+
+  moduleStatusPublishedAt.textContent = formatDateTimeValue(view.publishedAt);
+  moduleStatusCounts.textContent = view.countsText;
+  moduleStatusDetails.textContent = JSON.stringify(view.technicalDetails, null, 2);
+}
+
 function setSelectedModule(nextModuleId, syncInput = true) {
   selectedModuleId = typeof nextModuleId === "string" ? nextModuleId.trim() : "";
   if (syncInput) {
     selectedModuleIdInput.value = selectedModuleId;
   }
+  selectedModuleStatus = null;
   renderModuleDropdown();
   renderModuleMeta();
+  renderModuleStatus();
 }
 
 function resolveModuleIdOrThrow() {
@@ -599,6 +1022,16 @@ async function loadModules() {
   }
 
   setMessage(`${t("adminContent.meta.loadedCountPrefix")}: ${modules.length}`);
+  if (selectedModuleId) {
+    try {
+      await refreshSelectedModuleStatus();
+    } catch {
+      selectedModuleStatus = null;
+      renderModuleStatus();
+    }
+  } else {
+    renderModuleStatus();
+  }
   log(body);
 }
 
@@ -632,6 +1065,7 @@ async function handleCreateModule(options = { silent: false }) {
     setMessage(t("adminContent.message.moduleCreated"));
     log(body);
   }
+  await refreshSelectedModuleStatus();
   return body;
 }
 
@@ -656,14 +1090,17 @@ async function handleDeleteSelectedModule() {
   modules = modules.filter((item) => item.id !== selectedModuleId);
   const nextModuleId = modules[0]?.id ?? "";
   setSelectedModule(nextModuleId);
-  renderModuleDropdown();
-  renderModuleMeta();
   setMessage(t("adminContent.message.moduleDeleted"));
   log(body);
+  if (selectedModuleId) {
+    await refreshSelectedModuleStatus();
+  } else {
+    renderModuleStatus();
+  }
 }
 
 async function handleLoadSelectedModuleContent() {
-  const moduleExport = await fetchModuleExport();
+  const moduleExport = await refreshSelectedModuleStatus();
   if (!moduleExport) {
     throw new Error("Module export payload was empty.");
   }
@@ -676,7 +1113,7 @@ async function handleLoadSelectedModuleContent() {
 }
 
 async function handleExportSelectedModule() {
-  const moduleExport = await fetchModuleExport();
+  const moduleExport = await refreshSelectedModuleStatus();
   if (!moduleExport) {
     throw new Error("Module export payload was empty.");
   }
@@ -704,6 +1141,9 @@ async function handleCreateRubricVersion(options = { silent: false }) {
     setMessage(t("adminContent.message.rubricCreated"));
     log(body);
   }
+  if (!options.silent) {
+    await refreshSelectedModuleStatus();
+  }
   return body;
 }
 
@@ -727,6 +1167,9 @@ async function handleCreatePromptTemplateVersion(options = { silent: false }) {
     setMessage(t("adminContent.message.promptCreated"));
     log(body);
   }
+  if (!options.silent) {
+    await refreshSelectedModuleStatus();
+  }
   return body;
 }
 
@@ -745,6 +1188,9 @@ async function handleCreateMcqSetVersion(options = { silent: false }) {
   if (!options.silent) {
     setMessage(t("adminContent.message.mcqCreated"));
     log(body);
+  }
+  if (!options.silent) {
+    await refreshSelectedModuleStatus();
   }
   return body;
 }
@@ -772,6 +1218,9 @@ async function handleCreateModuleVersion(options = { silent: false }) {
     setMessage(t("adminContent.message.moduleVersionCreated"));
     log(body);
   }
+  if (!options.silent) {
+    await refreshSelectedModuleStatus();
+  }
   return body;
 }
 
@@ -788,6 +1237,7 @@ async function handleSaveContentBundle() {
     mcqSetVersion: mcqBody.mcqSetVersion,
     moduleVersion: moduleVersionBody.moduleVersion,
   });
+  await refreshSelectedModuleStatus();
 }
 
 async function handlePublishModuleVersion() {
@@ -804,6 +1254,23 @@ async function handlePublishModuleVersion() {
   );
   setMessage(t("adminContent.message.moduleVersionPublished"));
   log(body);
+  await refreshSelectedModuleStatus();
+}
+
+async function handleApplyImportDraft(rawValue) {
+  let parsed;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "invalid_json";
+    throw new Error(`${t("adminContent.errors.invalidJsonPrefix")} ${t("adminContent.import.json")}: ${detail}`);
+  }
+
+  const draft = normalizeImportDraftPayload(parsed);
+  applyImportDraftToForm(draft);
+  importDraftJsonInput.value = JSON.stringify(parsed, null, 2);
+  setMessage(t("adminContent.message.importApplied"));
+  log({ importedDraft: draft });
 }
 
 loadMeButton.addEventListener("click", async () => {
@@ -907,6 +1374,45 @@ selectedModuleIdInput.addEventListener("input", () => {
 
 moduleDropdown.addEventListener("change", () => {
   setSelectedModule(moduleDropdown.value, true);
+  void refreshSelectedModuleStatus().catch(() => {
+    selectedModuleStatus = null;
+    renderModuleStatus();
+  });
+});
+
+applyImportFileButton.addEventListener("click", async () => {
+  await runWithBusyButton(applyImportFileButton, async () => {
+    try {
+      const rawValue = await readImportFileContents();
+      importDraftJsonInput.value = rawValue;
+      await handleApplyImportDraft(rawValue);
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message);
+      log(message);
+    }
+  });
+});
+
+applyImportDraftButton.addEventListener("click", async () => {
+  await runWithBusyButton(applyImportDraftButton, async () => {
+    try {
+      await handleApplyImportDraft(importDraftJsonInput.value);
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message);
+      log(message);
+    }
+  });
+});
+
+downloadImportTemplateButton.addEventListener("click", async () => {
+  await runWithBusyButton(downloadImportTemplateButton, async () => {
+    const template = buildImportDraftTemplate();
+    downloadJsonFile("module-draft-template.json", template);
+    setMessage(t("adminContent.message.importTemplateDownloaded"));
+    log({ importDraftTemplate: template });
+  });
 });
 
 localeSelect.addEventListener("change", () => {
@@ -935,3 +1441,4 @@ loadVersion();
 loadParticipantConsoleConfig();
 renderModuleDropdown();
 renderModuleMeta();
+renderModuleStatus();

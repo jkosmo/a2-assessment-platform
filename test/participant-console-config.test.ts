@@ -195,9 +195,8 @@ describe("participant console runtime config", () => {
       }
 
       if (pagePath === "/participant") {
-        expect(response.text).toContain('aria-describedby="reflectionText-hint"');
-        expect(response.text).toContain('aria-describedby="promptExcerpt-hint"');
-        expect(response.text).toContain('aria-describedby="ack-hint"');
+        expect(response.text).toContain('id="selectedModuleTitle"');
+        expect(response.text).toContain('id="selectedModuleDescription"');
         expect(response.text).toContain('id="flowProgress"');
         expect(response.text).toContain('id="flowProgressSteps"');
         expect(response.text).toContain('id="selectedModuleBrief"');
@@ -244,6 +243,9 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain("<summary>View raw response</summary>");
         expect(response.text).toContain('id="loadModuleContent"');
         expect(response.text).toContain('id="exportModule"');
+        expect(response.text).toContain('id="moduleStatusCard"');
+        expect(response.text).toContain('id="importDraftJson"');
+        expect(response.text).toContain('id="applyImportDraft"');
         expect(response.text).not.toContain('id="flowProgress"');
       }
     }

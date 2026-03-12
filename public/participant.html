@@ -19,7 +19,9 @@
       .module-title { font-weight: 600; }
       .module-meta { font-size: 12px; color: var(--color-meta); margin-top: calc(var(--space-1) * 0.5); }
       .selected-badge { display: inline-block; margin-top: var(--space-1); font-size: 11px; font-weight: 600; color: var(--color-selected-badge); }
-      .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); }
+      .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); display: grid; gap: calc(var(--space-1) * 0.5); }
+      .selected-module-title { font-weight: 600; color: var(--color-text); }
+      .selected-module-description { color: var(--color-meta); line-height: 1.5; }
       .module-brief { display: grid; gap: var(--space-1); margin-top: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%); }
       .module-brief-section { display: grid; gap: calc(var(--space-1) * 0.5); }
       .module-brief-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--color-link-active); }
@@ -113,7 +115,10 @@
       <h3 data-i18n="submission.title">Submission</h3>
       <div>
         <label data-i18n="submission.selectedModule">Selected module</label>
-        <div id="selectedModuleDisplay" class="selected-module-summary" aria-describedby="moduleSelectionHint"></div>
+        <div id="selectedModuleDisplay" class="selected-module-summary" aria-describedby="moduleSelectionHint">
+          <div id="selectedModuleTitle" class="selected-module-title"></div>
+          <div id="selectedModuleDescription" class="selected-module-description hidden"></div>
+        </div>
         <input id="selectedModuleId" type="hidden" />
       </div>
       <div id="selectedModuleBrief" class="module-brief hidden">
@@ -128,18 +133,15 @@
       </div>
       <div><label data-i18n="submission.rawText">Your answer</label><textarea id="rawText" rows="5"></textarea></div>
       <div>
-        <label data-i18n="submission.reflection">Reflection</label>
-        <textarea id="reflectionText" rows="4" aria-describedby="reflectionText-hint"></textarea>
-        <div class="hint" id="reflectionText-hint" data-i18n="submission.hint.reflection" data-hint-key="submission.hint.reflection">Describe what you changed and why.</div>
+        <label data-i18n="submission.reflection">Reflection (what you changed and why)</label>
+        <textarea id="reflectionText" rows="4"></textarea>
       </div>
       <div>
-        <label data-i18n="submission.promptExcerpt">Instruction used</label>
-        <textarea id="promptExcerpt" rows="3" aria-describedby="promptExcerpt-hint"></textarea>
-        <div class="hint" id="promptExcerpt-hint" data-i18n="submission.hint.promptExcerpt" data-hint-key="submission.hint.promptExcerpt">Paste the instruction or task text you used.</div>
+        <label data-i18n="submission.promptExcerpt">Instruction used (paste prompt or task text)</label>
+        <textarea id="promptExcerpt" rows="3"></textarea>
       </div>
       <div class="small" id="draftStatus"></div>
-      <label><input class="inline" type="checkbox" id="ack" aria-describedby="ack-hint" checked /> <span data-i18n="submission.ack">I acknowledge responsibility for submitted content</span></label>
-      <div class="hint" id="ack-hint" data-i18n="submission.hint.ack" data-hint-key="submission.hint.ack">Required before submission can be created.</div>
+      <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack">I acknowledge responsibility for submitted content</span></label>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create">Create submission</button>
       <div class="hint" id="submissionValidationHint" data-hint-key="submission.validation.ready"></div>
       <div class="small"><span data-i18n="submission.submissionId">Submission ID:</span> <span id="submissionId">-</span></div>

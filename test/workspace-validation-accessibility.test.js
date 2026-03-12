@@ -19,16 +19,13 @@ describe("workspace validation accessibility", () => {
     expect(css).toContain(".is-invalid {");
   });
 
-  it("keeps aria-describedby wiring for participant and reviewer validation fields", () => {
+  it("keeps validation wiring for participant and reviewer validation fields", () => {
     const participantHtml = readFile("public/participant.html");
     expect(participantHtml).toContain('aria-describedby="moduleSelectionHint"');
-    expect(participantHtml).toContain('aria-describedby="reflectionText-hint"');
-    expect(participantHtml).toContain('aria-describedby="promptExcerpt-hint"');
-    expect(participantHtml).toContain('aria-describedby="ack-hint"');
     expect(participantHtml).toContain('id="submissionValidationHint"');
-    expect(participantHtml).toContain('class="hint" id="reflectionText-hint"');
-    expect(participantHtml).toContain('class="hint" id="promptExcerpt-hint"');
-    expect(participantHtml).toContain('class="hint" id="ack-hint"');
+    expect(participantHtml).not.toContain('id="reflectionText-hint"');
+    expect(participantHtml).not.toContain('id="promptExcerpt-hint"');
+    expect(participantHtml).not.toContain('id="ack-hint"');
 
     const appealHandlerHtml = readFile("public/appeal-handler.html");
     expect(appealHandlerHtml).toContain('aria-describedby="resolveValidationMessage"');

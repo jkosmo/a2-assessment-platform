@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.112 - 2026-03-12
+### Summary
+Improved participant submission UX, redesigned the admin content workspace around live/draft module status, and added draft JSON import plus LLM authoring guidance for content owners.
+
+### Included
+- Simplified participant submission labels and reduced field-clutter while showing selected-module description:
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- Redesigned the top of the admin content workspace around module status, human-readable version chains, and clearer action grouping:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Added draft JSON import support for both exported module bundles and simpler authoring drafts:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Added design and authoring support documents for the new admin-content workflow:
+  - `doc/PHASE2_ADMIN_CONTENT_WORKSPACE_V2_DESIGN.md`
+  - `doc/MODULE_DRAFT_JSON_AUTHORING_PROMPT.md`
+- Updated regression coverage for participant/admin workspace HTML and translations:
+  - `test/participant-console-config.test.ts`
+  - `test/workspace-validation-accessibility.test.js`
+  - `test/admin-content-translations.test.js`
+  - `test/participant-translations.test.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-validation-accessibility.test.js test/admin-content-translations.test.js test/participant-translations.test.js test/m2-admin-content-publication.test.ts`
+
 ## 0.3.111 - 2026-03-11
 ### Summary
 Fixed the participant workspace so published module assignment text and submission guidance are shown before a participant creates a submission.
