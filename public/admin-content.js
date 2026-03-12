@@ -45,6 +45,7 @@ const moduleStatusDetails = document.getElementById("moduleStatusDetails");
 const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
 const applyImportDraftButton = document.getElementById("applyImportDraft");
+const copyAuthoringPromptButton = document.getElementById("copyAuthoringPrompt");
 
 const rubricCriteriaJsonInput = document.getElementById("rubricCriteriaJson");
 const rubricScalingRuleJsonInput = document.getElementById("rubricScalingRuleJson");
@@ -69,6 +70,105 @@ const publishModuleVersionIdInput = document.getElementById("publishModuleVersio
 const publishModuleVersionButton = document.getElementById("publishModuleVersion");
 
 const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
+const MODULE_AUTHORING_PROMPT_TEMPLATE = `You are producing a module draft JSON for an assessment platform.
+
+Return one JSON object only.
+Preferred output is a downloadable \`.json\` file.
+If your interface cannot return a file, return the JSON as the only content in one code cell / code block.
+Do not include commentary.
+Do not include comments.
+
+Requirements:
+- The root object must contain exactly these sections:
+  - module
+  - rubric
+  - promptTemplate
+  - mcqSet
+  - moduleVersion
+- Localized participant-facing text should use the locales:
+  - en-GB
+  - nb
+  - nn
+- If multilingual content is required, use locale objects for:
+  - module.title
+  - module.description
+  - promptTemplate.systemPrompt
+  - promptTemplate.userPromptTemplate
+  - mcqSet.title
+  - moduleVersion.taskText
+  - moduleVersion.guidanceText
+- MCQ question fields may also use locale objects when participant-facing text must be translated.
+- Keep systemPrompt and userPromptTemplate concise and production-oriented.
+- MCQ questions must include:
+  - stem
+  - options
+  - correctAnswer
+  - rationale
+- correctAnswer must match one of the options exactly.
+- rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
+- moduleVersion.taskText must describe the participant assignment clearly.
+- moduleVersion.guidanceText must describe what a good submission should include.
+- validFrom and validTo should be empty strings unless a date range is explicitly provided.
+
+Return JSON in this exact shape:
+{
+  "module": {
+    "title": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "description": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "certificationLevel": "",
+    "validFrom": "",
+    "validTo": ""
+  },
+  "rubric": {
+    "criteria": {},
+    "scalingRule": {},
+    "passRule": {}
+  },
+  "promptTemplate": {
+    "systemPrompt": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "userPromptTemplate": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "examples": []
+  },
+  "mcqSet": {
+    "title": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "questions": []
+  },
+  "moduleVersion": {
+    "taskText": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "guidanceText": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    }
+  }
+}
+
+Source material follows:
+[PASTE SOURCE MATERIAL HERE]`;
 
 const defaultWorkspaceNavigationItems = [
   {
@@ -425,6 +525,21 @@ function formatDateTimeValue(value) {
   }).format(parsed);
 }
 
+function syncTextareaHeight(textarea) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function syncAllTextareaHeights() {
+  for (const textarea of document.querySelectorAll("textarea")) {
+    syncTextareaHeight(textarea);
+  }
+}
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -689,6 +804,7 @@ function applyImportDraftToForm(draft) {
   moduleVersionPromptTemplateVersionIdInput.value = "";
   moduleVersionMcqSetVersionIdInput.value = "";
   publishModuleVersionIdInput.value = "";
+  syncAllTextareaHeights();
 }
 
 function populateFormFromModuleExport(moduleExport) {
@@ -718,6 +834,7 @@ function populateFormFromModuleExport(moduleExport) {
 
   selectedModuleStatus = moduleExport;
   renderModuleStatus();
+  syncAllTextareaHeights();
 }
 
 function buildParticipantPreviewPayload() {
@@ -782,6 +899,23 @@ function downloadJsonFile(filename, payload) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
+}
+
+async function copyTextToClipboard(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const fallback = document.createElement("textarea");
+  fallback.value = value;
+  fallback.setAttribute("readonly", "true");
+  fallback.style.position = "absolute";
+  fallback.style.left = "-9999px";
+  document.body.appendChild(fallback);
+  fallback.select();
+  document.execCommand("copy");
+  document.body.removeChild(fallback);
 }
 
 async function readImportFileContents() {
@@ -872,6 +1006,7 @@ function setDefaultFormValues() {
   mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
+  syncAllTextareaHeights();
 }
 
 function normalizeModuleSummary(module) {
@@ -1330,6 +1465,15 @@ async function handleApplyImportDraft(rawValue) {
   log({ importedDraft: draft });
 }
 
+async function handleCopyAuthoringPrompt() {
+  await copyTextToClipboard(MODULE_AUTHORING_PROMPT_TEMPLATE);
+  setMessage(t("adminContent.message.authoringPromptCopied"));
+  log({
+    authoringPromptCopied: true,
+    reminder: t("adminContent.help.copyPrompt"),
+  });
+}
+
 async function handleOpenParticipantPreview() {
   const payload = buildParticipantPreviewPayload();
   localStorage.setItem(PARTICIPANT_PREVIEW_STORAGE_KEY, JSON.stringify(payload));
@@ -1443,6 +1587,18 @@ previewCurrentDraftButton.addEventListener("click", async () => {
   });
 });
 
+copyAuthoringPromptButton.addEventListener("click", async () => {
+  await runWithBusyButton(copyAuthoringPromptButton, async () => {
+    try {
+      await handleCopyAuthoringPrompt();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message);
+      log(message);
+    }
+  });
+});
+
 publishModuleVersionButton.addEventListener("click", async () => {
   await runWithBusyButton(publishModuleVersionButton, async () => {
     try {
@@ -1510,6 +1666,12 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
+for (const textarea of document.querySelectorAll("textarea")) {
+  textarea.addEventListener("input", () => {
+    syncTextareaHeight(textarea);
+  });
+}
+
 populateLocaleSelect();
 setLocale(currentLocale);
 setDefaultFormValues();
@@ -1518,3 +1680,4 @@ loadParticipantConsoleConfig();
 renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
+syncAllTextareaHeights();

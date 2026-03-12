@@ -31,6 +31,7 @@ Required baseline:
 - at least one manual review exists in queue
 - at least one appeal exists or can be created during setup
 - one subject matter owner/admin identity is available for content and calibration tasks
+- at least one importable module draft JSON is available for admin-content testing
 
 Suggested test URLs:
 - `/participant`
@@ -63,7 +64,7 @@ Run 5-8 tasks total. Minimum set below covers the issue scope.
 
 ### Reviewer/admin tasks
 7. Open `/manual-review`, find a relevant case, claim it, and finalize an override.
-8. Open `/admin-content`, identify where a rubric/prompt/module version is created and where publication happens.
+8. Open `/admin-content`, identify the two starting paths (`draft JSON` vs `manual module shell`), copy the authoring prompt, load or create a draft, open preview, and explain where publication happens.
 
 Optional SME task:
 9. Open `/calibration`, load a module snapshot, and explain what quality signals mean and what action you would take.
@@ -134,7 +135,9 @@ Prioritize observation around:
 - whether module selection and module switching are understandable
 - whether result, history, and appeal pathways are discoverable
 - whether queue filters/search/status pills are understandable without explanation
-- whether admin-content steps 1-6 feel like one coherent workflow
+- whether admin-content steps 1-9 feel like one coherent workflow
+- whether authors understand the difference between import, module shell creation, saved draft versions, preview, and publish
+- whether the copied authoring prompt and JSON-import path reduce confusion for content authors
 - whether calibration outputs are interpretable by non-developers
 
 ## Module-switch scenario script

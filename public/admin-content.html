@@ -32,6 +32,7 @@
       .import-panel textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
       .import-controls { display: grid; gap: var(--space-1); }
       .import-file { display: grid; gap: calc(var(--space-1) * 0.5); }
+      textarea { overflow-y: hidden; resize: vertical; }
       @media (max-width: 900px) {
         .module-status-header { flex-direction: column; }
         .module-status-grid { grid-template-columns: 1fr; }
@@ -87,7 +88,11 @@
       </div>
       <div><label for="importDraftJson" data-i18n="adminContent.import.json">Draft JSON</label><textarea id="importDraftJson" rows="12"></textarea></div>
       <div class="small" data-i18n="adminContent.help.importShape">Supports either exported module JSON or a simpler authoring draft with module, rubric, promptTemplate, mcqSet, and moduleVersion.</div>
-      <button id="applyImportDraft" class="btn-primary" data-i18n="adminContent.import.applyDraft">Apply draft JSON</button>
+      <div class="button-row">
+        <button id="applyImportDraft" class="btn-primary" data-i18n="adminContent.import.applyDraft">Apply draft JSON</button>
+        <button id="copyAuthoringPrompt" class="btn-secondary" data-i18n="adminContent.import.copyPrompt">Copy authoring prompt</button>
+      </div>
+      <div class="small" data-i18n="adminContent.help.copyPrompt">The copied prompt ends with a placeholder/source section. Replace the source material references before sending it to an LLM.</div>
     </section>
 
     <section class="card">

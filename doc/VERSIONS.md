@@ -7,6 +7,30 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.122 - 2026-03-12
+### Summary
+Improved admin-content authoring ergonomics with a one-click prompt copy action and auto-growing textareas, and updated the `#47` usability artefacts to reflect the current import/preview/publish UI.
+
+### Included
+- Added `Copy authoring prompt` to admin-content so content authors can copy the module draft prompt directly to the clipboard, together with an explicit reminder to replace the source-material references at the end before sending it to an LLM:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/i18n/admin-content-translations.js`
+- Added textarea autosizing in admin-content so large JSON/prompt/task fields expand to fit their content during typing, import, and load-back:
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+- Updated the `#47` discovery pack to reflect the current admin-content UX, including top-level import, prompt copy, preview, and publish semantics:
+  - `doc/PHASE2_USABILITY_TEST_PLAN.md`
+  - `doc/UX_SESSION_NOTES_TEMPLATE.md`
+  - `doc/UX_FINDINGS_REPORT_TEMPLATE.md`
+- Extended focused regression checks for the new admin-content button/translation keys:
+  - `test/admin-content-translations.test.js`
+  - `test/participant-console-config.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/admin-content-translations.test.js test/participant-console-config.test.ts`
+
 ## 0.3.121 - 2026-03-12
 ### Summary
 Bundled the participant-preview button copy refinement with a more execution-ready usability discovery pack for `#47`.

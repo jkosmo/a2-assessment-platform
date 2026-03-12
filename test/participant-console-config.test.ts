@@ -249,6 +249,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="importDraftFile"');
         expect(response.text).toContain('id="importDraftJson"');
         expect(response.text).toContain('id="applyImportDraft"');
+        expect(response.text).toContain('id="copyAuthoringPrompt"');
         expect(response.text).toContain('id="previewCurrentDraft"');
         expect(response.text).not.toContain('id="applyImportFile"');
         expect(response.text).not.toContain('id="downloadImportTemplate"');

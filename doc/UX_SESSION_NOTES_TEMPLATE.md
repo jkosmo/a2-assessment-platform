@@ -15,6 +15,7 @@ Use this template while running a moderated usability session for `#47`.
 ## Pre-check
 - [ ] Correct environment and build loaded
 - [ ] Required seeded data available
+- [ ] Admin-content import sample / draft JSON available if relevant for the session
 - [ ] Participant informed that the product is being tested, not the user
 - [ ] Think-aloud reminder given
 - [ ] Recording/notes capture started
@@ -105,4 +106,5 @@ Use this template while running a moderated usability session for `#47`.
 - Top 3 findings:
 - Likely highest-severity issue:
 - Roles/workspaces most affected:
+- Did admin-content import / preview / publish semantics appear understandable?
 - Follow-up issue candidates:

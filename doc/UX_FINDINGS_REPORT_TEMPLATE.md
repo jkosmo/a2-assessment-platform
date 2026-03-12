@@ -61,6 +61,13 @@ Use this template after moderated usability sessions for `#47`.
 - Draft/state confidence:
 - Recommendation:
 
+## Admin-content authoring analysis
+- Was the start path (`import` vs `manual shell`) understood?
+- Was the copied authoring prompt useful without facilitator explanation?
+- Was preview behavior understood as non-persistent?
+- Were draft-version vs published-version semantics understood?
+- Recommendation:
+
 ## Backlog conversion
 - [ ] One issue per confirmed finding
 - [ ] Severity and evidence added
