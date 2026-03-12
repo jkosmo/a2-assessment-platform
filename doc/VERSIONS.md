@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.123 - 2026-03-12
+### Summary
+Kept the top-level draft JSON textarea at a fixed size while preserving auto-growing behavior for the rest of the admin-content textareas.
+
+### Included
+- Excluded importDraftJson from admin-content textarea autosizing so the top-level draft editor keeps its original footprint:
+  - public/admin-content.js`r
+
+### Verification
+- 
+pm run lint`r
+
 ## 0.3.122 - 2026-03-12
 ### Summary
 Improved admin-content authoring ergonomics with a one-click prompt copy action and auto-growing textareas, and updated the `#47` usability artefacts to reflect the current import/preview/publish UI.
@@ -2969,3 +2981,4 @@ Initial M0 foundation release.
 
 ### Notes
 - Migration execution is done through repository migration scripts in this version.
+

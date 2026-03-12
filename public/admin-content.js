@@ -530,6 +530,11 @@ function syncTextareaHeight(textarea) {
     return;
   }
 
+  if (textarea.id === "importDraftJson") {
+    textarea.style.height = "";
+    return;
+  }
+
   textarea.style.height = "auto";
   textarea.style.height = `${textarea.scrollHeight}px`;
 }
