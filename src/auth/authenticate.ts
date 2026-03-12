@@ -2,6 +2,7 @@ import type { AppRole } from "@prisma/client";
 import { jwtVerify, createRemoteJWKSet, type JWTPayload } from "jose";
 import type { NextFunction, Request, Response } from "express";
 import { env } from "../config/env.js";
+import { AppError } from "../errors/AppError.js";
 import type { AuthPrincipal } from "./principal.js";
 import { getActiveRoles, syncEntraGroupRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
 import { resolveRequestLocale } from "../i18n/locale.js";
@@ -97,12 +98,27 @@ export async function authenticate(request: Request, response: Response, next: N
     defaultLocale: env.DEFAULT_LOCALE,
   });
 
+  let principal: AuthPrincipal;
   try {
-    const principal =
+    principal =
       env.AUTH_MODE === "mock"
         ? principalFromMockHeaders(request)
         : await principalFromBearerToken(extractBearerToken(request));
+  } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "";
+    const message =
+      rawMessage === "Missing Bearer token."
+        ? t(locale, "missing_bearer_token")
+        : t(locale, "unauthorized");
 
+    response.status(401).json({
+      error: "unauthorized",
+      message,
+    });
+    return;
+  }
+
+  try {
     const user = await upsertUserFromPrincipal(principal);
     await syncEntraGroupRoles(user.id, principal);
     let roles = await getActiveRoles(user.id);
@@ -124,16 +140,8 @@ export async function authenticate(request: Request, response: Response, next: N
 
     next();
   } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : "";
-    const message =
-      rawMessage === "Missing Bearer token."
-        ? t(locale, "missing_bearer_token")
-        : t(locale, "unauthorized");
-
-    response.status(401).json({
-      error: "unauthorized",
-      message,
-    });
+    console.error("Authentication backend failed.", error);
+    next(new AppError("internal_error", 500, "Internal server error."));
   }
 }
 

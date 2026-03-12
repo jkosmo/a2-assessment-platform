@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.114 - 2026-03-12
+### Summary
+Stopped authentication middleware from masking backend database/runtime failures as `401 unauthorized`, and added focused regression coverage for auth error handling.
+
+### Included
+- Split authentication failures from repository/runtime failures in the auth middleware, returning `401` only for actual credential problems and forwarding backend failures as `500`:
+  - `src/auth/authenticate.ts`
+- Added regression coverage for missing Bearer-token handling and backend failure handling in the auth path:
+  - `test/authenticate-middleware.test.ts`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/authenticate-middleware.test.ts test/mock-auth-identity-reconciliation.test.ts test/m0-foundation.test.ts`
+
 ## 0.3.113 - 2026-03-12
 ### Summary
 Closed the follow-up gaps from staging on participant submission validation and admin-content draft/import UX, and documented numbered manual UI test steps in the workflow guide.
