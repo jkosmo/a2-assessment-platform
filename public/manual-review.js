@@ -29,6 +29,7 @@ const overrideReviewButton = document.getElementById("overrideReview");
 const reviewDecisionReasonInput = document.getElementById("reviewDecisionReason");
 const reviewOverrideReasonInput = document.getElementById("reviewOverrideReason");
 const reviewPassFailTotalInput = document.getElementById("reviewPassFailTotal");
+const reviewActionSequenceHint = document.getElementById("reviewActionSequenceHint");
 const overrideValidationMessage = document.getElementById("overrideValidationMessage");
 
 const reviewStatusOptions = ["OPEN", "IN_REVIEW", "RESOLVED"];
@@ -166,6 +167,7 @@ function applyTranslations() {
   renderWorkspaceNavigation();
   renderReviewQueue();
   renderManualReviewDetails(selectedReviewDetails);
+  renderReviewActionState();
 }
 
 function populateLocaleSelect() {
@@ -620,6 +622,87 @@ function validateOverrideInput() {
   return { valid: true, decisionReason, overrideReason };
 }
 
+function getCurrentReviewerId() {
+  return document.getElementById("userId").value.trim();
+}
+
+function getSelectedReviewSummary() {
+  if (selectedReviewDetails?.review) {
+    return selectedReviewDetails.review;
+  }
+  if (selectedReviewDetails) {
+    return selectedReviewDetails;
+  }
+  return latestReviewQueue.find((review) => review.id === selectedReviewId) ?? null;
+}
+
+function isSelectedReviewClaimedByCurrentUser() {
+  const review = getSelectedReviewSummary();
+  const reviewerId = review?.reviewer?.id ?? review?.reviewerId ?? "";
+  return Boolean(
+    selectedReviewId &&
+    review?.reviewStatus === "IN_REVIEW" &&
+    reviewerId &&
+    reviewerId === getCurrentReviewerId(),
+  );
+}
+
+function renderReviewActionState() {
+  const review = getSelectedReviewSummary();
+  const hasSelection = Boolean(selectedReviewId);
+  const claimedByCurrentUser = isSelectedReviewClaimedByCurrentUser();
+  const resolved = review?.reviewStatus === "RESOLVED";
+  const claimedByOtherReviewer = Boolean(
+    review &&
+    review.reviewStatus === "IN_REVIEW" &&
+    (review?.reviewer?.id ?? review?.reviewerId) &&
+    !claimedByCurrentUser,
+  );
+
+  claimReviewButton.disabled =
+    claimReviewButton.dataset.busy === "true" ||
+    !hasSelection ||
+    resolved ||
+    claimedByCurrentUser ||
+    claimedByOtherReviewer;
+  overrideReviewButton.disabled =
+    overrideReviewButton.dataset.busy === "true" ||
+    !claimedByCurrentUser ||
+    resolved;
+
+  if (!hasSelection) {
+    reviewActionSequenceHint.textContent = t("manualReview.actionSequence");
+    claimReviewButton.removeAttribute("title");
+    overrideReviewButton.title = t("manualReview.overrideNeedsClaimFirst");
+    return;
+  }
+
+  if (resolved) {
+    reviewActionSequenceHint.textContent = t("manualReview.reviewResolved");
+    claimReviewButton.title = t("manualReview.reviewResolved");
+    overrideReviewButton.title = t("manualReview.reviewResolved");
+    return;
+  }
+
+  if (claimedByCurrentUser) {
+    reviewActionSequenceHint.textContent = t("manualReview.overrideReady");
+    claimReviewButton.title = t("manualReview.overrideReady");
+    overrideReviewButton.removeAttribute("title");
+    return;
+  }
+
+  if (claimedByOtherReviewer) {
+    reviewActionSequenceHint.textContent = t("manualReview.claimedByAnotherReviewer");
+    claimReviewButton.title = t("manualReview.claimedByAnotherReviewer");
+    overrideReviewButton.title = t("manualReview.overrideNeedsClaimFirst");
+    return;
+  }
+
+  reviewActionSequenceHint.textContent = t("manualReview.actionSequence");
+  claimReviewButton.removeAttribute("title");
+  overrideReviewButton.title = t("manualReview.overrideNeedsClaimFirst");
+}
+
 function setSelectedReview(reviewId, resetInputs = false) {
   const nextId = typeof reviewId === "string" ? reviewId : "";
   const changed = selectedReviewId !== nextId;
@@ -629,11 +712,13 @@ function setSelectedReview(reviewId, resetInputs = false) {
   if (changed && resetInputs) {
     resetOverrideInputs();
   }
+  renderReviewActionState();
 }
 
 function renderManualReviewDetails(details) {
   if (!details) {
     manualReviewDetails.textContent = t("manualReview.noDetails");
+    renderReviewActionState();
     return;
   }
 
@@ -708,6 +793,7 @@ function renderManualReviewDetails(details) {
   ];
 
   manualReviewDetails.textContent = lines.join("\n");
+  renderReviewActionState();
 }
 
 async function loadVersion() {
@@ -895,7 +981,7 @@ queueSearchInput.addEventListener("input", () => {
 
 claimReviewButton.addEventListener("click", async () => {
   if (!selectedReviewId) {
-    manualReviewMessage.textContent = t("manualReview.noSelection");
+    setOverrideValidationError(t("manualReview.noSelection"));
     return;
   }
 
@@ -912,20 +998,26 @@ claimReviewButton.addEventListener("click", async () => {
       await loadReviewQueue();
       await loadReviewDetails(selectedReviewId);
     } catch (error) {
-      manualReviewMessage.textContent = toActionableErrorMessage(error);
+      setOverrideValidationError(toActionableErrorMessage(error));
       log(error.message);
     }
   });
+  renderReviewActionState();
 });
 
 overrideReviewButton.addEventListener("click", async () => {
   if (!selectedReviewId) {
-    manualReviewMessage.textContent = t("manualReview.noSelection");
+    setOverrideValidationError(t("manualReview.noSelection"));
     return;
   }
 
   await runWithBusyButton(overrideReviewButton, async () => {
     try {
+      if (!isSelectedReviewClaimedByCurrentUser()) {
+        setOverrideValidationError(t("manualReview.overrideNeedsClaimFirst"));
+        return;
+      }
+
       const validation = validateOverrideInput();
       if (!validation.valid) {
         setOverrideValidationError(validation.message, validation.field);
@@ -965,11 +1057,12 @@ overrideReviewButton.addEventListener("click", async () => {
       if (validationMessage) {
         setOverrideValidationError(validationMessage);
       } else {
-        manualReviewMessage.textContent = toActionableErrorMessage(error);
+        setOverrideValidationError(toActionableErrorMessage(error));
       }
       log(error.message);
     }
   });
+  renderReviewActionState();
 });
 
 reviewDecisionReasonInput.addEventListener("input", () => {

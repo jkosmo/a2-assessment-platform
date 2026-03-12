@@ -67,6 +67,7 @@ const assessmentProgressStatus = document.getElementById("assessmentProgressStat
 const assessmentProgressSeconds = document.getElementById("assessmentProgressSeconds");
 const appealGateHint = document.getElementById("appealGateHint");
 const appealSubmittedStatus = document.getElementById("appealSubmittedStatus");
+const appealNextSteps = document.getElementById("appealNextSteps");
 const queueAssessmentButton = document.getElementById("queueAssessment");
 const checkAssessmentButton = document.getElementById("checkAssessment");
 const checkResultButton = document.getElementById("checkResult");
@@ -548,15 +549,15 @@ function renderSelectedModuleSummary() {
 
 function getActiveFlowStep() {
   if (flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus)) {
-    return 5;
-  }
-  if (flowState.hasSubmission) {
     return 4;
   }
-  if (resolveSelectedModule(loadedModules, selectedModuleId)) {
+  if (flowState.hasSubmission) {
     return 3;
   }
-  return 2;
+  if (resolveSelectedModule(loadedModules, selectedModuleId)) {
+    return 2;
+  }
+  return 1;
 }
 
 function renderFlowProgress() {
@@ -565,7 +566,7 @@ function renderFlowProgress() {
   }
 
   const activeStep = getActiveFlowStep();
-  const totalSteps = 5;
+  const totalSteps = 4;
   const summary = `${t("progress.stepPrefix")} ${activeStep} ${t("progress.of")} ${totalSteps}`;
 
   flowProgressSummary.textContent = summary;
@@ -697,9 +698,40 @@ function updateCreateSubmissionAvailability() {
   applySubmissionValidationFeedback(validation);
 }
 
+function buildDefaultDraftValueMap() {
+  return Object.fromEntries(
+    defaultFieldBindings
+      .filter((binding) => moduleDraftFieldIds.includes(binding.id))
+      .map((binding) => [binding.id, t(binding.key)]),
+  );
+}
+
+function hasMeaningfulStoredDraft(draft) {
+  if (!draft || typeof draft !== "object") {
+    return false;
+  }
+
+  const defaultValues = buildDefaultDraftValueMap();
+  for (const fieldId of moduleDraftFieldIds) {
+    const value = typeof draft[fieldId] === "string" ? draft[fieldId].trim() : "";
+    const defaultValue = typeof defaultValues[fieldId] === "string" ? defaultValues[fieldId].trim() : "";
+    if (value.length > 0 && value !== defaultValue) {
+      return true;
+    }
+  }
+
+  const responses = draft.mcq?.responses;
+  return Boolean(
+    responses &&
+    typeof responses === "object" &&
+    Object.values(responses).some((value) => typeof value === "string" && value.trim().length > 0),
+  );
+}
+
 function renderModules() {
   hideLoading(moduleList);
   moduleList.innerHTML = "";
+  const moduleDrafts = readModuleDraftMap();
 
   const modules = buildModuleCardViewModels(loadedModules, selectedModuleId);
   if (modules.length === 0) {
@@ -718,12 +750,16 @@ function renderModules() {
     button.className = module.selected ? "btn-secondary module-card selected" : "btn-secondary module-card";
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
-      persistCurrentModuleDraft(false);
+      const previousModuleId = selectedModuleId;
+      const savedDraft = persistCurrentModuleDraft(false);
       selectedModuleId = module.id;
       resetFlowStateForModuleContext();
       renderModules();
       renderSelectedModuleSummary();
       restoreDraftForSelectedModule(true);
+      if (savedDraft.saved && savedDraft.meaningful && previousModuleId && previousModuleId !== module.id) {
+        showToast(t("draft.savedSwitchToast").replace("{module}", savedDraft.title), "info");
+      }
       log({ selectedModule: { id: module.id, title: module.title } }, { notify: false });
     });
 
@@ -737,6 +773,13 @@ function renderModules() {
       description.className = "module-meta";
       description.textContent = module.description;
       button.appendChild(description);
+    }
+
+    if (hasMeaningfulStoredDraft(moduleDrafts[module.id])) {
+      const draftBadge = document.createElement("div");
+      draftBadge.className = "draft-badge";
+      draftBadge.textContent = t("modules.draftBadge");
+      button.appendChild(draftBadge);
     }
 
     const moduleMeta = document.createElement("div");
@@ -1079,7 +1122,7 @@ function collectCurrentMcqDraft() {
 function persistCurrentModuleDraft(showStatus = false) {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   if (!selectedModule) {
-    return;
+    return { saved: false, meaningful: false, title: "" };
   }
 
   const data = {};
@@ -1097,6 +1140,12 @@ function persistCurrentModuleDraft(showStatus = false) {
   if (showStatus) {
     setDraftStatus("saved", selectedModule.title);
   }
+
+  return {
+    saved: true,
+    meaningful: hasMeaningfulStoredDraft(updated[selectedModule.id]),
+    title: selectedModule.title,
+  };
 }
 
 function scheduleDraftAutosave() {
@@ -1578,6 +1627,7 @@ function renderAppealState() {
     appealSection.classList.add("hidden");
     createAppealButton.classList.add("hidden");
     appealSubmittedStatus.textContent = "";
+    appealNextSteps.textContent = "";
     appealIdLabel.textContent = "-";
     return;
   }
@@ -1591,6 +1641,7 @@ function renderAppealState() {
   if (!shouldShowAppealSection) {
     createAppealButton.classList.add("hidden");
     appealSubmittedStatus.textContent = "";
+    appealNextSteps.textContent = "";
     appealIdLabel.textContent = "-";
     return;
   }
@@ -1600,6 +1651,7 @@ function renderAppealState() {
     createAppealButton.disabled = true;
     appealSubmittedStatus.textContent =
       `${t("appeal.submittedPrefix")}: ${latestAppeal.id} (${localizeAppealStatus(latestAppeal.appealStatus)})`;
+    appealNextSteps.textContent = t("appeal.nextSteps");
     appealIdLabel.textContent = latestAppeal.id;
     return;
   }
@@ -1607,6 +1659,7 @@ function renderAppealState() {
   createAppealButton.classList.remove("hidden");
   appealIdLabel.textContent = "-";
   appealSubmittedStatus.textContent = t("appeal.readyForSubmission");
+  appealNextSteps.textContent = "";
 }
 
 function renderResultSummary(body) {

@@ -19,6 +19,7 @@
       .module-title { font-weight: 600; }
       .module-meta { font-size: 12px; color: var(--color-meta); margin-top: calc(var(--space-1) * 0.5); }
       .selected-badge { display: inline-block; margin-top: var(--space-1); font-size: 11px; font-weight: 600; color: var(--color-selected-badge); }
+      .draft-badge { display: inline-block; margin-top: var(--space-1); margin-right: var(--space-1); font-size: 11px; font-weight: 700; color: #7a4b00; background: #fff3db; border-radius: 999px; padding: 4px 10px; }
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); display: grid; gap: calc(var(--space-1) * 0.5); }
       .selected-module-title { font-weight: 600; color: var(--color-text); }
       .selected-module-description { color: var(--color-meta); line-height: 1.5; }
@@ -51,27 +52,23 @@
       <h3 data-i18n="preview.title">Draft preview</h3>
       <div id="previewModeMessage" class="small" data-i18n="preview.description">This page shows the current admin draft only. Nothing is saved, submitted, or scored.</div>
     </section>
-    <section id="flowProgress" class="card flow-progress" aria-label="Assessment flow progress: Step 2 of 5">
-      <div id="flowProgressSummary" class="flow-progress-summary">Step 2 of 5</div>
+    <section id="flowProgress" class="card flow-progress" aria-label="Assessment flow progress: Step 1 of 4">
+      <div id="flowProgressSummary" class="flow-progress-summary">Step 1 of 4</div>
       <ol id="flowProgressSteps" class="flow-progress-steps">
         <li class="flow-step" data-step="1">
           <span class="flow-step-number">1</span>
-          <span class="flow-step-label" data-i18n="progress.identity">Identity</span>
+          <span class="flow-step-label" data-i18n="progress.selectModule">Select Module</span>
         </li>
         <li class="flow-step" data-step="2">
           <span class="flow-step-number">2</span>
-          <span class="flow-step-label" data-i18n="progress.selectModule">Select Module</span>
+          <span class="flow-step-label" data-i18n="progress.submitWork">Submit Work</span>
         </li>
         <li class="flow-step" data-step="3">
           <span class="flow-step-number">3</span>
-          <span class="flow-step-label" data-i18n="progress.submitWork">Submit Work</span>
+          <span class="flow-step-label" data-i18n="progress.completeMcq">Complete MCQ</span>
         </li>
         <li class="flow-step" data-step="4">
           <span class="flow-step-number">4</span>
-          <span class="flow-step-label" data-i18n="progress.completeMcq">Complete MCQ</span>
-        </li>
-        <li class="flow-step" data-step="5">
-          <span class="flow-step-number">5</span>
           <span class="flow-step-label" data-i18n="progress.assessment">Assessment</span>
         </li>
       </ol>
@@ -145,6 +142,7 @@
         <textarea id="promptExcerpt" rows="3"></textarea>
       </div>
       <div class="small" id="draftStatus"></div>
+      <div class="small" id="draftBrowserNote" data-i18n="draft.browserNote">Your work is saved automatically in this browser while you switch between modules.</div>
       <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack">I acknowledge responsibility for submitted content</span></label>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create">Create submission</button>
       <div class="hint" id="submissionValidationHint" data-hint-key="submission.validation.ready"></div>
@@ -178,6 +176,7 @@
       <div><label data-i18n="appeal.reason">Appeal reason</label><textarea id="appealReason" rows="3"></textarea></div>
       <button id="createAppeal" class="btn-primary" data-i18n="appeal.create">Create appeal</button>
       <div class="small" id="appealSubmittedStatus"></div>
+      <div class="small" id="appealNextSteps"></div>
       <div class="small"><span data-i18n="appeal.appealId">Appeal ID:</span> <span id="appealId">-</span></div>
     </section>
 

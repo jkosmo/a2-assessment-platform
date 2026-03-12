@@ -202,7 +202,10 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="selectedModuleBrief"');
         expect(response.text).toContain('id="selectedModuleTaskText"');
         expect(response.text).toContain('id="selectedModuleGuidanceText"');
-        expect(response.text).toContain('data-step="5"');
+        expect(response.text).toContain('id="draftBrowserNote"');
+        expect(response.text).toContain('id="appealNextSteps"');
+        expect(response.text).toContain('data-step="4"');
+        expect(response.text).not.toContain('data-step="5"');
       }
 
       if (pagePath === "/appeal-handler") {
@@ -218,6 +221,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).not.toContain('id="loadReviewQueue"');
         expect(response.text).toContain('id="outputStatus"');
+        expect(response.text).toContain('id="reviewActionSequenceHint"');
       }
 
       if (pagePath === "/calibration") {
@@ -306,5 +310,6 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('document.createElement("fieldset")');
     expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
     expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
+    expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
   });
 });

@@ -32,6 +32,7 @@ describe("workspace validation accessibility", () => {
 
     const manualReviewHtml = readFile("public/manual-review.html");
     expect(manualReviewHtml).toContain('aria-describedby="overrideValidationMessage"');
+    expect(manualReviewHtml).toContain('id="reviewActionSequenceHint"');
   });
 
   it("keeps runtime alert and invalid-field hooks for validation errors", () => {
@@ -50,5 +51,6 @@ describe("workspace validation accessibility", () => {
     expect(manualReviewJs).toContain('classList.add("field-error")');
     expect(manualReviewJs).toContain('classList.add("is-invalid")');
     expect(manualReviewJs).toContain('setAttribute("role", "alert")');
+    expect(manualReviewJs).toContain("isSelectedReviewClaimedByCurrentUser");
   });
 });

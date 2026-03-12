@@ -7,6 +7,35 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.124 - 2026-03-12
+### Summary
+Improved the first participant/reviewer UX batch from the `#47` expert review by clarifying flow progress, draft persistence, appeal follow-up, and manual-review action sequencing.
+
+### Included
+- Changed the participant progress indicator to start at `Select Module` instead of showing `Step 2 of 5` on first load:
+  - `public/participant.html`
+  - `public/participant.js`
+- Added clearer participant draft persistence signals with module-card draft badges, a browser-local autosave note, and a toast when switching away from a module with saved work:
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- Added post-appeal next-steps guidance after appeal submission in the participant flow:
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- Gated manual-review override actions until the selected review is claimed by the current reviewer, and added explicit action-order guidance near the controls:
+  - `public/manual-review.html`
+  - `public/manual-review.js`
+  - `public/i18n/manual-review-translations.js`
+- Extended focused regression coverage for the updated participant and manual-review UI hooks:
+  - `test/participant-console-config.test.ts`
+  - `test/participant-translations.test.js`
+  - `test/workspace-validation-accessibility.test.js`
+
+### Verification
+- `npm run lint`
+- `npm test -- test/participant-console-config.test.ts test/workspace-validation-accessibility.test.js test/participant-translations.test.js`
+
 ## 0.3.123 - 2026-03-12
 ### Summary
 Kept the top-level draft JSON textarea at a fixed size while preserving auto-growing behavior for the rest of the admin-content textareas.
