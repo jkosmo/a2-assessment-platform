@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.116 - 2026-03-12
+### Summary
+Clarified the LLM authoring prompt for module draft JSON so it supports both downloadable `.json` output and copyable code-cell output, with clearer multilingual guidance.
+
+### Included
+- Updated the module draft authoring prompt with explicit output-format guidance and clearer expectations for localized fields:
+  - `doc/MODULE_DRAFT_JSON_AUTHORING_PROMPT.md`
+
+### Verification
+- Documentation-only change.
+
 ## 0.3.115 - 2026-03-12
 ### Summary
 Added a persistent incident log and documented the staging SQLite corruption incident plus the requirement to record future incidents there.

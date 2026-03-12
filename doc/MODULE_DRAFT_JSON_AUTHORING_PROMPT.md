@@ -8,7 +8,8 @@ Return one JSON object only.
 
 The JSON must be suitable for the `Import draft JSON` section in the content workspace.
 
-Do not include markdown fences.
+Preferred output is a downloadable `.json` file.
+If file output is not available, return the JSON as the only content in one code cell / code block so it can be copied out cleanly.
 Do not include explanation text.
 Do not include comments.
 
@@ -18,7 +19,8 @@ Do not include comments.
 You are producing a module draft JSON for an assessment platform.
 
 Return one JSON object only.
-Do not wrap the JSON in markdown.
+Preferred output is a downloadable `.json` file.
+If your interface cannot return a file, return the JSON as the only content in one code cell / code block.
 Do not include commentary.
 Do not include comments.
 
@@ -33,6 +35,15 @@ Requirements:
   - en-GB
   - nb
   - nn
+- If multilingual content is required, use locale objects for:
+  - module.title
+  - module.description
+  - promptTemplate.systemPrompt
+  - promptTemplate.userPromptTemplate
+  - mcqSet.title
+  - moduleVersion.taskText
+  - moduleVersion.guidanceText
+- MCQ question fields may also use locale objects when participant-facing text must be translated.
 - Keep systemPrompt and userPromptTemplate concise and production-oriented.
 - MCQ questions must include:
   - stem
@@ -110,3 +121,4 @@ Source material follows:
 
 - If you already have an exported module JSON, use the workspace import directly. This prompt is for authoring a simpler draft format.
 - After import, review the fields in `/admin-content`, then save a new draft version and publish separately.
+- If the LLM returns a code block instead of a file, copy only the JSON content into the import field or save it as a `.json` file before upload.
