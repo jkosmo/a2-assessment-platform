@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.129 - 2026-03-13
+### Summary
+Added a single explicit policy document for the assessment decision pipeline so automatic pass, automatic fail, manual review, secondary assessment, red flags, and borderline handling are now documented in one place.
+
+### Included
+- Added the consolidated assessment decision policy document:
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+
 ## 0.3.128 - 2026-03-13
 ### Summary
 Simplified the fail-vs-review policy so clearly failing submissions no longer open manual review solely because the LLM recommended review; manual review is now reserved for red flags, borderline scores, and explicitly forced review.
