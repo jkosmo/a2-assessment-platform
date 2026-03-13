@@ -104,6 +104,13 @@ Disagreement is currently defined as one or more of:
 If disagreement exists, the submission is forced to manual review with this reason:
 - `Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.`
 
+Exception:
+- if both primary and secondary results are clearly insufficient-evidence fails
+- and neither result contains red flags
+- and both practical passes are `false`
+
+then disagreement does **not** force manual review. In that case the submission continues through the normal automatic-fail logic.
+
 ## Automatic PASS
 
 A submission becomes automatic `PASS` only if all of these are true:
@@ -263,6 +270,18 @@ Outcome:
 
 Outcome:
 - `UNDER_REVIEW`
+
+### Example G: primary/secondary disagreement on two clearly insufficient fails
+
+- primary says the submission is minimal / non-specific / requires resubmission
+- secondary also says the submission is minimal / missing assessment artifacts
+- both practical passes are `false`
+- no red flags are present
+- disagreement thresholds are still exceeded
+
+Outcome:
+- automatic `FAIL`
+- no manual review opened
 
 ## Operational Notes
 

@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.132 - 2026-03-13
+### Summary
+Added traffic-light regression coverage for the assessment pipeline and changed secondary-disagreement handling so clearly insufficient submissions now stay automatic fail instead of being escalated to manual review just because primary and secondary differ.
+
+### Included
+- Added shared insufficient-evidence signal helpers used consistently by both decision building and secondary-assessment routing:
+  - `src/services/assessmentDecisionSignals.ts`
+- Secondary-assessment disagreement no longer forces manual review when both passes clearly indicate insufficient-evidence fail with no red flags:
+  - `src/services/assessmentJobService.ts`
+- Decision service now uses the shared insufficient-evidence helper instead of a private heuristic copy:
+  - `src/services/decisionService.ts`
+- Added pipeline-level traffic-light regression tests for known red and yellow outcomes:
+  - `test/unit/assessment-job-service.test.ts`
+- Updated the assessment decision policy documentation to reflect the new disagreement exception:
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+
 ## 0.3.131 - 2026-03-13
 ### Summary
 Hardened startup/bootstrap behavior after repeated staging SQLite incidents by removing a request/seed race, making principal-user upsert resilient to concurrent creates, and updating the PostgreSQL migration plan from optional backlog to pre-production requirement.

@@ -11,6 +11,7 @@ import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
 } from "./secondaryAssessmentService.js";
+import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "./assessmentDecisionSignals.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 
@@ -308,7 +309,13 @@ async function runAssessment(jobId: string) {
       },
     });
 
-    if (disagreement.hasDisagreement) {
+    if (
+      disagreement.hasDisagreement &&
+      !shouldSuppressManualReviewForInsufficientEvidenceDisagreement(
+        primaryLlmResult,
+        secondaryLlmResult,
+      )
+    ) {
       forceManualReviewReason =
         "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.";
     }

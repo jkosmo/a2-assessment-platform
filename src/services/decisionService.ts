@@ -4,6 +4,7 @@ import { decisionRepository } from "../repositories/decisionRepository.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
+import { hasInsufficientEvidenceSignal } from "./assessmentDecisionSignals.js";
 
 type BuildDecisionInput = {
   submissionId: string;
@@ -16,39 +17,6 @@ type BuildDecisionInput = {
   llmResult: LlmStructuredAssessment;
   forceManualReviewReason?: string;
 };
-
-const insufficientEvidencePatterns = [
-  "minimal artefact content",
-  "minimal content",
-  "minimal and non-substantive submission",
-  "non-substantive submission",
-  "little content",
-  "lite innhold",
-  "partial documentation",
-  "delvis dokumentasjon",
-  "placeholder",
-  "insufficient evidence",
-  "insufficient submission evidence",
-  "cannot assess reliably",
-  "requires additional materials",
-  "additional materials",
-  "detailed reflection",
-  "iteration/qa notes",
-  "no iteration history",
-  "no qa checks",
-];
-
-function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
-  const searchableTexts = [
-    input.confidence_note,
-    ...Object.values(input.criterion_rationales ?? {}),
-    ...(input.improvement_advice ?? []),
-  ]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .map((value) => value.toLowerCase());
-
-  return searchableTexts.some((text) => insufficientEvidencePatterns.some((pattern) => text.includes(pattern)));
-}
 
 export async function createAssessmentDecision(input: BuildDecisionInput) {
   const rules = getAssessmentRules();
