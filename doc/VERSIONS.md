@@ -7,6 +7,30 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.135 - 2026-03-14
+### Summary
+Completed the structured-LLM decision-metadata rollout by making secondary-assessment triggering and final decision routing prefer explicit machine-readable outcome fields, exposing those fields in participant result payloads, and updating the test suite and policy docs accordingly.
+
+### Included
+- Secondary-assessment triggering now skips explicit insufficient-evidence auto-fail cases and prefers structured metadata over confidence-note inference:
+  - `src/services/secondaryAssessmentService.ts`
+- Decision routing now prefers structured manual-review and insufficient-evidence signals before falling back to text heuristics:
+  - `src/services/decisionService.ts`
+  - `src/services/assessmentDecisionSignals.ts`
+- LLM response contract and stub output now include explicit decision metadata:
+  - `src/services/llmAssessmentService.ts`
+- Participant result payload now returns decision metadata for inspection:
+  - `src/routes/submissions.ts`
+- Updated regression coverage across OpenAI adapter, secondary-assessment policy, decision service, assessment pipeline, participant results, and i18n baseline:
+  - `test/llm-assessment-service.test.ts`
+  - `test/secondary-assessment.test.ts`
+  - `test/unit/decision-service.test.ts`
+  - `test/unit/assessment-job-service.test.ts`
+  - `test/m2-participant-results-history.test.ts`
+  - `test/m2-i18n-baseline.test.ts`
+- Updated assessment policy documentation:
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+
 ## 0.3.134 - 2026-03-14
 ### Summary
 Replaced string-first assessment routing with structured LLM decision metadata, so automatic fail, manual-review recommendation, and insufficient-evidence handling now prefer explicit machine-readable fields over fragile confidence-note phrasing.
