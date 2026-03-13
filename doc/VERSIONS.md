@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.130 - 2026-03-13
+### Summary
+Hardened mock-mode role handling and participant module visibility so the participant workspace no longer inherits broader stored roles or exposes unpublished module shells.
+
+### Included
+- Mock-mode authentication now honours explicit role hints from the workspace UI even when the backing user has broader role assignments:
+  - `src/auth/authenticate.ts`
+- Participant-facing module routes now always filter to published, date-valid participant modules:
+  - `src/repositories/moduleRepository.ts`
+  - `src/routes/modules.ts`
+- Seed data now resets seed-user role assignments to an exact baseline instead of preserving stale extra roles:
+  - `prisma/seed.ts`
+- Added regression coverage for mock-role override behavior and participant module filtering:
+  - `test/authenticate-middleware.test.ts`
+  - `test/m0-foundation.test.ts`
+
 ## 0.3.129 - 2026-03-13
 ### Summary
 Added a single explicit policy document for the assessment decision pipeline so automatic pass, automatic fail, manual review, secondary assessment, red flags, and borderline handling are now documented in one place.

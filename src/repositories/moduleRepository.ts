@@ -48,6 +48,7 @@ const moduleSummarySelect = {
 
 type ListModulesOptions = {
   includeCompleted?: boolean;
+  participantFacing?: boolean;
 };
 
 export async function listModules(
@@ -57,7 +58,7 @@ export async function listModules(
   options: ListModulesOptions = {},
 ) {
   const now = new Date();
-  const adminRead = hasAdminRead(roles);
+  const adminRead = options.participantFacing ? false : hasAdminRead(roles);
 
   const modules = await prisma.module.findMany({
     where: adminRead
@@ -229,9 +230,10 @@ export async function getModuleById(
   moduleId: string,
   roles: AppRoleType[],
   locale: SupportedLocale = "en-GB",
+  options: { participantFacing?: boolean } = {},
 ) {
   const now = new Date();
-  const adminRead = hasAdminRead(roles);
+  const adminRead = options.participantFacing ? false : hasAdminRead(roles);
 
   const module = await prisma.module.findFirst({
     where: {
@@ -266,8 +268,9 @@ export async function getActiveModuleVersion(
   moduleId: string,
   roles: AppRoleType[],
   locale: SupportedLocale = "en-GB",
+  options: { participantFacing?: boolean } = {},
 ) {
-  const module = await getModuleById(moduleId, roles, locale);
+  const module = await getModuleById(moduleId, roles, locale, options);
   if (!module || !module.activeVersion) {
     return null;
   }

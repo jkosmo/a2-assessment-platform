@@ -58,4 +58,24 @@ describe("M0 foundation APIs", () => {
 
     expect(response.status).toBe(403);
   });
+
+  it("keeps participant module list limited to published participant-visible modules even with broader mock role hints", async () => {
+    const adminOwnedModule = await prisma.module.create({
+      data: {
+        title: "Draft-only module",
+        description: "Should not appear in participant workspace.",
+        certificationLevel: "foundation",
+      },
+    });
+
+    const response = await request(app)
+      .get("/api/modules?includeCompleted=true")
+      .set("x-user-id", "participant-1")
+      .set("x-user-email", "participant@company.com")
+      .set("x-user-name", "Platform Participant")
+      .set("x-user-roles", "PARTICIPANT,ADMINISTRATOR");
+
+    expect(response.status).toBe(200);
+    expect(response.body.modules.some((module: { id: string }) => module.id === adminOwnedModule.id)).toBe(false);
+  });
 });

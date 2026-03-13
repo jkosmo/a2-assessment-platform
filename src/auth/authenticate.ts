@@ -123,10 +123,14 @@ export async function authenticate(request: Request, response: Response, next: N
     await syncEntraGroupRoles(user.id, principal);
     let roles = await getActiveRoles(user.id);
 
-    // In mock mode, allow explicit role hints so local development can proceed
-    // before role assignment administration endpoints are implemented.
-    if (env.AUTH_MODE === "mock" && roles.length === 0) {
-      roles = parseRoleNames(principal.tokenRoles);
+    // In mock mode, explicit role hints from the workspace UI should define
+    // the effective role set for the current request. This keeps role-switching
+    // predictable even if the backing user record has additional assignments.
+    if (env.AUTH_MODE === "mock") {
+      const hintedRoles = parseRoleNames(principal.tokenRoles);
+      if (hintedRoles.length > 0) {
+        roles = hintedRoles;
+      }
     }
 
     const correlationId = request.context?.correlationId;

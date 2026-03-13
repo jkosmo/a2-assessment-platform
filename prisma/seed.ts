@@ -69,25 +69,28 @@ async function main() {
     },
   });
 
-  for (const [userId, appRole] of [
-    [admin.id, AppRole.ADMINISTRATOR],
-    [admin.id, AppRole.REPORT_READER],
-    [participant.id, AppRole.PARTICIPANT],
-    [reviewer.id, AppRole.REVIEWER],
-    [appealHandler.id, AppRole.APPEAL_HANDLER],
-  ] as const) {
+  const seedRoleMap = new Map<string, AppRole[]>([
+    [admin.id, [AppRole.ADMINISTRATOR, AppRole.REPORT_READER]],
+    [participant.id, [AppRole.PARTICIPANT]],
+    [reviewer.id, [AppRole.REVIEWER]],
+    [appealHandler.id, [AppRole.APPEAL_HANDLER]],
+  ]);
+
+  for (const [userId, expectedRoles] of seedRoleMap.entries()) {
     await prisma.roleAssignment.deleteMany({
-      where: { userId, appRole },
+      where: { userId },
     });
 
-    await prisma.roleAssignment.create({
-      data: {
-        userId,
-        appRole,
-        validFrom: now,
-        createdBy: "seed",
-      },
-    });
+    for (const appRole of expectedRoles) {
+      await prisma.roleAssignment.create({
+        data: {
+          userId,
+          appRole,
+          validFrom: now,
+          createdBy: "seed",
+        },
+      });
+    }
   }
 
   const firstModule = await createSeedModuleBundle(admin.id, now, {

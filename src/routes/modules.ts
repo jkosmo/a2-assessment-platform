@@ -60,7 +60,10 @@ modulesRouter.get("/", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const userId = request.context?.userId;
   const locale = request.context?.locale ?? "en-GB";
-  const modules = await listModules(roles, userId, locale, { includeCompleted });
+  const modules = await listModules(roles, userId, locale, {
+    includeCompleted,
+    participantFacing: true,
+  });
   response.json({
     modules,
     filters: {
@@ -99,7 +102,7 @@ modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const locale = request.context?.locale ?? "en-GB";
   const moduleId = request.params.moduleId as string;
-  const module = await getModuleById(moduleId, roles, locale);
+  const module = await getModuleById(moduleId, roles, locale, { participantFacing: true });
 
   if (!module) {
     response.status(404).json({ error: "not_found", message: t(locale, "module_not_found") });
@@ -113,7 +116,7 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const locale = request.context?.locale ?? "en-GB";
   const moduleId = request.params.moduleId as string;
-  const activeVersion = await getActiveModuleVersion(moduleId, roles, locale);
+  const activeVersion = await getActiveModuleVersion(moduleId, roles, locale, { participantFacing: true });
 
   if (!activeVersion) {
     response

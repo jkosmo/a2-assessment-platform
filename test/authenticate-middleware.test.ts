@@ -108,4 +108,44 @@ describe("authenticate middleware", () => {
       message: "Internal server error.",
     });
   });
+
+  it("uses explicit mock role hints instead of broader stored role assignments", async () => {
+    const upsertUserFromPrincipal = vi.fn().mockResolvedValue({ id: "user-1" });
+    const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
+    const getActiveRoles = vi.fn().mockResolvedValue(["PARTICIPANT", "ADMINISTRATOR"]);
+
+    vi.doMock("../src/config/env.js", () => ({
+      env: {
+        AUTH_MODE: "mock",
+        ENTRA_TENANT_ID: undefined,
+        ENTRA_AUDIENCE: undefined,
+        DEFAULT_LOCALE: "en-GB",
+        MOCK_DEFAULT_USER_ID: "participant-1",
+        MOCK_DEFAULT_EMAIL: "participant@company.com",
+        MOCK_DEFAULT_NAME: "Platform Participant",
+        MOCK_DEFAULT_DEPARTMENT: "Consulting",
+      },
+    }));
+    vi.doMock("../src/repositories/userRepository.js", () => ({
+      upsertUserFromPrincipal,
+      syncEntraGroupRoles,
+      getActiveRoles,
+    }));
+
+    const { authenticate } = await import("../src/auth/authenticate.js");
+    const request = buildRequest({
+      "x-user-id": "participant-1",
+      "x-user-email": "participant@company.com",
+      "x-user-name": "Platform Participant",
+      "x-user-department": "Consulting",
+      "x-user-roles": "PARTICIPANT",
+    });
+    const response = buildResponse();
+    const next = vi.fn();
+
+    await authenticate(request as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect((request.context as { roles?: string[] }).roles).toEqual(["PARTICIPANT"]);
+  });
 });
