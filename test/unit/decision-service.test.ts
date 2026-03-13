@@ -318,4 +318,43 @@ describe("decision service", () => {
     );
     expect(result.needsManualReview).toBe(false);
   });
+
+  it("fails automatically when manual review is recommended for a clearly failing submission without other escalation triggers", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-6",
+      passFailTotal: false,
+      decisionReason: "Automatic fail due to insufficient submission evidence.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-6" });
+
+    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+
+    const result = await createAssessmentDecision({
+      submissionId: "submission-6",
+      userId: "user-6",
+      moduleVersionId: "module-version-6",
+      rubricVersionId: "rubric-version-6",
+      promptTemplateVersionId: "prompt-version-6",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({
+        rubric_total: 6,
+        practical_score_scaled: 21,
+        pass_fail_practical: false,
+        manual_review_recommended: true,
+        confidence_note:
+          "Low confidence due to minimal content and missing assessment artifacts; requires request for expanded submission to reassess.",
+      }),
+    });
+
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        passFailTotal: false,
+        decisionReason: "Automatic fail due to insufficient submission evidence.",
+        totalScore: 21,
+      }),
+    );
+    expect(result.needsManualReview).toBe(false);
+  });
 });

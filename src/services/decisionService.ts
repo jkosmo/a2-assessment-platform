@@ -74,14 +74,13 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     !hasOpenRedFlag &&
     !inBorderlineWindow &&
     !passesThresholds &&
-    hasInsufficientEvidenceSignal(input.llmResult);
+    (hasInsufficientEvidenceSignal(input.llmResult) || input.llmResult.manual_review_recommended);
 
   const needsManualReview =
-    !autoFailForInsufficientEvidence &&
-    (Boolean(input.forceManualReviewReason) ||
-      hasOpenRedFlag ||
-      input.llmResult.manual_review_recommended ||
-      inBorderlineWindow);
+    Boolean(input.forceManualReviewReason) ||
+    hasOpenRedFlag ||
+    inBorderlineWindow ||
+    (input.llmResult.manual_review_recommended && !autoFailForInsufficientEvidence);
 
   const decision = await decisionRepository.createAssessmentDecision({
     submissionId: input.submissionId,

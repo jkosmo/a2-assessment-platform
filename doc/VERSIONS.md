@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.128 - 2026-03-13
+### Summary
+Simplified the fail-vs-review policy so clearly failing submissions no longer open manual review solely because the LLM recommended review; manual review is now reserved for red flags, borderline scores, and explicitly forced review.
+
+### Included
+- Changed decision policy so `manual_review_recommended` by itself no longer escalates clearly failing submissions:
+  - `src/services/decisionService.ts`
+- Added regression coverage for low-score submissions that previously still opened manual review despite being obvious fails:
+  - `test/unit/decision-service.test.ts`
+
 ## 0.3.127 - 2026-03-13
 ### Summary
 Broadened the insufficient-evidence auto-fail heuristic so clearly non-substantive, low-confidence submissions that require additional materials now fail automatically instead of being routed to manual review.
