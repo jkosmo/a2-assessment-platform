@@ -626,6 +626,10 @@ function getCurrentReviewerId() {
   return document.getElementById("userId").value.trim();
 }
 
+function getCurrentReviewerEmail() {
+  return document.getElementById("email").value.trim().toLowerCase();
+}
+
 function getSelectedReviewSummary() {
   if (selectedReviewDetails?.review) {
     return selectedReviewDetails.review;
@@ -639,11 +643,12 @@ function getSelectedReviewSummary() {
 function isSelectedReviewClaimedByCurrentUser() {
   const review = getSelectedReviewSummary();
   const reviewerId = review?.reviewer?.id ?? review?.reviewerId ?? "";
+  const reviewerEmail = review?.reviewer?.email?.trim().toLowerCase() ?? "";
   return Boolean(
     selectedReviewId &&
     review?.reviewStatus === "IN_REVIEW" &&
-    reviewerId &&
-    reviewerId === getCurrentReviewerId(),
+    ((reviewerId && reviewerId === getCurrentReviewerId()) ||
+      (reviewerEmail && reviewerEmail === getCurrentReviewerEmail())),
   );
 }
 

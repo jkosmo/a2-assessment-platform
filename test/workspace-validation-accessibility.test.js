@@ -52,5 +52,7 @@ describe("workspace validation accessibility", () => {
     expect(manualReviewJs).toContain('classList.add("is-invalid")');
     expect(manualReviewJs).toContain('setAttribute("role", "alert")');
     expect(manualReviewJs).toContain("isSelectedReviewClaimedByCurrentUser");
+    expect(manualReviewJs).toContain("getCurrentReviewerEmail");
+    expect(manualReviewJs).toContain("review?.reviewer?.email");
   });
 });

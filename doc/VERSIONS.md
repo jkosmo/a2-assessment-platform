@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.125 - 2026-03-13
+### Summary
+Fixed manual-review claim ownership matching so the reviewer workspace recognises the current mock reviewer even when the active identity form shows external user ID while the queue/details primarily show reviewer email.
+
+### Included
+- Updated reviewer-claim matching in the manual-review workspace to accept either reviewer ID or reviewer email:
+  - `public/manual-review.js`
+- Extended focused regression coverage for the manual-review claim gating hook:
+  - `test/workspace-validation-accessibility.test.js`
+
 ## 0.3.124 - 2026-03-12
 ### Summary
 Improved the first participant/reviewer UX batch from the `#47` expert review by clarifying flow progress, draft persistence, appeal follow-up, and manual-review action sequencing.
