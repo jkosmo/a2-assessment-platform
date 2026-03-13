@@ -23,7 +23,24 @@ type BuildDecisionInput = {
   forceManualReviewReason?: string;
 };
 
-export async function createAssessmentDecision(input: BuildDecisionInput) {
+export type ResolvedAssessmentDecision = {
+  totalScore: number;
+  practicalPercent: number;
+  hasOpenRedFlag: boolean;
+  inBorderlineWindow: boolean;
+  passesThresholds: boolean;
+  autoFailForInsufficientEvidence: boolean;
+  needsManualReview: boolean;
+  passFailTotal: boolean;
+  decisionReason: string;
+};
+
+type ResolveAssessmentDecisionInput = Pick<
+  BuildDecisionInput,
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason"
+>;
+
+export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const totalScore = Number((practicalScoreScaled + input.mcqScaledScore).toFixed(2));
@@ -55,6 +72,32 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     inBorderlineWindow ||
     (llmRecommendsManualReview && !autoFailForInsufficientEvidence);
 
+  const decisionReason = needsManualReview
+    ? input.forceManualReviewReason ??
+      "Automatically routed to manual review due to red flag / confidence / borderline rule."
+    : autoFailForInsufficientEvidence
+      ? "Automatic fail due to insufficient submission evidence."
+      : passesThresholds
+        ? "Automatic pass by threshold rules."
+        : "Automatic fail by threshold rules.";
+
+  return {
+    totalScore,
+    practicalPercent,
+    hasOpenRedFlag,
+    inBorderlineWindow,
+    passesThresholds,
+    autoFailForInsufficientEvidence,
+    needsManualReview,
+    passFailTotal: passesThresholds,
+    decisionReason,
+  };
+}
+
+export async function createAssessmentDecision(input: BuildDecisionInput) {
+  const practicalScoreScaled = input.llmResult.practical_score_scaled;
+  const resolved = resolveAssessmentDecision(input);
+
   const decision = await decisionRepository.createAssessmentDecision({
     submissionId: input.submissionId,
     moduleVersionId: input.moduleVersionId,
@@ -62,22 +105,15 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     promptTemplateVersionId: input.promptTemplateVersionId,
     mcqScaledScore: input.mcqScaledScore,
     practicalScaledScore: practicalScoreScaled,
-    totalScore,
+    totalScore: resolved.totalScore,
     redFlagsJson: JSON.stringify(input.llmResult.red_flags),
-    passFailTotal: passesThresholds,
+    passFailTotal: resolved.passFailTotal,
     decisionType: DecisionType.AUTOMATIC,
-    decisionReason: needsManualReview
-      ? input.forceManualReviewReason ??
-        "Automatically routed to manual review due to red flag / confidence / borderline rule."
-      : autoFailForInsufficientEvidence
-        ? "Automatic fail due to insufficient submission evidence."
-      : passesThresholds
-        ? "Automatic pass by threshold rules."
-        : "Automatic fail by threshold rules.",
+    decisionReason: resolved.decisionReason,
     finalisedById: input.userId,
   });
 
-  if (needsManualReview) {
+  if (resolved.needsManualReview) {
     const review = await decisionRepository.createManualReview({
       submissionId: input.submissionId,
       triggerReason: decision.decisionReason,
@@ -99,10 +135,10 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
 
   await decisionRepository.updateSubmissionStatus(
     input.submissionId,
-    needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED,
+    resolved.needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED,
   );
 
-  if (!needsManualReview) {
+  if (!resolved.needsManualReview) {
     await upsertRecertificationStatusFromDecision({
       decisionId: decision.id,
       actorId: input.userId,
@@ -116,12 +152,12 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     actorId: input.userId,
     metadata: {
       submissionId: input.submissionId,
-      totalScore,
-      needsManualReview,
+      totalScore: resolved.totalScore,
+      needsManualReview: resolved.needsManualReview,
       forceManualReviewReason: input.forceManualReviewReason ?? null,
       passFailTotal: decision.passFailTotal,
     },
   });
 
-  return { decision, needsManualReview };
+  return { decision, needsManualReview: resolved.needsManualReview };
 }

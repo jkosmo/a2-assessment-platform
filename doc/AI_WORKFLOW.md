@@ -203,6 +203,14 @@ Critical flows that should have strong automated coverage:
 - Manual review and appeal resolution.
 - Reporting output correctness.
 
+Additional rule for live LLM changes:
+- If a change touches assessment policy, secondary-assessment routing, or the LLM response contract, run the batch regression harness before push:
+  1. `npm test -- test/unit/decision-service.test.ts test/unit/assessment-job-service.test.ts test/secondary-assessment.test.ts`
+  2. `npm run test:assessment:batch -- --repeat=10`
+- The batch regression harness is intended for non-default/manual use because it calls the live configured LLM and is nondeterministic, slower, and token-consuming.
+- The harness is intended for `LLM_MODE=azure_openai`; `--allow-stub` should only be used to smoke-test the harness itself, not to sign off assessment policy behavior.
+- At minimum, the canonical `green`, `yellow`, and `red` cases must hold their expected outcomes across the batch run before the change is considered ready for staging.
+
 ## Documentation Policy
 Each issue must evaluate documentation impact.
 

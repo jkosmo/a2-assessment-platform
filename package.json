@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.3.137",
+  "version": "0.3.138",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -20,6 +20,7 @@
     "test": "dotenv -e .env.test -- vitest run",
     "test:unit": "dotenv -e .env.test -- vitest run --config vitest.unit.config.ts",
     "test:integration": "dotenv -e .env.test -- vitest run --config vitest.integration.config.ts",
+    "test:assessment:batch": "tsx src/scripts/runAssessmentBatchRegression.ts",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
   },

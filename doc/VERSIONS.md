@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.138 - 2026-03-14
+### Summary
+Added a dedicated live-LMM batch regression harness for assessment policy changes, so red/yellow/green canonical cases can be run repeatedly against the configured model before staging instead of relying only on narrow unit tests.
+
+### Included
+- Refactored final assessment routing into a reusable pure decision helper that can be used outside the DB-persisting service path:
+  - `src/services/decisionService.ts`
+- Added reusable canonical batch cases for clear red, yellow, and green outcomes:
+  - `src/scripts/assessmentBatchCases.ts`
+- Added a new live batch regression runner with `--repeat` and optional `--case` filtering:
+  - `src/scripts/runAssessmentBatchRegression.ts`
+- Added npm command for manual batch runs:
+  - `package.json`
+  - `npm run test:assessment:batch -- --repeat=10`
+- Updated implementation workflow so assessment-policy and LLM-contract changes explicitly require both focused unit tests and the live batch harness before push:
+  - `doc/AI_WORKFLOW.md`
+
 ## 0.3.137 - 2026-03-14
 ### Summary
 Broadened the insufficient-evidence fail policy to cover Azure payloads that use `incomplete_submission` and `extremely_low_content` high red flags, so obviously empty submissions no longer open manual review just because the model frames the problem as completeness rather than safety risk.
