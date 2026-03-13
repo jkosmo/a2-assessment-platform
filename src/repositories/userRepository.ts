@@ -6,6 +6,16 @@ import { env } from "../config/env.js";
 import fs from "node:fs";
 import path from "node:path";
 
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    (error as { code: string }).code === "P2002"
+  );
+}
+
 export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
   const existingByExternalId = await prisma.user.findUnique({
     where: { externalId: principal.externalId },
@@ -43,15 +53,46 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
     });
   }
 
-  return prisma.user.create({
-    data: {
-      externalId: principal.externalId,
-      email: principal.email,
-      name: principal.name,
-      department: principal.department,
-      activeStatus: true,
-    },
-  });
+  try {
+    return await prisma.user.create({
+      data: {
+        externalId: principal.externalId,
+        email: principal.email,
+        name: principal.name,
+        department: principal.department,
+        activeStatus: true,
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const createdDuringRace =
+      (await prisma.user.findUnique({
+        where: { externalId: principal.externalId },
+        select: { id: true },
+      })) ??
+      (await prisma.user.findUnique({
+        where: { email: principal.email },
+        select: { id: true },
+      }));
+
+    if (!createdDuringRace) {
+      throw error;
+    }
+
+    return prisma.user.update({
+      where: { id: createdDuringRace.id },
+      data: {
+        externalId: principal.externalId,
+        email: principal.email,
+        name: principal.name,
+        department: principal.department,
+        activeStatus: true,
+      },
+    });
+  }
 }
 
 export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRoleType[]> {

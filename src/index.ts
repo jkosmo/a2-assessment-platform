@@ -30,34 +30,46 @@ const gracefulShutdown = (exitCode = 0) => {
 
 registerProcessErrorHandlers(gracefulShutdown);
 
-server = app.listen(env.PORT, () => {
+void startServer().catch((error) => {
   // eslint-disable-next-line no-console
-  console.log(`a2-assessment-platform listening on port ${env.PORT}`);
-  startBootstrapSeed();
+  console.error("Application startup failed.", error);
+  gracefulShutdown(1);
 });
 
-assessmentWorker.start();
-appealSlaMonitor.start();
+async function startServer() {
+  await runBootstrapSeed();
 
-function startBootstrapSeed() {
+  server = app.listen(env.PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`a2-assessment-platform listening on port ${env.PORT}`);
+  });
+
+  assessmentWorker.start();
+  appealSlaMonitor.start();
+}
+
+function runBootstrapSeed() {
   const scriptPath = path.resolve(process.cwd(), "scripts", "runtime", "bootstrapSeed.mjs");
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd: process.cwd(),
-    env: process.env,
-    stdio: "inherit",
-  });
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [scriptPath], {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: "inherit",
+    });
 
-  child.on("error", (error) => {
-    // eslint-disable-next-line no-console
-    console.error("Bootstrap seed process failed to start.", error);
-  });
+    child.on("error", (error) => {
+      // eslint-disable-next-line no-console
+      console.error("Bootstrap seed process failed to start.", error);
+      reject(error);
+    });
 
-  child.on("exit", (code) => {
-    if (code === 0) {
-      return;
-    }
-    // eslint-disable-next-line no-console
-    console.error(`Bootstrap seed process exited with code ${code ?? "unknown"}.`);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Bootstrap seed process exited with code ${code ?? "unknown"}.`));
+    });
   });
 }
 

@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.131 - 2026-03-13
+### Summary
+Hardened startup/bootstrap behavior after repeated staging SQLite incidents by removing a request/seed race, making principal-user upsert resilient to concurrent creates, and updating the PostgreSQL migration plan from optional backlog to pre-production requirement.
+
+### Included
+- `upsertUserFromPrincipal()` now recovers cleanly if another process creates the same user between lookup and create:
+  - `src/repositories/userRepository.ts`
+- Runtime bootstrap seed now uses the same race-safe user-create fallback:
+  - `scripts/runtime/bootstrapSeed.mjs`
+- App startup now waits for runtime bootstrap seed to complete before opening the HTTP listener, preventing request/seed collisions after reset or restart:
+  - `src/index.ts`
+- Added regression coverage for the concurrent-create recovery path:
+  - `test/unit/user-repository.test.ts`
+- Updated PostgreSQL migration planning to reflect repeated real staging incidents on SQLite/App Service:
+  - `doc/POSTGRES_MIGRATION_PLAN.md`
+
 ## 0.3.130 - 2026-03-13
 ### Summary
 Hardened mock-mode role handling and participant module visibility so the participant workspace no longer inherits broader stored roles or exposes unpublished module shells.

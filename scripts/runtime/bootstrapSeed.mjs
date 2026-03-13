@@ -92,6 +92,16 @@ const MODULE_SEEDS = [
   },
 ];
 
+function isUniqueConstraintError(error) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    error.code === "P2002"
+  );
+}
+
 async function ensureSeedUser(input) {
   const existingByExternal = await prisma.user.findUnique({
     where: { externalId: input.externalId },
@@ -127,15 +137,46 @@ async function ensureSeedUser(input) {
     });
   }
 
-  return prisma.user.create({
-    data: {
-      externalId: input.externalId,
-      email: input.email,
-      name: input.name,
-      department: input.department,
-      activeStatus: true,
-    },
-  });
+  try {
+    return await prisma.user.create({
+      data: {
+        externalId: input.externalId,
+        email: input.email,
+        name: input.name,
+        department: input.department,
+        activeStatus: true,
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const createdDuringRace =
+      (await prisma.user.findUnique({
+        where: { externalId: input.externalId },
+        select: { id: true },
+      })) ??
+      (await prisma.user.findUnique({
+        where: { email: input.email },
+        select: { id: true },
+      }));
+
+    if (!createdDuringRace) {
+      throw error;
+    }
+
+    return prisma.user.update({
+      where: { id: createdDuringRace.id },
+      data: {
+        externalId: input.externalId,
+        email: input.email,
+        name: input.name,
+        department: input.department,
+        activeStatus: true,
+      },
+    });
+  }
 }
 
 async function upsertUsersAndRoles(now) {

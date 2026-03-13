@@ -12,21 +12,26 @@ At the same time, the architecture documentation states PostgreSQL-compatible pr
 This note defines a safe migration plan. It is not the migration itself.
 
 ## Current backlog decision
-Decision date: `2026-03-11`
+Decision updated: `2026-03-13`
 
 Current recommendation:
-- stay on SQLite for now
-- treat PostgreSQL migration as backlog only
-- priority: `Pri-4`
-- target: `Version X`
+- keep SQLite only as a temporary dev/staging bridge
+- do not treat PostgreSQL as optional for production anymore
+- priority: raise from `Pri-4` backlog to pre-production readiness work
+- target: complete before any production go-live decision
 
-Reasoning for deferral:
-- expected scale is modest, approximately 60 total users
-- the solution is explicitly non-critical
-- current SQLite path is already deployed and operational
-- introducing PostgreSQL now would increase cost and migration risk before there is observed need
+Reasoning for the change:
+- expected scale is still modest, approximately 60 total users
+- the solution is still explicitly non-critical
+- however, staging has now shown repeated SQLite/App Service operational failures
+- the observed failures were not hypothetical lock noise; they included:
+  - `disk I/O error`
+  - `database disk image is malformed`
+  - `unable to open database file`
+- staging recovery required deleting the SQLite file and rebuilding the environment
+- a follow-on bootstrap/request race then caused `Unique constraint failed on the fields: (email)` during user creation
 
-This means `#91` should be treated as an option kept ready in the backlog, not as active implementation work.
+This means `#91` is no longer only an architectural cleanup item. It is now a documented operational risk that should block production use on the current storage model.
 
 ## Current coupling points
 Files that currently assume SQLite:
@@ -52,14 +57,16 @@ Operational consequence:
 - CI may fail before replacement database orchestration exists
 - runtime deploy can break if Azure still points to a file-backed `DATABASE_URL`
 
-## Reasons to stay on SQLite now
-For the current workload profile, SQLite still has real advantages:
+## Reasons to stay on SQLite temporarily
+For the current workload profile, SQLite still has real short-term advantages:
 - lowest runtime cost because there is no separate managed database service
-- simpler operational footprint
-- fewer moving parts in deploy and recovery for a non-critical internal tool
-- acceptable performance for low concurrency if the current symptoms remain absent
+- simpler local developer bootstrap
+- fewer moving parts while finishing feature and UX work
 
-The threshold for moving should therefore be observed pain, not architectural preference alone.
+But the threshold for moving has now been crossed for production planning:
+- observed staging pain is no longer hypothetical
+- the current runtime/storage model has already shown corruption and recovery fragility
+- any continued SQLite use should be framed as a temporary bridge, not an acceptable production target
 
 ## Symptoms that should trigger re-evaluation
 Re-open active PostgreSQL implementation work if one or more of these appear in staging or production:
@@ -79,6 +86,11 @@ Re-open active PostgreSQL implementation work if one or more of these appear in 
 - difficulty backing up, restoring, or inspecting production data confidently
 - deploys or restarts create database-file risk, corruption concern, or operational fragility
 - database file growth becomes awkward to manage operationally
+
+Observed in staging on `2026-03-13`:
+- database corruption and file access failures did occur
+- restart/reset recovery was needed to restore service
+- request traffic could race bootstrap seed and create secondary integrity failures
 
 ### Product and reporting symptoms
 - reporting/export workloads start interfering with normal transactional use
@@ -244,11 +256,11 @@ Unsafe rollback:
 
 ## Recommendation
 Current recommendation:
-- defer PostgreSQL migration
-- keep `#91` in backlog as `Pri-4 / Version X`
-- continue running SQLite until concrete symptoms justify change
+- continue using SQLite only as a short-lived bridge while finishing validation and non-production work
+- do not go to production on App Service + file-backed SQLite
+- treat `#91` as required pre-production work, not optional backlog polish
 
-If the symptoms above appear, then implement `#91` as a sequence of small issues or commits, not one large migration.
+The symptoms above are no longer hypothetical; staging has already exhibited them. The remaining question is sequencing, not whether the migration is justified.
 
 Recommended order:
 1. CI/test PostgreSQL bootstrap
