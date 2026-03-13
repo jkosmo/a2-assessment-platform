@@ -238,6 +238,48 @@ describe("assessment job service traffic-light policy", () => {
     );
   });
 
+  it("skips secondary assessment and stays red when Azure returns only an insufficient_submission red flag", async () => {
+    evaluatePracticalWithLlm.mockResolvedValueOnce(
+      buildLlmResult({
+        red_flags: [
+          {
+            code: "insufficient_submission",
+            severity: "high",
+            description:
+              "Submission contains minimal, non-substantive content; lacks MCQ responses and iteration/QA notes.",
+          },
+        ],
+        recommended_outcome: "manual_review",
+        manual_review_reason_code: "red_flag",
+        confidence_note:
+          "Very low confidence in evaluating candidate due to insufficient content and lack of required components.",
+      }),
+    );
+
+    const { processNextJob } = await import("../../src/services/assessmentJobService.js");
+
+    const processed = await processNextJob();
+
+    expect(processed).toBe(true);
+    expect(evaluatePracticalWithLlm).toHaveBeenCalledTimes(1);
+    expect(createAssessmentDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submissionId: "submission-1",
+        forceManualReviewReason: undefined,
+        llmResult: expect.objectContaining({
+          red_flags: [
+            expect.objectContaining({
+              code: "insufficient_submission",
+              severity: "high",
+            }),
+          ],
+          recommended_outcome: "manual_review",
+          manual_review_reason_code: "red_flag",
+        }),
+      }),
+    );
+  });
+
   it("keeps legitimately ambiguous submissions yellow when primary and secondary disagree materially", async () => {
     evaluatePracticalWithLlm
       .mockResolvedValueOnce(

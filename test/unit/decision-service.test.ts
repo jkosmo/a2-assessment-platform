@@ -284,6 +284,56 @@ describe("decision service", () => {
     expect(result.needsManualReview).toBe(true);
   });
 
+  it("fails automatically when the only red flag is insufficient_submission on an otherwise empty submission", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-4b",
+      passFailTotal: false,
+      decisionReason: "Automatic fail due to insufficient submission evidence.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-4b" });
+
+    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+
+    const result = await createAssessmentDecision({
+      submissionId: "submission-4b",
+      userId: "user-4b",
+      moduleVersionId: "module-version-4b",
+      rubricVersionId: "rubric-version-4b",
+      promptTemplateVersionId: "prompt-version-4b",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({
+        rubric_total: 0,
+        practical_score_scaled: 0,
+        pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "manual_review",
+        manual_review_reason_code: "red_flag",
+        manual_review_recommended: true,
+        confidence_note:
+          "Very low confidence in evaluating candidate due to insufficient content and lack of required components.",
+        red_flags: [
+          {
+            code: "insufficient_submission",
+            severity: "high",
+            description:
+              "Submission contains minimal, non-substantive content; lacks MCQ responses and iteration/QA notes.",
+          },
+        ],
+      }),
+    });
+
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        passFailTotal: false,
+        decisionReason: "Automatic fail due to insufficient submission evidence.",
+        totalScore: 0,
+      }),
+    );
+    expect(result.needsManualReview).toBe(false);
+  });
+
   it("fails automatically for non-substantive low-confidence submissions that ask for more materials", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-5",

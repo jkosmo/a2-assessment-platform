@@ -97,9 +97,10 @@ It is triggered when the primary result indicates one or more of these:
 
 Secondary assessment is skipped for an explicit insufficient-evidence auto-fail when all of these are true:
 - `evidence_sufficiency = insufficient`
-- `recommended_outcome = fail`
-- no red flags are present
 - practical pass is `false`
+- and either:
+  - no red flags are present, or
+  - the only red flag is `insufficient_submission`
 
 Current trigger patterns from [assessment-rules.json](C:/Users/JoakimKosmo/a2-assessment-platform/config/assessment-rules.json):
 - `medium confidence`
@@ -167,6 +168,7 @@ This path applies when all of these are true:
 The current implementation treats a submission as insufficiently evidenced if either:
 - the LLM sets `evidence_sufficiency = insufficient`, or
 - the LLM sets `manual_review_reason_code = insufficient_evidence`, or
+- the only returned red flag is `insufficient_submission`, or
 - the confidence/rationale/advice text contains patterns indicating minimal, placeholder, non-substantive, or incomplete evidence as fallback
 
 Examples of such signals:
@@ -212,6 +214,7 @@ Current forcing severities from [assessment-rules.json](C:/Users/JoakimKosmo/a2-
 This means:
 - medium red flags can still matter for secondary assessment
 - high red flags are the main direct blocker in the final decision service
+- exception: `insufficient_submission` is treated as an insufficient-evidence fail signal, not as a forcing safety/compliance red flag
 
 ## Borderline Window
 

@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.136 - 2026-03-14
+### Summary
+Corrected assessment routing for Azure responses that mark extremely thin submissions with the `insufficient_submission` red-flag code, so those cases now stay automatic fail instead of opening manual review or secondary assessment.
+
+### Included
+- Added explicit helpers for treating `insufficient_submission` as an insufficient-evidence signal rather than a forcing safety/compliance red flag:
+  - `src/services/assessmentDecisionSignals.ts`
+- Final decision routing now ignores `insufficient_submission` when deciding whether a high-severity red flag should force manual review:
+  - `src/services/decisionService.ts`
+- Secondary assessment now skips the same `insufficient_submission`-only cases instead of spending a second pass:
+  - `src/services/secondaryAssessmentService.ts`
+- Added regression coverage for the exact staging-style payload where Azure returns `recommended_outcome = manual_review`, `manual_review_reason_code = red_flag`, and `red_flags = [{ code: "insufficient_submission", severity: "high" }]`:
+  - `test/unit/decision-service.test.ts`
+  - `test/unit/assessment-job-service.test.ts`
+  - `test/secondary-assessment.test.ts`
+- Updated policy documentation to describe `insufficient_submission` as an automatic-fail signal:
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+
 ## 0.3.135 - 2026-03-14
 ### Summary
 Completed the structured-LLM decision-metadata rollout by making secondary-assessment triggering and final decision routing prefer explicit machine-readable outcome fields, exposing those fields in participant result payloads, and updating the test suite and policy docs accordingly.

@@ -5,7 +5,9 @@ import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
 import {
+  hasForcingRedFlag,
   hasInsufficientEvidenceSignal,
+  hasOnlyInsufficientSubmissionRedFlags,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
 
@@ -27,9 +29,8 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
   const totalScore = Number((practicalScoreScaled + input.mcqScaledScore).toFixed(2));
   const practicalPercent = (input.llmResult.rubric_total / 20) * 100;
 
-  const hasOpenRedFlag = input.llmResult.red_flags.some((flag) =>
-    rules.manualReview.redFlagSeverities.includes(flag.severity.toLowerCase()),
-  );
+  const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
+  const hasOnlyInsufficientSubmissionFlags = hasOnlyInsufficientSubmissionRedFlags(input.llmResult);
   const inBorderlineWindow =
     totalScore >= rules.manualReview.borderlineWindow.min &&
     totalScore <= rules.manualReview.borderlineWindow.max;
@@ -46,7 +47,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     !hasOpenRedFlag &&
     !inBorderlineWindow &&
     !passesThresholds &&
-    hasInsufficientEvidenceSignal(input.llmResult);
+    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientSubmissionFlags);
 
   const needsManualReview =
     Boolean(input.forceManualReviewReason) ||

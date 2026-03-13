@@ -97,6 +97,38 @@ describe("Secondary assessment policy", () => {
     expect(trigger.reasons).toEqual(["primary_result_insufficient_evidence_auto_fail"]);
   });
 
+  it("skips secondary pass when the only red flag is insufficient_submission", () => {
+    const trigger = evaluateSecondaryAssessmentTrigger(
+      {
+        moduleId: "module-1",
+        primaryResult: buildAssessment({
+          rubric_total: 0,
+          practical_score_scaled: 0,
+          pass_fail_practical: false,
+          evidence_sufficiency: "insufficient",
+          recommended_outcome: "manual_review",
+          manual_review_reason_code: "red_flag",
+          manual_review_recommended: true,
+          confidence_note:
+            "Very low confidence in evaluating candidate due to insufficient content and lack of required components.",
+          red_flags: [
+            {
+              code: "insufficient_submission",
+              severity: "high",
+              description:
+                "Submission contains minimal, non-substantive content; lacks MCQ responses and iteration/QA notes.",
+            },
+          ],
+        }),
+      },
+      basePolicy,
+    );
+
+    expect(trigger.enabled).toBe(true);
+    expect(trigger.shouldRun).toBe(false);
+    expect(trigger.reasons).toEqual(["primary_result_insufficient_evidence_auto_fail"]);
+  });
+
   it("respects module override disable", () => {
     const trigger = evaluateSecondaryAssessmentTrigger(
       {

@@ -1,5 +1,7 @@
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 
+type AssessmentRedFlag = LlmStructuredAssessment["red_flags"][number];
+
 const insufficientEvidencePatterns = [
   "minimal artefact content",
   "minimal content",
@@ -50,6 +52,24 @@ export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): b
   );
 }
 
+export function isInsufficientSubmissionRedFlag(flag: AssessmentRedFlag): boolean {
+  return flag.code.trim().toLowerCase() === "insufficient_submission";
+}
+
+export function hasOnlyInsufficientSubmissionRedFlags(input: LlmStructuredAssessment): boolean {
+  return input.red_flags.length > 0 && input.red_flags.every((flag) => isInsufficientSubmissionRedFlag(flag));
+}
+
+export function hasForcingRedFlag(
+  input: LlmStructuredAssessment,
+  forcingSeverities: string[],
+): boolean {
+  const severitySet = new Set(forcingSeverities.map((severity) => severity.toLowerCase()));
+  return input.red_flags.some(
+    (flag) => severitySet.has(flag.severity.toLowerCase()) && !isInsufficientSubmissionRedFlag(flag),
+  );
+}
+
 export function recommendsManualReview(input: LlmStructuredAssessment): boolean {
   return input.recommended_outcome === "manual_review" || input.manual_review_recommended;
 }
@@ -67,12 +87,10 @@ export function shouldSuppressManualReviewForInsufficientEvidenceDisagreement(
   secondaryResult: LlmStructuredAssessment,
 ): boolean {
   return (
-    primaryResult.red_flags.length === 0 &&
-    secondaryResult.red_flags.length === 0 &&
+    (primaryResult.red_flags.length === 0 || hasOnlyInsufficientSubmissionRedFlags(primaryResult)) &&
+    (secondaryResult.red_flags.length === 0 || hasOnlyInsufficientSubmissionRedFlags(secondaryResult)) &&
     !primaryResult.pass_fail_practical &&
     !secondaryResult.pass_fail_practical &&
-    isExplicitAutomaticFailRecommendation(primaryResult) &&
-    isExplicitAutomaticFailRecommendation(secondaryResult) &&
     hasInsufficientEvidenceSignal(primaryResult) &&
     hasInsufficientEvidenceSignal(secondaryResult)
   );

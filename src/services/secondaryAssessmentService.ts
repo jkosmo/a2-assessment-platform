@@ -1,9 +1,9 @@
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import {
+  hasOnlyInsufficientSubmissionRedFlags,
   hasInsufficientEvidenceSignal,
   hasLowConfidenceManualReviewSignal,
-  isExplicitAutomaticFailRecommendation,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
 
@@ -39,9 +39,9 @@ export function evaluateSecondaryAssessmentTrigger(
   }
 
   if (
-    input.primaryResult.red_flags.length === 0 &&
+    (input.primaryResult.red_flags.length === 0 ||
+      hasOnlyInsufficientSubmissionRedFlags(input.primaryResult)) &&
     !input.primaryResult.pass_fail_practical &&
-    isExplicitAutomaticFailRecommendation(input.primaryResult) &&
     hasInsufficientEvidenceSignal(input.primaryResult)
   ) {
     return {
