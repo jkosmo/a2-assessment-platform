@@ -17,6 +17,31 @@ type BuildDecisionInput = {
   forceManualReviewReason?: string;
 };
 
+const insufficientEvidencePatterns = [
+  "minimal artefact content",
+  "minimal content",
+  "little content",
+  "lite innhold",
+  "partial documentation",
+  "delvis dokumentasjon",
+  "placeholder",
+  "insufficient evidence",
+  "insufficient submission evidence",
+  "cannot assess reliably",
+];
+
+function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
+  const searchableTexts = [
+    input.confidence_note,
+    ...Object.values(input.criterion_rationales ?? {}),
+    ...(input.improvement_advice ?? []),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.toLowerCase());
+
+  return searchableTexts.some((text) => insufficientEvidencePatterns.some((pattern) => text.includes(pattern)));
+}
+
 export async function createAssessmentDecision(input: BuildDecisionInput) {
   const rules = getAssessmentRules();
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
@@ -36,11 +61,19 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     input.mcqPercentScore >= rules.thresholds.mcqMinPercent &&
     !hasOpenRedFlag;
 
+  const autoFailForInsufficientEvidence =
+    !input.forceManualReviewReason &&
+    !hasOpenRedFlag &&
+    !inBorderlineWindow &&
+    !passesThresholds &&
+    hasInsufficientEvidenceSignal(input.llmResult);
+
   const needsManualReview =
-    Boolean(input.forceManualReviewReason) ||
-    hasOpenRedFlag ||
-    input.llmResult.manual_review_recommended ||
-    inBorderlineWindow;
+    !autoFailForInsufficientEvidence &&
+    (Boolean(input.forceManualReviewReason) ||
+      hasOpenRedFlag ||
+      input.llmResult.manual_review_recommended ||
+      inBorderlineWindow);
 
   const decision = await decisionRepository.createAssessmentDecision({
     submissionId: input.submissionId,
@@ -56,6 +89,8 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     decisionReason: needsManualReview
       ? input.forceManualReviewReason ??
         "Automatically routed to manual review due to red flag / confidence / borderline rule."
+      : autoFailForInsufficientEvidence
+        ? "Automatic fail due to insufficient submission evidence."
       : passesThresholds
         ? "Automatic pass by threshold rules."
         : "Automatic fail by threshold rules.",

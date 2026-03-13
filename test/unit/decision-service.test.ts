@@ -172,4 +172,106 @@ describe("decision service", () => {
       needsManualReview: true,
     });
   });
+
+  it("fails automatically when confidence indicates insufficient evidence without other review triggers", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-3",
+      passFailTotal: false,
+      decisionReason: "Automatic fail due to insufficient submission evidence.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-3" });
+
+    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+
+    const result = await createAssessmentDecision({
+      submissionId: "submission-3",
+      userId: "user-3",
+      moduleVersionId: "module-version-3",
+      rubricVersionId: "rubric-version-3",
+      promptTemplateVersionId: "prompt-version-3",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({
+        rubric_total: 1,
+        practical_score_scaled: 3.5,
+        pass_fail_practical: false,
+        manual_review_recommended: true,
+        confidence_note: "Low confidence due to minimal artefact content; assessment relies on partial documentation.",
+        criterion_rationales: {
+          relevance_for_case: "Submission is placeholder content.",
+          quality_and_utility: "Content is minimal and not actionable.",
+          iteration_and_improvement: "No iteration trace is provided.",
+          human_quality_assurance: "No QA evidence is provided.",
+          responsible_use: "No safety concerns evident.",
+        },
+      }),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        passFailTotal: false,
+        decisionReason: "Automatic fail due to insufficient submission evidence.",
+      }),
+    );
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-3", SubmissionStatus.COMPLETED);
+    expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
+      decisionId: "decision-3",
+      actorId: "user-3",
+    });
+    expect(result).toEqual({
+      decision: {
+        id: "decision-3",
+        passFailTotal: false,
+        decisionReason: "Automatic fail due to insufficient submission evidence.",
+      },
+      needsManualReview: false,
+    });
+  });
+
+  it("still routes to manual review when red flags are present even if evidence is thin", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-4",
+      passFailTotal: false,
+      decisionReason: "Automatically routed to manual review due to red flag / confidence / borderline rule.",
+    });
+    manualReviewCreate.mockResolvedValue({
+      id: "review-4",
+      triggerReason: "Automatically routed to manual review due to red flag / confidence / borderline rule.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-4" });
+
+    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+
+    const result = await createAssessmentDecision({
+      submissionId: "submission-4",
+      userId: "user-4",
+      moduleVersionId: "module-version-4",
+      rubricVersionId: "rubric-version-4",
+      promptTemplateVersionId: "prompt-version-4",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({
+        rubric_total: 1,
+        practical_score_scaled: 3.5,
+        pass_fail_practical: false,
+        manual_review_recommended: true,
+        confidence_note: "Low confidence due to minimal artefact content; assessment relies on partial documentation.",
+        red_flags: [
+          {
+            code: "POTENTIAL_SENSITIVE_DATA",
+            severity: "high",
+            description: "Possible sensitive data exposure.",
+          },
+        ],
+      }),
+    });
+
+    expect(manualReviewCreate).toHaveBeenCalledWith({
+      submissionId: "submission-4",
+      triggerReason: "Automatically routed to manual review due to red flag / confidence / borderline rule.",
+      reviewStatus: "OPEN",
+    });
+    expect(result.needsManualReview).toBe(true);
+  });
 });

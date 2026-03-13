@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.126 - 2026-03-13
+### Summary
+Changed assessment decision policy so clearly insufficient, low-evidence submissions now fail automatically instead of being routed to manual review, unless separate red-flag, borderline, or forced-review conditions are present.
+
+### Included
+- Added insufficient-evidence auto-fail handling in the assessment decision service:
+  - `src/services/decisionService.ts`
+- Extended unit coverage for low-evidence automatic fail and red-flag override behavior:
+  - `test/unit/decision-service.test.ts`
+
 ## 0.3.125 - 2026-03-13
 ### Summary
 Fixed manual-review claim ownership matching so the reviewer workspace recognises the current mock reviewer even when the active identity form shows external user ID while the queue/details primarily show reviewer email.
