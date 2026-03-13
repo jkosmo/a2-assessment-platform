@@ -20,6 +20,8 @@ type BuildDecisionInput = {
 const insufficientEvidencePatterns = [
   "minimal artefact content",
   "minimal content",
+  "minimal and non-substantive submission",
+  "non-substantive submission",
   "little content",
   "lite innhold",
   "partial documentation",
@@ -28,6 +30,12 @@ const insufficientEvidencePatterns = [
   "insufficient evidence",
   "insufficient submission evidence",
   "cannot assess reliably",
+  "requires additional materials",
+  "additional materials",
+  "detailed reflection",
+  "iteration/qa notes",
+  "no iteration history",
+  "no qa checks",
 ];
 
 function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {

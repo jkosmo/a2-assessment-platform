@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.127 - 2026-03-13
+### Summary
+Broadened the insufficient-evidence auto-fail heuristic so clearly non-substantive, low-confidence submissions that require additional materials now fail automatically instead of being routed to manual review.
+
+### Included
+- Expanded insufficient-evidence phrase matching in the assessment decision service:
+  - `src/services/decisionService.ts`
+- Added regression coverage for low-confidence non-substantive submissions that previously still opened manual review:
+  - `test/unit/decision-service.test.ts`
+
 ## 0.3.126 - 2026-03-13
 ### Summary
 Changed assessment decision policy so clearly insufficient, low-evidence submissions now fail automatically instead of being routed to manual review, unless separate red-flag, borderline, or forced-review conditions are present.

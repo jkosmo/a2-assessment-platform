@@ -274,4 +274,48 @@ describe("decision service", () => {
     });
     expect(result.needsManualReview).toBe(true);
   });
+
+  it("fails automatically for non-substantive low-confidence submissions that ask for more materials", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-5",
+      passFailTotal: false,
+      decisionReason: "Automatic fail due to insufficient submission evidence.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-5" });
+
+    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+
+    const result = await createAssessmentDecision({
+      submissionId: "submission-5",
+      userId: "user-5",
+      moduleVersionId: "module-version-5",
+      rubricVersionId: "rubric-version-5",
+      promptTemplateVersionId: "prompt-version-5",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({
+        rubric_total: 6,
+        practical_score_scaled: 21,
+        pass_fail_practical: false,
+        manual_review_recommended: true,
+        confidence_note:
+          "Low confidence in assessment due to minimal and non-substantive submission; requires additional materials to review thoroughly.",
+        improvement_advice: [
+          "Provide a substantive practical answer to the MCQ and a detailed reflective section.",
+          "Document at least one iteration step or revision based on feedback.",
+          "Include explicit QA/validation notes (checks run, results, and fixes).",
+        ],
+      }),
+    });
+
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        passFailTotal: false,
+        decisionReason: "Automatic fail due to insufficient submission evidence.",
+        totalScore: 21,
+      }),
+    );
+    expect(result.needsManualReview).toBe(false);
+  });
 });
