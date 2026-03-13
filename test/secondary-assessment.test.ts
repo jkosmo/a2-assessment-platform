@@ -97,7 +97,7 @@ describe("Secondary assessment policy", () => {
     expect(trigger.reasons).toEqual(["primary_result_insufficient_evidence_auto_fail"]);
   });
 
-  it("skips secondary pass when the only red flag is insufficient_submission", () => {
+  it("skips secondary pass when the only red flags are insufficient-evidence completeness flags", () => {
     const trigger = evaluateSecondaryAssessmentTrigger(
       {
         moduleId: "module-1",
@@ -113,10 +113,15 @@ describe("Secondary assessment policy", () => {
             "Very low confidence in evaluating candidate due to insufficient content and lack of required components.",
           red_flags: [
             {
-              code: "insufficient_submission",
+              code: "incomplete_submission",
               severity: "high",
               description:
-                "Submission contains minimal, non-substantive content; lacks MCQ responses and iteration/QA notes.",
+                "Submission lacks MCQ answers, reflection depth, and QA notes.",
+            },
+            {
+              code: "extremely_low_content",
+              severity: "high",
+              description: "Minimal content provided; insufficient basis for evaluation.",
             },
           ],
         }),

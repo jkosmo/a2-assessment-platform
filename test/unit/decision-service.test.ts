@@ -284,7 +284,7 @@ describe("decision service", () => {
     expect(result.needsManualReview).toBe(true);
   });
 
-  it("fails automatically when the only red flag is insufficient_submission on an otherwise empty submission", async () => {
+  it("fails automatically when the only red flags are insufficiency/completeness flags on an otherwise empty submission", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-4b",
       passFailTotal: false,
@@ -311,13 +311,17 @@ describe("decision service", () => {
         manual_review_reason_code: "red_flag",
         manual_review_recommended: true,
         confidence_note:
-          "Very low confidence in evaluating candidate due to insufficient content and lack of required components.",
+          "Very low confidence in automated scoring due to lack of content; human review required.",
         red_flags: [
           {
-            code: "insufficient_submission",
+            code: "incomplete_submission",
             severity: "high",
-            description:
-              "Submission contains minimal, non-substantive content; lacks MCQ responses and iteration/QA notes.",
+            description: "Submission lacks MCQ answers, reflection depth, and QA notes.",
+          },
+          {
+            code: "extremely_low_content",
+            severity: "high",
+            description: "Minimal content provided; insufficient basis for evaluation.",
           },
         ],
       }),

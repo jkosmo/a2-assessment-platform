@@ -1,6 +1,11 @@
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 
 type AssessmentRedFlag = LlmStructuredAssessment["red_flags"][number];
+const insufficientEvidenceRedFlagCodes = new Set([
+  "insufficient_submission",
+  "incomplete_submission",
+  "extremely_low_content",
+]);
 
 const insufficientEvidencePatterns = [
   "minimal artefact content",
@@ -52,12 +57,12 @@ export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): b
   );
 }
 
-export function isInsufficientSubmissionRedFlag(flag: AssessmentRedFlag): boolean {
-  return flag.code.trim().toLowerCase() === "insufficient_submission";
+export function isInsufficientEvidenceRedFlag(flag: AssessmentRedFlag): boolean {
+  return insufficientEvidenceRedFlagCodes.has(flag.code.trim().toLowerCase());
 }
 
-export function hasOnlyInsufficientSubmissionRedFlags(input: LlmStructuredAssessment): boolean {
-  return input.red_flags.length > 0 && input.red_flags.every((flag) => isInsufficientSubmissionRedFlag(flag));
+export function hasOnlyInsufficientEvidenceRedFlags(input: LlmStructuredAssessment): boolean {
+  return input.red_flags.length > 0 && input.red_flags.every((flag) => isInsufficientEvidenceRedFlag(flag));
 }
 
 export function hasForcingRedFlag(
@@ -66,7 +71,7 @@ export function hasForcingRedFlag(
 ): boolean {
   const severitySet = new Set(forcingSeverities.map((severity) => severity.toLowerCase()));
   return input.red_flags.some(
-    (flag) => severitySet.has(flag.severity.toLowerCase()) && !isInsufficientSubmissionRedFlag(flag),
+    (flag) => severitySet.has(flag.severity.toLowerCase()) && !isInsufficientEvidenceRedFlag(flag),
   );
 }
 
@@ -87,8 +92,8 @@ export function shouldSuppressManualReviewForInsufficientEvidenceDisagreement(
   secondaryResult: LlmStructuredAssessment,
 ): boolean {
   return (
-    (primaryResult.red_flags.length === 0 || hasOnlyInsufficientSubmissionRedFlags(primaryResult)) &&
-    (secondaryResult.red_flags.length === 0 || hasOnlyInsufficientSubmissionRedFlags(secondaryResult)) &&
+    (primaryResult.red_flags.length === 0 || hasOnlyInsufficientEvidenceRedFlags(primaryResult)) &&
+    (secondaryResult.red_flags.length === 0 || hasOnlyInsufficientEvidenceRedFlags(secondaryResult)) &&
     !primaryResult.pass_fail_practical &&
     !secondaryResult.pass_fail_practical &&
     hasInsufficientEvidenceSignal(primaryResult) &&

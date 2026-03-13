@@ -238,21 +238,25 @@ describe("assessment job service traffic-light policy", () => {
     );
   });
 
-  it("skips secondary assessment and stays red when Azure returns only an insufficient_submission red flag", async () => {
+  it("skips secondary assessment and stays red when Azure returns only insufficiency/completeness red flags", async () => {
     evaluatePracticalWithLlm.mockResolvedValueOnce(
       buildLlmResult({
         red_flags: [
           {
-            code: "insufficient_submission",
+            code: "incomplete_submission",
             severity: "high",
-            description:
-              "Submission contains minimal, non-substantive content; lacks MCQ responses and iteration/QA notes.",
+            description: "Submission lacks MCQ answers, reflection depth, and QA notes.",
+          },
+          {
+            code: "extremely_low_content",
+            severity: "high",
+            description: "Minimal content provided; insufficient basis for evaluation.",
           },
         ],
         recommended_outcome: "manual_review",
-        manual_review_reason_code: "red_flag",
+        manual_review_reason_code: "insufficient_evidence",
         confidence_note:
-          "Very low confidence in evaluating candidate due to insufficient content and lack of required components.",
+          "Very low confidence in automated scoring due to lack of content; human review required.",
       }),
     );
 
@@ -267,14 +271,18 @@ describe("assessment job service traffic-light policy", () => {
         submissionId: "submission-1",
         forceManualReviewReason: undefined,
         llmResult: expect.objectContaining({
-          red_flags: [
+          red_flags: expect.arrayContaining([
             expect.objectContaining({
-              code: "insufficient_submission",
+              code: "incomplete_submission",
               severity: "high",
             }),
-          ],
+            expect.objectContaining({
+              code: "extremely_low_content",
+              severity: "high",
+            }),
+          ]),
           recommended_outcome: "manual_review",
-          manual_review_reason_code: "red_flag",
+          manual_review_reason_code: "insufficient_evidence",
         }),
       }),
     );

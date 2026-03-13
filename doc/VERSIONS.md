@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.137 - 2026-03-14
+### Summary
+Broadened the insufficient-evidence fail policy to cover Azure payloads that use `incomplete_submission` and `extremely_low_content` high red flags, so obviously empty submissions no longer open manual review just because the model frames the problem as completeness rather than safety risk.
+
+### Included
+- Generalized the red-flag exception from one code to a broader insufficiency/completeness class:
+  - `src/services/assessmentDecisionSignals.ts`
+- Final decision routing now treats insufficiency/completeness red flags as automatic-fail signals instead of forcing manual review:
+  - `src/services/decisionService.ts`
+- Secondary assessment now skips the same insufficiency/completeness-only cases:
+  - `src/services/secondaryAssessmentService.ts`
+- Replaced the previous narrow regression with tests that mirror the exact `0.3.136` staging payload:
+  - `test/unit/decision-service.test.ts`
+  - `test/unit/assessment-job-service.test.ts`
+  - `test/secondary-assessment.test.ts`
+- Updated the written decision policy to document the broader insufficiency/completeness red-flag class:
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+
 ## 0.3.136 - 2026-03-14
 ### Summary
 Corrected assessment routing for Azure responses that mark extremely thin submissions with the `insufficient_submission` red-flag code, so those cases now stay automatic fail instead of opening manual review or secondary assessment.

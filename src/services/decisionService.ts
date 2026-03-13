@@ -7,7 +7,7 @@ import { upsertRecertificationStatusFromDecision } from "./recertificationServic
 import {
   hasForcingRedFlag,
   hasInsufficientEvidenceSignal,
-  hasOnlyInsufficientSubmissionRedFlags,
+  hasOnlyInsufficientEvidenceRedFlags,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
 
@@ -30,7 +30,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
   const practicalPercent = (input.llmResult.rubric_total / 20) * 100;
 
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
-  const hasOnlyInsufficientSubmissionFlags = hasOnlyInsufficientSubmissionRedFlags(input.llmResult);
+  const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
   const inBorderlineWindow =
     totalScore >= rules.manualReview.borderlineWindow.min &&
     totalScore <= rules.manualReview.borderlineWindow.max;
@@ -47,7 +47,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     !hasOpenRedFlag &&
     !inBorderlineWindow &&
     !passesThresholds &&
-    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientSubmissionFlags);
+    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientEvidenceFlags);
 
   const needsManualReview =
     Boolean(input.forceManualReviewReason) ||
