@@ -195,6 +195,13 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
       confidenceNote: llmEvaluation?.confidenceNote ?? null,
       improvementAdvice: llmStructured?.improvement_advice ?? [],
       criterionRationales: llmStructured?.criterion_rationales ?? null,
+      decisionMetadata: llmStructured
+        ? {
+            evidenceSufficiency: llmStructured.evidence_sufficiency ?? null,
+            recommendedOutcome: llmStructured.recommended_outcome ?? null,
+            manualReviewReasonCode: llmStructured.manual_review_reason_code ?? null,
+          }
+        : null,
     },
   });
 });
@@ -207,6 +214,9 @@ function parseLlmResponse(rawJson: string | undefined) {
     return JSON.parse(rawJson) as {
       improvement_advice?: string[];
       criterion_rationales?: Record<string, string>;
+      evidence_sufficiency?: string;
+      recommended_outcome?: string;
+      manual_review_reason_code?: string;
     };
   } catch {
     return null;

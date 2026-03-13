@@ -1,6 +1,18 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
 
+const evidenceSufficiencySchema = z.enum(["sufficient", "insufficient", "uncertain"]);
+const recommendedOutcomeSchema = z.enum(["pass", "fail", "manual_review"]);
+const manualReviewReasonCodeSchema = z.enum([
+  "none",
+  "red_flag",
+  "borderline",
+  "low_confidence",
+  "disagreement",
+  "insufficient_evidence",
+  "policy",
+]);
+
 const llmResponseSchema = z.object({
   module_id: z.string(),
   rubric_scores: z.object({
@@ -30,6 +42,9 @@ const llmResponseSchema = z.object({
   ),
   manual_review_recommended: z.boolean(),
   confidence_note: z.string(),
+  evidence_sufficiency: evidenceSufficiencySchema.optional(),
+  recommended_outcome: recommendedOutcomeSchema.optional(),
+  manual_review_reason_code: manualReviewReasonCodeSchema.optional(),
 });
 
 export type LlmStructuredAssessment = z.infer<typeof llmResponseSchema>;
@@ -145,6 +160,7 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
   const length = content.length;
 
   const baseScore = length > 800 ? 4 : length > 350 ? 3 : length > 150 ? 2 : 1;
+  const hasInsufficientEvidence = length < 150;
   const responsibleUseScore = /sensitive|pii|client data/i.test(content) ? 1 : baseScore;
   const passAdjustment = input.assessmentPass === "secondary" ? -1 : 0;
   const redFlags =
@@ -173,13 +189,30 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
     rubricScores.human_quality_assurance +
     rubricScores.responsible_use;
   const practicalScoreScaled = Number(((rubricTotal / 20) * 70).toFixed(2));
+  const passFailPractical = (rubricTotal / 20) * 100 >= 50;
+  const evidenceSufficiency = hasInsufficientEvidence ? "insufficient" : "sufficient";
+  const recommendedOutcome = redFlags.length > 0 ? "manual_review" : passFailPractical ? "pass" : "fail";
+  const manualReviewReasonCode =
+    redFlags.length > 0
+      ? "red_flag"
+      : evidenceSufficiency === "insufficient"
+        ? "insufficient_evidence"
+        : "none";
+  const confidenceNote =
+    redFlags.length > 0
+      ? input.assessmentPass === "secondary"
+        ? "Low confidence due to potential responsible-use ambiguity."
+        : "Medium confidence due to potential responsible-use ambiguity."
+      : evidenceSufficiency === "insufficient"
+        ? "Low confidence due to insufficient submission evidence."
+        : "High confidence: structured and sufficiently detailed submission.";
 
   return {
     module_id: input.moduleId,
     rubric_scores: rubricScores,
     rubric_total: rubricTotal,
     practical_score_scaled: practicalScoreScaled,
-    pass_fail_practical: (rubricTotal / 20) * 100 >= 50,
+    pass_fail_practical: passFailPractical,
     criterion_rationales: {
       relevance_for_case: "Stub: submission appears relevant to the module task.",
       quality_and_utility: "Stub: output shows practical utility.",
@@ -194,12 +227,10 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
     ],
     red_flags: redFlags,
     manual_review_recommended: redFlags.length > 0,
-    confidence_note:
-      redFlags.length > 0
-        ? input.assessmentPass === "secondary"
-          ? "Low confidence due to potential responsible-use ambiguity."
-          : "Medium confidence due to potential responsible-use ambiguity."
-        : "High confidence: structured and sufficiently detailed submission.",
+    evidence_sufficiency: evidenceSufficiency,
+    recommended_outcome: recommendedOutcome,
+    manual_review_reason_code: manualReviewReasonCode,
+    confidence_note: confidenceNote,
   };
 }
 
@@ -394,5 +425,8 @@ JSON response contract:
 - red_flags: array of objects with fields: code (string), severity (string), description (string)
 - manual_review_recommended: boolean
 - confidence_note: string
+- evidence_sufficiency: one of sufficient, insufficient, uncertain
+- recommended_outcome: one of pass, fail, manual_review
+- manual_review_reason_code: one of none, red_flag, borderline, low_confidence, disagreement, insufficient_evidence, policy
 Do not include markdown, comments, or any wrapper text outside JSON.
 `.trim();

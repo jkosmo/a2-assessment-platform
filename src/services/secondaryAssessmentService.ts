@@ -1,5 +1,11 @@
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
+import {
+  hasInsufficientEvidenceSignal,
+  hasLowConfidenceManualReviewSignal,
+  isExplicitAutomaticFailRecommendation,
+  recommendsManualReview,
+} from "./assessmentDecisionSignals.js";
 
 export type SecondaryAssessmentPolicy = ReturnType<typeof getAssessmentRules>["secondaryAssessment"];
 
@@ -32,15 +38,30 @@ export function evaluateSecondaryAssessmentTrigger(
     };
   }
 
+  if (
+    input.primaryResult.red_flags.length === 0 &&
+    !input.primaryResult.pass_fail_practical &&
+    isExplicitAutomaticFailRecommendation(input.primaryResult) &&
+    hasInsufficientEvidenceSignal(input.primaryResult)
+  ) {
+    return {
+      enabled: true,
+      shouldRun: false,
+      reasons: ["primary_result_insufficient_evidence_auto_fail"],
+    };
+  }
+
   const reasons: string[] = [];
-  if (policy.triggerRules.manualReviewRecommended && input.primaryResult.manual_review_recommended) {
+  if (policy.triggerRules.manualReviewRecommended && recommendsManualReview(input.primaryResult)) {
     reasons.push("primary_result_manual_review_recommended");
   }
 
   const confidenceNote = input.primaryResult.confidence_note.toLowerCase();
-  const hasConfidenceTrigger = policy.triggerRules.confidenceNotePatterns.some((pattern) =>
-    confidenceNote.includes(pattern.toLowerCase()),
-  );
+  const hasConfidenceTrigger =
+    hasLowConfidenceManualReviewSignal(input.primaryResult) ||
+    policy.triggerRules.confidenceNotePatterns.some((pattern) =>
+      confidenceNote.includes(pattern.toLowerCase()),
+    );
   if (hasConfidenceTrigger) {
     reasons.push("primary_result_low_or_medium_confidence");
   }

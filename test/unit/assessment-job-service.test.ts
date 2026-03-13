@@ -122,6 +122,9 @@ function buildLlmResult(overrides: Record<string, unknown> = {}) {
     manual_review_recommended: true,
     confidence_note:
       "Very low confidence in assessment due to minimal and non-specific submission; requires resubmission.",
+    evidence_sufficiency: "insufficient",
+    recommended_outcome: "fail",
+    manual_review_reason_code: "insufficient_evidence",
     ...overrides,
   };
 }
@@ -187,12 +190,13 @@ describe("assessment job service traffic-light policy", () => {
     const processed = await processNextJob();
 
     expect(processed).toBe(true);
+    expect(evaluatePracticalWithLlm).toHaveBeenCalledTimes(1);
     expect(createAssessmentDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         submissionId: "submission-1",
         forceManualReviewReason: undefined,
         llmResult: expect.objectContaining({
-          practical_score_scaled: 10.5,
+          practical_score_scaled: 0,
           pass_fail_practical: false,
         }),
       }),
@@ -221,6 +225,7 @@ describe("assessment job service traffic-light policy", () => {
     const processed = await processNextJob();
 
     expect(processed).toBe(true);
+    expect(evaluatePracticalWithLlm).toHaveBeenCalledTimes(1);
     expect(createAssessmentDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         submissionId: "submission-1",
@@ -240,6 +245,9 @@ describe("assessment job service traffic-light policy", () => {
           rubric_total: 8,
           practical_score_scaled: 28,
           pass_fail_practical: false,
+          evidence_sufficiency: "uncertain",
+          recommended_outcome: "manual_review",
+          manual_review_reason_code: "low_confidence",
           confidence_note: "Low confidence due to ambiguous evidence and inconsistent quality signals.",
           criterion_rationales: {
             relevance_for_case: "Some relevant evidence exists, but alignment is incomplete.",
@@ -255,6 +263,9 @@ describe("assessment job service traffic-light policy", () => {
           rubric_total: 13,
           practical_score_scaled: 45.5,
           pass_fail_practical: true,
+          evidence_sufficiency: "uncertain",
+          recommended_outcome: "manual_review",
+          manual_review_reason_code: "low_confidence",
           manual_review_recommended: false,
           confidence_note: "Medium confidence due to mixed but substantive evidence.",
           criterion_rationales: {
@@ -273,6 +284,7 @@ describe("assessment job service traffic-light policy", () => {
     const processed = await processNextJob();
 
     expect(processed).toBe(true);
+    expect(evaluatePracticalWithLlm).toHaveBeenCalledTimes(2);
     expect(createAssessmentDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         submissionId: "submission-1",

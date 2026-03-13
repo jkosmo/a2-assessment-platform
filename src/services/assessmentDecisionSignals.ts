@@ -30,6 +30,13 @@ const insufficientEvidencePatterns = [
 ];
 
 export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
+  if (
+    input.evidence_sufficiency === "insufficient" ||
+    input.manual_review_reason_code === "insufficient_evidence"
+  ) {
+    return true;
+  }
+
   const searchableTexts = [
     input.confidence_note,
     ...Object.values(input.criterion_rationales ?? {}),
@@ -43,6 +50,18 @@ export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): b
   );
 }
 
+export function recommendsManualReview(input: LlmStructuredAssessment): boolean {
+  return input.recommended_outcome === "manual_review" || input.manual_review_recommended;
+}
+
+export function isExplicitAutomaticFailRecommendation(input: LlmStructuredAssessment): boolean {
+  return input.recommended_outcome === "fail";
+}
+
+export function hasLowConfidenceManualReviewSignal(input: LlmStructuredAssessment): boolean {
+  return input.manual_review_reason_code === "low_confidence";
+}
+
 export function shouldSuppressManualReviewForInsufficientEvidenceDisagreement(
   primaryResult: LlmStructuredAssessment,
   secondaryResult: LlmStructuredAssessment,
@@ -52,6 +71,8 @@ export function shouldSuppressManualReviewForInsufficientEvidenceDisagreement(
     secondaryResult.red_flags.length === 0 &&
     !primaryResult.pass_fail_practical &&
     !secondaryResult.pass_fail_practical &&
+    isExplicitAutomaticFailRecommendation(primaryResult) &&
+    isExplicitAutomaticFailRecommendation(secondaryResult) &&
     hasInsufficientEvidenceSignal(primaryResult) &&
     hasInsufficientEvidenceSignal(secondaryResult)
   );

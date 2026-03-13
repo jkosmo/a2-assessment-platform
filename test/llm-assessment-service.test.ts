@@ -47,6 +47,9 @@ const validPayload = {
   red_flags: [],
   manual_review_recommended: false,
   confidence_note: "High confidence.",
+  evidence_sufficiency: "sufficient",
+  recommended_outcome: "pass",
+  manual_review_reason_code: "none",
 };
 
 describe("llmAssessmentService azure_openai adapter", () => {
@@ -88,6 +91,9 @@ describe("llmAssessmentService azure_openai adapter", () => {
     const messages = payload.messages as Array<{ content: string }>;
     expect(messages[1].content).toContain("Participant assignment context:");
     expect(messages[1].content).toContain("Expected submission content context:");
+    expect(messages[1].content).toContain("evidence_sufficiency");
+    expect(messages[1].content).toContain("recommended_outcome");
+    expect(messages[1].content).toContain("manual_review_reason_code");
   });
 
   it("supports max_completion_tokens when configured", async () => {

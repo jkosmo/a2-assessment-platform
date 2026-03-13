@@ -48,6 +48,9 @@ function buildLlmResult(overrides: Partial<LlmStructuredAssessment> = {}): LlmSt
     red_flags: [],
     manual_review_recommended: false,
     confidence_note: "High confidence",
+    evidence_sufficiency: "sufficient",
+    recommended_outcome: "pass",
+    manual_review_reason_code: "none",
     ...overrides,
   };
 }
@@ -195,6 +198,9 @@ describe("decision service", () => {
         rubric_total: 1,
         practical_score_scaled: 3.5,
         pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "fail",
+        manual_review_reason_code: "insufficient_evidence",
         manual_review_recommended: true,
         confidence_note: "Low confidence due to minimal artefact content; assessment relies on partial documentation.",
         criterion_rationales: {
@@ -255,6 +261,9 @@ describe("decision service", () => {
         rubric_total: 1,
         practical_score_scaled: 3.5,
         pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "manual_review",
+        manual_review_reason_code: "red_flag",
         manual_review_recommended: true,
         confidence_note: "Low confidence due to minimal artefact content; assessment relies on partial documentation.",
         red_flags: [
@@ -297,6 +306,9 @@ describe("decision service", () => {
         rubric_total: 6,
         practical_score_scaled: 21,
         pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "fail",
+        manual_review_reason_code: "insufficient_evidence",
         manual_review_recommended: true,
         confidence_note:
           "Low confidence in assessment due to minimal and non-substantive submission; requires additional materials to review thoroughly.",
@@ -341,6 +353,9 @@ describe("decision service", () => {
         rubric_total: 6,
         practical_score_scaled: 21,
         pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "fail",
+        manual_review_reason_code: "insufficient_evidence",
         manual_review_recommended: true,
         confidence_note:
           "Low confidence due to minimal content and missing assessment artifacts; requires request for expanded submission to reassess.",
@@ -380,6 +395,9 @@ describe("decision service", () => {
         rubric_total: 0,
         practical_score_scaled: 0,
         pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "fail",
+        manual_review_reason_code: "insufficient_evidence",
         manual_review_recommended: true,
         confidence_note:
           "Low confidence in scoring due to minimal content; additional material required for a reliable assessment.",

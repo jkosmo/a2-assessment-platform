@@ -42,7 +42,14 @@ The LLM returns a structured result including:
 - `manual_review_recommended`
 - `confidence_note`
 - `red_flags`
+- `evidence_sufficiency`
+- `recommended_outcome`
+- `manual_review_reason_code`
 - criterion rationales and improvement advice
+
+These fields are now interpreted in two layers:
+- structured decision metadata is the primary source
+- confidence/rationale/advice text is legacy fallback when structured metadata is missing or incomplete
 
 ### MCQ result
 
@@ -82,9 +89,17 @@ If the result needs manual review, a manual review record is opened and submissi
 Secondary assessment is enabled by default.
 
 It is triggered when the primary result indicates one or more of these:
+- `recommended_outcome = manual_review`
 - `manual_review_recommended = true`
-- confidence note contains low/medium confidence patterns
+- `manual_review_reason_code = low_confidence`
+- confidence note contains low/medium confidence patterns as fallback
 - primary result contains medium/high red-flag severities according to secondary-assessment policy
+
+Secondary assessment is skipped for an explicit insufficient-evidence auto-fail when all of these are true:
+- `evidence_sufficiency = insufficient`
+- `recommended_outcome = fail`
+- no red flags are present
+- practical pass is `false`
 
 Current trigger patterns from [assessment-rules.json](C:/Users/JoakimKosmo/a2-assessment-platform/config/assessment-rules.json):
 - `medium confidence`
@@ -150,8 +165,9 @@ This path applies when all of these are true:
 - the submission looks insufficiently evidenced
 
 The current implementation treats a submission as insufficiently evidenced if either:
-- the LLM explicitly recommends manual review for an otherwise clearly failing submission, or
-- the confidence/rationale/advice text contains patterns indicating minimal, placeholder, non-substantive, or incomplete evidence
+- the LLM sets `evidence_sufficiency = insufficient`, or
+- the LLM sets `manual_review_reason_code = insufficient_evidence`, or
+- the confidence/rationale/advice text contains patterns indicating minimal, placeholder, non-substantive, or incomplete evidence as fallback
 
 Examples of such signals:
 - minimal content
@@ -174,7 +190,8 @@ Current manual-review triggers are:
 1. Forced manual review reason exists
 2. A configured high-severity red flag exists
 3. Total score is in the borderline window `67..73`
-4. `manual_review_recommended = true` and the submission is not already classified as a clear insufficient-evidence fail
+4. LLM metadata explicitly recommends manual review, and the submission is not already classified as a clear insufficient-evidence fail
+5. Legacy `manual_review_recommended = true` is still honoured as fallback, with the same insufficient-evidence exception
 
 This gives:
 - decision reason `Automatically routed to manual review due to red flag / confidence / borderline rule.`

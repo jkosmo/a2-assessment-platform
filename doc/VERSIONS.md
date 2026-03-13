@@ -7,6 +7,35 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.134 - 2026-03-14
+### Summary
+Replaced string-first assessment routing with structured LLM decision metadata, so automatic fail, manual-review recommendation, and insufficient-evidence handling now prefer explicit machine-readable fields over fragile confidence-note phrasing.
+
+### Included
+- Extended the LLM response contract with explicit decision metadata fields:
+  - `evidence_sufficiency`
+  - `recommended_outcome`
+  - `manual_review_reason_code`
+  - `src/services/llmAssessmentService.ts`
+- Stub LLM responses now emit structured decision metadata consistently:
+  - `src/services/llmAssessmentService.ts`
+- Decision building now prefers structured metadata and uses text-pattern fallback only when needed:
+  - `src/services/assessmentDecisionSignals.ts`
+  - `src/services/decisionService.ts`
+- Secondary assessment is now skipped for explicit insufficient-evidence auto-fail cases instead of spending a second pass:
+  - `src/services/secondaryAssessmentService.ts`
+- Submission result payload now exposes the structured decision metadata for inspection:
+  - `src/routes/submissions.ts`
+- Added and updated regression coverage across Azure OpenAI parsing, secondary-assessment policy, decision service, assessment pipeline, participant result API, and i18n baseline:
+  - `test/llm-assessment-service.test.ts`
+  - `test/secondary-assessment.test.ts`
+  - `test/unit/decision-service.test.ts`
+  - `test/unit/assessment-job-service.test.ts`
+  - `test/m2-participant-results-history.test.ts`
+  - `test/m2-i18n-baseline.test.ts`
+- Updated policy documentation to describe structured metadata as the primary assessment-routing source:
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+
 ## 0.3.133 - 2026-03-14
 ### Summary
 Closed the remaining insufficient-evidence gap by teaching the policy to recognise the exact staging phrase `additional material required for a reliable assessment`, and locked it down with both decision-layer and pipeline-layer regression tests.

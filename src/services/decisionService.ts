@@ -4,7 +4,10 @@ import { decisionRepository } from "../repositories/decisionRepository.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
-import { hasInsufficientEvidenceSignal } from "./assessmentDecisionSignals.js";
+import {
+  hasInsufficientEvidenceSignal,
+  recommendsManualReview,
+} from "./assessmentDecisionSignals.js";
 
 type BuildDecisionInput = {
   submissionId: string;
@@ -36,19 +39,20 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     practicalPercent >= rules.thresholds.practicalMinPercent &&
     input.mcqPercentScore >= rules.thresholds.mcqMinPercent &&
     !hasOpenRedFlag;
+  const llmRecommendsManualReview = recommendsManualReview(input.llmResult);
 
   const autoFailForInsufficientEvidence =
     !input.forceManualReviewReason &&
     !hasOpenRedFlag &&
     !inBorderlineWindow &&
     !passesThresholds &&
-    (hasInsufficientEvidenceSignal(input.llmResult) || input.llmResult.manual_review_recommended);
+    hasInsufficientEvidenceSignal(input.llmResult);
 
   const needsManualReview =
     Boolean(input.forceManualReviewReason) ||
     hasOpenRedFlag ||
     inBorderlineWindow ||
-    (input.llmResult.manual_review_recommended && !autoFailForInsufficientEvidence);
+    (llmRecommendsManualReview && !autoFailForInsufficientEvidence);
 
   const decision = await decisionRepository.createAssessmentDecision({
     submissionId: input.submissionId,

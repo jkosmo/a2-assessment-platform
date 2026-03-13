@@ -66,6 +66,13 @@ describe("MVP participant result and history", () => {
     expect(typeof completedResultResponse.body.statusExplanation).toBe("string");
     expect(completedResultResponse.body.scoreComponents.totalScore).not.toBeNull();
     expect(completedResultResponse.body.participantGuidance.improvementAdvice.length).toBeGreaterThan(0);
+    expect(completedResultResponse.body.participantGuidance.decisionMetadata).toEqual(
+      expect.objectContaining({
+        evidenceSufficiency: expect.anything(),
+        recommendedOutcome: expect.anything(),
+        manualReviewReasonCode: expect.anything(),
+      }),
+    );
 
     const underReviewResultResponse = await request(app)
       .get(`/api/submissions/${underReviewSubmissionId}/result`)

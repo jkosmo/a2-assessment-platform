@@ -46,6 +46,9 @@ function buildAssessment(overrides: Partial<LlmStructuredAssessment> = {}): LlmS
     red_flags: [],
     manual_review_recommended: false,
     confidence_note: "High confidence",
+    evidence_sufficiency: "sufficient",
+    recommended_outcome: "pass",
+    manual_review_reason_code: "none",
     ...overrides,
   };
 }
@@ -56,7 +59,9 @@ describe("Secondary assessment policy", () => {
       {
         moduleId: "module-1",
         primaryResult: buildAssessment({
+          recommended_outcome: "manual_review",
           manual_review_recommended: true,
+          manual_review_reason_code: "low_confidence",
           confidence_note: "Medium confidence due to ambiguity",
         }),
       },
@@ -67,6 +72,29 @@ describe("Secondary assessment policy", () => {
     expect(trigger.shouldRun).toBe(true);
     expect(trigger.reasons).toContain("primary_result_manual_review_recommended");
     expect(trigger.reasons).toContain("primary_result_low_or_medium_confidence");
+  });
+
+  it("skips secondary pass for explicit insufficient-evidence auto-fail metadata", () => {
+    const trigger = evaluateSecondaryAssessmentTrigger(
+      {
+        moduleId: "module-1",
+        primaryResult: buildAssessment({
+          rubric_total: 0,
+          practical_score_scaled: 0,
+          pass_fail_practical: false,
+          evidence_sufficiency: "insufficient",
+          recommended_outcome: "fail",
+          manual_review_reason_code: "insufficient_evidence",
+          manual_review_recommended: false,
+          confidence_note: "Low confidence due to insufficient submission evidence.",
+        }),
+      },
+      basePolicy,
+    );
+
+    expect(trigger.enabled).toBe(true);
+    expect(trigger.shouldRun).toBe(false);
+    expect(trigger.reasons).toEqual(["primary_result_insufficient_evidence_auto_fail"]);
   });
 
   it("respects module override disable", () => {
