@@ -199,6 +199,40 @@ describe("assessment job service traffic-light policy", () => {
     );
   });
 
+  it("keeps clearly insufficient submissions red for the exact staging phrase 'additional material required for a reliable assessment'", async () => {
+    evaluatePracticalWithLlm
+      .mockResolvedValueOnce(
+        buildLlmResult({
+          confidence_note:
+            "Low confidence in scoring due to minimal content; additional material required for a reliable assessment.",
+        }),
+      )
+      .mockResolvedValueOnce(
+        buildLlmResult({
+          rubric_total: 0,
+          practical_score_scaled: 0,
+          confidence_note:
+            "Low confidence in scoring due to minimal content; additional material required for a reliable assessment.",
+        }),
+      );
+
+    const { processNextJob } = await import("../../src/services/assessmentJobService.js");
+
+    const processed = await processNextJob();
+
+    expect(processed).toBe(true);
+    expect(createAssessmentDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submissionId: "submission-1",
+        forceManualReviewReason: undefined,
+        llmResult: expect.objectContaining({
+          practical_score_scaled: 0,
+          pass_fail_practical: false,
+        }),
+      }),
+    );
+  });
+
   it("keeps legitimately ambiguous submissions yellow when primary and secondary disagree materially", async () => {
     evaluatePracticalWithLlm
       .mockResolvedValueOnce(

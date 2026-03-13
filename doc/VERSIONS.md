@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.133 - 2026-03-14
+### Summary
+Closed the remaining insufficient-evidence gap by teaching the policy to recognise the exact staging phrase `additional material required for a reliable assessment`, and locked it down with both decision-layer and pipeline-layer regression tests.
+
+### Included
+- Expanded insufficient-evidence phrase matching for low-confidence minimal submissions:
+  - `src/services/assessmentDecisionSignals.ts`
+- Added a decision-service regression test for the exact staging phrase:
+  - `test/unit/decision-service.test.ts`
+- Added an assessment-pipeline regression test for the exact staging phrase so red submissions stay red even when secondary assessment runs:
+  - `test/unit/assessment-job-service.test.ts`
+
 ## 0.3.132 - 2026-03-13
 ### Summary
 Added traffic-light regression coverage for the assessment pipeline and changed secondary-disagreement handling so clearly insufficient submissions now stay automatic fail instead of being escalated to manual review just because primary and secondary differ.
