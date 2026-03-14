@@ -89,12 +89,24 @@ const mcqSetBodySchema = z.object({
   active: z.boolean().optional().default(true),
 });
 
+const submissionSchemaFieldSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(["textarea", "text"]),
+  required: z.boolean().optional().default(false),
+});
+
+const submissionSchemaBodySchema = z.object({
+  fields: z.array(submissionSchemaFieldSchema).min(1),
+});
+
 const moduleVersionBodySchema = z.object({
   taskText: localizedTextSchema,
   guidanceText: localizedTextSchema.optional(),
   rubricVersionId: z.string().min(1),
   promptTemplateVersionId: z.string().min(1),
   mcqSetVersionId: z.string().min(1),
+  submissionSchema: submissionSchemaBodySchema.optional(),
 });
 
 const benchmarkExampleVersionBodySchema = z.object({
@@ -288,6 +300,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
       rubricVersionId: parsed.data.rubricVersionId,
       promptTemplateVersionId: parsed.data.promptTemplateVersionId,
       mcqSetVersionId: parsed.data.mcqSetVersionId,
+      submissionSchemaJson: parsed.data.submissionSchema ? JSON.stringify(parsed.data.submissionSchema) : undefined,
     });
     response.status(201).json({ moduleVersion });
   } catch (error) {

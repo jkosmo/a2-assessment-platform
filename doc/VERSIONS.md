@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.4.2 - 2026-03-14
+### Summary
+Added `submissionSchemaJson` to `ModuleVersion` — admin can now define per-module submission field schemas; participants receive the parsed schema from the module API (#110).
+
+### Included
+- Prisma: `submissionSchemaJson String?` added to `ModuleVersion`
+  - `prisma/schema.prisma`
+  - `prisma/migrations/20260314203606_add_submission_schema_to_module_version/`
+- Admin content route: `submissionSchema` accepted in module version creation body (validated as `{ fields: [...] }`)
+  - `src/routes/adminContent.ts`
+- Admin content service + repository: field passed through and persisted
+  - `src/services/adminContentService.ts`
+  - `src/repositories/adminContentRepository.ts`
+- Module repository: `submissionSchemaJson` included in all activeVersion selects; parsed and returned as `submissionSchema` object to callers
+  - `src/repositories/moduleRepository.ts`
+
 ## 0.4.1 - 2026-03-14
 ### Summary
 Refactored submission model to generic `responseJson` — removes AI-specific fields and replaces with domain-agnostic structured response storage (#109).

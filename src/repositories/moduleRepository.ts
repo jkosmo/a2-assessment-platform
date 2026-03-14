@@ -25,6 +25,15 @@ function hasAdminRead(roles: AppRoleType[]) {
   return roles.some((role) => ADMIN_READ_ROLES.includes(role));
 }
 
+function parseSubmissionSchema(json: string | null | undefined): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 const moduleSummarySelect = {
   id: true,
   title: true,
@@ -38,6 +47,7 @@ const moduleSummarySelect = {
       versionNo: true,
       taskText: true,
       guidanceText: true,
+      submissionSchemaJson: true,
       publishedAt: true,
       rubricVersionId: true,
       promptTemplateVersionId: true,
@@ -81,6 +91,7 @@ export async function listModules(
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
       guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+      submissionSchema: parseSubmissionSchema(module.activeVersion?.submissionSchemaJson),
     }));
   }
 
@@ -151,6 +162,7 @@ export async function listModules(
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
       guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+      submissionSchema: parseSubmissionSchema(module.activeVersion?.submissionSchemaJson),
       participantStatus: latest
         ? {
             latestSubmissionId: latest.id,
@@ -308,6 +320,7 @@ export async function getActiveModuleVersion(
       versionNo: true,
       taskText: true,
       guidanceText: true,
+      submissionSchemaJson: true,
       rubricVersionId: true,
       promptTemplateVersionId: true,
       mcqSetVersionId: true,
@@ -324,6 +337,7 @@ export async function getActiveModuleVersion(
     ...activeVersion,
     taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
     guidanceText: localizeContentText(locale, activeVersion.guidanceText),
+    submissionSchema: parseSubmissionSchema(activeVersion.submissionSchemaJson),
   };
 }
 

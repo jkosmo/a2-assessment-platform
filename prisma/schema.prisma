@@ -113,6 +113,7 @@ model ModuleVersion {
   rubricVersionId           String
   promptTemplateVersionId   String
   mcqSetVersionId           String
+  submissionSchemaJson      String?
   publishedBy               String?
   publishedAt               DateTime?
   createdAt                 DateTime              @default(now())

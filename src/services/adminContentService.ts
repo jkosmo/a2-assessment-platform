@@ -39,6 +39,7 @@ type CreateModuleVersionInput = {
   rubricVersionId: string;
   promptTemplateVersionId: string;
   mcqSetVersionId: string;
+  submissionSchemaJson?: string;
 };
 
 type CreateModuleInput = {
@@ -438,6 +439,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     rubricVersionId: input.rubricVersionId,
     promptTemplateVersionId: input.promptTemplateVersionId,
     mcqSetVersionId: input.mcqSetVersionId,
+    submissionSchemaJson: input.submissionSchemaJson,
   });
 }
 
