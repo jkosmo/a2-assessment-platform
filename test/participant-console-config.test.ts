@@ -325,6 +325,7 @@ describe("participant console runtime config", () => {
 
     const adminContentJsResponse = await request(app).get("/static/admin-content.js");
     expect(adminContentJsResponse.status).toBe(200);
+    expect(adminContentJsResponse.text).toContain('/api/admin/content/modules');
     expect(adminContentJsResponse.text).toContain('window.confirm(t("adminContent.confirm.importOverwrite"))');
     expect(adminContentJsResponse.text).toContain("function shouldConfirmImportOverwrite(draft)");
   });

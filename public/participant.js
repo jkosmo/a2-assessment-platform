@@ -1821,11 +1821,13 @@ function renderHistorySummary(body) {
 
   clearSummaryContainer(historySummary);
   for (const item of history) {
-    const card = createSummaryCard(`${t("history.entry")}: ${item.submissionId}`);
+    const card = createSummaryCard(`${t("history.submittedAt")}: ${formatDateTime(item.submittedAt)}`);
     const grid = document.createElement("div");
     grid.className = "summary-grid";
+    if (shouldShowModuleDebugMeta()) {
+      appendSummaryRow(grid, t("modules.debugId"), item.submissionId);
+    }
     appendSummaryRow(grid, t("history.module"), formatHistoryModuleValue(item.module));
-    appendSummaryRow(grid, t("history.submittedAt"), formatDateTime(item.submittedAt));
     appendSummaryRow(grid, t("history.latestStatus"), localizeSubmissionStatus(item.status));
     appendSummaryRow(
       grid,

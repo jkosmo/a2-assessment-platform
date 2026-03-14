@@ -41,6 +41,14 @@ describe("MVP admin content management and publication", () => {
     expect(createModuleResponse.status).toBe(201);
     const moduleId = createModuleResponse.body.module.id as string;
 
+    const adminModuleListResponse = await request(app)
+      .get("/api/admin/content/modules")
+      .set(adminHeaders);
+    expect(adminModuleListResponse.status).toBe(200);
+    expect(
+      (adminModuleListResponse.body.modules as Array<{ id: string }>).some((module) => module.id === moduleId),
+    ).toBe(true);
+
     const rubricResponse = await request(app)
       .post(`/api/admin/content/modules/${moduleId}/rubric-versions`)
       .set(adminHeaders)

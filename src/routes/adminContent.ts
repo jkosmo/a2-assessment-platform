@@ -7,6 +7,7 @@ import {
   createModuleVersion,
   deleteModule,
   getModuleContentBundle,
+  listAdminModules,
   createPromptTemplateVersion,
   createRubricVersion,
   publishModuleVersion,
@@ -159,6 +160,11 @@ adminContentRouter.post("/modules", async (request, response) => {
       message: error instanceof Error ? error.message : "Could not create module.",
     });
   }
+});
+
+adminContentRouter.get("/modules", async (_request, response) => {
+  const modules = await listAdminModules();
+  response.json({ modules });
 });
 
 adminContentRouter.delete("/modules/:moduleId", async (request, response) => {

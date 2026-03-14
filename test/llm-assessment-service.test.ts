@@ -8,6 +8,7 @@ const baseInput = {
   rawText: "Candidate practical response with concrete implementation details.",
   reflectionText: "Candidate reflection with validation and iteration notes.",
   promptExcerpt: "Focus on practical utility and responsible use.",
+  responseLocale: "en-GB" as const,
   moduleTaskText: "Participant assignment context.",
   moduleGuidanceText: "Expected answer context.",
   assessmentPass: "primary" as const,
@@ -97,6 +98,38 @@ describe("llmAssessmentService azure_openai adapter", () => {
     expect(messages[1].content).toContain("allowed red_flags.code values");
     expect(messages[1].content).toContain("insufficient_submission");
     expect(messages[1].content).toContain("potential_sensitive_data");
+    expect(messages[1].content).toContain("Write all natural-language response fields in English (UK)");
+  });
+
+  it("includes a locale-specific language instruction for Norwegian Bokmal responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(validPayload),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await evaluatePracticalWithAzureOpenAi(
+      {
+        ...baseInput,
+        responseLocale: "nb",
+      },
+      baseConfig,
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(requestInit.body)) as Record<string, unknown>;
+    const messages = payload.messages as Array<{ content: string }>;
+    expect(messages[1].content).toContain("Write all natural-language response fields in Norwegian Bokmal");
   });
 
   it("supports max_completion_tokens when configured", async () => {

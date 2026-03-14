@@ -186,6 +186,22 @@ export async function createModule(input: CreateModuleInput) {
   return module;
 }
 
+export async function listAdminModules() {
+  const modules = await adminContentRepository.listModuleSummaries();
+
+  return modules.map((module) => ({
+    id: module.id,
+    title: decodeLocalizedText(module.title) ?? module.title,
+    description: decodeLocalizedText(module.description) ?? module.description,
+    activeVersion: module.activeVersion
+      ? {
+          id: module.activeVersion.id,
+          versionNo: module.activeVersion.versionNo,
+        }
+      : null,
+  }));
+}
+
 export async function getModuleContentBundle(moduleId: string) {
   const module = await adminContentRepository.findModuleContentBundle(moduleId);
 

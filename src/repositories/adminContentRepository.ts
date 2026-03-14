@@ -4,6 +4,23 @@ type AdminContentRepositoryClient = typeof prisma;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
+    listModuleSummaries() {
+      return client.module.findMany({
+        orderBy: { title: "asc" },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          activeVersion: {
+            select: {
+              id: true,
+              versionNo: true,
+            },
+          },
+        },
+      });
+    },
+
     findModuleSummary(moduleId: string) {
       return client.module.findUnique({
         where: { id: moduleId },

@@ -1269,7 +1269,7 @@ async function loadModules(options = {}) {
     typeof options.preferredModuleId === "string" ? options.preferredModuleId.trim() : selectedModuleId;
   const preserveMessage = options.preserveMessage === true;
   const logResponse = options.logResponse !== false;
-  const body = await apiFetch("/api/modules?includeCompleted=true", headers);
+  const body = await apiFetch("/api/admin/content/modules", headers);
   modules = Array.isArray(body.modules)
     ? body.modules
       .map((module) => normalizeModuleSummary(module))

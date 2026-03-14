@@ -7,6 +7,27 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.140 - 2026-03-14
+### Summary
+Followed up the first `0.3.139` staging round with three targeted fixes: locale-aware LLM response language instructions, a dedicated admin module-list endpoint that includes unpublished module shells, and a participant history cleanup that hides technical submission IDs unless debug mode is enabled.
+
+### Included
+- Added a dedicated admin-content module listing endpoint and switched the admin workspace to use it, so newly created modules appear immediately even before any version is published:
+  - `src/routes/adminContent.ts`
+  - `src/services/adminContentService.ts`
+  - `src/repositories/adminContentRepository.ts`
+  - `public/admin-content.js`
+  - `test/m2-admin-content-publication.test.ts`
+  - `test/participant-console-config.test.ts`
+- Added locale-aware language instructions to the LLM prompt contract so natural-language result fields follow the selected UI language instead of defaulting to English:
+  - `src/services/llmAssessmentService.ts`
+  - `src/services/assessmentJobService.ts`
+  - `src/scripts/runAssessmentBatchRegression.ts`
+  - `test/llm-assessment-service.test.ts`
+- Simplified participant history by showing submission timestamps as the primary history card label and reserving raw submission IDs for debug mode only:
+  - `public/participant.js`
+  - `test/m2-participant-results-history.test.ts`
+
 ## 0.3.139 - 2026-03-14
 ### Summary
 Bundled three local-first improvements into one deploy candidate: a canonical red-flag reliability policy for LLM assessment routing, a new local integration test layer for policy/workspace regressions, and a UX cleanup batch that simplifies mock-mode identity panels and replaces raw participant result/history text with structured cards.

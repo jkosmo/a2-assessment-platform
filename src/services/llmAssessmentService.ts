@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
+import type { SupportedLocale } from "../i18n/locale.js";
 import { buildAllowedRedFlagCodesForPrompt, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
 
 const evidenceSufficiencySchema = z.enum(["sufficient", "insufficient", "uncertain"]);
@@ -55,6 +56,7 @@ type AssessmentContext = {
   rawText: string;
   reflectionText: string;
   promptExcerpt: string;
+  responseLocale?: SupportedLocale;
   moduleTaskText?: string;
   moduleGuidanceText?: string;
   assessmentPass?: "primary" | "secondary";
@@ -292,10 +294,12 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
       ? "This is a secondary, independent assessment pass."
       : "This is the primary assessment pass.";
   const examplesJson = (input.promptTemplateExamplesJson ?? "").trim();
+  const responseLanguageInstruction = buildResponseLanguageInstruction(input.responseLocale ?? "en-GB");
 
   const userSections = [
     "Assess the candidate submission and return one strict JSON object only.",
     passContext,
+    responseLanguageInstruction,
     REQUIRED_RESPONSE_CONTRACT,
     input.moduleTaskText ? `Participant assignment context:\n${input.moduleTaskText}` : null,
     input.moduleGuidanceText ? `Expected submission content context:\n${input.moduleGuidanceText}` : null,
@@ -416,6 +420,19 @@ function parseStructuredPayload(content: string): unknown {
 }
 
 const DEFAULT_SYSTEM_PROMPT = "You are an assessment assistant. Return strict JSON only.";
+
+function buildResponseLanguageInstruction(locale: SupportedLocale) {
+  const localeInstructionMap: Record<SupportedLocale, string> = {
+    "en-GB":
+      "Write all natural-language response fields in English (UK): criterion_rationales values, improvement_advice entries, confidence_note, and red_flags.description.",
+    nb:
+      "Write all natural-language response fields in Norwegian Bokmal: criterion_rationales values, improvement_advice entries, confidence_note, and red_flags.description.",
+    nn:
+      "Write all natural-language response fields in Norwegian Nynorsk: criterion_rationales values, improvement_advice entries, confidence_note, and red_flags.description.",
+  };
+
+  return localeInstructionMap[locale] ?? localeInstructionMap["en-GB"];
+}
 
 const REQUIRED_RESPONSE_CONTRACT = `
 JSON response contract:
