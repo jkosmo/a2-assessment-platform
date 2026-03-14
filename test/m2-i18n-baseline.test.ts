@@ -177,6 +177,71 @@ describe("MVP i18n baseline", () => {
     expect(mcqSubmitResponse.body.rawScore).toBeGreaterThanOrEqual(1);
   });
 
+  it("localizes the second seed module title, brief, and MCQ content for nb locale", async () => {
+    const modulesEn = await request(app)
+      .get("/api/modules?includeCompleted=true")
+      .set({
+        ...participantHeaders,
+        "x-locale": "en-GB",
+      });
+    expect(modulesEn.status).toBe(200);
+
+    const seedModule = (modulesEn.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "AI Governance and Risk Essentials",
+    );
+    if (!seedModule) {
+      throw new Error("Second seed module not found.");
+    }
+
+    const moduleNb = await request(app)
+      .get(`/api/modules/${seedModule.id}`)
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      });
+    expect(moduleNb.status).toBe(200);
+    expect(moduleNb.body.module.title).toBe("Grunnleggende KI-styring og risiko");
+    expect(moduleNb.body.module.taskText).toBe(
+      "Vurder styringsrisiko og dokumenter en praktisk tilnærming til risikoreduserende tiltak.",
+    );
+    expect(moduleNb.body.module.guidanceText).toBe("Beskriv konkrete kontroller, ansvarlige og oppfølgingsaktiviteter.");
+
+    const submissionResponse = await request(app)
+      .post("/api/submissions")
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      })
+      .send({
+        moduleId: seedModule.id,
+        deliveryType: "text",
+        rawText: "Praktisk styringssvar for i18n-test.",
+        reflectionText: "Jeg testet norsk visning for styringsmodulen.",
+        promptExcerpt: "Beskriv risiko, tiltak og oppfølging.",
+        responsibilityAcknowledged: true,
+      });
+    expect(submissionResponse.status).toBe(201);
+
+    const submissionId = submissionResponse.body.submission.id as string;
+    const mcqStartResponse = await request(app)
+      .get(`/api/modules/${seedModule.id}/mcq/start`)
+      .query({ submissionId })
+      .set({
+        ...participantHeaders,
+        "x-locale": "nb",
+      });
+    expect(mcqStartResponse.status).toBe(200);
+
+    const stems = (mcqStartResponse.body.questions as Array<{ stem: string }>).map((question) => question.stem);
+    expect(stems).toContain("Hvilken kontroll støtter best sporbarhet i KI-vurderinger?");
+
+    const options = (mcqStartResponse.body.questions as Array<{ options: string[] }>).flatMap(
+      (question) => question.options,
+    );
+    expect(options).toContain("Versjonerte beslutninger og revisjonsspor");
+    expect(options).toContain("Send til manuell vurdering etter policy");
+  });
+
   it("uses the submission locale for localized LLM task and guidance context", async () => {
     const modulesEn = await request(app)
       .get("/api/modules?includeCompleted=true")

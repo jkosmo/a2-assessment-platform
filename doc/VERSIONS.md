@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.143 - 2026-03-14
+### Summary
+Expanded seed-module localization coverage and locked participant visibility after new module publication with local integration tests.
+
+### Included
+- Added fallback `nb`/`nn` content translations for the remaining seed-module assignment/guidance/MCQ strings so participant sees more of the seeded experience in the chosen locale:
+  - `src/i18n/contentMessages.ts`
+- Added a new i18n regression for the second seed module to ensure module brief and MCQ content localize correctly:
+  - `test/m2-i18n-baseline.test.ts`
+- Added a new publication regression to ensure previously completed modules remain visible to participant after a new module is created and published:
+  - `test/m2-admin-content-publication.test.ts`
+
 ## 0.3.142 - 2026-03-14
 ### Summary
 Participant now shows published modules even after completion, marks completed modules clearly, and keeps retake flow available from the same module list.

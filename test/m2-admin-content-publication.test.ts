@@ -344,4 +344,213 @@ describe("MVP admin content management and publication", () => {
     expect(blockedDeleteResponse.status).toBe(400);
     expect(blockedDeleteResponse.body.error).toBe("delete_module_failed");
   });
+
+  it("keeps previously completed modules visible to participant after publishing a new module", async () => {
+    const seedModulesResponse = await request(app)
+      .get("/api/modules?includeCompleted=true")
+      .set({
+        ...participantHeaders,
+        "x-user-roles": "PARTICIPANT",
+      });
+    expect(seedModulesResponse.status).toBe(200);
+
+    const seedModule = (seedModulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (module) => module.title === "Generative AI Foundations",
+    );
+    if (!seedModule) {
+      throw new Error("Seed module not found.");
+    }
+
+    const submissionResponse = await request(app)
+      .post("/api/submissions")
+      .set({
+        ...participantHeaders,
+        "x-user-roles": "PARTICIPANT",
+      })
+      .send({
+        moduleId: seedModule.id,
+        deliveryType: "text",
+        rawText: "Completed module should still remain visible after later publication.",
+        reflectionText: "Creating a completed module baseline before publishing a new module.",
+        promptExcerpt: "Document baseline completion before publication test.",
+        responsibilityAcknowledged: true,
+      });
+    expect(submissionResponse.status).toBe(201);
+
+    const submissionId = submissionResponse.body.submission.id as string;
+    const startMcqResponse = await request(app)
+      .get(`/api/modules/${seedModule.id}/mcq/start`)
+      .query({ submissionId })
+      .set({
+        ...participantHeaders,
+        "x-user-roles": "PARTICIPANT",
+      });
+    expect(startMcqResponse.status).toBe(200);
+
+    const responses = startMcqResponse.body.questions.map((question: { id: string; stem: string }) => ({
+      questionId: question.id,
+      selectedAnswer:
+        question.stem === "What is the recommended model ownership boundary?"
+          ? "Backend owns final decision"
+          : "Prompt versions and thresholds",
+    }));
+
+    const submitMcqResponse = await request(app)
+      .post(`/api/modules/${seedModule.id}/mcq/submit`)
+      .set({
+        ...participantHeaders,
+        "x-user-roles": "PARTICIPANT",
+      })
+      .send({
+        submissionId,
+        attemptId: startMcqResponse.body.attemptId,
+        responses,
+      });
+    expect(submitMcqResponse.status).toBe(200);
+
+    const runAssessmentResponse = await request(app)
+      .post(`/api/assessments/${submissionId}/run`)
+      .set({
+        ...participantHeaders,
+        "x-user-roles": "PARTICIPANT",
+      })
+      .send({ sync: true });
+    expect(runAssessmentResponse.status).toBe(202);
+
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": `Participant Visibility Module ${Date.now()}`,
+          nb: "Deltaker synlighetsmodul",
+          nn: "Deltakar synlegheitsmodul",
+        },
+        description: {
+          "en-GB": "Published module should not hide completed modules.",
+          nb: "Publisert modul skal ikke skjule fullførte moduler.",
+          nn: "Publisert modul skal ikkje skjule fullførte modular.",
+        },
+      });
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
+
+    const rubricResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/rubric-versions`)
+      .set(adminHeaders)
+      .send({
+        criteria: {
+          relevance_for_case: "0-4",
+          quality_and_utility: "0-4",
+          iteration_and_improvement: "0-4",
+          human_quality_assurance: "0-4",
+          responsible_use: "0-4",
+        },
+        scalingRule: { practical_weight: 70, max_total: 20 },
+        passRule: {
+          total_min: 70,
+          practical_min_percent: 50,
+          mcq_min_percent: 60,
+          no_open_red_flags: true,
+        },
+      });
+    expect(rubricResponse.status).toBe(201);
+
+    const promptResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/prompt-template-versions`)
+      .set(adminHeaders)
+      .send({
+        systemPrompt: {
+          "en-GB": "Return strict JSON only.",
+          nb: "Returner kun streng JSON.",
+          nn: "Returner berre streng JSON.",
+        },
+        userPromptTemplate: {
+          "en-GB": "Evaluate against rubric.",
+          nb: "Vurder mot kriterier.",
+          nn: "Vurder mot kriterium.",
+        },
+        examples: [],
+      });
+    expect(promptResponse.status).toBe(201);
+
+    const mcqResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/mcq-set-versions`)
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": "Visibility MCQ",
+          nb: "Synlighetstest MCQ",
+          nn: "Synlegheitstest MCQ",
+        },
+        questions: [
+          {
+            stem: {
+              "en-GB": "Which layer owns the final certification decision?",
+              nb: "Hvilket lag eier den endelige sertifiseringsbeslutningen?",
+              nn: "Kva lag eig den endelege sertifiseringsavgjerda?",
+            },
+            options: [
+              "LLM service",
+              {
+                "en-GB": "Backend service",
+                nb: "Backend-tjeneste",
+                nn: "Backend-teneste",
+              },
+            ],
+            correctAnswer: {
+              "en-GB": "Backend service",
+              nb: "Backend-tjeneste",
+              nn: "Backend-teneste",
+            },
+          },
+        ],
+      });
+    expect(mcqResponse.status).toBe(201);
+
+    const moduleVersionResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions`)
+      .set(adminHeaders)
+      .send({
+        taskText: {
+          "en-GB": "Complete the visibility publication task.",
+          nb: "Fullfør synlighetspubliseringsoppgaven.",
+          nn: "Fullfør synlegheitspubliseringsoppgåva.",
+        },
+        guidanceText: {
+          "en-GB": "Describe controls and expected outcome.",
+          nb: "Beskriv kontroller og forventet resultat.",
+          nn: "Skildra kontrollar og venta resultat.",
+        },
+        rubricVersionId: rubricResponse.body.rubricVersion.id,
+        promptTemplateVersionId: promptResponse.body.promptTemplateVersion.id,
+        mcqSetVersionId: mcqResponse.body.mcqSetVersion.id,
+      });
+    expect(moduleVersionResponse.status).toBe(201);
+
+    const publishResponse = await request(app)
+      .post(
+        `/api/admin/content/modules/${moduleId}/module-versions/${moduleVersionResponse.body.moduleVersion.id}/publish`,
+      )
+      .set(adminHeaders);
+    expect(publishResponse.status).toBe(200);
+
+    const participantListResponse = await request(app)
+      .get("/api/modules?includeCompleted=true")
+      .set({
+        ...participantHeaders,
+        "x-user-roles": "PARTICIPANT",
+        "x-locale": "nb",
+      });
+    expect(participantListResponse.status).toBe(200);
+
+    const modules = participantListResponse.body.modules as Array<Record<string, unknown>>;
+    expect(modules.some((module) => module.id === seedModule.id)).toBe(true);
+    expect(modules.some((module) => module.id === moduleId)).toBe(true);
+
+    const completedSeedModule = modules.find((module) => module.id === seedModule.id);
+    expect(completedSeedModule?.participantStatus).toMatchObject({
+      latestStatus: "COMPLETED",
+    });
+  });
 });
