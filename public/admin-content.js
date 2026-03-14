@@ -1219,12 +1219,36 @@ function renderModuleStatus() {
   moduleStatusDetails.textContent = JSON.stringify(view.technicalDetails, null, 2);
 }
 
+function clearVersionFields() {
+  rubricCriteriaJsonInput.value = "";
+  rubricScalingRuleJsonInput.value = "";
+  rubricPassRuleJsonInput.value = "";
+  promptSystemPromptInput.value = "";
+  promptUserPromptTemplateInput.value = "";
+  promptExamplesJsonInput.value = "";
+  mcqSetTitleInput.value = "";
+  mcqQuestionsJsonInput.value = "";
+  moduleVersionTaskTextInput.value = "";
+  moduleVersionGuidanceTextInput.value = "";
+  moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionRubricVersionIdInput.value = "";
+  moduleVersionPromptTemplateVersionIdInput.value = "";
+  moduleVersionMcqSetVersionIdInput.value = "";
+  publishModuleVersionIdInput.value = "";
+  syncAllTextareaHeights();
+}
+
 function setSelectedModule(nextModuleId, syncInput = true) {
-  selectedModuleId = typeof nextModuleId === "string" ? nextModuleId.trim() : "";
+  const nextId = typeof nextModuleId === "string" ? nextModuleId.trim() : "";
+  const moduleChanged = nextId !== selectedModuleId;
+  selectedModuleId = nextId;
   if (syncInput) {
     selectedModuleIdInput.value = selectedModuleId;
   }
   selectedModuleStatus = null;
+  if (moduleChanged) {
+    clearVersionFields();
+  }
   renderModuleDropdown();
   renderModuleMeta();
   renderModuleStatus();
