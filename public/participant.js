@@ -51,9 +51,7 @@ const loadModulesButton = document.getElementById("loadModules");
 const createSubmissionButton = document.getElementById("createSubmission");
 const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
-const rawTextInput = document.getElementById("rawText");
-const reflectionTextInput = document.getElementById("reflectionText");
-const promptExcerptInput = document.getElementById("promptExcerpt");
+const submissionFieldsContainer = document.getElementById("submissionFields");
 const ackCheckbox = document.getElementById("ack");
 const appealReasonInput = document.getElementById("appealReason");
 const assessmentSection = document.getElementById("assessmentSection");
@@ -78,8 +76,6 @@ const historySection = document.getElementById("historySection");
 
 const submissionValidationTargets = [
   { fieldElement: selectedModuleDisplay, hintElement: moduleSelectionHint },
-  { fieldElement: reflectionTextInput },
-  { fieldElement: promptExcerptInput },
   { fieldElement: ackCheckbox },
 ];
 const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
@@ -182,13 +178,16 @@ let autoAssessmentNextPollInSeconds = 0;
 let autoAssessmentRequestInFlight = false;
 
 const defaultFieldBindings = [
-  { id: "rawText", key: "defaults.rawText" },
-  { id: "reflectionText", key: "defaults.reflection" },
-  { id: "promptExcerpt", key: "defaults.promptExcerpt" },
   { id: "appealReason", key: "defaults.appealReason" },
 ];
 
-const moduleDraftFieldIds = ["rawText", "reflectionText", "promptExcerpt"];
+const DEFAULT_SUBMISSION_FIELDS = [
+  { id: "response", label: "Your answer", type: "textarea", rows: 5, required: true },
+  { id: "reflection", label: "Reflection (what you changed and why)", type: "textarea", rows: 4, required: false },
+  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", type: "textarea", rows: 3, required: false },
+];
+
+let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;
 const defaultWorkspaceNavigationItems = [
   {
     id: "participant",
@@ -348,6 +347,10 @@ function buildPreviewModuleFromPayload(payload) {
     taskText: localizePreviewText(previewModule.taskText).trim(),
     guidanceText: localizePreviewText(previewModule.guidanceText).trim(),
     previewQuestions: normalizePreviewQuestions(previewModule.questions),
+    submissionSchema:
+      previewModule.submissionSchema && typeof previewModule.submissionSchema === "object" && !Array.isArray(previewModule.submissionSchema)
+        ? previewModule.submissionSchema
+        : null,
   };
 }
 
@@ -538,6 +541,40 @@ function populateLocaleSelect() {
   }
 }
 
+function getSubmissionFields(selectedModule) {
+  const schemaFields = selectedModule?.submissionSchema?.fields;
+  if (Array.isArray(schemaFields) && schemaFields.length > 0) {
+    return schemaFields.map((f) => ({
+      id: f.id,
+      label: f.label ?? f.id,
+      type: f.type ?? "textarea",
+      rows: f.type === "text" ? 1 : 3,
+      required: f.required ?? false,
+    }));
+  }
+  return DEFAULT_SUBMISSION_FIELDS;
+}
+
+function renderSubmissionFields(fields) {
+  submissionFieldsContainer.innerHTML = "";
+  currentSubmissionFields = fields;
+  for (const field of fields) {
+    const wrapper = document.createElement("div");
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    const textarea = document.createElement("textarea");
+    textarea.setAttribute("data-field-id", field.id);
+    textarea.rows = field.rows ?? 3;
+    textarea.addEventListener("input", () => {
+      scheduleDraftAutosave();
+      updateCreateSubmissionAvailability();
+    });
+    wrapper.appendChild(label);
+    wrapper.appendChild(textarea);
+    submissionFieldsContainer.appendChild(wrapper);
+  }
+}
+
 function renderSelectedModuleSummary() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   selectedModuleIdInput.value = selectedModule?.id ?? "";
@@ -553,6 +590,7 @@ function renderSelectedModuleSummary() {
     "hidden",
     !(selectedModule && (selectedModule.taskText || selectedModule.guidanceText)),
   );
+  renderSubmissionFields(getSubmissionFields(selectedModule));
   updateModuleSelectionVisibility(Boolean(selectedModule));
 }
 
@@ -608,9 +646,6 @@ function updateModuleSelectionVisibility(hasSelectedModule) {
 function validateSubmissionInputState() {
   const selectedModule = resolveSelectedModule(loadedModules, selectedModuleId);
   const hasModule = Boolean(selectedModule);
-  const hasRawText = rawTextInput.value.trim().length >= 10;
-  const hasReflection = reflectionTextInput.value.trim().length >= 10;
-  const hasPromptExcerpt = promptExcerptInput.value.trim().length >= 5;
   const hasAcknowledgement = ackCheckbox.checked === true;
 
   if (!hasModule) {
@@ -621,27 +656,19 @@ function validateSubmissionInputState() {
       invalidHintElement: moduleSelectionHint,
     };
   }
-  if (!hasRawText) {
-    return {
-      valid: false,
-      hintKey: "submission.validation.rawTextMin",
-      invalidFieldElement: rawTextInput,
-    };
+
+  for (const field of currentSubmissionFields) {
+    if (!field.required) continue;
+    const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+    if (!element || element.value.trim().length < 10) {
+      return {
+        valid: false,
+        hintKey: "submission.validation.rawTextMin",
+        invalidFieldElement: element,
+      };
+    }
   }
-  if (!hasReflection) {
-    return {
-      valid: false,
-      hintKey: "submission.validation.reflectionMin",
-      invalidFieldElement: reflectionTextInput,
-    };
-  }
-  if (!hasPromptExcerpt) {
-    return {
-      valid: false,
-      hintKey: "submission.validation.promptMin",
-      invalidFieldElement: promptExcerptInput,
-    };
-  }
+
   if (!hasAcknowledgement) {
     return {
       valid: false,
@@ -654,6 +681,9 @@ function validateSubmissionInputState() {
 }
 
 function resetSubmissionValidationVisuals() {
+  for (const el of submissionFieldsContainer.querySelectorAll(".is-invalid")) {
+    el.classList.remove("is-invalid");
+  }
   for (const target of submissionValidationTargets) {
     target.fieldElement?.classList.remove("is-invalid");
     if (!target.hintElement) {
@@ -707,24 +737,14 @@ function updateCreateSubmissionAvailability() {
   applySubmissionValidationFeedback(validation);
 }
 
-function buildDefaultDraftValueMap() {
-  return Object.fromEntries(
-    defaultFieldBindings
-      .filter((binding) => moduleDraftFieldIds.includes(binding.id))
-      .map((binding) => [binding.id, t(binding.key)]),
-  );
-}
-
 function hasMeaningfulStoredDraft(draft) {
   if (!draft || typeof draft !== "object") {
     return false;
   }
 
-  const defaultValues = buildDefaultDraftValueMap();
-  for (const fieldId of moduleDraftFieldIds) {
-    const value = typeof draft[fieldId] === "string" ? draft[fieldId].trim() : "";
-    const defaultValue = typeof defaultValues[fieldId] === "string" ? defaultValues[fieldId].trim() : "";
-    if (value.length > 0 && value !== defaultValue) {
+  for (const field of currentSubmissionFields) {
+    const value = typeof draft[field.id] === "string" ? draft[field.id].trim() : "";
+    if (value.length > 0) {
       return true;
     }
   }
@@ -1119,13 +1139,11 @@ function setDraftStatus(kind, moduleTitle) {
 }
 
 function resetModuleDraftInputsToDefaultLocaleValues() {
-  for (const fieldId of moduleDraftFieldIds) {
-    const binding = defaultFieldBindings.find((item) => item.id === fieldId);
-    const element = document.getElementById(fieldId);
-    if (!binding || !element) {
-      continue;
+  for (const field of currentSubmissionFields) {
+    const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+    if (element) {
+      element.value = "";
     }
-    element.value = t(binding.key);
   }
 }
 
@@ -1169,9 +1187,9 @@ function persistCurrentModuleDraft(showStatus = false) {
   }
 
   const data = {};
-  for (const fieldId of moduleDraftFieldIds) {
-    const element = document.getElementById(fieldId);
-    data[fieldId] = element?.value ?? "";
+  for (const field of currentSubmissionFields) {
+    const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+    data[field.id] = element?.value ?? "";
   }
   data.mcq = collectCurrentMcqDraft();
 
@@ -1227,9 +1245,11 @@ function restoreDraftForSelectedModule(showStatus = true) {
     return;
   }
 
-  for (const fieldId of moduleDraftFieldIds) {
-    const element = document.getElementById(fieldId);
-    element.value = typeof draft[fieldId] === "string" ? draft[fieldId] : "";
+  for (const field of currentSubmissionFields) {
+    const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+    if (element) {
+      element.value = typeof draft[field.id] === "string" ? draft[field.id] : "";
+    }
   }
 
   const mcqDraft = draft.mcq;
@@ -2094,14 +2114,17 @@ createSubmissionButton.addEventListener("click", async () => {
       }
 
       const moduleId = selectedModuleId;
+      const responseJson = {};
+      for (const field of currentSubmissionFields) {
+        const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+        responseJson[field.id] = element?.value ?? "";
+      }
       const body = await apiFetch("/api/submissions", headers, {
         method: "POST",
         body: JSON.stringify({
           moduleId,
           deliveryType: "text",
-          rawText: rawTextInput.value,
-          reflectionText: reflectionTextInput.value,
-          promptExcerpt: promptExcerptInput.value,
+          responseJson,
           responsibilityAcknowledged: ackCheckbox.checked,
         }),
       });
@@ -2353,13 +2376,6 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-for (const fieldId of moduleDraftFieldIds) {
-  const element = document.getElementById(fieldId);
-  element.addEventListener("input", () => {
-    scheduleDraftAutosave();
-    updateCreateSubmissionAvailability();
-  });
-}
 
 ackCheckbox.addEventListener("change", () => {
   updateCreateSubmissionAvailability();

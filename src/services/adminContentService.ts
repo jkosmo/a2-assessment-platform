@@ -218,6 +218,7 @@ export async function getModuleContentBundle(moduleId: string) {
     versionNo: version.versionNo,
     taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
     guidanceText: decodeLocalizedText(version.guidanceText) ?? version.guidanceText,
+    submissionSchema: version.submissionSchemaJson ? safeParseJson(version.submissionSchemaJson) : null,
     rubricVersionId: version.rubricVersionId,
     promptTemplateVersionId: version.promptTemplateVersionId,
     mcqSetVersionId: version.mcqSetVersionId,

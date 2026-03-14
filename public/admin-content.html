@@ -219,6 +219,8 @@
       <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
       <div><label data-i18n="adminContent.moduleVersion.guidanceText">What we expect in the submission</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
       <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
+      <div><label data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
+      <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
       <div class="row">
         <div><label data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
         <div><label data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>

@@ -100,6 +100,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               versionNo: true,
               taskText: true,
               guidanceText: true,
+              submissionSchemaJson: true,
               rubricVersionId: true,
               promptTemplateVersionId: true,
               mcqSetVersionId: true,

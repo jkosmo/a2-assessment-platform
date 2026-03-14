@@ -60,6 +60,7 @@ const mcqQuestionsJsonInput = document.getElementById("mcqQuestionsJson");
 
 const moduleVersionTaskTextInput = document.getElementById("moduleVersionTaskText");
 const moduleVersionGuidanceTextInput = document.getElementById("moduleVersionGuidanceText");
+const moduleVersionSubmissionSchemaInput = document.getElementById("moduleVersionSubmissionSchema");
 const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersionRubricVersionId");
 const moduleVersionPromptTemplateVersionIdInput = document.getElementById("moduleVersionPromptTemplateVersionId");
 const moduleVersionMcqSetVersionIdInput = document.getElementById("moduleVersionMcqSetVersionId");
@@ -567,6 +568,7 @@ function getEditorSnapshot() {
     mcqQuestionsJson: normalizeSnapshotValue(mcqQuestionsJsonInput.value),
     moduleVersionTaskText: normalizeSnapshotValue(moduleVersionTaskTextInput.value),
     moduleVersionGuidanceText: normalizeSnapshotValue(moduleVersionGuidanceTextInput.value),
+    moduleVersionSubmissionSchema: normalizeSnapshotValue(moduleVersionSubmissionSchemaInput.value),
     moduleVersionRubricVersionId: normalizeSnapshotValue(moduleVersionRubricVersionIdInput.value),
     moduleVersionPromptTemplateVersionId: normalizeSnapshotValue(moduleVersionPromptTemplateVersionIdInput.value),
     moduleVersionMcqSetVersionId: normalizeSnapshotValue(moduleVersionMcqSetVersionIdInput.value),
@@ -593,6 +595,7 @@ function buildEditorSnapshotFromDraft(draft) {
     mcqQuestionsJson: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.questions, "")),
     moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
     moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
+    moduleVersionSubmissionSchema: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.submissionSchema, "")),
     moduleVersionRubricVersionId: "",
     moduleVersionPromptTemplateVersionId: "",
     moduleVersionMcqSetVersionId: "",
@@ -881,6 +884,7 @@ function applyImportDraftToForm(draft) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
+  moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchema, "");
 
   moduleVersionRubricVersionIdInput.value = "";
   moduleVersionPromptTemplateVersionIdInput.value = "";
@@ -909,6 +913,7 @@ function populateFormFromModuleExport(moduleExport) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
+  moduleVersionSubmissionSchemaInput.value = formatEditorValue(moduleVersion?.submissionSchema, "");
   moduleVersionRubricVersionIdInput.value = rubricVersion?.id ?? "";
   moduleVersionPromptTemplateVersionIdInput.value = promptTemplateVersion?.id ?? "";
   moduleVersionMcqSetVersionIdInput.value = mcqSetVersion?.id ?? "";
@@ -948,6 +953,9 @@ function buildParticipantPreviewPayload() {
         moduleVersionGuidanceTextInput.value,
         "adminContent.moduleVersion.guidanceText",
       ),
+      submissionSchema: moduleVersionSubmissionSchemaInput.value.trim()
+        ? parseJsonField(moduleVersionSubmissionSchemaInput.value.trim(), "adminContent.moduleVersion.submissionSchemaJson")
+        : null,
       questions,
     },
   };
@@ -1088,6 +1096,7 @@ function setDefaultFormValues() {
   mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
+  moduleVersionSubmissionSchemaInput.value = "";
   syncAllTextareaHeights();
   editorBaselineSnapshot = getEditorSnapshot();
 }
@@ -1473,6 +1482,11 @@ async function handleCreateMcqSetVersion(options = { silent: false }) {
 
 async function handleCreateModuleVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
+  const rawSubmissionSchema = moduleVersionSubmissionSchemaInput.value.trim();
+  let submissionSchema;
+  if (rawSubmissionSchema) {
+    submissionSchema = parseJsonField(rawSubmissionSchema, "adminContent.moduleVersion.submissionSchemaJson");
+  }
   const payload = {
     taskText: parseLocalizedTextField(moduleVersionTaskTextInput.value, "adminContent.moduleVersion.taskText"),
     guidanceText: parseLocalizedTextField(
@@ -1483,6 +1497,7 @@ async function handleCreateModuleVersion(options = { silent: false }) {
     rubricVersionId: moduleVersionRubricVersionIdInput.value.trim(),
     promptTemplateVersionId: moduleVersionPromptTemplateVersionIdInput.value.trim(),
     mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
+    ...(submissionSchema !== undefined && { submissionSchema }),
   };
 
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, headers, {
