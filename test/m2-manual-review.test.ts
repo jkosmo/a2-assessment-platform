@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { findModuleIdByTitle } from "./support/participantFlow.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -30,15 +31,7 @@ describe("MVP manual review workspace", () => {
   });
 
   it("creates immutable override decision layer through reviewer workspace", async () => {
-    const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
-    expect(modulesResponse.status).toBe(200);
-    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
-      (module) => module.title === "Generative AI Foundations",
-    );
-    if (!seedModule) {
-      throw new Error("Seed module not found.");
-    }
-    const moduleId = seedModule.id;
+    const moduleId = await findModuleIdByTitle(app, participantHeaders, "Generative AI Foundations");
 
     const submissionResponse = await request(app)
       .post("/api/submissions")

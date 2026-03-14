@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
+import { buildAllowedRedFlagCodesForPrompt, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
 
 const evidenceSufficiencySchema = z.enum(["sufficient", "insufficient", "uncertain"]);
 const recommendedOutcomeSchema = z.enum(["pass", "fail", "manual_review"]);
@@ -75,7 +76,11 @@ type AzureOpenAiRuntimeConfig = {
 
 export async function evaluatePracticalWithLlm(input: AssessmentContext): Promise<LlmStructuredAssessment> {
   if (env.LLM_MODE === "stub") {
-    return llmResponseSchema.parse(buildStubResponse(input));
+    const parsedAssessment = llmResponseSchema.parse(buildStubResponse(input));
+    return {
+      ...parsedAssessment,
+      red_flags: normalizeRedFlags(parsedAssessment.red_flags),
+    };
   }
 
   if (env.LLM_MODE === "azure_openai") {
@@ -137,8 +142,12 @@ export async function evaluatePracticalWithAzureOpenAi(
 
       const assistantContent = extractAssistantContent(responseBody);
       const parsedStructuredPayload = parseStructuredPayload(assistantContent);
+      const parsedAssessment = llmResponseSchema.parse(parsedStructuredPayload);
 
-      return llmResponseSchema.parse(parsedStructuredPayload);
+      return {
+        ...parsedAssessment,
+        red_flags: normalizeRedFlags(parsedAssessment.red_flags),
+      };
     }
 
     throw (
@@ -423,6 +432,9 @@ JSON response contract:
 - criterion_rationales: object with one concise string rationale per rubric criterion key
 - improvement_advice: array of up to 10 concise strings
 - red_flags: array of objects with fields: code (string), severity (string), description (string)
+- allowed red_flags.code values:
+  - ${buildAllowedRedFlagCodesForPrompt().join("\n  - ")}
+- if no allowed red flag applies, return an empty red_flags array
 - manual_review_recommended: boolean
 - confidence_note: string
 - evidence_sufficiency: one of sufficient, insufficient, uncertain

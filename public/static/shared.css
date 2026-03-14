@@ -252,6 +252,111 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.mock-identity-card {
+  padding: 0;
+}
+
+.mock-identity-panel {
+  padding: var(--space-2);
+}
+
+.mock-identity-panel summary {
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  list-style: none;
+}
+
+.mock-identity-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.mock-identity-panel summary::before {
+  content: "+";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: var(--space-1);
+  border-radius: 999px;
+  background: var(--color-blue-light);
+  color: var(--color-link-active);
+  font-weight: 700;
+}
+
+.mock-identity-panel[open] summary::before {
+  content: "-";
+}
+
+.mock-identity-panel-body {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.summary-stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.summary-card {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-module-summary-border);
+  border-radius: var(--radius-card);
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f8fe 100%);
+}
+
+.summary-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-link-active);
+}
+
+.summary-grid {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) 1fr;
+  gap: var(--space-1);
+  align-items: start;
+}
+
+.summary-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.summary-value {
+  color: var(--color-text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.summary-list {
+  margin: 0;
+  padding-left: calc(var(--space-2) + 4px);
+  color: var(--color-text);
+}
+
+.summary-list li + li {
+  margin-top: calc(var(--space-1) * 0.5);
+}
+
+.history-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
 .mcq-question-card {
   margin: 0 0 var(--space-2);
   padding: var(--space-2);
@@ -352,4 +457,10 @@ pre {
 
 .hidden {
   display: none;
+}
+
+@media (max-width: 900px) {
+  .summary-row {
+    grid-template-columns: 1fr;
+  }
 }

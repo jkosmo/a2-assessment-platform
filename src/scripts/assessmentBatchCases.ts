@@ -25,10 +25,8 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     rawText: "Hepp Hepp Hepp som det. Hvorfor er alt rødt nå",
     reflectionText: "Hepp hopp topp",
     promptExcerpt: "Promp",
-    moduleTaskText:
-      "Write a practical reflection showing how generative AI was used, what changed through iteration, and how the work was quality assured.",
-    moduleGuidanceText:
-      "A good submission includes a substantive answer, explicit iteration notes, QA checks, and enough detail for reliable scoring.",
+    moduleTaskText: "Submit a practical reflection and complete the MCQ.",
+    moduleGuidanceText: "Include iteration and quality assurance notes.",
   },
   {
     id: "yellow_sensitive_data",

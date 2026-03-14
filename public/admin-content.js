@@ -213,6 +213,7 @@ let currentLocale = resolveInitialLocale();
 let modules = [];
 let selectedModuleId = "";
 let selectedModuleStatus = null;
+let editorBaselineSnapshot = null;
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
@@ -543,6 +544,82 @@ function syncAllTextareaHeights() {
   for (const textarea of document.querySelectorAll("textarea")) {
     syncTextareaHeight(textarea);
   }
+}
+
+function normalizeSnapshotValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getEditorSnapshot() {
+  return {
+    moduleTitle: normalizeSnapshotValue(moduleTitleInput.value),
+    moduleDescription: normalizeSnapshotValue(moduleDescriptionInput.value),
+    moduleCertificationLevel: normalizeSnapshotValue(moduleCertificationLevelInput.value),
+    moduleValidFrom: normalizeSnapshotValue(moduleValidFromInput.value),
+    moduleValidTo: normalizeSnapshotValue(moduleValidToInput.value),
+    rubricCriteriaJson: normalizeSnapshotValue(rubricCriteriaJsonInput.value),
+    rubricScalingRuleJson: normalizeSnapshotValue(rubricScalingRuleJsonInput.value),
+    rubricPassRuleJson: normalizeSnapshotValue(rubricPassRuleJsonInput.value),
+    promptSystemPrompt: normalizeSnapshotValue(promptSystemPromptInput.value),
+    promptUserPromptTemplate: normalizeSnapshotValue(promptUserPromptTemplateInput.value),
+    promptExamplesJson: normalizeSnapshotValue(promptExamplesJsonInput.value),
+    mcqSetTitle: normalizeSnapshotValue(mcqSetTitleInput.value),
+    mcqQuestionsJson: normalizeSnapshotValue(mcqQuestionsJsonInput.value),
+    moduleVersionTaskText: normalizeSnapshotValue(moduleVersionTaskTextInput.value),
+    moduleVersionGuidanceText: normalizeSnapshotValue(moduleVersionGuidanceTextInput.value),
+    moduleVersionRubricVersionId: normalizeSnapshotValue(moduleVersionRubricVersionIdInput.value),
+    moduleVersionPromptTemplateVersionId: normalizeSnapshotValue(moduleVersionPromptTemplateVersionIdInput.value),
+    moduleVersionMcqSetVersionId: normalizeSnapshotValue(moduleVersionMcqSetVersionIdInput.value),
+    publishModuleVersionId: normalizeSnapshotValue(publishModuleVersionIdInput.value),
+  };
+}
+
+function buildEditorSnapshotFromDraft(draft) {
+  return {
+    moduleTitle: normalizeSnapshotValue(formatEditorValue(draft?.module?.title, "")),
+    moduleDescription: normalizeSnapshotValue(formatEditorValue(draft?.module?.description, "")),
+    moduleCertificationLevel: normalizeSnapshotValue(formatEditorValue(draft?.module?.certificationLevel, "")),
+    moduleValidFrom: normalizeSnapshotValue(typeof draft?.module?.validFrom === "string" ? draft.module.validFrom : ""),
+    moduleValidTo: normalizeSnapshotValue(typeof draft?.module?.validTo === "string" ? draft.module.validTo : ""),
+    rubricCriteriaJson: normalizeSnapshotValue(formatEditorValue(draft?.rubric?.criteria, "")),
+    rubricScalingRuleJson: normalizeSnapshotValue(formatEditorValue(draft?.rubric?.scalingRule, "")),
+    rubricPassRuleJson: normalizeSnapshotValue(formatEditorValue(draft?.rubric?.passRule, "")),
+    promptSystemPrompt: normalizeSnapshotValue(formatEditorValue(draft?.promptTemplate?.systemPrompt, "")),
+    promptUserPromptTemplate: normalizeSnapshotValue(
+      formatEditorValue(draft?.promptTemplate?.userPromptTemplate, ""),
+    ),
+    promptExamplesJson: normalizeSnapshotValue(formatEditorValue(draft?.promptTemplate?.examples, "")),
+    mcqSetTitle: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.title, "")),
+    mcqQuestionsJson: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.questions, "")),
+    moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
+    moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
+    moduleVersionRubricVersionId: "",
+    moduleVersionPromptTemplateVersionId: "",
+    moduleVersionMcqSetVersionId: "",
+    publishModuleVersionId: "",
+  };
+}
+
+function snapshotsEqual(left, right) {
+  const keys = new Set([...Object.keys(left ?? {}), ...Object.keys(right ?? {})]);
+  for (const key of keys) {
+    if ((left?.[key] ?? "") !== (right?.[key] ?? "")) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function shouldConfirmImportOverwrite(draft) {
+  const currentSnapshot = getEditorSnapshot();
+  const importedSnapshot = buildEditorSnapshotFromDraft(draft);
+  const baselineSnapshot = editorBaselineSnapshot ?? {};
+
+  if (snapshotsEqual(currentSnapshot, importedSnapshot)) {
+    return false;
+  }
+
+  return !snapshotsEqual(currentSnapshot, baselineSnapshot);
 }
 
 function isPlainObject(value) {
@@ -1012,6 +1089,7 @@ function setDefaultFormValues() {
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
   syncAllTextareaHeights();
+  editorBaselineSnapshot = getEditorSnapshot();
 }
 
 function normalizeModuleSummary(module) {
@@ -1459,6 +1537,13 @@ async function handleApplyImportDraft(rawValue) {
   }
 
   const draft = normalizeImportDraftPayload(parsed);
+  if (shouldConfirmImportOverwrite(draft)) {
+    const confirmed = window.confirm(t("adminContent.confirm.importOverwrite"));
+    if (!confirmed) {
+      setMessage(t("adminContent.message.importCancelled"));
+      return;
+    }
+  }
   applyImportDraftToForm(draft);
   importDraftJsonInput.value = JSON.stringify(parsed, null, 2);
   await loadModules({

@@ -32,26 +32,30 @@
         </div>
       </section>
 
-      <section class="card">
-        <h3 data-i18n="identity.title">Test User</h3>
-        <div class="row">
-          <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" /></div>
-          <div><label data-i18n="identity.email">Email</label><input id="email" value="reviewer1@company.com" /></div>
-        </div>
-        <div class="row">
-          <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Reviewer" /></div>
-          <div><label data-i18n="identity.department">Department</label><input id="department" value="Quality" /></div>
-        </div>
-        <div>
-          <label data-i18n="identity.roles">Roles</label>
-          <input id="roles" value="REVIEWER" />
-        </div>
-        <div id="mockRolePresetContainer">
-          <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
-          <select id="mockRolePreset"></select>
-          <div class="small" id="mockRolePresetHint"></div>
-        </div>
-        <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
+      <section class="card mock-identity-card">
+        <details class="mock-identity-panel">
+          <summary><span data-i18n="identity.title">Test User</span></summary>
+          <div class="mock-identity-panel-body">
+            <div class="row">
+              <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" /></div>
+              <div><label data-i18n="identity.email">Email</label><input id="email" value="reviewer1@company.com" /></div>
+            </div>
+            <div class="row">
+              <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Reviewer" /></div>
+              <div><label data-i18n="identity.department">Department</label><input id="department" value="Quality" /></div>
+            </div>
+            <div>
+              <label data-i18n="identity.roles">Roles</label>
+              <input id="roles" value="REVIEWER" />
+            </div>
+            <div id="mockRolePresetContainer">
+              <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
+              <select id="mockRolePreset"></select>
+              <div class="small" id="mockRolePresetHint"></div>
+            </div>
+            <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
+          </div>
+        </details>
       </section>
 
       <section class="card">

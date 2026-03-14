@@ -6,6 +6,7 @@ import {
   hasLowConfidenceManualReviewSignal,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
+import { isConfiguredSecondaryTriggerRedFlag, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
 
 export type SecondaryAssessmentPolicy = ReturnType<typeof getAssessmentRules>["secondaryAssessment"];
 
@@ -66,9 +67,8 @@ export function evaluateSecondaryAssessmentTrigger(
     reasons.push("primary_result_low_or_medium_confidence");
   }
 
-  const triggerSeverities = new Set(policy.triggerRules.redFlagSeverities.map((severity) => severity.toLowerCase()));
-  const hasFlagSeverityTrigger = input.primaryResult.red_flags.some((flag) =>
-    triggerSeverities.has(flag.severity.toLowerCase()),
+  const hasFlagSeverityTrigger = normalizeRedFlags(input.primaryResult.red_flags).some((flag) =>
+    isConfiguredSecondaryTriggerRedFlag(flag),
   );
   if (hasFlagSeverityTrigger) {
     reasons.push("primary_result_red_flag_trigger");

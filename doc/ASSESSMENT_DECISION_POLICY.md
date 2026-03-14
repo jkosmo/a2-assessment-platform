@@ -24,6 +24,27 @@ It does not describe:
 - appeal resolution policy
 - certification validity policy after a final decision
 
+## Reliability Requirement
+
+This platform is used for internal certification decisions that have real, though non-severe, consequences for participants.
+
+That means reliability is a functional requirement, not just a model-quality aspiration.
+
+The policy must therefore preserve consistency at the outcome level:
+- clearly weak or incomplete submissions should consistently become `FAIL`
+- clearly risky, policy-sensitive, or borderline submissions should consistently become `UNDER_REVIEW`
+- clearly strong submissions should consistently become `PASS`
+
+Some variation in raw rubric language, confidence phrasing, and rationale wording is expected from the LLM.
+That variation is acceptable only as long as it does not cause unstable routing between `red`, `yellow`, and `green`.
+
+Implications:
+- structured metadata is preferred over free-text interpretation
+- red-flag routing must use a constrained, documented taxonomy
+- unknown or drifting model wording must not silently redefine the traffic-light policy
+- policy and taxonomy levers must remain understandable and tuneable through configuration
+- local automated regression coverage should contain canonical `red`, `yellow`, and `green` cases before staging verification
+
 ## Inputs
 
 The decision logic uses four main inputs:
@@ -51,6 +72,11 @@ These fields are now interpreted in two layers:
 - structured decision metadata is the primary source
 - confidence/rationale/advice text is legacy fallback when structured metadata is missing or incomplete
 
+Red flags are additionally subject to normalization:
+- the model may use variable wording or unstable raw codes
+- runtime policy normalizes raw red-flag codes into a smaller canonical taxonomy before routing
+- only canonical, configured manual-review classes are allowed to force `UNDER_REVIEW`
+
 ### MCQ result
 
 The MCQ pipeline returns:
@@ -65,6 +91,11 @@ Current thresholds in [assessment-rules.json](C:/Users/JoakimKosmo/a2-assessment
 - MCQ minimum percent for pass: `60`
 - borderline window: `67..73`
 - red-flag severities that force review: `high`
+
+Current policy also depends on a canonical red-flag taxonomy in [assessment-rules.json](C:/Users/JoakimKosmo/a2-assessment-platform/config/assessment-rules.json):
+- insufficiency/completeness flags that should stay `red`
+- policy/safety flags that should stay `yellow`
+- handling of unknown or unstable LLM flag codes
 
 ## Decision Sequence
 
@@ -208,6 +239,9 @@ Red flags affect the decision in two ways:
 1. They block automatic pass when they match configured forcing severities.
 2. They can force manual review directly.
 
+Red flags are not treated as an open-ended free-text taxonomy.
+They must be interpreted through a canonical policy vocabulary so that administrators can understand and tune the routing behavior.
+
 Current forcing severities from [assessment-rules.json](C:/Users/JoakimKosmo/a2-assessment-platform/config/assessment-rules.json):
 - `high`
 
@@ -215,6 +249,7 @@ This means:
 - medium red flags can still matter for secondary assessment
 - high red flags are the main direct blocker in the final decision service
 - exception: insufficiency/completeness codes such as `insufficient_submission`, `incomplete_submission`, and `extremely_low_content` are treated as insufficient-evidence fail signals, not as forcing safety/compliance red flags
+- unknown model-generated red-flag codes should be normalized or downgraded according to configuration rather than automatically forcing manual review
 
 ## Borderline Window
 
@@ -310,7 +345,13 @@ Outcome:
 - If the business wants fewer manual reviews, the most important levers are:
   - borderline window
   - red-flag thresholds
+  - canonical red-flag taxonomy and alias mapping
+  - how unknown LLM red-flag codes are handled
   - how much weight is given to `manual_review_recommended`
+
+For administrator tuning, the key expectation is:
+- administrators should be able to understand why a case becomes `red`, `yellow`, or `green`
+- administrators should be able to adjust policy using documented config and taxonomy, not by guessing at prompt side effects
 
 ## Change Control
 

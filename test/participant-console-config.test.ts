@@ -179,6 +179,8 @@ describe("participant console runtime config", () => {
       expect(response.status).toBe(200);
       expect(response.text).toContain('href="/static/shared.css"');
       expect(response.text).toContain('class="layout-container"');
+      expect(response.text).toContain('class="card mock-identity-card"');
+      expect(response.text).toContain('class="mock-identity-panel"');
 
       if (["/participant", "/appeal-handler", "/calibration"].includes(pagePath)) {
         expect(response.text).toContain('href="/static/loading.css"');
@@ -204,6 +206,10 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="selectedModuleGuidanceText"');
         expect(response.text).toContain('id="draftBrowserNote"');
         expect(response.text).toContain('id="appealNextSteps"');
+        expect(response.text).toContain('id="resultSummary" class="summary-stack"');
+        expect(response.text).toContain('id="historySummary" class="history-list"');
+        expect(response.text).not.toContain('<pre id="resultSummary"');
+        expect(response.text).not.toContain('<pre id="historySummary"');
         expect(response.text).toContain('data-step="4"');
         expect(response.text).not.toContain('data-step="5"');
       }
@@ -274,6 +280,9 @@ describe("participant console runtime config", () => {
     expect(cssResponse.text).toContain(".layout-container");
     expect(cssResponse.text).toContain("max-width: 1100px;");
     expect(cssResponse.text).toContain("box-shadow: var(--shadow-card);");
+    expect(cssResponse.text).toContain(".mock-identity-panel");
+    expect(cssResponse.text).toContain(".summary-card");
+    expect(cssResponse.text).toContain(".history-list");
     expect(cssResponse.text).toContain(".btn-primary");
     expect(cssResponse.text).toContain(".btn-secondary");
     expect(cssResponse.text).toContain(".btn-danger");
@@ -308,8 +317,15 @@ describe("participant console runtime config", () => {
     const participantJsResponse = await request(app).get("/static/participant.js");
     expect(participantJsResponse.status).toBe(200);
     expect(participantJsResponse.text).toContain('document.createElement("fieldset")');
+    expect(participantJsResponse.text).toContain('function shouldShowModuleDebugMeta()');
+    expect(participantJsResponse.text).toContain('function createSummaryCard(title)');
     expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
     expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
     expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
+
+    const adminContentJsResponse = await request(app).get("/static/admin-content.js");
+    expect(adminContentJsResponse.status).toBe(200);
+    expect(adminContentJsResponse.text).toContain('window.confirm(t("adminContent.confirm.importOverwrite"))');
+    expect(adminContentJsResponse.text).toContain("function shouldConfirmImportOverwrite(draft)");
   });
 });

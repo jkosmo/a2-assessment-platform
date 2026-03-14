@@ -338,6 +338,55 @@ describe("decision service", () => {
     expect(result.needsManualReview).toBe(false);
   });
 
+  it("fails automatically when the model emits an unstable insufficiency alias instead of a canonical red-flag code", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-4c",
+      passFailTotal: false,
+      decisionReason: "Automatic fail due to insufficient submission evidence.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-4c" });
+
+    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+
+    const result = await createAssessmentDecision({
+      submissionId: "submission-4c",
+      userId: "user-4c",
+      moduleVersionId: "module-version-4c",
+      rubricVersionId: "rubric-version-4c",
+      promptTemplateVersionId: "prompt-version-4c",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({
+        rubric_total: 0,
+        practical_score_scaled: 0,
+        pass_fail_practical: false,
+        evidence_sufficiency: "insufficient",
+        recommended_outcome: "manual_review",
+        manual_review_reason_code: "red_flag",
+        manual_review_recommended: true,
+        confidence_note:
+          "Very low confidence in automated scoring due to lack of content; human review required.",
+        red_flags: [
+          {
+            code: "garbled_submission",
+            severity: "high",
+            description: "Observed staging-style low-content warning.",
+          },
+        ],
+      }),
+    });
+
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        passFailTotal: false,
+        decisionReason: "Automatic fail due to insufficient submission evidence.",
+        totalScore: 0,
+      }),
+    );
+    expect(result.needsManualReview).toBe(false);
+  });
+
   it("fails automatically for non-substantive low-confidence submissions that ask for more materials", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-5",

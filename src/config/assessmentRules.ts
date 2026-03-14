@@ -19,7 +19,19 @@ const rulesSchema = z.object({
       max: z.number(),
     }),
     redFlagSeverities: z.array(z.string().min(1)),
+    redFlagCodes: z.array(z.string().min(1)).default([]),
   }),
+  llmDecisionReliability: z
+    .object({
+      unknownRedFlagHandling: z.enum(["downgrade_to_unclassified", "keep_as_is"]).default("downgrade_to_unclassified"),
+      unknownRedFlagCanonicalCode: z.string().min(1).default("unclassified_model_warning"),
+      canonicalRedFlags: z.record(z.string().min(1), z.array(z.string().min(1))).default({}),
+    })
+    .default({
+      unknownRedFlagHandling: "downgrade_to_unclassified",
+      unknownRedFlagCanonicalCode: "unclassified_model_warning",
+      canonicalRedFlags: {},
+    }),
   mcqQuality: z
     .object({
       minAttemptCount: z.number().int().positive().default(5),
@@ -61,11 +73,13 @@ const rulesSchema = z.object({
         .object({
           manualReviewRecommended: z.boolean().default(true),
           confidenceNotePatterns: z.array(z.string().min(1)).default(["medium confidence", "low confidence"]),
+          redFlagCodes: z.array(z.string().min(1)).default([]),
           redFlagSeverities: z.array(z.string().min(1)).default(["medium", "high"]),
         })
         .default({
           manualReviewRecommended: true,
           confidenceNotePatterns: ["medium confidence", "low confidence"],
+          redFlagCodes: [],
           redFlagSeverities: ["medium", "high"],
         }),
       disagreementRules: z
@@ -88,6 +102,7 @@ const rulesSchema = z.object({
       triggerRules: {
         manualReviewRecommended: true,
         confidenceNotePatterns: ["medium confidence", "low confidence"],
+        redFlagCodes: [],
         redFlagSeverities: ["medium", "high"],
       },
       disagreementRules: {

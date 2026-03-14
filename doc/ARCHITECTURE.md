@@ -151,6 +151,17 @@ The platform separates human tasks by workspace and role.
 
 ## Key Architectural Boundaries
 
+### Assessment reliability is a product requirement
+- the platform supports certification decisions that have real internal consequences for participants
+- because of that, assessment outcomes must be reliable enough to preserve trust in the certification process
+- some variation in free-text scoring from the LLM is expected and tolerated, especially across model versions
+- that variation is **not** acceptable at the traffic-light level:
+  - clearly weak/incomplete submissions should consistently land in `red`
+  - clearly risky/borderline submissions should consistently land in `yellow`
+  - clearly strong submissions should consistently land in `green`
+- the architecture must therefore constrain the LLM to structured, policy-governed signals rather than letting arbitrary wording decide routing
+- tuning of these levels must remain understandable and configurable for administrators through documented policy/configuration, not hidden prompt behavior
+
 ### Manual review and appeals are different workflows
 - manual review happens before or around finalisation of an assessment outcome when the system needs human intervention
 - appeals happen after a participant disputes an outcome

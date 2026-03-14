@@ -45,12 +45,14 @@ describe("admin content translation resources", () => {
       "adminContent.message.moduleContentLoaded",
       "adminContent.message.moduleExported",
       "adminContent.message.importApplied",
+      "adminContent.message.importCancelled",
       "adminContent.message.authoringPromptCopied",
       "adminContent.message.previewOpened",
       "adminContent.errors.valueRequiredPrefix",
       "adminContent.errors.importShape",
       "adminContent.errors.previewPopupBlocked",
       "adminContent.confirm.deleteModule",
+      "adminContent.confirm.importOverwrite",
     ];
 
     for (const locale of supportedLocales) {

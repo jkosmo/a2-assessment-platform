@@ -272,6 +272,10 @@ function localizePreviewText(value) {
   return typeof localized === "string" ? localized : "";
 }
 
+function shouldShowModuleDebugMeta() {
+  return isRawDebugEnabled();
+}
+
 function normalizePreviewQuestions(questions) {
   if (!Array.isArray(questions)) {
     return [];
@@ -782,10 +786,12 @@ function renderModules() {
       button.appendChild(draftBadge);
     }
 
-    const moduleMeta = document.createElement("div");
-    moduleMeta.className = "module-meta";
-    moduleMeta.textContent = `ID: ${module.id}`;
-    button.appendChild(moduleMeta);
+    if (shouldShowModuleDebugMeta()) {
+      const moduleMeta = document.createElement("div");
+      moduleMeta.className = "module-meta";
+      moduleMeta.textContent = `${t("modules.debugId")}: ${module.id}`;
+      button.appendChild(moduleMeta);
+    }
 
     if (module.selected) {
       const selectedBadge = document.createElement("div");
@@ -1504,8 +1510,12 @@ function localizeConfidence(value) {
 }
 
 function localizeImprovementAdvice(values) {
+  return localizeImprovementAdviceItems(values).join("; ");
+}
+
+function localizeImprovementAdviceItems(values) {
   if (!Array.isArray(values) || values.length === 0) {
-    return "-";
+    return [];
   }
 
   const mapping = {
@@ -1548,7 +1558,7 @@ function localizeImprovementAdvice(values) {
       "result.improvementAdviceValue.examplesFailureModes",
   };
 
-  return values.map((value) => localizeKnownContent(value, mapping)).join("; ");
+  return values.map((value) => localizeKnownContent(value, mapping));
 }
 
 function localizeCriterionRationale(value) {
@@ -1662,12 +1672,80 @@ function renderAppealState() {
   appealNextSteps.textContent = "";
 }
 
+function clearSummaryContainer(element) {
+  if (!element) {
+    return;
+  }
+
+  element.innerHTML = "";
+}
+
+function createSummaryCard(title) {
+  const card = document.createElement("section");
+  card.className = "summary-card";
+
+  if (title) {
+    const heading = document.createElement("div");
+    heading.className = "summary-card-title";
+    heading.textContent = title;
+    card.appendChild(heading);
+  }
+
+  return card;
+}
+
+function appendSummaryRow(container, label, value) {
+  const row = document.createElement("div");
+  row.className = "summary-row";
+
+  const labelNode = document.createElement("div");
+  labelNode.className = "summary-label";
+  labelNode.textContent = label;
+
+  const valueNode = document.createElement("div");
+  valueNode.className = "summary-value";
+  valueNode.textContent = value;
+
+  row.append(labelNode, valueNode);
+  container.appendChild(row);
+}
+
+function appendSummaryList(container, title, values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return;
+  }
+
+  const card = createSummaryCard(title);
+  const list = document.createElement("ul");
+  list.className = "summary-list";
+
+  for (const value of values) {
+    const item = document.createElement("li");
+    item.textContent = value;
+    list.appendChild(item);
+  }
+
+  card.appendChild(list);
+  container.appendChild(card);
+}
+
+function formatHistoryModuleValue(module) {
+  const moduleTitle = module?.title ?? "-";
+  if (!shouldShowModuleDebugMeta()) {
+    return moduleTitle;
+  }
+
+  const moduleId = module?.id ?? "-";
+  return `${moduleTitle} (${t("modules.debugId")}: ${moduleId})`;
+}
+
 function renderResultSummary(body) {
   latestResult = body;
   latestAppeal = body?.latestAppeal ?? latestAppeal;
 
   if (!body) {
     resultSummary.dataset.hasResult = "";
+    clearSummaryContainer(resultSummary);
     resultSummary.textContent = t("result.none");
     renderAppealState();
     return;
@@ -1679,26 +1757,53 @@ function renderResultSummary(body) {
   );
   renderAssessmentProgress();
 
-  const lines = [
-    `${t("result.status")}: ${localizeSubmissionStatus(body.status)}`,
-    `${t("result.statusExplanation")}: ${localizeStatusExplanation(body.status)}`,
-    `${t("result.totalScore")}: ${formatNumber(body.scoreComponents?.totalScore)}`,
-    `${t("result.mcqScore")}: ${formatNumber(body.scoreComponents?.mcqScaledScore)}`,
-    `${t("result.practicalScore")}: ${formatNumber(body.scoreComponents?.practicalScaledScore)}`,
-    `${t("result.decision")}: ${localizeDecisionType(body.decision?.decisionType, body.status)}`,
-    `${t("result.decisionReason")}: ${localizeDecisionReason(body.participantGuidance?.decisionReason)}`,
-    `${t("result.confidence")}: ${localizeConfidence(body.participantGuidance?.confidenceNote)}`,
-    `${t("result.improvementAdvice")}: ${localizeImprovementAdvice(body.participantGuidance?.improvementAdvice)}`,
-    `${t("result.rationales")}:`,
-  ];
+  clearSummaryContainer(resultSummary);
+  const summaryCard = createSummaryCard("");
+  const summaryGrid = document.createElement("div");
+  summaryGrid.className = "summary-grid";
+  appendSummaryRow(summaryGrid, t("result.status"), localizeSubmissionStatus(body.status));
+  appendSummaryRow(summaryGrid, t("result.statusExplanation"), localizeStatusExplanation(body.status));
+  appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
+  appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
+  appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
+  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status));
+  appendSummaryRow(
+    summaryGrid,
+    t("result.decisionReason"),
+    localizeDecisionReason(body.participantGuidance?.decisionReason),
+  );
+  appendSummaryRow(
+    summaryGrid,
+    t("result.confidence"),
+    localizeConfidence(body.participantGuidance?.confidenceNote),
+  );
+  summaryCard.appendChild(summaryGrid);
+  resultSummary.appendChild(summaryCard);
+
+  appendSummaryList(
+    resultSummary,
+    t("result.improvementAdvice"),
+    localizeImprovementAdviceItems(body.participantGuidance?.improvementAdvice),
+  );
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
-  for (const [criterion, rationale] of Object.entries(rationales)) {
-    lines.push(`- ${localizeCriterionName(criterion)}: ${localizeCriterionRationale(String(rationale))}`);
+  const rationaleEntries = Object.entries(rationales);
+  if (rationaleEntries.length > 0) {
+    const rationaleCard = createSummaryCard(t("result.rationales"));
+    const rationaleList = document.createElement("ul");
+    rationaleList.className = "summary-list";
+
+    for (const [criterion, rationale] of rationaleEntries) {
+      const item = document.createElement("li");
+      item.textContent = `${localizeCriterionName(criterion)}: ${localizeCriterionRationale(String(rationale))}`;
+      rationaleList.appendChild(item);
+    }
+
+    rationaleCard.appendChild(rationaleList);
+    resultSummary.appendChild(rationaleCard);
   }
 
   resultSummary.dataset.hasResult = "true";
-  resultSummary.textContent = lines.join("\n");
   renderAppealState();
 }
 
@@ -1709,23 +1814,30 @@ function renderHistorySummary(body) {
 
   if (!Array.isArray(history) || history.length === 0) {
     historySummary.dataset.hasHistory = "";
+    clearSummaryContainer(historySummary);
     showEmpty(historySummary, t("history.empty"));
     return;
   }
 
-  const lines = [];
+  clearSummaryContainer(historySummary);
   for (const item of history) {
-    lines.push(`${t("history.entry")}: ${item.submissionId}`);
-    lines.push(`${t("history.module")}: ${item.module?.title ?? "-"} (${item.module?.id ?? "-"})`);
-    lines.push(`${t("history.submittedAt")}: ${formatDateTime(item.submittedAt)}`);
-    lines.push(`${t("history.latestStatus")}: ${localizeSubmissionStatus(item.status)}`);
-    lines.push(`${t("history.latestDecision")}: ${localizeDecisionType(item.latestDecision?.decisionType, item.status)}`);
-    lines.push(`${t("history.latestScore")}: ${formatNumber(item.latestDecision?.totalScore)}`);
-    lines.push("");
+    const card = createSummaryCard(`${t("history.entry")}: ${item.submissionId}`);
+    const grid = document.createElement("div");
+    grid.className = "summary-grid";
+    appendSummaryRow(grid, t("history.module"), formatHistoryModuleValue(item.module));
+    appendSummaryRow(grid, t("history.submittedAt"), formatDateTime(item.submittedAt));
+    appendSummaryRow(grid, t("history.latestStatus"), localizeSubmissionStatus(item.status));
+    appendSummaryRow(
+      grid,
+      t("history.latestDecision"),
+      localizeDecisionType(item.latestDecision?.decisionType, item.status),
+    );
+    appendSummaryRow(grid, t("history.latestScore"), formatNumber(item.latestDecision?.totalScore));
+    card.appendChild(grid);
+    historySummary.appendChild(card);
   }
 
   historySummary.dataset.hasHistory = "true";
-  historySummary.textContent = lines.join("\n").trim();
 }
 
 async function startMcqForSubmission(moduleId, submissionId) {
@@ -1765,13 +1877,23 @@ function clearCurrentModuleDraft() {
 
 function renderPreviewResultSummary(answeredCount, totalCount, hasMcq) {
   resultSummary.dataset.hasResult = "true";
+  clearSummaryContainer(resultSummary);
+  const card = createSummaryCard("");
 
   if (!hasMcq) {
-    resultSummary.textContent = t("preview.resultNoMcq");
+    const message = document.createElement("div");
+    message.className = "summary-value";
+    message.textContent = t("preview.resultNoMcq");
+    card.appendChild(message);
+    resultSummary.appendChild(card);
     return;
   }
 
-  resultSummary.textContent = `${t("preview.resultPrefix")}: ${answeredCount}/${totalCount}. ${t("preview.resultSuffix")}`;
+  const message = document.createElement("div");
+  message.className = "summary-value";
+  message.textContent = `${t("preview.resultPrefix")}: ${answeredCount}/${totalCount}. ${t("preview.resultSuffix")}`;
+  card.appendChild(message);
+  resultSummary.appendChild(card);
 }
 
 function loadPreviewModules(options = {}) {

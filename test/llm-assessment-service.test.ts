@@ -94,6 +94,9 @@ describe("llmAssessmentService azure_openai adapter", () => {
     expect(messages[1].content).toContain("evidence_sufficiency");
     expect(messages[1].content).toContain("recommended_outcome");
     expect(messages[1].content).toContain("manual_review_reason_code");
+    expect(messages[1].content).toContain("allowed red_flags.code values");
+    expect(messages[1].content).toContain("insufficient_submission");
+    expect(messages[1].content).toContain("potential_sensitive_data");
   });
 
   it("supports max_completion_tokens when configured", async () => {
@@ -145,6 +148,47 @@ describe("llmAssessmentService azure_openai adapter", () => {
 
     expect(result.pass_fail_practical).toBe(true);
     expect(result.confidence_note).toBe("High confidence.");
+  });
+
+  it("normalizes observed insufficiency red-flag aliases to the canonical policy code", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  ...validPayload,
+                  red_flags: [
+                    {
+                      code: "incoherent_submission",
+                      severity: "HIGH",
+                      description: "Observed staging-style low-content flag.",
+                    },
+                  ],
+                  manual_review_recommended: true,
+                  evidence_sufficiency: "insufficient",
+                  recommended_outcome: "manual_review",
+                  manual_review_reason_code: "red_flag",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await evaluatePracticalWithAzureOpenAi(baseInput, baseConfig);
+
+    expect(result.red_flags).toEqual([
+      {
+        code: "insufficient_submission",
+        severity: "high",
+        description: "Observed staging-style low-content flag.",
+      },
+    ]);
   });
 
   it("returns a clear provider error when Azure OpenAI request fails", async () => {

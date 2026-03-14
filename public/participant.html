@@ -82,26 +82,30 @@
       </div>
     </div>
 
-    <section class="card">
-      <h3 data-i18n="identity.title">Test User</h3>
-      <div class="row">
-        <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="participant-1" /></div>
-        <div><label data-i18n="identity.email">Email</label><input id="email" value="participant@company.com" /></div>
-      </div>
-      <div class="row">
-        <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Participant" /></div>
-        <div><label data-i18n="identity.department">Department</label><input id="department" value="Consulting" /></div>
-      </div>
-      <div>
-        <label data-i18n="identity.roles">Roles (comma-separated)</label>
-        <input id="roles" value="PARTICIPANT" />
-      </div>
-      <div id="mockRolePresetContainer">
-        <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
-        <select id="mockRolePreset"></select>
-        <div class="small" id="mockRolePresetHint"></div>
-      </div>
-      <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
+    <section class="card mock-identity-card">
+      <details class="mock-identity-panel">
+        <summary><span data-i18n="identity.title">Test User</span></summary>
+        <div class="mock-identity-panel-body">
+          <div class="row">
+            <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="participant-1" /></div>
+            <div><label data-i18n="identity.email">Email</label><input id="email" value="participant@company.com" /></div>
+          </div>
+          <div class="row">
+            <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Participant" /></div>
+            <div><label data-i18n="identity.department">Department</label><input id="department" value="Consulting" /></div>
+          </div>
+          <div>
+            <label data-i18n="identity.roles">Roles (comma-separated)</label>
+            <input id="roles" value="PARTICIPANT" />
+          </div>
+          <div id="mockRolePresetContainer">
+            <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
+            <select id="mockRolePreset"></select>
+            <div class="small" id="mockRolePresetHint"></div>
+          </div>
+          <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
+        </div>
+      </details>
     </section>
 
     <section class="card">
@@ -166,7 +170,7 @@
       <div id="assessmentProgressSeconds" class="assessment-progress-seconds hidden"></div>
       <button id="checkResult" class="btn-primary" data-i18n="assessment.checkResult">View result</button>
       <div class="small" data-i18n="assessment.resultSummary">Result summary:</div>
-      <pre id="resultSummary"></pre>
+      <div id="resultSummary" class="summary-stack"></div>
       <button id="resetSubmissionFlow" class="btn-danger" data-i18n="submission.resetFlow">Delete submission and start over</button>
     </section>
 
@@ -183,7 +187,7 @@
     <section class="card" id="historySection">
       <h3 data-i18n="history.title">My history</h3>
       <button id="loadHistory" class="btn-secondary" data-i18n="history.load">Load my submission history</button>
-      <pre id="historySummary"></pre>
+      <div id="historySummary" class="history-list"></div>
     </section>
 
     <section class="card" id="debugOutputSection" hidden>

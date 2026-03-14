@@ -1,11 +1,10 @@
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
-
-type AssessmentRedFlag = LlmStructuredAssessment["red_flags"][number];
-const insufficientEvidenceRedFlagCodes = new Set([
-  "insufficient_submission",
-  "incomplete_submission",
-  "extremely_low_content",
-]);
+import {
+  type AssessmentRedFlag,
+  isConfiguredInsufficientEvidenceRedFlag,
+  isConfiguredManualReviewRedFlag,
+  normalizeRedFlags,
+} from "./assessmentRedFlagPolicy.js";
 
 const insufficientEvidencePatterns = [
   "minimal artefact content",
@@ -58,20 +57,20 @@ export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): b
 }
 
 export function isInsufficientEvidenceRedFlag(flag: AssessmentRedFlag): boolean {
-  return insufficientEvidenceRedFlagCodes.has(flag.code.trim().toLowerCase());
+  return isConfiguredInsufficientEvidenceRedFlag(flag);
 }
 
 export function hasOnlyInsufficientEvidenceRedFlags(input: LlmStructuredAssessment): boolean {
-  return input.red_flags.length > 0 && input.red_flags.every((flag) => isInsufficientEvidenceRedFlag(flag));
+  const normalizedRedFlags = normalizeRedFlags(input.red_flags);
+  return normalizedRedFlags.length > 0 && normalizedRedFlags.every((flag) => isInsufficientEvidenceRedFlag(flag));
 }
 
 export function hasForcingRedFlag(
   input: LlmStructuredAssessment,
-  forcingSeverities: string[],
+  _forcingSeverities: string[],
 ): boolean {
-  const severitySet = new Set(forcingSeverities.map((severity) => severity.toLowerCase()));
-  return input.red_flags.some(
-    (flag) => severitySet.has(flag.severity.toLowerCase()) && !isInsufficientEvidenceRedFlag(flag),
+  return normalizeRedFlags(input.red_flags).some(
+    (flag) => isConfiguredManualReviewRedFlag(flag) && !isInsufficientEvidenceRedFlag(flag),
   );
 }
 

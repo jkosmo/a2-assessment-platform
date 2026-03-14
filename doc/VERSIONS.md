@@ -7,6 +7,52 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.139 - 2026-03-14
+### Summary
+Bundled three local-first improvements into one deploy candidate: a canonical red-flag reliability policy for LLM assessment routing, a new local integration test layer for policy/workspace regressions, and a UX cleanup batch that simplifies mock-mode identity panels and replaces raw participant result/history text with structured cards.
+
+### Included
+- Tightened assessment reliability by normalizing unstable LLM red-flag aliases into a canonical, configurable policy and documenting reliability as an explicit architecture requirement:
+  - `config/assessment-rules.json`
+  - `src/config/assessmentRules.ts`
+  - `src/services/assessmentRedFlagPolicy.ts`
+  - `src/services/assessmentDecisionSignals.ts`
+  - `src/services/llmAssessmentService.ts`
+  - `src/services/secondaryAssessmentService.ts`
+  - `doc/ARCHITECTURE.md`
+  - `doc/ASSESSMENT_DECISION_POLICY.md`
+- Added a local integration suite and testcase map so policy/workspace regressions can be caught before staging:
+  - `doc/AI_WORKFLOW.md`
+  - `doc/LOCAL_INTEGRATION_TEST_SUITE_DESIGN.md`
+  - `doc/LOCAL_TESTCASE_MAP.md`
+  - `test/assessment-policy.integration.test.ts`
+  - `test/support/participantFlow.ts`
+  - `package.json`
+  - `npm run test:integration:local`
+- Added regression coverage for the normalized red-flag policy and stabilized seeded review/appeal test fixtures:
+  - `test/llm-assessment-service.test.ts`
+  - `test/secondary-assessment.test.ts`
+  - `test/unit/decision-service.test.ts`
+  - `test/m2-manual-review.test.ts`
+  - `test/m2-appeal-flow.test.ts`
+- Improved mock-mode usability by collapsing `Test User` panels by default across the workspace pages:
+  - `public/participant.html`
+  - `public/manual-review.html`
+  - `public/admin-content.html`
+  - `public/appeal-handler.html`
+  - `public/calibration.html`
+  - `public/participant-completed.html`
+  - `public/static/shared.css`
+- Replaced participant raw `<pre>` result/history blocks with structured cards, hid module IDs behind debug mode, and added overwrite confirmation before draft JSON import:
+  - `public/participant.html`
+  - `public/participant.js`
+  - `public/admin-content.js`
+  - `public/i18n/participant-translations.js`
+  - `public/i18n/admin-content-translations.js`
+- Extended static workspace contract coverage for the new UX structure:
+  - `test/participant-console-config.test.ts`
+  - `test/admin-content-translations.test.js`
+
 ## 0.3.138 - 2026-03-14
 ### Summary
 Added a dedicated live-LMM batch regression harness for assessment policy changes, so red/yellow/green canonical cases can be run repeatedly against the configured model before staging instead of relying only on narrow unit tests.

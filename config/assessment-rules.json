@@ -15,7 +15,53 @@
     },
     "redFlagSeverities": [
       "high"
+    ],
+    "redFlagCodes": [
+      "potential_sensitive_data",
+      "policy_violation",
+      "responsible_use_violation"
     ]
+  },
+  "llmDecisionReliability": {
+    "unknownRedFlagHandling": "downgrade_to_unclassified",
+    "unknownRedFlagCanonicalCode": "unclassified_model_warning",
+    "canonicalRedFlags": {
+      "insufficient_submission": [
+        "insufficient_submission",
+        "insufficient_content",
+        "insufficient_submission_content",
+        "incomplete_submission",
+        "extremely_low_content",
+        "low_content_quality",
+        "missing_mcq_and_notes",
+        "missing_iteration_and_qa",
+        "missing_iteration_qa",
+        "garbled_submission",
+        "incoherent_submission",
+        "non_coherent_language",
+        "language_clarity",
+        "language_mismatch",
+        "clarity_issue",
+        "misalignment",
+        "r001",
+        "r002"
+      ],
+      "potential_sensitive_data": [
+        "potential_sensitive_data",
+        "sensitive_data_exposure",
+        "personal_data_exposure"
+      ],
+      "policy_violation": [
+        "policy_violation",
+        "compliance_violation",
+        "unsafe_instruction",
+        "unsafe_content"
+      ],
+      "responsible_use_violation": [
+        "responsible_use_violation",
+        "responsible_use_risk"
+      ]
+    }
   },
   "mcqQuality": {
     "minAttemptCount": 5,
@@ -55,6 +101,11 @@
       "confidenceNotePatterns": [
         "medium confidence",
         "low confidence"
+      ],
+      "redFlagCodes": [
+        "potential_sensitive_data",
+        "policy_violation",
+        "responsible_use_violation"
       ],
       "redFlagSeverities": [
         "medium",

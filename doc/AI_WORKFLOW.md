@@ -24,6 +24,9 @@ This workflow applies to:
 - Automation-first CI/CD for build, test, security checks, and deployment.
 - Human approval gate before production deployment.
 - Keep GitHub issue status aligned with the real implementation state.
+- Default to local iteration first; do not deploy every small patch to staging.
+- Prefer batched deploy candidates that contain several independent, locally verified changes.
+- Always separate independent manual test cases so findings can be reported back without blocking unrelated verification.
 
 ## Issue Execution Workflow
 
@@ -70,6 +73,7 @@ Define the minimal change set that satisfies acceptance criteria:
 - Database or schema changes.
 - Infrastructure/pipeline changes.
 - Test and documentation updates.
+- Decide whether the work should stay local for additional batching or be prepared as a deploy candidate now.
 
 ### 5. Implement
 - Keep code modular and explicit.
@@ -77,6 +81,7 @@ Define the minimal change set that satisfies acceptance criteria:
 - Keep business rules in one place.
 - Preserve traceability requirements.
 - Ensure LLM outputs are treated as structured input, not final decision authority.
+- Treat assessment outcome consistency (`red` / `yellow` / `green`) as a product requirement when changing LLM routing, scoring, or policy logic.
 
 ### 6. Validate locally and in CI
 Run relevant checks before merge:
@@ -86,19 +91,35 @@ Run relevant checks before merge:
 - Integration tests when applicable.
 - Security and dependency checks where configured.
 
+Local-first rule:
+- Before proposing a staging deploy, complete as much verification locally as possible.
+- If several related fixes can be developed and verified together without increasing risk too much, prefer one larger local batch over multiple deploy/wait cycles.
+- Do not push to remote only to validate documentation-only or narrowly isolated internal refactors unless that push is part of a broader deploy candidate.
+
 ### 7. Deployment workflow (CI/CD)
 CI/CD should be fully automated except production approval.
 
 Required flow:
-1. Pull request triggers CI checks.
-2. Merge to main triggers automatic deploy to staging.
-3. Smoke tests run in staging.
-4. Production deploy requires explicit human approval.
-5. Production deployment and post-deploy verification are logged.
+1. Local implementation and verification produce a coherent deploy candidate.
+2. Pull request or push candidate triggers CI checks.
+3. Merge to main triggers automatic deploy to staging.
+4. Smoke tests run in staging.
+5. Human runs grouped manual verification scripts for the independent test cases in the batch.
+6. Production deploy requires explicit human approval.
+7. Production deployment and post-deploy verification are logged.
 
 Environment policy:
 - Staging: AI services and app components can auto-deploy.
 - Production: manual approval gate is mandatory before deploy.
+
+Deploy-cadence rule:
+- Do not deploy every small fix immediately by default.
+- Prefer to deploy when there are multiple independent things to verify together, provided they do not block each other.
+- Before recommending deploy, Codex should explicitly state:
+  - what is included in the batch
+  - which test cases are independent
+  - what can be verified locally already
+  - what still requires staging or real LLM/runtime verification
 
 ### 8. Post-implementation review
 For every issue, explicitly evaluate:
@@ -190,11 +211,19 @@ Verification responsibilities:
 - Human verifies UI behavior, layout, wording, interaction clarity, and other browser-observed outcomes.
 - For mixed issues, Codex completes backend/API verification first, then the human performs final UI verification before close-out.
 - When Codex provides a manual UI test script, the steps must be explicitly numbered so findings can be referenced back by step number.
+- Manual verification scripts must be grouped into independent test cases with stable identifiers, for example `TC1`, `TC2`, `TC3`.
+- Each manual test case should include:
+  - scope/purpose
+  - numbered steps
+  - expected result
+  - whether it should be automated afterward
+- After a human reports a manual test case as successful, Codex should explicitly evaluate whether that case now belongs in local automated integration coverage so it does not need to be repeated manually.
 
 Minimum expectations:
 - Unit tests for core logic changes.
 - Integration tests for API, data, and workflow boundaries.
 - E2E tests for critical user journeys when UI or cross-service flow changes.
+- Prefer local integration tests over repeated staging-only verification whenever the behavior can be reproduced without waiting for deployment.
 
 Critical flows that should have strong automated coverage:
 - Login and authorization.
@@ -210,6 +239,11 @@ Additional rule for live LLM changes:
 - The batch regression harness is intended for non-default/manual use because it calls the live configured LLM and is nondeterministic, slower, and token-consuming.
 - The harness is intended for `LLM_MODE=azure_openai`; `--allow-stub` should only be used to smoke-test the harness itself, not to sign off assessment policy behavior.
 - At minimum, the canonical `green`, `yellow`, and `red` cases must hold their expected outcomes across the batch run before the change is considered ready for staging.
+- If a live batch run exposes a new LLM red-flag variant or routing drift, that exact case should be turned into a stable local regression test before the next deploy candidate is proposed.
+
+Automation bias:
+- If a manual test case can be executed deterministically against local app/runtime behavior, there should be a strong bias toward automating it as a local integration test.
+- Repeating the same staging/manual test more than once is a signal that local automated coverage is missing and should usually trigger a follow-up or in-scope test addition.
 
 ## Documentation Policy
 Each issue must evaluate documentation impact.
@@ -223,24 +257,25 @@ Update relevant docs when behavior changes:
 - GitHub issue status, checklist state, and close-out notes when implementation status has changed.
 
 ## Versioning Policy
-- A version number must be bumped before every push to remote.
+- A version number must be bumped before every remote push that is intended to create a new shared deploy candidate.
 - Semantic Versioning (`MAJOR.MINOR.PATCH`) must be used.
 - The version bump must be reflected in `doc/VERSIONS.md` with a short change summary.
 
-## Definition of Done (per issue)
+## Definition of Done (per deploy candidate / issue batch)
 - Acceptance criteria met and verified.
 - Design/architecture evaluation completed.
 - Refactor evaluation completed.
 - Hardcoded values reviewed and moved to config where appropriate.
 - Required tests implemented and passing.
 - CI checks green.
-- Staging deploy successful.
+- Local verification completed before deploy recommendation.
+- Staging deploy successful when the batch actually requires staging verification.
 - Production approval requirement respected.
 - Documentation updated or follow-up issue created.
 - GitHub issue updated to reflect actual implementation status.
 - If only partially complete, remaining scope is documented and the issue stays open.
 - If human-verified complete, verification result is recorded and the issue is closed.
-- Version number bumped for this push and `doc/VERSIONS.md` updated.
+- Version number bumped for deploy-candidate pushes and `doc/VERSIONS.md` updated.
 
 ## Pull Request Checklist
 - Linked issue and scope are clear.

@@ -12,6 +12,7 @@ const basePolicy: SecondaryAssessmentPolicy = {
   triggerRules: {
     manualReviewRecommended: true,
     confidenceNotePatterns: ["medium confidence", "low confidence"],
+    redFlagCodes: ["potential_sensitive_data", "policy_violation", "responsible_use_violation"],
     redFlagSeverities: ["medium", "high"],
   },
   disagreementRules: {
