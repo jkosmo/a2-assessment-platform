@@ -186,6 +186,8 @@ export const translations = {
       "Automatically sent to manual review because confidence, red flags, or borderline rules were triggered.",
     "result.decisionReasonValue.autoPass": "Automatically passed based on threshold rules.",
     "result.decisionReasonValue.autoFail": "Automatically failed based on threshold rules.",
+    "result.decisionReasonValue.autoFailInsufficientEvidence":
+      "Automatically failed because the submission did not contain enough evidence to assess reliably.",
     "result.confidence": "Confidence note",
     "result.confidenceValue.low":
       "Low confidence due to sparse content; assessment is based on partial evidence.",
@@ -427,6 +429,8 @@ export const translations = {
       "Automatisk sendt til manuell vurdering på grunn av konfidens, røde flagg eller grenseverdi-regler.",
     "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelregler.",
     "result.decisionReasonValue.autoFail": "Automatisk ikke bestått etter terskelregler.",
+    "result.decisionReasonValue.autoFailInsufficientEvidence":
+      "Automatisk ikke bestått fordi innleveringen ikke ga nok grunnlag for en pålitelig vurdering.",
     "result.confidence": "Konfidensnotat",
     "result.confidenceValue.low":
       "Lav konfidens på grunn av lite innhold; vurderingen bygger på delvis dokumentasjon.",
@@ -672,6 +676,8 @@ export const translations = {
       "Automatisk sendt til manuell vurdering på grunn av konfidens, raude flagg eller grenseverdi-reglar.",
     "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelreglar.",
     "result.decisionReasonValue.autoFail": "Automatisk ikkje bestått etter terskelreglar.",
+    "result.decisionReasonValue.autoFailInsufficientEvidence":
+      "Automatisk ikkje bestått fordi innleveringa ikkje gav nok grunnlag for ei påliteleg vurdering.",
     "result.confidence": "Konfidensnotat",
     "result.confidenceValue.low":
       "Låg konfidens på grunn av lite innhald; vurderinga byggjer på delvis dokumentasjon.",

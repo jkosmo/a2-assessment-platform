@@ -1481,6 +1481,8 @@ function localizeDecisionReason(value) {
       "result.decisionReasonValue.autoManualReview",
     "Automatic pass by threshold rules.": "result.decisionReasonValue.autoPass",
     "Automatic fail by threshold rules.": "result.decisionReasonValue.autoFail",
+    "Automatic fail due to insufficient submission evidence.":
+      "result.decisionReasonValue.autoFailInsufficientEvidence",
   });
 }
 

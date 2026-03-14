@@ -7,6 +7,21 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.141 - 2026-03-14
+### Summary
+Fixed the remaining admin-content list regression for locale-based module titles and localized the new insufficient-evidence auto-fail decision reason in participant results.
+
+### Included
+- Made the dedicated admin module list return locale-resolved strings and hardened frontend normalization so locale-object titles no longer disappear from the admin dropdown/list:
+  - `src/routes/adminContent.ts`
+  - `src/services/adminContentService.ts`
+  - `public/admin-content.js`
+  - `test/m2-admin-content-publication.test.ts`
+- Added participant translation coverage for `Automatic fail due to insufficient submission evidence.` so the explanation is localized instead of leaking English in `nb`/`nn`:
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+  - `test/participant-translations.test.js`
+
 ## 0.3.140 - 2026-03-14
 ### Summary
 Followed up the first `0.3.139` staging round with three targeted fixes: locale-aware LLM response language instructions, a dedicated admin module-list endpoint that includes unpublished module shells, and a participant history cleanup that hides technical submission IDs unless debug mode is enabled.

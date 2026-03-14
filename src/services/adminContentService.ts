@@ -1,6 +1,8 @@
 import { adminContentRepository } from "../repositories/adminContentRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { getBenchmarkExamplesConfig } from "../config/benchmarkExamples.js";
+import type { SupportedLocale } from "../i18n/locale.js";
+import { localizeContentText } from "../i18n/content.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -186,13 +188,13 @@ export async function createModule(input: CreateModuleInput) {
   return module;
 }
 
-export async function listAdminModules() {
+export async function listAdminModules(locale: SupportedLocale = "en-GB") {
   const modules = await adminContentRepository.listModuleSummaries();
 
   return modules.map((module) => ({
     id: module.id,
-    title: decodeLocalizedText(module.title) ?? module.title,
-    description: decodeLocalizedText(module.description) ?? module.description,
+    title: localizeContentText(locale, module.title) ?? module.title,
+    description: localizeContentText(locale, module.description),
     activeVersion: module.activeVersion
       ? {
           id: module.activeVersion.id,

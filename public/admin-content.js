@@ -1096,14 +1096,19 @@ function normalizeModuleSummary(module) {
   if (!module || typeof module !== "object") {
     return null;
   }
-  if (typeof module.id !== "string" || typeof module.title !== "string") {
+  if (typeof module.id !== "string") {
+    return null;
+  }
+
+  const title = localizeContentValue(module.title);
+  if (!title) {
     return null;
   }
 
   return {
     id: module.id,
-    title: module.title,
-    description: typeof module.description === "string" ? module.description : "",
+    title,
+    description: localizeContentValue(module.description),
     taskText: typeof module.taskText === "string" ? module.taskText : "",
     guidanceText: typeof module.guidanceText === "string" ? module.guidanceText : "",
     activeVersionId: typeof module.activeVersion?.id === "string" ? module.activeVersion.id : "",

@@ -162,8 +162,8 @@ adminContentRouter.post("/modules", async (request, response) => {
   }
 });
 
-adminContentRouter.get("/modules", async (_request, response) => {
-  const modules = await listAdminModules();
+adminContentRouter.get("/modules", async (request, response) => {
+  const modules = await listAdminModules(request.context?.locale ?? "en-GB");
   response.json({ modules });
 });
 
