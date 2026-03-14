@@ -61,6 +61,7 @@ const mcqQuestionsJsonInput = document.getElementById("mcqQuestionsJson");
 const moduleVersionTaskTextInput = document.getElementById("moduleVersionTaskText");
 const moduleVersionGuidanceTextInput = document.getElementById("moduleVersionGuidanceText");
 const moduleVersionSubmissionSchemaInput = document.getElementById("moduleVersionSubmissionSchema");
+const moduleVersionAssessmentPolicyInput = document.getElementById("moduleVersionAssessmentPolicy");
 const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersionRubricVersionId");
 const moduleVersionPromptTemplateVersionIdInput = document.getElementById("moduleVersionPromptTemplateVersionId");
 const moduleVersionMcqSetVersionIdInput = document.getElementById("moduleVersionMcqSetVersionId");
@@ -152,7 +153,17 @@ Return JSON in this exact shape:
       "nb": "",
       "nn": ""
     },
-    "questions": []
+    "questions": [
+      {
+        "stem": {"en-GB": "", "nb": "", "nn": ""},
+        "options": [
+          {"en-GB": "", "nb": "", "nn": ""},
+          {"en-GB": "", "nb": "", "nn": ""}
+        ],
+        "correctAnswer": {"en-GB": "", "nb": "", "nn": ""},
+        "rationale": {"en-GB": "", "nb": "", "nn": ""}
+      }
+    ]
   },
   "moduleVersion": {
     "taskText": {
@@ -569,6 +580,7 @@ function getEditorSnapshot() {
     moduleVersionTaskText: normalizeSnapshotValue(moduleVersionTaskTextInput.value),
     moduleVersionGuidanceText: normalizeSnapshotValue(moduleVersionGuidanceTextInput.value),
     moduleVersionSubmissionSchema: normalizeSnapshotValue(moduleVersionSubmissionSchemaInput.value),
+    moduleVersionAssessmentPolicy: normalizeSnapshotValue(moduleVersionAssessmentPolicyInput.value),
     moduleVersionRubricVersionId: normalizeSnapshotValue(moduleVersionRubricVersionIdInput.value),
     moduleVersionPromptTemplateVersionId: normalizeSnapshotValue(moduleVersionPromptTemplateVersionIdInput.value),
     moduleVersionMcqSetVersionId: normalizeSnapshotValue(moduleVersionMcqSetVersionIdInput.value),
@@ -596,6 +608,7 @@ function buildEditorSnapshotFromDraft(draft) {
     moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
     moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
     moduleVersionSubmissionSchema: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.submissionSchema, "")),
+    moduleVersionAssessmentPolicy: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "")),
     moduleVersionRubricVersionId: "",
     moduleVersionPromptTemplateVersionId: "",
     moduleVersionMcqSetVersionId: "",
@@ -885,6 +898,7 @@ function applyImportDraftToForm(draft) {
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
   moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchema, "");
+  moduleVersionAssessmentPolicyInput.value = formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "");
 
   moduleVersionRubricVersionIdInput.value = "";
   moduleVersionPromptTemplateVersionIdInput.value = "";
@@ -914,6 +928,7 @@ function populateFormFromModuleExport(moduleExport) {
   moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
   moduleVersionSubmissionSchemaInput.value = formatEditorValue(moduleVersion?.submissionSchema, "");
+  moduleVersionAssessmentPolicyInput.value = formatEditorValue(moduleVersion?.assessmentPolicy, "");
   moduleVersionRubricVersionIdInput.value = rubricVersion?.id ?? "";
   moduleVersionPromptTemplateVersionIdInput.value = promptTemplateVersion?.id ?? "";
   moduleVersionMcqSetVersionIdInput.value = mcqSetVersion?.id ?? "";
@@ -1097,6 +1112,7 @@ function setDefaultFormValues() {
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
   moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionAssessmentPolicyInput.value = "";
   syncAllTextareaHeights();
   editorBaselineSnapshot = getEditorSnapshot();
 }
@@ -1231,6 +1247,7 @@ function clearVersionFields() {
   moduleVersionTaskTextInput.value = "";
   moduleVersionGuidanceTextInput.value = "";
   moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionAssessmentPolicyInput.value = "";
   moduleVersionRubricVersionIdInput.value = "";
   moduleVersionPromptTemplateVersionIdInput.value = "";
   moduleVersionMcqSetVersionIdInput.value = "";
@@ -1511,6 +1528,10 @@ async function handleCreateModuleVersion(options = { silent: false }) {
   if (rawSubmissionSchema) {
     submissionSchema = parseJsonField(rawSubmissionSchema, "adminContent.moduleVersion.submissionSchemaJson");
   }
+  const rawAssessmentPolicy = moduleVersionAssessmentPolicyInput.value.trim();
+  const assessmentPolicy = rawAssessmentPolicy
+    ? parseJsonField(rawAssessmentPolicy, "adminContent.moduleVersion.assessmentPolicyJson")
+    : undefined;
   const payload = {
     taskText: parseLocalizedTextField(moduleVersionTaskTextInput.value, "adminContent.moduleVersion.taskText"),
     guidanceText: parseLocalizedTextField(
@@ -1522,6 +1543,7 @@ async function handleCreateModuleVersion(options = { silent: false }) {
     promptTemplateVersionId: moduleVersionPromptTemplateVersionIdInput.value.trim(),
     mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
     ...(submissionSchema !== undefined && { submissionSchema }),
+    ...(assessmentPolicy !== undefined && { assessmentPolicy }),
   };
 
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, headers, {

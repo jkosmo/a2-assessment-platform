@@ -476,6 +476,53 @@ describe("decision service", () => {
     expect(result.needsManualReview).toBe(false);
   });
 
+  describe("assessmentPolicy scoring weights", () => {
+    it("recalculates MCQ score from mcqPercentScore when scoring.mcqWeight is set", async () => {
+      // mcqPercentScore=80, mcqWeight=40 → effectiveMcqScaledScore = (80/100)*40 = 32
+      // practical_score_scaled=45, no practicalWeight → effectivePracticalScaledScore=45
+      // totalScore = 45 + 32 = 77
+      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 24, // would give 45+24=69 without weight override (fail)
+        mcqPercentScore: 80,
+        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        assessmentPolicy: { scoring: { mcqWeight: 40 } },
+      });
+      expect(result.totalScore).toBe(77);
+      expect(result.passesThresholds).toBe(true);
+    });
+
+    it("rescales practical score from practical_score_scaled / practicalMaxScore when scoring.practicalWeight is set", async () => {
+      // practicalMaxScore=70, practical_score_scaled=35, practicalWeight=60
+      // effectivePracticalScaledScore = (35/70)*60 = 30
+      // mcqScaledScore=30, no mcqWeight → effectiveMcqScaledScore=30
+      // totalScore = 30 + 30 = 60
+      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 100,
+        llmResult: buildLlmResult({ practical_score_scaled: 35, rubric_total: 10 }),
+        assessmentPolicy: { scoring: { practicalWeight: 60 } },
+      });
+      expect(result.totalScore).toBe(60);
+    });
+
+    it("applies both practicalWeight and mcqWeight together", async () => {
+      // practicalMaxScore=70, practical_score_scaled=70, practicalWeight=60 → effectivePractical=(70/70)*60=60
+      // mcqPercentScore=100, mcqWeight=40 → effectiveMcq=(100/100)*40=40
+      // totalScore = 60 + 40 = 100
+      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 100,
+        llmResult: buildLlmResult({ practical_score_scaled: 70, rubric_total: 20 }),
+        assessmentPolicy: { scoring: { practicalWeight: 60, mcqWeight: 40 } },
+      });
+      expect(result.totalScore).toBe(100);
+      expect(result.passesThresholds).toBe(true);
+    });
+  });
+
   describe("assessmentPolicy override", () => {
     it("passes when module-level totalMin is lower than global and score is above module threshold", async () => {
       // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=20 → total=65 (fails globally)

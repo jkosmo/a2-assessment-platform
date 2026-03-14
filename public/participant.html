@@ -144,7 +144,7 @@
         </div>
       </div>
       <div id="submissionFields"></div>
-      <div class="small" id="draftStatus"></div>
+      <div class="small" id="draftStatus" aria-live="polite" aria-atomic="true"></div>
       <div class="small" id="draftBrowserNote" data-i18n="draft.browserNote">Your work is saved automatically in this browser while you switch between modules.</div>
       <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack">I acknowledge responsibility for submitted content</span></label>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create">Create submission</button>
@@ -165,7 +165,7 @@
       <button id="queueAssessment" class="btn-secondary" data-i18n="assessment.queue">Start assessment</button>
       <button id="checkAssessment" class="btn-secondary" data-i18n="assessment.checkAssessment">Check progress</button>
       <div class="small" id="checkAssessmentHint"></div>
-      <div id="assessmentProgressStatus" class="assessment-progress"></div>
+      <div id="assessmentProgressStatus" class="assessment-progress" aria-live="polite" aria-atomic="true"></div>
       <div id="assessmentProgressSeconds" class="assessment-progress-seconds hidden"></div>
       <button id="checkResult" class="btn-primary" data-i18n="assessment.checkResult">View result</button>
       <div class="small" data-i18n="assessment.resultSummary">Result summary:</div>
@@ -191,7 +191,7 @@
 
     <section class="card" id="debugOutputSection" hidden>
       <h3 data-i18n="output.title">System response</h3>
-      <div class="small" id="outputStatus"></div>
+      <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
       <pre id="output"></pre>
     </section>
 

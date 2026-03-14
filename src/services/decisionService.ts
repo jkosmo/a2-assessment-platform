@@ -56,7 +56,13 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   const rules = getAssessmentRules();
   const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
-  const totalScore = Number((practicalScoreScaled + input.mcqScaledScore).toFixed(2));
+  const effectivePracticalScaledScore = input.assessmentPolicy?.scoring?.practicalWeight != null
+    ? (practicalScoreScaled / rules.weights.practicalMaxScore) * input.assessmentPolicy.scoring.practicalWeight
+    : practicalScoreScaled;
+  const effectiveMcqScaledScore = input.assessmentPolicy?.scoring?.mcqWeight != null
+    ? (input.mcqPercentScore / 100) * input.assessmentPolicy.scoring.mcqWeight
+    : input.mcqScaledScore;
+  const totalScore = Number((effectivePracticalScaledScore + effectiveMcqScaledScore).toFixed(2));
   const rubricMaxTotal = input.rubricMaxTotal ?? 20;
   const practicalPercent = (input.llmResult.rubric_total / rubricMaxTotal) * 100;
 
