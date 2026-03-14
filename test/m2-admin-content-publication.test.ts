@@ -346,12 +346,16 @@ describe("MVP admin content management and publication", () => {
   });
 
   it("keeps previously completed modules visible to participant after publishing a new module", async () => {
+    const isolatedParticipantHeaders = {
+      "x-user-id": `participant-pub-regression-${Date.now()}`,
+      "x-user-email": "participant.pub.regression@company.com",
+      "x-user-name": "Participant Pub Regression",
+      "x-user-roles": "PARTICIPANT",
+    };
+
     const seedModulesResponse = await request(app)
       .get("/api/modules?includeCompleted=true")
-      .set({
-        ...participantHeaders,
-        "x-user-roles": "PARTICIPANT",
-      });
+      .set(isolatedParticipantHeaders);
     expect(seedModulesResponse.status).toBe(200);
 
     const seedModule = (seedModulesResponse.body.modules as Array<{ id: string; title: string }>).find(
@@ -363,10 +367,7 @@ describe("MVP admin content management and publication", () => {
 
     const submissionResponse = await request(app)
       .post("/api/submissions")
-      .set({
-        ...participantHeaders,
-        "x-user-roles": "PARTICIPANT",
-      })
+      .set(isolatedParticipantHeaders)
       .send({
         moduleId: seedModule.id,
         deliveryType: "text",
@@ -381,10 +382,7 @@ describe("MVP admin content management and publication", () => {
     const startMcqResponse = await request(app)
       .get(`/api/modules/${seedModule.id}/mcq/start`)
       .query({ submissionId })
-      .set({
-        ...participantHeaders,
-        "x-user-roles": "PARTICIPANT",
-      });
+      .set(isolatedParticipantHeaders);
     expect(startMcqResponse.status).toBe(200);
 
     const responses = startMcqResponse.body.questions.map((question: { id: string; stem: string }) => ({
@@ -397,10 +395,7 @@ describe("MVP admin content management and publication", () => {
 
     const submitMcqResponse = await request(app)
       .post(`/api/modules/${seedModule.id}/mcq/submit`)
-      .set({
-        ...participantHeaders,
-        "x-user-roles": "PARTICIPANT",
-      })
+      .set(isolatedParticipantHeaders)
       .send({
         submissionId,
         attemptId: startMcqResponse.body.attemptId,
@@ -410,10 +405,7 @@ describe("MVP admin content management and publication", () => {
 
     const runAssessmentResponse = await request(app)
       .post(`/api/assessments/${submissionId}/run`)
-      .set({
-        ...participantHeaders,
-        "x-user-roles": "PARTICIPANT",
-      })
+      .set(isolatedParticipantHeaders)
       .send({ sync: true });
     expect(runAssessmentResponse.status).toBe(202);
 
@@ -538,8 +530,7 @@ describe("MVP admin content management and publication", () => {
     const participantListResponse = await request(app)
       .get("/api/modules?includeCompleted=true")
       .set({
-        ...participantHeaders,
-        "x-user-roles": "PARTICIPANT",
+        ...isolatedParticipantHeaders,
         "x-locale": "nb",
       });
     expect(participantListResponse.status).toBe(200);

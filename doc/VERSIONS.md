@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.144 - 2026-03-14
+### Summary
+Hides the Test User (mock identity) panel in entra auth mode and adds a "Dev only" badge to clearly label it as a developer tool in mock mode.
+
+### Included
+- Hide `.mock-identity-card` on all workspace pages when `authMode === "entra"` via `body.auth-entra` CSS class set after config loads:
+  - `public/participant.js`
+  - `public/admin-content.js`
+  - `public/calibration.js`
+  - `public/appeal-handler.js`
+  - `public/participant-completed.js`
+  - `public/manual-review.js`
+- Added `body.auth-entra .mock-identity-card { display: none; }` and `.mock-identity-dev-badge` badge style:
+  - `public/static/shared.css`
+- Added "Dev only" badge to `<summary>` on all 6 workspace HTML pages:
+  - `public/participant.html`, `public/admin-content.html`, `public/calibration.html`, `public/appeal-handler.html`, `public/participant-completed.html`, `public/manual-review.html`
+- Added `identity.devOnlyBadge` translation key (en-GB / nb / nn):
+  - `public/i18n/participant-translations.js`
+
 ## 0.3.143 - 2026-03-14
 ### Summary
 Expanded seed-module localization coverage and locked participant visibility after new module publication with local integration tests.

@@ -8,5 +8,9 @@ coverage/
 config/entra-group-role-map.generated.json
 staging-logs*/
 staging-logs*.zip
+latest-staging-logs*/
+latest-staging-logs*.zip
+doc/Usability raport.md
+doc/WCAG_EVALUATION.docx
 fic-staging.json
 infra/azure/main.json

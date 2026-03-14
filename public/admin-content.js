@@ -1263,6 +1263,7 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
   applyOutputVisibility();
   applyIdentityDefaults();
   renderRolePresetControl();

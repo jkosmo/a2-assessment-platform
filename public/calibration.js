@@ -545,6 +545,7 @@ async function loadParticipantConsoleConfig() {
     roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
   }
 
+  document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
   applyOutputVisibility();
   applyIdentityDefaults();
   const maxRows = participantRuntimeConfig?.calibrationWorkspace?.defaults?.maxRows ?? 120;
