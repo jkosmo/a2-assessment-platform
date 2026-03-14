@@ -1539,7 +1539,12 @@ function localizeCriterionName(criterion) {
   const key = typeof criterion === "string" ? criterion : "";
   const translationKey = `result.criterion.${key}`;
   const localized = t(translationKey);
-  return localized === translationKey ? key : localized;
+  if (localized !== translationKey) return localized;
+  // Format raw key: snake_case and camelCase → readable words
+  return key
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase());
 }
 
 function localizeKnownContent(value, map) {

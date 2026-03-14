@@ -37,11 +37,14 @@ export async function startMcqAttempt(
 
   return {
     attemptId: attempt.id,
-    questions: questions.map((question) => ({
-      id: question.id,
-      stem: localizeContentText(locale, question.stem) ?? question.stem,
-      options: localizeContentArray(locale, JSON.parse(question.optionsJson) as unknown[]),
-    })),
+    questions: questions.map((question) => {
+      const options = localizeContentArray(locale, JSON.parse(question.optionsJson) as unknown[]);
+      return {
+        id: question.id,
+        stem: localizeContentText(locale, question.stem) ?? question.stem,
+        options: shuffleArray(options),
+      };
+    }),
   };
 }
 
@@ -134,4 +137,13 @@ export async function submitMcqAttempt(input: {
     scaledScore,
     passFailMcq,
   };
+}
+
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
 }
