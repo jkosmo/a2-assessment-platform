@@ -7,6 +7,10 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.4.0 - 2026-03-14
+### Summary
+Minor version bump marking completion of the UX improvement sprint (issues #99–#107 all closed).
+
 ## 0.3.144 - 2026-03-14
 ### Summary
 Hides the Test User (mock identity) panel in entra auth mode and adds a "Dev only" badge to clearly label it as a developer tool in mock mode.
