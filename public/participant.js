@@ -182,9 +182,9 @@ const defaultFieldBindings = [
 ];
 
 const DEFAULT_SUBMISSION_FIELDS = [
-  { id: "response", label: "Your answer", type: "textarea", rows: 5, required: true },
-  { id: "reflection", label: "Reflection (what you changed and why)", type: "textarea", rows: 4, required: false },
-  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", type: "textarea", rows: 3, required: false },
+  { id: "response", label: "Your answer", type: "textarea", rows: 5, required: true, defaultValueKey: "defaults.rawText" },
+  { id: "reflection", label: "Reflection (what you changed and why)", type: "textarea", rows: 4, required: false, defaultValueKey: "defaults.reflection" },
+  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", type: "textarea", rows: 3, required: false, defaultValueKey: "defaults.promptExcerpt" },
 ];
 
 let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;
@@ -527,6 +527,20 @@ function setDefaultFieldValues(previousLocale, nextLocale) {
       element.value = nextDefault;
     }
   }
+
+  for (const field of currentSubmissionFields) {
+    if (!field.defaultValueKey) continue;
+    const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+    if (!element) continue;
+    const previousDefault = tForLocale(previousLocale, field.defaultValueKey);
+    const nextDefault = tForLocale(nextLocale, field.defaultValueKey);
+    const englishDefault = tForLocale("en-GB", field.defaultValueKey);
+    const currentValue = element.value;
+    if (!currentValue || currentValue === previousDefault || currentValue === englishDefault) {
+      element.value = nextDefault;
+    }
+  }
+
   updateCreateSubmissionAvailability();
 }
 
@@ -744,7 +758,8 @@ function hasMeaningfulStoredDraft(draft) {
 
   for (const field of currentSubmissionFields) {
     const value = typeof draft[field.id] === "string" ? draft[field.id].trim() : "";
-    if (value.length > 0) {
+    const defaultValue = field.defaultValueKey ? t(field.defaultValueKey).trim() : "";
+    if (value.length > 0 && value !== defaultValue) {
       return true;
     }
   }
@@ -1142,7 +1157,7 @@ function resetModuleDraftInputsToDefaultLocaleValues() {
   for (const field of currentSubmissionFields) {
     const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
     if (element) {
-      element.value = "";
+      element.value = field.defaultValueKey ? t(field.defaultValueKey) : "";
     }
   }
 }
