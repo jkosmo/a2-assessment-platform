@@ -100,6 +100,20 @@ const submissionSchemaBodySchema = z.object({
   fields: z.array(submissionSchemaFieldSchema).min(1),
 });
 
+const assessmentPolicyBodySchema = z.object({
+  scoring: z
+    .object({
+      practicalWeight: z.number().min(0).max(100),
+      mcqWeight: z.number().min(0).max(100),
+    })
+    .optional(),
+  passRules: z
+    .object({
+      totalMin: z.number().min(0).max(100),
+    })
+    .optional(),
+});
+
 const moduleVersionBodySchema = z.object({
   taskText: localizedTextSchema,
   guidanceText: localizedTextSchema.optional(),
@@ -107,6 +121,7 @@ const moduleVersionBodySchema = z.object({
   promptTemplateVersionId: z.string().min(1),
   mcqSetVersionId: z.string().min(1),
   submissionSchema: submissionSchemaBodySchema.optional(),
+  assessmentPolicy: assessmentPolicyBodySchema.optional(),
 });
 
 const benchmarkExampleVersionBodySchema = z.object({
@@ -301,6 +316,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
       promptTemplateVersionId: parsed.data.promptTemplateVersionId,
       mcqSetVersionId: parsed.data.mcqSetVersionId,
       submissionSchemaJson: parsed.data.submissionSchema ? JSON.stringify(parsed.data.submissionSchema) : undefined,
+      assessmentPolicyJson: parsed.data.assessmentPolicy ? JSON.stringify(parsed.data.assessmentPolicy) : undefined,
     });
     response.status(201).json({ moduleVersion });
   } catch (error) {

@@ -114,6 +114,7 @@ model ModuleVersion {
   promptTemplateVersionId   String
   mcqSetVersionId           String
   submissionSchemaJson      String?
+  assessmentPolicyJson      String?
   publishedBy               String?
   publishedAt               DateTime?
   createdAt                 DateTime              @default(now())

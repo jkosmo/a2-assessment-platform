@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { evaluatePracticalWithLlm } from "./llmAssessmentService.js";
 import { sha256 } from "../utils/hash.js";
-import { createAssessmentDecision } from "./decisionService.js";
+import { createAssessmentDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { preprocessSensitiveDataForLlm } from "./sensitiveDataMaskingService.js";
@@ -132,6 +132,16 @@ async function runAssessment(jobId: string) {
   const submission = job.submission;
   const submissionLocale = normalizeLocale(submission.locale) ?? "en-GB";
   const mcqAttempt = submission.mcqAttempts[0];
+
+  const assessmentPolicy: ModuleAssessmentPolicy | null = submission.moduleVersion.assessmentPolicyJson
+    ? (() => {
+        try {
+          return JSON.parse(submission.moduleVersion.assessmentPolicyJson) as ModuleAssessmentPolicy;
+        } catch {
+          return null;
+        }
+      })()
+    : null;
   if (!mcqAttempt || mcqAttempt.scaledScore == null || mcqAttempt.percentScore == null) {
     throw new Error("Cannot assess submission before MCQ completion.");
   }
@@ -325,6 +335,7 @@ async function runAssessment(jobId: string) {
     mcqPercentScore: mcqAttempt.percentScore,
     llmResult: finalLlmResult,
     forceManualReviewReason,
+    assessmentPolicy,
   });
 
   await recordAuditEvent({

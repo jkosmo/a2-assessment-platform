@@ -545,4 +545,79 @@ describe("MVP admin content management and publication", () => {
       latestStatus: "COMPLETED",
     });
   });
+
+  it("stores assessmentPolicy on module version and returns it as parsed object via active-version endpoint", async () => {
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({ title: "Assessment Policy Test Module" });
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
+
+    const rubricResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/rubric-versions`)
+      .set(adminHeaders)
+      .send({
+        criteria: { quality: "0-4" },
+        scalingRule: { practical_weight: 70, max_total: 4 },
+        passRule: { total_min: 70, practical_min_percent: 50, mcq_min_percent: 60, no_open_red_flags: true },
+      });
+    expect(rubricResponse.status).toBe(201);
+
+    const promptResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/prompt-template-versions`)
+      .set(adminHeaders)
+      .send({
+        systemPrompt: "You are an assessor.",
+        userPromptTemplate: "Evaluate: {{submission}}",
+        examples: [{ example: "Good response." }],
+      });
+    expect(promptResponse.status).toBe(201);
+
+    const mcqResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/mcq-set-versions`)
+      .set(adminHeaders)
+      .send({
+        title: "Policy Test MCQ",
+        questions: [
+          {
+            stem: "What does assessment policy control?",
+            options: ["Pass thresholds", "Module title", "User roles"],
+            correctAnswer: "Pass thresholds",
+          },
+        ],
+      });
+    expect(mcqResponse.status).toBe(201);
+
+    const assessmentPolicy = {
+      scoring: { practicalWeight: 60, mcqWeight: 40 },
+      passRules: { totalMin: 65 },
+    };
+
+    const moduleVersionResponse = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions`)
+      .set(adminHeaders)
+      .send({
+        taskText: "Complete the policy test task.",
+        rubricVersionId: rubricResponse.body.rubricVersion.id,
+        promptTemplateVersionId: promptResponse.body.promptTemplateVersion.id,
+        mcqSetVersionId: mcqResponse.body.mcqSetVersion.id,
+        assessmentPolicy,
+      });
+    expect(moduleVersionResponse.status).toBe(201);
+    expect(moduleVersionResponse.body.moduleVersion.assessmentPolicyJson).toBe(JSON.stringify(assessmentPolicy));
+
+    await request(app)
+      .post(
+        `/api/admin/content/modules/${moduleId}/module-versions/${moduleVersionResponse.body.moduleVersion.id}/publish`,
+      )
+      .set(adminHeaders)
+      .expect(200);
+
+    const activeVersionResponse = await request(app)
+      .get(`/api/modules/${moduleId}/active-version`)
+      .set(adminHeaders);
+    expect(activeVersionResponse.status).toBe(200);
+    expect(activeVersionResponse.body.activeVersion.assessmentPolicy).toEqual(assessmentPolicy);
+  });
 });

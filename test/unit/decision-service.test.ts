@@ -476,6 +476,48 @@ describe("decision service", () => {
     expect(result.needsManualReview).toBe(false);
   });
 
+  describe("assessmentPolicy override", () => {
+    it("passes when module-level totalMin is lower than global and score is above module threshold", async () => {
+      // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=20 → total=65 (fails globally)
+      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 20,
+        mcqPercentScore: 66,
+        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        assessmentPolicy: { passRules: { totalMin: 60 } },
+      });
+      expect(result.passesThresholds).toBe(true);
+      expect(result.passFailTotal).toBe(true);
+      expect(result.decisionReason).toBe("Automatic pass by threshold rules.");
+    });
+
+    it("fails when module-level totalMin is higher than global and score is below module threshold", async () => {
+      // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=30 → total=75 (passes globally)
+      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 100,
+        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        assessmentPolicy: { passRules: { totalMin: 80 } },
+      });
+      expect(result.passesThresholds).toBe(false);
+      expect(result.passFailTotal).toBe(false);
+    });
+
+    it("falls back to global rules when assessmentPolicy is null", async () => {
+      // practicalScoreScaled=45, mcqScaledScore=30 → total=75 passes global default (70)
+      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 100,
+        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        assessmentPolicy: null,
+      });
+      expect(result.passesThresholds).toBe(true);
+      expect(result.passFailTotal).toBe(true);
+    });
+  });
+
   it("fails automatically for the exact staging phrase 'additional material required for a reliable assessment'", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-7",

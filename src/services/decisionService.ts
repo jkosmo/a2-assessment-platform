@@ -11,6 +11,16 @@ import {
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
 
+export type ModuleAssessmentPolicy = {
+  scoring?: {
+    practicalWeight?: number;
+    mcqWeight?: number;
+  };
+  passRules?: {
+    totalMin?: number;
+  };
+};
+
 type BuildDecisionInput = {
   submissionId: string;
   userId: string;
@@ -21,6 +31,7 @@ type BuildDecisionInput = {
   mcqPercentScore: number;
   llmResult: LlmStructuredAssessment;
   forceManualReviewReason?: string;
+  assessmentPolicy?: ModuleAssessmentPolicy | null;
 };
 
 export type ResolvedAssessmentDecision = {
@@ -37,11 +48,12 @@ export type ResolvedAssessmentDecision = {
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy"
 >;
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
+  const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const totalScore = Number((practicalScoreScaled + input.mcqScaledScore).toFixed(2));
   const practicalPercent = (input.llmResult.rubric_total / 20) * 100;
@@ -53,7 +65,7 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     totalScore <= rules.manualReview.borderlineWindow.max;
 
   const passesThresholds =
-    totalScore >= rules.thresholds.totalMin &&
+    totalScore >= totalMin &&
     practicalPercent >= rules.thresholds.practicalMinPercent &&
     input.mcqPercentScore >= rules.thresholds.mcqMinPercent &&
     !hasOpenRedFlag;

@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.5.0 - 2026-03-14
+### Summary
+Added `assessmentPolicyJson` to `ModuleVersion` — admin can configure per-module scoring weights and pass rules; decision engine applies module-level `passRules.totalMin` override when present, falling back to global config (#115).
+
+### Included
+- Prisma: `assessmentPolicyJson String?` added to `ModuleVersion`
+  - `prisma/schema.prisma`
+  - `prisma/migrations/20260314205138_add_assessment_policy_json_to_module_version/`
+- Admin content route: `assessmentPolicy` accepted in module version creation body (`{ scoring?: { practicalWeight, mcqWeight }, passRules?: { totalMin } }`)
+  - `src/routes/adminContent.ts`
+- Admin content service + repository: field passed through and persisted
+  - `src/services/adminContentService.ts`
+  - `src/repositories/adminContentRepository.ts`
+- Module repository: `assessmentPolicyJson` included in all activeVersion selects; parsed and returned as `assessmentPolicy` object
+  - `src/repositories/moduleRepository.ts`
+- Decision service: `ModuleAssessmentPolicy` type exported; `resolveAssessmentDecision` accepts optional `assessmentPolicy` and uses `passRules.totalMin` to override global threshold
+  - `src/services/decisionService.ts`
+- Assessment job service: parses `assessmentPolicyJson` from module version and passes to `createAssessmentDecision`
+  - `src/services/assessmentJobService.ts`
+- Tests: 3 unit tests for policy override in `resolveAssessmentDecision`; 1 integration test for admin create + participant read of `assessmentPolicy`
+  - `test/unit/decision-service.test.ts`
+  - `test/m2-admin-content-publication.test.ts`
+
 ## 0.4.2 - 2026-03-14
 ### Summary
 Added `submissionSchemaJson` to `ModuleVersion` — admin can now define per-module submission field schemas; participants receive the parsed schema from the module API (#110).

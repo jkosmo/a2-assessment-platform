@@ -308,6 +308,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       promptTemplateVersionId: string;
       mcqSetVersionId: string;
       submissionSchemaJson?: string;
+      assessmentPolicyJson?: string;
     }) {
       return client.moduleVersion.create({
         data,
@@ -318,6 +319,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           taskText: true,
           guidanceText: true,
           submissionSchemaJson: true,
+          assessmentPolicyJson: true,
           rubricVersionId: true,
           promptTemplateVersionId: true,
           mcqSetVersionId: true,
