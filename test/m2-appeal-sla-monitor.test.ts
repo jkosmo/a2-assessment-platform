@@ -45,9 +45,11 @@ describe("Appeal SLA monitor snapshot", () => {
     const overdueSubmissionId = await createSubmissionAndAssessment({
       moduleId,
       headers: participantAHeaders,
-      rawText: "Appeal SLA overdue case content.",
-      reflectionText: "Overdue case should exceed first-response SLA.",
-      promptExcerpt: "Assess and classify this case.",
+      responseJson: {
+        response: "Appeal SLA overdue case content.",
+        reflection: "Overdue case should exceed first-response SLA.",
+        promptExcerpt: "Assess and classify this case.",
+      },
     });
 
     const createOverdueAppealResponse = await request(app)
@@ -70,9 +72,11 @@ describe("Appeal SLA monitor snapshot", () => {
     const atRiskSubmissionId = await createSubmissionAndAssessment({
       moduleId,
       headers: participantBHeaders,
-      rawText: "Appeal SLA at-risk case content.",
-      reflectionText: "Claimed case near resolution SLA.",
-      promptExcerpt: "Assess and classify this second case.",
+      responseJson: {
+        response: "Appeal SLA at-risk case content.",
+        reflection: "Claimed case near resolution SLA.",
+        promptExcerpt: "Assess and classify this second case.",
+      },
     });
 
     const createAtRiskAppealResponse = await request(app)
@@ -110,9 +114,7 @@ describe("Appeal SLA monitor snapshot", () => {
 async function createSubmissionAndAssessment(input: {
   moduleId: string;
   headers: Record<string, string>;
-  rawText: string;
-  reflectionText: string;
-  promptExcerpt: string;
+  responseJson: Record<string, unknown>;
 }) {
   const submissionResponse = await request(app)
     .post("/api/submissions")
@@ -120,10 +122,7 @@ async function createSubmissionAndAssessment(input: {
     .send({
       moduleId: input.moduleId,
       deliveryType: "text",
-      rawText: input.rawText,
-      reflectionText: input.reflectionText,
-      promptExcerpt: input.promptExcerpt,
-      responsibilityAcknowledged: true,
+      responseJson: input.responseJson,
     });
   expect(submissionResponse.status).toBe(201);
   const submissionId = submissionResponse.body.submission.id as string;

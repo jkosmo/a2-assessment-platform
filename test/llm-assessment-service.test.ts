@@ -5,9 +5,11 @@ const originalFetch = global.fetch;
 
 const baseInput = {
   moduleId: "module-1",
-  rawText: "Candidate practical response with concrete implementation details.",
-  reflectionText: "Candidate reflection with validation and iteration notes.",
-  promptExcerpt: "Focus on practical utility and responsible use.",
+  responseJson: {
+    response: "Candidate practical response with concrete implementation details.",
+    reflection: "Candidate reflection with validation and iteration notes.",
+    promptExcerpt: "Focus on practical utility and responsible use.",
+  },
   responseLocale: "en-GB" as const,
   moduleTaskText: "Participant assignment context.",
   moduleGuidanceText: "Expected answer context.",

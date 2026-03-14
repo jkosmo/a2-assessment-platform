@@ -69,10 +69,11 @@ describe("Participant completed modules and available list filtering", () => {
         moduleId: module.id,
         moduleVersionId: moduleVersion.id,
         deliveryType: "text",
-        rawText: "Completed module test submission.",
-        reflectionText: "Completed module test reflection.",
-        promptExcerpt: "Completed module test prompt excerpt.",
-        responsibilityAcknowledged: true,
+        responseJson: JSON.stringify({
+          response: "Completed module test submission.",
+          reflection: "Completed module test reflection.",
+          promptExcerpt: "Completed module test prompt excerpt.",
+        }),
         submissionStatus: "COMPLETED",
       },
       select: { id: true, submittedAt: true },
@@ -128,10 +129,11 @@ describe("Participant completed modules and available list filtering", () => {
       .send({
         moduleId: module.id,
         deliveryType: "text",
-        rawText: "Retake submission after completed result.",
-        reflectionText: "Retake reflection after completed result.",
-        promptExcerpt: "Retake prompt excerpt.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Retake submission after completed result.",
+          reflection: "Retake reflection after completed result.",
+          promptExcerpt: "Retake prompt excerpt.",
+        },
       });
     expect(retakeSubmissionResponse.status).toBe(201);
 

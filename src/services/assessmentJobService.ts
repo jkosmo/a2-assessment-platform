@@ -140,9 +140,7 @@ async function runAssessment(jobId: string) {
 
   const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({
     moduleId: submission.moduleId,
-    rawText: submission.rawText ?? "",
-    reflectionText: submission.reflectionText,
-    promptExcerpt: submission.promptExcerpt,
+    responseJson: JSON.parse(submission.responseJson) as Record<string, unknown>,
   });
 
   await recordAuditEvent({
@@ -168,9 +166,7 @@ async function runAssessment(jobId: string) {
       moduleId: submission.moduleId,
       moduleVersionId: submission.moduleVersionId,
       assessmentPass,
-      rawText: sensitiveDataPreprocess.payload.rawText,
-      reflectionText: sensitiveDataPreprocess.payload.reflectionText,
-      promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
+      responseJson: sensitiveDataPreprocess.payload.responseJson,
       sensitiveDataPreprocess: {
         maskingEnabled: sensitiveDataPreprocess.maskingEnabled,
         maskingApplied: sensitiveDataPreprocess.maskingApplied,
@@ -218,9 +214,7 @@ async function runAssessment(jobId: string) {
   try {
     primaryLlmResult = await evaluatePracticalWithLlm({
       moduleId: submission.moduleId,
-      rawText: sensitiveDataPreprocess.payload.rawText,
-      reflectionText: sensitiveDataPreprocess.payload.reflectionText,
-      promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
+      responseJson: sensitiveDataPreprocess.payload.responseJson,
       responseLocale: submissionLocale,
       assessmentPass: "primary",
       promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
@@ -269,9 +263,7 @@ async function runAssessment(jobId: string) {
     try {
       secondaryLlmResult = await evaluatePracticalWithLlm({
         moduleId: submission.moduleId,
-        rawText: sensitiveDataPreprocess.payload.rawText,
-        reflectionText: sensitiveDataPreprocess.payload.reflectionText,
-        promptExcerpt: sensitiveDataPreprocess.payload.promptExcerpt,
+        responseJson: sensitiveDataPreprocess.payload.responseJson,
         responseLocale: submissionLocale,
         assessmentPass: "secondary",
         promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,

@@ -53,9 +53,7 @@ export type LlmStructuredAssessment = z.infer<typeof llmResponseSchema>;
 
 type AssessmentContext = {
   moduleId: string;
-  rawText: string;
-  reflectionText: string;
-  promptExcerpt: string;
+  responseJson: Record<string, unknown>;
   responseLocale?: SupportedLocale;
   moduleTaskText?: string;
   moduleGuidanceText?: string;
@@ -167,7 +165,7 @@ export async function evaluatePracticalWithAzureOpenAi(
 }
 
 function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
-  const content = `${input.rawText}\n${input.reflectionText}\n${input.promptExcerpt}`.trim();
+  const content = JSON.stringify(input.responseJson);
   const length = content.length;
 
   const baseScore = length > 800 ? 4 : length > 350 ? 3 : length > 150 ? 2 : 1;
@@ -306,9 +304,7 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
     userPromptTemplate ? `Prompt template context:\n${userPromptTemplate}` : null,
     examplesJson ? `Prompt examples context (JSON):\n${examplesJson}` : null,
     `Module ID: ${input.moduleId}`,
-    `Candidate practical answer:\n${input.rawText}`,
-    `Candidate reflection:\n${input.reflectionText}`,
-    `Candidate prompt excerpt:\n${input.promptExcerpt}`,
+    `Candidate submission:\n${JSON.stringify(input.responseJson, null, 2)}`,
   ].filter((value): value is string => Boolean(value));
 
   return [

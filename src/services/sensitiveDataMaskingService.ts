@@ -2,9 +2,7 @@ import { getAssessmentRules } from "../config/assessmentRules.js";
 
 type LlmPayloadInput = {
   moduleId: string;
-  rawText: string;
-  reflectionText: string;
-  promptExcerpt: string;
+  responseJson: Record<string, unknown>;
 };
 
 type RuleHit = {
@@ -15,7 +13,7 @@ type RuleHit = {
 export type SensitiveDataPolicy = ReturnType<typeof getAssessmentRules>["sensitiveData"];
 
 export type SensitiveDataPreprocessResult = {
-  payload: Omit<LlmPayloadInput, "moduleId">;
+  payload: { responseJson: Record<string, unknown> };
   maskingEnabled: boolean;
   maskingApplied: boolean;
   totalMatches: number;
@@ -30,55 +28,38 @@ export function preprocessSensitiveDataForLlm(
   const rules = policy;
   const maskingEnabled = rules.moduleOverrides[input.moduleId] ?? rules.enabledByDefault;
 
-  let workingRawText = input.rawText;
-  let workingReflectionText = input.reflectionText;
-  let workingPromptExcerpt = input.promptExcerpt;
-
   let totalMatches = 0;
   const ruleHits: RuleHit[] = [];
   const fieldsMasked = new Set<string>();
 
+  let workingResponseJson = { ...input.responseJson };
+
   for (const rule of rules.rules) {
     const regex = buildGlobalRegex(rule.pattern, rule.flags);
 
-    const rawMatchCount = countMatches(workingRawText, regex);
-    if (rawMatchCount > 0) {
-      totalMatches += rawMatchCount;
-      fieldsMasked.add("rawText");
-      if (maskingEnabled) {
-        workingRawText = workingRawText.replace(regex, rule.replacement);
-      }
-    }
+    const { masked, matchCount, maskedKeys } = maskStringValuesInObject(
+      workingResponseJson,
+      regex,
+      rule.replacement,
+      maskingEnabled,
+    );
 
-    const reflectionMatchCount = countMatches(workingReflectionText, regex);
-    if (reflectionMatchCount > 0) {
-      totalMatches += reflectionMatchCount;
-      fieldsMasked.add("reflectionText");
-      if (maskingEnabled) {
-        workingReflectionText = workingReflectionText.replace(regex, rule.replacement);
+    if (matchCount > 0) {
+      totalMatches += matchCount;
+      for (const key of maskedKeys) {
+        fieldsMasked.add(key);
       }
-    }
-
-    const promptMatchCount = countMatches(workingPromptExcerpt, regex);
-    if (promptMatchCount > 0) {
-      totalMatches += promptMatchCount;
-      fieldsMasked.add("promptExcerpt");
       if (maskingEnabled) {
-        workingPromptExcerpt = workingPromptExcerpt.replace(regex, rule.replacement);
+        workingResponseJson = masked as Record<string, unknown>;
       }
-    }
 
-    const ruleMatchTotal = rawMatchCount + reflectionMatchCount + promptMatchCount;
-    if (ruleMatchTotal > 0) {
-      ruleHits.push({ ruleId: rule.id, matches: ruleMatchTotal });
+      ruleHits.push({ ruleId: rule.id, matches: matchCount });
     }
   }
 
   return {
     payload: {
-      rawText: workingRawText,
-      reflectionText: workingReflectionText,
-      promptExcerpt: workingPromptExcerpt,
+      responseJson: workingResponseJson,
     },
     maskingEnabled,
     maskingApplied: maskingEnabled && totalMatches > 0,
@@ -86,6 +67,46 @@ export function preprocessSensitiveDataForLlm(
     ruleHits,
     fieldsMasked: Array.from(fieldsMasked),
   };
+}
+
+function maskStringValuesInObject(
+  obj: Record<string, unknown>,
+  regex: RegExp,
+  replacement: string,
+  applyMasking: boolean,
+): { masked: Record<string, unknown>; matchCount: number; maskedKeys: string[] } {
+  const masked: Record<string, unknown> = {};
+  let matchCount = 0;
+  const maskedKeys: string[] = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === "string") {
+      const count = countMatches(value, regex);
+      if (count > 0) {
+        matchCount += count;
+        maskedKeys.push(key);
+        masked[key] = applyMasking ? value.replace(regex, replacement) : value;
+      } else {
+        masked[key] = value;
+      }
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      const nested = maskStringValuesInObject(
+        value as Record<string, unknown>,
+        regex,
+        replacement,
+        applyMasking,
+      );
+      matchCount += nested.matchCount;
+      for (const k of nested.maskedKeys) {
+        maskedKeys.push(k);
+      }
+      masked[key] = nested.masked;
+    } else {
+      masked[key] = value;
+    }
+  }
+
+  return { masked, matchCount, maskedKeys };
 }
 
 function buildGlobalRegex(pattern: string, flags: string | undefined) {

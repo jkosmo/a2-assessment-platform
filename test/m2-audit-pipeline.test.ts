@@ -43,10 +43,11 @@ describe("MVP audit event pipeline", () => {
       .send({
         moduleId,
         deliveryType: "text",
-        rawText: "Submission with sensitive client data references for manual review trigger.",
-        reflectionText: "I iterated and included sensitive snippets to validate manual routing.",
-        promptExcerpt: "Assess and identify potential policy risks.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Submission with sensitive client data references for manual review trigger.",
+          reflection: "I iterated and included sensitive snippets to validate manual routing.",
+          promptExcerpt: "Assess and identify potential policy risks.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     const submissionId = submissionResponse.body.submission.id as string;
@@ -119,10 +120,11 @@ describe("MVP audit event pipeline", () => {
       .send({
         moduleId,
         deliveryType: "text",
-        rawText: "Owner-only submission text.",
-        reflectionText: "Owner-only reflection for audit access control.",
-        promptExcerpt: "Owner-only prompt excerpt.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Owner-only submission text.",
+          reflection: "Owner-only reflection for audit access control.",
+          promptExcerpt: "Owner-only prompt excerpt.",
+        },
       });
     expect(ownerSubmissionResponse.status).toBe(201);
     const submissionId = ownerSubmissionResponse.body.submission.id as string;

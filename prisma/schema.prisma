@@ -137,10 +137,7 @@ model Submission {
   moduleVersionId   String
   locale            String             @default("en-GB")
   deliveryType      String
-  rawText           String?
-  reflectionText    String
-  promptExcerpt     String
-  responsibilityAcknowledged Boolean   @default(false)
+  responseJson      String             @default("{}")
   attachmentUri     String?
   submittedAt       DateTime           @default(now())
   submissionStatus  SubmissionStatus   @default(SUBMITTED)

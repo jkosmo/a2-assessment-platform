@@ -304,12 +304,11 @@ async function createSeedPendingManualReview(input: {
       moduleVersionId: input.moduleVersionId,
       locale: "nb",
       deliveryType: "text",
-      rawText:
-        "Seeded response for manual review queue visibility. The answer is useful, but contains enough ambiguity to require a human decision.",
-      reflectionText:
-        "I iterated several times and documented quality checks, but I am not fully confident in the governance section.",
-      promptExcerpt: "Assess governance quality, risk handling, and human oversight.",
-      responsibilityAcknowledged: true,
+      responseJson: JSON.stringify({
+        response: "Seeded response for manual review queue visibility. The answer is useful, but contains enough ambiguity to require a human decision.",
+        reflection: "I iterated several times and documented quality checks, but I am not fully confident in the governance section.",
+        promptExcerpt: "Assess governance quality, risk handling, and human oversight.",
+      }),
       submittedAt,
       submissionStatus: "UNDER_REVIEW",
     },

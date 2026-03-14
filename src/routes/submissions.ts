@@ -10,10 +10,7 @@ import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
 const createSubmissionSchema = z.object({
   moduleId: z.string().min(1),
   deliveryType: z.enum(["text", "file", "hybrid"]).default("text"),
-  rawText: z.string().trim().optional(),
-  reflectionText: z.string().trim().min(10),
-  promptExcerpt: z.string().trim().min(5),
-  responsibilityAcknowledged: z.literal(true),
+  responseJson: z.record(z.string(), z.unknown()).default({}),
   attachmentUri: z.string().trim().optional(),
   attachmentBase64: z.string().trim().optional(),
   attachmentFilename: z.string().trim().optional(),

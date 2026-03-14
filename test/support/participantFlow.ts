@@ -30,9 +30,7 @@ export async function findModuleIdByTitle(
 
 export async function createSubmission(app: Express, headers: ParticipantHeaders, input: {
   moduleId: string;
-  rawText: string;
-  reflectionText: string;
-  promptExcerpt: string;
+  responseJson: Record<string, unknown>;
 }) {
   const submissionResponse = await request(app)
     .post("/api/submissions")
@@ -40,10 +38,7 @@ export async function createSubmission(app: Express, headers: ParticipantHeaders
     .send({
       moduleId: input.moduleId,
       deliveryType: "text",
-      rawText: input.rawText,
-      reflectionText: input.reflectionText,
-      promptExcerpt: input.promptExcerpt,
-      responsibilityAcknowledged: true,
+      responseJson: input.responseJson,
     });
 
   if (submissionResponse.status !== 201) {

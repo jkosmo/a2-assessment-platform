@@ -85,9 +85,11 @@ async function createAssessedSubmission(
   const moduleId = await findModuleIdByTitle(app, participantHeaders, "Generative AI Foundations");
   const submissionId = await createSubmission(app, participantHeaders, {
     moduleId,
-    rawText: input.rawText,
-    reflectionText: input.reflectionText,
-    promptExcerpt: input.promptExcerpt,
+    responseJson: {
+      response: input.rawText,
+      reflection: input.reflectionText,
+      promptExcerpt: input.promptExcerpt,
+    },
   });
 
   const mcqStart = await startMcq(app, participantHeaders, moduleId, submissionId);

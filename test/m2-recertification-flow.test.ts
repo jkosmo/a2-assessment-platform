@@ -38,19 +38,20 @@ describe("Recertification status and reminders", () => {
       .send({
         moduleId,
         deliveryType: "text",
-        rawText:
-          "A practical submission with structured examples and responsible guidance. " +
-          "It includes before/after prompt versions, measurable output checks, " +
-          "documented QA criteria, and mitigation notes for model limitations. " +
-          "The submission also describes approval checkpoints, stakeholder review, " +
-          "and traceability decisions to ensure robust governance in real delivery contexts.",
-        reflectionText:
-          "I iterated prompts in multiple rounds, validated output quality against explicit acceptance criteria, " +
-          "documented false-positive/false-negative behavior, and added clear human-review guardrails. " +
-          "I also captured how responsible-use checks were executed and how remediation actions were tracked.",
-        promptExcerpt:
-          "Summarize findings with clear recommendations, evidence references, and operational safeguards.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response:
+            "A practical submission with structured examples and responsible guidance. " +
+            "It includes before/after prompt versions, measurable output checks, " +
+            "documented QA criteria, and mitigation notes for model limitations. " +
+            "The submission also describes approval checkpoints, stakeholder review, " +
+            "and traceability decisions to ensure robust governance in real delivery contexts.",
+          reflection:
+            "I iterated prompts in multiple rounds, validated output quality against explicit acceptance criteria, " +
+            "documented false-positive/false-negative behavior, and added clear human-review guardrails. " +
+            "I also captured how responsible-use checks were executed and how remediation actions were tracked.",
+          promptExcerpt:
+            "Summarize findings with clear recommendations, evidence references, and operational safeguards.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     const submissionId = submissionResponse.body.submission.id as string;

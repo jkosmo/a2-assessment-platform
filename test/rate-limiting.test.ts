@@ -40,10 +40,11 @@ describe("API rate limiting", () => {
       .send({
         moduleId: seedModule.id,
         deliveryType: "text",
-        rawText: "Rate limit test content for queued assessments.",
-        reflectionText: "This submission is used to verify request throttling.",
-        promptExcerpt: "Queue the assessment repeatedly.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Rate limit test content for queued assessments.",
+          reflection: "This submission is used to verify request throttling.",
+          promptExcerpt: "Queue the assessment repeatedly.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     const submissionId = submissionResponse.body.submission.id as string;

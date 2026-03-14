@@ -47,9 +47,7 @@ vi.mock("../../src/observability/operationalLog.js", () => ({
 vi.mock("../../src/services/sensitiveDataMaskingService.js", () => ({
   preprocessSensitiveDataForLlm: vi.fn((input) => ({
     payload: {
-      rawText: input.rawText,
-      reflectionText: input.reflectionText,
-      promptExcerpt: input.promptExcerpt,
+      responseJson: input.responseJson,
     },
     maskingEnabled: false,
     maskingApplied: false,
@@ -70,9 +68,7 @@ function buildSubmissionFixture() {
     moduleId: "module-1",
     moduleVersionId: "module-version-1",
     locale: "nb",
-    rawText: "raw text",
-    reflectionText: "reflection text",
-    promptExcerpt: "prompt excerpt",
+    responseJson: JSON.stringify({ response: "raw text", reflection: "reflection text", promptExcerpt: "prompt excerpt" }),
     moduleVersion: {
       rubricVersionId: "rubric-version-1",
       promptTemplateVersionId: "prompt-version-1",

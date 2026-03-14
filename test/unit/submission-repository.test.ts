@@ -16,10 +16,7 @@ describe("submission repository", () => {
       moduleVersionId: "module-version-1",
       locale: "en-GB",
       deliveryType: "text",
-      rawText: "content",
-      reflectionText: "reflection",
-      promptExcerpt: "prompt",
-      responsibilityAcknowledged: true,
+      responseJson: JSON.stringify({ response: "content", reflection: "reflection", promptExcerpt: "prompt" }),
       attachmentUri: "file://submission.txt",
       submissionStatus: "SUBMITTED",
     });

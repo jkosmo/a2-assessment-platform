@@ -123,10 +123,11 @@ describe("MVP i18n baseline", () => {
       .send({
         moduleId: seedModule.id,
         deliveryType: "text",
-        rawText: "Praktisk svar for i18n-test.",
-        reflectionText: "Jeg testet sprakveksling og validerte resultatet.",
-        promptExcerpt: "Oppsummer innholdet med tydelig struktur.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Praktisk svar for i18n-test.",
+          reflection: "Jeg testet sprakveksling og validerte resultatet.",
+          promptExcerpt: "Oppsummer innholdet med tydelig struktur.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     expect(submissionResponse.body.submission.locale).toBe("nb");
@@ -215,10 +216,11 @@ describe("MVP i18n baseline", () => {
       .send({
         moduleId: seedModule.id,
         deliveryType: "text",
-        rawText: "Praktisk styringssvar for i18n-test.",
-        reflectionText: "Jeg testet norsk visning for styringsmodulen.",
-        promptExcerpt: "Beskriv risiko, tiltak og oppfølging.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Praktisk styringssvar for i18n-test.",
+          reflection: "Jeg testet norsk visning for styringsmodulen.",
+          promptExcerpt: "Beskriv risiko, tiltak og oppfølging.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
 
@@ -351,10 +353,11 @@ describe("MVP i18n baseline", () => {
       .send({
         moduleId: seedModule.id,
         deliveryType: "text",
-        rawText: "Praktisk svar for LLM-lokaliseringskontroll.",
-        reflectionText: "Jeg vurderte norsk lokalisering i assessment-pipelinen.",
-        promptExcerpt: "Oppsummer innholdet med norsk kontekst.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Praktisk svar for LLM-lokaliseringskontroll.",
+          reflection: "Jeg vurderte norsk lokalisering i assessment-pipelinen.",
+          promptExcerpt: "Oppsummer innholdet med norsk kontekst.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     expect(submissionResponse.body.submission.locale).toBe("nb");

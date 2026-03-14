@@ -7,6 +7,30 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.4.1 - 2026-03-14
+### Summary
+Refactored submission model to generic `responseJson` — removes AI-specific fields and replaces with domain-agnostic structured response storage (#109).
+
+### Included
+- Prisma schema: removed `rawText`, `reflectionText`, `promptExcerpt`, `responsibilityAcknowledged` from `Submission`; added `responseJson String @default("{}")`
+  - `prisma/schema.prisma`
+  - `prisma/migrations/20260314202206_refactor_submission_response_json/`
+- Document parsing service: renamed to `resolveSubmissionResponseJson`, input/output updated to `Record<string, unknown>`
+  - `src/services/documentParsingService.ts`
+- Submission service and API route: updated to accept and store `responseJson`
+  - `src/services/submissionService.ts`
+  - `src/routes/submissions.ts`
+- Sensitive data masking: rewrote to recursively mask string values inside `responseJson`
+  - `src/services/sensitiveDataMaskingService.ts`
+- LLM assessment service: `AssessmentContext` and prompt builder updated to use `responseJson`
+  - `src/services/llmAssessmentService.ts`
+- Assessment job pipeline: updated preprocessing and LLM calls to use `responseJson`
+  - `src/services/assessmentJobService.ts`
+- Batch regression script and cases updated
+  - `src/scripts/assessmentBatchCases.ts`
+  - `src/scripts/runAssessmentBatchRegression.ts`
+- All test files and test support helpers updated to use `responseJson`
+
 ## 0.4.0 - 2026-03-14
 ### Summary
 Minor version bump marking completion of the UX improvement sprint (issues #99–#107 all closed).

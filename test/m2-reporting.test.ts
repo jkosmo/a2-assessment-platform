@@ -51,17 +51,21 @@ describe("MVP reporting endpoints", () => {
     const completedSubmissionId = await createSubmissionAndAssessment({
       moduleId,
       headers: participantAHeaders,
-      rawText: "A normal practical submission with no sensitive data indicators.",
-      reflectionText: "I validated responses and improved prompt quality iteratively.",
-      promptExcerpt: "Summarize findings in a clear professional style.",
+      responseJson: {
+        response: "A normal practical submission with no sensitive data indicators.",
+        reflection: "I validated responses and improved prompt quality iteratively.",
+        promptExcerpt: "Summarize findings in a clear professional style.",
+      },
     });
 
     const underReviewSubmissionId = await createSubmissionAndAssessment({
       moduleId,
       headers: participantBHeaders,
-      rawText: "Contains sensitive client data snippets for manual routing.",
-      reflectionText: "This should route to manual review due to sensitive data concerns.",
-      promptExcerpt: "Assess policy risk and route for review if uncertain.",
+      responseJson: {
+        response: "Contains sensitive client data snippets for manual routing.",
+        reflection: "This should route to manual review due to sensitive data concerns.",
+        promptExcerpt: "Assess policy risk and route for review if uncertain.",
+      },
     });
 
     const createAppealResponse = await request(app)
@@ -228,9 +232,7 @@ describe("MVP reporting endpoints", () => {
 async function createSubmissionAndAssessment(input: {
   moduleId: string;
   headers: Record<string, string>;
-  rawText: string;
-  reflectionText: string;
-  promptExcerpt: string;
+  responseJson: Record<string, unknown>;
 }) {
   const submissionResponse = await request(app)
     .post("/api/submissions")
@@ -238,10 +240,7 @@ async function createSubmissionAndAssessment(input: {
     .send({
       moduleId: input.moduleId,
       deliveryType: "text",
-      rawText: input.rawText,
-      reflectionText: input.reflectionText,
-      promptExcerpt: input.promptExcerpt,
-      responsibilityAcknowledged: true,
+      responseJson: input.responseJson,
     });
   expect(submissionResponse.status).toBe(201);
   const submissionId = submissionResponse.body.submission.id as string;

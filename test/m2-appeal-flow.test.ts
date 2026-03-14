@@ -30,10 +30,11 @@ describe("MVP appeal flow", () => {
       .send({
         moduleId,
         deliveryType: "text",
-        rawText: "A practical submission with analysis and responsible use notes.",
-        reflectionText: "I iterated on prompts and manually validated outputs.",
-        promptExcerpt: "Improve structure and summarize findings.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "A practical submission with analysis and responsible use notes.",
+          reflection: "I iterated on prompts and manually validated outputs.",
+          promptExcerpt: "Improve structure and summarize findings.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     const submissionId = submissionResponse.body.submission.id as string;

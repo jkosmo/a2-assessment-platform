@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSubmissionRawTextFromAttachment, type DocumentParserAdapters } from "../src/services/documentParsingService.js";
+import { resolveSubmissionResponseJson, type DocumentParserAdapters } from "../src/services/documentParsingService.js";
 
 const fakeAdapters: DocumentParserAdapters = {
   async parsePdf() {
@@ -12,7 +12,7 @@ const fakeAdapters: DocumentParserAdapters = {
 
 describe("Document parsing service", () => {
   it("parses PDF attachment content", async () => {
-    const outcome = await resolveSubmissionRawTextFromAttachment(
+    const outcome = await resolveSubmissionResponseJson(
       {
         attachmentMimeType: "application/pdf",
         attachmentBase64: Buffer.from("fake-pdf-content").toString("base64"),
@@ -20,13 +20,13 @@ describe("Document parsing service", () => {
       fakeAdapters,
     );
 
-    expect(outcome.resolvedRawText).toContain("Parsed PDF text");
+    expect((outcome.resolvedResponseJson.response as string)).toContain("Parsed PDF text");
     expect(outcome.parser.status).toBe("parsed");
     expect(outcome.parser.format).toBe("pdf");
     expect(outcome.parser.reason).toBeNull();
   });
 
-  it("falls back to raw text when parser fails but fallback text exists", async () => {
+  it("falls back to responseJson when parser fails but fallback responseJson exists", async () => {
     const failingDocxAdapters: DocumentParserAdapters = {
       ...fakeAdapters,
       async parseDocx() {
@@ -34,22 +34,22 @@ describe("Document parsing service", () => {
       },
     };
 
-    const outcome = await resolveSubmissionRawTextFromAttachment(
+    const outcome = await resolveSubmissionResponseJson(
       {
         attachmentFilename: "submission.docx",
         attachmentBase64: Buffer.from("fake-docx-content").toString("base64"),
-        rawText: "Manual fallback raw text",
+        responseJson: { response: "Manual fallback raw text" },
       },
       failingDocxAdapters,
     );
 
-    expect(outcome.resolvedRawText).toBe("Manual fallback raw text");
+    expect(outcome.resolvedResponseJson.response).toBe("Manual fallback raw text");
     expect(outcome.parser.status).toBe("fallback_raw_text");
     expect(outcome.parser.format).toBe("docx");
     expect(outcome.parser.reason).toContain("DOCX parser failed");
   });
 
-  it("returns clear feedback when parser fails and fallback text is missing", async () => {
+  it("returns clear feedback when parser fails and fallback responseJson is missing", async () => {
     const failingPdfAdapters: DocumentParserAdapters = {
       ...fakeAdapters,
       async parsePdf() {
@@ -58,7 +58,7 @@ describe("Document parsing service", () => {
     };
 
     await expect(
-      resolveSubmissionRawTextFromAttachment(
+      resolveSubmissionResponseJson(
         {
           attachmentFilename: "submission.pdf",
           attachmentBase64: Buffer.from("fake-pdf-content").toString("base64"),
@@ -68,9 +68,9 @@ describe("Document parsing service", () => {
     ).rejects.toThrow("Could not parse PDF attachment.");
   });
 
-  it("returns clear feedback for unsupported format without fallback text", async () => {
+  it("returns clear feedback for unsupported format without fallback responseJson", async () => {
     await expect(
-      resolveSubmissionRawTextFromAttachment(
+      resolveSubmissionResponseJson(
         {
           attachmentFilename: "submission.txt",
           attachmentBase64: Buffer.from("plain-text-content").toString("base64"),

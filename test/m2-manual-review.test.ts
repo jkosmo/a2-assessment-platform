@@ -39,10 +39,11 @@ describe("MVP manual review workspace", () => {
       .send({
         moduleId,
         deliveryType: "text",
-        rawText: "Submission contains sensitive client data references.",
-        reflectionText: "Manual review should be triggered due to sensitive handling concerns.",
-        promptExcerpt: "Assess risk and route if uncertain.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Submission contains sensitive client data references.",
+          reflection: "Manual review should be triggered due to sensitive handling concerns.",
+          promptExcerpt: "Assess risk and route if uncertain.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
     const submissionId = submissionResponse.body.submission.id as string;

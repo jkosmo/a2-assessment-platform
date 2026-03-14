@@ -371,10 +371,11 @@ describe("MVP admin content management and publication", () => {
       .send({
         moduleId: seedModule.id,
         deliveryType: "text",
-        rawText: "Completed module should still remain visible after later publication.",
-        reflectionText: "Creating a completed module baseline before publishing a new module.",
-        promptExcerpt: "Document baseline completion before publication test.",
-        responsibilityAcknowledged: true,
+        responseJson: {
+          response: "Completed module should still remain visible after later publication.",
+          reflection: "Creating a completed module baseline before publishing a new module.",
+          promptExcerpt: "Document baseline completion before publication test.",
+        },
       });
     expect(submissionResponse.status).toBe(201);
 

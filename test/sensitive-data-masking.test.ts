@@ -25,9 +25,11 @@ describe("Sensitive data masking preprocessor", () => {
     const result = preprocessSensitiveDataForLlm(
       {
         moduleId: "module-1",
-        rawText: "Reach me at user@example.com",
-        reflectionText: "Phone 12345678",
-        promptExcerpt: "No sensitive values here",
+        responseJson: {
+          response: "Reach me at user@example.com",
+          reflection: "Phone 12345678",
+          promptExcerpt: "No sensitive values here",
+        },
       },
       basePolicy,
     );
@@ -39,17 +41,19 @@ describe("Sensitive data masking preprocessor", () => {
       { ruleId: "email", matches: 1 },
       { ruleId: "phone", matches: 1 },
     ]);
-    expect(result.payload.rawText).toContain("user@example.com");
-    expect(result.payload.reflectionText).toContain("12345678");
+    expect((result.payload.responseJson.response as string)).toContain("user@example.com");
+    expect((result.payload.responseJson.reflection as string)).toContain("12345678");
   });
 
   it("applies masking when enabled by module override", () => {
     const result = preprocessSensitiveDataForLlm(
       {
         moduleId: "module-sensitive",
-        rawText: "Reach me at user@example.com",
-        reflectionText: "Phone 12345678",
-        promptExcerpt: "No sensitive values here",
+        responseJson: {
+          response: "Reach me at user@example.com",
+          reflection: "Phone 12345678",
+          promptExcerpt: "No sensitive values here",
+        },
       },
       {
         ...basePolicy,
@@ -62,8 +66,8 @@ describe("Sensitive data masking preprocessor", () => {
     expect(result.maskingEnabled).toBe(true);
     expect(result.maskingApplied).toBe(true);
     expect(result.totalMatches).toBe(2);
-    expect(result.payload.rawText).toContain("[MASKED_EMAIL]");
-    expect(result.payload.reflectionText).toContain("[MASKED_PHONE]");
-    expect(result.fieldsMasked).toEqual(["rawText", "reflectionText"]);
+    expect((result.payload.responseJson.response as string)).toContain("[MASKED_EMAIL]");
+    expect((result.payload.responseJson.reflection as string)).toContain("[MASKED_PHONE]");
+    expect(result.fieldsMasked).toEqual(["response", "reflection"]);
   });
 });

@@ -5,17 +5,14 @@ import { getModuleWithActiveVersion } from "../repositories/moduleRepository.js"
 import { submissionRepository } from "../repositories/submissionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
-import { resolveSubmissionRawTextFromAttachment } from "./documentParsingService.js";
+import { resolveSubmissionResponseJson } from "./documentParsingService.js";
 
 export type CreateSubmissionInput = {
   userId: string;
   moduleId: string;
   locale: SupportedLocale;
   deliveryType: string;
-  rawText?: string;
-  reflectionText: string;
-  promptExcerpt: string;
-  responsibilityAcknowledged: boolean;
+  responseJson: Record<string, unknown>;
   attachmentUri?: string;
   attachmentBase64?: string;
   attachmentFilename?: string;
@@ -29,8 +26,8 @@ export async function createSubmission(input: CreateSubmissionInput) {
     throw new ValidationError("Module active version is not available.");
   }
 
-  const parseOutcome = await resolveSubmissionRawTextFromAttachment({
-    rawText: input.rawText,
+  const parseOutcome = await resolveSubmissionResponseJson({
+    responseJson: input.responseJson,
     attachmentBase64: input.attachmentBase64,
     attachmentFilename: input.attachmentFilename,
     attachmentMimeType: input.attachmentMimeType,
@@ -42,10 +39,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     moduleVersionId: module.activeVersion.id,
     locale: input.locale,
     deliveryType: input.deliveryType,
-    rawText: parseOutcome.resolvedRawText,
-    reflectionText: input.reflectionText,
-    promptExcerpt: input.promptExcerpt,
-    responsibilityAcknowledged: input.responsibilityAcknowledged,
+    responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
     attachmentUri: input.attachmentUri,
     submissionStatus: SubmissionStatus.SUBMITTED,
   });

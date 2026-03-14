@@ -6,7 +6,7 @@ const getModuleWithActiveVersion = vi.fn();
 const submissionCreate = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
-const resolveSubmissionRawTextFromAttachment = vi.fn();
+const resolveSubmissionResponseJson = vi.fn();
 
 vi.mock("../../src/repositories/moduleRepository.js", () => ({
   getModuleWithActiveVersion,
@@ -27,7 +27,7 @@ vi.mock("../../src/observability/operationalLog.js", () => ({
 }));
 
 vi.mock("../../src/services/documentParsingService.js", () => ({
-  resolveSubmissionRawTextFromAttachment,
+  resolveSubmissionResponseJson,
 }));
 
 describe("submission service", () => {
@@ -36,7 +36,7 @@ describe("submission service", () => {
     submissionCreate.mockReset();
     recordAuditEvent.mockReset();
     logOperationalEvent.mockReset();
-    resolveSubmissionRawTextFromAttachment.mockReset();
+    resolveSubmissionResponseJson.mockReset();
   });
 
   it("rejects submission creation when no published active module version exists", async () => {
@@ -53,14 +53,11 @@ describe("submission service", () => {
         moduleId: "module-1",
         locale: "nb",
         deliveryType: "text",
-        rawText: "raw text",
-        reflectionText: "reflection",
-        promptExcerpt: "prompt",
-        responsibilityAcknowledged: true,
+        responseJson: { response: "raw text", reflection: "reflection", promptExcerpt: "prompt" },
       }),
     ).rejects.toBeInstanceOf(ValidationError);
 
-    expect(resolveSubmissionRawTextFromAttachment).not.toHaveBeenCalled();
+    expect(resolveSubmissionResponseJson).not.toHaveBeenCalled();
     expect(submissionCreate).not.toHaveBeenCalled();
   });
 
@@ -72,8 +69,8 @@ describe("submission service", () => {
         publishedAt: new Date("2026-03-11T10:00:00.000Z"),
       },
     });
-    resolveSubmissionRawTextFromAttachment.mockResolvedValue({
-      resolvedRawText: "parsed document text",
+    resolveSubmissionResponseJson.mockResolvedValue({
+      resolvedResponseJson: { response: "parsed document text" },
       parser: "pdf",
     });
     submissionCreate.mockResolvedValue({
@@ -90,18 +87,15 @@ describe("submission service", () => {
       moduleId: "module-1",
       locale: "nn",
       deliveryType: "document",
-      rawText: undefined,
-      reflectionText: "reflection",
-      promptExcerpt: "prompt excerpt",
-      responsibilityAcknowledged: true,
+      responseJson: {},
       attachmentUri: "https://storage.example/submission.pdf",
       attachmentBase64: "JVBERi0xLjc=",
       attachmentFilename: "submission.pdf",
       attachmentMimeType: "application/pdf",
     });
 
-    expect(resolveSubmissionRawTextFromAttachment).toHaveBeenCalledWith({
-      rawText: undefined,
+    expect(resolveSubmissionResponseJson).toHaveBeenCalledWith({
+      responseJson: {},
       attachmentBase64: "JVBERi0xLjc=",
       attachmentFilename: "submission.pdf",
       attachmentMimeType: "application/pdf",
@@ -112,10 +106,7 @@ describe("submission service", () => {
       moduleVersionId: "module-version-1",
       locale: "nn",
       deliveryType: "document",
-      rawText: "parsed document text",
-      reflectionText: "reflection",
-      promptExcerpt: "prompt excerpt",
-      responsibilityAcknowledged: true,
+      responseJson: JSON.stringify({ response: "parsed document text" }),
       attachmentUri: "https://storage.example/submission.pdf",
       submissionStatus: SubmissionStatus.SUBMITTED,
     });

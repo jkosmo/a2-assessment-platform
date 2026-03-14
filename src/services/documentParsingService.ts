@@ -17,14 +17,14 @@ export type DocumentParserAdapters = {
 };
 
 type ResolveDocumentInput = {
-  rawText?: string;
+  responseJson?: Record<string, unknown>;
   attachmentBase64?: string;
   attachmentFilename?: string;
   attachmentMimeType?: string;
 };
 
 export type DocumentParseOutcome = {
-  resolvedRawText: string | undefined;
+  resolvedResponseJson: Record<string, unknown>;
   parser: {
     status: ParseStatus;
     format: DocumentFormat;
@@ -45,15 +45,16 @@ const defaultAdapters: DocumentParserAdapters = {
   },
 };
 
-export async function resolveSubmissionRawTextFromAttachment(
+export async function resolveSubmissionResponseJson(
   input: ResolveDocumentInput,
   adapters: DocumentParserAdapters = defaultAdapters,
 ): Promise<DocumentParseOutcome> {
-  const baseRawText = input.rawText?.trim();
+  const baseResponseJson = input.responseJson ?? {};
+  const hasResponseJson = Object.keys(baseResponseJson).length > 0;
   const attachmentBase64 = input.attachmentBase64?.trim();
   if (!attachmentBase64) {
     return {
-      resolvedRawText: baseRawText || undefined,
+      resolvedResponseJson: baseResponseJson,
       parser: {
         status: "skipped",
         format: "unknown",
@@ -66,14 +67,14 @@ export async function resolveSubmissionRawTextFromAttachment(
 
   const format = detectDocumentFormat(input.attachmentMimeType, input.attachmentFilename);
   if (format === "unknown") {
-    if (baseRawText) {
+    if (hasResponseJson) {
       return {
-        resolvedRawText: baseRawText,
+        resolvedResponseJson: baseResponseJson,
         parser: {
           status: "fallback_raw_text",
           format,
-          quality: qualityFromText(baseRawText),
-          extractedChars: baseRawText.length,
+          quality: "low",
+          extractedChars: JSON.stringify(baseResponseJson).length,
           reason: "unsupported_attachment_format",
         },
       };
@@ -90,14 +91,14 @@ export async function resolveSubmissionRawTextFromAttachment(
       format === "pdf" ? await adapters.parsePdf(payload) : await adapters.parseDocx(payload);
     const normalized = extracted.trim();
     if (!normalized) {
-      if (baseRawText) {
+      if (hasResponseJson) {
         return {
-          resolvedRawText: baseRawText,
+          resolvedResponseJson: baseResponseJson,
           parser: {
             status: "fallback_raw_text",
             format,
-            quality: qualityFromText(baseRawText),
-            extractedChars: baseRawText.length,
+            quality: "low",
+            extractedChars: JSON.stringify(baseResponseJson).length,
             reason: "parser_returned_empty_text",
           },
         };
@@ -108,7 +109,7 @@ export async function resolveSubmissionRawTextFromAttachment(
     }
 
     return {
-      resolvedRawText: normalized,
+      resolvedResponseJson: { ...baseResponseJson, response: normalized },
       parser: {
         status: "parsed",
         format,
@@ -118,14 +119,14 @@ export async function resolveSubmissionRawTextFromAttachment(
       },
     };
   } catch (error) {
-    if (baseRawText) {
+    if (hasResponseJson) {
       return {
-        resolvedRawText: baseRawText,
+        resolvedResponseJson: baseResponseJson,
         parser: {
           status: "fallback_raw_text",
           format,
-          quality: qualityFromText(baseRawText),
-          extractedChars: baseRawText.length,
+          quality: "low",
+          extractedChars: JSON.stringify(baseResponseJson).length,
           reason: error instanceof Error ? error.message : "parser_failed",
         },
       };

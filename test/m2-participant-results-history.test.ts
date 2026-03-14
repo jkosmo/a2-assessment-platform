@@ -37,25 +37,31 @@ describe("MVP participant result and history", () => {
     const completedSubmissionId = await createSubmissionAndAssessment({
       moduleId,
       headers: participantAHeaders,
-      rawText: "Normal submission without sensitive marker.",
-      reflectionText: "I validated output and improved prompt structure.",
-      promptExcerpt: "Summarize and improve the text quality.",
+      responseJson: {
+        response: "Normal submission without sensitive marker.",
+        reflection: "I validated output and improved prompt structure.",
+        promptExcerpt: "Summarize and improve the text quality.",
+      },
     });
 
     const underReviewSubmissionId = await createSubmissionAndAssessment({
       moduleId,
       headers: participantAHeaders,
-      rawText: "Contains sensitive client data marker for manual review.",
-      reflectionText: "Potentially sensitive handling should trigger manual review.",
-      promptExcerpt: "Evaluate risk and route if uncertain.",
+      responseJson: {
+        response: "Contains sensitive client data marker for manual review.",
+        reflection: "Potentially sensitive handling should trigger manual review.",
+        promptExcerpt: "Evaluate risk and route if uncertain.",
+      },
     });
 
     await createSubmissionAndAssessment({
       moduleId,
       headers: participantBHeaders,
-      rawText: "Other user's submission.",
-      reflectionText: "Other user reflection for history isolation test.",
-      promptExcerpt: "Other user prompt excerpt.",
+      responseJson: {
+        response: "Other user's submission.",
+        reflection: "Other user reflection for history isolation test.",
+        promptExcerpt: "Other user prompt excerpt.",
+      },
     });
 
     const completedResultResponse = await request(app)
@@ -102,9 +108,7 @@ describe("MVP participant result and history", () => {
 async function createSubmissionAndAssessment(input: {
   moduleId: string;
   headers: Record<string, string>;
-  rawText: string;
-  reflectionText: string;
-  promptExcerpt: string;
+  responseJson: Record<string, unknown>;
 }) {
   const submissionResponse = await request(app)
     .post("/api/submissions")
@@ -112,10 +116,7 @@ async function createSubmissionAndAssessment(input: {
     .send({
       moduleId: input.moduleId,
       deliveryType: "text",
-      rawText: input.rawText,
-      reflectionText: input.reflectionText,
-      promptExcerpt: input.promptExcerpt,
-      responsibilityAcknowledged: true,
+      responseJson: input.responseJson,
     });
   expect(submissionResponse.status).toBe(201);
   const submissionId = submissionResponse.body.submission.id as string;

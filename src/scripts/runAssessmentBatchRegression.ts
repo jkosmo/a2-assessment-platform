@@ -58,9 +58,7 @@ async function runSingleIteration(
 ): Promise<BatchRunRecord> {
   const primaryResult = await evaluatePracticalWithLlm({
     moduleId: assessmentCase.moduleId,
-    rawText: assessmentCase.rawText,
-    reflectionText: assessmentCase.reflectionText,
-    promptExcerpt: assessmentCase.promptExcerpt,
+    responseJson: assessmentCase.responseJson,
     responseLocale: "en-GB",
     moduleTaskText: assessmentCase.moduleTaskText,
     moduleGuidanceText: assessmentCase.moduleGuidanceText,
@@ -80,9 +78,7 @@ async function runSingleIteration(
     secondaryRan = true;
     const secondaryResult = await evaluatePracticalWithLlm({
       moduleId: assessmentCase.moduleId,
-      rawText: assessmentCase.rawText,
-      reflectionText: assessmentCase.reflectionText,
-      promptExcerpt: assessmentCase.promptExcerpt,
+      responseJson: assessmentCase.responseJson,
       responseLocale: "en-GB",
       moduleTaskText: assessmentCase.moduleTaskText,
       moduleGuidanceText: assessmentCase.moduleGuidanceText,
