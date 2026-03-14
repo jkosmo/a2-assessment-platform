@@ -199,6 +199,7 @@ describe("participant console runtime config", () => {
       if (pagePath === "/participant") {
         expect(response.text).toContain('id="selectedModuleTitle"');
         expect(response.text).toContain('id="selectedModuleDescription"');
+        expect(response.text).toContain('id="selectedModuleStatus"');
         expect(response.text).toContain('id="flowProgress"');
         expect(response.text).toContain('id="flowProgressSteps"');
         expect(response.text).toContain('id="selectedModuleBrief"');

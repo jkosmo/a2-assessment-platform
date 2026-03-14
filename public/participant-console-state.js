@@ -157,12 +157,30 @@ export function buildModuleCardViewModels(modules, selectedModuleId) {
         typeof module.title === "string" &&
         module.title.trim().length > 0,
     )
-    .map((module) => ({
-      ...module,
-      id: module.id,
-      title: module.title,
-      selected: module.id === selectedModuleId,
-    }));
+    .map((module) => {
+      const latestStatus =
+        typeof module?.participantStatus?.latestStatus === "string"
+          ? module.participantStatus.latestStatus.toUpperCase()
+          : "";
+      const completed = latestStatus === "COMPLETED";
+      return {
+        ...module,
+        id: module.id,
+        title: module.title,
+        selected: module.id === selectedModuleId,
+        completed,
+        latestStatus,
+      };
+    })
+    .sort((left, right) => {
+      if (left.selected !== right.selected) {
+        return left.selected ? -1 : 1;
+      }
+      if (left.completed !== right.completed) {
+        return left.completed ? 1 : -1;
+      }
+      return left.title.localeCompare(right.title);
+    });
 }
 
 export function resolveSelectedModule(modules, selectedModuleId) {

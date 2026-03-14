@@ -16,13 +16,19 @@
       .module-card:hover { border-color: var(--color-link-hover-border); }
       .module-card:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       .module-card.selected { border-color: var(--color-blue); background: var(--color-blue-light); }
+      .module-card.completed { border-color: #b8d9c6; background: #f7fcf9; }
       .module-title { font-weight: 600; }
+      .module-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-1); }
+      .module-status-badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 10px; }
+      .module-status-badge.completed { color: #1f7a4d; background: #e6f5ec; }
+      .module-status-badge.retake { color: #0d3f9e; background: #e9f0ff; }
       .module-meta { font-size: 12px; color: var(--color-meta); margin-top: calc(var(--space-1) * 0.5); }
       .selected-badge { display: inline-block; margin-top: var(--space-1); font-size: 11px; font-weight: 600; color: var(--color-selected-badge); }
       .draft-badge { display: inline-block; margin-top: var(--space-1); margin-right: var(--space-1); font-size: 11px; font-weight: 700; color: #7a4b00; background: #fff3db; border-radius: 999px; padding: 4px 10px; }
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); display: grid; gap: calc(var(--space-1) * 0.5); }
       .selected-module-title { font-weight: 600; color: var(--color-text); }
       .selected-module-description { color: var(--color-meta); line-height: 1.5; }
+      .selected-module-status { font-size: 12px; color: var(--color-meta); line-height: 1.5; }
       .module-brief { display: grid; gap: var(--space-1); margin-top: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%); }
       .module-brief-section { display: grid; gap: calc(var(--space-1) * 0.5); }
       .module-brief-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--color-link-active); }
@@ -123,6 +129,7 @@
         <div id="selectedModuleDisplay" class="selected-module-summary" aria-describedby="moduleSelectionHint">
           <div id="selectedModuleTitle" class="selected-module-title"></div>
           <div id="selectedModuleDescription" class="selected-module-description hidden"></div>
+          <div id="selectedModuleStatus" class="selected-module-status hidden"></div>
         </div>
         <input id="selectedModuleId" type="hidden" />
       </div>

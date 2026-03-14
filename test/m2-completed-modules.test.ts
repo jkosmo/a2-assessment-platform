@@ -108,8 +108,32 @@ describe("Participant completed modules and available list filtering", () => {
       .get("/api/modules?includeCompleted=true")
       .set(participantHeaders);
     expect(includeCompletedResponse.status).toBe(200);
-    const includeCompletedIds = (includeCompletedResponse.body.modules as Array<{ id: string }>).map((entry) => entry.id);
+    const includeCompletedModules = includeCompletedResponse.body.modules as Array<Record<string, unknown>>;
+    const includeCompletedIds = includeCompletedModules.map((entry) => entry.id as string);
     expect(includeCompletedIds).toContain(module.id);
+    const includedModule = includeCompletedModules.find((entry) => entry.id === module.id);
+    expect(includedModule?.participantStatus).toMatchObject({
+      latestStatus: "COMPLETED",
+      latestSubmissionId: submission.id,
+      latestDecision: {
+        totalScore: 94,
+        passFailTotal: true,
+        decisionType: "AUTOMATIC",
+      },
+    });
+
+    const retakeSubmissionResponse = await request(app)
+      .post("/api/submissions")
+      .set(participantHeaders)
+      .send({
+        moduleId: module.id,
+        deliveryType: "text",
+        rawText: "Retake submission after completed result.",
+        reflectionText: "Retake reflection after completed result.",
+        promptExcerpt: "Retake prompt excerpt.",
+        responsibilityAcknowledged: true,
+      });
+    expect(retakeSubmissionResponse.status).toBe(201);
 
     const completedResponse = await request(app)
       .get("/api/modules/completed?limit=20")

@@ -47,18 +47,33 @@ describe("participant console state helpers", () => {
     expect(findMatchingPreset("reviewer", presets)).toBe("");
   });
 
-  it("builds module card models with explicit selected state", () => {
+  it("builds module card models with explicit selected and completed state", () => {
     const models = buildModuleCardViewModels(
       [
-        { id: "m1", title: "Foundations", taskText: "Task 1" },
+        { id: "m1", title: "Foundations", taskText: "Task 1", participantStatus: { latestStatus: "COMPLETED" } },
         { id: "m2", title: "Governance", guidanceText: "Guide 2" },
       ],
       "m2",
     );
 
     expect(models).toEqual([
-      { id: "m1", title: "Foundations", taskText: "Task 1", selected: false },
-      { id: "m2", title: "Governance", guidanceText: "Guide 2", selected: true },
+      {
+        id: "m2",
+        title: "Governance",
+        guidanceText: "Guide 2",
+        selected: true,
+        completed: false,
+        latestStatus: "",
+      },
+      {
+        id: "m1",
+        title: "Foundations",
+        taskText: "Task 1",
+        participantStatus: { latestStatus: "COMPLETED" },
+        selected: false,
+        completed: true,
+        latestStatus: "COMPLETED",
+      },
     ]);
   });
 
@@ -77,6 +92,8 @@ describe("participant console state helpers", () => {
       taskText: "Task 1",
       guidanceText: "Guide 1",
       selected: true,
+      completed: false,
+      latestStatus: "",
     });
   });
 

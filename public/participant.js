@@ -35,6 +35,7 @@ const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const selectedModuleDisplay = document.getElementById("selectedModuleDisplay");
 const selectedModuleTitle = document.getElementById("selectedModuleTitle");
 const selectedModuleDescription = document.getElementById("selectedModuleDescription");
+const selectedModuleStatus = document.getElementById("selectedModuleStatus");
 const selectedModuleBrief = document.getElementById("selectedModuleBrief");
 const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
 const selectedModuleGuidanceText = document.getElementById("selectedModuleGuidanceText");
@@ -84,6 +85,7 @@ const submissionValidationTargets = [
 const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
 const previewModeEnabled = new URLSearchParams(window.location.search).get("preview") === "1";
 const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
+const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
@@ -542,6 +544,9 @@ function renderSelectedModuleSummary() {
   selectedModuleTitle.textContent = selectedModule?.title ?? t("submission.selectedModuleNone");
   selectedModuleDescription.textContent = selectedModule?.description ?? "";
   selectedModuleDescription.classList.toggle("hidden", !(selectedModule?.description ?? "").trim());
+  const statusSummary = formatModuleStatusSummary(selectedModule);
+  selectedModuleStatus.textContent = statusSummary;
+  selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
   selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
   selectedModuleGuidanceText.textContent = selectedModule?.guidanceText ?? "";
   selectedModuleBrief.classList.toggle(
@@ -752,6 +757,7 @@ function renderModules() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = module.selected ? "btn-secondary module-card selected" : "btn-secondary module-card";
+    button.classList.toggle("completed", module.completed === true);
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
       const previousModuleId = selectedModuleId;
@@ -779,11 +785,42 @@ function renderModules() {
       button.appendChild(description);
     }
 
+    const badges = document.createElement("div");
+    badges.className = "module-badges";
+    let hasBadges = false;
+
+    if (module.completed) {
+      const completedBadge = document.createElement("div");
+      completedBadge.className = "module-status-badge completed";
+      completedBadge.textContent = t("modules.completedBadge");
+      badges.appendChild(completedBadge);
+      hasBadges = true;
+
+      const retakeBadge = document.createElement("div");
+      retakeBadge.className = "module-status-badge retake";
+      retakeBadge.textContent = t("modules.retakeBadge");
+      badges.appendChild(retakeBadge);
+      hasBadges = true;
+    }
+
     if (hasMeaningfulStoredDraft(moduleDrafts[module.id])) {
       const draftBadge = document.createElement("div");
       draftBadge.className = "draft-badge";
       draftBadge.textContent = t("modules.draftBadge");
-      button.appendChild(draftBadge);
+      badges.appendChild(draftBadge);
+      hasBadges = true;
+    }
+
+    if (hasBadges) {
+      button.appendChild(badges);
+    }
+
+    const statusSummary = formatModuleStatusSummary(module);
+    if (statusSummary.length > 0) {
+      const statusMeta = document.createElement("div");
+      statusMeta.className = "module-meta";
+      statusMeta.textContent = statusSummary;
+      button.appendChild(statusMeta);
     }
 
     if (shouldShowModuleDebugMeta()) {
@@ -1396,6 +1433,30 @@ function formatDateTime(value) {
   }
 }
 
+function isCompletedModuleStatus(value) {
+  return COMPLETED_MODULE_STATUSES.has(typeof value === "string" ? value.toUpperCase() : "");
+}
+
+function formatModuleStatusSummary(module) {
+  const latestStatus = module?.participantStatus?.latestStatus;
+  if (!isCompletedModuleStatus(latestStatus)) {
+    return "";
+  }
+
+  const parts = [t("modules.completedBadge")];
+  if (module?.participantStatus?.latestDecision && typeof module.participantStatus.latestDecision.totalScore === "number") {
+    parts.push(
+      `${t("modules.latestScoreLabel")}: ${formatNumber(module.participantStatus.latestDecision.totalScore)}`,
+    );
+  }
+  if (module?.participantStatus?.latestSubmittedAt) {
+    parts.push(
+      `${t("modules.completedAtLabel")}: ${formatDateTime(module.participantStatus.latestSubmittedAt)}`,
+    );
+  }
+  return parts.join(" · ");
+}
+
 function formatNumber(value, maxFractionDigits = 2) {
   if (typeof value !== "number") {
     return "-";
@@ -1963,7 +2024,7 @@ loadModulesButton.addEventListener("click", async () => {
         loadPreviewModules();
         return;
       }
-      const body = await apiFetch("/api/modules", headers);
+      const body = await apiFetch("/api/modules?includeCompleted=true", headers);
       loadedModules = Array.isArray(body.modules) ? body.modules : [];
       hasLoadedModules = true;
       if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {

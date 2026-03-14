@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.3.142 - 2026-03-14
+### Summary
+Participant now shows published modules even after completion, marks completed modules clearly, and keeps retake flow available from the same module list.
+
+### Included
+- Changed participant module loading to include completed modules and rendered completed/retake state directly on the module cards and selected-module summary:
+  - `public/participant.js`
+  - `public/participant.html`
+  - `public/participant-console-state.js`
+  - `public/i18n/participant-translations.js`
+- Extended participant-facing module data with latest decision details so the module list can show the latest status/score context for completed modules:
+  - `src/repositories/moduleRepository.ts`
+- Added regression coverage for completed-module rendering, retake creation, and new participant UI strings/markup:
+  - `test/m2-completed-modules.test.ts`
+  - `test/participant-console-state.test.js`
+  - `test/participant-console-config.test.ts`
+  - `test/participant-translations.test.js`
+
 ## 0.3.141 - 2026-03-14
 ### Summary
 Fixed the remaining admin-content list regression for locale-based module titles and localized the new insufficient-evidence auto-fail decision reason in participant results.

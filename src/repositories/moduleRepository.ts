@@ -90,6 +90,12 @@ export async function listModules(
       id: string;
       submittedAt: Date;
       submissionStatus: SubmissionStatusType;
+      latestDecision: {
+        totalScore: number;
+        passFailTotal: boolean;
+        decisionType: DecisionTypeType;
+        finalisedAt: Date;
+      } | null;
     }
   >();
 
@@ -105,6 +111,16 @@ export async function listModules(
         moduleId: true,
         submittedAt: true,
         submissionStatus: true,
+        decisions: {
+          orderBy: { finalisedAt: "desc" },
+          take: 1,
+          select: {
+            totalScore: true,
+            passFailTotal: true,
+            decisionType: true,
+            finalisedAt: true,
+          },
+        },
       },
     });
 
@@ -114,6 +130,14 @@ export async function listModules(
           id: submission.id,
           submittedAt: submission.submittedAt,
           submissionStatus: submission.submissionStatus,
+          latestDecision: submission.decisions[0]
+            ? {
+                totalScore: submission.decisions[0].totalScore,
+                passFailTotal: submission.decisions[0].passFailTotal,
+                decisionType: submission.decisions[0].decisionType,
+                finalisedAt: submission.decisions[0].finalisedAt,
+              }
+            : null,
         });
       }
     }
@@ -132,6 +156,7 @@ export async function listModules(
             latestSubmissionId: latest.id,
             latestSubmittedAt: latest.submittedAt,
             latestStatus: latest.submissionStatus,
+            latestDecision: latest.latestDecision,
           }
         : null,
     };
