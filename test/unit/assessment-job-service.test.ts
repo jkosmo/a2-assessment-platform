@@ -74,10 +74,23 @@ function buildSubmissionFixture() {
       promptTemplateVersionId: "prompt-version-1",
       taskText: "Task text",
       guidanceText: "Guidance text",
+      assessmentPolicyJson: null,
+      submissionSchemaJson: null,
       promptTemplateVersion: {
         systemPrompt: "system",
         userPromptTemplate: "template",
         examplesJson: "[]",
+      },
+      rubricVersion: {
+        criteriaJson: JSON.stringify({
+          relevance_for_case: "0-4",
+          quality_and_utility: "0-4",
+          iteration_and_improvement: "0-4",
+          human_quality_assurance: "0-4",
+          responsible_use: "0-4",
+        }),
+        scalingRuleJson: JSON.stringify({ practical_weight: 70, max_total: 20 }),
+        passRuleJson: JSON.stringify({ total_min: 70 }),
       },
     },
     mcqAttempts: [

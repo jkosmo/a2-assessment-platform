@@ -142,6 +142,11 @@ async function runAssessment(jobId: string) {
         }
       })()
     : null;
+
+  const rubricCriteriaIds = parseRubricCriteriaIds(submission.moduleVersion.rubricVersion.criteriaJson);
+  const rubricMaxTotal = parseRubricMaxTotal(submission.moduleVersion.rubricVersion.scalingRuleJson);
+  const submissionFieldLabels = parseSubmissionFieldLabels(submission.moduleVersion.submissionSchemaJson);
+
   if (!mcqAttempt || mcqAttempt.scaledScore == null || mcqAttempt.percentScore == null) {
     throw new Error("Cannot assess submission before MCQ completion.");
   }
@@ -232,6 +237,8 @@ async function runAssessment(jobId: string) {
       promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
       moduleTaskText: localizeContentText(submissionLocale, submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
       moduleGuidanceText: localizeContentText(submissionLocale, submission.moduleVersion.guidanceText) ?? undefined,
+      rubricCriteriaIds,
+      submissionFieldLabels,
     });
   } catch (error) {
     logOperationalEvent(
@@ -281,6 +288,8 @@ async function runAssessment(jobId: string) {
         promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
         moduleTaskText: localizeContentText(submissionLocale, submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
         moduleGuidanceText: localizeContentText(submissionLocale, submission.moduleVersion.guidanceText) ?? undefined,
+        rubricCriteriaIds,
+        submissionFieldLabels,
       });
     } catch (error) {
       logOperationalEvent(
@@ -336,6 +345,7 @@ async function runAssessment(jobId: string) {
     llmResult: finalLlmResult,
     forceManualReviewReason,
     assessmentPolicy,
+    rubricMaxTotal,
   });
 
   await recordAuditEvent({
@@ -357,4 +367,44 @@ async function logQueueBacklog(trigger: string, submissionId: string) {
     pendingJobs,
     runningJobs,
   });
+}
+
+function parseRubricCriteriaIds(criteriaJson: string): string[] {
+  try {
+    const parsed = JSON.parse(criteriaJson) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((c: { id?: string }) => c.id).filter((id): id is string => typeof id === "string");
+    }
+    if (parsed && typeof parsed === "object") {
+      return Object.keys(parsed as Record<string, unknown>);
+    }
+  } catch {
+    // fall through
+  }
+  return [];
+}
+
+function parseRubricMaxTotal(scalingRuleJson: string): number {
+  try {
+    const parsed = JSON.parse(scalingRuleJson) as { max_total?: unknown };
+    if (typeof parsed.max_total === "number") {
+      return parsed.max_total;
+    }
+  } catch {
+    // fall through
+  }
+  return 20;
+}
+
+function parseSubmissionFieldLabels(submissionSchemaJson: string | null | undefined): string[] {
+  if (!submissionSchemaJson) return [];
+  try {
+    const parsed = JSON.parse(submissionSchemaJson) as { fields?: Array<{ label?: string; id?: string }> };
+    if (!Array.isArray(parsed.fields)) return [];
+    return parsed.fields
+      .map((field) => field.label ?? field.id ?? "")
+      .filter((label) => label.length > 0);
+  } catch {
+    return [];
+  }
 }

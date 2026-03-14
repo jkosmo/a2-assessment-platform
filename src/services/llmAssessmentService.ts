@@ -17,23 +17,11 @@ const manualReviewReasonCodeSchema = z.enum([
 
 const llmResponseSchema = z.object({
   module_id: z.string(),
-  rubric_scores: z.object({
-    relevance_for_case: z.number().int().min(0).max(4),
-    quality_and_utility: z.number().int().min(0).max(4),
-    iteration_and_improvement: z.number().int().min(0).max(4),
-    human_quality_assurance: z.number().int().min(0).max(4),
-    responsible_use: z.number().int().min(0).max(4),
-  }),
-  rubric_total: z.number().int().min(0).max(20),
+  rubric_scores: z.record(z.number().int().min(0)),
+  rubric_total: z.number().int().min(0),
   practical_score_scaled: z.number().min(0).max(70),
   pass_fail_practical: z.boolean(),
-  criterion_rationales: z.object({
-    relevance_for_case: z.string(),
-    quality_and_utility: z.string(),
-    iteration_and_improvement: z.string(),
-    human_quality_assurance: z.string(),
-    responsible_use: z.string(),
-  }),
+  criterion_rationales: z.record(z.string()),
   improvement_advice: z.array(z.string()).max(10),
   red_flags: z.array(
     z.object({
@@ -61,6 +49,8 @@ type AssessmentContext = {
   promptTemplateSystem?: string;
   promptTemplateUserTemplate?: string;
   promptTemplateExamplesJson?: string;
+  rubricCriteriaIds?: string[];
+  submissionFieldLabels?: string[];
 };
 
 type AzureOpenAiRuntimeConfig = {
@@ -164,16 +154,48 @@ export async function evaluatePracticalWithAzureOpenAi(
   }
 }
 
+const DEFAULT_CRITERIA_IDS = [
+  "relevance_for_case",
+  "quality_and_utility",
+  "iteration_and_improvement",
+  "human_quality_assurance",
+  "responsible_use",
+];
+
 function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
   const content = JSON.stringify(input.responseJson);
   const length = content.length;
+  const criteriaIds = input.rubricCriteriaIds?.length ? input.rubricCriteriaIds : DEFAULT_CRITERIA_IDS;
+  const maxTotal = criteriaIds.length * 4;
 
   const baseScore = length > 800 ? 4 : length > 350 ? 3 : length > 150 ? 2 : 1;
   const hasInsufficientEvidence = length < 150;
-  const responsibleUseScore = /sensitive|pii|client data/i.test(content) ? 1 : baseScore;
+  const hasSensitiveContent = /sensitive|pii|client data/i.test(content);
   const passAdjustment = input.assessmentPass === "secondary" ? -1 : 0;
+
+  const rubricScores: Record<string, number> = {};
+  for (const [index, id] of criteriaIds.entries()) {
+    const isLastCriteria = index === criteriaIds.length - 1;
+    const isIterationLike = id.includes("iteration") || id.includes("improvement");
+    const isSensitiveLike = id.includes("responsible") || id.includes("safety") || id.includes("risk");
+
+    let score = baseScore + passAdjustment;
+    if (isIterationLike) score -= 1;
+    if (isLastCriteria && hasSensitiveContent && isSensitiveLike) score = 1;
+    rubricScores[id] = Math.max(0, Math.min(4, score));
+  }
+
+  // Detect sensitive data flag via the designated responsible-use criterion
+  const responsibleCriterionId = criteriaIds.find((id) => id.includes("responsible") || id.includes("safety")) ?? criteriaIds[criteriaIds.length - 1];
+  const responsibleScore = hasSensitiveContent ? 1 : (rubricScores[responsibleCriterionId] ?? baseScore);
+  rubricScores[responsibleCriterionId] = Math.max(0, Math.min(4, responsibleScore));
+
+  const rubricTotal = Object.values(rubricScores).reduce((sum, s) => sum + s, 0);
+  const practicalScoreScaled = Number(((rubricTotal / maxTotal) * 70).toFixed(2));
+  const passFailPractical = (rubricTotal / maxTotal) * 100 >= 50;
+
   const redFlags =
-    responsibleUseScore <= 1
+    responsibleScore <= 1
       ? [
           {
             code: "POTENTIAL_SENSITIVE_DATA",
@@ -183,22 +205,6 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
         ]
       : [];
 
-  const rubricScores = {
-    relevance_for_case: Math.max(0, Math.min(4, baseScore + passAdjustment)),
-    quality_and_utility: Math.max(0, Math.min(4, baseScore + passAdjustment)),
-    iteration_and_improvement: Math.max(0, Math.min(4, baseScore - 1 + passAdjustment)),
-    human_quality_assurance: Math.max(0, Math.min(4, baseScore + passAdjustment)),
-    responsible_use: responsibleUseScore,
-  };
-
-  const rubricTotal =
-    rubricScores.relevance_for_case +
-    rubricScores.quality_and_utility +
-    rubricScores.iteration_and_improvement +
-    rubricScores.human_quality_assurance +
-    rubricScores.responsible_use;
-  const practicalScoreScaled = Number(((rubricTotal / 20) * 70).toFixed(2));
-  const passFailPractical = (rubricTotal / 20) * 100 >= 50;
   const evidenceSufficiency = hasInsufficientEvidence ? "insufficient" : "sufficient";
   const recommendedOutcome = redFlags.length > 0 ? "manual_review" : passFailPractical ? "pass" : "fail";
   const manualReviewReasonCode =
@@ -216,19 +222,18 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
         ? "Low confidence due to insufficient submission evidence."
         : "High confidence: structured and sufficiently detailed submission.";
 
+  const criterionRationales: Record<string, string> = {};
+  for (const id of criteriaIds) {
+    criterionRationales[id] = `Stub: assessed criterion ${id}.`;
+  }
+
   return {
     module_id: input.moduleId,
     rubric_scores: rubricScores,
     rubric_total: rubricTotal,
     practical_score_scaled: practicalScoreScaled,
     pass_fail_practical: passFailPractical,
-    criterion_rationales: {
-      relevance_for_case: "Stub: submission appears relevant to the module task.",
-      quality_and_utility: "Stub: output shows practical utility.",
-      iteration_and_improvement: "Stub: at least one improvement iteration is visible.",
-      human_quality_assurance: "Stub: includes human QA/reflection markers.",
-      responsible_use: "Stub: responsible-use checks inferred from provided content.",
-    },
+    criterion_rationales: criterionRationales,
     improvement_advice: [
       "Provide clearer before/after examples.",
       "Describe concrete validation checks you performed.",
@@ -293,14 +298,22 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
       : "This is the primary assessment pass.";
   const examplesJson = (input.promptTemplateExamplesJson ?? "").trim();
   const responseLanguageInstruction = buildResponseLanguageInstruction(input.responseLocale ?? "en-GB");
+  const criteriaIds = input.rubricCriteriaIds?.length ? input.rubricCriteriaIds : DEFAULT_CRITERIA_IDS;
+  const responseContract = buildRequiredResponseContract(criteriaIds);
+
+  const submissionFieldsSection =
+    input.submissionFieldLabels?.length
+      ? `Submission fields:\n${input.submissionFieldLabels.map((label) => `- ${label}`).join("\n")}`
+      : null;
 
   const userSections = [
     "Assess the candidate submission and return one strict JSON object only.",
     passContext,
     responseLanguageInstruction,
-    REQUIRED_RESPONSE_CONTRACT,
+    responseContract,
     input.moduleTaskText ? `Participant assignment context:\n${input.moduleTaskText}` : null,
     input.moduleGuidanceText ? `Expected submission content context:\n${input.moduleGuidanceText}` : null,
+    submissionFieldsSection,
     userPromptTemplate ? `Prompt template context:\n${userPromptTemplate}` : null,
     examplesJson ? `Prompt examples context (JSON):\n${examplesJson}` : null,
     `Module ID: ${input.moduleId}`,
@@ -430,19 +443,17 @@ function buildResponseLanguageInstruction(locale: SupportedLocale) {
   return localeInstructionMap[locale] ?? localeInstructionMap["en-GB"];
 }
 
-const REQUIRED_RESPONSE_CONTRACT = `
+function buildRequiredResponseContract(criteriaIds: string[]): string {
+  const criteriaList = criteriaIds.map((id) => `  - ${id}`).join("\n");
+  return `
 JSON response contract:
 - module_id: string
-- rubric_scores: object with integer values 0..4 for:
-  - relevance_for_case
-  - quality_and_utility
-  - iteration_and_improvement
-  - human_quality_assurance
-  - responsible_use
-- rubric_total: integer 0..20 and equal to sum of rubric_scores
+- rubric_scores: object with integer values 0..4 for each rubric criterion:
+${criteriaList}
+- rubric_total: integer equal to sum of rubric_scores values
 - practical_score_scaled: number 0..70
 - pass_fail_practical: boolean
-- criterion_rationales: object with one concise string rationale per rubric criterion key
+- criterion_rationales: object with one concise string rationale per rubric criterion key (same keys as rubric_scores)
 - improvement_advice: array of up to 10 concise strings
 - red_flags: array of objects with fields: code (string), severity (string), description (string)
 - allowed red_flags.code values:
@@ -455,3 +466,4 @@ JSON response contract:
 - manual_review_reason_code: one of none, red_flag, borderline, low_confidence, disagreement, insufficient_evidence, policy
 Do not include markdown, comments, or any wrapper text outside JSON.
 `.trim();
+}

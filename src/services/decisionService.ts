@@ -32,6 +32,7 @@ type BuildDecisionInput = {
   llmResult: LlmStructuredAssessment;
   forceManualReviewReason?: string;
   assessmentPolicy?: ModuleAssessmentPolicy | null;
+  rubricMaxTotal?: number;
 };
 
 export type ResolvedAssessmentDecision = {
@@ -48,7 +49,7 @@ export type ResolvedAssessmentDecision = {
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal"
 >;
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
@@ -56,7 +57,8 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const totalScore = Number((practicalScoreScaled + input.mcqScaledScore).toFixed(2));
-  const practicalPercent = (input.llmResult.rubric_total / 20) * 100;
+  const rubricMaxTotal = input.rubricMaxTotal ?? 20;
+  const practicalPercent = (input.llmResult.rubric_total / rubricMaxTotal) * 100;
 
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
   const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
