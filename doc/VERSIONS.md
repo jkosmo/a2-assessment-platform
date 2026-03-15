@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.4 - 2026-03-15
+### Summary
+Admin-content message feedback is no longer silent on failure: errors are styled red, bundle-saved and published confirmations are styled green.
+
+### Included
+- `setMessage(text, type)` now accepts `"info"` (default), `"error"`, or `"success"`. Errors add `.field-error` (red); success adds `.field-success` (green); both classes are toggled exclusively.
+- All `catch` blocks in button handlers now call `setMessage(message, "error")` — save/publish/load/delete failures are visually distinct from the neutral info messages that follow normal operations.
+- Bundle-saved and module-version-published confirmations now call `setMessage(..., "success")` — the user sees green after a successful save and green after a successful publish, making the transition visible if they previously saw red.
+  - `public/admin-content.js`
+
 ## 0.8.3 - 2026-03-15
 ### Summary
 Fixed all remaining items from the v0.8.1 deferred test list: default field label i18n, timeout button gate, appeal from history, admin version count formatting, and dark pre boxes in review workspaces. Also added TC-PART-05b criterion name normalization.

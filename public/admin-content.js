@@ -278,8 +278,11 @@ function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;
 }
 
-function setMessage(text) {
+function setMessage(text, type = "info") {
   adminContentMessage.textContent = text ?? "";
+  adminContentMessage.classList.remove("field-error", "field-success");
+  if (type === "error") adminContentMessage.classList.add("field-error");
+  if (type === "success") adminContentMessage.classList.add("field-success");
 }
 
 function setLocale(locale) {
@@ -1618,7 +1621,7 @@ async function handleSaveContentBundle() {
   const mcqBody = await handleCreateMcqSetVersion({ silent: true });
   const moduleVersionBody = await handleCreateModuleVersion({ silent: true });
 
-  setMessage(t("adminContent.message.bundleSaved"));
+  setMessage(t("adminContent.message.bundleSaved"), "success");
   log({
     rubricVersion: rubricBody.rubricVersion,
     promptTemplateVersion: promptBody.promptTemplateVersion,
@@ -1640,7 +1643,7 @@ async function handlePublishModuleVersion() {
     headers,
     { method: "POST", body: JSON.stringify({}) },
   );
-  setMessage(t("adminContent.message.moduleVersionPublished"));
+  setMessage(t("adminContent.message.moduleVersionPublished"), "success");
   log(body);
   await refreshSelectedModuleStatus();
 }
@@ -1707,7 +1710,7 @@ loadMeButton.addEventListener("click", async () => {
       log(body);
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1719,7 +1722,7 @@ createModuleButton.addEventListener("click", async () => {
       await handleCreateModule();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1731,7 +1734,7 @@ loadModulesButton.addEventListener("click", async () => {
       await loadModules();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1765,7 +1768,7 @@ deleteModuleButton.addEventListener("click", async () => {
       await handleDeleteSelectedModule();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1777,7 +1780,7 @@ saveContentBundleButton.addEventListener("click", async () => {
       await handleSaveContentBundle();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1789,7 +1792,7 @@ previewCurrentDraftButton.addEventListener("click", async () => {
       await handleOpenParticipantPreview();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1801,7 +1804,7 @@ copyAuthoringPromptButton.addEventListener("click", async () => {
       await handleCopyAuthoringPrompt();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1813,7 +1816,7 @@ publishModuleVersionButton.addEventListener("click", async () => {
       await handlePublishModuleVersion();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1837,7 +1840,7 @@ applyImportDraftButton.addEventListener("click", async () => {
       await handleApplyImportDraft(importDraftJsonInput.value);
     } catch (error) {
       const message = parseActionableErrorMessage(error);
-      setMessage(message);
+      setMessage(message, "error");
       log(message);
     }
   });
@@ -1850,7 +1853,7 @@ importDraftFileInput.addEventListener("change", async () => {
     await handleApplyImportDraft(rawValue);
   } catch (error) {
     const message = parseActionableErrorMessage(error);
-    setMessage(message);
+    setMessage(message, "error");
     log(message);
   }
 });
