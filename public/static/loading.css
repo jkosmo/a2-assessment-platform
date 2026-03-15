@@ -93,3 +93,13 @@ pre.empty-state {
     background-position: -200% 0;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spin {
+    animation: none;
+  }
+  .loading-shimmer {
+    animation: none;
+    background: var(--color-surface-2, #e5e7eb);
+  }
+}

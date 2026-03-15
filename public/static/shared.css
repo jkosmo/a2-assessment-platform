@@ -45,6 +45,27 @@ body {
   color: var(--color-text);
 }
 
+.skip-nav {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-nav:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  z-index: 9999;
+}
+
 .layout-container {
   max-width: 1100px;
   margin: 0 auto;

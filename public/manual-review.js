@@ -583,7 +583,9 @@ function resetOverrideInputs() {
 
 function resetOverrideValidationFeedback() {
   reviewDecisionReasonInput.classList.remove("is-invalid");
+  reviewDecisionReasonInput.setAttribute("aria-invalid", "false");
   reviewOverrideReasonInput.classList.remove("is-invalid");
+  reviewOverrideReasonInput.setAttribute("aria-invalid", "false");
   overrideValidationMessage.classList.remove("field-error");
   overrideValidationMessage.removeAttribute("role");
   overrideValidationMessage.textContent = "";
@@ -593,6 +595,7 @@ function setOverrideValidationError(message, field = null) {
   resetOverrideValidationFeedback();
   if (field) {
     field.classList.add("is-invalid");
+    field.setAttribute("aria-invalid", "true");
   }
   overrideValidationMessage.classList.add("field-error");
   overrideValidationMessage.setAttribute("role", "alert");

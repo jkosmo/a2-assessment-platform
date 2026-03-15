@@ -40,7 +40,8 @@
     </style>
   </head>
   <body>
-    <div class="layout-container">
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
     <h1 data-i18n="adminContentPage.title">Content Setup Workspace</h1>
     <p class="small" data-i18n="adminContentPage.subtitle">Define module content and scoring rules in a guided sequence.</p>
     <p class="small"><span data-i18n="adminContentPage.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
@@ -60,15 +61,15 @@
         <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
         <div class="mock-identity-panel-body">
           <div class="row">
-            <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="content-owner-1" /></div>
-            <div><label data-i18n="identity.email">Email</label><input id="email" value="content.owner@company.com" /></div>
+            <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="content-owner-1" /></div>
+            <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="content.owner@company.com" autocomplete="email" /></div>
           </div>
           <div class="row">
-            <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Content Owner" /></div>
-            <div><label data-i18n="identity.department">Department</label><input id="department" value="Learning" /></div>
+            <div><label for="name" data-i18n="identity.name">Name</label><input id="name" value="Platform Content Owner" autocomplete="name" /></div>
+            <div><label for="department" data-i18n="identity.department">Department</label><input id="department" value="Learning" autocomplete="organization" /></div>
           </div>
           <div>
-            <label data-i18n="identity.roles">Roles (comma-separated)</label>
+            <label for="roles" data-i18n="identity.roles">Roles (comma-separated)</label>
             <input id="roles" value="SUBJECT_MATTER_OWNER" />
           </div>
           <div id="mockRolePresetContainer">
@@ -82,7 +83,7 @@
     </section>
 
     <section class="card import-panel">
-      <h3 data-i18n="adminContent.import.title">1) Start from draft JSON (optional)</h3>
+      <h2 data-i18n="adminContent.import.title">1) Start from draft JSON (optional)</h2>
       <div class="small" data-i18n="adminContent.help.importOverview">Use this when your draft already includes both module shell fields and version content. Import only fills the editor. Review, save, and publish separately.</div>
       <div class="row">
         <div class="import-file">
@@ -100,25 +101,25 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.module.title">2) Create module shell manually</h3>
+      <h2 data-i18n="adminContent.module.title">2) Create module shell manually</h2>
       <div class="small" data-i18n="adminContent.help.moduleOverview">Use this path when you want to create the module shell manually before adding scoring, evaluation instruction, and test.</div>
       <div class="row">
-        <div><label data-i18n="adminContent.module.name">Module name shown to participants</label><textarea id="moduleTitle" rows="3"></textarea></div>
-        <div><label data-i18n="adminContent.module.certificationLevel">Level (for example foundation)</label><input id="moduleCertificationLevel" /></div>
+        <div><label for="moduleTitle" data-i18n="adminContent.module.name">Module name shown to participants</label><textarea id="moduleTitle" rows="3"></textarea></div>
+        <div><label for="moduleCertificationLevel" data-i18n="adminContent.module.certificationLevel">Level (for example foundation)</label><input id="moduleCertificationLevel" /></div>
       </div>
       <div class="small" data-i18n="adminContent.help.moduleName">Use plain text or locale JSON: {&quot;en-GB&quot;:&quot;...&quot;,&quot;nb&quot;:&quot;...&quot;,&quot;nn&quot;:&quot;...&quot;}.</div>
-      <div><label data-i18n="adminContent.module.description">Short module description</label><textarea id="moduleDescription" rows="2"></textarea></div>
+      <div><label for="moduleDescription" data-i18n="adminContent.module.description">Short module description</label><textarea id="moduleDescription" rows="2"></textarea></div>
       <div class="small" data-i18n="adminContent.help.moduleDescription">Shown in module lists. Supports the same locale JSON format.</div>
       <div class="row">
-        <div><label data-i18n="adminContent.module.validFrom">Available from date</label><input id="moduleValidFrom" type="date" /></div>
-        <div><label data-i18n="adminContent.module.validTo">Available until date</label><input id="moduleValidTo" type="date" /></div>
+        <div><label for="moduleValidFrom" data-i18n="adminContent.module.validFrom">Available from date</label><input id="moduleValidFrom" type="date" /></div>
+        <div><label for="moduleValidTo" data-i18n="adminContent.module.validTo">Available until date</label><input id="moduleValidTo" type="date" /></div>
       </div>
       <div class="small" data-i18n="adminContent.help.moduleValidity">Optional module-level availability window. A published version must still be active; these dates only control when the module is offered. Dates are interpreted as UTC midnight.</div>
       <button id="createModule" class="btn-primary" data-i18n="adminContent.module.create">Create module</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.select.title">3) Open existing module</h3>
+      <h2 data-i18n="adminContent.select.title">3) Open existing module</h2>
       <div class="small" data-i18n="adminContent.help.selectOverview">Load an existing module, inspect what is live, and decide whether you are preparing a new draft.</div>
       <div class="row">
         <div>
@@ -146,7 +147,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.status.title">4) Module status</h3>
+      <h2 data-i18n="adminContent.status.title">4) Module status</h2>
       <div id="moduleStatusCard" class="module-status-card">
         <div class="module-status-header">
           <div class="stack">
@@ -182,53 +183,53 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.rubric.title">5) Submission scoring rules</h3>
+      <h2 data-i18n="adminContent.rubric.title">5) Submission scoring rules</h2>
       <div class="small" data-i18n="adminContent.help.rubricOverview">Defines how the participant submission quality is scored.</div>
-      <div><label data-i18n="adminContent.rubric.criteria">Criteria JSON</label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
+      <div><label for="rubricCriteriaJson" data-i18n="adminContent.rubric.criteria">Criteria JSON</label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
       <div class="small" data-i18n="adminContent.help.rubricCriteria">Criterion keys should match the current evaluator contract unless code is changed.</div>
-      <div><label data-i18n="adminContent.rubric.scalingRule">Score scaling JSON</label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
+      <div><label for="rubricScalingRuleJson" data-i18n="adminContent.rubric.scalingRule">Score scaling JSON</label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.rubricScalingRule">Controls score scaling (for example submission weight and maximum score).</div>
-      <div><label data-i18n="adminContent.rubric.passRule">Pass/fail threshold JSON</label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
+      <div><label for="rubricPassRuleJson" data-i18n="adminContent.rubric.passRule">Pass/fail threshold JSON</label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.rubricPassRule">Controls pass/fail thresholds and hard-stop rules.</div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.prompt.title">6) LLM evaluation instruction</h3>
+      <h2 data-i18n="adminContent.prompt.title">6) LLM evaluation instruction</h2>
       <div class="small" data-i18n="adminContent.help.promptOverview">Instruction used by the LLM during evaluation.</div>
-      <div><label data-i18n="adminContent.prompt.systemPrompt">System instruction to evaluator</label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
+      <div><label for="promptSystemPrompt" data-i18n="adminContent.prompt.systemPrompt">System instruction to evaluator</label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.promptSystemPrompt">Global evaluator behavior and output constraints.</div>
-      <div><label data-i18n="adminContent.prompt.userPromptTemplate">Evaluation task instruction</label><textarea id="promptUserPromptTemplate" rows="3"></textarea></div>
+      <div><label for="promptUserPromptTemplate" data-i18n="adminContent.prompt.userPromptTemplate">Evaluation task instruction</label><textarea id="promptUserPromptTemplate" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.promptUserTemplate">Task-specific evaluation instruction. This is often called the module evaluation prompt.</div>
-      <div><label data-i18n="adminContent.prompt.examplesJson">Optional examples JSON array</label><textarea id="promptExamplesJson" rows="4"></textarea></div>
+      <div><label for="promptExamplesJson" data-i18n="adminContent.prompt.examplesJson">Optional examples JSON array</label><textarea id="promptExamplesJson" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.promptExamples">Optional few-shot examples. Keep these short and stable.</div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.mcq.title">7) Multiple-choice test</h3>
+      <h2 data-i18n="adminContent.mcq.title">7) Multiple-choice test</h2>
       <div class="small" data-i18n="adminContent.help.mcqOverview">Defines the participant multiple-choice test.</div>
-      <div><label data-i18n="adminContent.mcq.setTitle">Test title</label><input id="mcqSetTitle" /></div>
+      <div><label for="mcqSetTitle" data-i18n="adminContent.mcq.setTitle">Test title</label><input id="mcqSetTitle" /></div>
       <div class="small" data-i18n="adminContent.help.mcqTitle">Shown in admin context and can be localized using locale JSON.</div>
-      <div><label data-i18n="adminContent.mcq.questionsJson">Questions JSON array</label><textarea id="mcqQuestionsJson" rows="7"></textarea></div>
+      <div><label for="mcqQuestionsJson" data-i18n="adminContent.mcq.questionsJson">Questions JSON array</label><textarea id="mcqQuestionsJson" rows="7"></textarea></div>
       <div class="small" data-i18n="adminContent.help.mcqQuestions">Supports plain strings or locale objects per field: stem/options/correctAnswer/rationale.</div>
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.moduleVersion.title">8) Participant-facing module version</h3>
+      <h2 data-i18n="adminContent.moduleVersion.title">8) Participant-facing module version</h2>
       <div class="small" data-i18n="adminContent.help.moduleVersionOverview">Binds assignment text + scoring rules + evaluation instruction + test.</div>
-      <div><label data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
+      <div><label for="moduleVersionTaskText" data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
       <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
-      <div><label data-i18n="adminContent.moduleVersion.guidanceText">What we expect in the submission</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
+      <div><label for="moduleVersionGuidanceText" data-i18n="adminContent.moduleVersion.guidanceText">What we expect in the submission</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
       <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
-      <div><label data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
+      <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
-      <div><label data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
+      <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
       <div class="row">
-        <div><label data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
-        <div><label data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>
+        <div><label for="moduleVersionRubricVersionId" data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
+        <div><label for="moduleVersionPromptTemplateVersionId" data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>
       </div>
       <div class="small" data-i18n="adminContent.help.moduleVersionIds">IDs are auto-filled when you save steps 5-8.</div>
-      <div><label data-i18n="adminContent.moduleVersion.mcqSetVersionId">Test version ID</label><input id="moduleVersionMcqSetVersionId" /></div>
+      <div><label for="moduleVersionMcqSetVersionId" data-i18n="adminContent.moduleVersion.mcqSetVersionId">Test version ID</label><input id="moduleVersionMcqSetVersionId" /></div>
       <div class="button-row">
         <button id="saveContentBundle" class="btn-primary" data-i18n="adminContent.moduleVersion.saveBundle">Save new draft version (steps 5-8)</button>
         <button id="previewCurrentDraft" class="btn-secondary" data-i18n="adminContent.moduleVersion.previewDraft">Open participant preview</button>
@@ -237,14 +238,14 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="adminContent.publish.title">9) Publish module version</h3>
+      <h2 data-i18n="adminContent.publish.title">9) Publish module version</h2>
       <div class="small" data-i18n="adminContent.help.publishOverview">Publishing makes this version active for participant submissions.</div>
-      <div><label data-i18n="adminContent.publish.moduleVersionId">Module version ID to publish</label><input id="publishModuleVersionId" /></div>
+      <div><label for="publishModuleVersionId" data-i18n="adminContent.publish.moduleVersionId">Module version ID to publish</label><input id="publishModuleVersionId" /></div>
       <button id="publishModuleVersion" class="btn-primary" data-i18n="adminContent.publish.publish">Publish version</button>
     </section>
 
     <section class="card">
-      <h3 data-i18n="output.title">System response</h3>
+      <h2 data-i18n="output.title">System response</h2>
       <div class="small" id="adminContentMessage" role="status" aria-atomic="true"></div>
       <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
       <details id="outputDetails">
@@ -253,7 +254,7 @@
       </details>
     </section>
 
-    </div>
+    </main>
     <script src="/static/i18n/admin-content-translations.js" type="module"></script>
     <script src="/static/admin-content.js" type="module"></script>
   </body>

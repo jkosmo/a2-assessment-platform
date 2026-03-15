@@ -49,13 +49,14 @@
     </style>
   </head>
   <body>
-    <div class="layout-container">
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
     <h1 data-i18n="page.title">Participant Test Console</h1>
     <p class="small" data-i18n="page.subtitle">Manual flow: modules -&gt; submission -&gt; MCQ -&gt; assessment/result.</p>
     <p class="small"><span data-i18n="page.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
     <nav id="workspaceNav" class="workspace-nav"></nav>
     <section id="previewModeBanner" class="card hidden">
-      <h3 data-i18n="preview.title">Draft preview</h3>
+      <h2 data-i18n="preview.title">Draft preview</h2>
       <div id="previewModeMessage" class="small" data-i18n="preview.description">This page shows the current admin draft only. Nothing is saved, submitted, or scored.</div>
     </section>
     <section id="flowProgress" class="card flow-progress" aria-label="Assessment flow progress: Step 1 of 4">
@@ -93,15 +94,15 @@
         <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
         <div class="mock-identity-panel-body">
           <div class="row">
-            <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="participant-1" /></div>
-            <div><label data-i18n="identity.email">Email</label><input id="email" value="participant@company.com" /></div>
+            <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="participant-1" /></div>
+            <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="participant@company.com" autocomplete="email" /></div>
           </div>
           <div class="row">
-            <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Participant" /></div>
-            <div><label data-i18n="identity.department">Department</label><input id="department" value="Consulting" /></div>
+            <div><label for="name" data-i18n="identity.name">Name</label><input id="name" value="Platform Participant" autocomplete="name" /></div>
+            <div><label for="department" data-i18n="identity.department">Department</label><input id="department" value="Consulting" autocomplete="organization" /></div>
           </div>
           <div>
-            <label data-i18n="identity.roles">Roles (comma-separated)</label>
+            <label for="roles" data-i18n="identity.roles">Roles (comma-separated)</label>
             <input id="roles" value="PARTICIPANT" />
           </div>
           <div id="mockRolePresetContainer">
@@ -115,7 +116,7 @@
     </section>
 
     <section class="card">
-      <h3 data-i18n="modules.title">Modules</h3>
+      <h2 data-i18n="modules.title">Modules</h2>
       <button id="loadModules" class="btn-secondary" data-i18n="modules.load">Load modules</button>
       <div class="small" data-i18n="modules.summaryHint">Select one module card before creating submission.</div>
       <div class="hint" id="moduleSelectionHint" data-i18n="modules.selectToUnlock" data-hint-key="modules.selectToUnlock">Submission is hidden until you select a module. MCQ opens after submission is created.</div>
@@ -123,7 +124,7 @@
     </section>
 
     <section class="card hidden" id="submissionSection">
-      <h3 data-i18n="submission.title">Submission</h3>
+      <h2 data-i18n="submission.title">Submission</h2>
       <div>
         <label data-i18n="submission.selectedModule">Selected module</label>
         <div id="selectedModuleDisplay" class="selected-module-summary" aria-describedby="moduleSelectionHint">
@@ -153,14 +154,14 @@
     </section>
 
     <section class="card hidden" id="mcqSection">
-      <h3 data-i18n="mcq.title">MCQ</h3>
+      <h2 data-i18n="mcq.title">MCQ</h2>
       <div id="mcqQuestions"></div>
       <button id="submitMcq" class="btn-primary" data-i18n="mcq.submit">Submit MCQ</button>
       <div class="small"><span data-i18n="mcq.attemptId">Attempt ID:</span> <span id="attemptId">-</span></div>
     </section>
 
     <section class="card hidden" id="assessmentSection">
-      <h3 data-i18n="assessment.title">Assessment</h3>
+      <h2 data-i18n="assessment.title">Assessment</h2>
       <div class="small" id="assessmentGateHint"></div>
       <button id="queueAssessment" class="btn-secondary" data-i18n="assessment.queue">Start assessment</button>
       <button id="checkAssessment" class="btn-secondary" data-i18n="assessment.checkAssessment">Check progress</button>
@@ -174,9 +175,9 @@
     </section>
 
     <section class="card hidden" id="appealSection">
-      <h3 data-i18n="appeal.title">Appeal</h3>
+      <h2 data-i18n="appeal.title">Appeal</h2>
       <div class="small" id="appealGateHint"></div>
-      <div><label data-i18n="appeal.reason">Appeal reason</label><textarea id="appealReason" rows="3"></textarea></div>
+      <div><label for="appealReason" data-i18n="appeal.reason">Appeal reason</label><textarea id="appealReason" rows="3"></textarea></div>
       <button id="createAppeal" class="btn-primary" data-i18n="appeal.create">Create appeal</button>
       <div class="small" id="appealSubmittedStatus"></div>
       <div class="small" id="appealNextSteps"></div>
@@ -184,18 +185,18 @@
     </section>
 
     <section class="card" id="historySection">
-      <h3 data-i18n="history.title">My history</h3>
+      <h2 data-i18n="history.title">My history</h2>
       <button id="loadHistory" class="btn-secondary" data-i18n="history.load">Load my submission history</button>
       <div id="historySummary" class="history-list"></div>
     </section>
 
     <section class="card" id="debugOutputSection" hidden>
-      <h3 data-i18n="output.title">System response</h3>
+      <h2 data-i18n="output.title">System response</h2>
       <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
       <pre id="output"></pre>
     </section>
 
-    </div>
+    </main>
     <script src="/static/i18n/participant-translations.js" type="module"></script>
     <script src="/static/participant.js" type="module"></script>
   </body>

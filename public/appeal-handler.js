@@ -667,7 +667,9 @@ function resetResolutionInputs() {
 
 function resetResolveValidationFeedback() {
   handlerDecisionReasonInput.classList.remove("is-invalid");
+  handlerDecisionReasonInput.setAttribute("aria-invalid", "false");
   handlerResolutionNoteInput.classList.remove("is-invalid");
+  handlerResolutionNoteInput.setAttribute("aria-invalid", "false");
   resolveValidationMessage.classList.remove("field-error");
   resolveValidationMessage.removeAttribute("role");
   resolveValidationMessage.textContent = "";
@@ -677,6 +679,7 @@ function setResolveValidationError(message, field = null) {
   resetResolveValidationFeedback();
   if (field) {
     field.classList.add("is-invalid");
+    field.setAttribute("aria-invalid", "true");
   }
   resolveValidationMessage.classList.add("field-error");
   resolveValidationMessage.setAttribute("role", "alert");

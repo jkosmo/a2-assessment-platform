@@ -16,7 +16,8 @@
     </style>
   </head>
   <body>
-    <div class="layout-container">
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
       <h1 data-i18n="reviewPage.title">Manual Review Workspace</h1>
       <p class="small" data-i18n="reviewPage.subtitle">Handle submissions routed to human review before the final result is confirmed.</p>
       <p class="small" data-i18n="reviewPage.scopeNote">This queue shows submissions waiting for reviewer action. Appeals are handled separately.</p>
@@ -37,15 +38,15 @@
           <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
           <div class="mock-identity-panel-body">
             <div class="row">
-              <div><label data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" /></div>
-              <div><label data-i18n="identity.email">Email</label><input id="email" value="reviewer1@company.com" /></div>
+              <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" /></div>
+              <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="reviewer1@company.com" autocomplete="email" /></div>
             </div>
             <div class="row">
-              <div><label data-i18n="identity.name">Name</label><input id="name" value="Platform Reviewer" /></div>
-              <div><label data-i18n="identity.department">Department</label><input id="department" value="Quality" /></div>
+              <div><label for="name" data-i18n="identity.name">Name</label><input id="name" value="Platform Reviewer" autocomplete="name" /></div>
+              <div><label for="department" data-i18n="identity.department">Department</label><input id="department" value="Quality" autocomplete="organization" /></div>
             </div>
             <div>
-              <label data-i18n="identity.roles">Roles</label>
+              <label for="roles" data-i18n="identity.roles">Roles</label>
               <input id="roles" value="REVIEWER" />
             </div>
             <div id="mockRolePresetContainer">
@@ -59,7 +60,7 @@
       </section>
 
       <section class="card">
-        <h3 data-i18n="manualReview.title">Manual Review Queue</h3>
+        <h2 data-i18n="manualReview.title">Manual Review Queue</h2>
         <div class="queue-toolbar">
           <div>
             <fieldset class="pill-group-fieldset">
@@ -78,7 +79,7 @@
             <input id="queueSearch" data-i18n-placeholder="manualReview.searchPlaceholder" placeholder="Filter by participant, module, review ID, or status" />
           </div>
           <div>
-            <label data-i18n="manualReview.queueLimit">Max reviews to load</label>
+            <label for="queueLimit" data-i18n="manualReview.queueLimit">Max reviews to load</label>
             <input id="queueLimit" readonly value="50" />
           </div>
         </div>
@@ -88,14 +89,14 @@
           <table>
             <thead>
               <tr>
-                <th data-i18n="manualReview.table.reviewId">Review</th>
-                <th data-i18n="manualReview.table.status">Status</th>
-                <th data-i18n="manualReview.table.participant">Participant</th>
-                <th data-i18n="manualReview.table.module">Module</th>
-                <th data-i18n="manualReview.table.submittedAt">Submitted</th>
-                <th data-i18n="manualReview.table.createdAt">Created</th>
-                <th data-i18n="manualReview.table.reviewer">Reviewer</th>
-                <th data-i18n="manualReview.table.reviewedAt">Reviewed</th>
+                <th scope="col" data-i18n="manualReview.table.reviewId">Review</th>
+                <th scope="col" data-i18n="manualReview.table.status">Status</th>
+                <th scope="col" data-i18n="manualReview.table.participant">Participant</th>
+                <th scope="col" data-i18n="manualReview.table.module">Module</th>
+                <th scope="col" data-i18n="manualReview.table.submittedAt">Submitted</th>
+                <th scope="col" data-i18n="manualReview.table.createdAt">Created</th>
+                <th scope="col" data-i18n="manualReview.table.reviewer">Reviewer</th>
+                <th scope="col" data-i18n="manualReview.table.reviewedAt">Reviewed</th>
               </tr>
             </thead>
             <tbody id="manualReviewQueueBody"></tbody>
@@ -104,11 +105,11 @@
       </section>
 
       <section class="card">
-        <h3 data-i18n="manualReview.detailsTitle">Selected review details</h3>
-        <div><label data-i18n="manualReview.selectedReview">Selected review</label><input id="selectedReviewId" readonly value="-" /></div>
+        <h2 data-i18n="manualReview.detailsTitle">Selected review details</h2>
+        <div><label for="selectedReviewId" data-i18n="manualReview.selectedReview">Selected review</label><input id="selectedReviewId" readonly value="-" /></div>
         <pre id="manualReviewDetails"></pre>
-        <div><label data-i18n="manualReview.overrideDecision">Decision reason</label><textarea id="reviewDecisionReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
-        <div><label data-i18n="manualReview.overrideReason">Override note</label><textarea id="reviewOverrideReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
+        <div><label for="reviewDecisionReason" data-i18n="manualReview.overrideDecision">Decision reason</label><textarea id="reviewDecisionReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
+        <div><label for="reviewOverrideReason" data-i18n="manualReview.overrideReason">Override note</label><textarea id="reviewOverrideReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
         <div>
           <label for="reviewPassFailTotal" data-i18n="manualReview.passFail">Final result</label>
           <select id="reviewPassFailTotal">
@@ -125,11 +126,11 @@
       </section>
 
       <section class="card">
-        <h3 data-i18n="output.title">System response</h3>
+        <h2 data-i18n="output.title">System response</h2>
         <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
         <pre id="output"></pre>
       </section>
-    </div>
+    </main>
     <script src="/static/i18n/manual-review-translations.js" type="module"></script>
     <script src="/static/manual-review.js" type="module"></script>
   </body>

@@ -697,9 +697,11 @@ function validateSubmissionInputState() {
 function resetSubmissionValidationVisuals() {
   for (const el of submissionFieldsContainer.querySelectorAll(".is-invalid")) {
     el.classList.remove("is-invalid");
+    el.setAttribute("aria-invalid", "false");
   }
   for (const target of submissionValidationTargets) {
     target.fieldElement?.classList.remove("is-invalid");
+    target.fieldElement?.setAttribute("aria-invalid", "false");
     if (!target.hintElement) {
       continue;
     }
@@ -730,6 +732,7 @@ function applySubmissionValidationFeedback(validation) {
   }
 
   validation.invalidFieldElement?.classList.add("is-invalid");
+  validation.invalidFieldElement?.setAttribute("aria-invalid", "true");
 
   if (validation.invalidHintElement) {
     validation.invalidHintElement.classList.remove("hint", "field-success");
