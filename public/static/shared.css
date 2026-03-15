@@ -548,6 +548,8 @@ dialog {
   padding: var(--space-2);
   max-width: min(560px, 92vw);
   width: min(560px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 dialog::backdrop {
