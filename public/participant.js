@@ -607,7 +607,9 @@ function renderSubmissionFields(fields) {
       charHint.setAttribute("aria-live", "polite");
       const updateCharHint = () => {
         const len = textarea.value.trim().length;
-        charHint.textContent = len > 0 && len < 10 ? t("submission.validation.rawTextMin") : "";
+        const warn = len > 0 && len < 10;
+        charHint.textContent = warn ? t("submission.validation.rawTextMin") : "";
+        charHint.classList.toggle("field-warning", warn);
       };
       textarea.addEventListener("input", () => {
         updateCharHint();

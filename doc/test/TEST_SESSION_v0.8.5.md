@@ -53,7 +53,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 9 | La «Refleksjon» stå tom, fyll inn «Ditt svar» | Innsending opprettes uten feil | | |
 | 10 | Bytt lokalitet til **en-GB** uten å laste siden på nytt | Feltetiketter oppdateres til «Your answer» og «Reflection» umiddelbart | | |
 
-**W1-konklusjon:** _______________
+**W1-konklusjon:** OK. Men 1) Det er fortsatt forskjell i hvordan partipipant og admin_content håndterer feil og statusmelding. Vi trenger å standardisere dette på tvers av skjermbilder 
 
 ---
 
@@ -68,7 +68,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 2 | Inspiser «Modul»-kolonnen i ankekøtabellen | Viser **leselig modulnavn** (f.eks. «Testmodul») — ikke rå JSON som `{"en-GB":"...","nb":"..."}` | | |
 | 3 | Bytt lokalitet (f.eks. fra **en-GB** til **nb**) | Modulnavnet i køtabellen oppdateres til riktig språk | | |
 
-**W2-konklusjon:** _______________
+**W2-konklusjon:** OK
 
 ---
 
@@ -84,7 +84,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 3 | Inspiser toppen av panelet under «Anke» | **Ankebegrunnelse** viser teksten deltakeren la inn — ikke «-» | | |
 | 4 | Inspiser «Modul»-linjen i panelet | Viser leselig modulnavn — ikke rå JSON | | |
 
-**W3-konklusjon:** _______________
+**W3-konklusjon:** OK
 
 ---
 
@@ -100,7 +100,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 3 | Inspiser «Begrunnelse for anke»-feltet | Feltet er **forhåndsutfylt** med standardtekst (f.eks. «Ber om ny vurdering på grunn av mulig avvik i poengsetting.») — ikke tomt | | |
 | 4 | Slett teksten, skriv en egendefinert begrunnelse og klikk «Send inn anke» | Anken sendes inn med egendefinert begrunnelse. Grønn bekreftelsesmelding | | |
 
-**W4-konklusjon:** _______________
+**W4-konklusjon:** OK. 1) Men Send in anke knappen ser grå ut og er ikke konsistent i forhold andre skjermbilder. 2) Vi har en stor sort boks under System svar 
 
 ---
 

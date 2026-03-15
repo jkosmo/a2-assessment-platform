@@ -44,7 +44,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 3 | Skriv 5 tegn i et obligatorisk felt og klikk knappen igjen | Scroll til feltet, hint vises under feltet («minst 10 tegn») | |
 | 4 | Fyll inn nok tekst (≥10 tegn) | Feilhinten forsvinner umiddelbart | |
 
-**Notater:** _______________
+**Notater:** OK
 
 ---
 
@@ -60,7 +60,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 3 | Fortsett til ≥10 tegn | Hinten forsvinner | |
 | 4 | Sjekk at ikke-obligatoriske felt ikke viser hint | Ingen hint under valgfrie felt | |
 
-**Notater:** _______________
+**Notater:** OK
 
 ---
 
@@ -75,7 +75,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 2 | Sjekk at module-ID-feltet i steg 3 er utfylt | Feltet inneholder den nye modul-IDen | |
 | 3 | Sjekk statuskortet i steg 4 | Viser den nye modulen som valgt (shell/ingen versjon) | |
 
-**Notater:** _______________
+**Notater:** Den scrollet til seksjon 3. Ellers OK
 
 ---
 
@@ -94,7 +94,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 6 | Åpne dialog, lim inn egendefinert felt-JSON og klikk «Kopier» | Prompt bruker egendefinert feltliste (overstyrer avkrysningsbokser) | |
 | 7 | Test Escape-tast med åpen dialog | Dialogboks lukkes | |
 
-**Notater:** _______________
+**Notater:** 1) Avkrysningsbokser er ikke på linje med ledetekst. 2) Dialogboks er for liten til at custom-JSON-felt vises fult. 
 
 ---
 
@@ -108,7 +108,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 1 | Last gjennomgangskø og velg en rad | Raden har blå venstre-kantlinje (box-shadow) i tillegg til lys blå bakgrunn | |
 | 2 | Gjør det samme i ankekøen | Samme indikator | |
 
-**Notater:** _______________
+**Notater:** OK
 
 ---
 
@@ -122,7 +122,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 1 | I deltakerflyten: fyll inn nok tekst og klikk «Opprett innlevering» (hvis valideringsstatus vises) | Suksessmelding har «✓ »-prefix | |
 | 2 | Sjekk evt. advarselmeldinger (f.eks. felthint) | Har «⚠ »-prefix | |
 
-**Notater:** _______________
+**Notater:** Ser ikke ⚠ Ellers OK
 
 ---
 
@@ -137,7 +137,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 2 | Velg modul og opprett innlevering | Vurderingsseksjon vises som låst (grå kortbakgrunn, tekst fullt lesbar) | |
 | 3 | Fullfør MCQ | Vurderingsseksjon låses opp (hvit kortbakgrunn) | |
 
-**Notater:** _______________
+**Notater:** OK
 
 ---
 
@@ -151,7 +151,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 1 | Tab til en køtabell-container | Container får synlig fokusring (blå outline) | |
 | 2 | Bruk piltaster mens container er fokusert | Tabellen scroller horisontalt/vertikalt | |
 
-**Notater:** _______________
+**Notater:** Trenger å vite hvilke skjermbilder og seksjoner jeg kan gjøre dette
 
 ---
 
@@ -165,7 +165,7 @@ Følgende ble verifisert OK i tidligere versjoner og er ikke endret siden:
 | 1 | Åpne identitetspanelet på `/participant` og klikk i userId-feltet | Nettleserens autofullføring vises ikke | |
 | 2 | Samme for roles-feltet | Ingen autofullføring | |
 
-**Notater:** _______________
+**Notater:** OK
 
 ---
 

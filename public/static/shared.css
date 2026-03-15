@@ -528,12 +528,21 @@ tr.selected {
   outline-offset: -2px;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-1) * 0.5);
+  margin-bottom: calc(var(--space-1) * 0.5);
+  cursor: pointer;
+}
+
 dialog {
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-card);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
   padding: var(--space-2);
-  max-width: min(480px, 90vw);
+  max-width: min(560px, 92vw);
+  width: min(560px, 92vw);
 }
 
 dialog::backdrop {
