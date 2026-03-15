@@ -28,7 +28,7 @@ Current implementation includes MVP core flow, governance flow, and observabilit
 - Internationalization baseline (`en-GB`, `nb`, `nn`) for participant UI and key API payloads.
 - Azure deployment baseline (staging auto deploy, production approval gate, alerts/runbooks).
 
-Architecture overview: `doc/ARCHITECTURE.md`
+Architecture overview: `doc/design/ARCHITECTURE.md`
 
 ## Tech
 - Node.js + TypeScript + Express
@@ -313,49 +313,49 @@ Seed baseline now includes two modules for multi-module flow checks:
 
 ## Discovery output
 Borderline/manual review routing baseline is documented in:
-- `doc/M0_BORDERLINE_ROUTING.md`
+- `doc/design/M0_BORDERLINE_ROUTING.md`
 
 M0 architecture and implementation decisions are documented in:
-- `doc/M0_IMPLEMENTATION_DECISIONS.md`
+- `doc/design/M0_IMPLEMENTATION_DECISIONS.md`
 
 M1 implementation decisions are documented in:
-- `doc/M1_IMPLEMENTATION_DECISIONS.md`
+- `doc/design/M1_IMPLEMENTATION_DECISIONS.md`
 
 Version history is tracked in:
 - `doc/VERSIONS.md`
 
 Dev-tenant Entra auth target design is documented in:
-- `doc/DEV_TENANT_AUTH_TARGET_DESIGN.md`
+- `doc/design/DEV_TENANT_AUTH_TARGET_DESIGN.md`
 
 Dev-tenant auth onboarding and smoke tests are documented in:
-- `doc/DEV_TENANT_AUTH_ONBOARDING.md`
+- `doc/ops/DEV_TENANT_AUTH_ONBOARDING.md`
 
 Dev-tenant auth bootstrap script:
 - `scripts/entra/setup-dev-tenant-auth.ps1`
 
 Azure staging/production runbook:
-- `doc/AZURE_ENVIRONMENTS.md`
+- `doc/ops/AZURE_ENVIRONMENTS.md`
 
 Azure deployment workflow:
 - `.github/workflows/deploy-azure.yml`
 
 Internationalization baseline and translation workflow:
-- `doc/I18N.md`
+- `doc/design/I18N.md`
 
 Appeals operating process (SLA, ownership, escalation):
-- `doc/APPEALS_OPERATING_MODEL.md`
+- `doc/ops/APPEALS_OPERATING_MODEL.md`
 
 Observability and incident response runbook:
-- `doc/OBSERVABILITY_RUNBOOK.md`
+- `doc/ops/OBSERVABILITY_RUNBOOK.md`
 
 Phase-2 design note for participant appeal notifications:
-- `doc/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`
+- `doc/design/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`
 
 Org sync conflict/override strategy:
-- `doc/ORG_SYNC_CONFLICT_STRATEGY.md`
+- `doc/design/ORG_SYNC_CONFLICT_STRATEGY.md`
 
 Phase-2 design note for Azure OpenAI assessment integration:
-- `doc/PHASE2_AZURE_OPENAI_INTEGRATION.md`
+- `doc/design/PHASE2_AZURE_OPENAI_INTEGRATION.md`
 
 Phase-2 design note for admin content workspace:
-- `doc/PHASE2_ADMIN_CONTENT_WORKSPACE_DESIGN.md`
+- `doc/design/PHASE2_ADMIN_CONTENT_WORKSPACE_DESIGN.md`
