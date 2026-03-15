@@ -40,7 +40,7 @@
 | 13 | Export again. Inspect `selectedConfiguration.moduleVersion.assessmentPolicy` | Contains the entered scoring weights (not null) | | |
 | 14 | Publish the module version | Published, badge changes to "Live" | | |
 
-**W1 verdict:** _______________
+**W1 verdict:** Step 7, use of button Last utkast wipes the module version fields, if used before the button "Lagre ny utkastversjon (steg 5-8), Except from that OK_______________
 
 ---
 
@@ -63,7 +63,12 @@
 | 10 | Poll until result appears | Result shown | | |
 | 11 | Inspect the pass/fail indicator | Norwegian text (Bestått / Ikke bestått) | | |
 
-**W2 verdict:** _______________
+**W2 verdict:** 1) When using en-GB there is no default values in the subision section. When using Norwegian default values is the fallback values (from the module about generic KI) initialy, but after switching back and forth to en-GB it becomes blank. 2) Labels is also in english even when language is NB. 3) If I fill in values in your answers, and then switch language, my input is cleared/ deleted.
+4) LLM call timed out, with notice "Vurdering feila. Prøv å sjekke framdrift igjen. Automatisk sjekk gjekk ut på tid. Du kan halde fram med Sjekk framdrift under." But the button "Sjekk Framdrift" was not active.5) Retaking the test I get the following output "Kriteriegrunngjevingar
+Technical Accuracy: Svaret inneheld feil definisjon av hovudformålet med kendo og manglar presis terminologi.
+Conceptual Understanding: Manglar forståing for kendo som disiplin som kombinerer kropp og sinnsfokus, samt viktig rolle av etikette og filosofi.
+Application: Ingen forklåring på korleis kunnskapen kan omsetast til trening eller konkurranse.
+Clarity: Språket er vagt og lite presist, noko som gjer budskapet uklårt." with a mix of english and norwegian_______________
 
 ---
 
@@ -90,7 +95,13 @@
 | 5 | Leave "Refleksjon" empty, fill only "Ditt svar" | Submission proceeds | | |
 | 6 | Switch locale to **en-GB** without reloading | Labels update to "Your answer" and "Reflection" immediately | | |
 
-**W3 verdict:** _______________
+**W3 verdict:** 1) Step 2 shows still the default 3 fields. Checking back in admin_content there is indication that something went wrong during publishing. In the field Live Nå: I can see the following "Module v1
+>
+Rubric v1
+>
+Prompt v1
+>
+MCQ v1" while under Sist lagrede utkast "Ingen upublisert utkastversjon." and Lagrede versjoner "Module 1, Rubric 3, Prompt 3, MCQ 3" which seems inconsistant. 2) Cosmetic "Live nå" and "Lagrede utkast" have very different formating. 
 
 ---
 
@@ -106,7 +117,7 @@
 | 4 | Claim the review | Reviewer name appears in queue row | | |
 | 5 | Enter decision reason and outcome, submit | Review closes; status updates | | |
 
-**W4 verdict:** _______________
+**W4 verdict:** OK, Cosmetic formating is different from Admin_Content and Participant with large black squares
 
 ---
 
@@ -122,7 +133,7 @@
 | 4 | Claim and resolve the appeal | Appeal resolved; status updates | | |
 | 5 | Return to participant.html — verify appeal outcome visible | Appeal result shown | | |
 
-**W5 verdict:** _______________
+**W5 verdict:** 1) OK, same cosmetic issues as with manual review. 2) There is a inconsitancy in the participant workflow, if you should apeal you need to do so at once, if you open a past failure there is no way to apeal 
 
 ---
 
@@ -139,7 +150,7 @@
 | 4 | Before appeal is available, Tab through | Appeal button unreachable | | |
 | 5 | After result + appeal available, Tab through | Appeal button reachable | | |
 
-**W6 verdict:** _______________
+**W6 verdict:** OK
 
 ---
 
@@ -158,7 +169,7 @@
 | 6 | Open calibration.html at 400 px | Both outcomes and anchors tables as stacked cards | | |
 | 7 | Resize above 600 px | Tables return to normal horizontal layout | | |
 
-**W7 verdict:** _______________
+**W7 verdict:** OK
 
 ---
 
@@ -172,7 +183,7 @@
 | 2 | Switch to a different module in the selector | All version fields clear before new module's content loads | | |
 | 3 | Load content for the second module | No content from the previous module visible | | |
 
-**W8 verdict:** _______________
+**W8 verdict:** OK
 
 ---
 

@@ -1,9 +1,9 @@
 # Test Session — v0.8.0
 
 **Version tested:** 0.8.0
-**Date:** _______________
-**Tester:** _______________
-**Environment:** _______________
+**Date:** 15.03.2026_______________
+**Tester:** JK_______________
+**Environment:** Stage_______________
 
 ---
 
@@ -43,7 +43,7 @@ Write a **session verdict** at the bottom when done.
 | 12 | Export again. Inspect `selectedConfiguration.moduleVersion.assessmentPolicy` | Contains the entered scoring weights (not null) | | |
 | 13 | Publish the module version | Published, badge changes to "Live" | | |
 
-**W1 verdict:** _______________
+**W1 verdict:** Kosmetiskfeil i 3, feltet Nivå bør være i samme format som modulnavn til venstre. Lite intuitiv flyt, hvis man trykker bruk-utkast-json knapp så Opprett-modul så Last-utkast så blir modul-versjon felt blankt. 
 
 ---
 
@@ -68,7 +68,11 @@ Write a **session verdict** at the bottom when done.
 | 12 | Inspect criterion names in the result view | Criterion labels in Norwegian (not raw camelCase keys) | | |
 | 13 | Inspect the pass/fail indicator | Norwegian text (Bestått / Ikke bestått) | | |
 
-**W2 verdict:** _______________
+**W2 verdict:** 6: modulliste samt modulfelter er fortsatt på norsk, kun ledetekster er på engelsk. Jeg skiftet ikke tilbake til NB og når jeg fikk svar tilbake var kriteria en blanding av norsk og engelsk "Criterion rationales
+Source Understanding: Begrenset referanse til kilde-materialet; svarer ikke på hovedpunktene.
+Accuracy: Innholdet er ikke verifisert eller korrekt i forhold til kildematerialet.
+Analysis: Vurdering av relevans eller betydning mangler; ingen analytisk innsikt.
+Clarity: Kort og lite strukturert; mangler detaljer og tydelig opplegg."_______________
 
 ---
 
@@ -94,7 +98,7 @@ Write a **session verdict** at the bottom when done.
 | 5 | Leave the optional field empty, fill only the required field | Submission proceeds | | |
 | 6 | Switch locale to **en-GB** without reloading | Labels update to "Your answer" and "Reflection" | | |
 
-**W3 verdict:** _______________
+**W3 verdict:** Trying to add the json above to the module created In testcase 1. I get the error message "Value is required for Module name shown to participants" in system respone when pressing the preview button. When I open the module in Participant the Instruction field is still visible and labels in section 8 are in still in english
 
 ---
 
