@@ -182,9 +182,9 @@ const defaultFieldBindings = [
 ];
 
 const DEFAULT_SUBMISSION_FIELDS = [
-  { id: "response", label: "Your answer", type: "textarea", rows: 5, required: true, defaultValueKey: "defaults.rawText" },
-  { id: "reflection", label: "Reflection (what you changed and why)", type: "textarea", rows: 4, required: false, defaultValueKey: "defaults.reflection" },
-  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", type: "textarea", rows: 3, required: false, defaultValueKey: "defaults.promptExcerpt" },
+  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 5, required: true, defaultValueKey: "defaults.rawText" },
+  { id: "reflection", label: "Reflection (what you changed and why)", labelKey: "submission.reflection", type: "textarea", rows: 4, required: false, defaultValueKey: "defaults.reflection" },
+  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", labelKey: "submission.promptExcerpt", type: "textarea", rows: 3, required: false, defaultValueKey: "defaults.promptExcerpt" },
 ];
 
 let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;
@@ -592,7 +592,7 @@ function renderSubmissionFields(fields) {
   for (const field of fields) {
     const wrapper = document.createElement("div");
     const label = document.createElement("label");
-    label.textContent = localizePreviewText(field.label);
+    label.textContent = field.labelKey ? t(field.labelKey) : localizePreviewText(field.label);
     const textarea = document.createElement("textarea");
     textarea.setAttribute("data-field-id", field.id);
     textarea.rows = field.rows ?? 3;
@@ -1007,9 +1007,10 @@ function renderFlowGating() {
     !flowState.hasSubmission ||
     flowState.hasMcqSubmission ||
     currentQuestions.length === 0;
-  queueAssessmentButton.disabled = autoAssessmentEnabled || queueBusy || !gate.assessmentUnlocked;
-  checkResultButton.disabled = autoAssessmentEnabled || checkResultBusy || !gate.assessmentUnlocked;
-  checkAssessmentButton.disabled = autoAssessmentEnabled || checkAssessmentBusy || !gate.checkAssessmentUnlocked;
+  const isAutoLoopActive = autoAssessmentEnabled && autoAssessmentTicker !== null;
+  queueAssessmentButton.disabled = isAutoLoopActive || queueBusy || !gate.assessmentUnlocked;
+  checkResultButton.disabled = isAutoLoopActive || checkResultBusy || !gate.assessmentUnlocked;
+  checkAssessmentButton.disabled = isAutoLoopActive || checkAssessmentBusy || !gate.checkAssessmentUnlocked;
   createAppealButton.disabled = createAppealBusy || !gate.appealUnlocked;
   resetSubmissionFlowButton.disabled = resetFlowBusy || !hasResultStatus;
 
@@ -1102,6 +1103,7 @@ async function startAutomaticAssessmentFlow(submissionId) {
       stopAutoAssessmentLoop(false);
       setAssessmentProgressDetail("assessment.auto.timeout");
       renderAssessmentProgress();
+      renderFlowGating();
       return;
     }
 
@@ -1581,6 +1583,18 @@ function localizeCriterionName(criterion) {
   const translationKey = `result.criterion.${key}`;
   const localized = t(translationKey);
   if (localized !== translationKey) return localized;
+  // Try snake_case normalization: "Technical Accuracy" / "technicalAccuracy" → "technical_accuracy"
+  const snakeKey = key
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+  if (snakeKey && snakeKey !== key) {
+    const snakeTranslationKey = `result.criterion.${snakeKey}`;
+    const snakeLocalized = t(snakeTranslationKey);
+    if (snakeLocalized !== snakeTranslationKey) return snakeLocalized;
+  }
   // Format raw key: snake_case and camelCase → readable words
   return key
     .replace(/_/g, " ")

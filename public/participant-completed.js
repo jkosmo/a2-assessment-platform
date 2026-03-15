@@ -20,6 +20,14 @@ const loadCompletedButton = document.getElementById("loadCompleted");
 const completedMeta = document.getElementById("completedMeta");
 const completedBody = document.getElementById("completedBody");
 const completedLimit = document.getElementById("completedLimit");
+const completedAppealSection = document.getElementById("completedAppealSection");
+const appealModuleTitle = document.getElementById("appealModuleTitle");
+const completedAppealReason = document.getElementById("completedAppealReason");
+const completedSubmitAppeal = document.getElementById("completedSubmitAppeal");
+const completedCancelAppeal = document.getElementById("completedCancelAppeal");
+const completedAppealFeedback = document.getElementById("completedAppealFeedback");
+
+let pendingAppealSubmissionId = null;
 
 const defaultWorkspaceNavigationItems = [
   {
@@ -316,7 +324,7 @@ function renderCompletedModules(body) {
   completedMeta.textContent = `${t("completed.meta.loadedPrefix")}: ${modules.length}`;
 
   if (modules.length === 0) {
-    completedBody.innerHTML = `<tr><td colspan="5">${t("completed.empty")}</td></tr>`;
+    completedBody.innerHTML = `<tr><td colspan="6">${t("completed.empty")}</td></tr>`;
     return;
   }
 
@@ -327,12 +335,17 @@ function renderCompletedModules(body) {
       : module?.latestDecision?.passFailTotal === false
         ? t("completed.value.fail")
         : "-";
+    const canAppeal =
+      module?.latestStatus === "COMPLETED" &&
+      module?.latestDecision?.passFailTotal === false &&
+      module?.latestSubmissionId;
     const labels = [
       t("completed.table.module"),
       t("completed.table.completedAt"),
       t("completed.table.status"),
       t("completed.table.score"),
       t("completed.table.passFail"),
+      t("completed.table.appeal"),
     ];
     const values = [
       `${module.moduleTitle ?? "-"}\n(${module.moduleId ?? "-"})`,
@@ -342,14 +355,40 @@ function renderCompletedModules(body) {
       passFailValue,
     ];
 
-    for (let i = 0; i < values.length; i++) {
+    for (let i = 0; i < labels.length; i++) {
       const cell = document.createElement("td");
       cell.dataset.label = labels[i];
-      cell.textContent = String(values[i]);
+      if (i < values.length) {
+        cell.textContent = String(values[i]);
+      } else if (i === 5 && canAppeal) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = t("completed.appeal.button");
+        btn.className = "btn-secondary";
+        btn.addEventListener("click", () => openAppealForm(module.latestSubmissionId, module.moduleTitle ?? ""));
+        cell.appendChild(btn);
+      }
       row.appendChild(cell);
     }
     completedBody.appendChild(row);
   }
+}
+
+function openAppealForm(submissionId, moduleTitle) {
+  pendingAppealSubmissionId = submissionId;
+  appealModuleTitle.textContent = moduleTitle;
+  completedAppealReason.value = "";
+  completedAppealFeedback.hidden = true;
+  completedAppealFeedback.textContent = "";
+  completedAppealFeedback.className = "small field-success";
+  completedAppealSection.hidden = false;
+  completedAppealSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeAppealForm() {
+  pendingAppealSubmissionId = null;
+  completedAppealSection.hidden = true;
+  completedAppealReason.value = "";
 }
 
 async function loadVersion() {
@@ -426,6 +465,34 @@ loadCompletedButton.addEventListener("click", async () => {
 
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
+});
+
+completedCancelAppeal.addEventListener("click", () => {
+  closeAppealForm();
+});
+
+completedSubmitAppeal.addEventListener("click", async () => {
+  await runWithBusyButton(completedSubmitAppeal, async () => {
+    const submissionId = pendingAppealSubmissionId;
+    const reason = completedAppealReason.value.trim();
+    if (!submissionId || !reason) {
+      return;
+    }
+    try {
+      await apiFetch(`/api/submissions/${submissionId}/appeals`, headers, {
+        method: "POST",
+        body: JSON.stringify({ appealReason: reason }),
+      });
+      completedAppealFeedback.textContent = t("completed.appeal.success");
+      completedAppealFeedback.className = "small field-success";
+      completedAppealFeedback.hidden = false;
+      completedSubmitAppeal.disabled = true;
+    } catch (error) {
+      completedAppealFeedback.textContent = `${t("completed.appeal.error")} ${error.message ?? ""}`.trim();
+      completedAppealFeedback.className = "small field-error";
+      completedAppealFeedback.hidden = false;
+    }
+  });
 });
 
 mockRolePresetSelect.addEventListener("change", () => {

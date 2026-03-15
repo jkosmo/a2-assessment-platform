@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/static/shared.css" />
     <style>
       .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 420px; overflow-y: auto; }
-      table { width: 100%; border-collapse: collapse; min-width: 760px; }
+      table { width: 100%; border-collapse: collapse; min-width: 880px; }
       th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
       tr:hover { background: var(--color-row-hover); }
     </style>
@@ -77,11 +77,26 @@
               <th scope="col" data-i18n="completed.table.status">Status</th>
               <th scope="col" data-i18n="completed.table.score">Total score</th>
               <th scope="col" data-i18n="completed.table.passFail">Pass/fail</th>
+              <th scope="col" data-i18n="completed.table.appeal">Appeal</th>
             </tr>
           </thead>
           <tbody id="completedBody"></tbody>
         </table>
       </div>
+    </section>
+
+    <section id="completedAppealSection" class="card" hidden>
+      <h2 data-i18n="completed.appeal.title">Appeal a result</h2>
+      <div class="small"><span data-i18n="completed.appeal.for">Module:</span> <strong id="appealModuleTitle"></strong></div>
+      <div>
+        <label for="completedAppealReason" data-i18n="completed.appeal.reasonLabel">Reason for appeal</label>
+        <textarea id="completedAppealReason" rows="3"></textarea>
+      </div>
+      <div class="row" style="margin-top: var(--space-1);">
+        <div><button id="completedSubmitAppeal" data-i18n="completed.appeal.submit">Submit appeal</button></div>
+        <div><button id="completedCancelAppeal" class="btn-secondary" data-i18n="completed.appeal.cancel">Cancel</button></div>
+      </div>
+      <div class="small field-success" id="completedAppealFeedback" hidden></div>
     </section>
 
     <section class="card">

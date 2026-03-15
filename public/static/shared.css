@@ -500,6 +500,14 @@ pre {
   border-radius: var(--radius-card);
 }
 
+pre.pre-content {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-soft);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 .hidden {
   display: none;
 }

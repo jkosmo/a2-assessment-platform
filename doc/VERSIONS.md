@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.3 - 2026-03-15
+### Summary
+Fixed all remaining items from the v0.8.1 deferred test list: default field label i18n, timeout button gate, appeal from history, admin version count formatting, and dark pre boxes in review workspaces. Also added TC-PART-05b criterion name normalization.
+
+### Included
+- **TC-PART-07**: `DEFAULT_SUBMISSION_FIELDS` in participant.js now uses `labelKey` properties (`submission.rawText`, `submission.reflection`, `submission.promptExcerpt`). `renderSubmissionFields` resolves labels via `t(field.labelKey)` for default fields, `localizePreviewText(field.label)` for custom schema fields. Default field labels now render in the participant's locale.
+  - `public/participant.js`
+- **TC-PART-08**: Fixed "Sjekk framdrift" button being disabled after auto-assessment timeout. Two changes: (1) `renderFlowGating()` is now called in the timeout branch so button states update immediately; (2) `checkAssessmentButton.disabled` (and queue/result buttons) now uses `isAutoLoopActive = autoAssessmentEnabled && autoAssessmentTicker !== null` — buttons re-enable when the loop has stopped regardless of the `autoStartAfterMcq` setting.
+  - `public/participant.js`
+- **TC-PART-09**: Appeal button added to participant-completed.html for eligible past failures (COMPLETED status, passFailTotal=false). Clicking the button reveals an appeal form panel; on submit the form calls `POST /api/submissions/:id/appeals`.
+  - `public/participant-completed.html`
+  - `public/participant-completed.js`
+  - `public/i18n/participant-completed-translations.js`
+- **TC-PART-05b**: `localizeCriterionName` now normalises the criterion key to `snake_case` (handling both "Technical Accuracy" and "technicalAccuracy" → "technical_accuracy") before falling back. Common criterion translations added for `en-GB`, `nb`, `nn`: technical_accuracy, conceptual_understanding, application, clarity, communication, critical_thinking, problem_solving.
+  - `public/participant.js`
+  - `public/i18n/participant-translations.js`
+- **TC-ADMIN-09**: "Lagrede versjoner" in admin-content now renders as a badge chain (same visual style as "Live nå") using `renderStatusChain`. Replaced plain `countsText` string with `versionsCountsChain` array in `deriveModuleStatusView`.
+  - `public/admin-content.js`
+- **TC-ADMIN-10**: `<pre>` elements displaying structured review/appeal details now use `.pre-content` CSS class (light background, readable contrast, max-height with scroll). Added to `#manualReviewDetails` and `#appealHandlerDetails`. Terminal-style debug `#output` pres unchanged.
+  - `public/static/shared.css`
+  - `public/manual-review.html`
+  - `public/appeal-handler.html`
+
 ## 0.8.2 - 2026-03-15
 ### Summary
 Fixed regression introduced in v0.8.1 where user input in submission fields was wiped on locale switch.

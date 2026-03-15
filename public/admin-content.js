@@ -802,7 +802,12 @@ function deriveModuleStatusView(moduleExport) {
       ].filter(Boolean)
       : [],
     publishedAt: liveModuleVersion?.publishedAt ?? null,
-    countsText: `Module ${moduleVersions.length}, Rubric ${rubricVersions.length}, Prompt ${promptTemplateVersions.length}, MCQ ${mcqSetVersions.length}`,
+    versionsCountsChain: [
+      moduleVersions.length > 0 ? { label: "Module", versionNo: moduleVersions.length } : null,
+      rubricVersions.length > 0 ? { label: "Rubric", versionNo: rubricVersions.length } : null,
+      promptTemplateVersions.length > 0 ? { label: "Prompt", versionNo: promptTemplateVersions.length } : null,
+      mcqSetVersions.length > 0 ? { label: "MCQ", versionNo: mcqSetVersions.length } : null,
+    ].filter(Boolean),
     technicalDetails,
   };
 }
@@ -1195,7 +1200,11 @@ function renderModuleStatus() {
     moduleStatusLive.textContent = t("adminContent.status.noPublishedVersion");
     moduleStatusDraft.textContent = t("adminContent.status.noDraftVersion");
     moduleStatusPublishedAt.textContent = "-";
-    moduleStatusCounts.textContent = module?.activeVersionNo ? `Module ${module.activeVersionNo}` : "-";
+    if (module?.activeVersionNo) {
+      renderStatusChain(moduleStatusCounts, [{ label: "Module", versionNo: module.activeVersionNo }]);
+    } else {
+      moduleStatusCounts.textContent = "-";
+    }
     moduleStatusDetails.textContent = module
       ? JSON.stringify({ moduleId: module.id, activeVersionNo: module.activeVersionNo }, null, 2)
       : "-";
@@ -1236,7 +1245,11 @@ function renderModuleStatus() {
   }
 
   moduleStatusPublishedAt.textContent = formatDateTimeValue(view.publishedAt);
-  moduleStatusCounts.textContent = view.countsText;
+  if (view.versionsCountsChain.length > 0) {
+    renderStatusChain(moduleStatusCounts, view.versionsCountsChain);
+  } else {
+    moduleStatusCounts.textContent = "-";
+  }
   moduleStatusDetails.textContent = JSON.stringify(view.technicalDetails, null, 2);
 }
 
