@@ -327,6 +327,13 @@ function renderCompletedModules(body) {
       : module?.latestDecision?.passFailTotal === false
         ? t("completed.value.fail")
         : "-";
+    const labels = [
+      t("completed.table.module"),
+      t("completed.table.completedAt"),
+      t("completed.table.status"),
+      t("completed.table.score"),
+      t("completed.table.passFail"),
+    ];
     const values = [
       `${module.moduleTitle ?? "-"}\n(${module.moduleId ?? "-"})`,
       formatDateTime(module.latestCompletedAt),
@@ -335,9 +342,10 @@ function renderCompletedModules(body) {
       passFailValue,
     ];
 
-    for (const value of values) {
+    for (let i = 0; i < values.length; i++) {
       const cell = document.createElement("td");
-      cell.textContent = String(value);
+      cell.dataset.label = labels[i];
+      cell.textContent = String(values[i]);
       row.appendChild(cell);
     }
     completedBody.appendChild(row);

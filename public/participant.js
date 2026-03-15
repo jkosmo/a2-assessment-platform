@@ -364,6 +364,7 @@ function setLocale(locale) {
     loadPreviewModules({ notify: false });
   }
   setDefaultFieldValues(previousLocale, currentLocale);
+  renderSubmissionFields(getSubmissionFields(resolveSelectedModule(loadedModules, selectedModuleId)));
   renderResultSummary(latestResult);
   renderHistorySummary(latestHistory);
 }
@@ -575,7 +576,7 @@ function renderSubmissionFields(fields) {
   for (const field of fields) {
     const wrapper = document.createElement("div");
     const label = document.createElement("label");
-    label.textContent = field.label;
+    label.textContent = localizePreviewText(field.label);
     const textarea = document.createElement("textarea");
     textarea.setAttribute("data-field-id", field.id);
     textarea.rows = field.rows ?? 3;
@@ -646,6 +647,24 @@ function renderFlowProgress() {
       stepElement.setAttribute("aria-current", "step");
     } else {
       stepElement.removeAttribute("aria-current");
+    }
+  }
+}
+
+function setSectionLocked(section, locked) {
+  section.classList.toggle("section-locked", locked);
+  for (const el of section.querySelectorAll("button, input, textarea, select, a[href]")) {
+    if (locked) {
+      el.dataset.preLockTabindex = el.getAttribute("tabindex") ?? "";
+      el.setAttribute("tabindex", "-1");
+    } else {
+      const pre = el.dataset.preLockTabindex;
+      if (pre === "") {
+        el.removeAttribute("tabindex");
+      } else if (pre != null) {
+        el.setAttribute("tabindex", pre);
+      }
+      delete el.dataset.preLockTabindex;
     }
   }
 }
@@ -909,8 +928,8 @@ function renderFlowGating() {
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
   mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission);
-  assessmentSection.classList.toggle("section-locked", !gate.assessmentUnlocked);
-  appealSection.classList.toggle("section-locked", !gate.appealUnlocked);
+  setSectionLocked(assessmentSection, !gate.assessmentUnlocked);
+  setSectionLocked(appealSection, !gate.appealUnlocked);
   queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
   createSubmissionButton.classList.toggle("hidden", flowState.hasSubmission);
   submitMcqButton.classList.toggle("hidden", !flowState.hasSubmission || flowState.hasMcqSubmission);
@@ -929,7 +948,7 @@ function renderFlowGating() {
   if (previewModeEnabled) {
     assessmentSection.classList.toggle("hidden", !flowState.hasMcqSubmission);
     mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission || (!hasPreviewQuestions && flowState.hasMcqSubmission));
-    assessmentSection.classList.remove("section-locked");
+    setSectionLocked(assessmentSection, false);
     appealSection.classList.add("hidden");
     if (historySection) {
       historySection.classList.add("hidden");

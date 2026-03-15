@@ -7,6 +7,34 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.0 - 2026-03-15
+### Summary
+Tier 2 WCAG accessibility batch: improved colour contrast for warning/success states, section-locked keyboard isolation, and responsive card-view for all queue and history tables.
+
+### Included
+- **#118 — Colour contrast**: `--color-warning` changed from `#e67e22` to `#b36200` (4.6:1 on white); `--color-success` changed from `#27ae60` to `#1a6b1a` (6.1:1 on white). Both now pass WCAG AA 4.5:1 for normal text.
+  - `public/static/shared.css`
+- **#122 — Section-locked keyboard isolation**: New `setSectionLocked(section, locked)` function in participant.js applies `tabindex="-1"` to all interactive elements (`button`, `input`, `textarea`, `select`, `a[href]`) inside a locked section, restoring their previous `tabindex` on unlock. Applied to `assessmentSection` and `appealSection`.
+  - `public/participant.js`
+- **#124 — Responsive card view**: Tables reflow to stacked cards at ≤ 600 px viewport width using `display: block` on `table/thead/tbody/tr/td` and `::before` pseudo-elements reading `data-label` for column headers. `data-label` attributes added to all dynamically-rendered `<td>` cells in all five table-rendering functions.
+  - `public/static/shared.css`
+  - `public/manual-review.js`
+  - `public/appeal-handler.js`
+  - `public/participant-completed.js`
+  - `public/calibration.js`
+
+## 0.7.7 - 2026-03-15
+### Summary
+Fixed three localization and accessibility defects found during v0.7.6 manual testing.
+
+### Included
+- `module.certificationLevel` now supports locale objects in the GPT authoring prompt template; the shape `{"en-GB":"","nb":"","nn":""}` is shown in the JSON skeleton and listed in the locale-object requirements
+  - `public/admin-content.js`
+- `submissionSchema.fields[].label` is now rendered via `localizePreviewText` in the participant workspace so Norwegian/Nynorsk labels display correctly when the participant switches locale; labels are also re-rendered on locale change
+  - `public/participant.js`
+- Skip-nav link now works in Microsoft Edge: added `clip: rect(0 0 0 0)`, `clip-path: inset(50%)`, and `white-space: nowrap` to the hidden state; corresponding resets in the `:focus` state
+  - `public/static/shared.css`
+
 ## 0.7.5 - 2026-03-15
 ### Summary
 Fixed a bug where "Load content" in admin-content.html populated the form from the active published version instead of the newest draft version, causing edits such as `assessmentPolicyJson` to be silently discarded on save.

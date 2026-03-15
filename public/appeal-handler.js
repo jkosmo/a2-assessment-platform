@@ -636,6 +636,17 @@ function renderAppealQueue() {
 
     const participantName = appeal.appealedBy?.name ?? appeal.submission?.user?.name ?? "-";
     const participantEmail = appeal.appealedBy?.email ?? appeal.submission?.user?.email ?? "-";
+    const labels = [
+      t("appealHandler.table.appealId"),
+      t("appealHandler.table.status"),
+      t("appealHandler.table.participant"),
+      t("appealHandler.table.module"),
+      t("appealHandler.table.submittedAt"),
+      t("appealHandler.table.createdAt"),
+      t("appealHandler.table.claimedAt"),
+      t("appealHandler.table.resolvedAt"),
+      t("appealHandler.table.sla"),
+    ];
     const values = [
       appeal.id,
       localizeAppealStatus(appeal.appealStatus),
@@ -648,9 +659,10 @@ function renderAppealQueue() {
       appeal.sla?.status ?? "-",
     ];
 
-    for (const value of values) {
+    for (let i = 0; i < values.length; i++) {
       const cell = document.createElement("td");
-      cell.textContent = String(value);
+      cell.dataset.label = labels[i];
+      cell.textContent = String(values[i]);
       row.appendChild(cell);
     }
 

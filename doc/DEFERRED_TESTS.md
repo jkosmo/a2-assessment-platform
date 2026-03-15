@@ -1,6 +1,36 @@
 # Deferred Manual Test Cases
 
-These test cases were not completed during the v0.7.4/v0.7.5 test round and must be included in the next test session.
+These test cases were not completed in the most recent test round and must be included in the next session.
+
+## Retests from v0.7.7 fixes
+
+### TC-ADMIN-08r — certificationLevel exports and displays in participant locale
+**Regression test for:** certificationLevel was a plain English string even when module was authored in Norwegian; GPT prompt template did not include locale object for it.
+**Steps:**
+1. Copy the authoring prompt (section 1 of admin-content.html)
+2. Verify the JSON skeleton shows `"certificationLevel": {"en-GB":"","nb":"","nn":""}` (not a plain string)
+3. Generate a Norwegian module via the prompt and import the JSON
+4. Create module shell and save a draft version
+5. Open participant.html in nb locale
+6. Select the module — inspect the module status line (shows certificationLevel)
+**Expected:** certificationLevel shows in Norwegian ("Grunnleggende", not "Foundation").
+
+### TC-PART-06r — Submission field labels show in participant locale
+**Regression test for:** submissionSchema.fields[].label was always rendered in English because localizePreviewText was not applied.
+**Steps:**
+1. Create a module with a `submissionSchemaJson` where `fields[].label` is a locale object, e.g. `{"en-GB":"Your answer","nb":"Ditt svar","nn":"Ditt svar"}`
+2. Open participant.html, switch locale to nb
+3. Select the module
+**Expected:** The textarea label reads "Ditt svar" (Norwegian), not "Your answer".
+**Note:** Also switch locale after selecting the module and verify label updates without reloading.
+
+### TC-WCAG-01r — Skip-nav link visible on Tab in Microsoft Edge
+**Regression test for:** Skip-nav link was not appearing in Edge due to missing clip/clip-path properties.
+**Steps:**
+1. Open any workspace page (e.g. participant.html) in Microsoft Edge
+2. Press Tab once — the skip-nav link should become visible
+3. Press Enter — focus should move to `<main id="main-content">`
+**Expected:** Link is visible on first Tab press in Edge; activating it skips to main content.
 
 ## Deferred from v0.7.4/v0.7.5 round
 

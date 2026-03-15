@@ -94,6 +94,7 @@ Requirements:
 - If multilingual content is required, use locale objects for:
   - module.title
   - module.description
+  - module.certificationLevel
   - promptTemplate.systemPrompt
   - promptTemplate.userPromptTemplate
   - mcqSet.title
@@ -125,7 +126,11 @@ Return JSON in this exact shape:
       "nb": "",
       "nn": ""
     },
-    "certificationLevel": "",
+    "certificationLevel": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
     "validFrom": "",
     "validTo": ""
   },

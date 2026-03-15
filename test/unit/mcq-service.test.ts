@@ -43,6 +43,167 @@ vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
 
+describe("mcq service — submitMcqAttempt", () => {
+  const baseSubmission = {
+    id: "submission-1",
+    moduleVersion: { mcqSetVersionId: "mcq-set-1" },
+  };
+  const baseAttempt = {
+    id: "attempt-1",
+    mcqSetVersionId: "mcq-set-1",
+    completedAt: null,
+  };
+  const baseQuestions = [
+    {
+      id: "q-1",
+      stem: "What is 2+2?",
+      optionsJson: JSON.stringify(["4", "3", "5"]),
+      correctAnswer: "4",
+      active: true,
+    },
+    {
+      id: "q-2",
+      stem: "Capital of Norway?",
+      optionsJson: JSON.stringify(["Oslo", "Bergen"]),
+      correctAnswer: "Oslo",
+      active: true,
+    },
+  ];
+
+  beforeEach(() => {
+    findSubmissionForModuleMcq.mockReset();
+    findAttemptForSubmission.mockReset();
+    findActiveQuestionsForSet.mockReset();
+    deleteResponsesForAttempt.mockReset();
+    createResponses.mockReset();
+    completeAttempt.mockReset();
+    updateSubmissionStatus.mockReset();
+    enqueueAssessmentJobMock.mockReset();
+    recordAuditEvent.mockReset();
+
+    findSubmissionForModuleMcq.mockResolvedValue(baseSubmission);
+    findAttemptForSubmission.mockResolvedValue(baseAttempt);
+    findActiveQuestionsForSet.mockResolvedValue(baseQuestions);
+    deleteResponsesForAttempt.mockResolvedValue(undefined);
+    createResponses.mockResolvedValue(undefined);
+    completeAttempt.mockImplementation(({ attemptId }) =>
+      Promise.resolve({ id: attemptId }),
+    );
+    updateSubmissionStatus.mockResolvedValue(undefined);
+    enqueueAssessmentJobMock.mockResolvedValue(undefined);
+    recordAuditEvent.mockResolvedValue(undefined);
+  });
+
+  it("calculates correct rawScore, percentScore, and scaledScore for a fully correct submission", async () => {
+    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+
+    const result = await submitMcqAttempt({
+      moduleId: "module-1",
+      submissionId: "submission-1",
+      attemptId: "attempt-1",
+      userId: "user-1",
+      responses: [
+        { questionId: "q-1", selectedAnswer: "4" },
+        { questionId: "q-2", selectedAnswer: "Oslo" },
+      ],
+    });
+
+    expect(result.rawScore).toBe(2);
+    expect(result.percentScore).toBe(100);
+    // scaledScore = (2/2) * mcqMaxScore; default mcqMaxScore is 30
+    expect(result.scaledScore).toBe(30);
+    expect(result.passFailMcq).toBe(true);
+  });
+
+  it("calculates correct scores when only one of two answers is correct", async () => {
+    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+
+    const result = await submitMcqAttempt({
+      moduleId: "module-1",
+      submissionId: "submission-1",
+      attemptId: "attempt-1",
+      userId: "user-1",
+      responses: [
+        { questionId: "q-1", selectedAnswer: "4" },
+        { questionId: "q-2", selectedAnswer: "Bergen" }, // wrong
+      ],
+    });
+
+    expect(result.rawScore).toBe(1);
+    expect(result.percentScore).toBe(50);
+    expect(result.scaledScore).toBe(15);
+    expect(result.passFailMcq).toBe(false);
+  });
+
+  it("ignores responses for unknown question IDs and does not count them", async () => {
+    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+
+    const result = await submitMcqAttempt({
+      moduleId: "module-1",
+      submissionId: "submission-1",
+      attemptId: "attempt-1",
+      userId: "user-1",
+      responses: [
+        { questionId: "q-1", selectedAnswer: "4" },
+        { questionId: "q-999", selectedAnswer: "ghost" }, // unknown
+      ],
+    });
+
+    // Only the known question counts; 1 correct out of 2 total questions
+    expect(result.rawScore).toBe(1);
+    expect(result.percentScore).toBe(50);
+  });
+
+  it("throws when the attempt is already completed", async () => {
+    findAttemptForSubmission.mockResolvedValue({
+      ...baseAttempt,
+      completedAt: new Date("2026-03-15T10:00:00.000Z"),
+    });
+
+    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+
+    await expect(
+      submitMcqAttempt({
+        moduleId: "module-1",
+        submissionId: "submission-1",
+        attemptId: "attempt-1",
+        userId: "user-1",
+        responses: [{ questionId: "q-1", selectedAnswer: "4" }],
+      }),
+    ).rejects.toThrow("MCQ attempt already submitted.");
+  });
+
+  it("records an audit event with rawScore, percentScore, and scaledScore after submission", async () => {
+    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+
+    await submitMcqAttempt({
+      moduleId: "module-1",
+      submissionId: "submission-1",
+      attemptId: "attempt-1",
+      userId: "user-1",
+      responses: [
+        { questionId: "q-1", selectedAnswer: "4" },
+        { questionId: "q-2", selectedAnswer: "Oslo" },
+      ],
+    });
+
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "mcq_attempt",
+        entityId: "attempt-1",
+        action: "mcq_submitted",
+        actorId: "user-1",
+        metadata: expect.objectContaining({
+          submissionId: "submission-1",
+          rawScore: 2,
+          percentScore: 100,
+          scaledScore: 30,
+        }),
+      }),
+    );
+  });
+});
+
 describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
   beforeEach(() => {
     findSubmissionForModuleMcq.mockReset();

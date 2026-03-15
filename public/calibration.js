@@ -459,6 +459,15 @@ function renderWorkspace(body) {
           ? t("calibration.value.fail")
           : "-";
       const manualReview = outcome?.llm?.manualReviewRecommended === true ? t("calibration.value.yes") : t("calibration.value.no");
+      const outcomeLabels = [
+        t("calibration.outcomes.submissionId"),
+        t("calibration.outcomes.submittedAt"),
+        t("calibration.outcomes.status"),
+        t("calibration.outcomes.moduleVersion"),
+        t("calibration.outcomes.totalScore"),
+        t("calibration.outcomes.passFail"),
+        t("calibration.outcomes.manualReview"),
+      ];
       const values = [
         outcome.submissionId ?? "-",
         formatDateTime(outcome.submittedAt),
@@ -468,9 +477,10 @@ function renderWorkspace(body) {
         passFail,
         manualReview,
       ];
-      for (const value of values) {
+      for (let i = 0; i < values.length; i++) {
         const cell = document.createElement("td");
-        cell.textContent = String(value);
+        cell.dataset.label = outcomeLabels[i];
+        cell.textContent = String(values[i]);
         row.appendChild(cell);
       }
       outcomesBody.appendChild(row);
@@ -484,6 +494,13 @@ function renderWorkspace(body) {
   } else {
     for (const anchor of anchors) {
       const row = document.createElement("tr");
+      const anchorLabels = [
+        t("calibration.anchors.promptVersion"),
+        t("calibration.anchors.benchmarkCount"),
+        t("calibration.anchors.sourcePromptVersion"),
+        t("calibration.anchors.sourceModuleVersion"),
+        t("calibration.anchors.createdAt"),
+      ];
       const values = [
         `${anchor.promptTemplateVersionNo ?? "-"} (${anchor.promptTemplateVersionId ?? "-"})`,
         String(anchor.benchmarkExampleCount ?? "-"),
@@ -491,9 +508,10 @@ function renderWorkspace(body) {
         anchor.sourceModuleVersionId ?? "-",
         formatDateTime(anchor.createdAt),
       ];
-      for (const value of values) {
+      for (let i = 0; i < values.length; i++) {
         const cell = document.createElement("td");
-        cell.textContent = String(value);
+        cell.dataset.label = anchorLabels[i];
+        cell.textContent = String(values[i]);
         row.appendChild(cell);
       }
       anchorsBody.appendChild(row);

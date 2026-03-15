@@ -553,6 +553,16 @@ function renderReviewQueue() {
     const reviewerName = review.reviewer?.name ?? "-";
     const reviewerEmail = review.reviewer?.email ?? "-";
 
+    const labels = [
+      t("manualReview.table.reviewId"),
+      t("manualReview.table.status"),
+      t("manualReview.table.participant"),
+      t("manualReview.table.module"),
+      t("manualReview.table.submittedAt"),
+      t("manualReview.table.createdAt"),
+      t("manualReview.table.reviewer"),
+      t("manualReview.table.reviewedAt"),
+    ];
     const values = [
       review.id,
       localizeReviewStatus(review.reviewStatus),
@@ -564,9 +574,10 @@ function renderReviewQueue() {
       formatDateTime(review.reviewedAt),
     ];
 
-    for (const value of values) {
+    for (let i = 0; i < values.length; i++) {
       const cell = document.createElement("td");
-      cell.textContent = String(value);
+      cell.dataset.label = labels[i];
+      cell.textContent = String(values[i]);
       row.appendChild(cell);
     }
 
