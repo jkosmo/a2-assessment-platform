@@ -167,15 +167,14 @@ http://localhost:3000/participant
 - Queue/check assessment
 - Check result
 - Create participant appeal (after `COMPLETED` result)
-- Submission validation feedback now uses dedicated hint/error/success styles with ARIA-linked field hints in participant flow
 
 Submission parser behavior:
 - `POST /api/submissions` supports optional attachment parsing fields:
   - `attachmentBase64`
   - `attachmentFilename`
   - `attachmentMimeType`
-- PDF and DOCX attachments are parsed into submission `rawText`.
-- If parsing fails and `rawText` is provided, `rawText` is used as fallback.
+- PDF and DOCX attachments are parsed and stored in the submission `responseJson`.
+- If parsing fails and a text field is provided, it is used as fallback.
 - If parsing fails without fallback text, API returns a clear parse error message.
 
 4. Optional completed-modules view (`PARTICIPANT` role):

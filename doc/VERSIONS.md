@@ -7,6 +7,29 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.5 - 2026-03-15
+### Summary
+Fixed W2/W5 bugs found in v0.8.4 testing, resolved two participant-completed UX issues, and standardized GUI elements (toast, pre-content) across all six workspaces.
+
+### Included
+- **W2 fix**: `submissionSchemaFieldSchema.label` now uses `localizedTextSchema` instead of `z.string()`, accepting locale objects `{"en-GB":"…","nb":"…"}`. `parseSubmissionFieldLabels` in assessmentJobService handles locale-object labels.
+  - `src/routes/adminContent.ts`
+  - `src/services/assessmentJobService.ts`
+- **W5 fix — module name in appeal queue**: Added `resolveModuleTitle()` helper that parses stored locale JSON strings; used in both queue table and details panel.
+  - `public/appeal-handler.js`
+- **W5 fix — appeal details show submission content**: Added `parseResponseJsonFields()` to read fields from `submission.responseJson`; details panel now shows response/reflection/promptExcerpt correctly.
+  - `public/appeal-handler.js`
+- **W5 fix — default appeal reason in participant-completed**: `openAppealForm()` now pre-fills reason with `t("defaults.appealReason")`.
+  - `public/participant-completed.js`
+- **UX: participant-completed button and pre box**: `completedSubmitAppeal` gets `btn-primary` class; `#output pre` gets `pre-content` class.
+  - `public/participant-completed.html`
+- **UX: standardize toast across all workspaces**: `admin-content` migrated from inline `setMessage()` div to `showToast()`; `manual-review` and `appeal-handler` migrated from inline message divs to `showToast()`. Inline message divs removed from all three pages.
+  - `public/admin-content.html`, `public/admin-content.js`
+  - `public/manual-review.html`, `public/manual-review.js`
+  - `public/appeal-handler.html`, `public/appeal-handler.js`
+- **UX: pre-content class on all #output pre elements**: `participant.html`, `calibration.html`, `admin-content.html` were missing `class="pre-content"` — all output pres now use light background with scroll.
+  - `public/participant.html`, `public/calibration.html`, `public/admin-content.html`
+
 ## 0.8.4 - 2026-03-15
 ### Summary
 Admin-content message feedback is no longer silent on failure: errors are styled red, bundle-saved and published confirmations are styled green.
