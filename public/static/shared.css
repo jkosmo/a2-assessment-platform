@@ -536,6 +536,11 @@ tr.selected {
   cursor: pointer;
 }
 
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  flex-shrink: 0;
+}
+
 dialog {
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-card);
