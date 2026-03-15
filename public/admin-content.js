@@ -1579,7 +1579,7 @@ async function handleCreateModule(options = { silent: false }) {
     log(body);
   }
   await refreshSelectedModuleStatus();
-  document.getElementById("moduleStatusCard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("moduleStatusCard")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
   return body;
 }
 
