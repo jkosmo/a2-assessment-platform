@@ -1380,6 +1380,24 @@ async function handleCreateModule(options = { silent: false }) {
     validTo: moduleValidToInput.value || undefined,
   };
 
+  // Capture version fields before loadModules triggers clearVersionFields on module change.
+  // A newly created module has no database versions yet, so we preserve the imported draft
+  // content so the user can immediately save it as the first version.
+  const savedVersionFields = {
+    rubricCriteriaJson: rubricCriteriaJsonInput.value,
+    rubricScalingRuleJson: rubricScalingRuleJsonInput.value,
+    rubricPassRuleJson: rubricPassRuleJsonInput.value,
+    promptSystemPrompt: promptSystemPromptInput.value,
+    promptUserPromptTemplate: promptUserPromptTemplateInput.value,
+    promptExamplesJson: promptExamplesJsonInput.value,
+    mcqSetTitle: mcqSetTitleInput.value,
+    mcqQuestionsJson: mcqQuestionsJsonInput.value,
+    moduleVersionTaskText: moduleVersionTaskTextInput.value,
+    moduleVersionGuidanceText: moduleVersionGuidanceTextInput.value,
+    moduleVersionSubmissionSchema: moduleVersionSubmissionSchemaInput.value,
+    moduleVersionAssessmentPolicy: moduleVersionAssessmentPolicyInput.value,
+  };
+
   const body = await apiFetch("/api/admin/content/modules", headers, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -1391,6 +1409,21 @@ async function handleCreateModule(options = { silent: false }) {
     preserveMessage: true,
     logResponse: false,
   });
+
+  // Restore version field content cleared by clearVersionFields during loadModules.
+  rubricCriteriaJsonInput.value = savedVersionFields.rubricCriteriaJson;
+  rubricScalingRuleJsonInput.value = savedVersionFields.rubricScalingRuleJson;
+  rubricPassRuleJsonInput.value = savedVersionFields.rubricPassRuleJson;
+  promptSystemPromptInput.value = savedVersionFields.promptSystemPrompt;
+  promptUserPromptTemplateInput.value = savedVersionFields.promptUserPromptTemplate;
+  promptExamplesJsonInput.value = savedVersionFields.promptExamplesJson;
+  mcqSetTitleInput.value = savedVersionFields.mcqSetTitle;
+  mcqQuestionsJsonInput.value = savedVersionFields.mcqQuestionsJson;
+  moduleVersionTaskTextInput.value = savedVersionFields.moduleVersionTaskText;
+  moduleVersionGuidanceTextInput.value = savedVersionFields.moduleVersionGuidanceText;
+  moduleVersionSubmissionSchemaInput.value = savedVersionFields.moduleVersionSubmissionSchema;
+  moduleVersionAssessmentPolicyInput.value = savedVersionFields.moduleVersionAssessmentPolicy;
+  syncAllTextareaHeights();
 
   if (!options.silent) {
     setMessage(t("adminContent.message.moduleCreated"));

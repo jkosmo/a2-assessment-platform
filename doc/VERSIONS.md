@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.1 - 2026-03-15
+### Summary
+Fixed three defects found during v0.8.0 manual testing: certificationLevel field layout, version field loss after module creation, and module titles not updating on locale switch.
+
+### Included
+- **DEF-01**: `certificationLevel` input changed to `<textarea rows="2">` in admin-content.html so locale JSON renders legibly alongside the other multi-line fields
+- **DEF-02**: `handleCreateModule` now captures all version field content before calling `loadModules` and restores it afterwards — imported draft data (rubric, prompt, MCQ, task text, etc.) is preserved when the newly created module is selected and `clearVersionFields` fires
+- **DEF-03**: `setLocale` in participant.js now fires a silent re-fetch of `/api/modules` when modules have previously been loaded; server-resolved titles, descriptions, and certificationLevel then reflect the new locale without disrupting flow state
+  - `public/admin-content.html`
+  - `public/admin-content.js`
+  - `public/participant.js`
+
 ## 0.8.0 - 2026-03-15
 ### Summary
 Tier 2 WCAG accessibility batch: improved colour contrast for warning/success states, section-locked keyboard isolation, and responsive card-view for all queue and history tables.

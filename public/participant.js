@@ -362,6 +362,16 @@ function setLocale(locale) {
   applyTranslations();
   if (previewModeEnabled) {
     loadPreviewModules({ notify: false });
+  } else if (hasLoadedModules) {
+    // Re-fetch modules so server-resolved titles and descriptions reflect the new locale.
+    // Intentionally fire-and-forget — locale switch must not block or disrupt flow state.
+    apiFetch("/api/modules?includeCompleted=true", headers)
+      .then((body) => {
+        loadedModules = Array.isArray(body.modules) ? body.modules : [];
+        renderModules();
+        renderSelectedModuleSummary();
+      })
+      .catch(() => {/* silent — stale titles are preferable to an error on locale switch */});
   }
   setDefaultFieldValues(previousLocale, currentLocale);
   renderSubmissionFields(getSubmissionFields(resolveSelectedModule(loadedModules, selectedModuleId)));
