@@ -25,7 +25,7 @@ const queueSearchInput = document.getElementById("queueSearch");
 const queueLimitInput = document.getElementById("queueLimit");
 const queueCountLabel = document.getElementById("queueCount");
 const appealQueueBody = document.getElementById("appealQueueBody");
-const appealHandlerMessage = document.getElementById("appealHandlerMessage");
+
 const handlerSelectedAppealIdInput = document.getElementById("handlerSelectedAppealId");
 const appealHandlerDetails = document.getElementById("appealHandlerDetails");
 const claimAppealButton = document.getElementById("claimAppeal");
@@ -988,7 +988,7 @@ async function loadAppealDetails(appealId, options = {}) {
     renderAppealHandlerDetails(body);
     log(body, { notify: options.notify === true });
   } catch (error) {
-    appealHandlerMessage.textContent = toActionableErrorMessage(error);
+    showToast(toActionableErrorMessage(error), "error");
     log(error.message);
   }
 }
@@ -1009,7 +1009,7 @@ async function loadAppealQueue(options = {}) {
       );
       latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
       renderAppealQueue();
-      appealHandlerMessage.textContent = `${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`;
+      showToast(`${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`, "info");
 
       if (selectedAppealId && latestAppealQueue.some((appeal) => appeal.id === selectedAppealId)) {
         await loadAppealDetails(selectedAppealId, { notify: false });
@@ -1024,7 +1024,7 @@ async function loadAppealQueue(options = {}) {
       selectedAppealDetails = null;
       renderAppealHandlerDetails(null);
       showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
-      appealHandlerMessage.textContent = toActionableErrorMessage(error);
+      showToast(toActionableErrorMessage(error), "error");
       log(error.message);
     } finally {
       activeAppealQueueLoad = null;
@@ -1055,7 +1055,7 @@ queueSearchInput.addEventListener("input", () => {
 
 claimAppealButton.addEventListener("click", async () => {
   if (!selectedAppealId) {
-    appealHandlerMessage.textContent = t("appealHandler.noSelection");
+    showToast(t("appealHandler.noSelection"), "info");
     return;
   }
 
@@ -1066,13 +1066,13 @@ claimAppealButton.addEventListener("click", async () => {
         method: "POST",
         body: JSON.stringify({}),
       });
-      appealHandlerMessage.textContent = t("appealHandler.claimed");
+      showToast(t("appealHandler.claimed"), "success");
       setSelectedAppeal(selectedAppealId, true);
       log(body);
       await loadAppealQueue({ notify: false });
       await loadAppealDetails(selectedAppealId, { notify: false });
     } catch (error) {
-      appealHandlerMessage.textContent = toActionableErrorMessage(error);
+      showToast(toActionableErrorMessage(error), "error");
       log(error.message);
     }
   });
@@ -1080,7 +1080,7 @@ claimAppealButton.addEventListener("click", async () => {
 
 resolveAppealButton.addEventListener("click", async () => {
   if (!selectedAppealId) {
-    appealHandlerMessage.textContent = t("appealHandler.noSelection");
+    showToast(t("appealHandler.noSelection"), "info");
     return;
   }
 
@@ -1101,7 +1101,7 @@ resolveAppealButton.addEventListener("click", async () => {
           resolutionNote: validation.resolutionNote,
         }),
       });
-      appealHandlerMessage.textContent = t("appealHandler.resolved");
+      showToast(t("appealHandler.resolved"), "success");
       const resolvedAppealId = body?.appeal?.id ?? selectedAppealId;
       const resolvedAppealStatus = body?.appeal?.appealStatus ?? "RESOLVED";
       const selectedStatuses = getSelectedAppealStatuses();
@@ -1125,7 +1125,7 @@ resolveAppealButton.addEventListener("click", async () => {
       if (validationMessage) {
         setResolveValidationError(validationMessage);
       } else {
-        appealHandlerMessage.textContent = toActionableErrorMessage(error);
+        showToast(toActionableErrorMessage(error), "error");
       }
       log(error.message);
     }

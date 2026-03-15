@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/manual-review-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { showToast } from "/static/toast.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -21,7 +22,7 @@ const queueSearchInput = document.getElementById("queueSearch");
 const queueLimitInput = document.getElementById("queueLimit");
 const queueCountLabel = document.getElementById("queueCount");
 const manualReviewQueueBody = document.getElementById("manualReviewQueueBody");
-const manualReviewMessage = document.getElementById("manualReviewMessage");
+
 const selectedReviewIdInput = document.getElementById("selectedReviewId");
 const manualReviewDetails = document.getElementById("manualReviewDetails");
 const claimReviewButton = document.getElementById("claimReview");
@@ -937,7 +938,7 @@ async function loadReviewDetails(reviewId) {
     renderManualReviewDetails(body);
     log(body);
   } catch (error) {
-    manualReviewMessage.textContent = toActionableErrorMessage(error);
+    showToast(toActionableErrorMessage(error), "error");
     selectedReviewDetails = null;
     renderManualReviewDetails(null);
     log(error.message);
@@ -959,7 +960,7 @@ async function loadReviewQueue() {
       );
       latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
       renderReviewQueue();
-      manualReviewMessage.textContent = `${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`;
+      showToast(`${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`, "info");
 
       if (selectedReviewId && latestReviewQueue.some((review) => review.id === selectedReviewId)) {
         await loadReviewDetails(selectedReviewId);
@@ -970,7 +971,7 @@ async function loadReviewQueue() {
       }
       log(body);
     } catch (error) {
-      manualReviewMessage.textContent = toActionableErrorMessage(error);
+      showToast(toActionableErrorMessage(error), "error");
       log(error.message);
     } finally {
       activeReviewQueueLoad = null;
@@ -1012,7 +1013,7 @@ claimReviewButton.addEventListener("click", async () => {
         method: "POST",
         body: JSON.stringify({}),
       });
-      manualReviewMessage.textContent = t("manualReview.claimed");
+      showToast(t("manualReview.claimed"), "success");
       setSelectedReview(selectedReviewId, true);
       log(body);
       await loadReviewQueue();
@@ -1053,7 +1054,7 @@ overrideReviewButton.addEventListener("click", async () => {
           overrideReason: validation.overrideReason,
         }),
       });
-      manualReviewMessage.textContent = t("manualReview.resolved");
+      showToast(t("manualReview.resolved"), "success");
       const resolvedReviewId = body?.review?.id ?? selectedReviewId;
       const resolvedReviewStatus = body?.review?.reviewStatus ?? "RESOLVED";
       const selectedStatuses = getSelectedReviewStatuses();
