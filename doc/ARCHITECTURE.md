@@ -203,6 +203,17 @@ Current posture on database engine mismatch:
 - re-evaluate if concurrency, latency, scale-out, backup/recovery, or operational fragility symptoms appear
 - see `doc/POSTGRES_MIGRATION_PLAN.md` for symptom list and migration sequence
 
+## ModuleVersion Fields
+
+### submissionSchemaJson
+`ModuleVersion.submissionSchemaJson` is an optional JSON field defining the participant submission form. If present, `participant.js` renders the schema's `fields` array as form inputs instead of the default 3-field form. If absent, the default 3-field form is used. Schema format: `{"fields":[{"id":"...", "label":"...", "type":"textarea", "required":true}]}`.
+
+### assessmentPolicyJson
+`ModuleVersion.assessmentPolicyJson` is an optional JSON field that overrides global assessment rules for a specific module. Supported overrides: `scoring.practicalWeight`, `scoring.mcqWeight`, and `passRules.totalMin`. The policy is parsed at submission time and passed to `decisionService.resolveAssessmentDecision`, which applies any present overrides and falls back to global config for absent fields.
+
+### MCQ locale objects
+MCQ question fields (`stem`, `options` array elements, `correctAnswer`, `rationale`) support both plain strings and locale objects of the form `{"en-GB":"...","nb":"...","nn":"..."}`. Plain strings are returned as-is for all locales. Locale objects are resolved at serve time via `localizeContentText` (for scalar fields) or `localizeContentArray` (for the options list). The admin authoring prompt generates locale objects for all MCQ fields so participants see their UI language reflected in quiz content.
+
 ## Related Documents
 
 - `README.md`

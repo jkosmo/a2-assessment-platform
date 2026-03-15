@@ -7,6 +7,59 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.7.5 - 2026-03-15
+### Summary
+Fixed a bug where "Load content" in admin-content.html populated the form from the active published version instead of the newest draft version, causing edits such as `assessmentPolicyJson` to be silently discarded on save.
+
+### Included
+- `getModuleContentBundle` now selects `moduleVersions[0]` (highest `versionNo`, ordered descending by repository query) as `selectedConfiguration` regardless of `activeVersionId`; source is `latestModuleVersion` when that version is not the active published one
+  - `src/services/adminContentService.ts`
+- Regression tests: new unit test asserting latest version is selected when a newer draft exists alongside a published version; new TC-ADMIN-06r/07r manual test cases documented in `doc/DEFERRED_TESTS.md`
+
+## 0.7.4 - 2026-03-15
+### Summary
+Added per-module assessment policy scoring weights (`practicalWeight`, `mcqWeight`) surfaced in the admin-content UI; fixed MCQ option shuffling and unknown-criterion key formatting in results; batched WCAG accessibility improvements across workspaces.
+
+### Included
+- Assessment policy textarea in admin-content step 8 now accepts `scoring.practicalWeight` and `scoring.mcqWeight` alongside the existing `passRules.totalMin`
+- MCQ options are now shuffled on each `startMcqAttempt` call so participants do not see a fixed option order
+- Unknown rubric criterion keys are formatted readably in the result view rather than showing raw camelCase identifiers
+- Cleared version-related form fields when the selected module changes in admin-content to prevent stale data leaking between module loads
+- WCAG accessibility improvements across participant, manual-review, calibration, appeal-handler, and admin-content workspaces
+
+## 0.7.3 - 2026-03-15
+### Summary
+Added dynamic submission forms: participant workspace renders schema-defined fields from `submissionSchemaJson`; admin preview renders the same schema; default 3-field form is used when no schema is present. Restored default placeholder text in submission fields after the dynamic-form refactor.
+
+### Included
+- Participant workspace reads `submissionSchema` from the module API and builds form inputs from `schema.fields`; falls back to the 3-field default when absent
+  - `public/participant.js`, `public/participant.html`
+- Admin content workspace previews the submission form defined in the draft version
+  - `public/admin-content.js`, `public/admin-content.html`
+- Restored default placeholder/label text that was stripped during the responseJson refactor
+  - `public/participant.js`
+
+## 0.7.2 - 2026-03-15
+### Summary
+Generalized the LLM schema and rubric structure to be domain-independent, removing AI-domain-specific field assumptions and replacing them with generic criterion/response patterns that work across certification domains (#111, #114).
+
+### Included
+- LLM assessment service: prompt builder and response parser updated to use generic criterion keys from the rubric rather than hard-coded field names
+  - `src/services/llmAssessmentService.ts`
+- Rubric and prompt-template structures no longer assume a fixed domain vocabulary; criterion definitions drive all scoring logic
+  - `src/services/assessmentJobService.ts`
+  - `src/repositories/adminContentRepository.ts`
+
+## 0.7.1 - 2026-03-15
+### Summary
+Added `assessmentPolicyJson` and `submissionSchemaJson` to `ModuleVersion`, refactored submission storage to generic `responseJson`, and bumped to v0.4.0 marking completion of the UX improvement sprint (#109, #110, #115).
+
+### Included
+- `ModuleVersion.assessmentPolicyJson` — per-module scoring weight and pass-rule overrides; applied by `decisionService.resolveAssessmentDecision`
+- `ModuleVersion.submissionSchemaJson` — per-module submission form schema; consumed by participant and admin UIs
+- `Submission.responseJson` — replaces AI-domain-specific free-text fields with a generic key-value store
+- Prisma migrations for all three schema changes
+
 ## 0.5.0 - 2026-03-14
 ### Summary
 Added `assessmentPolicyJson` to `ModuleVersion` — admin can configure per-module scoring weights and pass rules; decision engine applies module-level `passRules.totalMin` override when present, falling back to global config (#115).

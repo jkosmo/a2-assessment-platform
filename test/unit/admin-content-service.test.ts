@@ -222,6 +222,82 @@ describe("admin content service", () => {
     ]);
   });
 
+  it("selects the latest (highest versionNo) module version as selectedConfiguration, not the active published one", async () => {
+    findModuleContentBundle.mockResolvedValue({
+      id: "module-1",
+      title: "Module One",
+      description: null,
+      certificationLevel: "foundation",
+      validFrom: null,
+      validTo: null,
+      activeVersionId: "version-1",
+      createdAt: new Date("2026-03-10T00:00:00.000Z"),
+      updatedAt: new Date("2026-03-11T00:00:00.000Z"),
+      versions: [
+        {
+          id: "version-2",
+          versionNo: 2,
+          taskText: "Task v2",
+          guidanceText: "Guide v2",
+          rubricVersionId: "rubric-2",
+          promptTemplateVersionId: null,
+          mcqSetVersionId: null,
+          publishedBy: null,
+          publishedAt: null,
+          createdAt: new Date("2026-03-11T08:00:00.000Z"),
+          updatedAt: new Date("2026-03-11T08:00:00.000Z"),
+        },
+        {
+          id: "version-1",
+          versionNo: 1,
+          taskText: "Task v1",
+          guidanceText: "Guide v1",
+          rubricVersionId: "rubric-1",
+          promptTemplateVersionId: null,
+          mcqSetVersionId: null,
+          publishedBy: "admin-1",
+          publishedAt: new Date("2026-03-10T08:00:00.000Z"),
+          createdAt: new Date("2026-03-10T07:00:00.000Z"),
+          updatedAt: new Date("2026-03-10T07:30:00.000Z"),
+        },
+      ],
+      rubricVersions: [
+        {
+          id: "rubric-2",
+          versionNo: 2,
+          criteriaJson: "{\"criterion\":2}",
+          scalingRuleJson: "{}",
+          passRuleJson: "{}",
+          active: false,
+          createdAt: new Date("2026-03-11T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-11T00:00:00.000Z"),
+        },
+        {
+          id: "rubric-1",
+          versionNo: 1,
+          criteriaJson: "{\"criterion\":1}",
+          scalingRuleJson: "{}",
+          passRuleJson: "{}",
+          active: true,
+          createdAt: new Date("2026-03-10T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-10T00:00:00.000Z"),
+        },
+      ],
+      promptTemplateVersions: [],
+      mcqSetVersions: [],
+    });
+
+    const { getModuleContentBundle } = await import("../../src/services/adminContentService.js");
+
+    const result = await getModuleContentBundle("module-1");
+
+    // The latest draft (version-2, versionNo=2) must be selected, not the active
+    // published version (version-1, versionNo=1).
+    expect(result.selectedConfiguration.moduleVersion?.id).toBe("version-2");
+    expect(result.selectedConfiguration.source).toBe("latestModuleVersion");
+    expect(result.selectedConfiguration.rubricVersion?.id).toBe("rubric-2");
+  });
+
   it("deletes an empty module and records module_deleted audit metadata", async () => {
     findModuleDeleteSummary.mockResolvedValue({
       id: "module-1",
