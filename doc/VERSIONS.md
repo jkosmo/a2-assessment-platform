@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.2 - 2026-03-15
+### Summary
+Fixed regression introduced in v0.8.1 where user input in submission fields was wiped on locale switch.
+
+### Included
+- `renderSubmissionFields` now preserves all existing textarea values before recreating DOM elements; values are restored by `data-field-id` after the re-render. This fixes both the input-loss regression and the disappearing default values on back-and-forth locale switching.
+  - `public/participant.js`
+- Deferred test log updated: TC-ADMIN-06r/07r, TC-ADMIN-08r, TC-PART-06r, TC-WCAG-01r all verified OK in v0.8.1; five new deferred items added from v0.8.1 session findings
+
 ## 0.8.1 - 2026-03-15
 ### Summary
 Fixed three defects found during v0.8.0 manual testing: certificationLevel field layout, version field loss after module creation, and module titles not updating on locale switch.

@@ -581,6 +581,12 @@ function getSubmissionFields(selectedModule) {
 }
 
 function renderSubmissionFields(fields) {
+  // Preserve any values already typed or restored from draft before wiping the container.
+  const preserved = {};
+  for (const el of submissionFieldsContainer.querySelectorAll("[data-field-id]")) {
+    preserved[el.dataset.fieldId] = el.value;
+  }
+
   submissionFieldsContainer.innerHTML = "";
   currentSubmissionFields = fields;
   for (const field of fields) {
@@ -590,6 +596,9 @@ function renderSubmissionFields(fields) {
     const textarea = document.createElement("textarea");
     textarea.setAttribute("data-field-id", field.id);
     textarea.rows = field.rows ?? 3;
+    if (preserved[field.id] !== undefined) {
+      textarea.value = preserved[field.id];
+    }
     textarea.addEventListener("input", () => {
       scheduleDraftAutosave();
       updateCreateSubmissionAvailability();
