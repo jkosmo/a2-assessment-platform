@@ -253,16 +253,15 @@ export async function getModuleContentBundle(moduleId: string) {
 
   const mcqSetVersions = module.mcqSetVersions.map((version) => mapMcqSetVersion(version));
 
-  const selectedModuleVersion =
-    moduleVersions.find((version) => version.id === module.activeVersionId) ?? moduleVersions[0] ?? null;
+  const selectedModuleVersion = moduleVersions[0] ?? null;
   const selectedConfigurationSource =
-    selectedModuleVersion && module.activeVersionId === selectedModuleVersion.id
-      ? "activeModuleVersion"
-      : selectedModuleVersion
-        ? "latestModuleVersion"
-        : rubricVersions.length > 0 || promptTemplateVersions.length > 0 || mcqSetVersions.length > 0
-          ? "latestIndividualVersions"
-          : "moduleShellOnly";
+    !selectedModuleVersion
+      ? rubricVersions.length > 0 || promptTemplateVersions.length > 0 || mcqSetVersions.length > 0
+        ? "latestIndividualVersions"
+        : "moduleShellOnly"
+      : module.activeVersionId === selectedModuleVersion.id
+        ? "activeModuleVersion"
+        : "latestModuleVersion";
 
   const selectedRubricVersion = selectedModuleVersion
     ? rubricVersions.find((version) => version.id === selectedModuleVersion.rubricVersionId) ?? null
