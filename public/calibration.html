@@ -35,7 +35,7 @@
         <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
         <div class="mock-identity-panel-body">
           <div class="row">
-            <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="smo-1" /></div>
+            <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="smo-1" autocomplete="off" /></div>
             <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="smo@company.com" autocomplete="email" /></div>
           </div>
           <div class="row">
@@ -44,7 +44,7 @@
           </div>
           <div>
             <label for="roles" data-i18n="identity.roles">Roles (comma-separated)</label>
-            <input id="roles" value="SUBJECT_MATTER_OWNER" />
+            <input id="roles" value="SUBJECT_MATTER_OWNER" autocomplete="off" />
           </div>
           <div id="mockRolePresetContainer">
             <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
@@ -108,7 +108,7 @@
 
     <section class="card">
       <h2 data-i18n="calibration.outcomes.title">Historical outcomes</h2>
-      <div class="table-wrap">
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Historical outcomes">
         <table>
           <thead>
             <tr>
@@ -128,7 +128,7 @@
 
     <section class="card">
       <h2 data-i18n="calibration.anchors.title">Benchmark anchors</h2>
-      <div class="table-wrap">
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Benchmark anchors">
         <table>
           <thead>
             <tr>

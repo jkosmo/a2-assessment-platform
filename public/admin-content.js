@@ -47,6 +47,13 @@ const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
 const applyImportDraftButton = document.getElementById("applyImportDraft");
 const copyAuthoringPromptButton = document.getElementById("copyAuthoringPrompt");
+const authoringPromptDialog = document.getElementById("authoringPromptDialog");
+const promptMcqCountInput = document.getElementById("promptMcqCount");
+const promptFieldResponse = document.getElementById("promptFieldResponse");
+const promptFieldReflection = document.getElementById("promptFieldReflection");
+const promptFieldPromptExcerpt = document.getElementById("promptFieldPromptExcerpt");
+const promptCustomFieldsInput = document.getElementById("promptCustomFields");
+const promptDialogCancel = document.getElementById("promptDialogCancel");
 
 const rubricCriteriaJsonInput = document.getElementById("rubricCriteriaJson");
 const rubricScalingRuleJsonInput = document.getElementById("rubricScalingRuleJson");
@@ -73,7 +80,134 @@ const publishModuleVersionIdInput = document.getElementById("publishModuleVersio
 const publishModuleVersionButton = document.getElementById("publishModuleVersion");
 
 const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
-const MODULE_AUTHORING_PROMPT_TEMPLATE = `You are producing a module draft JSON for an assessment platform.
+function buildAuthoringPrompt(mcqCount, fields) {
+  const questionStub = `{
+        "stem": {"en-GB": "", "nb": "", "nn": ""},
+        "options": [
+          {"en-GB": "", "nb": "", "nn": ""},
+          {"en-GB": "", "nb": "", "nn": ""}
+        ],
+        "correctAnswer": {"en-GB": "", "nb": "", "nn": ""},
+        "rationale": {"en-GB": "", "nb": "", "nn": ""}
+      }`;
+  const questionsJson = Array.from({ length: mcqCount }, () => questionStub).join(",\n      ");
+  const schemaNote = fields.length > 0
+    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. Each field has id, label (plain text or locale object), type ("textarea" or "text"), and required (boolean).`
+    : "";
+  const schemaShape = fields.length > 0
+    ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields }, null, 4).split("\n").join("\n    ")}`
+    : "";
+  return `You are producing a module draft JSON for an assessment platform.
+
+Return one JSON object only.
+Preferred output is a downloadable \`.json\` file.
+If your interface cannot return a file, return the JSON as the only content in one code cell / code block.
+Do not include commentary.
+Do not include comments.
+
+Requirements:
+- The root object must contain exactly these sections:
+  - module
+  - rubric
+  - promptTemplate
+  - mcqSet
+  - moduleVersion
+- Localized participant-facing text should use the locales:
+  - en-GB
+  - nb
+  - nn
+- If multilingual content is required, use locale objects for:
+  - module.title
+  - module.description
+  - module.certificationLevel
+  - promptTemplate.systemPrompt
+  - promptTemplate.userPromptTemplate
+  - mcqSet.title
+  - moduleVersion.taskText
+  - moduleVersion.guidanceText
+- MCQ question fields may also use locale objects when participant-facing text must be translated.
+- Keep systemPrompt and userPromptTemplate concise and production-oriented.
+- MCQ questions must include:
+  - stem
+  - options
+  - correctAnswer
+  - rationale
+- correctAnswer must match one of the options exactly.
+- rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
+- moduleVersion.taskText must describe the participant assignment clearly.
+- moduleVersion.guidanceText must describe what a good submission should include.
+- validFrom and validTo should be empty strings unless a date range is explicitly provided.
+- Generate exactly ${mcqCount} MCQ question${mcqCount !== 1 ? "s" : ""} in mcqSet.questions.${schemaNote}
+
+Return JSON in this exact shape:
+{
+  "module": {
+    "title": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "description": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "certificationLevel": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "validFrom": "",
+    "validTo": ""
+  },
+  "rubric": {
+    "criteria": {},
+    "scalingRule": {},
+    "passRule": {}
+  },
+  "promptTemplate": {
+    "systemPrompt": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "userPromptTemplate": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "examples": []
+  },
+  "mcqSet": {
+    "title": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "questions": [
+      ${questionsJson}
+    ]
+  },
+  "moduleVersion": {
+    "taskText": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    },
+    "guidanceText": {
+      "en-GB": "",
+      "nb": "",
+      "nn": ""
+    }${schemaShape}
+  }
+}
+
+Source material follows:
+[PASTE SOURCE MATERIAL HERE]`;
+}
+
+// Legacy static template retained for reference only — replaced by buildAuthoringPrompt above.
+const _LEGACY_MODULE_AUTHORING_PROMPT_TEMPLATE = `You are producing a module draft JSON for an assessment platform.
 
 Return one JSON object only.
 Preferred output is a downloadable \`.json\` file.
@@ -1445,6 +1579,7 @@ async function handleCreateModule(options = { silent: false }) {
     log(body);
   }
   await refreshSelectedModuleStatus();
+  document.getElementById("moduleStatusCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   return body;
 }
 
@@ -1675,13 +1810,23 @@ async function handleApplyImportDraft(rawValue) {
   log({ importedDraft: draft });
 }
 
-async function handleCopyAuthoringPrompt() {
-  await copyTextToClipboard(MODULE_AUTHORING_PROMPT_TEMPLATE);
-  setMessage(t("adminContent.message.authoringPromptCopied"));
-  log({
-    authoringPromptCopied: true,
-    reminder: t("adminContent.help.copyPrompt"),
-  });
+function resolvePromptFields() {
+  const customJson = promptCustomFieldsInput.value.trim();
+  if (customJson) {
+    const parsed = JSON.parse(customJson);
+    return Array.isArray(parsed) ? parsed : Array.isArray(parsed?.fields) ? parsed.fields : [];
+  }
+  const fields = [];
+  if (promptFieldResponse.checked) {
+    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true });
+  }
+  if (promptFieldReflection.checked) {
+    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true });
+  }
+  if (promptFieldPromptExcerpt.checked) {
+    fields.push({ id: "promptExcerpt", label: { "en-GB": "Prompt excerpt", "nb": "Utdrag fra oppgave", "nn": "Utdrag frå oppgåve" }, type: "text", required: false });
+  }
+  return fields;
 }
 
 async function handleOpenParticipantPreview() {
@@ -1797,16 +1942,40 @@ previewCurrentDraftButton.addEventListener("click", async () => {
   });
 });
 
-copyAuthoringPromptButton.addEventListener("click", async () => {
-  await runWithBusyButton(copyAuthoringPromptButton, async () => {
-    try {
-      await handleCopyAuthoringPrompt();
-    } catch (error) {
-      const message = parseActionableErrorMessage(error);
-      setMessage(message, "error");
-      log(message);
-    }
-  });
+copyAuthoringPromptButton.addEventListener("click", () => {
+  promptMcqCountInput.value = "10";
+  promptCustomFieldsInput.value = "";
+  promptFieldResponse.checked = true;
+  promptFieldReflection.checked = true;
+  promptFieldPromptExcerpt.checked = true;
+  authoringPromptDialog.showModal();
+});
+
+promptDialogCancel.addEventListener("click", () => {
+  authoringPromptDialog.close();
+});
+
+authoringPromptDialog.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const mcqCount = Math.max(1, Math.min(50, parseInt(promptMcqCountInput.value, 10) || 10));
+  let fields;
+  try {
+    fields = resolvePromptFields();
+  } catch {
+    setMessage(t("adminContent.errors.invalidJsonPrefix") + " custom fields", "error");
+    return;
+  }
+  authoringPromptDialog.close();
+  try {
+    const prompt = buildAuthoringPrompt(mcqCount, fields);
+    await copyTextToClipboard(prompt);
+    setMessage(t("adminContent.message.authoringPromptCopied"));
+    log({ authoringPromptCopied: true, mcqCount, fieldCount: fields.length });
+  } catch (error) {
+    const message = parseActionableErrorMessage(error);
+    setMessage(message, "error");
+    log(message);
+  }
 });
 
 publishModuleVersionButton.addEventListener("click", async () => {

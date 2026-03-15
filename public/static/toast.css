@@ -97,8 +97,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast-enter {
+  .toast {
     animation: none;
-    opacity: 1;
   }
 }

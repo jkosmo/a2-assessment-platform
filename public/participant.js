@@ -599,12 +599,29 @@ function renderSubmissionFields(fields) {
     if (preserved[field.id] !== undefined) {
       textarea.value = preserved[field.id];
     }
-    textarea.addEventListener("input", () => {
-      scheduleDraftAutosave();
-      updateCreateSubmissionAvailability();
-    });
     wrapper.appendChild(label);
     wrapper.appendChild(textarea);
+    if (field.required) {
+      const charHint = document.createElement("div");
+      charHint.className = "small";
+      charHint.setAttribute("aria-live", "polite");
+      const updateCharHint = () => {
+        const len = textarea.value.trim().length;
+        charHint.textContent = len > 0 && len < 10 ? t("submission.validation.rawTextMin") : "";
+      };
+      textarea.addEventListener("input", () => {
+        updateCharHint();
+        scheduleDraftAutosave();
+        updateCreateSubmissionAvailability();
+      });
+      updateCharHint();
+      wrapper.appendChild(charHint);
+    } else {
+      textarea.addEventListener("input", () => {
+        scheduleDraftAutosave();
+        updateCreateSubmissionAvailability();
+      });
+    }
     submissionFieldsContainer.appendChild(wrapper);
   }
 }
@@ -2146,6 +2163,8 @@ createSubmissionButton.addEventListener("click", async () => {
     try {
       const validation = validateSubmissionInputState();
       if (!validation.valid) {
+        applySubmissionValidationFeedback(validation);
+        validation.invalidFieldElement?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         throw new Error(t(validation.hintKey));
       }
 

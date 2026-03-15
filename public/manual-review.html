@@ -39,7 +39,7 @@
           <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
           <div class="mock-identity-panel-body">
             <div class="row">
-              <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" /></div>
+              <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="reviewer-user-1" autocomplete="off" /></div>
               <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="reviewer1@company.com" autocomplete="email" /></div>
             </div>
             <div class="row">
@@ -48,7 +48,7 @@
             </div>
             <div>
               <label for="roles" data-i18n="identity.roles">Roles</label>
-              <input id="roles" value="REVIEWER" />
+              <input id="roles" value="REVIEWER" autocomplete="off" />
             </div>
             <div id="mockRolePresetContainer">
               <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
@@ -86,7 +86,7 @@
         </div>
         <div class="small" style="margin-top: calc(var(--space-1) * 1.25);"><span data-i18n="manualReview.queueCount">Reviews shown:</span> <strong id="queueCount">0</strong></div>
 
-        <div class="queue-table-wrap">
+        <div class="queue-table-wrap" tabindex="0" role="region" aria-label="Manual review queue">
           <table>
             <thead>
               <tr>

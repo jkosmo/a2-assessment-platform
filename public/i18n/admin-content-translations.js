@@ -154,6 +154,17 @@ const adminContentBase = {
   "adminContent.defaults.userPromptTemplate": "Evaluate the submission against rubric criteria and explain each criterion score.",
   "adminContent.defaults.taskText": "Submit a practical reflection with risk handling, QA process, and improvement loop.",
   "adminContent.defaults.guidanceText": "Include concrete examples, measurable checks, and responsible AI safeguards.",
+  "adminContent.promptDialog.title": "Authoring prompt options",
+  "adminContent.promptDialog.mcqCount": "Number of MCQ questions",
+  "adminContent.promptDialog.fieldLabel": "Submission fields to include",
+  "adminContent.promptDialog.fieldResponse": "Response",
+  "adminContent.promptDialog.fieldReflection": "Reflection",
+  "adminContent.promptDialog.fieldPromptExcerpt": "Prompt excerpt",
+  "adminContent.promptDialog.customFields": "Custom fields JSON (overrides checkboxes)",
+  "adminContent.promptDialog.customFieldsPlaceholder": "[{\"id\":\"response\",\"label\":\"Your answer\",\"type\":\"textarea\",\"required\":true}]",
+  "adminContent.promptDialog.customFieldsHint": "Leave empty to use the checkboxes above.",
+  "adminContent.promptDialog.copy": "Copy",
+  "adminContent.promptDialog.cancel": "Cancel",
 };
 const nbOverrides = {
   "adminContentPage.title": "Arbeidsflate for innholdsoppsett",
@@ -297,6 +308,16 @@ const nbOverrides = {
   "adminContent.defaults.examplesJson": "[{\"example\":\"Sterkt svar med tydelige QA-kontroller og risikohåndtering.\"}]",
   "adminContent.defaults.taskText": "Lever en praktisk refleksjon med risikohåndtering, QA-prosess og forbedringsloop.",
   "adminContent.defaults.guidanceText": "Inkluder konkrete eksempler, målbare kontroller og ansvarlig AI-sikring.",
+  "adminContent.promptDialog.title": "Valg for forfatterprompt",
+  "adminContent.promptDialog.mcqCount": "Antall MCQ-spørsmål",
+  "adminContent.promptDialog.fieldLabel": "Innleveringsfelt som skal inkluderes",
+  "adminContent.promptDialog.fieldResponse": "Svar",
+  "adminContent.promptDialog.fieldReflection": "Refleksjon",
+  "adminContent.promptDialog.fieldPromptExcerpt": "Utdrag fra oppgave",
+  "adminContent.promptDialog.customFields": "Egendefinert felt-JSON (overstyrer avkrysningsbokser)",
+  "adminContent.promptDialog.customFieldsHint": "La stå tomt for å bruke avkrysningsboksene ovenfor.",
+  "adminContent.promptDialog.copy": "Kopier",
+  "adminContent.promptDialog.cancel": "Avbryt",
 };
 const nnOverrides = {
   "adminContentPage.title": "Arbeidsflate for innhaldsoppsett",
@@ -438,6 +459,16 @@ const nnOverrides = {
   "adminContent.defaults.examplesJson": "[{\"example\":\"Sterkt svar med tydelege QA-kontrollar og risikohandtering.\"}]",
   "adminContent.defaults.taskText": "Lever ein praktisk refleksjon med risikohandtering, QA-prosess og forbetringsloop.",
   "adminContent.defaults.guidanceText": "Inkluder konkrete døme, målbare kontrollar og ansvarleg AI-sikring.",
+  "adminContent.promptDialog.title": "Val for forfattarprompt",
+  "adminContent.promptDialog.mcqCount": "Tal på MCQ-spørsmål",
+  "adminContent.promptDialog.fieldLabel": "Innleveringsfelt som skal inkluderast",
+  "adminContent.promptDialog.fieldResponse": "Svar",
+  "adminContent.promptDialog.fieldReflection": "Refleksjon",
+  "adminContent.promptDialog.fieldPromptExcerpt": "Utdrag frå oppgåve",
+  "adminContent.promptDialog.customFields": "Eigendefinert felt-JSON (overstyrer avkryssingsboksar)",
+  "adminContent.promptDialog.customFieldsHint": "La stå tomt for å bruke avkryssingsboksane ovanfor.",
+  "adminContent.promptDialog.copy": "Kopier",
+  "adminContent.promptDialog.cancel": "Avbryt",
 };
 
 const adminContentLateOverrides = {
