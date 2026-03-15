@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-content-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { showToast } from "/static/toast.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -17,7 +18,7 @@ const mockRolePresetContainer = document.getElementById("mockRolePresetContainer
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
-const adminContentMessage = document.getElementById("adminContentMessage");
+
 
 const moduleTitleInput = document.getElementById("moduleTitle");
 const moduleDescriptionInput = document.getElementById("moduleDescription");
@@ -279,10 +280,8 @@ function t(key) {
 }
 
 function setMessage(text, type = "info") {
-  adminContentMessage.textContent = text ?? "";
-  adminContentMessage.classList.remove("field-error", "field-success");
-  if (type === "error") adminContentMessage.classList.add("field-error");
-  if (type === "success") adminContentMessage.classList.add("field-success");
+  if (!text) return;
+  showToast(text, type === "error" ? "error" : type === "success" ? "success" : "info");
 }
 
 function setLocale(locale) {
