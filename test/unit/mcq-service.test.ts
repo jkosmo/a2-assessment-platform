@@ -132,7 +132,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
 
     // Re-use the same options object reference across two calls to ensure
     // the original array is not mutated between invocations.
-    let capturedQuestion: { optionsJson: string } | null = null;
+    let capturedQuestion: { id: string; stem: string; optionsJson: string; correctAnswer: string; active: boolean } | null = null;
     findActiveQuestionsForSet.mockImplementation(() => {
       capturedQuestion = {
         id: "q-1",
