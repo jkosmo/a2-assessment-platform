@@ -532,13 +532,18 @@ tr.selected {
   display: flex;
   align-items: center;
   gap: calc(var(--space-1) * 0.5);
-  margin-bottom: calc(var(--space-1) * 0.5);
+  margin-bottom: 2px;
   cursor: pointer;
 }
 
 .checkbox-label input[type="checkbox"] {
   width: auto;
   flex-shrink: 0;
+  padding: 0;
+}
+
+dialog textarea {
+  min-height: 96px;
 }
 
 dialog {
