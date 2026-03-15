@@ -91,7 +91,7 @@ const mcqSetBodySchema = z.object({
 
 const submissionSchemaFieldSchema = z.object({
   id: z.string().min(1),
-  label: z.string().min(1),
+  label: localizedTextSchema,
   type: z.enum(["textarea", "text"]),
   required: z.boolean().optional().default(false),
 });

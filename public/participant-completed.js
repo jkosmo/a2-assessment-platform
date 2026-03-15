@@ -377,7 +377,7 @@ function renderCompletedModules(body) {
 function openAppealForm(submissionId, moduleTitle) {
   pendingAppealSubmissionId = submissionId;
   appealModuleTitle.textContent = moduleTitle;
-  completedAppealReason.value = "";
+  completedAppealReason.value = t("defaults.appealReason");
   completedAppealFeedback.hidden = true;
   completedAppealFeedback.textContent = "";
   completedAppealFeedback.className = "small field-success";

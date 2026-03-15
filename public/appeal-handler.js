@@ -561,6 +561,34 @@ function localizeManualReviewStatus(value) {
   return t(`manualReview.statusValue.${normalized || "UNKNOWN"}`);
 }
 
+function resolveModuleTitle(title) {
+  if (!title) return "-";
+  if (typeof title === "object") {
+    return title[currentLocale] ?? title["en-GB"] ?? Object.values(title)[0] ?? "-";
+  }
+  try {
+    const parsed = JSON.parse(title);
+    if (parsed && typeof parsed === "object") {
+      return parsed[currentLocale] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? title;
+    }
+  } catch {
+    // not JSON
+  }
+  return title;
+}
+
+function parseResponseJsonFields(submission) {
+  if (!submission) return {};
+  const raw = submission.responseJson;
+  if (!raw) return {};
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function getSelectedAppealStatuses() {
   const selected = getCheckedPillValues(statusFilter);
   if (selected.length > 0) {
@@ -651,7 +679,7 @@ function renderAppealQueue() {
       appeal.id,
       localizeAppealStatus(appeal.appealStatus),
       `${participantName}\n${participantEmail}`,
-      `${appeal.submission?.module?.title ?? "-"}\n${appeal.submission?.module?.id ?? "-"}`,
+      `${resolveModuleTitle(appeal.submission?.module?.title)}\n${appeal.submission?.module?.id ?? "-"}`,
       formatDateTime(appeal.submission?.submittedAt),
       formatDateTime(appeal.createdAt),
       formatDateTime(appeal.claimedAt),
@@ -741,6 +769,7 @@ function renderAppealHandlerDetails(details) {
   const appeal = details.appeal ?? details;
   const sla = details.sla ?? appeal.sla ?? null;
   const submission = appeal.submission ?? {};
+  const responseFields = parseResponseJsonFields(submission);
   const latestDecision = submission.decisions?.[0] ?? submission.latestDecision ?? null;
   const latestLlmEvaluation = Array.isArray(submission.llmEvaluations) ? submission.llmEvaluations[0] ?? null : null;
   const latestManualReview = Array.isArray(submission.manualReviews) ? submission.manualReviews[0] ?? null : null;
@@ -759,7 +788,7 @@ function renderAppealHandlerDetails(details) {
     `${t("appealHandler.details.appealReason")}: ${normalizeMultilineText(appeal.appealReason)}`,
     `${t("appealHandler.details.participant")}: ${appeal.appealedBy?.name ?? "-"} (${appeal.appealedBy?.email ?? "-"})`,
     `${t("appealHandler.details.submissionParticipant")}: ${submission.user?.name ?? "-"} (${submission.user?.email ?? "-"})`,
-    `${t("appealHandler.details.module")}: ${submission.module?.title ?? "-"} (${submission.module?.id ?? "-"})`,
+    `${t("appealHandler.details.module")}: ${resolveModuleTitle(submission.module?.title)} (${submission.module?.id ?? "-"})`,
     `${t("appealHandler.details.submissionId")}: ${submission.id ?? "-"}`,
     `${t("appealHandler.details.submittedAt")}: ${formatDateTime(submission.submittedAt)}`,
     `${t("appealHandler.details.createdAt")}: ${formatDateTime(appeal.createdAt)}`,
@@ -771,13 +800,13 @@ function renderAppealHandlerDetails(details) {
     `=== ${t("appealHandler.details.section.submission")} ===`,
     `${t("appealHandler.details.deliveryType")}: ${submission.deliveryType ?? "-"}`,
     `${t("appealHandler.details.rawText")}:`,
-    normalizeMultilineText(submission.rawText),
+    normalizeMultilineText(responseFields.response ?? submission.rawText),
     "",
     `${t("appealHandler.details.reflection")}:`,
-    normalizeMultilineText(submission.reflectionText),
+    normalizeMultilineText(responseFields.reflection ?? submission.reflectionText),
     "",
     `${t("appealHandler.details.promptExcerpt")}:`,
-    normalizeMultilineText(submission.promptExcerpt),
+    normalizeMultilineText(responseFields.promptExcerpt ?? submission.promptExcerpt),
     "",
     `=== ${t("appealHandler.details.section.mcq")} ===`,
     `${t("appealHandler.details.mcqAttemptId")}: ${latestMcqAttempt?.id ?? t("appealHandler.details.none")}`,

@@ -399,10 +399,17 @@ function parseRubricMaxTotal(scalingRuleJson: string): number {
 function parseSubmissionFieldLabels(submissionSchemaJson: string | null | undefined): string[] {
   if (!submissionSchemaJson) return [];
   try {
-    const parsed = JSON.parse(submissionSchemaJson) as { fields?: Array<{ label?: string; id?: string }> };
+    const parsed = JSON.parse(submissionSchemaJson) as {
+      fields?: Array<{ label?: string | Record<string, string>; id?: string }>;
+    };
     if (!Array.isArray(parsed.fields)) return [];
     return parsed.fields
-      .map((field) => field.label ?? field.id ?? "")
+      .map((field) => {
+        const label = field.label;
+        if (!label) return field.id ?? "";
+        if (typeof label === "object") return label["en-GB"] ?? Object.values(label)[0] ?? field.id ?? "";
+        return label;
+      })
       .filter((label) => label.length > 0);
   } catch {
     return [];

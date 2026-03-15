@@ -41,7 +41,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 3 | Fyll inn feltene igjen. Klikk «Lagre ny utkastversjon (Steg 5-8)» | Meldingsfeltet viser **grønn** melding «Lagret bundle» | | |
 | 4 | Klikk «Publiser modulversjon» | Meldingsfeltet viser **grønn** melding om vellykket publisering | | |
 
-**W1-konklusjon:** _______________
+**W1-konklusjon:** OK. 1) Men det er inkonsistens i hvordan participant og admin_content håndterer meldinger. Participant sier en firkant noen sekunder oppe i høyre hjørne. Admin_content viser det nederst under system svar. Vi må finne en felles måte å gjøre dette på. 2) Modullisten i participant begynner å bli veldig lang vi trenger å finne en måte å vise moduler mer kompakt, og / eller vise gamle fullførte moduler mindre synlig. 
 
 ---
 
@@ -63,7 +63,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 9 | La «Refleksjon» stå tom, fyll inn «Ditt svar» | Innsending opprettes uten feil | | |
 | 10 | Bytt lokalitet til **en-GB** uten å laste siden på nytt | Feltetiketter oppdateres til «Your answer» og «Reflection» umiddelbart | | |
 
-**W2-konklusjon:** _______________
+**W2-konklusjon:** Feilmelding ved lagring "Expected string, received object; Expected string, received object"_______________
 
 ---
 
@@ -80,7 +80,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 4 | Skriv inn tekst i «Ditt svar». Bytt til **nn** | Teksten i feltet **beholdes** — ikke slettet. Etikett vises på nynorsk | | |
 | 5 | Bytt tilbake til **nb** | Teksten beholdes, etiketter på bokmål | | |
 
-**W3-konklusjon:** _______________
+**W3-konklusjon:** ______________OK
 
 ---
 
@@ -96,7 +96,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 3 | Inspiser «Lagrede versjoner» | Vises som **samme badgekjede-format** (ikke ren tekst), f.eks. «Module v2 › Rubric v3 › Prompt v3 › MCQ v3» | | |
 | 4 | Sammenlign visuell stil mellom «Live nå» og «Lagrede versjoner» | Begge bruker identiske badges og separatorer | | |
 
-**W4-konklusjon:** _______________
+**W4-konklusjon:** OK
 
 ---
 
@@ -112,7 +112,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 3 | Åpne appeal-handler.html. Velg en anke fra køen | Detaljpanelet vises | | |
 | 4 | Inspiser innholdsvisningen under «Valgt anke» | Samme — lys bakgrunn, leselig kontrast, rulling ved langt innhold | | |
 
-**W5-konklusjon:** _______________
+**W5-konklusjon:** OK. Men 1) oversikt over anker som venter viser json for modulnanv i stedet for tekst basert på språk valg. 2) "Detaljer for valgt anke" viser kun for "-" som verdi for submision felt og heller ikke årsak til anke som bruker legger inn. 3) Årsak for anke har standard verdi når man anker fra participant men ikke stanard verdi fra completed
 
 ---
 
@@ -131,7 +131,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 6 | Klikk «Anke resultat» igjen. Fyll inn begrunnelse og klikk «Send inn anke» | Grønn bekreftelsesmelding vises. «Send inn anke»-knappen deaktiveres | | |
 | 7 | Bytt lokalitet til **en-GB** — sjekk knappetekster og skjemafelt | Oppdateres til engelsk: «Appeal result», «Reason for appeal», «Submit appeal», «Cancel» | | |
 
-**W6-konklusjon:** _______________
+**W6-konklusjon:** OK
 
 ---
 
@@ -146,7 +146,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 2 | Velg modulen. Vent til vurdering er fullført. Vis resultat | Kriterienavn under «Kriteriegrunngjevingar»-seksjonen vises på **norsk**: «Teknisk nøyaktighet», «Konseptuell forståelse», «Anvendelse», «Klarhet» (ikke engelske nøkler) | | |
 | 3 | Bytt lokalitet til **en-GB** | Kriterienavn bytter til engelsk: «Technical accuracy», «Conceptual understanding» osv. | | |
 
-**W7-konklusjon:** _______________
+**W7-konklusjon:** OK
 
 ---
 
@@ -162,7 +162,7 @@ Følgende ble verifisert OK i v0.8.1 og er ikke endret siden:
 | 2 | Inspiser «Sjekk framdrift»-knappen umiddelbart etter | Knappen er **aktiv** (ikke deaktivert) | | |
 | 3 | Klikk «Sjekk framdrift» | Ny statussjekk kjøres | | |
 
-**W8-konklusjon:** — (kun hvis tidsavbrudd oppstår)
+**W8-konklusjon:** — Ikke gjennomført
 
 ---
 
