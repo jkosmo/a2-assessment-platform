@@ -1,0 +1,77 @@
+name: Feilrapport
+description: Rapporter en feil eller uventet oppførsel i applikasjonen.
+title: "[Feil]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: Hva skjedde?
+      description: Beskriv hva som gikk galt.
+      placeholder: Jeg klikket på ... og så ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Hva forventet du skulle skje?
+      placeholder: Jeg forventet at ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steg for å gjenskape feilen
+      description: Beskriv steg for steg hvordan feilen oppstår.
+      placeholder: |
+        1. Gå til ...
+        2. Klikk på ...
+        3. Fyll inn ...
+        4. Feilen vises
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Hvilken side oppstod feilen på?
+      options:
+        - Deltaker (/participant)
+        - Manuell gjennomgang (/manual-review)
+        - Ankebehandler (/appeal-handler)
+        - Innholdsforvaltning (/admin-content)
+        - Kalibrering (/calibration)
+        - Fullførte moduler (/participant-completed)
+        - Annen / vet ikke
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Alvorlighetsgrad
+      options:
+        - Blokkerende — kan ikke fortsette arbeidet
+        - Alvorlig — stor hindring, men finnes en omvei
+        - Mindre — irriterende, men ikke blokkerende
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Nettleser og enhet
+      placeholder: f.eks. Chrome 123 / Windows 11
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Skjermbilde eller tilleggsinformasjon
+      description: Lim inn skjermbilde eller annen relevant informasjon her.
+    validations:
+      required: false
