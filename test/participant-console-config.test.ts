@@ -170,6 +170,18 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain("admin-content.js");
   });
 
+  it("serves dedicated results workspace page", async () => {
+    const response = await request(app).get("/results");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("results.js");
+    expect(response.text).toContain('id="passRateGrid"');
+    expect(response.text).toContain('id="completionBody"');
+    expect(response.text).toContain('id="participantBody"');
+    expect(response.text).toContain('id="debugOutputSection"');
+    expect(response.text).toContain('id="exportRecertification"');
+  });
+
   it("serves shared stylesheet and links it from all workspace pages", async () => {
     const workspacePages = [
       "/participant",

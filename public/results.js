@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken } from "/static/api-client.js";
 import { hideLoading, showLoading } from "/static/loading.js";
 import {
   findMatchingPreset,
@@ -9,6 +9,7 @@ import {
 
 const output = document.getElementById("output");
 const outputStatus = document.getElementById("outputStatus");
+const debugOutputSection = document.getElementById("debugOutputSection");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
@@ -26,6 +27,8 @@ const passRateGrid = document.getElementById("passRateGrid");
 const completionBody = document.getElementById("completionBody");
 const exportCompletionButton = document.getElementById("exportCompletion");
 const exportPassRatesButton = document.getElementById("exportPassRates");
+const exportRecertificationButton = document.getElementById("exportRecertification");
+const participantBody = document.getElementById("participantBody");
 
 const defaultWorkspaceNavigationItems = [
   { id: "participant", path: "/participant", labelKey: "nav.participant", requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"] },
@@ -103,6 +106,16 @@ function pct(value) {
   return `${Math.round(value * 100)} %`;
 }
 
+function localizeTitle(value) {
+  if (!value) return "";
+  try {
+    const parsed = JSON.parse(value);
+    return parsed[currentLocale] ?? parsed["en-GB"] ?? value;
+  } catch {
+    return value;
+  }
+}
+
 function renderPassRates(rows) {
   passRateGrid.innerHTML = "";
   if (!rows || rows.length === 0) {
@@ -118,7 +131,7 @@ function renderPassRates(rows) {
 
     const title = document.createElement("div");
     title.className = "module-title";
-    title.textContent = row.moduleTitle || row.moduleId;
+    title.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
 
     const rateValue = document.createElement("div");
     rateValue.className = "rate-value";
@@ -161,7 +174,7 @@ function renderCompletion(passRatesRows, completionRows) {
     const pr = passRateByModule.get(row.moduleId);
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${row.moduleTitle || row.moduleId}</td>
+      <td>${localizeTitle(row.moduleTitle) || row.moduleId}</td>
       <td>${row.totalSubmissions}</td>
       <td>${row.completedSubmissions}</td>
       <td>${row.underReviewSubmissions}</td>
@@ -174,18 +187,44 @@ function renderCompletion(passRatesRows, completionRows) {
   }
 }
 
+function renderParticipants(rows) {
+  participantBody.innerHTML = "";
+  if (!rows || rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.textContent = t("results.participants.empty");
+    tr.appendChild(td);
+    participantBody.appendChild(tr);
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${row.participantEmail}</td>
+      <td>${row.participantDepartment ?? "—"}</td>
+      <td>${localizeTitle(row.moduleTitle) || row.moduleId}</td>
+      <td>${row.status}</td>
+      <td>${row.passedAt ? new Date(row.passedAt).toLocaleDateString(currentLocale) : "—"}</td>
+    `;
+    participantBody.appendChild(tr);
+  }
+}
+
 async function loadResults() {
   const params = buildFilterParams();
   showLoading(loadResultsButton);
   setMessage("");
   try {
-    const [passRatesData, completionData] = await Promise.all([
+    const [passRatesData, completionData, participantData] = await Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
+      apiFetch(`/api/reports/recertification?${params}`, headers),
     ]);
 
     renderPassRates(passRatesData.rows);
     renderCompletion(passRatesData.rows, completionData.rows);
+    renderParticipants(participantData.rows);
     resultsMeta.textContent = t("results.filters.loaded");
     log({ passRates: passRatesData, completion: completionData });
   } catch (error) {
@@ -203,7 +242,10 @@ async function exportCsv(type) {
   const url = `/api/reports/export?${params}`;
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const response = await fetch(url, { headers: headers() });
+    const token = await getAccessToken();
+    const reqHeaders = headers();
+    if (token) reqHeaders["Authorization"] = `Bearer ${token}`;
+    const response = await fetch(url, { headers: reqHeaders });
     if (!response.ok) throw new Error(`Export failed: ${response.status}`);
     const blob = await response.blob();
     const a = document.createElement("a");
@@ -363,6 +405,7 @@ rolesInput.addEventListener("input", () => {
 loadResultsButton.addEventListener("click", () => loadResults());
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
 exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
+exportRecertificationButton.addEventListener("click", () => exportCsv("recertification"));
 
 loadMeButton?.addEventListener("click", async () => {
   try {
@@ -374,6 +417,7 @@ loadMeButton?.addEventListener("click", async () => {
 });
 
 // Init
+if (debugOutputSection) debugOutputSection.hidden = new URLSearchParams(location.search).get("debug") !== "1";
 populateLocaleSelect();
 setLocale(currentLocale);
 loadVersion();

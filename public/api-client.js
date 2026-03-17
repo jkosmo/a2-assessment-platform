@@ -47,7 +47,7 @@ async function initMsal(entraConfig) {
   }
 }
 
-async function getAccessToken() {
+export async function getAccessToken() {
   if (!msalInstance) return null;
 
   const accounts = msalInstance.getAllAccounts();
