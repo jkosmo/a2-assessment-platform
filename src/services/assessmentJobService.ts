@@ -14,6 +14,7 @@ import {
 import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "./assessmentDecisionSignals.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
+import { notifyAssessmentResult } from "./participantNotificationService.js";
 
 export async function enqueueAssessmentJob(submissionId: string) {
   const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(submissionId, [
@@ -334,7 +335,7 @@ async function runAssessment(jobId: string) {
     }
   }
 
-  await createAssessmentDecision({
+  const decisionResult = await createAssessmentDecision({
     submissionId: submission.id,
     userId: submission.userId,
     moduleVersionId: submission.moduleVersionId,
@@ -347,6 +348,28 @@ async function runAssessment(jobId: string) {
     assessmentPolicy,
     rubricMaxTotal,
   });
+
+  if (!decisionResult.needsManualReview) {
+    const moduleTitle = localizeContentText(submissionLocale, submission.moduleVersion.module.title) ?? submission.moduleId;
+    notifyAssessmentResult({
+      submissionId: submission.id,
+      recipientEmail: submission.user.email,
+      recipientName: submission.user.name,
+      moduleTitle,
+      moduleId: submission.moduleId,
+      passFailTotal: decisionResult.decision.passFailTotal,
+      locale: submissionLocale,
+    }).catch((error: unknown) => {
+      logOperationalEvent(
+        "participant_notification_failed",
+        {
+          submissionId: submission.id,
+          errorMessage: error instanceof Error ? error.message : "Unknown error",
+        },
+        "error",
+      );
+    });
+  }
 
   await recordAuditEvent({
     entityType: "assessment_job",

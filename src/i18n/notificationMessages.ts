@@ -1,6 +1,8 @@
 import type { AppealStatus } from "@prisma/client";
 import type { SupportedLocale } from "./locale.js";
 
+type AssessmentOutcome = "pass" | "fail" | "under_review";
+
 type NotificationMessage = {
   subject: string;
   nextStepGuidance: string;
@@ -67,4 +69,58 @@ const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
 
 export function getAppealNotificationMessage(locale: SupportedLocale, status: AppealStatus): NotificationMessage {
   return notificationMessages[locale][status];
+}
+
+type AssessmentResultTemplates = Record<AssessmentOutcome, NotificationMessage>;
+
+const assessmentResultMessages: Record<SupportedLocale, AssessmentResultTemplates> = {
+  "en-GB": {
+    pass: {
+      subject: "You have passed your assessment",
+      nextStepGuidance: "Congratulations! Your submission has been assessed and you have passed. You can view your result in the participant portal.",
+    },
+    fail: {
+      subject: "Assessment result: not passed",
+      nextStepGuidance: "Your submission has been assessed. Unfortunately you did not pass this time. You can review the result and submit an appeal in the participant portal.",
+    },
+    under_review: {
+      subject: "Your assessment is under manual review",
+      nextStepGuidance: "Your submission is being reviewed by an assessor. You will receive a notification when the review is complete.",
+    },
+  },
+  nb: {
+    pass: {
+      subject: "Du har bestått vurderingen",
+      nextStepGuidance: "Gratulerer! Innleveringen din er vurdert og du har bestått. Du kan se resultatet i deltakerportalen.",
+    },
+    fail: {
+      subject: "Vurderingsresultat: ikke bestått",
+      nextStepGuidance: "Innleveringen din er vurdert. Du bestod dessverre ikke denne gangen. Du kan se resultatet og sende inn en anke i deltakerportalen.",
+    },
+    under_review: {
+      subject: "Vurderingen din er til manuell gjennomgang",
+      nextStepGuidance: "Innleveringen din gjennomgås av en sensor. Du vil motta en varsling når gjennomgangen er fullført.",
+    },
+  },
+  nn: {
+    pass: {
+      subject: "Du har bestått vurderinga",
+      nextStepGuidance: "Gratulerer! Innleveringa di er vurdert og du har bestått. Du kan sjå resultatet i deltakarportalen.",
+    },
+    fail: {
+      subject: "Vurderingsresultat: ikkje bestått",
+      nextStepGuidance: "Innleveringa di er vurdert. Du bestod dessverre ikkje denne gongen. Du kan sjå resultatet og sende inn ein klage i deltakarportalen.",
+    },
+    under_review: {
+      subject: "Vurderinga di er til manuell gjennomgang",
+      nextStepGuidance: "Innleveringa di vert gjennomgått av ein sensor. Du vil motta ei varsling når gjennomgangen er fullført.",
+    },
+  },
+};
+
+export function getAssessmentResultNotificationMessage(
+  locale: SupportedLocale,
+  outcome: AssessmentOutcome,
+): NotificationMessage {
+  return assessmentResultMessages[locale][outcome];
 }

@@ -83,10 +83,12 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
         include: {
           submission: {
             include: {
+              user: true,
               moduleVersion: {
                 include: {
                   promptTemplateVersion: true,
                   rubricVersion: true,
+                  module: true,
                 },
               },
               mcqAttempts: { where: { completedAt: { not: null } }, orderBy: { completedAt: "desc" } },

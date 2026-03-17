@@ -6,6 +6,7 @@ import { auditRepository } from "../repositories/auditRepository.js";
 import { certificationRepository } from "../repositories/certificationRepository.js";
 import { decisionRepository } from "../repositories/decisionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
+import { sendViaAcs } from "./participantNotificationService.js";
 
 export type RecertificationLifecycleStatus = "ACTIVE" | "DUE_SOON" | "DUE" | "EXPIRED" | "NOT_CERTIFIED";
 
@@ -14,7 +15,7 @@ type UpsertFromDecisionInput = {
   actorId?: string | null;
 };
 
-type ReminderChannel = "disabled" | "log" | "webhook";
+type ReminderChannel = "disabled" | "log" | "webhook" | "acs_email";
 
 export async function upsertRecertificationStatusFromDecision(input: UpsertFromDecisionInput) {
   const decision = await decisionRepository.findDecisionWithSubmissionIdentifiers(input.decisionId);
@@ -240,6 +241,17 @@ async function sendRecertificationReminder(input: {
       delivered: true,
       channel,
     };
+  }
+
+  if (channel === "acs_email") {
+    const result = await sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject: payload.notificationType,
+      body: `Recertification reminder: module ${input.moduleTitle} expires on ${input.expiryDate.toISOString().slice(0, 10)}.`,
+      logPayload: payload,
+    });
+    return { delivered: result.delivered, channel, failureReason: result.failureReason };
   }
 
   const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;

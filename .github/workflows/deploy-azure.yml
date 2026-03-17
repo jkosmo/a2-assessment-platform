@@ -87,6 +87,7 @@ jobs:
             -ParticipantNotificationChannel "${{ vars.PARTICIPANT_NOTIFICATION_CHANNEL || 'log' }}" `
             -ParticipantNotificationWebhookUrl "${{ secrets.PARTICIPANT_NOTIFICATION_WEBHOOK_URL }}" `
             -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
+            -AcsEmailSenderDisplayName "${{ vars.ACS_EMAIL_SENDER_DISPLAY_NAME || 'A2 Assessment Platform' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
 
@@ -155,5 +156,6 @@ jobs:
             -ParticipantNotificationChannel "${{ vars.PARTICIPANT_NOTIFICATION_CHANNEL || 'log' }}" `
             -ParticipantNotificationWebhookUrl "${{ secrets.PARTICIPANT_NOTIFICATION_WEBHOOK_URL }}" `
             -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
+            -AcsEmailSenderDisplayName "${{ vars.ACS_EMAIL_SENDER_DISPLAY_NAME || 'A2 Assessment Platform' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"

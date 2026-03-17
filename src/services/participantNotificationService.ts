@@ -1,11 +1,12 @@
+import { EmailClient } from "@azure/communication-email";
 import type { AppealStatus } from "@prisma/client";
 import { env } from "../config/env.js";
 import type { SupportedLocale } from "../i18n/locale.js";
-import { getAppealNotificationMessage } from "../i18n/notificationMessages.js";
+import { getAppealNotificationMessage, getAssessmentResultNotificationMessage } from "../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { recordAuditEvent } from "./auditService.js";
 
-type NotificationChannel = "disabled" | "log" | "webhook";
+type NotificationChannel = "disabled" | "log" | "webhook" | "acs_email";
 
 export type AppealNotificationInput = {
   appealId: string;
@@ -67,6 +68,16 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
       subject: message.subject,
       nextStepGuidance: message.nextStepGuidance,
     };
+  }
+
+  if (channel === "acs_email") {
+    return sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject: message.subject,
+      body: message.nextStepGuidance,
+      logPayload: payload,
+    });
   }
 
   const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
@@ -150,6 +161,136 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function sendViaAcs(input: {
+  recipientEmail: string;
+  recipientName?: string;
+  subject: string;
+  body: string;
+  logPayload: Record<string, unknown>;
+}): Promise<NotificationResult> {
+  const connectionString = env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING!;
+  const senderAddress = env.ACS_EMAIL_SENDER!;
+
+  const emailClient = new EmailClient(connectionString);
+  const message = {
+    senderAddress,
+    content: { subject: input.subject, plainText: input.body },
+    recipients: {
+      to: [{ address: input.recipientEmail, displayName: input.recipientName }],
+    },
+  };
+
+  try {
+    const poller = await emailClient.beginSend(message);
+    const result = await poller.pollUntilDone();
+
+    if (result.status === "Succeeded") {
+      logOperationalEvent("participant_notification_sent", { channel: "acs_email", ...input.logPayload });
+      return { delivered: true, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body };
+    }
+
+    const failureReason = `acs_send_status_${result.status}`;
+    logOperationalEvent("participant_notification_failed", { channel: "acs_email", ...input.logPayload, failureReason }, "error");
+    return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
+  } catch (error) {
+    const failureReason = error instanceof Error ? error.message : "acs_send_failed";
+    logOperationalEvent("participant_notification_failed", { channel: "acs_email", ...input.logPayload, failureReason }, "error");
+    return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
+  }
+}
+
+export type AssessmentResultNotificationInput = {
+  submissionId: string;
+  recipientEmail: string;
+  recipientName: string | null;
+  moduleTitle: string;
+  moduleId: string;
+  passFailTotal: boolean;
+  locale: SupportedLocale;
+};
+
+export async function notifyAssessmentResult(input: AssessmentResultNotificationInput): Promise<void> {
+  const outcome = input.passFailTotal ? "pass" : "fail";
+  const message = getAssessmentResultNotificationMessage(input.locale, outcome);
+  const logPayload = {
+    notificationType: "assessment_result",
+    submissionId: input.submissionId,
+    moduleId: input.moduleId,
+    outcome,
+    recipient: { email: input.recipientEmail, locale: input.locale },
+    subject: message.subject,
+    emittedAt: new Date().toISOString(),
+  };
+
+  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+
+  if (channel === "disabled") return;
+
+  if (channel === "log") {
+    logOperationalEvent("participant_notification_sent", { channel, ...logPayload });
+    return;
+  }
+
+  let result: NotificationResult;
+
+  if (channel === "acs_email") {
+    result = await sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject: message.subject,
+      body: message.nextStepGuidance,
+      logPayload,
+    });
+  } else {
+    const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
+    if (!webhookUrl) {
+      logOperationalEvent("participant_notification_failed", { channel, ...logPayload, failureReason: "missing_webhook_url" }, "error");
+      result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason: "missing_webhook_url" };
+    } else {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), env.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS);
+      try {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...logPayload }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const failureReason = `webhook_non_2xx_${response.status}`;
+          logOperationalEvent("participant_notification_failed", { channel, ...logPayload, failureReason }, "error");
+          result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason };
+        } else {
+          logOperationalEvent("participant_notification_sent", { channel, ...logPayload });
+          result = { delivered: true, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance };
+        }
+      } catch (error) {
+        const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
+        logOperationalEvent("participant_notification_failed", { channel, ...logPayload, failureReason }, "error");
+        result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
+  await recordAuditEvent({
+    entityType: "submission",
+    entityId: input.submissionId,
+    action: result.delivered ? "participant_notification_sent" : "participant_notification_failed",
+    metadata: {
+      notificationType: "assessment_result",
+      moduleId: input.moduleId,
+      outcome,
+      recipientEmail: input.recipientEmail,
+      channel: result.channel,
+      subject: result.subject,
+      delivered: result.delivered,
+      failureReason: result.failureReason ?? null,
+    },
+  });
 }
 
 export async function notifyAppealStatusTransition(input: AppealNotificationInput) {

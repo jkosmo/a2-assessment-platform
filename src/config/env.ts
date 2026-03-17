@@ -37,12 +37,21 @@ const envSchema = z.object({
   APPEAL_AT_RISK_RATIO: z.coerce.number().positive().max(1).default(0.75),
   APPEAL_SLA_MONITOR_INTERVAL_MS: z.coerce.number().int().positive().default(600000),
   APPEAL_OVERDUE_ALERT_THRESHOLD: z.coerce.number().int().positive().default(1),
-  PARTICIPANT_NOTIFICATION_CHANNEL: z.enum(["disabled", "log", "webhook"]).default("log"),
+  PARTICIPANT_NOTIFICATION_CHANNEL: z.enum(["disabled", "log", "webhook", "acs_email"]).default("log"),
   PARTICIPANT_NOTIFICATION_WEBHOOK_URL: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().url().optional(),
   ),
   PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  ),
+  ACS_EMAIL_SENDER: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  ),
+  ACS_EMAIL_SENDER_DISPLAY_NAME: z.string().default("A2 Assessment Platform"),
   PARTICIPANT_CONSOLE_CONFIG_FILE: z.string().default("config/participant-console.json"),
   PARTICIPANT_CONSOLE_DEBUG_MODE: z.enum(["auto", "true", "false"]).default("auto"),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),
@@ -76,6 +85,16 @@ if (
 
 if (env.PARTICIPANT_NOTIFICATION_CHANNEL === "webhook" && !env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL) {
   console.error("PARTICIPANT_NOTIFICATION_WEBHOOK_URL is required when PARTICIPANT_NOTIFICATION_CHANNEL=webhook");
+  process.exit(1);
+}
+
+if (
+  env.PARTICIPANT_NOTIFICATION_CHANNEL === "acs_email" &&
+  (!env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING || !env.ACS_EMAIL_SENDER)
+) {
+  console.error(
+    "AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING and ACS_EMAIL_SENDER are required when PARTICIPANT_NOTIFICATION_CHANNEL=acs_email",
+  );
   process.exit(1);
 }
 

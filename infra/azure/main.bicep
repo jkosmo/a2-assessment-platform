@@ -109,6 +109,7 @@ param appealSlaMonitorIntervalMs int = 600000
   'disabled'
   'log'
   'webhook'
+  'acs_email'
 ])
 param participantNotificationChannel string = 'log'
 
@@ -119,6 +120,9 @@ param participantNotificationWebhookUrl string = ''
 @description('Webhook timeout in milliseconds for participant notifications.')
 param participantNotificationWebhookTimeoutMs int = 5000
 
+@description('Display name used as the sender name in ACS email notifications.')
+param acsEmailSenderDisplayName string = 'A2 Assessment Platform'
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
@@ -127,6 +131,9 @@ var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
 var createObservabilityActionGroup = !empty(observabilityAlertEmail)
+var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')
+var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
+var createAcsEmail = participantNotificationChannel == 'acs_email'
 var llmFailureAlertQuery = '''
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where TimeGenerated > ago(5m)
@@ -155,6 +162,42 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where maxOverdueAppeals >= __THRESHOLD__
 '''
 var appealOverdueAlertQuery = replace(appealOverdueAlertQueryTemplate, '__THRESHOLD__', string(appealOverdueAlertThreshold))
+
+resource acsEmailService 'Microsoft.Communication/emailServices@2023-04-01' = if (createAcsEmail) {
+  name: acsEmailServiceName
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    dataLocation: 'Europe'
+  }
+}
+
+resource acsEmailDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = if (createAcsEmail) {
+  parent: acsEmailService
+  name: 'AzureManagedDomain'
+  location: 'global'
+  properties: {
+    domainManagement: 'AzureManaged'
+  }
+}
+
+resource acsService 'Microsoft.Communication/communicationServices@2023-04-01' = if (createAcsEmail) {
+  name: acsName
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    dataLocation: 'Europe'
+    linkedDomains: [acsEmailDomain.id]
+  }
+}
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsWorkspaceName
@@ -338,6 +381,18 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
           value: string(participantNotificationWebhookTimeoutMs)
+        }
+        {
+          name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
+          value: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+        }
+        {
+          name: 'ACS_EMAIL_SENDER'
+          value: createAcsEmail ? 'DoNotReply@${acsEmailDomain.properties.mailFromSenderDomain}' : ''
+        }
+        {
+          name: 'ACS_EMAIL_SENDER_DISPLAY_NAME'
+          value: acsEmailSenderDisplayName
         }
         {
           name: 'BOOTSTRAP_SEED'

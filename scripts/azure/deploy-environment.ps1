@@ -36,6 +36,7 @@ param(
   [string]$ParticipantNotificationChannel = "log",
   [string]$ParticipantNotificationWebhookUrl = "",
   [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
+  [string]$AcsEmailSenderDisplayName = "A2 Assessment Platform",
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30
 )
@@ -131,6 +132,7 @@ $deployment = az deployment group create `
               participantNotificationChannel=$ParticipantNotificationChannel `
               participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
+              acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 
