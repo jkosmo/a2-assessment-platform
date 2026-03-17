@@ -61,6 +61,10 @@ vi.mock("../../src/utils/hash.js", () => ({
   sha256: vi.fn(() => "hash"),
 }));
 
+vi.mock("../../src/services/participantNotificationService.js", () => ({
+  notifyAssessmentResult: vi.fn().mockResolvedValue(undefined),
+}));
+
 function buildSubmissionFixture() {
   return {
     id: "submission-1",
@@ -69,6 +73,10 @@ function buildSubmissionFixture() {
     moduleVersionId: "module-version-1",
     locale: "nb",
     responseJson: JSON.stringify({ response: "raw text", reflection: "reflection text", promptExcerpt: "prompt excerpt" }),
+    user: {
+      email: "participant@company.com",
+      name: "Test Participant",
+    },
     moduleVersion: {
       rubricVersionId: "rubric-version-1",
       promptTemplateVersionId: "prompt-version-1",
@@ -76,6 +84,9 @@ function buildSubmissionFixture() {
       guidanceText: "Guidance text",
       assessmentPolicyJson: null,
       submissionSchemaJson: null,
+      module: {
+        title: "Test Module",
+      },
       promptTemplateVersion: {
         systemPrompt: "system",
         userPromptTemplate: "template",
