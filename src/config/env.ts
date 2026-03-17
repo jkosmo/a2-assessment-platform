@@ -7,6 +7,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   AUTH_MODE: z.enum(["mock", "entra"]).default("mock"),
   ENTRA_TENANT_ID: z.string().optional(),
+  ENTRA_CLIENT_ID: z.string().optional(),
   ENTRA_AUDIENCE: z.string().optional(),
   ENTRA_GROUP_ROLE_MAP_JSON: z.string().default("{}"),
   ENTRA_GROUP_ROLE_MAP_FILE: z.string().optional(),
@@ -58,8 +59,8 @@ if (!parsed.success) {
 
 const env = parsed.data;
 
-if (env.AUTH_MODE === "entra" && (!env.ENTRA_TENANT_ID || !env.ENTRA_AUDIENCE)) {
-  console.error("ENTRA_TENANT_ID and ENTRA_AUDIENCE are required when AUTH_MODE=entra");
+if (env.AUTH_MODE === "entra" && (!env.ENTRA_TENANT_ID || !env.ENTRA_CLIENT_ID || !env.ENTRA_AUDIENCE)) {
+  console.error("ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_AUDIENCE are required when AUTH_MODE=entra");
   process.exit(1);
 }
 

@@ -28,7 +28,7 @@ describe("workspace HTML i18n fallbacks", () => {
         expect(text, `${relativePath} -> ${key}`).not.toBe("");
       }
 
-      const placeholderMatches = [...html.matchAll(/<input\b[^>]*data-i18n-placeholder="([^"]+)"[^>]*placeholder="([^"]*)"[^>]*\/?>/gi)];
+      const placeholderMatches = [...html.matchAll(/<(?:input|textarea)\b[^>]*data-i18n-placeholder="([^"]+)"[^>]*placeholder="([^"]*)"[^>]*\/?>/gi)];
       const expectedPlaceholderCount = (html.match(/data-i18n-placeholder="/g) ?? []).length;
 
       expect(placeholderMatches.length, `${relativePath} placeholder count`).toBe(expectedPlaceholderCount);

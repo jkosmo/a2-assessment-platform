@@ -102,6 +102,11 @@ export type ParticipantConsoleRuntimeConfig = {
   flow: ParticipantConsoleConfig["flow"];
   calibrationWorkspace: ParticipantConsoleConfig["calibrationWorkspace"];
   identityDefaults?: ParticipantConsoleConfig["identityDefaults"];
+  entra?: {
+    clientId: string;
+    authority: string;
+    scopes: string[];
+  };
 };
 
 let cached: ParticipantConsoleConfig | null = null;
@@ -141,6 +146,14 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     flow: config.flow,
     calibrationWorkspace: config.calibrationWorkspace,
     identityDefaults: config.identityDefaults,
+    entra:
+      env.AUTH_MODE === "entra" && env.ENTRA_CLIENT_ID && env.ENTRA_TENANT_ID && env.ENTRA_AUDIENCE
+        ? {
+            clientId: env.ENTRA_CLIENT_ID,
+            authority: `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}`,
+            scopes: [`${env.ENTRA_AUDIENCE}/.default`],
+          }
+        : undefined,
   };
 }
 
