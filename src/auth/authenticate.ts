@@ -133,6 +133,16 @@ export async function authenticate(request: Request, response: Response, next: N
       }
     }
 
+    // In Entra mode, app roles from the JWT token are authoritative.
+    // Merge token roles with any DB-assigned roles so both sources are honoured.
+    if (env.AUTH_MODE === "entra") {
+      const tokenRoles = parseRoleNames(principal.tokenRoles);
+      if (tokenRoles.length > 0) {
+        const merged = new Set([...roles, ...tokenRoles]);
+        roles = Array.from(merged) as AppRole[];
+      }
+    }
+
     const correlationId = request.context?.correlationId;
     request.context = {
       correlationId,
