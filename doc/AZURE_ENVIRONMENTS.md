@@ -62,7 +62,7 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_DEPLOYMENT`
 - `AZURE_OPENAI_API_VERSION` (optional, default `2024-10-21`)
-- `AZURE_OPENAI_TIMEOUT_MS` (optional, default `30000`)
+- `AZURE_OPENAI_TIMEOUT_MS` (optional, default `120000`)
 - `AZURE_OPENAI_TEMPERATURE` (optional, default `0`)
 - `AZURE_OPENAI_MAX_TOKENS` (optional, default `1200`)
 - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (optional, `max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
@@ -73,8 +73,9 @@ For each environment, define variables/secrets used by workflow:
 - `LATENCY_ALERT_THRESHOLD_SECONDS` (optional, default `3`)
 - `APPEAL_OVERDUE_ALERT_THRESHOLD` (optional, default `1`)
 - `APPEAL_SLA_MONITOR_INTERVAL_MS` (optional, default `600000`)
-- `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, default `log`)
+- `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, `disabled` | `log` | `webhook` | `acs_email`, default `log`)
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS` (optional, default `5000`)
+- `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A2 Assessment Platform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
 
@@ -147,6 +148,20 @@ Why:
 - `AZURE_OPENAI_MAX_TOKENS=5000`
 - `AZURE_OPENAI_TIMEOUT_MS=90000`
 - `AZURE_OPENAI_DEPLOYMENT=<prod-quality-deployment>`
+
+## Activating ACS email notifications
+
+When `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` is set, the Bicep template automatically provisions:
+- An Azure Communication Services resource
+- An Email Communication Service with AzureManagedDomain (`dataLocation: Europe`)
+- App settings: `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING`, `ACS_EMAIL_SENDER`, `ACS_EMAIL_SENDER_DISPLAY_NAME`
+
+No manual resource creation is required. To activate:
+1. Set GitHub Actions variable `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` for the target environment.
+2. Optionally set `ACS_EMAIL_SENDER_DISPLAY_NAME` (default: `A2 Assessment Platform`).
+3. Trigger a deploy. ACS resources will be provisioned on the first run.
+
+Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. To use a custom verified domain, replace the domain resource in `infra/azure/main.bicep`.
 
 ## Production onboarding checklist for Azure OpenAI
 1. Create production GitHub environment (`production`) if missing.

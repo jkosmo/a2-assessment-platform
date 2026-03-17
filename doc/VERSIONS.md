@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.10 - 2026-03-17
+### Summary
+LLM timeout raised to 120 s and participant poll settings tuned for long-running assessments.
+
+### Included
+- **LLM timeout** (#137): `AZURE_OPENAI_TIMEOUT_MS` default raised from 30 000 ms to 120 000 ms so assessments on slower models are not prematurely aborted.
+- **Participant poll tuning** (#137): `flow.maxWaitSeconds` lowered from 180 to 150 (client waits for full LLM window); `flow.pollIntervalSeconds` raised from 2 to 3 (reduces server-side polling load during long jobs).
+- Bicep, deploy script, and CI workflow fallback defaults updated to match.
+
+## 0.8.9 - 2026-03-17
+### Summary
+Azure Communication Services email notifications for assessment results and recertification reminders.
+
+### Included
+- **ACS email channel** (#138): `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` activates email delivery via Azure Communication Services for assessment results, appeal status transitions, and recertification reminders.
+- **Assessment result notification**: `notifyAssessmentResult()` fires after each automatic decision; messages are localized in en-GB, nb, and nn for pass, fail, and under_review outcomes.
+- **Recertification reminder email**: `sendRecertificationReminder()` supports the `acs_email` channel alongside existing `log` and `webhook` channels.
+- **Bicep automation**: ACS email service, AzureManagedDomain, and app settings are provisioned automatically when `participantNotificationChannel=acs_email` is passed to the deploy.
+- **CSV module title fix**: All six report types in `reportingService.ts` now resolve locale-aware titles via `localizeContentText()` instead of returning raw JSON.
+
+## 0.8.8 - 2026-03-17
+### Summary
+Results Workspace bugs resolved: module titles, system-response visibility, CSV export in Entra mode, and per-participant certification overview.
+
+### Included
+- **Module title in results**: `localizeTitle()` now parses JSON locale objects so module names render correctly instead of raw JSON.
+- **System response hidden by default**: Raw LLM output section moved to a collapsible debug section hidden unless `?debug=1` is present.
+- **CSV export in Entra mode**: Export calls now include `Authorization: Bearer` header via `getAccessToken()`.
+- **Per-participant certification overview**: New recertification table added to the Results Workspace showing participant status, expiry dates, and CSV export.
+
 ## 0.8.7 - 2026-03-17
 ### Summary
 Hotfix: toppmenyen viste ingen lenker i Entra-modus fordi roller ikke var tilgjengelige frontend-side.

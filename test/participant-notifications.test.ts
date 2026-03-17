@@ -1,7 +1,13 @@
 import { AppealStatus } from "../src/db/prismaRuntime.js";
 import { env } from "../src/config/env.js";
-import { getAppealNotificationMessage } from "../src/i18n/notificationMessages.js";
-import { sendAppealStatusNotification } from "../src/services/participantNotificationService.js";
+import {
+  getAppealNotificationMessage,
+  getAssessmentResultNotificationMessage,
+} from "../src/i18n/notificationMessages.js";
+import {
+  notifyAssessmentResult,
+  sendAppealStatusNotification,
+} from "../src/services/participantNotificationService.js";
 
 describe("participant notification service", () => {
   const originalChannel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
@@ -94,5 +100,62 @@ describe("participant notification service", () => {
     expect(result.delivered).toBe(false);
     expect(result.channel).toBe("webhook");
     expect(result.failureReason).toBe("webhook_non_2xx_500");
+  });
+});
+
+describe("assessment result notification messages", () => {
+  it("returns localized pass message for all supported locales", () => {
+    const enMsg = getAssessmentResultNotificationMessage("en-GB", "pass");
+    const nbMsg = getAssessmentResultNotificationMessage("nb", "pass");
+    const nnMsg = getAssessmentResultNotificationMessage("nn", "pass");
+
+    expect(enMsg.subject.length).toBeGreaterThan(3);
+    expect(nbMsg.subject.length).toBeGreaterThan(3);
+    expect(nnMsg.subject.length).toBeGreaterThan(3);
+    expect(enMsg.nextStepGuidance.length).toBeGreaterThan(3);
+  });
+
+  it("returns localized fail message for all supported locales", () => {
+    const enMsg = getAssessmentResultNotificationMessage("en-GB", "fail");
+    const nbMsg = getAssessmentResultNotificationMessage("nb", "fail");
+    const nnMsg = getAssessmentResultNotificationMessage("nn", "fail");
+
+    expect(enMsg.subject).not.toBe(getAssessmentResultNotificationMessage("en-GB", "pass").subject);
+    expect(nbMsg.subject.length).toBeGreaterThan(3);
+    expect(nnMsg.nextStepGuidance.length).toBeGreaterThan(3);
+  });
+
+  it("returns localized under_review message for all supported locales", () => {
+    const enMsg = getAssessmentResultNotificationMessage("en-GB", "under_review");
+    const nbMsg = getAssessmentResultNotificationMessage("nb", "under_review");
+    const nnMsg = getAssessmentResultNotificationMessage("nn", "under_review");
+
+    expect(enMsg.subject.length).toBeGreaterThan(3);
+    expect(nbMsg.nextStepGuidance.length).toBeGreaterThan(3);
+    expect(nnMsg.subject.length).toBeGreaterThan(3);
+  });
+});
+
+describe("notifyAssessmentResult", () => {
+  const originalChannel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+
+  afterEach(() => {
+    env.PARTICIPANT_NOTIFICATION_CHANNEL = originalChannel;
+  });
+
+  it("returns without side effects when channel is disabled", async () => {
+    env.PARTICIPANT_NOTIFICATION_CHANNEL = "disabled";
+
+    await expect(
+      notifyAssessmentResult({
+        submissionId: "sub-1",
+        recipientEmail: "user@company.com",
+        recipientName: "Test User",
+        moduleTitle: "Module One",
+        moduleId: "mod-1",
+        passFailTotal: true,
+        locale: "en-GB",
+      }),
+    ).resolves.toBeUndefined();
   });
 });
