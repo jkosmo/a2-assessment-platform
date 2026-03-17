@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.11 - 2026-03-17
+### Summary
+Bugfix: "Fullfør overstyring" i manuell vurdering og ankebehandler var deaktivert i Entra-modus selv om brukeren hadde tatt vurderingen.
+
+### Included
+- **Entra-identitet i vurderingsarbeidsrom**: `manual-review.js` og `appeal-handler.js` henter nå `email`, `externalId` og `name` fra `/api/me` i Entra-modus. Tidligere ble kun `roles` oppdatert, noe som førte til at identitetssammenligning feilet og override-knappen var utilgjengelig.
+- **Testfikstur utvidet**: `buildSubmissionFixture()` i `assessment-job-service.test.ts` mangler `user`- og `module`-felter som ble lagt til for varslingsintegrasjon. Test-mock for `participantNotificationService` lagt til for å holde grensesnittet rent.
+- Fjernet ubrukt `isDebugModeEnabled`-funksjon i `appeal-handler.js`.
+
 ## 0.8.10 - 2026-03-17
 ### Summary
 LLM timeout raised to 120 s and participant poll settings tuned for long-running assessments.
