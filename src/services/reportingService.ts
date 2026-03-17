@@ -1,5 +1,6 @@
 import { ReviewStatus, AppealStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
+import { localizeContentText } from "../i18n/content.js";
 import { getReportingAnalyticsConfig } from "../config/reportingAnalytics.js";
 import { reportingRepository } from "../repositories/reportingRepository.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
@@ -156,7 +157,7 @@ export async function getCompletionReport(filters: ReportFilters) {
     const key = submission.module.id;
     const current = rowsByModule.get(key) ?? {
       moduleId: submission.module.id,
-      moduleTitle: submission.module.title,
+      moduleTitle: localizeContentText("en-GB", submission.module.title) ?? submission.module.title,
       totalSubmissions: 0,
       completedSubmissions: 0,
       underReviewSubmissions: 0,
@@ -228,7 +229,7 @@ export async function getPassRatesReport(filters: ReportFilters) {
     const key = submission.module.id;
     const current = rowsByModule.get(key) ?? {
       moduleId: submission.module.id,
-      moduleTitle: submission.module.title,
+      moduleTitle: localizeContentText("en-GB", submission.module.title) ?? submission.module.title,
       totalSubmissions: 0,
       decisionCount: 0,
       passCount: 0,
@@ -290,7 +291,7 @@ export async function getManualReviewQueueReport(filters: ReportFilters) {
     createdAt: review.createdAt,
     reviewedAt: review.reviewedAt,
     moduleId: review.submission.module.id,
-    moduleTitle: review.submission.module.title,
+    moduleTitle: localizeContentText("en-GB", review.submission.module.title) ?? review.submission.module.title,
     submissionId: review.submission.id,
     submissionStatus: review.submission.submissionStatus,
     participantEmail: review.submission.user.email,
@@ -335,7 +336,7 @@ export async function getAppealsReport(filters: ReportFilters) {
     claimedAt: appeal.claimedAt,
     resolvedAt: appeal.resolvedAt,
     moduleId: appeal.submission.module.id,
-    moduleTitle: appeal.submission.module.title,
+    moduleTitle: localizeContentText("en-GB", appeal.submission.module.title) ?? appeal.submission.module.title,
     submissionId: appeal.submission.id,
     participantEmail: appeal.submission.user.email,
     participantDepartment: appeal.submission.user.department,
@@ -395,7 +396,7 @@ export async function getMcqQualityReport(filters: ReportFilters) {
   for (const response of responses) {
     const existing = perQuestion.get(response.questionId) ?? {
       moduleId: response.question.module.id,
-      moduleTitle: response.question.module.title,
+      moduleTitle: localizeContentText("en-GB", response.question.module.title) ?? response.question.module.title,
       questionId: response.question.id,
       questionStem: response.question.stem,
       responses: [],
@@ -513,7 +514,7 @@ export async function getRecertificationStatusReport(filters: ReportFilters) {
         participantEmail: certification.user.email,
         participantDepartment: certification.user.department,
         moduleId: certification.module.id,
-        moduleTitle: certification.module.title,
+        moduleTitle: localizeContentText("en-GB", certification.module.title) ?? certification.module.title,
         latestDecisionId: certification.latestDecisionId,
         status: derivedStatus,
         passedAt: certification.passedAt,
