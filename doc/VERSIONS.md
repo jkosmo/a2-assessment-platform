@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.13 - 2026-03-17
+### Summary
+Fix: provider-registrering blokkerte deploy når service principal mangler subscription-rettigheter.
+
+### Included
+- **Ikke-fatal provider-sjekk**: Deploy-scriptet sjekker nå om `Microsoft.Communication` er registrert, forsøker registrering uten å feile hardt, og gir en tydelig advarsel hvis det feiler. Registrering må gjøres manuelt én gang av en bruker med subscription-rettigheter: `az provider register --namespace Microsoft.Communication --wait`.
+
 ## 0.8.12 - 2026-03-17
 ### Summary
 Fix: deploy feilet med MissingSubscriptionRegistration for Microsoft.Communication når acs_email-kanal er aktivert.

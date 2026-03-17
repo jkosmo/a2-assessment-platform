@@ -90,9 +90,19 @@ az group create `
 Assert-LastExitCode "az group create"
 
 if ($ParticipantNotificationChannel -eq "acs_email") {
-  Write-Host "Registering Microsoft.Communication provider (required for acs_email channel)..."
-  az provider register --namespace Microsoft.Communication --wait
-  Assert-LastExitCode "az provider register Microsoft.Communication"
+  Write-Host "Checking Microsoft.Communication provider registration (required for acs_email channel)..."
+  $providerState = (az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv 2>$null)
+  if ($providerState -eq "Registered") {
+    Write-Host "Microsoft.Communication provider is already registered."
+  } else {
+    Write-Host "Microsoft.Communication provider is not registered (state: $providerState). Attempting registration..."
+    az provider register --namespace Microsoft.Communication 2>&1 | Write-Host
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Could not register Microsoft.Communication provider automatically. Register it manually: az provider register --namespace Microsoft.Communication --wait"
+    } else {
+      Write-Host "Registration initiated. If deploy fails, wait a few minutes for registration to complete and redeploy."
+    }
+  }
 }
 
 $deploymentName = "a2-assessment-$EnvironmentName-$(Get-Date -Format 'yyyyMMddHHmmss')"
