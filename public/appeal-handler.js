@@ -961,8 +961,8 @@ async function loadParticipantConsoleConfig() {
   if (roleSwitchState.authMode === "entra") {
     try {
       const me = await apiFetch("/api/me", headers);
-      if (Array.isArray(me.roles) && me.roles.length > 0) {
-        rolesInput.value = me.roles.join(",");
+      if (Array.isArray(me?.user?.roles) && me.user.roles.length > 0) {
+        rolesInput.value = me.user.roles.join(",");
       }
     } catch {
       // nav renders with empty roles if /api/me fails
