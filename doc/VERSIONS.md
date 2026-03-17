@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.6 - 2026-03-17
+### Summary
+P2 accessibility fixes, MSAL frontend integration for Entra auth mode, authoring prompt dialog, Results Workspace epic created, bug report issue template for pilot users.
+
+### Included
+- **MSAL frontend integration** (#132): `api-client.js` loads MSAL dynamically, initializes via `getConsoleConfig()`, injects `Authorization: Bearer` in all API calls. New env vars: `ENTRA_CLIENT_ID`. Backend exposes `entra.clientId/authority/scopes` via `/participant/config`.
+- **P2 a11y fixes**: color contrast (`--color-warning`), non-color selection indicator (`box-shadow` on `tr.selected`), non-color field status (`::before` content), `prefers-reduced-motion` fix in `toast.css`, scrollable table keyboard access (`tabindex`, `role="region"`), responsive tables (`min-width: 0` override), `autocomplete="off"` on identity fields, locked section contrast fix.
+- **Authoring prompt dialog** (#125): native `<dialog>` with MCQ count, field checkboxes, custom JSON override, and dynamic prompt generation.
+- **Usability findings F2/F7** (#126/#127): scroll-to-invalid on submission validation, scroll-to-status-card after module creation.
+- **Results Workspace epic** (#128–#131): frontend report page for HR/SMO (backend APIs already exist).
+- **Bug report issue template**: Norwegian GitHub issue template for pilot users.
+
 ## 0.8.5 - 2026-03-15
 ### Summary
 Fixed W2/W5 bugs found in v0.8.4 testing, resolved two participant-completed UX issues, and standardized GUI elements (toast, pre-content) across all six workspaces.
