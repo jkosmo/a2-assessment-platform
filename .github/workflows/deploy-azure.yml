@@ -63,6 +63,7 @@ jobs:
             -Owner "${{ vars.AZURE_OWNER }}" `
             -AuthMode "${{ vars.AUTH_MODE }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
             -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
             -EntraSyncGroupRoles "${{ vars.ENTRA_SYNC_GROUP_ROLES }}" `
             -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `
@@ -130,6 +131,7 @@ jobs:
             -Owner "${{ vars.AZURE_OWNER }}" `
             -AuthMode "${{ vars.AUTH_MODE }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
             -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
             -EntraSyncGroupRoles "${{ vars.ENTRA_SYNC_GROUP_ROLES }}" `
             -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `

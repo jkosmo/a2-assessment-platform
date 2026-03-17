@@ -31,6 +31,9 @@ param authMode string = 'mock'
 @description('Entra tenant id when authMode=entra.')
 param entraTenantId string = ''
 
+@description('Entra client id (SPA app registration) when authMode=entra.')
+param entraClientId string = ''
+
 @description('Entra audience when authMode=entra.')
 param entraAudience string = ''
 
@@ -247,6 +250,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'ENTRA_TENANT_ID'
           value: entraTenantId
+        }
+        {
+          name: 'ENTRA_CLIENT_ID'
+          value: entraClientId
         }
         {
           name: 'ENTRA_AUDIENCE'

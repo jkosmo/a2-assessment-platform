@@ -12,6 +12,7 @@ param(
   [string]$Owner = "engineering",
   [string]$AuthMode = "mock",
   [string]$EntraTenantId = "",
+  [string]$EntraClientId = "",
   [string]$EntraAudience = "",
   [string]$EntraSyncGroupRoles = "false",
   [string]$EntraGroupRoleMapJson = "{}",
@@ -106,6 +107,7 @@ $deployment = az deployment group create `
               owner=$Owner `
               authMode=$AuthMode `
               entraTenantId=$EntraTenantId `
+              entraClientId=$EntraClientId `
               entraAudience=$EntraAudience `
               entraSyncGroupRoles=$entraSyncGroupRolesBool `
               entraGroupRoleMapJson=$EntraGroupRoleMapJson `
