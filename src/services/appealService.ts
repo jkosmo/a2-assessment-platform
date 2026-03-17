@@ -7,6 +7,7 @@ import { notifyAppealStatusTransition } from "./participantNotificationService.j
 import { env } from "../config/env.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
+import { localizeContentText } from "../i18n/content.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -57,6 +58,7 @@ export async function createSubmissionAppeal(input: {
   const appealedBy = await appealRepository.findUserNotificationRecipient(input.appealedById);
 
   if (appealedBy) {
+    const moduleTitle = localizeContentText(env.DEFAULT_LOCALE, submission.module.title) ?? submission.moduleId;
     await safeNotifyAppealStatusTransition({
       appealId: appeal.id,
       submissionId: submission.id,
@@ -65,6 +67,7 @@ export async function createSubmissionAppeal(input: {
       recipientUserId: appealedBy.id,
       recipientEmail: appealedBy.email,
       recipientName: appealedBy.name,
+      moduleTitle,
       locale: env.DEFAULT_LOCALE,
     });
   }
@@ -145,6 +148,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     },
   });
 
+  const claimModuleTitle = localizeContentText(env.DEFAULT_LOCALE, appeal.submission.module.title) ?? appeal.submissionId;
   await safeNotifyAppealStatusTransition({
     appealId: claimed.id,
     submissionId: appeal.submissionId,
@@ -153,6 +157,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     recipientUserId: appeal.appealedBy.id,
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
+    moduleTitle: claimModuleTitle,
     locale: env.DEFAULT_LOCALE,
   });
 
@@ -253,6 +258,7 @@ export async function resolveAppeal(input: {
     },
   });
 
+  const resolveModuleTitle = localizeContentText(env.DEFAULT_LOCALE, appeal.submission.module.title) ?? latestDecision.submissionId;
   await safeNotifyAppealStatusTransition({
     appealId: resolvedAppeal.id,
     submissionId: latestDecision.submissionId,
@@ -261,6 +267,7 @@ export async function resolveAppeal(input: {
     recipientUserId: appeal.appealedBy.id,
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
+    moduleTitle: resolveModuleTitle,
     locale: env.DEFAULT_LOCALE,
   });
 

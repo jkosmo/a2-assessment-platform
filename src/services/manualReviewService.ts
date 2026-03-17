@@ -3,6 +3,10 @@ import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { manualReviewRepository } from "../repositories/manualReviewRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
+import { notifyAssessmentResult } from "./participantNotificationService.js";
+import { logOperationalEvent } from "../observability/operationalLog.js";
+import { localizeContentText } from "../i18n/content.js";
+import { normalizeLocale } from "../i18n/locale.js";
 
 export async function listManualReviewQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED">;
@@ -115,6 +119,28 @@ export async function finalizeManualReviewOverride(input: {
   await upsertRecertificationStatusFromDecision({
     decisionId: overrideDecision.id,
     actorId: input.reviewerId,
+  });
+
+  const submissionLocale = normalizeLocale(review.submission.locale) ?? "en-GB";
+  const moduleTitle = localizeContentText(submissionLocale, review.submission.module.title) ?? review.submission.moduleId;
+  notifyAssessmentResult({
+    submissionId: review.submission.id,
+    submittedAt: review.submission.submittedAt,
+    recipientEmail: review.submission.user.email,
+    recipientName: review.submission.user.name,
+    moduleTitle,
+    moduleId: review.submission.moduleId,
+    passFailTotal: input.passFailTotal,
+    locale: submissionLocale,
+  }).catch((error: unknown) => {
+    logOperationalEvent(
+      "participant_notification_failed",
+      {
+        submissionId: review.submission.id,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      },
+      "error",
+    );
   });
 
   await recordAuditEvent({

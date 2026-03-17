@@ -10,6 +10,32 @@ type NotificationMessage = {
 
 type StatusTemplates = Record<AppealStatus, NotificationMessage>;
 
+type ContextLabels = { module: string; submitted: string };
+
+const contextLabels: Record<SupportedLocale, ContextLabels> = {
+  "en-GB": { module: "Module", submitted: "Submitted" },
+  nb: { module: "Modul", submitted: "Innlevert" },
+  nn: { module: "Modul", submitted: "Innlevert" },
+};
+
+function formatNotificationDate(date: Date, locale: SupportedLocale): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+}
+
+function buildAssessmentContextHeader(locale: SupportedLocale, context: { moduleTitle: string; submittedAt: Date }): string {
+  const labels = contextLabels[locale];
+  return `${labels.module}: ${context.moduleTitle}\n${labels.submitted}: ${formatNotificationDate(context.submittedAt, locale)}`;
+}
+
+function buildAppealContextHeader(locale: SupportedLocale, context: { moduleTitle: string }): string {
+  const labels = contextLabels[locale];
+  return `${labels.module}: ${context.moduleTitle}`;
+}
+
 const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
   "en-GB": {
     OPEN: {
@@ -67,8 +93,17 @@ const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
   },
 };
 
-export function getAppealNotificationMessage(locale: SupportedLocale, status: AppealStatus): NotificationMessage {
-  return notificationMessages[locale][status];
+export function getAppealNotificationMessage(
+  locale: SupportedLocale,
+  status: AppealStatus,
+  context: { moduleTitle: string },
+): NotificationMessage {
+  const template = notificationMessages[locale][status];
+  const header = buildAppealContextHeader(locale, context);
+  return {
+    subject: template.subject,
+    nextStepGuidance: `${header}\n\n${template.nextStepGuidance}`,
+  };
 }
 
 type AssessmentResultTemplates = Record<AssessmentOutcome, NotificationMessage>;
@@ -121,6 +156,12 @@ const assessmentResultMessages: Record<SupportedLocale, AssessmentResultTemplate
 export function getAssessmentResultNotificationMessage(
   locale: SupportedLocale,
   outcome: AssessmentOutcome,
+  context: { moduleTitle: string; submittedAt: Date },
 ): NotificationMessage {
-  return assessmentResultMessages[locale][outcome];
+  const template = assessmentResultMessages[locale][outcome];
+  const header = buildAssessmentContextHeader(locale, context);
+  return {
+    subject: template.subject,
+    nextStepGuidance: `${header}\n\n${template.nextStepGuidance}`,
+  };
 }

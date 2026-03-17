@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.14 - 2026-03-17
+### Summary
+Varslingsforbedringer: ACS-avsendernavn, manuell vurdering sender varsel, og e-post inneholder modulnavn og innleveringstidspunkt (#139, #140, #141).
+
+### Included
+- **#139 ACS-avsendernavn**: E-post sendes nå fra konfigurert visningsnavn (`ACS_EMAIL_SENDER_DISPLAY_NAME`) i stedet for standard DoNotReply-adresse.
+- **#140 Varsel ved manuell gjennomgang**: Deltakere mottar nå e-post/webhook-varsel når manuell vurdering fullføres (override).
+- **#141 Kontekstheader i e-post**: Alle varsler inneholder nå modulnavn og innleveringstidspunkt (for vurderingsresultat) øverst i meldingen.
+- Alle tre varslingskanaler (log, webhook, acs_email) støtter de nye feltene.
+- Tester oppdatert for nye signaturer i `getAppealNotificationMessage`, `getAssessmentResultNotificationMessage` og `notifyAssessmentResult`.
+
 ## 0.8.13 - 2026-03-17
 ### Summary
 Fix: provider-registrering blokkerte deploy når service principal mangler subscription-rettigheter.

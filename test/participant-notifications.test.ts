@@ -23,8 +23,8 @@ describe("participant notification service", () => {
   });
 
   it("returns localized templates for supported locales", () => {
-    const nbMessage = getAppealNotificationMessage("nb", AppealStatus.RESOLVED);
-    const nnMessage = getAppealNotificationMessage("nn", AppealStatus.IN_REVIEW);
+    const nbMessage = getAppealNotificationMessage("nb", AppealStatus.RESOLVED, { moduleTitle: "Testmodul" });
+    const nnMessage = getAppealNotificationMessage("nn", AppealStatus.IN_REVIEW, { moduleTitle: "Testmodul" });
     expect(nbMessage.subject).toContain("ferdigbehandlet");
     expect(nnMessage.nextStepGuidance).toContain("ankebehandlar");
   });
@@ -40,6 +40,7 @@ describe("participant notification service", () => {
       recipientUserId: "user-1",
       recipientEmail: "user1@company.com",
       recipientName: "User One",
+      moduleTitle: "Test Module",
       locale: "en-GB",
     });
 
@@ -67,6 +68,7 @@ describe("participant notification service", () => {
       recipientUserId: "user-2",
       recipientEmail: "user2@company.com",
       recipientName: "User Two",
+      moduleTitle: "Testmodul",
       locale: "nb",
     });
 
@@ -94,6 +96,7 @@ describe("participant notification service", () => {
       recipientUserId: "user-3",
       recipientEmail: "user3@company.com",
       recipientName: "User Three",
+      moduleTitle: "Testmodul",
       locale: "nn",
     });
 
@@ -104,31 +107,33 @@ describe("participant notification service", () => {
 });
 
 describe("assessment result notification messages", () => {
+  const ctx = { moduleTitle: "Test Module", submittedAt: new Date("2025-01-15T10:00:00Z") };
+
   it("returns localized pass message for all supported locales", () => {
-    const enMsg = getAssessmentResultNotificationMessage("en-GB", "pass");
-    const nbMsg = getAssessmentResultNotificationMessage("nb", "pass");
-    const nnMsg = getAssessmentResultNotificationMessage("nn", "pass");
+    const enMsg = getAssessmentResultNotificationMessage("en-GB", "pass", ctx);
+    const nbMsg = getAssessmentResultNotificationMessage("nb", "pass", ctx);
+    const nnMsg = getAssessmentResultNotificationMessage("nn", "pass", ctx);
 
     expect(enMsg.subject.length).toBeGreaterThan(3);
     expect(nbMsg.subject.length).toBeGreaterThan(3);
     expect(nnMsg.subject.length).toBeGreaterThan(3);
-    expect(enMsg.nextStepGuidance.length).toBeGreaterThan(3);
+    expect(enMsg.nextStepGuidance).toContain("Test Module");
   });
 
   it("returns localized fail message for all supported locales", () => {
-    const enMsg = getAssessmentResultNotificationMessage("en-GB", "fail");
-    const nbMsg = getAssessmentResultNotificationMessage("nb", "fail");
-    const nnMsg = getAssessmentResultNotificationMessage("nn", "fail");
+    const enMsg = getAssessmentResultNotificationMessage("en-GB", "fail", ctx);
+    const nbMsg = getAssessmentResultNotificationMessage("nb", "fail", ctx);
+    const nnMsg = getAssessmentResultNotificationMessage("nn", "fail", ctx);
 
-    expect(enMsg.subject).not.toBe(getAssessmentResultNotificationMessage("en-GB", "pass").subject);
+    expect(enMsg.subject).not.toBe(getAssessmentResultNotificationMessage("en-GB", "pass", ctx).subject);
     expect(nbMsg.subject.length).toBeGreaterThan(3);
     expect(nnMsg.nextStepGuidance.length).toBeGreaterThan(3);
   });
 
   it("returns localized under_review message for all supported locales", () => {
-    const enMsg = getAssessmentResultNotificationMessage("en-GB", "under_review");
-    const nbMsg = getAssessmentResultNotificationMessage("nb", "under_review");
-    const nnMsg = getAssessmentResultNotificationMessage("nn", "under_review");
+    const enMsg = getAssessmentResultNotificationMessage("en-GB", "under_review", ctx);
+    const nbMsg = getAssessmentResultNotificationMessage("nb", "under_review", ctx);
+    const nnMsg = getAssessmentResultNotificationMessage("nn", "under_review", ctx);
 
     expect(enMsg.subject.length).toBeGreaterThan(3);
     expect(nbMsg.nextStepGuidance.length).toBeGreaterThan(3);
@@ -149,6 +154,7 @@ describe("notifyAssessmentResult", () => {
     await expect(
       notifyAssessmentResult({
         submissionId: "sub-1",
+        submittedAt: new Date("2025-01-15T10:00:00Z"),
         recipientEmail: "user@company.com",
         recipientName: "Test User",
         moduleTitle: "Module One",

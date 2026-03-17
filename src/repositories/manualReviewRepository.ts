@@ -134,6 +134,18 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
         include: {
           submission: {
             include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  name: true,
+                },
+              },
+              module: {
+                select: {
+                  title: true,
+                },
+              },
               decisions: {
                 orderBy: { finalisedAt: "desc" },
               },

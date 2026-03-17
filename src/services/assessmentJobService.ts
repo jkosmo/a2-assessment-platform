@@ -353,6 +353,7 @@ async function runAssessment(jobId: string) {
     const moduleTitle = localizeContentText(submissionLocale, submission.moduleVersion.module.title) ?? submission.moduleId;
     notifyAssessmentResult({
       submissionId: submission.id,
+      submittedAt: submission.submittedAt,
       recipientEmail: submission.user.email,
       recipientName: submission.user.name,
       moduleTitle,

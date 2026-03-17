@@ -16,6 +16,7 @@ export type AppealNotificationInput = {
   recipientUserId: string;
   recipientEmail: string;
   recipientName: string | null;
+  moduleTitle: string;
   locale: SupportedLocale;
 };
 
@@ -28,13 +29,14 @@ type NotificationResult = {
 };
 
 export async function sendAppealStatusNotification(input: AppealNotificationInput): Promise<NotificationResult> {
-  const message = getAppealNotificationMessage(input.locale, input.currentStatus);
+  const message = getAppealNotificationMessage(input.locale, input.currentStatus, { moduleTitle: input.moduleTitle });
   const payload = {
     notificationType: "appeal_status_transition",
     appealId: input.appealId,
     submissionId: input.submissionId,
     previousStatus: input.previousStatus,
     currentStatus: input.currentStatus,
+    moduleTitle: input.moduleTitle,
     recipient: {
       userId: input.recipientUserId,
       email: input.recipientEmail,
@@ -171,7 +173,9 @@ export async function sendViaAcs(input: {
   logPayload: Record<string, unknown>;
 }): Promise<NotificationResult> {
   const connectionString = env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING!;
-  const senderAddress = env.ACS_EMAIL_SENDER!;
+  const rawSenderAddress = env.ACS_EMAIL_SENDER!;
+  const displayName = env.ACS_EMAIL_SENDER_DISPLAY_NAME;
+  const senderAddress = displayName ? `${displayName} <${rawSenderAddress}>` : rawSenderAddress;
 
   const emailClient = new EmailClient(connectionString);
   const message = {
@@ -203,6 +207,7 @@ export async function sendViaAcs(input: {
 
 export type AssessmentResultNotificationInput = {
   submissionId: string;
+  submittedAt: Date;
   recipientEmail: string;
   recipientName: string | null;
   moduleTitle: string;
@@ -213,11 +218,15 @@ export type AssessmentResultNotificationInput = {
 
 export async function notifyAssessmentResult(input: AssessmentResultNotificationInput): Promise<void> {
   const outcome = input.passFailTotal ? "pass" : "fail";
-  const message = getAssessmentResultNotificationMessage(input.locale, outcome);
+  const message = getAssessmentResultNotificationMessage(input.locale, outcome, {
+    moduleTitle: input.moduleTitle,
+    submittedAt: input.submittedAt,
+  });
   const logPayload = {
     notificationType: "assessment_result",
     submissionId: input.submissionId,
     moduleId: input.moduleId,
+    moduleTitle: input.moduleTitle,
     outcome,
     recipient: { email: input.recipientEmail, locale: input.locale },
     subject: message.subject,
@@ -306,6 +315,7 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
       recipientEmail: input.recipientEmail,
       previousStatus: input.previousStatus,
       currentStatus: input.currentStatus,
+      moduleTitle: input.moduleTitle,
       channel: result.channel,
       subject: result.subject,
       nextStepGuidance: result.nextStepGuidance,

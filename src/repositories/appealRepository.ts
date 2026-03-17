@@ -16,6 +16,9 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
           userId,
         },
         include: {
+          module: {
+            select: { title: true },
+          },
           decisions: {
             orderBy: { finalisedAt: "desc" },
             take: 1,
@@ -203,6 +206,13 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
               name: true,
             },
           },
+          submission: {
+            select: {
+              module: {
+                select: { title: true },
+              },
+            },
+          },
         },
       });
     },
@@ -231,6 +241,9 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
           },
           submission: {
             include: {
+              module: {
+                select: { title: true },
+              },
               decisions: {
                 orderBy: { finalisedAt: "desc" },
               },
