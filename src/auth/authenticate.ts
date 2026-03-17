@@ -9,7 +9,10 @@ import { resolveRequestLocale } from "../i18n/locale.js";
 import { t } from "../i18n/messages.js";
 
 const entraIssuer = env.ENTRA_TENANT_ID
-  ? `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/v2.0`
+  ? [
+      `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/v2.0`,
+      `https://sts.windows.net/${env.ENTRA_TENANT_ID}/`,
+    ]
   : undefined;
 
 const entraJwks = env.ENTRA_TENANT_ID
