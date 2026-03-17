@@ -67,6 +67,10 @@ app.get("/calibration", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "calibration.html"));
 });
 
+app.get("/results", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "results.html"));
+});
+
 app.get("/participant/config", (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });
