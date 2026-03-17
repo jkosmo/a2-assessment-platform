@@ -957,6 +957,18 @@ async function loadParticipantConsoleConfig() {
   applyOutputVisibility();
   applyIdentityDefaults();
   renderRolePresetControl();
+
+  if (roleSwitchState.authMode === "entra") {
+    try {
+      const me = await apiFetch("/api/me", headers);
+      if (Array.isArray(me.roles) && me.roles.length > 0) {
+        rolesInput.value = me.roles.join(",");
+      }
+    } catch {
+      // nav renders with empty roles if /api/me fails
+    }
+  }
+
   renderWorkspaceNavigation();
   populateAppealStatusFilters();
   await loadAppealQueue();
