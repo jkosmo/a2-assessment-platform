@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.7 - 2026-03-17
+### Summary
+Hotfix: toppmenyen viste ingen lenker i Entra-modus fordi roller ikke var tilgjengelige frontend-side.
+
+### Included
+- **Nav-fiks Entra-modus**: alle 6 workspaces henter nå roller fra `/api/me` etter MSAL-init og setter `rolesInput.value` slik at `renderWorkspaceNavigation()` filtrerer korrekt.
+
 ## 0.8.6 - 2026-03-17
 ### Summary
 P2 accessibility fixes, MSAL frontend integration for Entra auth mode, authoring prompt dialog, Results Workspace epic created, bug report issue template for pilot users.
