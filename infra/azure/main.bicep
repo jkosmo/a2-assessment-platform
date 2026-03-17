@@ -67,7 +67,7 @@ param azureOpenAiDeployment string = ''
 param azureOpenAiApiVersion string = '2024-10-21'
 
 @description('Azure OpenAI request timeout in milliseconds.')
-param azureOpenAiTimeoutMs int = 30000
+param azureOpenAiTimeoutMs int = 120000
 
 @description('Azure OpenAI temperature (0-2).')
 param azureOpenAiTemperature string = '0'

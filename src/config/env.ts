@@ -26,7 +26,7 @@ const envSchema = z.object({
   AZURE_OPENAI_API_KEY: z.string().optional(),
   AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
-  AZURE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  AZURE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
   AZURE_OPENAI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0),
   AZURE_OPENAI_MAX_TOKENS: z.coerce.number().int().positive().default(1200),
   AZURE_OPENAI_TOKEN_LIMIT_PARAMETER: z

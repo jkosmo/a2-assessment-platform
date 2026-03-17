@@ -80,8 +80,8 @@ describe("participant console runtime config", () => {
     });
     expect(response.body.flow).toEqual({
       autoStartAfterMcq: true,
-      pollIntervalSeconds: 2,
-      maxWaitSeconds: 180,
+      pollIntervalSeconds: 3,
+      maxWaitSeconds: 150,
     });
     expect(response.body.calibrationWorkspace).toEqual({
       accessRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],

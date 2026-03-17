@@ -70,8 +70,8 @@
   },
   "flow": {
     "autoStartAfterMcq": true,
-    "pollIntervalSeconds": 2,
-    "maxWaitSeconds": 180
+    "pollIntervalSeconds": 3,
+    "maxWaitSeconds": 150
   },
   "calibrationWorkspace": {
     "accessRoles": ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],

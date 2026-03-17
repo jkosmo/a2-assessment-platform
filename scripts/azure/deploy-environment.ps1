@@ -22,7 +22,7 @@ param(
   [string]$AzureOpenAiApiKey = "",
   [string]$AzureOpenAiDeployment = "",
   [string]$AzureOpenAiApiVersion = "2024-10-21",
-  [int]$AzureOpenAiTimeoutMs = 30000,
+  [int]$AzureOpenAiTimeoutMs = 120000,
   [string]$AzureOpenAiTemperature = "0",
   [int]$AzureOpenAiMaxTokens = 1200,
   [string]$AzureOpenAiTokenLimitParameter = "auto",

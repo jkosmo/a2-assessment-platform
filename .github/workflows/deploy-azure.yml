@@ -73,7 +73,7 @@ jobs:
             -AzureOpenAiApiKey "${{ secrets.AZURE_OPENAI_API_KEY }}" `
             -AzureOpenAiDeployment "${{ vars.AZURE_OPENAI_DEPLOYMENT }}" `
             -AzureOpenAiApiVersion "${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}" `
-            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '30000' }}" `
+            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '120000' }}" `
             -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
             -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
             -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
@@ -142,7 +142,7 @@ jobs:
             -AzureOpenAiApiKey "${{ secrets.AZURE_OPENAI_API_KEY }}" `
             -AzureOpenAiDeployment "${{ vars.AZURE_OPENAI_DEPLOYMENT }}" `
             -AzureOpenAiApiVersion "${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}" `
-            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '30000' }}" `
+            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '120000' }}" `
             -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
             -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
             -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
