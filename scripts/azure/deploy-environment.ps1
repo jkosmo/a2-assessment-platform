@@ -89,6 +89,12 @@ az group create `
   --tags environment=$EnvironmentName costCenter=$CostCenter owner=$Owner | Out-Null
 Assert-LastExitCode "az group create"
 
+if ($ParticipantNotificationChannel -eq "acs_email") {
+  Write-Host "Registering Microsoft.Communication provider (required for acs_email channel)..."
+  az provider register --namespace Microsoft.Communication --wait
+  Assert-LastExitCode "az provider register Microsoft.Communication"
+}
+
 $deploymentName = "a2-assessment-$EnvironmentName-$(Get-Date -Format 'yyyyMMddHHmmss')"
 
 $entraSyncGroupRolesBool = $false

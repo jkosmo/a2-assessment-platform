@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.12 - 2026-03-17
+### Summary
+Fix: deploy feilet med MissingSubscriptionRegistration for Microsoft.Communication når acs_email-kanal er aktivert.
+
+### Included
+- **Provider-registrering i deploy-script**: `deploy-environment.ps1` registrerer nå `Microsoft.Communication`-namespacet automatisk (med `--wait`) når `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`. Registreringen er idempotent og gjøres bare når ACS er konfigurert.
+
 ## 0.8.11 - 2026-03-17
 ### Summary
 Bugfix: "Fullfør overstyring" i manuell vurdering og ankebehandler var deaktivert i Entra-modus selv om brukeren hadde tatt vurderingen.
