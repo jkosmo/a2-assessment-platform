@@ -109,6 +109,98 @@ describe("authenticate middleware", () => {
     });
   });
 
+  it("merges Entra JWT token roles with DB-assigned roles in Entra mode", async () => {
+    const upsertUserFromPrincipal = vi.fn().mockResolvedValue({ id: "user-1" });
+    const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
+    const getActiveRoles = vi.fn().mockResolvedValue(["PARTICIPANT"]);
+
+    vi.doMock("../src/config/env.js", () => ({
+      env: {
+        AUTH_MODE: "entra",
+        ENTRA_TENANT_ID: "tenant-id",
+        ENTRA_AUDIENCE: "api://assessment-api",
+        DEFAULT_LOCALE: "nb",
+        MOCK_DEFAULT_USER_ID: "unused",
+        MOCK_DEFAULT_EMAIL: "unused@company.com",
+        MOCK_DEFAULT_NAME: "Unused",
+        MOCK_DEFAULT_DEPARTMENT: "Unused",
+      },
+    }));
+    vi.doMock("../src/repositories/userRepository.js", () => ({
+      upsertUserFromPrincipal,
+      syncEntraGroupRoles,
+      getActiveRoles,
+    }));
+    vi.doMock("jose", () => ({
+      createRemoteJWKSet: vi.fn().mockReturnValue({}),
+      jwtVerify: vi.fn().mockResolvedValue({
+        payload: {
+          oid: "user-oid-1",
+          preferred_username: "jko@a-2.no",
+          name: "Joakim Kosmo",
+          roles: ["ADMINISTRATOR"],
+        },
+      }),
+    }));
+
+    const { authenticate } = await import("../src/auth/authenticate.js");
+    const request = buildRequest({ authorization: "Bearer fake-token" });
+    const response = buildResponse();
+    const next = vi.fn();
+
+    await authenticate(request as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith();
+    const roles = (request.context as { roles?: string[] }).roles ?? [];
+    expect(roles).toContain("ADMINISTRATOR");
+    expect(roles).toContain("PARTICIPANT");
+  });
+
+  it("filters out invalid role names from Entra JWT token", async () => {
+    const upsertUserFromPrincipal = vi.fn().mockResolvedValue({ id: "user-1" });
+    const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
+    const getActiveRoles = vi.fn().mockResolvedValue([]);
+
+    vi.doMock("../src/config/env.js", () => ({
+      env: {
+        AUTH_MODE: "entra",
+        ENTRA_TENANT_ID: "tenant-id",
+        ENTRA_AUDIENCE: "api://assessment-api",
+        DEFAULT_LOCALE: "nb",
+        MOCK_DEFAULT_USER_ID: "unused",
+        MOCK_DEFAULT_EMAIL: "unused@company.com",
+        MOCK_DEFAULT_NAME: "Unused",
+        MOCK_DEFAULT_DEPARTMENT: "Unused",
+      },
+    }));
+    vi.doMock("../src/repositories/userRepository.js", () => ({
+      upsertUserFromPrincipal,
+      syncEntraGroupRoles,
+      getActiveRoles,
+    }));
+    vi.doMock("jose", () => ({
+      createRemoteJWKSet: vi.fn().mockReturnValue({}),
+      jwtVerify: vi.fn().mockResolvedValue({
+        payload: {
+          oid: "user-oid-1",
+          preferred_username: "jko@a-2.no",
+          name: "Joakim Kosmo",
+          roles: ["ADMINISTRATORS", "INVALID_ROLE"],
+        },
+      }),
+    }));
+
+    const { authenticate } = await import("../src/auth/authenticate.js");
+    const request = buildRequest({ authorization: "Bearer fake-token" });
+    const response = buildResponse();
+    const next = vi.fn();
+
+    await authenticate(request as never, response as never, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect((request.context as { roles?: string[] }).roles).toEqual([]);
+  });
+
   it("uses explicit mock role hints instead of broader stored role assignments", async () => {
     const upsertUserFromPrincipal = vi.fn().mockResolvedValue({ id: "user-1" });
     const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
