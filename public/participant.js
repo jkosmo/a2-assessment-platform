@@ -1596,13 +1596,20 @@ function outcomeClass(passFailTotal, submissionStatus) {
   return "";
 }
 
-function localizeDecisionType(value, submissionStatus) {
+function localizeDecisionType(value, submissionStatus, passFailTotal) {
   const normalizedStatus = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
   if (normalizedStatus === "UNDER_REVIEW") {
     return t("result.decisionValue.MANUAL_REVIEW_PENDING");
   }
 
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  if (normalized === "AUTOMATIC") {
+    return passFailTotal === true
+      ? t("result.decisionValue.AUTOMATIC_PASS")
+      : passFailTotal === false
+        ? t("result.decisionValue.AUTOMATIC_FAIL")
+        : t("result.decisionValue.AUTOMATIC");
+  }
   return t(`result.decisionValue.${normalized || "UNKNOWN"}`);
 }
 
@@ -1964,7 +1971,7 @@ function renderResultSummary(body) {
   appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
   appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
   appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
-  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status), outcomeClass(body.decision?.passFailTotal, body.status));
+  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status, body.decision?.passFailTotal), outcomeClass(body.decision?.passFailTotal, body.status));
   appendSummaryRow(
     summaryGrid,
     t("result.decisionReason"),
@@ -2030,7 +2037,7 @@ function renderHistorySummary(body) {
     appendSummaryRow(
       grid,
       t("history.latestDecision"),
-      localizeDecisionType(item.latestDecision?.decisionType, item.status),
+      localizeDecisionType(item.latestDecision?.decisionType, item.status, item.latestDecision?.passFailTotal),
       outcomeClass(item.latestDecision?.passFailTotal, item.status),
     );
     appendSummaryRow(grid, t("history.latestScore"), formatNumber(item.latestDecision?.totalScore));

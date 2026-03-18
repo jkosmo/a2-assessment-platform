@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.8.21",
+  "version": "0.8.22",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -13,6 +13,7 @@
     "postgres:start": "node scripts/postgres/localSetup.mjs start",
     "postgres:stop": "node scripts/postgres/localSetup.mjs stop",
     "postgres:status": "node scripts/postgres/localSetup.mjs status",
+    "postgres:verify": "node scripts/postgres/localSetup.mjs verify",
     "postgres:write-env": "node scripts/postgres/localSetup.mjs write-env",
     "postgres:recreate": "node scripts/postgres/localSetup.mjs recreate",
     "postgres:destroy": "node scripts/postgres/localSetup.mjs destroy",

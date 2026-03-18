@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.22 - 2026-03-18
+### Summary
+Fix: beslutningsetikett viser nå "Automatisk bestått" / "Automatisk ikke bestått" i stedet for bare "Automatisk".
+
+### Included
+- **`participant.js`**: `localizeDecisionType` tar nå `passFailTotal` og velger `AUTOMATIC_PASS`/`AUTOMATIC_FAIL`-nøkkel for automatiske beslutninger.
+- **`participant-translations.js`**: Nye nøkler `result.decisionValue.AUTOMATIC_PASS` og `AUTOMATIC_FAIL` i en-GB, nb, nn.
+
 ## 0.8.21 - 2026-03-18
 ### Summary
 Fix: fargeindikatorer brukte feil felt (decisionType) — skal bruke passFailTotal.
