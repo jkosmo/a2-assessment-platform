@@ -8,7 +8,24 @@ export function createCalibrationRepository(client: CalibrationRepositoryClient 
     findModuleSummary(moduleId: string) {
       return client.module.findUnique({
         where: { id: moduleId },
-        select: { id: true, title: true },
+        select: {
+          id: true,
+          title: true,
+          activeVersionId: true,
+          activeVersion: {
+            select: {
+              id: true,
+              versionNo: true,
+              assessmentPolicyJson: true,
+              rubricVersionId: true,
+              promptTemplateVersionId: true,
+              mcqSetVersionId: true,
+              taskText: true,
+              guidanceText: true,
+              submissionSchemaJson: true,
+            },
+          },
+        },
       });
     },
 

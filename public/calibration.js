@@ -29,6 +29,16 @@ const calibrationMeta = document.getElementById("calibrationMeta");
 const calibrationSignals = document.getElementById("calibrationSignals");
 const outcomesBody = document.getElementById("calibrationOutcomesBody");
 const anchorsBody = document.getElementById("calibrationAnchorsBody");
+const thresholdEditorSection = document.getElementById("thresholdEditorSection");
+const thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
+const thresholdPracticalMinPercentInput = document.getElementById("thresholdPracticalMinPercent");
+const thresholdMcqMinPercentInput = document.getElementById("thresholdMcqMinPercent");
+const thresholdBorderlineMinInput = document.getElementById("thresholdBorderlineMin");
+const thresholdBorderlineMaxInput = document.getElementById("thresholdBorderlineMax");
+const thresholdBandPreview = document.getElementById("thresholdBandPreview");
+const thresholdValidationError = document.getElementById("thresholdValidationError");
+const publishThresholdsButton = document.getElementById("publishThresholds");
+const thresholdPublishResult = document.getElementById("thresholdPublishResult");
 
 const allSubmissionStatuses = ["SUBMITTED", "PROCESSING", "SCORED", "UNDER_REVIEW", "COMPLETED", "REJECTED"];
 const defaultWorkspaceNavigationItems = [
@@ -413,6 +423,123 @@ function populateStatusOptions() {
   }
 }
 
+function validateThresholds(values) {
+  const { totalMin, practicalMinPercent, mcqMinPercent, borderlineMin, borderlineMax } = values;
+  if (borderlineMin > borderlineMax) {
+    return t("calibration.thresholds.error.borderlineMinGtMax");
+  }
+  if (borderlineMax > totalMin) {
+    return t("calibration.thresholds.error.borderlineMaxGtTotalMin");
+  }
+  return null;
+}
+
+function getThresholdInputValues() {
+  return {
+    totalMin: Number(thresholdTotalMinInput.value),
+    practicalMinPercent: Number(thresholdPracticalMinPercentInput.value),
+    mcqMinPercent: Number(thresholdMcqMinPercentInput.value),
+    borderlineMin: Number(thresholdBorderlineMinInput.value),
+    borderlineMax: Number(thresholdBorderlineMaxInput.value),
+  };
+}
+
+function updateThresholdPreview() {
+  const values = getThresholdInputValues();
+  const error = validateThresholds(values);
+
+  thresholdValidationError.textContent = error ?? "";
+  publishThresholdsButton.disabled = Boolean(error);
+
+  if (!error) {
+    const { totalMin, borderlineMin, borderlineMax } = values;
+    const previewKey = t("calibration.thresholds.preview.bands");
+    const preview = previewKey
+      .replace("{redMax}", String(borderlineMin - 1))
+      .replace("{yellowMin}", String(borderlineMin))
+      .replace("{yellowMax}", String(borderlineMax))
+      .replace("{greenMin}", String(totalMin));
+    thresholdBandPreview.textContent = preview;
+  } else {
+    thresholdBandPreview.textContent = "";
+  }
+}
+
+function renderThresholds(effectiveThresholds) {
+  if (!effectiveThresholds) {
+    return;
+  }
+
+  thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
+  thresholdPracticalMinPercentInput.value = String(effectiveThresholds.practicalMinPercent);
+  thresholdMcqMinPercentInput.value = String(effectiveThresholds.mcqMinPercent);
+  thresholdBorderlineMinInput.value = String(effectiveThresholds.borderlineMin);
+  thresholdBorderlineMaxInput.value = String(effectiveThresholds.borderlineMax);
+
+  const sourceKey =
+    effectiveThresholds.source === "module_policy"
+      ? "calibration.thresholds.source.module"
+      : "calibration.thresholds.source.global";
+  thresholdPublishResult.textContent = t(sourceKey);
+
+  thresholdEditorSection.style.display = "";
+  updateThresholdPreview();
+}
+
+for (const input of [
+  thresholdTotalMinInput,
+  thresholdPracticalMinPercentInput,
+  thresholdMcqMinPercentInput,
+  thresholdBorderlineMinInput,
+  thresholdBorderlineMaxInput,
+]) {
+  input.addEventListener("input", () => {
+    updateThresholdPreview();
+  });
+}
+
+publishThresholdsButton.addEventListener("click", async () => {
+  await runWithBusyButton(publishThresholdsButton, async () => {
+    const moduleId = moduleIdSelect.value;
+    if (!moduleId) {
+      thresholdPublishResult.textContent = t("calibration.errors.moduleRequired");
+      return;
+    }
+
+    const values = getThresholdInputValues();
+    const error = validateThresholds(values);
+    if (error) {
+      thresholdPublishResult.textContent = error;
+      return;
+    }
+
+    try {
+      const body = await apiFetch("/api/calibration/workspace/publish-thresholds", {
+        method: "POST",
+        headers: {
+          ...headers(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          moduleId,
+          totalMin: values.totalMin,
+          practicalMinPercent: values.practicalMinPercent,
+          mcqMinPercent: values.mcqMinPercent,
+          borderlineMin: values.borderlineMin,
+          borderlineMax: values.borderlineMax,
+        }),
+      });
+      thresholdPublishResult.textContent = t("calibration.thresholds.publishSuccess");
+      log(body);
+
+      // Reload workspace snapshot to reflect the new thresholds
+      loadCalibrationButton.click();
+    } catch (err) {
+      thresholdPublishResult.textContent = err instanceof Error ? err.message : "Publish failed.";
+    }
+  });
+});
+
 function renderWorkspace(body) {
   hideLoading(calibrationSignals);
   hideLoading(outcomesBody);
@@ -424,6 +551,8 @@ function renderWorkspace(body) {
     calibrationMeta.textContent = "";
     showEmpty(outcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
     showEmpty(anchorsBody, t("calibration.anchors.empty"), { columns: 5 });
+    thresholdEditorSection.style.display = "none";
+    thresholdPublishResult.textContent = "";
     return;
   }
 
@@ -516,6 +645,10 @@ function renderWorkspace(body) {
       }
       anchorsBody.appendChild(row);
     }
+  }
+
+  if (body.effectiveThresholds) {
+    renderThresholds(body.effectiveThresholds);
   }
 }
 
