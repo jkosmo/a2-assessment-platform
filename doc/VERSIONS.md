@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.25 - 2026-03-18
+### Summary
+MVP: Innholdskort-oversikt og dialog for moduldetaljer i Admin Content (#135 – #145, #146, #147).
+
+### Included
+- **`admin-content.html`**: Ny seksjon "Content overview" med 7 innholdskort (Moduldetaljer, Versjonsdetaljer, Vurderingsregler, Vurderingspolicy, LLM-prompt, Flervalgstest, Innleveringsskjema). Hvert kort viser read-only sammendrag + "Rediger"-knapp. Knapper for seksjonene uten dialog scroller til tilsvarende skjemafelt. Ny `<dialog id="dialogModuleDetails">` med lokaliseringsfaner (EN-GB / NB / NN) for tittel, beskrivelse og sertifiseringsnivå. CSS for kart-grid, dialog-modal og lokaliserings-faner. IDs lagt til eksisterende seksjoner 5–8 for scroll-navigasjon.
+- **`admin-content.js`**: `dirtyCards`-sett for å spore ulagrede dialogendringer. `renderContentCards()` oppdaterer kortvisning fra eksisterende skjemainputs. `openModuleDetailsDialog()` / `applyModuleDetailsDialog()` håndterer fokus, faner og tilbakeskrivning til eksisterende inputs. `setActiveDialogLocaleTab()` og `closeFieldDialog()` med fokusretur til trigger. Scroll-til-seksjon for ikke-implementerte kort. "Lagre alle endringer"- og "Forhåndsvis"-knapper i kortvisningen kaller eksisterende `handleSaveContentBundle()` og `handleOpenParticipantPreview()`. `dirtyCards` ryddes ved modul-last, import og bundle-lagring. `renderContentCards()` kalles fra `applyTranslations()` og ved initialisering.
+- **`i18n/admin-content-translations.js`**: Nye nøkler for kort og dialog i alle tre lokaliteter (en-GB, nb, nn).
+- **`doc/design/ADMIN_CONTENT_DIALOG_REDESIGN.md`**: Designdokument for #135 (nytt).
+
 ## 0.8.24 - 2026-03-18
 ### Summary
 Kompakt modullistevisning ved 6+ moduler (#136).

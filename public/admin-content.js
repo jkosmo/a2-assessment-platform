@@ -385,6 +385,8 @@ let participantRuntimeConfig = {
   },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+let dirtyCards = new Set();
+let _dialogTriggerRef = null;
 
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
@@ -454,6 +456,7 @@ function applyTranslations() {
   renderWorkspaceNavigation();
   renderModuleMeta();
   renderModuleStatus();
+  renderContentCards();
 }
 
 function isDebugModeEnabled() {
@@ -1050,7 +1053,9 @@ function applyImportDraftToForm(draft) {
   moduleVersionPromptTemplateVersionIdInput.value = "";
   moduleVersionMcqSetVersionIdInput.value = "";
   publishModuleVersionIdInput.value = "";
+  dirtyCards.clear();
   syncAllTextareaHeights();
+  renderContentCards();
 }
 
 function populateFormFromModuleExport(moduleExport) {
@@ -1081,8 +1086,10 @@ function populateFormFromModuleExport(moduleExport) {
   publishModuleVersionIdInput.value = moduleVersion?.id ?? "";
 
   selectedModuleStatus = moduleExport;
+  dirtyCards.clear();
   renderModuleStatus();
   syncAllTextareaHeights();
+  renderContentCards();
 }
 
 function buildParticipantPreviewPayload() {
@@ -1775,6 +1782,10 @@ async function handleSaveContentBundle() {
     moduleVersion: moduleVersionBody.moduleVersion,
   });
   await refreshSelectedModuleStatus();
+  for (const key of ["rubric", "prompt", "mcq", "versionDetails", "assessmentPolicy", "submissionSchema"]) {
+    dirtyCards.delete(key);
+  }
+  renderContentCards();
 }
 
 async function handlePublishModuleVersion() {
@@ -1813,6 +1824,8 @@ async function handleApplyImportDraft(rawValue) {
   }
   applyImportDraftToForm(draft);
   importDraftJsonInput.value = JSON.stringify(parsed, null, 2);
+  dirtyCards.clear();
+  renderContentCards();
   await loadModules({
     preferredModuleId: selectedModuleId,
     preserveMessage: true,
@@ -1858,6 +1871,178 @@ async function handleOpenParticipantPreview() {
     },
   });
 }
+
+// ── Content cards ─────────────────────────────────────────────────────────────
+
+function truncateText(text, maxLen = 120) {
+  if (!text || typeof text !== "string") return "";
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  return cleaned.length > maxLen ? cleaned.slice(0, maxLen) + "…" : cleaned;
+}
+
+function parseLocalizedSafe(value) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed || !trimmed.startsWith("{")) return trimmed;
+  try { return JSON.parse(trimmed); } catch { return trimmed; }
+}
+
+function getJsonSummary(rawValue) {
+  const trimmed = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (!trimmed) return "";
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return `${parsed.length} item${parsed.length !== 1 ? "s" : ""}`;
+    if (parsed && typeof parsed === "object") {
+      const keys = Object.keys(parsed);
+      if (keys.length === 0) return "{}";
+      return keys.slice(0, 4).join(", ") + (keys.length > 4 ? ", …" : "");
+    }
+    return trimmed;
+  } catch {
+    return truncateText(trimmed, 100);
+  }
+}
+
+function setCardSummary(elementId, text) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const empty = !text || (typeof text === "string" && !text.trim());
+  if (empty) {
+    el.textContent = t("adminContent.cards.empty");
+    el.classList.add("empty");
+  } else {
+    el.textContent = truncateText(typeof text === "string" ? text : JSON.stringify(text));
+    el.classList.remove("empty");
+  }
+}
+
+function setCardUnsaved(elementId, isDirty) {
+  const el = document.getElementById(elementId);
+  if (el) el.hidden = !isDirty;
+}
+
+function renderContentCards() {
+  // Moduldetaljer
+  const titleVal = localizeContentValue(parseLocalizedSafe(moduleTitleInput.value));
+  const descVal = localizeContentValue(parseLocalizedSafe(moduleDescriptionInput.value));
+  const moduleDetailsSummary = [titleVal, descVal].filter(Boolean).join(" — ");
+  setCardSummary("contentCard_moduleDetails_summary", moduleDetailsSummary);
+  setCardUnsaved("contentCard_moduleDetails_unsaved", dirtyCards.has("moduleDetails"));
+
+  // Versjonsdetaljer
+  const taskVal = localizeContentValue(parseLocalizedSafe(moduleVersionTaskTextInput.value));
+  setCardSummary("contentCard_versionDetails_summary", taskVal);
+  setCardUnsaved("contentCard_versionDetails_unsaved", dirtyCards.has("versionDetails"));
+
+  // Rubrikk
+  setCardSummary("contentCard_rubric_summary", getJsonSummary(rubricCriteriaJsonInput.value));
+  setCardUnsaved("contentCard_rubric_unsaved", dirtyCards.has("rubric"));
+
+  // Vurderingspolicy
+  setCardSummary("contentCard_assessmentPolicy_summary", getJsonSummary(moduleVersionAssessmentPolicyInput.value));
+  setCardUnsaved("contentCard_assessmentPolicy_unsaved", dirtyCards.has("assessmentPolicy"));
+
+  // LLM-prompt
+  const promptVal = localizeContentValue(parseLocalizedSafe(promptSystemPromptInput.value));
+  setCardSummary("contentCard_prompt_summary", promptVal);
+  setCardUnsaved("contentCard_prompt_unsaved", dirtyCards.has("prompt"));
+
+  // Flervalgstest
+  setCardSummary("contentCard_mcq_summary", getJsonSummary(mcqQuestionsJsonInput.value));
+  setCardUnsaved("contentCard_mcq_unsaved", dirtyCards.has("mcq"));
+
+  // Innleveringsskjema
+  setCardSummary("contentCard_submissionSchema_summary", getJsonSummary(moduleVersionSubmissionSchemaInput.value));
+  setCardUnsaved("contentCard_submissionSchema_unsaved", dirtyCards.has("submissionSchema"));
+
+  // Show/hide save button row
+  const actionsEl = document.getElementById("contentCardsActions");
+  if (actionsEl) actionsEl.style.display = selectedModuleId ? "" : "none";
+}
+
+// ── Module details dialog ──────────────────────────────────────────────────────
+
+const _localeToSuffix = { "en-GB": "enGB", nb: "nb", nn: "nn" };
+
+function openModuleDetailsDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogModuleDetails");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+
+  const parsedTitle = parseLocalizedSafe(moduleTitleInput.value);
+  const parsedDesc = parseLocalizedSafe(moduleDescriptionInput.value);
+  const parsedCert = parseLocalizedSafe(moduleCertificationLevelInput.value);
+
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const sfx = _localeToSuffix[locale];
+    const getString = (parsed) => {
+      if (typeof parsed === "object" && parsed !== null) return parsed[locale] ?? "";
+      return locale === "en-GB" ? (typeof parsed === "string" ? parsed : "") : "";
+    };
+    const titleEl = document.getElementById(`dlgMD_title_${sfx}`);
+    const descEl = document.getElementById(`dlgMD_desc_${sfx}`);
+    const certEl = document.getElementById(`dlgMD_cert_${sfx}`);
+    if (titleEl) titleEl.value = getString(parsedTitle);
+    if (descEl) descEl.value = getString(parsedDesc);
+    if (certEl) certEl.value = getString(parsedCert);
+  }
+
+  const validFromEl = document.getElementById("dlgMD_validFrom");
+  const validToEl = document.getElementById("dlgMD_validTo");
+  if (validFromEl) validFromEl.value = moduleValidFromInput.value || "";
+  if (validToEl) validToEl.value = moduleValidToInput.value || "";
+
+  setActiveDialogLocaleTab(dialog, "en-GB");
+  dialog.showModal();
+  const firstInput = dialog.querySelector("input");
+  if (firstInput) firstInput.focus();
+}
+
+function applyModuleDetailsDialog() {
+  const dialog = document.getElementById("dialogModuleDetails");
+
+  const titles = {}, descs = {}, certs = {};
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const sfx = _localeToSuffix[locale];
+    titles[locale] = document.getElementById(`dlgMD_title_${sfx}`)?.value?.trim() ?? "";
+    descs[locale] = document.getElementById(`dlgMD_desc_${sfx}`)?.value?.trim() ?? "";
+    certs[locale] = document.getElementById(`dlgMD_cert_${sfx}`)?.value?.trim() ?? "";
+  }
+
+  const isMultiLocale = (obj) => Object.values(obj).some(v => v !== obj["en-GB"]);
+  const asValue = (obj) => isMultiLocale(obj) ? JSON.stringify(obj, null, 2) : (obj["en-GB"] ?? "");
+
+  moduleTitleInput.value = asValue(titles);
+  moduleDescriptionInput.value = asValue(descs);
+  moduleCertificationLevelInput.value = asValue(certs);
+  moduleValidFromInput.value = document.getElementById("dlgMD_validFrom")?.value ?? "";
+  moduleValidToInput.value = document.getElementById("dlgMD_validTo")?.value ?? "";
+
+  dirtyCards.add("moduleDetails");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
+function setActiveDialogLocaleTab(dialog, locale) {
+  for (const tab of dialog.querySelectorAll(".dialog-locale-tab")) {
+    const active = tab.dataset.localeTab === locale;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  for (const pane of dialog.querySelectorAll(".dialog-locale-pane")) {
+    pane.classList.toggle("active", pane.dataset.localePane === locale);
+  }
+}
+
+function closeFieldDialog(dialog) {
+  dialog.close();
+  const trigger = _dialogTriggerRef;
+  _dialogTriggerRef = null;
+  if (trigger) trigger.focus();
+}
+
+// ── End of card / dialog helpers ───────────────────────────────────────────────
 
 loadMeButton.addEventListener("click", async () => {
   await runWithBusyButton(loadMeButton, async () => {
@@ -2063,6 +2248,73 @@ for (const textarea of document.querySelectorAll("textarea")) {
   });
 }
 
+// ── Content card button wiring ─────────────────────────────────────────────────
+
+document.getElementById("editBtn_moduleDetails")?.addEventListener("click", (e) => {
+  openModuleDetailsDialog(e.currentTarget);
+});
+
+// Scroll-to-section buttons (unimplemented cards)
+for (const btn of document.querySelectorAll("[data-card-scroll]")) {
+  btn.addEventListener("click", () => {
+    const targetId = btn.dataset.cardScroll;
+    const target = document.getElementById(targetId);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+// Module details dialog controls
+document.getElementById("dialogModuleDetailsClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogModuleDetails"));
+});
+document.getElementById("dialogModuleDetailsCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogModuleDetails"));
+});
+document.getElementById("dialogModuleDetailsApply")?.addEventListener("click", () => {
+  applyModuleDetailsDialog();
+});
+
+// Tab switching inside Module details dialog
+document.getElementById("dialogModuleDetails")?.addEventListener("click", (e) => {
+  const tab = e.target.closest(".dialog-locale-tab");
+  if (!tab) return;
+  const locale = tab.dataset.localeTab;
+  if (locale) setActiveDialogLocaleTab(document.getElementById("dialogModuleDetails"), locale);
+});
+
+// Keyboard: Escape closes open field dialogs (browser native on <dialog> but we return focus)
+document.getElementById("dialogModuleDetails")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogModuleDetails"));
+});
+
+// Content cards save + preview
+document.getElementById("saveAllCards")?.addEventListener("click", async () => {
+  const btn = document.getElementById("saveAllCards");
+  await runWithBusyButton(btn, async () => {
+    try {
+      await handleSaveContentBundle();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message, "error");
+      log(message);
+    }
+  });
+});
+
+document.getElementById("previewCardsBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("previewCardsBtn");
+  await runWithBusyButton(btn, async () => {
+    try {
+      await handleOpenParticipantPreview();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message, "error");
+      log(message);
+    }
+  });
+});
+
 populateLocaleSelect();
 setLocale(currentLocale);
 setDefaultFormValues();
@@ -2071,4 +2323,5 @@ loadParticipantConsoleConfig();
 renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
+renderContentCards();
 syncAllTextareaHeights();
