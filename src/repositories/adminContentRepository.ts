@@ -351,6 +351,23 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    findActiveModuleVersionForClone(moduleVersionId: string) {
+      return client.moduleVersion.findUnique({
+        where: { id: moduleVersionId },
+        select: {
+          id: true,
+          moduleId: true,
+          taskText: true,
+          guidanceText: true,
+          rubricVersionId: true,
+          promptTemplateVersionId: true,
+          mcqSetVersionId: true,
+          submissionSchemaJson: true,
+          assessmentPolicyJson: true,
+        },
+      });
+    },
+
     publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date) {
       return client.$transaction(async (tx) => {
         const moduleVersion = await tx.moduleVersion.findUnique({

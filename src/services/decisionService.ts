@@ -18,6 +18,12 @@ export type ModuleAssessmentPolicy = {
   };
   passRules?: {
     totalMin?: number;
+    practicalMinPercent?: number;
+    mcqMinPercent?: number;
+    borderlineWindow?: {
+      min?: number;
+      max?: number;
+    };
   };
 };
 
@@ -55,6 +61,15 @@ type ResolveAssessmentDecisionInput = Pick<
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
   const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
+  const practicalMinPercent =
+    input.assessmentPolicy?.passRules?.practicalMinPercent ?? rules.thresholds.practicalMinPercent;
+  const mcqMinPercent =
+    input.assessmentPolicy?.passRules?.mcqMinPercent ?? rules.thresholds.mcqMinPercent;
+  const borderlineMin =
+    input.assessmentPolicy?.passRules?.borderlineWindow?.min ?? rules.manualReview.borderlineWindow.min;
+  const borderlineMax =
+    input.assessmentPolicy?.passRules?.borderlineWindow?.max ?? rules.manualReview.borderlineWindow.max;
+
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const effectivePracticalScaledScore = input.assessmentPolicy?.scoring?.practicalWeight != null
     ? (practicalScoreScaled / rules.weights.practicalMaxScore) * input.assessmentPolicy.scoring.practicalWeight
@@ -69,13 +84,13 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
   const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
   const inBorderlineWindow =
-    totalScore >= rules.manualReview.borderlineWindow.min &&
-    totalScore <= rules.manualReview.borderlineWindow.max;
+    totalScore >= borderlineMin &&
+    totalScore <= borderlineMax;
 
   const passesThresholds =
     totalScore >= totalMin &&
-    practicalPercent >= rules.thresholds.practicalMinPercent &&
-    input.mcqPercentScore >= rules.thresholds.mcqMinPercent &&
+    practicalPercent >= practicalMinPercent &&
+    input.mcqPercentScore >= mcqMinPercent &&
     !hasOpenRedFlag;
   const llmRecommendsManualReview = recommendsManualReview(input.llmResult);
 

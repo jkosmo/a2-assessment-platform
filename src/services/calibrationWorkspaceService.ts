@@ -2,6 +2,8 @@ import { NotFoundError } from "../errors/AppError.js";
 import { calibrationRepository } from "../repositories/calibrationRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
+import type { ModuleAssessmentPolicy } from "./decisionService.js";
+import { getAssessmentRules } from "../config/assessmentRules.js";
 
 export type CalibrationWorkspaceFilters = {
   moduleId: string;
@@ -69,6 +71,17 @@ function parseBenchmarkExamples(rawJson: string) {
 
 function toStringOrNull(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function safeParsePolicy(json: string | null | undefined): ModuleAssessmentPolicy | null {
+  if (!json) {
+    return null;
+  }
+  try {
+    return JSON.parse(json) as ModuleAssessmentPolicy;
+  } catch {
+    return null;
+  }
 }
 
 function buildBenchmarkAnchors(
@@ -233,6 +246,24 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
     });
   }
 
+  const rules = getAssessmentRules();
+  const modulePolicy = safeParsePolicy(module.activeVersion?.assessmentPolicyJson);
+  const hasModuleOverrides =
+    modulePolicy?.passRules?.totalMin != null ||
+    modulePolicy?.passRules?.practicalMinPercent != null ||
+    modulePolicy?.passRules?.mcqMinPercent != null ||
+    modulePolicy?.passRules?.borderlineWindow?.min != null ||
+    modulePolicy?.passRules?.borderlineWindow?.max != null;
+
+  const effectiveThresholds = {
+    totalMin: modulePolicy?.passRules?.totalMin ?? rules.thresholds.totalMin,
+    practicalMinPercent: modulePolicy?.passRules?.practicalMinPercent ?? rules.thresholds.practicalMinPercent,
+    mcqMinPercent: modulePolicy?.passRules?.mcqMinPercent ?? rules.thresholds.mcqMinPercent,
+    borderlineMin: modulePolicy?.passRules?.borderlineWindow?.min ?? rules.manualReview.borderlineWindow.min,
+    borderlineMax: modulePolicy?.passRules?.borderlineWindow?.max ?? rules.manualReview.borderlineWindow.max,
+    source: hasModuleOverrides ? ("module_policy" as const) : ("global_defaults" as const),
+  };
+
   await recordAuditEvent({
     entityType: "calibration_workspace",
     entityId: module.id,
@@ -254,7 +285,9 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
     module: {
       id: module.id,
       title: module.title,
+      activeVersionId: module.activeVersionId ?? null,
     },
+    effectiveThresholds,
     filters: {
       moduleId: input.filters.moduleId,
       moduleVersionId: input.filters.moduleVersionId ?? null,

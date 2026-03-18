@@ -5,6 +5,7 @@ import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole.js";
 import { AppError } from "../errors/AppError.js";
 import { getCalibrationWorkspaceSnapshot } from "../services/calibrationWorkspaceService.js";
+import { publishModuleVersionWithThresholds } from "../services/adminContentService.js";
 
 const calibrationRouter = Router();
 
@@ -116,6 +117,70 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
     response.status(500).json({
       error: "calibration_workspace_failed",
       message: error instanceof Error ? error.message : "Could not load calibration workspace snapshot.",
+    });
+  }
+});
+
+const publishThresholdsBodySchema = z
+  .object({
+    moduleId: z.string().trim().min(1),
+    totalMin: z.number().min(0).max(100),
+    practicalMinPercent: z.number().min(0).max(100),
+    mcqMinPercent: z.number().min(0).max(100),
+    borderlineMin: z.number().min(0).max(100),
+    borderlineMax: z.number().min(0).max(100),
+  })
+  .refine((d) => d.borderlineMin <= d.borderlineMax, {
+    message: "borderlineMin must be \u2264 borderlineMax",
+    path: ["borderlineMin"],
+  })
+  .refine((d) => d.borderlineMax <= d.totalMin, {
+    message: "borderlineMax must be \u2264 totalMin",
+    path: ["borderlineMax"],
+  });
+
+calibrationRouter.post("/workspace/publish-thresholds", async (request, response) => {
+  const roles: string[] = (request.context?.roles as string[] | undefined) ?? [];
+  const isAllowed =
+    roles.includes("ADMINISTRATOR") || roles.includes("SUBJECT_MATTER_OWNER");
+
+  if (!isAllowed) {
+    response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR or SUBJECT_MATTER_OWNER may publish thresholds." });
+    return;
+  }
+
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const parsed = publishThresholdsBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  try {
+    const published = await publishModuleVersionWithThresholds({
+      moduleId: parsed.data.moduleId,
+      totalMin: parsed.data.totalMin,
+      practicalMinPercent: parsed.data.practicalMinPercent,
+      mcqMinPercent: parsed.data.mcqMinPercent,
+      borderlineMin: parsed.data.borderlineMin,
+      borderlineMax: parsed.data.borderlineMax,
+      actorId,
+    });
+    response.status(201).json({ moduleVersion: published });
+  } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus ?? 400).json({ error: error.code, message: error.message });
+      return;
+    }
+
+    response.status(400).json({
+      error: "publish_thresholds_failed",
+      message: error instanceof Error ? error.message : "Could not publish thresholds.",
     });
   }
 });

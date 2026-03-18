@@ -3,6 +3,7 @@ import { recordAuditEvent } from "./auditService.js";
 import { getBenchmarkExamplesConfig } from "../config/benchmarkExamples.js";
 import type { SupportedLocale } from "../i18n/locale.js";
 import { localizeContentText } from "../i18n/content.js";
+import type { ModuleAssessmentPolicy } from "./decisionService.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -545,6 +546,96 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
       moduleVersionId,
       versionNo: published.versionNo,
       previousActiveVersionId: module.activeVersionId,
+      publishedAt: published.publishedAt?.toISOString() ?? null,
+    },
+  });
+
+  return published;
+}
+
+type PublishThresholdsInput = {
+  moduleId: string;
+  totalMin: number;
+  practicalMinPercent: number;
+  mcqMinPercent: number;
+  borderlineMin: number;
+  borderlineMax: number;
+  actorId: string;
+};
+
+export async function publishModuleVersionWithThresholds(input: PublishThresholdsInput) {
+  const module = await ensureModuleExists(input.moduleId);
+
+  if (!module.activeVersionId) {
+    throw new Error("Module has no active version to base thresholds on.");
+  }
+
+  const sourceVersion = await adminContentRepository.findActiveModuleVersionForClone(module.activeVersionId);
+
+  if (!sourceVersion) {
+    throw new Error("Active module version not found.");
+  }
+
+  let existingPolicy: ModuleAssessmentPolicy = {};
+  if (sourceVersion.assessmentPolicyJson) {
+    try {
+      existingPolicy = JSON.parse(sourceVersion.assessmentPolicyJson) as ModuleAssessmentPolicy;
+    } catch {
+      existingPolicy = {};
+    }
+  }
+
+  const newPolicy: ModuleAssessmentPolicy = {
+    ...existingPolicy,
+    passRules: {
+      ...(existingPolicy.passRules ?? {}),
+      totalMin: input.totalMin,
+      practicalMinPercent: input.practicalMinPercent,
+      mcqMinPercent: input.mcqMinPercent,
+      borderlineWindow: {
+        min: input.borderlineMin,
+        max: input.borderlineMax,
+      },
+    },
+  };
+
+  const versionNo = await getNextVersionNo("module", input.moduleId);
+  const now = new Date();
+
+  const newVersion = await adminContentRepository.createModuleVersion({
+    moduleId: input.moduleId,
+    versionNo,
+    taskText: sourceVersion.taskText,
+    guidanceText: sourceVersion.guidanceText ?? undefined,
+    rubricVersionId: sourceVersion.rubricVersionId,
+    promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
+    mcqSetVersionId: sourceVersion.mcqSetVersionId,
+    submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
+    assessmentPolicyJson: JSON.stringify(newPolicy),
+  });
+
+  const published = await adminContentRepository.publishModuleVersion(
+    input.moduleId,
+    newVersion.id,
+    input.actorId,
+    now,
+  );
+
+  await recordAuditEvent({
+    entityType: "module_version",
+    entityId: newVersion.id,
+    action: "calibration_thresholds_published",
+    actorId: input.actorId,
+    metadata: {
+      moduleId: input.moduleId,
+      moduleVersionId: newVersion.id,
+      versionNo: newVersion.versionNo,
+      sourceVersionId: sourceVersion.id,
+      totalMin: input.totalMin,
+      practicalMinPercent: input.practicalMinPercent,
+      mcqMinPercent: input.mcqMinPercent,
+      borderlineMin: input.borderlineMin,
+      borderlineMax: input.borderlineMax,
       publishedAt: published.publishedAt?.toISOString() ?? null,
     },
   });

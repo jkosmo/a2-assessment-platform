@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.18 - 2026-03-18
+### Summary
+Calibration threshold tuning (#143) — per-module borderlineWindow, practicalMinPercent, mcqMinPercent via assessmentPolicyJson; publish-thresholds endpoint; calibration UI with live preview and publish action.
+
+### Included
+- **`decisionService.ts`**: Extended `ModuleAssessmentPolicy.passRules` with `practicalMinPercent`, `mcqMinPercent`, `borderlineWindow`. `resolveAssessmentDecision` now derives per-module-or-global values for all five threshold variables.
+- **`calibrationRepository.ts`**: `findModuleSummary` now selects `activeVersionId` and full `activeVersion` (including `assessmentPolicyJson`).
+- **`adminContentRepository.ts`**: New `findActiveModuleVersionForClone` method for cloning the active version when publishing thresholds.
+- **`adminContentService.ts`**: New exported function `publishModuleVersionWithThresholds` — clones active version with merged threshold overrides in `assessmentPolicyJson`, publishes it, and records a `calibration_thresholds_published` audit event.
+- **`calibrationWorkspaceService.ts`**: Computes `effectiveThresholds` (source: `module_policy` | `global_defaults`) from module policy + global rules; includes it in the snapshot response; includes `activeVersionId` in returned module object.
+- **`routes/calibration.ts`**: New POST `/workspace/publish-thresholds` route with Zod validation, role guard (ADMINISTRATOR or SUBJECT_MATTER_OWNER), and cross-field refinements (borderlineMin ≤ borderlineMax ≤ totalMin).
+- **`routes/adminContent.ts`**: Extended `assessmentPolicyBodySchema.passRules` with optional `practicalMinPercent`, `mcqMinPercent`, `borderlineWindow`.
+- **`public/calibration.html`**: Threshold editor card (`thresholdEditorSection`) with five inputs, band preview, validation error, publish button, and result area — starts hidden.
+- **`public/calibration.js`**: `renderThresholds`, `updateThresholdPreview`, `validateThresholds`, input event listeners, publish button handler (POST + workspace reload), integration in `renderWorkspace`.
+- **`public/i18n/calibration-translations.js`**: All threshold translation keys added for en-GB, nb, and nn.
+
 ## 0.8.17 - 2026-03-18
 ### Summary
 Modulvelger (nedtrekk) på kalibreringsside (#142) og fix av appeal-repository-test etter #140.
