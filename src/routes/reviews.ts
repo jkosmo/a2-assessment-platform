@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { AppError } from "../errors/AppError.js";
+import { localizeContentText } from "../i18n/content.js";
 import {
   claimManualReview,
   finalizeManualReviewOverride,
@@ -41,10 +42,12 @@ reviewsRouter.get("/", async (request, response) => {
     return;
   }
 
+  const locale = request.context?.locale ?? "nb";
   const reviews = await listManualReviewQueue({
     statuses:
       parsed.data.status.length > 0 ? parsed.data.status : (["OPEN", "IN_REVIEW"] as const),
     limit: parsed.data.limit,
+    locale,
   });
 
   response.json({ reviews });
@@ -57,7 +60,37 @@ reviewsRouter.get("/:reviewId", async (request, response) => {
     return;
   }
 
-  response.json({ review: workspace });
+  const locale = request.context?.locale ?? "nb";
+  const parsedResponse = (() => {
+    try {
+      return JSON.parse(workspace.submission.responseJson) as Record<string, unknown>;
+    } catch {
+      return {} as Record<string, unknown>;
+    }
+  })();
+
+  response.json({
+    review: {
+      ...workspace,
+      submission: {
+        ...workspace.submission,
+        module: {
+          ...workspace.submission.module,
+          title:
+            localizeContentText(locale, workspace.submission.module.title) ??
+            workspace.submission.module.title,
+          description:
+            localizeContentText(locale, workspace.submission.module.description ?? null) ??
+            workspace.submission.module.description,
+        },
+        rawText: typeof parsedResponse.response === "string" ? parsedResponse.response : null,
+        reflectionText:
+          typeof parsedResponse.reflection === "string" ? parsedResponse.reflection : null,
+        promptExcerpt:
+          typeof parsedResponse.promptExcerpt === "string" ? parsedResponse.promptExcerpt : null,
+      },
+    },
+  });
 });
 
 reviewsRouter.post("/:reviewId/claim", async (request, response, next) => {

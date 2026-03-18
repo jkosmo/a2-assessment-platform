@@ -81,7 +81,7 @@ let selectedReviewDetails = null;
 let activeReviewQueueLoad = null;
 let participantRuntimeConfig = {
   authMode: "mock",
-  debugMode: true,
+  debugMode: new URLSearchParams(window.location.search).get("debug") === "1",
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
   navigation: {
@@ -776,9 +776,9 @@ function renderManualReviewDetails(details) {
     `${t("manualReview.details.reflection")}:`,
     normalizeMultilineText(submission.reflectionText),
     "",
-    `${t("manualReview.details.promptExcerpt")}:`,
-    normalizeMultilineText(submission.promptExcerpt),
-    "",
+    ...(submission.promptExcerpt
+      ? [`${t("manualReview.details.promptExcerpt")}:`, normalizeMultilineText(submission.promptExcerpt), ""]
+      : []),
     `=== ${t("manualReview.details.section.mcq")} ===`,
     `${t("manualReview.details.mcqAttemptId")}: ${latestMcqAttempt?.id ?? t("manualReview.details.none")}`,
     `${t("manualReview.details.mcqPercentScore")}: ${formatNumber(latestMcqAttempt?.percentScore)}`,
@@ -799,13 +799,17 @@ function renderManualReviewDetails(details) {
     `${t("manualReview.details.llmManualReviewRecommended")}: ${String(latestLlmEvaluation?.manualReviewRecommended ?? "-")}`,
     `${t("manualReview.details.llmConfidenceNote")}: ${normalizeMultilineText(latestLlmEvaluation?.confidenceNote)}`,
     `${t("manualReview.details.llmCreatedAt")}: ${formatDateTime(latestLlmEvaluation?.createdAt)}`,
-    `${t("manualReview.details.improvementAdvice")}:`,
-    ...(improvementAdvice.length > 0
-      ? improvementAdvice.map((advice) => `- ${String(advice)}`)
-      : [t("manualReview.details.none")]),
-    `${t("manualReview.details.criterionRationales")}:`,
-    ...criterionRationales,
-    "",
+    ...(isDebugModeEnabled()
+      ? [
+          `${t("manualReview.details.improvementAdvice")}:`,
+          ...(improvementAdvice.length > 0
+            ? improvementAdvice.map((advice) => `- ${String(advice)}`)
+            : [t("manualReview.details.none")]),
+          `${t("manualReview.details.criterionRationales")}:`,
+          ...criterionRationales,
+          "",
+        ]
+      : [""]),
     `=== ${t("manualReview.details.section.appeals")} ===`,
     `${t("manualReview.details.latestAppealId")}: ${latestAppeal?.id ?? t("manualReview.details.none")}`,
     `${t("manualReview.details.latestAppealStatus")}: ${latestAppeal?.appealStatus ?? "-"}`,

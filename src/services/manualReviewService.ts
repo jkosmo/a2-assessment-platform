@@ -11,6 +11,7 @@ import { normalizeLocale } from "../i18n/locale.js";
 export async function listManualReviewQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED">;
   limit: number;
+  locale: string;
 }) {
   const reviews = await manualReviewRepository.findManualReviewQueue(input.statuses, input.limit);
 
@@ -26,7 +27,12 @@ export async function listManualReviewQueue(input: {
       submittedAt: review.submission.submittedAt,
       submissionStatus: review.submission.submissionStatus,
       user: review.submission.user,
-      module: review.submission.module,
+      module: {
+        ...review.submission.module,
+        title:
+          localizeContentText(normalizeLocale(input.locale) ?? "en-GB", review.submission.module.title) ??
+          review.submission.module.title,
+      },
       latestDecision: review.submission.decisions[0] ?? null,
     },
   }));

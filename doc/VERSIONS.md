@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.15 - 2026-03-18
+### Summary
+Regresjonsfikser i manuell vurdering: modulnavn lokaliseres, besvarelsestekst vises, promptutdrag betinget, og LLM-detaljer/Systemsvar skjules uten `?debug=1`.
+
+### Included
+- **Modulnavn i liste**: `module.title` lokaliseres nå korrekt via `localizeContentText` med brukerens locale
+- **Besvarelsestekst**: `responseJson` ekspanderes i workspace-ruten til `rawText`, `reflectionText`, `promptExcerpt` — felt som frontend allerede forventet
+- **Betinget promptutdrag**: "Promptutdrag brukt" vises kun når modulen bruker dette feltet
+- **Debug-modus**: `debugMode` defaulter til `false`; `?debug=1` aktiverer Systemsvar og LLM-detaljer (forbedringsråd, kriteriebegrunnelser)
+
 ## 0.8.14 - 2026-03-17
 ### Summary
 Varslingsforbedringer: ACS-avsendernavn, manuell vurdering sender varsel, og e-post inneholder modulnavn og innleveringstidspunkt (#139, #140, #141).
