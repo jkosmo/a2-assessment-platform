@@ -25,6 +25,17 @@
       .module-meta { font-size: 12px; color: var(--color-meta); margin-top: calc(var(--space-1) * 0.5); }
       .selected-badge { display: inline-block; margin-top: var(--space-1); font-size: 11px; font-weight: 600; color: var(--color-selected-badge); }
       .draft-badge { display: inline-block; margin-top: var(--space-1); margin-right: var(--space-1); font-size: 11px; font-weight: 700; color: #7a4b00; background: #fff3db; border-radius: 999px; padding: 4px 10px; }
+      /* Compact list mode (≥ 6 modules) */
+      .module-list.compact { gap: 2px; }
+      .module-list.compact .module-card { display: flex; align-items: center; gap: var(--space-1); padding: 8px 12px; border-radius: 6px; }
+      .module-list.compact .module-card.selected { border-left: 3px solid var(--color-blue); padding-left: 9px; }
+      .module-list.compact .module-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .module-list.compact .module-meta { display: none; }
+      .module-list.compact .module-badges { margin-top: 0; flex-shrink: 0; gap: 4px; }
+      .module-list.compact .module-status-badge { padding: 2px 7px; font-size: 10px; }
+      .module-list.compact .draft-badge { margin-top: 0; margin-right: 0; padding: 2px 7px; font-size: 10px; }
+      .module-list.compact .selected-badge { display: none; }
+      @media (max-width: 600px) { .module-list.compact .module-title { white-space: normal; } }
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); display: grid; gap: calc(var(--space-1) * 0.5); }
       .selected-module-title { font-weight: 600; color: var(--color-text); }
       .selected-module-description { color: var(--color-meta); line-height: 1.5; }

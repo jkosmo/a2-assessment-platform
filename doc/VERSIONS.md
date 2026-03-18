@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.24 - 2026-03-18
+### Summary
+Kompakt modullistevisning ved 6+ moduler (#136).
+
+### Included
+- **`participant.html`**: CSS for `.module-list.compact` — tettere gap, enkeltrad per kort med flex-layout, venstrebord på valgt modul, tittel avkortes med ellipsis, badges vises som minipills.
+- **`participant.js`**: `renderModules()` setter `compact`-klassen automatisk ved ≥ 6 moduler. I kompakt modus skjules beskrivelse, statusmeta og selected-badge (valgt modul markeres med venstrebord). Alle `aria-pressed`/tastaturegenskaper bevares.
+
 ## 0.8.23 - 2026-03-18
 ### Summary
 Fix: ACS e-postvarsler feilet pga. feil senderAddress-format — visningsnavn skal ikke embeddes i adressefeltet.

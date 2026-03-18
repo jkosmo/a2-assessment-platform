@@ -848,6 +848,9 @@ function renderModules() {
     return;
   }
 
+  const compact = modules.length >= 6;
+  moduleList.classList.toggle("compact", compact);
+
   for (const module of modules) {
     const button = document.createElement("button");
     button.type = "button";
@@ -873,7 +876,7 @@ function renderModules() {
     title.textContent = module.title;
     button.appendChild(title);
 
-    if (typeof module.description === "string" && module.description.trim().length > 0) {
+    if (!compact && typeof module.description === "string" && module.description.trim().length > 0) {
       const description = document.createElement("div");
       description.className = "module-meta";
       description.textContent = module.description;
@@ -891,11 +894,13 @@ function renderModules() {
       badges.appendChild(completedBadge);
       hasBadges = true;
 
-      const retakeBadge = document.createElement("div");
-      retakeBadge.className = "module-status-badge retake";
-      retakeBadge.textContent = t("modules.retakeBadge");
-      badges.appendChild(retakeBadge);
-      hasBadges = true;
+      if (!compact) {
+        const retakeBadge = document.createElement("div");
+        retakeBadge.className = "module-status-badge retake";
+        retakeBadge.textContent = t("modules.retakeBadge");
+        badges.appendChild(retakeBadge);
+        hasBadges = true;
+      }
     }
 
     if (hasMeaningfulStoredDraft(moduleDrafts[module.id])) {
@@ -910,12 +915,14 @@ function renderModules() {
       button.appendChild(badges);
     }
 
-    const statusSummary = formatModuleStatusSummary(module);
-    if (statusSummary.length > 0) {
-      const statusMeta = document.createElement("div");
-      statusMeta.className = "module-meta";
-      statusMeta.textContent = statusSummary;
-      button.appendChild(statusMeta);
+    if (!compact) {
+      const statusSummary = formatModuleStatusSummary(module);
+      if (statusSummary.length > 0) {
+        const statusMeta = document.createElement("div");
+        statusMeta.className = "module-meta";
+        statusMeta.textContent = statusSummary;
+        button.appendChild(statusMeta);
+      }
     }
 
     if (shouldShowModuleDebugMeta()) {
@@ -925,7 +932,7 @@ function renderModules() {
       button.appendChild(moduleMeta);
     }
 
-    if (module.selected) {
+    if (!compact && module.selected) {
       const selectedBadge = document.createElement("div");
       selectedBadge.className = "selected-badge";
       selectedBadge.textContent = t("modules.selectedBadge");
