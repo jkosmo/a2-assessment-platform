@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.17 - 2026-03-18
+### Summary
+Modulvelger (nedtrekk) på kalibreringsside (#142) og fix av appeal-repository-test etter #140.
+
+### Included
+- **#142 Modulvelger**: `GET /api/modules?adminFacing=true` returnerer alle moduler for SMO/Admin. Kalibreringsside bruker nå nedtrekk populert på oppstart i stedet for fritekstfelt for modul-ID
+- **i18n**: `calibration.filters.moduleSelectPlaceholder` lagt til for en-GB, nb, nn
+- **Test**: `appeal-repository.test.ts` oppdatert med `module: { select: { title: true } }` i forventet Prisma-kall etter #140-endring
+
 ## 0.8.16 - 2026-03-18
 ### Summary
 Fikser test-feil i appeal-service og manual-review-service unit-tester forårsaket av manglende `module`/`user`/`locale` i test-fixtures etter #140-implementasjon.

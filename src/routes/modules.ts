@@ -18,6 +18,7 @@ import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
 const modulesRouter = Router();
 const modulesListQuerySchema = z.object({
   includeCompleted: z.string().trim().optional(),
+  adminFacing: z.string().trim().optional(),
 });
 const completedModulesQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
@@ -60,9 +61,12 @@ modulesRouter.get("/", async (request, response) => {
   const roles = request.context?.roles ?? [];
   const userId = request.context?.userId;
   const locale = request.context?.locale ?? "en-GB";
+  const adminFacingRequested = parsed.data.adminFacing === "true";
+  const hasElevatedRole = roles.some((r) => r === "ADMINISTRATOR" || r === "SUBJECT_MATTER_OWNER");
+  const participantFacing = !adminFacingRequested || !hasElevatedRole;
   const modules = await listModules(roles, userId, locale, {
     includeCompleted,
-    participantFacing: true,
+    participantFacing,
   });
   response.json({
     modules,

@@ -55,6 +55,24 @@ describe("Calibration workspace Phase A", () => {
     expect(auditEvent?.metadataJson).toContain(`"moduleId":"${module!.id}"`);
   });
 
+  it("GET /api/modules?adminFacing=true returns all modules for SMO and participant-filtered list for participant", async () => {
+    const smoResponse = await request(app)
+      .get("/api/modules?adminFacing=true")
+      .set(subjectMatterOwnerHeaders);
+    expect(smoResponse.status).toBe(200);
+    expect(Array.isArray(smoResponse.body.modules)).toBe(true);
+    expect(smoResponse.body.modules.length).toBeGreaterThan(0);
+
+    const participantResponse = await request(app)
+      .get("/api/modules?adminFacing=true")
+      .set(participantHeaders);
+    expect(participantResponse.status).toBe(200);
+    expect(Array.isArray(participantResponse.body.modules)).toBe(true);
+    // participant gets same filtered list regardless of adminFacing param
+    const participantDefault = await request(app).get("/api/modules").set(participantHeaders);
+    expect(participantResponse.body.modules.length).toBe(participantDefault.body.modules.length);
+  });
+
   it("enforces role access and validates status query", async () => {
     const module = await prisma.module.findFirst({
       where: { activeVersionId: { not: null } },

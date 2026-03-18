@@ -18,6 +18,9 @@ describe("appeal repository", () => {
         userId: "user-1",
       },
       include: {
+        module: {
+          select: { title: true },
+        },
         decisions: {
           orderBy: { finalisedAt: "desc" },
           take: 1,

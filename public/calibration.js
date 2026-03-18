@@ -18,7 +18,7 @@ const mockRolePresetContainer = document.getElementById("mockRolePresetContainer
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
-const moduleIdInput = document.getElementById("calibrationModuleId");
+const moduleIdSelect = document.getElementById("calibrationModuleId");
 const moduleVersionIdInput = document.getElementById("calibrationModuleVersionId");
 const statusesSelect = document.getElementById("calibrationStatuses");
 const limitInput = document.getElementById("calibrationLimit");
@@ -583,6 +583,27 @@ async function loadParticipantConsoleConfig() {
 
   renderWorkspaceNavigation();
   populateStatusOptions();
+  await loadModuleOptions();
+}
+
+async function loadModuleOptions() {
+  try {
+    const body = await apiFetch("/api/modules?adminFacing=true", headers);
+    const modules = body.modules ?? [];
+
+    while (moduleIdSelect.options.length > 1) {
+      moduleIdSelect.remove(1);
+    }
+
+    for (const mod of modules) {
+      const option = document.createElement("option");
+      option.value = mod.id;
+      option.textContent = `${mod.title} (${mod.id})`;
+      moduleIdSelect.appendChild(option);
+    }
+  } catch {
+    // keep select with only placeholder on error
+  }
 }
 
 loadMeButton.addEventListener("click", async () => {
@@ -603,7 +624,7 @@ loadCalibrationButton.addEventListener("click", async () => {
       showLoading(calibrationSignals, { rows: 6 });
       showLoading(outcomesBody, { rows: 4, columns: 7 });
       showLoading(anchorsBody, { rows: 3, columns: 5 });
-      const moduleId = moduleIdInput.value.trim();
+      const moduleId = moduleIdSelect.value;
       if (!moduleId) {
         throw new Error(t("calibration.errors.moduleRequired"));
       }
