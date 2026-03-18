@@ -87,6 +87,7 @@ describe("appeal service", () => {
     findOwnedSubmissionWithLatestDecision.mockResolvedValue({
       id: "submission-1",
       decisions: [{ id: "decision-1" }],
+      module: { title: "Test Module" },
     });
     findActiveAppealForSubmission.mockResolvedValue(null);
     createAppeal.mockResolvedValue({
@@ -186,6 +187,7 @@ describe("appeal service", () => {
             redFlagsJson: "[]",
           },
         ],
+        module: { title: "Test Module" },
       },
     });
     createResolutionDecision.mockResolvedValue({

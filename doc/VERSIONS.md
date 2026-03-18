@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.16 - 2026-03-18
+### Summary
+Fikser test-feil i appeal-service og manual-review-service unit-tester forårsaket av manglende `module`/`user`/`locale` i test-fixtures etter #140-implementasjon.
+
+### Included
+- **Test-fixtures**: `findOwnedSubmissionWithLatestDecision` og `findAppealForResolution` mock-verdier utvidet med `module.title`
+- **Test-fixtures**: `findManualReviewForOverride` mock utvidet med `module.title`, `user`, `locale`, `id`, `moduleId`, `submittedAt`
+- **Test-mocks**: `notifyAssessmentResult` og `logOperationalEvent` lagt til i `manual-review-service.test.ts`
+
 ## 0.8.15 - 2026-03-18
 ### Summary
 Regresjonsfikser i manuell vurdering: modulnavn lokaliseres, besvarelsestekst vises, promptutdrag betinget, og LLM-detaljer/Systemsvar skjules uten `?debug=1`.

@@ -10,6 +10,8 @@ const resolveManualReview = vi.fn();
 const updateSubmissionStatus = vi.fn();
 const recordAuditEvent = vi.fn();
 const upsertRecertificationStatusFromDecision = vi.fn();
+const notifyAssessmentResult = vi.fn();
+const logOperationalEvent = vi.fn();
 
 vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
   manualReviewRepository: {
@@ -30,6 +32,14 @@ vi.mock("../../src/services/recertificationService.js", () => ({
   upsertRecertificationStatusFromDecision,
 }));
 
+vi.mock("../../src/services/participantNotificationService.js", () => ({
+  notifyAssessmentResult,
+}));
+
+vi.mock("../../src/observability/operationalLog.js", () => ({
+  logOperationalEvent,
+}));
+
 describe("manual review service", () => {
   beforeEach(() => {
     findManualReviewForClaim.mockReset();
@@ -40,6 +50,8 @@ describe("manual review service", () => {
     updateSubmissionStatus.mockReset();
     recordAuditEvent.mockReset();
     upsertRecertificationStatusFromDecision.mockReset();
+    notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
+    logOperationalEvent.mockReset();
   });
 
   it("rejects claim when the manual review is missing", async () => {
@@ -100,6 +112,12 @@ describe("manual review service", () => {
       reviewStatus: ReviewStatus.IN_REVIEW,
       reviewerId: "reviewer-1",
       submission: {
+        id: "submission-1",
+        moduleId: "module-1",
+        locale: "nb",
+        submittedAt: new Date("2026-03-01T10:00:00.000Z"),
+        user: { email: "participant@company.com", name: "Test Participant" },
+        module: { title: "Test Module" },
         decisions: [
           {
             id: "decision-1",
