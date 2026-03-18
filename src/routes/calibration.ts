@@ -97,6 +97,7 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
   try {
     const body = await getCalibrationWorkspaceSnapshot({
       actorId: request.context?.userId,
+      locale: request.context?.locale ?? "en-GB",
       filters: {
         moduleId: parsed.data.moduleId,
         moduleVersionId: parsed.data.moduleVersionId,

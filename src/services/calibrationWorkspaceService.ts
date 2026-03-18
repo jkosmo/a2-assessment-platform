@@ -4,6 +4,8 @@ import { recordAuditEvent } from "./auditService.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import type { ModuleAssessmentPolicy } from "./decisionService.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
+import { localizeContentText } from "../i18n/content.js";
+import { normalizeLocale } from "../i18n/locale.js";
 
 export type CalibrationWorkspaceFilters = {
   moduleId: string;
@@ -24,6 +26,7 @@ type CalibrationWorkspaceInput = {
   filters: CalibrationWorkspaceFilters;
   signalThresholds: CalibrationSignalThresholds;
   actorId?: string;
+  locale?: string;
 };
 
 type BenchmarkAnchor = {
@@ -284,7 +287,7 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
   return {
     module: {
       id: module.id,
-      title: module.title,
+      title: localizeContentText(normalizeLocale(input.locale) ?? "en-GB", module.title) ?? module.title,
       activeVersionId: module.activeVersionId ?? null,
     },
     effectiveThresholds,
