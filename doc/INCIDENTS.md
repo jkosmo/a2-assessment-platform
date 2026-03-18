@@ -13,6 +13,39 @@ This document records notable staging/production incidents so symptoms, root cau
 - Follow-up:
 - References:
 
+## 2026-03-18 - Staging SQLite Corruption (Recurrence) — Container Timeout
+- Date: `2026-03-18`
+- Environment: `staging`
+- Symptom:
+  - manual review queue showed 0 entries despite having cases visible earlier the same day
+  - appeal queue dropped from 4 open appeals to 0 with no manual resolution
+  - logging gap of ~47 minutes (11:48 → 12:35 UTC) with no `appeal_sla_backlog` events
+- Impact:
+  - all runtime test data lost: submissions, manual reviews, and appeals wiped
+  - staging environment effectively reset to seed-only state mid-session
+- Root cause:
+  - Azure App Service container failed to start at `2026-03-18T12:29:28Z` with `ContainerTimeout` (did not start within 230s limit)
+  - Azure recycled the container and started a fresh one at `2026-03-18T12:35:02Z`
+  - on restart, the SQLite database was re-initialised by bootstrap seed, wiping all runtime data
+  - underlying cause is the same as 2026-03-12: SQLite on Azure App Service persistent storage is unreliable under container restarts
+  - confirmed via `az webapp log download` + docker log analysis; no code regression involved
+- Mitigation:
+  - none required — app recovered automatically after container restart
+  - test data was re-created through a new participant flow session
+- Recovery verification:
+  - `appeal_sla_backlog` resumed at `2026-03-18T12:35:54Z` with `openAppeals: 0`
+  - new submission, assessment, and appeal created successfully after restart
+- Follow-up:
+  - this is the second SQLite corruption/data-loss incident in 6 days on staging
+  - `#91` (Postgres migration) must be prioritised — SQLite is not viable for persistent staging data
+  - consider whether staging needs a "do not rely on persistent test data" policy until Postgres is in place
+- References:
+  - docker log: `ContainerTimeout` at `2026-03-18T12:29:28Z`
+  - app log gap: `2026-03-18T11:48Z` → `2026-03-18T12:35Z`
+  - previous incident: 2026-03-12 below
+  - [INCIDENTS.md — 2026-03-12 entry](#2026-03-12---staging-sqlite-corruption)
+  - [#91 Postgres migration issue]
+
 ## 2026-03-12 - Staging SQLite Corruption
 - Date: `2026-03-12`
 - Environment: `staging`

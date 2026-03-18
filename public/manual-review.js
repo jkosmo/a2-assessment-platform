@@ -328,7 +328,7 @@ function buildCriterionRationaleLines(criteria) {
     return [t("manualReview.details.noCriteria")];
   }
 
-  return entries.map(([criterion, rationale]) => `- ${criterion}: ${String(rationale)}`);
+  return entries.map(([, rationale], i) => `${i + 1}. ${String(rationale)}`);
 }
 
 function toActionableErrorMessage(error) {
