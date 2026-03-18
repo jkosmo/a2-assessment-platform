@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.23 - 2026-03-18
+### Summary
+Fix: ACS e-postvarsler feilet pga. feil senderAddress-format — visningsnavn skal ikke embeddes i adressefeltet.
+
+### Included
+- **`participantNotificationService.ts`**: `senderAddress` settes nå til plain e-postadresse (`ACS_EMAIL_SENDER`). Den tidligere koden la visningsnavn inn som `"Navn <epost>"` — et format ACS-SDK-en ikke aksepterer i `senderAddress`-feltet. Rotårsak til alle `participant_notification_failed`-hendelser siden varsling ble aktivert.
+
 ## 0.8.22 - 2026-03-18
 ### Summary
 Fix: beslutningsetikett viser nå "Automatisk bestått" / "Automatisk ikke bestått" i stedet for bare "Automatisk".

@@ -173,9 +173,8 @@ export async function sendViaAcs(input: {
   logPayload: Record<string, unknown>;
 }): Promise<NotificationResult> {
   const connectionString = env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING!;
-  const rawSenderAddress = env.ACS_EMAIL_SENDER!;
-  const displayName = env.ACS_EMAIL_SENDER_DISPLAY_NAME;
-  const senderAddress = displayName ? `${displayName} <${rawSenderAddress}>` : rawSenderAddress;
+  // ACS senderAddress must be a plain email address — display name is set at domain level in Azure.
+  const senderAddress = env.ACS_EMAIL_SENDER!;
 
   const emailClient = new EmailClient(connectionString);
   const message = {
