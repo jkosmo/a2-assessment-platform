@@ -330,11 +330,13 @@ function renderCompletedModules(body) {
 
   for (const module of modules) {
     const row = document.createElement("tr");
-    const passFailValue = module?.latestDecision?.passFailTotal === true
+    const passFailRaw = module?.latestDecision?.passFailTotal;
+    const passFailValue = passFailRaw === true
       ? t("completed.value.pass")
-      : module?.latestDecision?.passFailTotal === false
+      : passFailRaw === false
         ? t("completed.value.fail")
         : "-";
+    const passFailClass = passFailRaw === true ? "outcome--pass" : passFailRaw === false ? "outcome--fail" : "";
     const canAppeal =
       module?.latestStatus === "COMPLETED" &&
       module?.latestDecision?.passFailTotal === false &&
@@ -360,6 +362,7 @@ function renderCompletedModules(body) {
       cell.dataset.label = labels[i];
       if (i < values.length) {
         cell.textContent = String(values[i]);
+        if (i === 4 && passFailClass) cell.className = passFailClass;
       } else if (i === 5 && canAppeal) {
         const btn = document.createElement("button");
         btn.type = "button";

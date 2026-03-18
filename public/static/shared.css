@@ -407,6 +407,26 @@ body.auth-entra .mock-identity-card {
   margin-top: calc(var(--space-1) * 0.5);
 }
 
+.outcome--pass,
+.outcome--review,
+.outcome--fail {
+  font-weight: 600;
+}
+.outcome--pass::before,
+.outcome--review::before,
+.outcome--fail::before {
+  content: "● ";
+  font-size: 0.65em;
+  vertical-align: middle;
+  margin-right: 1px;
+}
+.outcome--pass { color: var(--color-success); }
+.outcome--pass::before { color: var(--color-success); }
+.outcome--review { color: var(--color-warning); }
+.outcome--review::before { color: var(--color-warning); }
+.outcome--fail { color: var(--color-error); }
+.outcome--fail::before { color: var(--color-error); }
+
 .history-list {
   display: grid;
   gap: var(--space-2);

@@ -1588,6 +1588,15 @@ function localizeAppealStatus(value) {
   return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
 }
 
+function outcomeClass(decisionType, submissionStatus) {
+  const status = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
+  if (status === "UNDER_REVIEW") return "outcome--review";
+  const d = typeof decisionType === "string" ? decisionType.toUpperCase() : "";
+  if (d === "PASS") return "outcome--pass";
+  if (d === "FAIL" || d === "AUTO_FAIL_INSUFFICIENT_EVIDENCE") return "outcome--fail";
+  return "";
+}
+
 function localizeDecisionType(value, submissionStatus) {
   const normalizedStatus = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
   if (normalizedStatus === "UNDER_REVIEW") {
@@ -1884,7 +1893,7 @@ function createSummaryCard(title) {
   return card;
 }
 
-function appendSummaryRow(container, label, value) {
+function appendSummaryRow(container, label, value, valueClass) {
   const row = document.createElement("div");
   row.className = "summary-row";
 
@@ -1893,7 +1902,7 @@ function appendSummaryRow(container, label, value) {
   labelNode.textContent = label;
 
   const valueNode = document.createElement("div");
-  valueNode.className = "summary-value";
+  valueNode.className = valueClass ? `summary-value ${valueClass}` : "summary-value";
   valueNode.textContent = value;
 
   row.append(labelNode, valueNode);
@@ -1956,7 +1965,7 @@ function renderResultSummary(body) {
   appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
   appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
   appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
-  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status));
+  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status), outcomeClass(body.decision?.decisionType, body.status));
   appendSummaryRow(
     summaryGrid,
     t("result.decisionReason"),
@@ -2023,6 +2032,7 @@ function renderHistorySummary(body) {
       grid,
       t("history.latestDecision"),
       localizeDecisionType(item.latestDecision?.decisionType, item.status),
+      outcomeClass(item.latestDecision?.decisionType, item.status),
     );
     appendSummaryRow(grid, t("history.latestScore"), formatNumber(item.latestDecision?.totalScore));
     card.appendChild(grid);

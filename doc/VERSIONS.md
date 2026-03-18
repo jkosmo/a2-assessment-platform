@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.20 - 2026-03-18
+### Summary
+Diskrete fargeindikatorer (grønn/gul/rød) på evalueringsresultat i Participant-siden.
+
+### Included
+- **`shared.css`**: Nye klasser `.outcome--pass`, `.outcome--review`, `.outcome--fail` — farget tekst + diskret ●-punkt foran.
+- **`participant.js`**: `appendSummaryRow` støtter valgfri `valueClass`; `outcomeClass(decisionType, status)` helper. Decision-raden i resultat-summary og historikk farges.
+- **`participant-completed.js`**: Pass/fail-kolonnen i ferdigstilte moduler farges grønn/rød.
+
 ## 0.8.19 - 2026-03-18
 ### Summary
 Calibration threshold UI reorganized into three sections (Total / Sone for manuell vurdering / Innlevering / Flervalgsspørsmål); "rubrikk"-terminologi fjernet; backend-fix: practicalMinPercent-porten hoppes over for moduler uten vurderingskomponent (rubricMaxTotal === 0).
