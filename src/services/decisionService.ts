@@ -43,7 +43,7 @@ type BuildDecisionInput = {
 
 export type ResolvedAssessmentDecision = {
   totalScore: number;
-  practicalPercent: number;
+  practicalPercent: number | null;
   hasOpenRedFlag: boolean;
   inBorderlineWindow: boolean;
   passesThresholds: boolean;
@@ -79,7 +79,11 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     : input.mcqScaledScore;
   const totalScore = Number((effectivePracticalScaledScore + effectiveMcqScaledScore).toFixed(2));
   const rubricMaxTotal = input.rubricMaxTotal ?? 20;
-  const practicalPercent = (input.llmResult.rubric_total / rubricMaxTotal) * 100;
+  // When there is no submission scoring component (rubricMaxTotal === 0), skip the
+  // practicalMinPercent gate entirely — it cannot be evaluated and should not block passing.
+  const practicalPercent = rubricMaxTotal > 0
+    ? (input.llmResult.rubric_total / rubricMaxTotal) * 100
+    : null;
 
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
   const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
@@ -89,7 +93,7 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
   const passesThresholds =
     totalScore >= totalMin &&
-    practicalPercent >= practicalMinPercent &&
+    (practicalPercent === null || practicalPercent >= practicalMinPercent) &&
     input.mcqPercentScore >= mcqMinPercent &&
     !hasOpenRedFlag;
   const llmRecommendsManualReview = recommendsManualReview(input.llmResult);

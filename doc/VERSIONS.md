@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.19 - 2026-03-18
+### Summary
+Calibration threshold UI reorganized into three sections (Total / Sone for manuell vurdering / Innlevering / Flervalgsspørsmål); "rubrikk"-terminologi fjernet; backend-fix: practicalMinPercent-porten hoppes over for moduler uten vurderingskomponent (rubricMaxTotal === 0).
+
+### Included
+- **`calibration.html`**: Threshold editor delt i tre seksjoner med `<h3>`-overskrifter: Total, Sone for manuell vurdering, Innlevering, Flervalgsspørsmål. Borderline-feltene flyttet under Total.
+- **`calibration-translations.js`**: Ny seksjonsnøkler (`section.total`, `section.manualReview`, `section.practical`, `section.mcq`) i en-GB/nb/nn. Alle hjelpetekster oppdatert uten "rubrikk". MCQ-felt bruker nå "flervalgsspørsmål" i norsk.
+- **`decisionService.ts`**: `practicalPercent` settes til `null` når `rubricMaxTotal === 0`; `passesThresholds` hopper over praktisk-porten når `null`. Fikser bug der moduler uten innleveringskomponent alltid feilet.
+
 ## 0.8.18 - 2026-03-18
 ### Summary
 Calibration threshold tuning (#143) — per-module borderlineWindow, practicalMinPercent, mcqMinPercent via assessmentPolicyJson; publish-thresholds endpoint; calibration UI with live preview and publish action.
