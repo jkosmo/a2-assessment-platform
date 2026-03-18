@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.21 - 2026-03-18
+### Summary
+Fix: fargeindikatorer brukte feil felt (decisionType) — skal bruke passFailTotal.
+
+### Included
+- **`participant.js`**: `outcomeClass` tar nå `passFailTotal` (boolean) + status i stedet for `decisionType`-streng. DecisionType er alltid "AUTOMATIC" og skiller ikke mellom bestått/ikke bestått.
+
 ## 0.8.20 - 2026-03-18
 ### Summary
 Diskrete fargeindikatorer (grønn/gul/rød) på evalueringsresultat i Participant-siden.

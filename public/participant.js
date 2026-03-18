@@ -1588,12 +1588,11 @@ function localizeAppealStatus(value) {
   return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
 }
 
-function outcomeClass(decisionType, submissionStatus) {
+function outcomeClass(passFailTotal, submissionStatus) {
   const status = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
   if (status === "UNDER_REVIEW") return "outcome--review";
-  const d = typeof decisionType === "string" ? decisionType.toUpperCase() : "";
-  if (d === "PASS") return "outcome--pass";
-  if (d === "FAIL" || d === "AUTO_FAIL_INSUFFICIENT_EVIDENCE") return "outcome--fail";
+  if (passFailTotal === true) return "outcome--pass";
+  if (passFailTotal === false) return "outcome--fail";
   return "";
 }
 
@@ -1965,7 +1964,7 @@ function renderResultSummary(body) {
   appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
   appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
   appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
-  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status), outcomeClass(body.decision?.decisionType, body.status));
+  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status), outcomeClass(body.decision?.passFailTotal, body.status));
   appendSummaryRow(
     summaryGrid,
     t("result.decisionReason"),
@@ -2032,7 +2031,7 @@ function renderHistorySummary(body) {
       grid,
       t("history.latestDecision"),
       localizeDecisionType(item.latestDecision?.decisionType, item.status),
-      outcomeClass(item.latestDecision?.decisionType, item.status),
+      outcomeClass(item.latestDecision?.passFailTotal, item.status),
     );
     appendSummaryRow(grid, t("history.latestScore"), formatNumber(item.latestDecision?.totalScore));
     card.appendChild(grid);
