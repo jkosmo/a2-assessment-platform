@@ -162,6 +162,7 @@ describe("calibration workspace service", () => {
     expect(snapshot.module).toEqual({
       id: "module-1",
       title: "Module One",
+      activeVersionId: null,
     });
     expect(snapshot.outcomes).toHaveLength(2);
     expect(snapshot.outcomes[0]).toMatchObject({
