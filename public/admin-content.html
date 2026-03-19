@@ -361,13 +361,7 @@
       <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
       <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-1);flex-wrap:wrap">
-          <label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label>
-          <button type="button" id="fillDefaultPolicy" class="btn-secondary content-card-edit-btn" data-i18n="adminContent.moduleVersion.fillDefaultPolicy">Fill in template</button>
-        </div>
-        <textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea>
-      </div>
+      <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
       <div class="row">
         <div><label for="moduleVersionRubricVersionId" data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>

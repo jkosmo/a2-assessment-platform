@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.28 - 2026-03-19
+### Summary
+UX: Vurderingspolicy auto-fylles med standard når feltet er tomt ved modul-last og draft-import.
+
+### Included
+- **`admin-content.js`**: `fillDefaultAssessmentPolicy()` kalles automatisk i `populateFormFromModuleExport()` og `applyImportDraftToForm()` når policy-feltet er tomt etter lasting. Fjernet eksplisitt «Fyll inn standard»-knapp (auto-fill er bedre UX).
+- **`admin-content.html`**: Fjernet «Fyll inn standard»-knappen.
+
 ## 0.8.27 - 2026-03-19
 ### Summary
 UX: Admin Content — tydelig ELLER-skille mellom startpunktene, samlet lagre-logikk, "Publiser siste versjon" i innholdsoversikten, og standardmal for vurderingspolicy.

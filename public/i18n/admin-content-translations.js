@@ -173,7 +173,6 @@ const adminContentBase = {
   "adminContent.cards.preview": "Preview",
   "adminContent.cards.publish": "Publish latest version",
   "adminContent.startPath.or": "or",
-  "adminContent.moduleVersion.fillDefaultPolicy": "Fill in template",
   "adminContent.cards.empty": "(not set)",
   "adminContent.cards.card.moduleDetails": "Module details",
   "adminContent.cards.card.versionDetails": "Version details",

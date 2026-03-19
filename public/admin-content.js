@@ -1048,6 +1048,7 @@ function applyImportDraftToForm(draft) {
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
   moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchema, "");
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "");
+  if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
 
   moduleVersionRubricVersionIdInput.value = "";
   moduleVersionPromptTemplateVersionIdInput.value = "";
@@ -1080,6 +1081,7 @@ function populateFormFromModuleExport(moduleExport) {
   moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
   moduleVersionSubmissionSchemaInput.value = formatEditorValue(moduleVersion?.submissionSchema, "");
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(moduleVersion?.assessmentPolicy, "");
+  if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
   moduleVersionRubricVersionIdInput.value = rubricVersion?.id ?? "";
   moduleVersionPromptTemplateVersionIdInput.value = promptTemplateVersion?.id ?? "";
   moduleVersionMcqSetVersionIdInput.value = mcqSetVersion?.id ?? "";
@@ -2309,11 +2311,6 @@ document.getElementById("dialogModuleDetails")?.addEventListener("click", (e) =>
 document.getElementById("dialogModuleDetails")?.addEventListener("cancel", (e) => {
   e.preventDefault();
   closeFieldDialog(document.getElementById("dialogModuleDetails"));
-});
-
-// Fill default assessment policy
-document.getElementById("fillDefaultPolicy")?.addEventListener("click", () => {
-  fillDefaultAssessmentPolicy();
 });
 
 // Publish from content cards section
