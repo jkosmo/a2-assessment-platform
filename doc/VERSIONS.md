@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.37 - 2026-03-19
+### Summary
+UX: Skjuler seksjon 5 (Rubrikk) nå som den er fullt erstattet av rubrikk-dialogen.
+
+### Included
+- **`admin-content.html`**: `sectionRubric` har fått `hidden` — inputs forblir i DOM for at dialogen skal fungere, men seksjonen er ikke lenger synlig.
+
 ## 0.8.36 - 2026-03-19
 ### Summary
 Feat: Strukturert vurderingspolicy-dialog med tallfelter for vekting, beståttkrav og grenseområde (#152).
