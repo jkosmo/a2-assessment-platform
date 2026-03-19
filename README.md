@@ -33,35 +33,94 @@ Architecture overview: `doc/design/ARCHITECTURE.md`
 ## Tech
 - Node.js + TypeScript + Express
 - Prisma ORM
-- SQLite (development bootstrap)
+- PostgreSQL (default local/test bootstrap)
 
 ## Setup
-1. Copy env file:
+Prerequisite:
 ```bash
-cp .env.example .env
+docker --version
 ```
 
-2. Install dependencies:
+1. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Generate Prisma client and run migration:
+2. Start the local PostgreSQL environment:
+```bash
+npm run postgres:setup
+```
+
+3. Generate Prisma client and run schema bootstrap:
 ```bash
 npm run prisma:generate
 npm run db:reset
-npm run db:migrate
 ```
 
 4. Seed baseline data:
 ```bash
-npm run prisma:seed
+npx dotenv -e .env.postgres.local -- npm run prisma:seed
 ```
 
 5. Start app:
 ```bash
 npm run dev
 ```
+
+## PostgreSQL automation
+The default local/test flow now targets PostgreSQL and is fully automatable.
+
+What this does:
+- starts a local PostgreSQL container on `127.0.0.1:54329`
+- creates `a2_assessment_dev` and `a2_assessment_test`
+- generates `.env.postgres.local` and `.env.postgres.test`
+
+One-command setup:
+```bash
+npm run postgres:setup
+```
+
+Useful follow-up commands:
+```bash
+npm run postgres:status
+npm run postgres:verify
+npm run postgres:stop
+npm run postgres:recreate
+npm run postgres:destroy
+npm run postgres:write-env
+```
+
+One-command bootstrap for both Postgres databases plus app seed/smoke:
+```bash
+npm run postgres:app:bootstrap
+```
+
+Additional app-level commands:
+```bash
+npm run postgres:prisma:generate
+npm run postgres:app:reset
+npm run postgres:test:reset
+npm run postgres:app:seed
+npm run postgres:test:seed
+npm run postgres:app:smoke
+npm run postgres:test:smoke
+```
+
+Files used by the automation:
+- `docker-compose.postgres.yml`
+- `scripts/postgres/localSetup.mjs`
+- `scripts/postgres/appBootstrap.mjs`
+- `scripts/postgres/seedPostgres.mts`
+- `scripts/postgres/smokePostgres.mts`
+- `scripts/postgres/init/01-create-test-db.sql`
+
+Current migration boundary:
+- the repo default has switched to PostgreSQL
+- the active Prisma migration path now starts from a PostgreSQL baseline migration
+- local/test reset now runs through Prisma migrate
+- runtime startup now prefers `prisma migrate deploy`
+- a temporary non-production compatibility fallback to `prisma db push` exists for already-provisioned environments while they are converged onto the new baseline
+- the old SQLite-specific migration runners are no longer part of the default flow
 
 ## Automated Testing
 - Local:
@@ -81,6 +140,7 @@ npm run build
 - Production deploy: manual `workflow_dispatch` with environment approval gate.
 - Infrastructure as code: `infra/azure/main.bicep`
 - Deploy script: `scripts/azure/deploy-environment.ps1`
+- App Service startup entrypoint: `scripts/runtime/startup.mjs`
 
 ## API
 - `GET /healthz`

@@ -10,6 +10,15 @@ param(
   [string]$AppServiceSkuName = "B1",
   [string]$CostCenter = "a2-assessment-platform",
   [string]$Owner = "engineering",
+  [string]$PostgresAdministratorLogin = "a2platformadmin",
+  [Parameter(Mandatory = $true)]
+  [string]$PostgresAdministratorPassword,
+  [string]$PostgresDatabaseName = "a2assessment",
+  [string]$PostgresVersion = "16",
+  [string]$PostgresSkuName = "Standard_B1ms",
+  [string]$PostgresSkuTier = "Burstable",
+  [int]$PostgresStorageSizeGB = 32,
+  [int]$PostgresBackupRetentionDays = 7,
   [string]$AuthMode = "mock",
   [string]$EntraTenantId = "",
   [string]$EntraClientId = "",
@@ -76,6 +85,42 @@ function Assert-LastExitCode([string]$stepName) {
   }
 }
 
+function Copy-DeploymentSources([string]$destinationRoot) {
+  $repoRoot = (git rev-parse --show-toplevel).Trim()
+  Assert-LastExitCode "git rev-parse --show-toplevel"
+
+  $status = git status --short
+  Assert-LastExitCode "git status --short"
+  if ($status) {
+    Write-Host "Packaging deployment artifact from current working tree (includes uncommitted changes)."
+  } else {
+    Write-Host "Packaging deployment artifact from clean working tree."
+  }
+
+  $files = git ls-files --cached --others --exclude-standard
+  Assert-LastExitCode "git ls-files"
+
+  foreach ($relativePath in $files) {
+    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+      continue
+    }
+
+    $sourcePath = Join-Path $repoRoot $relativePath
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+      continue
+    }
+
+    $destinationPath = Join-Path $destinationRoot $relativePath
+    $destinationDirectory = Split-Path -Path $destinationPath -Parent
+
+    if (-not (Test-Path -LiteralPath $destinationDirectory)) {
+      New-Item -Path $destinationDirectory -ItemType Directory -Force | Out-Null
+    }
+
+    Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
+  }
+}
+
 Write-Host "Deploying environment: $EnvironmentName"
 Write-Host "Subscription: $SubscriptionId"
 Write-Host "Resource group: $ResourceGroupName"
@@ -122,6 +167,14 @@ $deployment = az deployment group create `
               appServiceSkuName=$AppServiceSkuName `
               costCenter=$CostCenter `
               owner=$Owner `
+              postgresAdministratorLogin=$PostgresAdministratorLogin `
+              postgresAdministratorPassword=$PostgresAdministratorPassword `
+              postgresDatabaseName=$PostgresDatabaseName `
+              postgresVersion=$PostgresVersion `
+              postgresSkuName=$PostgresSkuName `
+              postgresSkuTier=$PostgresSkuTier `
+              postgresStorageSizeGB=$PostgresStorageSizeGB `
+              postgresBackupRetentionDays=$PostgresBackupRetentionDays `
               authMode=$AuthMode `
               entraTenantId=$EntraTenantId `
               entraClientId=$EntraClientId `
@@ -153,6 +206,8 @@ $deployment = az deployment group create `
 Assert-LastExitCode "az deployment group create"
 
 $webAppName = $deployment.webAppName.value
+$postgresServerName = $deployment.postgresServerName.value
+$postgresDatabaseName = $deployment.postgresDatabaseName.value
 
 if (-not $webAppName) {
   throw "webAppName output missing from deployment."
@@ -165,8 +220,7 @@ if (Test-Path $tmpRoot) {
 }
 New-Item -Path $tmpRoot -ItemType Directory | Out-Null
 
-git archive --format=tar HEAD | tar -xf - -C $tmpRoot
-Assert-LastExitCode "git archive + tar extract"
+Copy-DeploymentSources -destinationRoot $tmpRoot
 
 Push-Location $tmpRoot
 try {
@@ -245,9 +299,13 @@ if ($BudgetContactEmail) {
 
 Write-Host "Deployment complete."
 Write-Host "Web App URL: https://$webAppName.azurewebsites.net"
+Write-Host "PostgreSQL server: $postgresServerName"
+Write-Host "PostgreSQL database: $postgresDatabaseName"
 
 if ($env:GITHUB_OUTPUT) {
   Add-Content -Path $env:GITHUB_OUTPUT -Value "web_app_name=$webAppName"
   Add-Content -Path $env:GITHUB_OUTPUT -Value "web_app_url=https://$webAppName.azurewebsites.net"
   Add-Content -Path $env:GITHUB_OUTPUT -Value "resource_group=$ResourceGroupName"
+  Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_server_name=$postgresServerName"
+  Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_database_name=$postgresDatabaseName"
 }

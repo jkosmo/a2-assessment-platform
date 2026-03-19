@@ -84,7 +84,7 @@ Each automated integration test should map cleanly to one or more manual testcas
 Use the existing stack:
 - Vitest
 - Supertest
-- local SQLite test DB via `.env.test`
+- local PostgreSQL test DB via `.env.test`
 - existing `pretest` reset/migrate/seed flow
 
 Prefer tests that:

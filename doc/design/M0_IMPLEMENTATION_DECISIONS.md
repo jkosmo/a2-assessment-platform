@@ -19,8 +19,10 @@ This document captures design and architecture decisions for M0 implementation:
 - Additional decision: `AssessmentDecision` stores explicit version references (`moduleVersionId`, `rubricVersionId`, `promptTemplateVersionId`) to strengthen auditability.
 
 ### 3) Migration strategy for this environment
-- Chosen: SQL migration files in `prisma/migrations/*` + repository migration runner (`src/scripts/applyMigrations.ts`).
-- Why: Prisma schema-engine migration commands were unstable in this environment; SQL-based runner provides deterministic setup.
+- Original M0 choice: SQL migration files in `prisma/migrations/*` + repository migration runner.
+- Current default: Prisma PostgreSQL baseline migration plus Dockerized local PostgreSQL automation.
+- Runtime strategy: `scripts/runtime/startup.mjs` prefers `prisma migrate deploy`, with a temporary non-production compatibility fallback for already-provisioned environments.
+- Why: the repository has now switched its default local/test path to PostgreSQL, the old SQLite-specific migration runner is no longer part of the active bootstrap flow, and the active migration chain should now be PostgreSQL-native.
 
 ### 4) Auth + RBAC
 - Chosen: dual auth mode:
@@ -55,7 +57,6 @@ Moved to config/env:
 - Added CI workflow running migration + seed + lint + test + build.
 
 ## Deferred / Follow-up
-- Replace SQLite bootstrap with managed PostgreSQL in staging/production.
+- Complete Azure staging/production rollout on managed PostgreSQL and formalize the new Prisma migration baseline.
 - Add admin APIs for role assignment management (currently seeded/manual).
 - Add audit-event persistence hooks in write paths (currently M0 focus is read/auth/model baseline).
-

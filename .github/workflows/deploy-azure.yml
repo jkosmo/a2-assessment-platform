@@ -61,6 +61,14 @@ jobs:
             -AppServiceSkuName "${{ vars.AZURE_APP_SERVICE_SKU }}" `
             -CostCenter "${{ vars.AZURE_COST_CENTER }}" `
             -Owner "${{ vars.AZURE_OWNER }}" `
+            -PostgresAdministratorLogin "${{ vars.POSTGRES_ADMIN_USERNAME || 'a2platformadmin' }}" `
+            -PostgresAdministratorPassword "${{ secrets.POSTGRES_ADMIN_PASSWORD }}" `
+            -PostgresDatabaseName "${{ vars.POSTGRES_DATABASE_NAME || 'a2assessment' }}" `
+            -PostgresVersion "${{ vars.POSTGRES_VERSION || '16' }}" `
+            -PostgresSkuName "${{ vars.POSTGRES_SKU_NAME || 'Standard_B1ms' }}" `
+            -PostgresSkuTier "${{ vars.POSTGRES_SKU_TIER || 'Burstable' }}" `
+            -PostgresStorageSizeGB "${{ vars.POSTGRES_STORAGE_SIZE_GB || '32' }}" `
+            -PostgresBackupRetentionDays "${{ vars.POSTGRES_BACKUP_RETENTION_DAYS || '7' }}" `
             -AuthMode "${{ vars.AUTH_MODE }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
             -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
@@ -130,6 +138,14 @@ jobs:
             -AppServiceSkuName "${{ vars.AZURE_APP_SERVICE_SKU }}" `
             -CostCenter "${{ vars.AZURE_COST_CENTER }}" `
             -Owner "${{ vars.AZURE_OWNER }}" `
+            -PostgresAdministratorLogin "${{ vars.POSTGRES_ADMIN_USERNAME || 'a2platformadmin' }}" `
+            -PostgresAdministratorPassword "${{ secrets.POSTGRES_ADMIN_PASSWORD }}" `
+            -PostgresDatabaseName "${{ vars.POSTGRES_DATABASE_NAME || 'a2assessment' }}" `
+            -PostgresVersion "${{ vars.POSTGRES_VERSION || '16' }}" `
+            -PostgresSkuName "${{ vars.POSTGRES_SKU_NAME || 'Standard_B1ms' }}" `
+            -PostgresSkuTier "${{ vars.POSTGRES_SKU_TIER || 'Burstable' }}" `
+            -PostgresStorageSizeGB "${{ vars.POSTGRES_STORAGE_SIZE_GB || '32' }}" `
+            -PostgresBackupRetentionDays "${{ vars.POSTGRES_BACKUP_RETENTION_DAYS || '7' }}" `
             -AuthMode "${{ vars.AUTH_MODE }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
             -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `

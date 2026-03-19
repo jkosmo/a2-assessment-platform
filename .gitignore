@@ -1,7 +1,11 @@
 node_modules/
 dist/
 .env
+.env.postgres.local
+.env.postgres.test
 .env.entra.dev.generated
+.generated/
+prisma/schema.postgres.prisma
 *.db
 *.db-journal
 coverage/

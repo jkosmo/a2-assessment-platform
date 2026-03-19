@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { runSeed } from "./seedCore.js";
+import { runSeed } from "../../prisma/seedCore.ts";
 
 const prisma = new PrismaClient();
 

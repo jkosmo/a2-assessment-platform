@@ -22,14 +22,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Start PostgreSQL test environment
+        run: npm run postgres:setup
+
       - name: Generate Prisma client
         run: npm run prisma:generate
-
-      - name: Run migrations and seed
-        run: |
-          npx dotenv -e .env.test -- npm run db:reset
-          npx dotenv -e .env.test -- npm run db:migrate
-          npx dotenv -e .env.test -- npm run prisma:seed
 
       - name: Type check
         run: npm run lint
@@ -39,3 +36,7 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Destroy PostgreSQL test environment
+        if: always()
+        run: npm run postgres:destroy

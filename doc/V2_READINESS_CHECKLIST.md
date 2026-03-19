@@ -62,11 +62,11 @@ Recommended rule:
 - [ ] Team knows how to identify assessment queue backlog, LLM failures, and appeal SLA issues.
 - [ ] Runbook owner has validated the basic observability flow in staging.
 
-## 8. SQLite acceptance check
-- [ ] Team explicitly accepts SQLite as the current runtime choice for the current user/load profile.
-- [ ] Team knows the symptoms that would trigger renewed PostgreSQL work from `#91`.
-- [ ] No observed `SQLITE_BUSY`, lock contention, or clear write-path bottleneck has appeared in staging testing.
-- [ ] No immediate need exists for horizontal scale-out that would make the current file-backed database unsafe.
+## 8. Runtime storage acceptance check
+- [ ] Team explicitly accepts the runtime database choice for each environment (PostgreSQL for local/test/staging, and planned PostgreSQL for production) based on the current expected load.
+- [ ] Team understands the remaining migration-baseline and rollout follow-up from `#91` / `#154`.
+- [ ] Staging has been exercised on PostgreSQL without startup instability or clear write-path bottlenecks.
+- [ ] No immediate need exists for horizontal scale-out or storage changes beyond the current PostgreSQL environment sizing.
 
 ## 9. Test and quality gate
 - [ ] `npm run lint` passes on the release candidate.

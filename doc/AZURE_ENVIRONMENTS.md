@@ -19,14 +19,20 @@ Each environment must use a dedicated resource group and be deployable via CI/CD
 
 ## Architecture (cost-optimized baseline)
 - Azure App Service Linux (Node 22) on small SKU (`B1` default).
+- Azure Database for PostgreSQL Flexible Server as the runtime datastore.
 - Workspace-based Application Insights + Log Analytics workspace.
 - Azure Monitor alerts baseline:
 - latency metric alert (App Service)
 - LLM failure log alert
 - assessment queue backlog log alert
 - appeal overdue escalation log alert
-- Single-instance non-critical setup.
-- SQLite file persisted at `/home/site/data/app.db` (non-critical baseline only).
+- Single-instance non-critical app tier with one managed PostgreSQL server per environment.
+- App startup runs `scripts/runtime/startup.mjs`, which prefers `prisma migrate deploy` against the injected `DATABASE_URL`.
+
+Current baseline note:
+- Azure runtime uses password-based PostgreSQL authentication wired from GitHub Environment secrets into App Service settings.
+- Non-production environments may temporarily allow a `prisma db push` compatibility fallback while already-provisioned databases are converged onto the new PostgreSQL migration baseline.
+- Microsoft Entra database authentication is still a follow-up hardening step, not part of the current automated baseline.
 
 ## Environment separation
 - Staging resource group example: `rg-a2-assessment-staging`
@@ -43,6 +49,7 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
+- `POSTGRES_ADMIN_PASSWORD`
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_URL` (optional; required when channel=`webhook`)
 - `AZURE_OPENAI_API_KEY` (required when `LLM_MODE=azure_openai`)
 - Variables:
@@ -52,8 +59,16 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_APP_SERVICE_SKU`
 - `AZURE_COST_CENTER`
 - `AZURE_OWNER`
+- `POSTGRES_ADMIN_USERNAME` (optional, default `a2platformadmin`)
+- `POSTGRES_DATABASE_NAME` (optional, default `a2assessment`)
+- `POSTGRES_VERSION` (optional, default `16`)
+- `POSTGRES_SKU_NAME` (optional, default `Standard_B1ms`)
+- `POSTGRES_SKU_TIER` (optional, `Burstable` | `GeneralPurpose` | `MemoryOptimized`, default `Burstable`)
+- `POSTGRES_STORAGE_SIZE_GB` (optional, default `32`)
+- `POSTGRES_BACKUP_RETENTION_DAYS` (optional, default `7`)
 - `AUTH_MODE`
 - `ENTRA_TENANT_ID`
+- `ENTRA_CLIENT_ID`
 - `ENTRA_AUDIENCE`
 - `ENTRA_SYNC_GROUP_ROLES`
 - `ENTRA_GROUP_ROLE_MAP_JSON`
@@ -91,13 +106,15 @@ For each environment, define variables/secrets used by workflow:
 Redeploy staging:
 1. Push the desired commit to `main` or trigger `.github/workflows/deploy-azure.yml`.
 2. Confirm the `deploy-staging` job completes.
-3. Verify `/healthz`, `/version`, and a minimal participant flow in staging.
+3. Verify the workflow logs include both `PostgreSQL server` and `PostgreSQL database` outputs.
+4. Verify `/healthz`, `/version`, and a minimal participant flow in staging.
 
 Redeploy production:
 1. Trigger `.github/workflows/deploy-azure.yml` with `deploy_production=true` and the desired `ref`.
 2. Wait for `deploy-staging` to complete first.
 3. Approve the `production` GitHub Environment gate.
-4. Verify `/healthz`, `/version`, and one end-to-end production smoke path after deploy.
+4. Verify the workflow logs include both `PostgreSQL server` and `PostgreSQL database` outputs.
+5. Verify `/healthz`, `/version`, and one end-to-end production smoke path after deploy.
 
 ## Teardown runbook
 Teardown should remove the whole environment resource group to avoid orphaned cost.
@@ -197,16 +214,17 @@ Run cost review at least monthly and after any SKU/config change.
 Checklist:
 1. Review current spend and forecast for each environment resource group.
 2. Confirm budget still matches intended non-critical baseline.
-3. Confirm App Service SKU is still the intended low-cost tier.
+3. Confirm App Service SKU and PostgreSQL SKU/storage are still the intended low-cost tier.
 4. Confirm no unexpected always-on, premium, or duplicate resources have appeared.
 5. Confirm resource tags (`environment`, `costCenter`, `owner`) remain present for chargeback filtering.
 6. If cost drift is found, update environment variables or Bicep parameters and redeploy rather than editing resources manually.
 
 ## Manual verification checklist
 1. Confirm RG exists per environment.
-2. Confirm Web App and App Service Plan deployed in correct RG.
+2. Confirm Web App, App Service Plan, PostgreSQL Flexible Server, and PostgreSQL database deployed in correct RG.
 3. Open app URL from workflow logs.
 4. Call `/healthz` and `/api/me`.
-5. Validate budget object exists (if budget email configured).
-6. Validate production deploy is blocked until manual approval.
-7. Validate alerts exist in Azure Monitor for latency, LLM failures, queue backlog, and overdue appeals.
+5. Validate the Web App `DATABASE_URL` app setting points to the provisioned PostgreSQL server.
+6. Validate budget object exists (if budget email configured).
+7. Validate production deploy is blocked until manual approval.
+8. Validate alerts exist in Azure Monitor for latency, LLM failures, queue backlog, and overdue appeals.

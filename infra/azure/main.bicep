@@ -21,6 +21,36 @@ param costCenter string = 'a2-assessment-platform'
 @description('Deployment owner tag value.')
 param owner string = 'engineering'
 
+@description('Administrator login for Azure Database for PostgreSQL Flexible Server.')
+param postgresAdministratorLogin string = 'a2platformadmin'
+
+@description('Administrator password for Azure Database for PostgreSQL Flexible Server.')
+@secure()
+param postgresAdministratorPassword string
+
+@description('Database name used by the application.')
+param postgresDatabaseName string = 'a2assessment'
+
+@description('PostgreSQL major version.')
+param postgresVersion string = '16'
+
+@description('PostgreSQL Flexible Server SKU name.')
+param postgresSkuName string = 'Standard_B1ms'
+
+@description('PostgreSQL Flexible Server SKU tier.')
+@allowed([
+  'Burstable'
+  'GeneralPurpose'
+  'MemoryOptimized'
+])
+param postgresSkuTier string = 'Burstable'
+
+@description('PostgreSQL storage size in GiB.')
+param postgresStorageSizeGB int = 32
+
+@description('PostgreSQL backup retention in days.')
+param postgresBackupRetentionDays int = 7
+
 @description('Auth mode for runtime.')
 @allowed([
   'mock'
@@ -130,10 +160,13 @@ var webAppName = toLower('${appNamePrefix}-${envCode}-app-${suffix}')
 var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
+var postgresServerName = toLower('${appNamePrefix}-${envCode}-pg-${suffix}')
 var createObservabilityActionGroup = !empty(observabilityAlertEmail)
 var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')
 var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
 var createAcsEmail = participantNotificationChannel == 'acs_email'
+var postgresHost = '${postgresServerName}.postgres.database.azure.com'
+var postgresConnectionString = 'postgresql://${uriComponent(postgresAdministratorLogin)}:${uriComponent(postgresAdministratorPassword)}@${postgresHost}:5432/${postgresDatabaseName}?schema=public&sslmode=require'
 var llmFailureAlertQuery = '''
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where TimeGenerated > ago(5m)
@@ -251,10 +284,71 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   }
 }
 
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
+  name: postgresServerName
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  sku: {
+    name: postgresSkuName
+    tier: postgresSkuTier
+  }
+  properties: {
+    administratorLogin: postgresAdministratorLogin
+    administratorLoginPassword: postgresAdministratorPassword
+    authConfig: {
+      activeDirectoryAuth: 'Disabled'
+      passwordAuth: 'Enabled'
+    }
+    availabilityZone: '1'
+    backup: {
+      backupRetentionDays: postgresBackupRetentionDays
+      geoRedundantBackup: 'Disabled'
+    }
+    createMode: 'Create'
+    highAvailability: {
+      mode: 'Disabled'
+    }
+    network: {
+      publicNetworkAccess: 'Enabled'
+    }
+    storage: {
+      autoGrow: 'Enabled'
+      storageSizeGB: postgresStorageSizeGB
+      type: 'Premium_LRS'
+    }
+    version: postgresVersion
+  }
+}
+
+resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = {
+  parent: postgresServer
+  name: postgresDatabaseName
+  properties: {
+    charset: 'UTF8'
+    collation: 'en_US.utf8'
+  }
+}
+
+resource postgresFirewallAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = {
+  parent: postgresServer
+  name: 'allow-azure-services'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   name: webAppName
   location: location
   kind: 'app,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
   tags: {
     environment: environmentName
     costCenter: costCenter
@@ -265,7 +359,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'NODE|22-lts'
-      appCommandLine: ''
+      appCommandLine: 'node scripts/runtime/startup.mjs'
       alwaysOn: false
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
@@ -284,7 +378,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'DATABASE_URL'
-          value: 'file:/home/site/data/app.db'
+          value: postgresConnectionString
         }
         {
           name: 'AUTH_MODE'
@@ -399,8 +493,12 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: environmentName == 'production' ? 'false' : 'true'
         }
         {
+          name: 'PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK'
+          value: environmentName == 'production' ? 'false' : 'true'
+        }
+        {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'true'
+          value: 'false'
         }
         {
           name: 'WEBSITE_RUN_FROM_PACKAGE'
@@ -619,3 +717,5 @@ output webAppName string = webApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
+output postgresServerName string = postgresServer.name
+output postgresDatabaseName string = postgresDatabase.name

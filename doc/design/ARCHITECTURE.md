@@ -70,7 +70,7 @@ This section summarizes what is used for which area of the solution.
 
 ### Data access and persistence
 - ORM/data access: Prisma
-- development database: SQLite
+- local/test database: PostgreSQL
 - production-oriented target database: PostgreSQL-compatible platform on Azure
 - purpose: relational storage for submissions, decisions, reviews, appeals, audit data, and versioned content
 
@@ -189,18 +189,18 @@ Current deployment model:
 - production deploy behind manual approval
 - Azure Monitor / runbook support for operations
 
-Development currently uses SQLite bootstrap, while production-oriented deployment targets PostgreSQL-compatible infrastructure. That mismatch is tracked as architectural debt, but is currently an accepted backlog deferment for the present workload profile.
+Local, test, CI, and Azure repo provisioning now target PostgreSQL by default. The remaining `#91` gap is operational rollout: staging/production environments still need to be redeployed and verified against the new Azure Database for PostgreSQL contract.
 
 ## Known Architectural Debt
 
 The most important currently known gaps are:
-- development database engine does not match production target architecture
+- deployed staging/production Azure environments still need PostgreSQL rollout verification after the repo-level cutover
 - some broader unit-test coverage still depends too much on integration setup
 - several architecture decisions live across design notes and release notes rather than one permanent reference
 
 Current posture on database engine mismatch:
-- keep SQLite for now because the expected user base is small and the workload is non-critical
-- re-evaluate if concurrency, latency, scale-out, backup/recovery, or operational fragility symptoms appear
+- local/test/CI and Azure deployment wiring are now in place on PostgreSQL
+- staging/production Azure redeploy and smoke verification are still pending
 - see `doc/POSTGRES_MIGRATION_PLAN.md` for symptom list and migration sequence
 
 ## ModuleVersion Fields
