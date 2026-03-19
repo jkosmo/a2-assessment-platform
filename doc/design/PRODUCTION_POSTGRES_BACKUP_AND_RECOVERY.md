@@ -18,12 +18,14 @@ Current Azure baseline in `infra/azure/main.bicep`:
 
 This is acceptable for low-cost staging validation, but not for production where:
 - data loss has direct operational impact
+- participant results and certification outcomes must not be lost
 - logical corruption might not be detected immediately
 - restore must be rehearsed, not improvised
 - regional incidents and operator mistakes must be considered
 
 ## Goals
 - recover from accidental deletes, bad deployments, and logical data corruption
+- restore participant-facing assessment history, including submissions, results, completion state, appeals, and decision lineage
 - recover from infrastructure-level failure with a documented runbook
 - keep recovery options available beyond the short operational window
 - ensure restore is possible even if the source server or subscription state is compromised
@@ -36,6 +38,13 @@ This is acceptable for low-cost staging validation, but not for production where
 
 ## Recovery Scenarios
 The target strategy must cover these scenarios:
+
+Critical data to preserve across all scenarios:
+- participant submissions and uploaded/parsed response content
+- MCQ attempts and assessment results
+- manual review overrides and appeal resolutions
+- module completion / certification status derived from decisions
+- audit and reporting data needed to explain how a result was reached
 
 1. Operator error
 - accidental row updates/deletes
@@ -213,6 +222,8 @@ Each drill should verify:
 - database can be restored into isolated environment
 - app can boot against restored data
 - `/healthz` responds
+- a known participant's results/history can be retrieved correctly
+- decision lineage, manual-review state, and appeal state remain intact for restored records
 - one participant flow and one admin/reporting flow can be exercised
 
 ## IaC Implications
@@ -236,6 +247,7 @@ Before production go-live, we should have:
 - named restore commands and portal paths documented
 - ownership defined for who can execute restore
 - post-restore verification checklist documented
+- explicit verification steps for restored participant results and certification history
 
 ## Decision Summary
 Chosen strategy:
