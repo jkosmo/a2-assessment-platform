@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.30 - 2026-03-19
+### Summary
+UX: «Bruk utkast-JSON» oppretter modulen automatisk, og innholdskort oppdateres korrekt etter modulopprettelse.
+
+### Included
+- **`admin-content.js`**: `handleApplyImportDraft` oppretter nå modulen automatisk (via `handleCreateModule({ silent: true })`) når ingen modul er valgt og utkastet inneholder moduldetaljer. Eliminerer behovet for et separat «Opprett modul»-steg ved JSON-import. `handleCreateModule` kaller nå `renderContentCards()` etter at `savedVersionFields` er gjenopprettet, og markerer innholdskortene som ulagret — kortene viste feil «(not set)» selv om tekstfeltene hadde innhold.
+- **`i18n/admin-content-translations.js`**: Ny nøkkel `adminContent.message.importAppliedWithModule` med veiledning om neste steg (alle lokaliteter).
+
 ## 0.8.29 - 2026-03-19
 ### Summary
 Fix: Innleveringsskjema viser ikke lenger generiske hardkodede standardverdier — defaults er nå modulspesifikke og kommer fra submissionSchema.

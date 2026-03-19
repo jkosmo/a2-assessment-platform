@@ -1594,6 +1594,11 @@ async function handleCreateModule(options = { silent: false }) {
   moduleVersionSubmissionSchemaInput.value = savedVersionFields.moduleVersionSubmissionSchema;
   moduleVersionAssessmentPolicyInput.value = savedVersionFields.moduleVersionAssessmentPolicy;
   syncAllTextareaHeights();
+  // Mark restored content as dirty (not yet saved as a version) and refresh cards.
+  for (const key of ["rubric", "prompt", "mcq", "versionDetails", "assessmentPolicy", "submissionSchema"]) {
+    dirtyCards.add(key);
+  }
+  renderContentCards();
 
   if (!options.silent) {
     setMessage(t("adminContent.message.moduleCreated"));
@@ -1828,12 +1833,19 @@ async function handleApplyImportDraft(rawValue) {
   importDraftJsonInput.value = JSON.stringify(parsed, null, 2);
   dirtyCards.clear();
   renderContentCards();
-  await loadModules({
-    preferredModuleId: selectedModuleId,
-    preserveMessage: true,
-    logResponse: false,
-  });
-  setMessage(t("adminContent.message.importApplied"));
+  if (!selectedModuleId) {
+    // No module selected — auto-create from the draft's module details so the user
+    // can go straight to "Lagre alle endringer" without a separate "Opprett modul" step.
+    await handleCreateModule({ silent: true });
+    setMessage(t("adminContent.message.importAppliedWithModule"));
+  } else {
+    await loadModules({
+      preferredModuleId: selectedModuleId,
+      preserveMessage: true,
+      logResponse: false,
+    });
+    setMessage(t("adminContent.message.importApplied"));
+  }
   log({ importedDraft: draft });
 }
 
