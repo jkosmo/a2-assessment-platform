@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.29 - 2026-03-19
+### Summary
+Fix: Innleveringsskjema viser ikke lenger generiske hardkodede standardverdier — defaults er nå modulspesifikke og kommer fra submissionSchema.
+
+### Included
+- **`participant.js`**: Fjernet `defaultValueKey` fra `DEFAULT_SUBMISSION_FIELDS` — ingen forhåndsutfylte tekster for standardskjemaet. `getSubmissionFields()` sender nå `defaultValue` fra schema-felt videre. `resetModuleDraftInputsToDefaultLocaleValues()` og `hasMeaningfulStoredDraft()` bruker `field.defaultValue` (tom streng hvis ikke definert).
+- **`admin-content.js`**: `resolvePromptFields()` inkluderer `defaultValue: ""` i feltmalen så LLM-en vet at den skal fylle inn modulspesifikke eksempelsvar. `buildAuthoringPrompt` instruerer LLM-en til å skrive realistiske og modulrelevante `defaultValue`-tekster.
+
 ## 0.8.28 - 2026-03-19
 ### Summary
 UX: Vurderingspolicy auto-fylles med standard når feltet er tomt ved modul-last og draft-import.

@@ -92,7 +92,7 @@ function buildAuthoringPrompt(mcqCount, fields) {
       }`;
   const questionsJson = Array.from({ length: mcqCount }, () => questionStub).join(",\n      ");
   const schemaNote = fields.length > 0
-    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. Each field has id, label (plain text or locale object), type ("textarea" or "text"), and required (boolean).`
+    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. Each field has id, label (plain text or locale object), type ("textarea" or "text"), required (boolean), and defaultValue (a short module-specific example answer shown as a pre-fill — write this in the module's primary language, make it realistic and relevant to the module topic).`
     : "";
   const schemaShape = fields.length > 0
     ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields }, null, 4).split("\n").join("\n    ")}`
@@ -1845,13 +1845,13 @@ function resolvePromptFields() {
   }
   const fields = [];
   if (promptFieldResponse.checked) {
-    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true });
+    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true, defaultValue: "" });
   }
   if (promptFieldReflection.checked) {
-    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true });
+    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true, defaultValue: "" });
   }
   if (promptFieldPromptExcerpt.checked) {
-    fields.push({ id: "promptExcerpt", label: { "en-GB": "Prompt excerpt", "nb": "Utdrag fra oppgave", "nn": "Utdrag frå oppgåve" }, type: "text", required: false });
+    fields.push({ id: "promptExcerpt", label: { "en-GB": "Prompt excerpt", "nb": "Utdrag fra oppgave", "nn": "Utdrag frå oppgåve" }, type: "text", required: false, defaultValue: "" });
   }
   return fields;
 }

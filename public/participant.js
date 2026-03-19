@@ -182,9 +182,9 @@ const defaultFieldBindings = [
 ];
 
 const DEFAULT_SUBMISSION_FIELDS = [
-  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 5, required: true, defaultValueKey: "defaults.rawText" },
-  { id: "reflection", label: "Reflection (what you changed and why)", labelKey: "submission.reflection", type: "textarea", rows: 4, required: false, defaultValueKey: "defaults.reflection" },
-  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", labelKey: "submission.promptExcerpt", type: "textarea", rows: 3, required: false, defaultValueKey: "defaults.promptExcerpt" },
+  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 5, required: true },
+  { id: "reflection", label: "Reflection (what you changed and why)", labelKey: "submission.reflection", type: "textarea", rows: 4, required: false },
+  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", labelKey: "submission.promptExcerpt", type: "textarea", rows: 3, required: false },
 ];
 
 let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;
@@ -575,6 +575,7 @@ function getSubmissionFields(selectedModule) {
       type: f.type ?? "textarea",
       rows: f.type === "text" ? 1 : 3,
       required: f.required ?? false,
+      ...(f.defaultValue !== undefined && f.defaultValue !== "" && { defaultValue: f.defaultValue }),
     }));
   }
   return DEFAULT_SUBMISSION_FIELDS;
@@ -818,7 +819,7 @@ function hasMeaningfulStoredDraft(draft) {
 
   for (const field of currentSubmissionFields) {
     const value = typeof draft[field.id] === "string" ? draft[field.id].trim() : "";
-    const defaultValue = field.defaultValueKey ? t(field.defaultValueKey).trim() : "";
+    const defaultValue = (field.defaultValue ?? "").trim();
     if (value.length > 0 && value !== defaultValue) {
       return true;
     }
@@ -1226,7 +1227,7 @@ function resetModuleDraftInputsToDefaultLocaleValues() {
   for (const field of currentSubmissionFields) {
     const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
     if (element) {
-      element.value = field.defaultValueKey ? t(field.defaultValueKey) : "";
+      element.value = field.defaultValue ?? "";
     }
   }
 }
