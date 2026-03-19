@@ -2,13 +2,13 @@ import request from "supertest";
 import { app } from "../src/app.js";
 
 describe("participant console runtime config", () => {
-  it("returns mock auth runtime config with role presets", async () => {
+  it("returns runtime config with role presets and auth metadata", async () => {
     const response = await request(app).get("/participant/config");
 
     expect(response.status).toBe(200);
-    expect(response.body.authMode).toBe("mock");
+    expect(["mock", "entra"]).toContain(response.body.authMode);
     expect(response.body.debugMode).toBe(true);
-    expect(response.body.mockRoleSwitchEnabled).toBe(true);
+    expect(response.body.mockRoleSwitchEnabled).toBe(response.body.authMode === "mock");
     expect(response.body.mockRolePresets).toEqual([
       "PARTICIPANT",
       "APPEAL_HANDLER",
@@ -133,6 +133,15 @@ describe("participant console runtime config", () => {
         roles: ["SUBJECT_MATTER_OWNER"],
       },
     });
+    if (response.body.authMode === "entra") {
+      expect(response.body.entra).toMatchObject({
+        clientId: expect.any(String),
+        authority: expect.stringContaining("https://login.microsoftonline.com/"),
+        scopes: [expect.stringContaining("/.default")],
+      });
+    } else {
+      expect(response.body.entra).toBeUndefined();
+    }
   });
 
   it("serves dedicated appeal-handler workspace page", async () => {
