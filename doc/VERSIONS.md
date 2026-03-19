@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.32 - 2026-03-19
+### Summary
+Fix: Prompt-instruksjon til LLM spesifiserer nå eksakt antall felt og feltID-er — forhindrer at LLM legger til ekstra innleveringsfelt.
+
+### Included
+- **`admin-content.js`**: `buildAuthoringPrompt` sin `schemaNote` nevner nå eksplisitt antall felt og alle felt-ID-er (f.eks. «MUST contain EXACTLY 1 field with id ["response"]»), slik at LLM-en ikke legger til `reflection` eller `promptExcerpt` når disse ikke er valgt.
+
 ## 0.8.31 - 2026-03-19
 ### Summary
 Fix: `defaultValue` i innleveringsfelt er nå et lokalisert objekt — LLM genererer modulspesifikke eksempelsvar for alle lokaliteter.

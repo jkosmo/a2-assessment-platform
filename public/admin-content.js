@@ -91,8 +91,9 @@ function buildAuthoringPrompt(mcqCount, fields) {
         "rationale": {"en-GB": "", "nb": "", "nn": ""}
       }`;
   const questionsJson = Array.from({ length: mcqCount }, () => questionStub).join(",\n      ");
+  const fieldIds = fields.map((f) => `"${f.id}"`).join(", ");
   const schemaNote = fields.length > 0
-    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. Include EXACTLY the fields listed in the template below — do not add, remove, or rename fields. Each field has id, label (locale object), type, required, and defaultValue (a locale object with en-GB, nb, nn — write a short, realistic, module-specific example answer for each locale).`
+    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. The array MUST contain EXACTLY ${fields.length} field${fields.length !== 1 ? "s" : ""} with id${fields.length !== 1 ? "s" : ""} [${fieldIds}]. Do NOT add, remove, or rename any field. Fill in label (locale object), type, required, and defaultValue (locale object with en-GB, nb, nn — a short, realistic, module-specific placeholder answer for each locale).`
     : "";
   const schemaShape = fields.length > 0
     ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields }, null, 4).split("\n").join("\n    ")}`
