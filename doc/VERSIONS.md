@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.26 - 2026-03-19
+### Summary
+Fix: staging startup-krasj — prisma db push feilet på _manual_migrations-tabellen.
+
+### Included
+- **`package.json`**: `prestart` får nå `--accept-data-loss` slik at `prisma db push` ikke avbryter når den finner tabeller fjernet fra schema. Rotårsak: SQLite-filen `/home/site/data/app.db` er persistent og inneholdt `_manual_migrations` (7 rader) som ikke lenger finnes i schema.prisma — uten flagget krasjet Prisma og 503 på alle container-restarter etter første deploy.
+
 ## 0.8.25 - 2026-03-18
 ### Summary
 MVP: Innholdskort-oversikt og dialog for moduldetaljer i Admin Content (#135 – #145, #146, #147).

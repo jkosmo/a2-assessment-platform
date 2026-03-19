@@ -1,13 +1,13 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.8.25",
+  "version": "0.8.26",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
   "scripts": {
     "dev": "npm run postgres:setup && dotenv -e .env.postgres.local -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "prestart": "node ./node_modules/prisma/build/index.js db push --skip-generate",
+    "prestart": "node ./node_modules/prisma/build/index.js db push --skip-generate --accept-data-loss",
     "start": "node dist/src/index.js",
     "postgres:setup": "node scripts/postgres/localSetup.mjs setup",
     "postgres:start": "node scripts/postgres/localSetup.mjs start",
