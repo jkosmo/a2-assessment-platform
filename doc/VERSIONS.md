@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.34 - 2026-03-19
+### Summary
+Feat: Dialog for redigering av versjonsdetaljer (taskText / guidanceText) med lokaliseringsfaner (#150).
+
+### Included
+- **`admin-content.html`**: Ny `<dialog id="dialogVersionDetails">` med locale-faner (EN-GB / NB / NN) og to tekstfelter per lokale (oppgavetekst, veiledning). Rediger-knapp på Versjonsdetaljer-kortet har fått `id="editBtn_versionDetails"`.
+- **`admin-content.js`**: `openVersionDetailsDialog()` og `applyVersionDetailsDialog()` — populerer og skriver tilbake til `moduleVersionTaskTextInput` / `moduleVersionGuidanceTextInput`. Event listeners for close/cancel/apply/tabs/Escape.
+- **`i18n/admin-content-translations.js`**: Nye nøkler for `adminContent.dialog.versionDetails.*` (EN-GB, NB, NN).
+
 ## 0.8.33 - 2026-03-19
 ### Summary
 Fix: `submissionSchemaJson` fra LLM-output ble ikke lest inn i skjemaet — felt-nøkkel stemte ikke med variabelnavnet i koden.

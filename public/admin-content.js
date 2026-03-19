@@ -2080,6 +2080,53 @@ function closeFieldDialog(dialog) {
   if (trigger) trigger.focus();
 }
 
+// ── Version details dialog ────────────────────────────────────────────────────
+
+function openVersionDetailsDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogVersionDetails");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+
+  const parsedTask = parseLocalizedSafe(moduleVersionTaskTextInput.value);
+  const parsedGuidance = parseLocalizedSafe(moduleVersionGuidanceTextInput.value);
+
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const sfx = _localeToSuffix[locale];
+    const getString = (parsed) => {
+      if (typeof parsed === "object" && parsed !== null) return parsed[locale] ?? "";
+      return locale === "en-GB" ? (typeof parsed === "string" ? parsed : "") : "";
+    };
+    const taskEl = document.getElementById(`dlgVD_task_${sfx}`);
+    const guidanceEl = document.getElementById(`dlgVD_guidance_${sfx}`);
+    if (taskEl) taskEl.value = getString(parsedTask);
+    if (guidanceEl) guidanceEl.value = getString(parsedGuidance);
+  }
+
+  setActiveDialogLocaleTab(dialog, "en-GB");
+  dialog.showModal();
+  const firstTextarea = dialog.querySelector("textarea");
+  if (firstTextarea) firstTextarea.focus();
+}
+
+function applyVersionDetailsDialog() {
+  const dialog = document.getElementById("dialogVersionDetails");
+
+  const tasks = {}, guidances = {};
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const sfx = _localeToSuffix[locale];
+    tasks[locale] = document.getElementById(`dlgVD_task_${sfx}`)?.value ?? "";
+    guidances[locale] = document.getElementById(`dlgVD_guidance_${sfx}`)?.value ?? "";
+  }
+
+  moduleVersionTaskTextInput.value = formatEditorValue(tasks);
+  moduleVersionGuidanceTextInput.value = formatEditorValue(guidances);
+
+  dirtyCards.add("versionDetails");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
 // ── End of card / dialog helpers ───────────────────────────────────────────────
 
 loadMeButton.addEventListener("click", async () => {
@@ -2292,6 +2339,10 @@ document.getElementById("editBtn_moduleDetails")?.addEventListener("click", (e) 
   openModuleDetailsDialog(e.currentTarget);
 });
 
+document.getElementById("editBtn_versionDetails")?.addEventListener("click", (e) => {
+  openVersionDetailsDialog(e.currentTarget);
+});
+
 // Scroll-to-section buttons (unimplemented cards)
 for (const btn of document.querySelectorAll("[data-card-scroll]")) {
   btn.addEventListener("click", () => {
@@ -2324,6 +2375,27 @@ document.getElementById("dialogModuleDetails")?.addEventListener("click", (e) =>
 document.getElementById("dialogModuleDetails")?.addEventListener("cancel", (e) => {
   e.preventDefault();
   closeFieldDialog(document.getElementById("dialogModuleDetails"));
+});
+
+// Version details dialog controls
+document.getElementById("dialogVersionDetailsClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogVersionDetails"));
+});
+document.getElementById("dialogVersionDetailsCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogVersionDetails"));
+});
+document.getElementById("dialogVersionDetailsApply")?.addEventListener("click", () => {
+  applyVersionDetailsDialog();
+});
+document.getElementById("dialogVersionDetails")?.addEventListener("click", (e) => {
+  const tab = e.target.closest(".dialog-locale-tab");
+  if (!tab) return;
+  const locale = tab.dataset.localeTab;
+  if (locale) setActiveDialogLocaleTab(document.getElementById("dialogVersionDetails"), locale);
+});
+document.getElementById("dialogVersionDetails")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogVersionDetails"));
 });
 
 // Publish from content cards section

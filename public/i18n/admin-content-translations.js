@@ -192,6 +192,9 @@ const adminContentBase = {
   "adminContent.dialog.moduleDetails.validFrom": "Available from",
   "adminContent.dialog.moduleDetails.validTo": "Available until",
   "adminContent.dialog.moduleDetails.close": "Close",
+  "adminContent.dialog.versionDetails.title": "Edit version details",
+  "adminContent.dialog.versionDetails.taskText": "Assignment text",
+  "adminContent.dialog.versionDetails.guidanceText": "Guidance text",
 };
 const nbOverrides = {
   "adminContentPage.title": "Arbeidsflate for innholdsoppsett",
@@ -373,6 +376,9 @@ const nbOverrides = {
   "adminContent.dialog.moduleDetails.validFrom": "Tilgjengelig fra",
   "adminContent.dialog.moduleDetails.validTo": "Tilgjengelig til",
   "adminContent.dialog.moduleDetails.close": "Lukk",
+  "adminContent.dialog.versionDetails.title": "Rediger versjonsdetaljer",
+  "adminContent.dialog.versionDetails.taskText": "Oppgavetekst",
+  "adminContent.dialog.versionDetails.guidanceText": "Veiledning",
 };
 const nnOverrides = {
   "adminContentPage.title": "Arbeidsflate for innhaldsoppsett",
@@ -552,6 +558,9 @@ const nnOverrides = {
   "adminContent.dialog.moduleDetails.validFrom": "Tilgjengeleg frå",
   "adminContent.dialog.moduleDetails.validTo": "Tilgjengeleg til",
   "adminContent.dialog.moduleDetails.close": "Lukk",
+  "adminContent.dialog.versionDetails.title": "Rediger versjonsdetaljar",
+  "adminContent.dialog.versionDetails.taskText": "Oppgåvetekst",
+  "adminContent.dialog.versionDetails.guidanceText": "Rettleiing",
 };
 
 const adminContentLateOverrides = {

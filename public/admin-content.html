@@ -243,7 +243,7 @@
                 <span id="contentCard_versionDetails_unsaved" class="content-card-unsaved" hidden data-i18n="adminContent.cards.unsaved">Unsaved</span>
               </div>
             </div>
-            <button class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn" data-card-scroll="sectionModuleVersion">Edit</button>
+            <button id="editBtn_versionDetails" class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn">Edit</button>
           </div>
           <div id="contentCard_versionDetails_summary" class="content-card-summary empty"></div>
         </div>
@@ -427,6 +427,34 @@
       <div class="dialog-footer">
         <button type="button" id="dialogModuleDetailsCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
         <button type="button" id="dialogModuleDetailsApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
+      </div>
+    </dialog>
+
+    <dialog id="dialogVersionDetails" aria-labelledby="dialogVersionDetailsTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogVersionDetailsTitle" class="field-dialog-title" data-i18n="adminContent.dialog.versionDetails.title">Edit version details</h2>
+        <button type="button" id="dialogVersionDetailsClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="dialog-locale-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB" aria-controls="dlgVDPane_enGB">EN-GB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nb" aria-controls="dlgVDPane_nb">NB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn" aria-controls="dlgVDPane_nn">NN</button>
+      </div>
+      <div id="dlgVDPane_enGB" class="dialog-locale-pane active" role="tabpanel" data-locale-pane="en-GB">
+        <div><label for="dlgVD_task_enGB" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_enGB" rows="4"></textarea></div>
+        <div><label for="dlgVD_guidance_enGB" data-i18n="adminContent.dialog.versionDetails.guidanceText">Guidance text</label><textarea id="dlgVD_guidance_enGB" rows="4"></textarea></div>
+      </div>
+      <div id="dlgVDPane_nb" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nb">
+        <div><label for="dlgVD_task_nb" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_nb" rows="4"></textarea></div>
+        <div><label for="dlgVD_guidance_nb" data-i18n="adminContent.dialog.versionDetails.guidanceText">Guidance text</label><textarea id="dlgVD_guidance_nb" rows="4"></textarea></div>
+      </div>
+      <div id="dlgVDPane_nn" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nn">
+        <div><label for="dlgVD_task_nn" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_nn" rows="4"></textarea></div>
+        <div><label for="dlgVD_guidance_nn" data-i18n="adminContent.dialog.versionDetails.guidanceText">Guidance text</label><textarea id="dlgVD_guidance_nn" rows="4"></textarea></div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" id="dialogVersionDetailsCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
+        <button type="button" id="dialogVersionDetailsApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
       </div>
     </dialog>
 
