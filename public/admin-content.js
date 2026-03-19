@@ -2127,6 +2127,74 @@ function applyVersionDetailsDialog() {
   closeFieldDialog(dialog);
 }
 
+// ── Assessment policy dialog ──────────────────────────────────────────────────
+
+function openAssessmentPolicyDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogAssessmentPolicy");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+
+  let policy = {};
+  try { policy = JSON.parse(moduleVersionAssessmentPolicyInput.value.trim() || "{}"); } catch { policy = {}; }
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ""; };
+  set("dlgAP_practicalWeight", policy.scoring?.practicalWeight);
+  set("dlgAP_mcqWeight", policy.scoring?.mcqWeight);
+  set("dlgAP_totalMin", policy.passRules?.totalMin);
+  set("dlgAP_practicalMin", policy.passRules?.practicalMinPercent);
+  set("dlgAP_mcqMin", policy.passRules?.mcqMinPercent);
+  set("dlgAP_borderlineMin", policy.passRules?.borderlineWindow?.min);
+  set("dlgAP_borderlineMax", policy.passRules?.borderlineWindow?.max);
+
+  dialog.showModal();
+  document.getElementById("dlgAP_practicalWeight")?.focus();
+}
+
+function applyAssessmentPolicyDialog() {
+  const dialog = document.getElementById("dialogAssessmentPolicy");
+
+  const num = (id) => { const v = parseFloat(document.getElementById(id)?.value ?? ""); return isNaN(v) ? undefined : v; };
+  const practicalWeight = num("dlgAP_practicalWeight");
+  const mcqWeight = num("dlgAP_mcqWeight");
+  const totalMin = num("dlgAP_totalMin");
+  const practicalMin = num("dlgAP_practicalMin");
+  const mcqMin = num("dlgAP_mcqMin");
+  const borderlineMin = num("dlgAP_borderlineMin");
+  const borderlineMax = num("dlgAP_borderlineMax");
+
+  if (totalMin === undefined) {
+    setMessage(t("adminContent.dialog.assessmentPolicy.errorTotalMinRequired"), "error");
+    return;
+  }
+  if (totalMin < 0 || totalMin > 100) {
+    setMessage(t("adminContent.dialog.assessmentPolicy.errorOutOfRange"), "error");
+    return;
+  }
+
+  const policy = {
+    ...(practicalWeight !== undefined || mcqWeight !== undefined ? {
+      scoring: {
+        ...(practicalWeight !== undefined && { practicalWeight }),
+        ...(mcqWeight !== undefined && { mcqWeight }),
+      },
+    } : {}),
+    passRules: {
+      totalMin,
+      ...(practicalMin !== undefined && { practicalMinPercent: practicalMin }),
+      ...(mcqMin !== undefined && { mcqMinPercent: mcqMin }),
+      ...(borderlineMin !== undefined && borderlineMax !== undefined ? {
+        borderlineWindow: { min: borderlineMin, max: borderlineMax },
+      } : {}),
+    },
+  };
+
+  moduleVersionAssessmentPolicyInput.value = JSON.stringify(policy, null, 2);
+  dirtyCards.add("assessmentPolicy");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
 // ── Rubric dialog ─────────────────────────────────────────────────────────────
 
 function openRubricDialog(triggerBtn) {
@@ -2499,6 +2567,10 @@ document.getElementById("editBtn_rubric")?.addEventListener("click", (e) => {
   openRubricDialog(e.currentTarget);
 });
 
+document.getElementById("editBtn_assessmentPolicy")?.addEventListener("click", (e) => {
+  openAssessmentPolicyDialog(e.currentTarget);
+});
+
 // Scroll-to-section buttons (unimplemented cards)
 for (const btn of document.querySelectorAll("[data-card-scroll]")) {
   btn.addEventListener("click", () => {
@@ -2552,6 +2624,21 @@ document.getElementById("dialogVersionDetails")?.addEventListener("click", (e) =
 document.getElementById("dialogVersionDetails")?.addEventListener("cancel", (e) => {
   e.preventDefault();
   closeFieldDialog(document.getElementById("dialogVersionDetails"));
+});
+
+// Assessment policy dialog controls
+document.getElementById("dialogAssessmentPolicyClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogAssessmentPolicy"));
+});
+document.getElementById("dialogAssessmentPolicyCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogAssessmentPolicy"));
+});
+document.getElementById("dialogAssessmentPolicyApply")?.addEventListener("click", () => {
+  applyAssessmentPolicyDialog();
+});
+document.getElementById("dialogAssessmentPolicy")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogAssessmentPolicy"));
 });
 
 // Rubric dialog controls

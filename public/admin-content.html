@@ -272,7 +272,7 @@
                 <span id="contentCard_assessmentPolicy_unsaved" class="content-card-unsaved" hidden data-i18n="adminContent.cards.unsaved">Unsaved</span>
               </div>
             </div>
-            <button class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn" data-card-scroll="sectionModuleVersion">Edit</button>
+            <button id="editBtn_assessmentPolicy" class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn">Edit</button>
           </div>
           <div id="contentCard_assessmentPolicy_summary" class="content-card-summary empty"></div>
         </div>
@@ -458,6 +458,61 @@
       <div class="dialog-footer">
         <button type="button" id="dialogVersionDetailsCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
         <button type="button" id="dialogVersionDetailsApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
+      </div>
+    </dialog>
+
+    <dialog id="dialogAssessmentPolicy" aria-labelledby="dialogAssessmentPolicyTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogAssessmentPolicyTitle" class="field-dialog-title" data-i18n="adminContent.dialog.assessmentPolicy.title">Edit assessment policy</h2>
+        <button type="button" id="dialogAssessmentPolicyClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+      </div>
+
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.assessmentPolicy.sectionScoring">Scoring weights</div>
+      <div class="row">
+        <div>
+          <label for="dlgAP_practicalWeight" data-i18n="adminContent.dialog.assessmentPolicy.practicalWeight">Practical weight (0–100)</label>
+          <input id="dlgAP_practicalWeight" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+        <div>
+          <label for="dlgAP_mcqWeight" data-i18n="adminContent.dialog.assessmentPolicy.mcqWeight">MCQ weight (0–100)</label>
+          <input id="dlgAP_mcqWeight" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.assessmentPolicy.sectionPassRules">Pass rules</div>
+      <div class="row">
+        <div>
+          <label for="dlgAP_totalMin" data-i18n="adminContent.dialog.assessmentPolicy.totalMin">Total min score (0–100)</label>
+          <input id="dlgAP_totalMin" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+        <div>
+          <label for="dlgAP_practicalMin" data-i18n="adminContent.dialog.assessmentPolicy.practicalMin">Practical min % (opt.)</label>
+          <input id="dlgAP_practicalMin" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="dlgAP_mcqMin" data-i18n="adminContent.dialog.assessmentPolicy.mcqMin">MCQ min % (opt.)</label>
+          <input id="dlgAP_mcqMin" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+        <div></div>
+      </div>
+
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.assessmentPolicy.sectionBorderline">Borderline window (opt.)</div>
+      <div class="row">
+        <div>
+          <label for="dlgAP_borderlineMin" data-i18n="adminContent.dialog.assessmentPolicy.borderlineMin">From score</label>
+          <input id="dlgAP_borderlineMin" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+        <div>
+          <label for="dlgAP_borderlineMax" data-i18n="adminContent.dialog.assessmentPolicy.borderlineMax">To score</label>
+          <input id="dlgAP_borderlineMax" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" id="dialogAssessmentPolicyCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
+        <button type="button" id="dialogAssessmentPolicyApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
       </div>
     </dialog>
 

@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.36 - 2026-03-19
+### Summary
+Feat: Strukturert vurderingspolicy-dialog med tallfelter for vekting, beståttkrav og grenseområde (#152).
+
+### Included
+- **`admin-content.html`**: Ny `<dialog id="dialogAssessmentPolicy">` med tre seksjoner: vekting (practicalWeight, mcqWeight), beståttkrav (totalMin, practicalMinPercent, mcqMinPercent) og grenseområde (borderlineWindow min/max). Rediger-knapp på Vurderingspolicy-kortet har fått `id="editBtn_assessmentPolicy"`.
+- **`admin-content.js`**: `openAssessmentPolicyDialog()` og `applyAssessmentPolicyDialog()` — parser og skriver tilbake til `moduleVersionAssessmentPolicyInput`. Validerer at totalMin er satt og innenfor 0–100.
+- **`i18n/admin-content-translations.js`**: Nye nøkler for `adminContent.dialog.assessmentPolicy.*` (EN-GB, NB, NN).
+
 ## 0.8.35 - 2026-03-19
 ### Summary
 Feat: Strukturert rubrikk-dialog — kriterieliste med add/remove, beståttregel og skaleringstregel (#149).
