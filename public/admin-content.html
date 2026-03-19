@@ -68,6 +68,9 @@
       .dialog-locale-pane.active { display: grid; }
       .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-1); margin-top: var(--space-2); padding-top: var(--space-1); border-top: 1px solid var(--color-border-soft); }
       .dialog-footer .btn-primary, .dialog-footer .btn-secondary { width: auto; }
+      .dialog-section-label { font-size: 12px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--space-2) 0 6px; border-bottom: 1px solid var(--color-border-soft); padding-bottom: 4px; }
+      .rubric-criterion-row { display: grid; grid-template-columns: 90px 1fr 64px 28px; gap: 6px; align-items: end; margin-bottom: 8px; }
+      .rubric-criterion-row label { font-size: 11px; margin-bottom: 2px; }
     </style>
   </head>
   <body>
@@ -256,7 +259,7 @@
                 <span id="contentCard_rubric_unsaved" class="content-card-unsaved" hidden data-i18n="adminContent.cards.unsaved">Unsaved</span>
               </div>
             </div>
-            <button class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn" data-card-scroll="sectionRubric">Edit</button>
+            <button id="editBtn_rubric" class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn">Edit</button>
           </div>
           <div id="contentCard_rubric_summary" class="content-card-summary empty"></div>
         </div>
@@ -455,6 +458,46 @@
       <div class="dialog-footer">
         <button type="button" id="dialogVersionDetailsCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
         <button type="button" id="dialogVersionDetailsApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
+      </div>
+    </dialog>
+
+    <dialog id="dialogRubric" aria-labelledby="dialogRubricTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogRubricTitle" class="field-dialog-title" data-i18n="adminContent.dialog.rubric.title">Edit rubric</h2>
+        <button type="button" id="dialogRubricClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+      </div>
+
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionCriteria">Criteria</div>
+      <div id="dlgRubric_criteriaList"></div>
+      <button type="button" id="dlgRubric_addCriterion" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.rubric.addCriterion">Add criterion</span></button>
+
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionPassRule">Pass rule</div>
+      <div class="row">
+        <div>
+          <label for="dlgRubric_minScore" data-i18n="adminContent.dialog.rubric.minScore">Minimum score (0–100)</label>
+          <input id="dlgRubric_minScore" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+        <div>
+          <label for="dlgRubric_criteriaMin" data-i18n="adminContent.dialog.rubric.criteriaMin">All criteria above (opt.)</label>
+          <input id="dlgRubric_criteriaMin" type="number" min="0" max="100" step="1" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionScalingRule">Scaling rule</div>
+      <div class="row">
+        <div>
+          <label for="dlgRubric_scalingType" data-i18n="adminContent.dialog.rubric.scalingType">Type</label>
+          <input id="dlgRubric_scalingType" autocomplete="off" />
+        </div>
+        <div>
+          <label for="dlgRubric_maxScore" data-i18n="adminContent.dialog.rubric.maxScore">Max score</label>
+          <input id="dlgRubric_maxScore" type="number" min="1" step="1" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" id="dialogRubricCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
+        <button type="button" id="dialogRubricApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
       </div>
     </dialog>
 

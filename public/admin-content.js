@@ -2127,6 +2127,158 @@ function applyVersionDetailsDialog() {
   closeFieldDialog(dialog);
 }
 
+// ── Rubric dialog ─────────────────────────────────────────────────────────────
+
+function openRubricDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogRubric");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+
+  let criteria = {};
+  try { criteria = JSON.parse(rubricCriteriaJsonInput.value.trim() || "{}"); } catch { criteria = {}; }
+  let scalingRule = {};
+  try { scalingRule = JSON.parse(rubricScalingRuleJsonInput.value.trim() || "{}"); } catch { scalingRule = {}; }
+  let passRule = {};
+  try { passRule = JSON.parse(rubricPassRuleJsonInput.value.trim() || "{}"); } catch { passRule = {}; }
+
+  const list = document.getElementById("dlgRubric_criteriaList");
+  list.innerHTML = "";
+  const entries = Object.entries(criteria);
+  if (entries.length === 0) {
+    addRubricCriterionRow("", "", 0.25, "");
+  } else {
+    for (const [key, val] of entries) {
+      addRubricCriterionRow(key, val.title ?? "", val.weight ?? 0.25, val.description ?? "");
+    }
+  }
+
+  const minScoreEl = document.getElementById("dlgRubric_minScore");
+  const criteriaMinEl = document.getElementById("dlgRubric_criteriaMin");
+  if (minScoreEl) minScoreEl.value = passRule.minimumScore ?? "";
+  if (criteriaMinEl) criteriaMinEl.value = passRule.requireAllCriteriaAbove ?? "";
+
+  const scalingTypeEl = document.getElementById("dlgRubric_scalingType");
+  const maxScoreEl = document.getElementById("dlgRubric_maxScore");
+  if (scalingTypeEl) scalingTypeEl.value = scalingRule.type ?? "weightedSum";
+  if (maxScoreEl) maxScoreEl.value = scalingRule.maxScore ?? 100;
+
+  dialog.showModal();
+}
+
+function addRubricCriterionRow(key = "", title = "", weight = 0.25, description = "") {
+  const list = document.getElementById("dlgRubric_criteriaList");
+  const row = document.createElement("div");
+  row.className = "rubric-criterion-row";
+  row.dataset.description = description;
+
+  const mkCell = (labelKey, labelDefault) => {
+    const cell = document.createElement("div");
+    const lbl = document.createElement("label");
+    lbl.setAttribute("data-i18n", labelKey);
+    lbl.textContent = t(labelKey) || labelDefault;
+    cell.appendChild(lbl);
+    return cell;
+  };
+
+  const keyCell = mkCell("adminContent.dialog.rubric.criterionKey", "ID");
+  const keyInput = document.createElement("input");
+  keyInput.className = "dlgRubric_key";
+  keyInput.value = key;
+  keyInput.autocomplete = "off";
+  keyInput.placeholder = "myKey";
+  keyCell.appendChild(keyInput);
+
+  const titleCell = mkCell("adminContent.dialog.rubric.criterionTitle", "Title");
+  const titleInput = document.createElement("input");
+  titleInput.className = "dlgRubric_title";
+  titleInput.value = title;
+  titleInput.autocomplete = "off";
+  titleCell.appendChild(titleInput);
+
+  const weightCell = mkCell("adminContent.dialog.rubric.criterionWeight", "Weight");
+  const weightInput = document.createElement("input");
+  weightInput.className = "dlgRubric_weight";
+  weightInput.type = "number";
+  weightInput.min = "0";
+  weightInput.max = "1";
+  weightInput.step = "0.05";
+  weightInput.value = weight;
+  weightInput.autocomplete = "off";
+  weightCell.appendChild(weightInput);
+
+  const removeCell = document.createElement("div");
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "field-dialog-close dlgRubric_remove";
+  removeBtn.setAttribute("aria-label", "Remove");
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", () => row.remove());
+  removeCell.appendChild(removeBtn);
+
+  row.appendChild(keyCell);
+  row.appendChild(titleCell);
+  row.appendChild(weightCell);
+  row.appendChild(removeCell);
+  list.appendChild(row);
+}
+
+function applyRubricDialog() {
+  const dialog = document.getElementById("dialogRubric");
+  const list = document.getElementById("dlgRubric_criteriaList");
+
+  const criteria = {};
+  for (const row of list.children) {
+    const key = row.querySelector(".dlgRubric_key")?.value.trim() ?? "";
+    const title = row.querySelector(".dlgRubric_title")?.value.trim() ?? "";
+    const weight = parseFloat(row.querySelector(".dlgRubric_weight")?.value ?? "0");
+    const description = row.dataset.description ?? "";
+
+    if (!key || !title) {
+      setMessage(t("adminContent.dialog.rubric.errorMissingFields"), "error");
+      return;
+    }
+    if (isNaN(weight) || weight <= 0) {
+      setMessage(t("adminContent.dialog.rubric.errorInvalidWeight"), "error");
+      return;
+    }
+    criteria[key] = { title, weight, ...(description ? { description } : {}) };
+  }
+
+  if (Object.keys(criteria).length === 0) {
+    setMessage(t("adminContent.dialog.rubric.errorNoCriteria"), "error");
+    return;
+  }
+
+  let existingLevels = [];
+  try {
+    const existing = JSON.parse(rubricScalingRuleJsonInput.value.trim() || "{}");
+    existingLevels = Array.isArray(existing.levels) ? existing.levels : [];
+  } catch { /* preserve nothing */ }
+
+  const scalingRule = {
+    type: document.getElementById("dlgRubric_scalingType")?.value.trim() || "weightedSum",
+    maxScore: parseInt(document.getElementById("dlgRubric_maxScore")?.value ?? "100", 10) || 100,
+    ...(existingLevels.length > 0 ? { levels: existingLevels } : {}),
+  };
+
+  const minScore = parseInt(document.getElementById("dlgRubric_minScore")?.value ?? "", 10);
+  const criteriaMin = parseInt(document.getElementById("dlgRubric_criteriaMin")?.value ?? "", 10);
+  const passRule = {
+    type: "minimumScore",
+    ...(isNaN(minScore) ? {} : { minimumScore: minScore }),
+    ...(isNaN(criteriaMin) ? {} : { requireAllCriteriaAbove: criteriaMin }),
+  };
+
+  rubricCriteriaJsonInput.value = JSON.stringify(criteria, null, 2);
+  rubricScalingRuleJsonInput.value = JSON.stringify(scalingRule, null, 2);
+  rubricPassRuleJsonInput.value = JSON.stringify(passRule, null, 2);
+
+  dirtyCards.add("rubric");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
 // ── End of card / dialog helpers ───────────────────────────────────────────────
 
 loadMeButton.addEventListener("click", async () => {
@@ -2343,6 +2495,10 @@ document.getElementById("editBtn_versionDetails")?.addEventListener("click", (e)
   openVersionDetailsDialog(e.currentTarget);
 });
 
+document.getElementById("editBtn_rubric")?.addEventListener("click", (e) => {
+  openRubricDialog(e.currentTarget);
+});
+
 // Scroll-to-section buttons (unimplemented cards)
 for (const btn of document.querySelectorAll("[data-card-scroll]")) {
   btn.addEventListener("click", () => {
@@ -2396,6 +2552,24 @@ document.getElementById("dialogVersionDetails")?.addEventListener("click", (e) =
 document.getElementById("dialogVersionDetails")?.addEventListener("cancel", (e) => {
   e.preventDefault();
   closeFieldDialog(document.getElementById("dialogVersionDetails"));
+});
+
+// Rubric dialog controls
+document.getElementById("dialogRubricClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogRubric"));
+});
+document.getElementById("dialogRubricCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogRubric"));
+});
+document.getElementById("dialogRubricApply")?.addEventListener("click", () => {
+  applyRubricDialog();
+});
+document.getElementById("dlgRubric_addCriterion")?.addEventListener("click", () => {
+  addRubricCriterionRow("", "", 0.25, "");
+});
+document.getElementById("dialogRubric")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogRubric"));
 });
 
 // Publish from content cards section

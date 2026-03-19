@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.35 - 2026-03-19
+### Summary
+Feat: Strukturert rubrikk-dialog — kriterieliste med add/remove, beståttregel og skaleringstregel (#149).
+
+### Included
+- **`admin-content.html`**: Ny `<dialog id="dialogRubric">` med dynamisk kriterieliste (ID, tittel, vekt per rad), beståttregel (minimumspoeng, alle-kriterier-over) og skaleringstregel (type, maksimumspoeng). CSS for `.dialog-section-label` og `.rubric-criterion-row`. Rediger-knapp på Rubrikk-kortet har fått `id="editBtn_rubric"`.
+- **`admin-content.js`**: `openRubricDialog()`, `addRubricCriterionRow()`, `applyRubricDialog()` — parser eksisterende JSON, populerer DOM med strukturerte felter, serialiserer tilbake. Bevarer eksisterende `levels` fra scalingRule. Validering med i18n-feilmeldinger.
+- **`i18n/admin-content-translations.js`**: Nye nøkler for `adminContent.dialog.rubric.*` (EN-GB, NB, NN).
+
 ## 0.8.34 - 2026-03-19
 ### Summary
 Feat: Dialog for redigering av versjonsdetaljer (taskText / guidanceText) med lokaliseringsfaner (#150).
