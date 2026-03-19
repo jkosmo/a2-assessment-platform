@@ -408,6 +408,9 @@ Appeals operating process (SLA, ownership, escalation):
 Observability and incident response runbook:
 - `doc/ops/OBSERVABILITY_RUNBOOK.md`
 
+Production PostgreSQL backup and recovery target:
+- `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`
+
 Phase-2 design note for participant appeal notifications:
 - `doc/design/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`
 

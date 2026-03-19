@@ -33,6 +33,7 @@ Current baseline note:
 - Azure runtime uses password-based PostgreSQL authentication wired from GitHub Environment secrets into App Service settings.
 - Non-production environments may temporarily allow a `prisma db push` compatibility fallback while already-provisioned databases are converged onto the new PostgreSQL migration baseline.
 - Microsoft Entra database authentication is still a follow-up hardening step, not part of the current automated baseline.
+- Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
 
 ## Environment separation
 - Staging resource group example: `rg-a2-assessment-staging`
