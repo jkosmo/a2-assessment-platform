@@ -34,6 +34,9 @@
       .import-controls { display: grid; gap: var(--space-1); }
       .import-file { display: grid; gap: calc(var(--space-1) * 0.5); }
       textarea { overflow-y: hidden; resize: vertical; }
+      .start-path-divider { display: flex; align-items: center; gap: var(--space-2); margin: calc(var(--space-2) * -0.5) 0; }
+      .start-path-divider::before, .start-path-divider::after { content: ""; flex: 1; border-top: 1px solid var(--color-border-soft); }
+      .start-path-divider span { font-size: 11px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.08em; }
       @media (max-width: 900px) {
         .module-status-header { flex-direction: column; }
         .module-status-grid { grid-template-columns: 1fr; }
@@ -127,6 +130,10 @@
       </div>
       <div class="small" data-i18n="adminContent.help.copyPrompt">The copied prompt ends with a placeholder/source section. Replace the source material references before sending it to an LLM.</div>
     </section>
+
+    <div class="start-path-divider" role="separator">
+      <span data-i18n="adminContent.startPath.or">or</span>
+    </div>
 
     <section class="card">
       <h2 data-i18n="adminContent.module.title">2) Create module shell manually</h2>
@@ -309,6 +316,7 @@
       </div>
       <div class="button-row" id="contentCardsActions" style="display:none;margin-top:var(--space-2)">
         <button id="saveAllCards" class="btn-primary" data-i18n="adminContent.cards.saveAll">Save all changes</button>
+        <button id="publishFromCards" class="btn-secondary" data-i18n="adminContent.cards.publish" hidden>Publish latest version</button>
         <button id="previewCardsBtn" class="btn-secondary" data-i18n="adminContent.cards.preview">Preview</button>
       </div>
     </section>
@@ -353,7 +361,13 @@
       <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
       <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
-      <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-1);flex-wrap:wrap">
+          <label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label>
+          <button type="button" id="fillDefaultPolicy" class="btn-secondary content-card-edit-btn" data-i18n="adminContent.moduleVersion.fillDefaultPolicy">Fill in template</button>
+        </div>
+        <textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea>
+      </div>
       <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
       <div class="row">
         <div><label for="moduleVersionRubricVersionId" data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>

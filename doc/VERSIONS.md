@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.27 - 2026-03-19
+### Summary
+UX: Admin Content — tydelig ELLER-skille mellom startpunktene, samlet lagre-logikk, "Publiser siste versjon" i innholdsoversikten, og standardmal for vurderingspolicy.
+
+### Included
+- **`admin-content.html`**: Visuell "ELLER"-separator mellom seksjon 1 (import) og seksjon 2 (manuell opprettelse). "Fyll inn standard"-knapp ved vurderingspolicy-feltet i seksjon 8. "Publiser siste versjon"-knapp i innholdsoversikten (vises når en lagret modulversjon-ID finnes).
+- **`admin-content.js`**: `fillDefaultAssessmentPolicy()` fyller ut standard policy basert på om MCQ er konfigurert (60/40 split med MCQ, 100/0 uten). Event listeners for de to nye knappene. `renderContentCards()` viser/skjuler publiser-knappen basert på om `publishModuleVersionId` er satt.
+- **`i18n/admin-content-translations.js`**: Fikset feilaktig "steg 3-6" i `bundleSaved`-melding til "steg 5–8" (alle lokaliteter). Omdøpte `saveBundle`-knapp til "Lagre alle endringer" (matcher nå innholdsoversiktens knapp). Lagt til nøkler: `startPath.or`, `cards.publish`, `moduleVersion.fillDefaultPolicy`.
+
 ## 0.8.26 - 2026-03-19
 ### Summary
 Fix: staging startup-krasj — prisma db push feilet på _manual_migrations-tabellen.

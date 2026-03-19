@@ -1958,6 +1958,29 @@ function renderContentCards() {
   // Show/hide save button row
   const actionsEl = document.getElementById("contentCardsActions");
   if (actionsEl) actionsEl.style.display = selectedModuleId ? "" : "none";
+
+  // Show publish button only when a saved module version ID is available
+  const publishFromCardsBtn = document.getElementById("publishFromCards");
+  if (publishFromCardsBtn) {
+    publishFromCardsBtn.hidden = !publishModuleVersionIdInput.value.trim();
+  }
+}
+
+// ── Assessment policy helper ───────────────────────────────────────────────────
+
+function fillDefaultAssessmentPolicy() {
+  let hasMcq = false;
+  try {
+    const parsed = JSON.parse(mcqQuestionsJsonInput.value.trim() || "[]");
+    hasMcq = Array.isArray(parsed) && parsed.length > 0;
+  } catch {
+    hasMcq = false;
+  }
+  const defaultPolicy = hasMcq
+    ? { scoring: { practicalWeight: 60, mcqWeight: 40 }, passRules: { totalMin: 65 } }
+    : { scoring: { practicalWeight: 100, mcqWeight: 0 }, passRules: { totalMin: 50 } };
+  moduleVersionAssessmentPolicyInput.value = JSON.stringify(defaultPolicy, null, 2);
+  syncTextareaHeight(moduleVersionAssessmentPolicyInput);
 }
 
 // ── Module details dialog ──────────────────────────────────────────────────────
@@ -2286,6 +2309,25 @@ document.getElementById("dialogModuleDetails")?.addEventListener("click", (e) =>
 document.getElementById("dialogModuleDetails")?.addEventListener("cancel", (e) => {
   e.preventDefault();
   closeFieldDialog(document.getElementById("dialogModuleDetails"));
+});
+
+// Fill default assessment policy
+document.getElementById("fillDefaultPolicy")?.addEventListener("click", () => {
+  fillDefaultAssessmentPolicy();
+});
+
+// Publish from content cards section
+document.getElementById("publishFromCards")?.addEventListener("click", async () => {
+  const btn = document.getElementById("publishFromCards");
+  await runWithBusyButton(btn, async () => {
+    try {
+      await handlePublishModuleVersion();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message, "error");
+      log(message);
+    }
+  });
 });
 
 // Content cards save + preview
