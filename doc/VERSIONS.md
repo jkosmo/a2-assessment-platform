@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.31 - 2026-03-19
+### Summary
+Fix: `defaultValue` i innleveringsfelt er nå et lokalisert objekt — LLM genererer modulspesifikke eksempelsvar for alle lokaliteter.
+
+### Included
+- **`admin-content.js`**: `resolvePromptFields()` sender nå `defaultValue: {"en-GB": "", "nb": "", "nn": ""}` (lokalisert objekt) som feltmal til LLM-en i stedet for en tom streng. LLM instrueres til å fylle inn realistiske, modulspesifikke eksempeltekster for hver lokalitet.
+- **`participant.js`**: `resetModuleDraftInputsToDefaultLocaleValues()` og `hasMeaningfulStoredDraft()` bruker nå `localizePreviewText(field.defaultValue)` for å håndtere både strenger og lokaliserte objekter som `defaultValue`.
+
 ## 0.8.30 - 2026-03-19
 ### Summary
 UX: «Bruk utkast-JSON» oppretter modulen automatisk, og innholdskort oppdateres korrekt etter modulopprettelse.

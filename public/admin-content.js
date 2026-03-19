@@ -92,7 +92,7 @@ function buildAuthoringPrompt(mcqCount, fields) {
       }`;
   const questionsJson = Array.from({ length: mcqCount }, () => questionStub).join(",\n      ");
   const schemaNote = fields.length > 0
-    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. Each field has id, label (plain text or locale object), type ("textarea" or "text"), required (boolean), and defaultValue (a short module-specific example answer shown as a pre-fill — write this in the module's primary language, make it realistic and relevant to the module topic).`
+    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. Include EXACTLY the fields listed in the template below — do not add, remove, or rename fields. Each field has id, label (locale object), type, required, and defaultValue (a locale object with en-GB, nb, nn — write a short, realistic, module-specific example answer for each locale).`
     : "";
   const schemaShape = fields.length > 0
     ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields }, null, 4).split("\n").join("\n    ")}`
@@ -1857,13 +1857,13 @@ function resolvePromptFields() {
   }
   const fields = [];
   if (promptFieldResponse.checked) {
-    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true, defaultValue: "" });
+    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
   }
   if (promptFieldReflection.checked) {
-    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true, defaultValue: "" });
+    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
   }
   if (promptFieldPromptExcerpt.checked) {
-    fields.push({ id: "promptExcerpt", label: { "en-GB": "Prompt excerpt", "nb": "Utdrag fra oppgave", "nn": "Utdrag frå oppgåve" }, type: "text", required: false, defaultValue: "" });
+    fields.push({ id: "promptExcerpt", label: { "en-GB": "Prompt excerpt", "nb": "Utdrag fra oppgave", "nn": "Utdrag frå oppgåve" }, type: "text", required: false, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
   }
   return fields;
 }

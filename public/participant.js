@@ -819,7 +819,7 @@ function hasMeaningfulStoredDraft(draft) {
 
   for (const field of currentSubmissionFields) {
     const value = typeof draft[field.id] === "string" ? draft[field.id].trim() : "";
-    const defaultValue = (field.defaultValue ?? "").trim();
+    const defaultValue = localizePreviewText(field.defaultValue).trim();
     if (value.length > 0 && value !== defaultValue) {
       return true;
     }
@@ -1227,7 +1227,7 @@ function resetModuleDraftInputsToDefaultLocaleValues() {
   for (const field of currentSubmissionFields) {
     const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
     if (element) {
-      element.value = field.defaultValue ?? "";
+      element.value = localizePreviewText(field.defaultValue);
     }
   }
 }
