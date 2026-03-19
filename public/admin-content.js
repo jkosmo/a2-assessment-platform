@@ -1047,7 +1047,7 @@ function applyImportDraftToForm(draft) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
-  moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchema, "");
+  moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema, "");
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "");
   if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
 

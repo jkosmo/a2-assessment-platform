@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.33 - 2026-03-19
+### Summary
+Fix: `submissionSchemaJson` fra LLM-output ble ikke lest inn i skjemaet — felt-nøkkel stemte ikke med variabelnavnet i koden.
+
+### Included
+- **`admin-content.js`**: `applyImportDraftToForm` leser nå `moduleVersion.submissionSchemaJson ?? moduleVersion.submissionSchema` — håndterer både LLM-format (`submissionSchemaJson`) og API-serverformat (`submissionSchema`).
+
 ## 0.8.32 - 2026-03-19
 ### Summary
 Fix: Prompt-instruksjon til LLM spesifiserer nå eksakt antall felt og feltID-er — forhindrer at LLM legger til ekstra innleveringsfelt.
