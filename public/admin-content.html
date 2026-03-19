@@ -71,6 +71,9 @@
       .dialog-section-label { font-size: 12px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--space-2) 0 6px; border-bottom: 1px solid var(--color-border-soft); padding-bottom: 4px; }
       .rubric-criterion-row { display: grid; grid-template-columns: 90px 1fr 64px 28px; gap: 6px; align-items: end; margin-bottom: 8px; }
       .rubric-criterion-row label { font-size: 11px; margin-bottom: 2px; }
+      .json-fallback-panel > summary { font-size: 13px; font-weight: 600; color: var(--color-meta); cursor: pointer; padding: 4px 0; user-select: none; list-style: revert; }
+      .json-fallback-panel > summary:hover { color: var(--color-text); }
+      .json-fallback-panel[open] > summary { margin-bottom: var(--space-1); border-bottom: 1px solid var(--color-border-soft); padding-bottom: var(--space-1); }
     </style>
   </head>
   <body>
@@ -324,15 +327,17 @@
       </div>
     </section>
 
-    <section class="card" id="sectionRubric" hidden>
-      <h2 data-i18n="adminContent.rubric.title">5) Submission scoring rules</h2>
-      <div class="small" data-i18n="adminContent.help.rubricOverview">Defines how the participant submission quality is scored.</div>
-      <div><label for="rubricCriteriaJson" data-i18n="adminContent.rubric.criteria">Criteria JSON</label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.rubricCriteria">Criterion keys should match the current evaluator contract unless code is changed.</div>
-      <div><label for="rubricScalingRuleJson" data-i18n="adminContent.rubric.scalingRule">Score scaling JSON</label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.rubricScalingRule">Controls score scaling (for example submission weight and maximum score).</div>
-      <div><label for="rubricPassRuleJson" data-i18n="adminContent.rubric.passRule">Pass/fail threshold JSON</label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.rubricPassRule">Controls pass/fail thresholds and hard-stop rules.</div>
+    <section class="card" id="sectionRubric">
+      <details class="json-fallback-panel">
+        <summary data-i18n="adminContent.jsonFallback.rubric">5) Rubrikk — rå JSON (avansert)</summary>
+        <div class="small" data-i18n="adminContent.help.rubricOverview">Defines how the participant submission quality is scored.</div>
+        <div><label for="rubricCriteriaJson" data-i18n="adminContent.rubric.criteria">Criteria JSON</label><textarea id="rubricCriteriaJson" rows="5"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.rubricCriteria">Criterion keys should match the current evaluator contract unless code is changed.</div>
+        <div><label for="rubricScalingRuleJson" data-i18n="adminContent.rubric.scalingRule">Score scaling JSON</label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.rubricScalingRule">Controls score scaling (for example submission weight and maximum score).</div>
+        <div><label for="rubricPassRuleJson" data-i18n="adminContent.rubric.passRule">Pass/fail threshold JSON</label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.rubricPassRule">Controls pass/fail thresholds and hard-stop rules.</div>
+      </details>
     </section>
 
     <section class="card" id="sectionPrompt">
@@ -358,14 +363,17 @@
     <section class="card" id="sectionModuleVersion">
       <h2 data-i18n="adminContent.moduleVersion.title">8) Participant-facing module version</h2>
       <div class="small" data-i18n="adminContent.help.moduleVersionOverview">Binds assignment text + scoring rules + evaluation instruction + test.</div>
-      <div><label for="moduleVersionTaskText" data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
-      <div><label for="moduleVersionGuidanceText" data-i18n="adminContent.moduleVersion.guidanceText">What we expect in the submission</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
+      <details class="json-fallback-panel">
+        <summary data-i18n="adminContent.jsonFallback.versionDetails">Oppgavetekst, veiledning og vurderingspolicy — rå JSON (avansert)</summary>
+        <div><label for="moduleVersionTaskText" data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
+        <div><label for="moduleVersionGuidanceText" data-i18n="adminContent.moduleVersion.guidanceText">What we expect in the submission</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
+        <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
+      </details>
       <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
       <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
-      <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
       <div class="row">
         <div><label for="moduleVersionRubricVersionId" data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
         <div><label for="moduleVersionPromptTemplateVersionId" data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>

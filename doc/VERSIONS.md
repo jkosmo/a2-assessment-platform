@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.38 - 2026-03-19
+### Summary
+UX: JSON-felter som er migrert til dialoger vises nå i kollapset `<details>`-panel — synkronisert med dialogverdiene.
+
+### Included
+- **`admin-content.html`**: Seksjon 5 (Rubrikk) er synlig igjen, men all JSON er pakket i `<details class="json-fallback-panel">`. I seksjon 8 er `moduleVersionTaskText`, `moduleVersionGuidanceText` og `moduleVersionAssessmentPolicy` pakket i eget `<details>`-panel; `moduleVersionSubmissionSchema` forblir åpent inntil dialog #151 er ferdig.
+- **`i18n/admin-content-translations.js`**: Summary-tekster for collapse-panelene (EN-GB, NB, NN).
+- Synkronisering er automatisk: dialogene leser fra og skriver til de samme textarea-inputs.
+
 ## 0.8.37 - 2026-03-19
 ### Summary
 UX: Skjuler seksjon 5 (Rubrikk) nå som den er fullt erstattet av rubrikk-dialogen.
