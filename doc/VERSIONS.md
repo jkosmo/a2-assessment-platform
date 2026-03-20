@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.41 - 2026-03-20
+### Summary
+Test: 36 negative config validation tests for `assessment-rules.json` zod schema (issue #213). Exports `rulesSchema` for direct unit-test access.
+
+### Included
+- **`src/config/assessmentRules.ts`**: Eksporterer `rulesSchema` (var privat).
+- **`test/unit/assessment-rules-config.test.ts`**: 36 tester i 7 describe-blokker — baseline gyldighet, `thresholds` utenfor verdiområde, `weights` min(1)-brudd, `manualReview`-struktur (inkl. dokumenterte schema-gap: tom array og inverted borderline godtas), `mcqQuality`-begrensninger, `recertification`-begrensninger, manglende påkrevde seksjoner og `sensitiveData`-regelstruktur. Dekker issue #213.
+
 ## 0.8.40 - 2026-03-20
 ### Summary
 Test: 21 nye unit-tester for `resolveAssessmentDecision` og 34 RBAC-denialtester uten DB-avhengighet.

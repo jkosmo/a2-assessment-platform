@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { env } from "./env.js";
 
-const rulesSchema = z.object({
+export const rulesSchema = z.object({
   thresholds: z.object({
     totalMin: z.number().min(0).max(100),
     practicalMinPercent: z.number().min(0).max(100),
