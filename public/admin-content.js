@@ -2347,6 +2347,484 @@ function applyRubricDialog() {
   closeFieldDialog(dialog);
 }
 
+// ── Prompt dialog (#153) ───────────────────────────────────────────────────────
+
+function openPromptDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogPrompt");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+
+  const parsedSys = parseLocalizedSafe(promptSystemPromptInput.value);
+  const parsedUser = parseLocalizedSafe(promptUserPromptTemplateInput.value);
+
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const sfx = _localeToSuffix[locale];
+    const getString = (parsed) => {
+      if (typeof parsed === "object" && parsed !== null) return parsed[locale] ?? "";
+      return locale === "en-GB" ? (typeof parsed === "string" ? parsed : "") : "";
+    };
+    const sysEl = document.getElementById(`dlgPR_sys_${sfx}`);
+    const userEl = document.getElementById(`dlgPR_user_${sfx}`);
+    if (sysEl) sysEl.value = getString(parsedSys);
+    if (userEl) userEl.value = getString(parsedUser);
+  }
+
+  const exList = document.getElementById("dlgPR_examplesList");
+  exList.innerHTML = "";
+  let examples = [];
+  try { examples = JSON.parse(promptExamplesJsonInput.value.trim() || "[]"); } catch { examples = []; }
+  if (!Array.isArray(examples)) examples = [];
+  for (const ex of examples) addPromptExampleRow(ex.input ?? "", ex.output ?? "");
+
+  setActiveDialogLocaleTab(dialog, "en-GB");
+  dialog.showModal();
+}
+
+function addPromptExampleRow(inputVal = "", outputVal = "") {
+  const list = document.getElementById("dlgPR_examplesList");
+  const row = document.createElement("div");
+  row.className = "prompt-example-row";
+
+  const header = document.createElement("div");
+  header.className = "prompt-example-header";
+  const numSpan = document.createElement("span");
+  numSpan.textContent = `${t("adminContent.dialog.prompt.exampleLabel") || "Example"} ${list.children.length + 1}`;
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "prompt-ex-remove";
+  removeBtn.setAttribute("aria-label", "Remove");
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", () => row.remove());
+  header.append(numSpan, removeBtn);
+  row.appendChild(header);
+
+  const mkTa = (labelKey, labelDefault, value) => {
+    const wrap = document.createElement("div");
+    const lbl = document.createElement("label");
+    lbl.textContent = t(labelKey) || labelDefault;
+    const ta = document.createElement("textarea");
+    ta.rows = 2;
+    ta.value = value;
+    wrap.append(lbl, ta);
+    return wrap;
+  };
+  row.appendChild(mkTa("adminContent.dialog.prompt.exampleInput", "Input", inputVal));
+  row.appendChild(mkTa("adminContent.dialog.prompt.exampleOutput", "Output", outputVal));
+  list.appendChild(row);
+}
+
+function applyPromptDialog() {
+  const dialog = document.getElementById("dialogPrompt");
+  const syss = {}, users = {};
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const sfx = _localeToSuffix[locale];
+    syss[locale] = document.getElementById(`dlgPR_sys_${sfx}`)?.value ?? "";
+    users[locale] = document.getElementById(`dlgPR_user_${sfx}`)?.value ?? "";
+  }
+  promptSystemPromptInput.value = formatEditorValue(syss);
+  promptUserPromptTemplateInput.value = formatEditorValue(users);
+
+  const exRows = document.querySelectorAll("#dlgPR_examplesList .prompt-example-row");
+  const examples = [];
+  for (const row of exRows) {
+    const tas = row.querySelectorAll("textarea");
+    const inputVal = tas[0]?.value ?? "";
+    const outputVal = tas[1]?.value ?? "";
+    if (inputVal || outputVal) examples.push({ input: inputVal, output: outputVal });
+  }
+  promptExamplesJsonInput.value = examples.length > 0 ? JSON.stringify(examples, null, 2) : "";
+
+  dirtyCards.add("prompt");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
+// ── MCQ dialog (#148) ──────────────────────────────────────────────────────────
+
+let _mcqQCounter = 0;
+
+function setActiveMcqLocale(locale) {
+  const list = document.getElementById("dlgMCQ_questionsList");
+  if (!list) return;
+  for (const el of list.querySelectorAll("[data-locale]")) {
+    el.hidden = el.dataset.locale !== locale;
+  }
+}
+
+function addMcqOptionRow(qId, container, optLocaleObj, isCorrect) {
+  const row = document.createElement("div");
+  row.className = "mcq-option-row";
+
+  const radio = document.createElement("input");
+  radio.type = "radio";
+  radio.name = `${qId}_correct`;
+  if (isCorrect) radio.checked = true;
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "mcq-opt-remove";
+  removeBtn.setAttribute("aria-label", "Remove");
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", () => row.remove());
+
+  row.appendChild(radio);
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "mcq-opt-text";
+    inp.dataset.locale = locale;
+    inp.autocomplete = "off";
+    if (locale !== "en-GB") inp.hidden = true;
+    const locVal = typeof optLocaleObj === "object" && optLocaleObj !== null
+      ? (optLocaleObj[locale] ?? "")
+      : (locale === "en-GB" ? (typeof optLocaleObj === "string" ? optLocaleObj : "") : "");
+    inp.value = locVal;
+    row.appendChild(inp);
+  }
+  row.appendChild(removeBtn);
+  container.appendChild(row);
+  return row;
+}
+
+function renumberMcqQuestions() {
+  const items = document.querySelectorAll("#dlgMCQ_questionsList .mcq-question-item");
+  items.forEach((item, i) => {
+    const numEl = item.querySelector(".mcq-q-num");
+    if (numEl) numEl.textContent = `Q${i + 1}`;
+  });
+}
+
+function createMcqQuestionEl(question, idx) {
+  const qId = `mcqQ_${_mcqQCounter++}`;
+  const locales = ["en-GB", "nb", "nn"];
+
+  const item = document.createElement("div");
+  item.className = "mcq-question-item";
+  item.dataset.qId = qId;
+
+  const header = document.createElement("div");
+  header.className = "mcq-q-header";
+  const numSpan = document.createElement("span");
+  numSpan.className = "mcq-q-num";
+  numSpan.textContent = `Q${idx + 1}`;
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "mcq-q-remove";
+  removeBtn.setAttribute("aria-label", "Remove question");
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", () => { item.remove(); renumberMcqQuestions(); });
+  header.append(numSpan, removeBtn);
+  item.appendChild(header);
+
+  const mkSectionLabel = (i18nKey, fallback) => {
+    const el = document.createElement("div");
+    el.className = "dialog-section-label";
+    el.textContent = t(i18nKey) || fallback;
+    return el;
+  };
+
+  // Stem per locale
+  item.appendChild(mkSectionLabel("adminContent.dialog.mcq.stem", "Stem"));
+  for (const locale of locales) {
+    const wrap = document.createElement("div");
+    wrap.dataset.locale = locale;
+    if (locale !== "en-GB") wrap.hidden = true;
+    const ta = document.createElement("textarea");
+    ta.className = "mcq-stem";
+    ta.rows = 2;
+    ta.value = typeof question?.stem === "object" && question.stem !== null
+      ? (question.stem[locale] ?? "")
+      : (locale === "en-GB" ? (typeof question?.stem === "string" ? question.stem : "") : "");
+    wrap.appendChild(ta);
+    item.appendChild(wrap);
+  }
+
+  // Options
+  item.appendChild(mkSectionLabel("adminContent.dialog.mcq.options", "Options"));
+  const optContainer = document.createElement("div");
+  optContainer.className = "mcq-options-container";
+  item.appendChild(optContainer);
+
+  const addOptBtn = document.createElement("button");
+  addOptBtn.type = "button";
+  addOptBtn.className = "btn-secondary";
+  addOptBtn.style.cssText = "width:auto;font-size:12px;margin-bottom:6px";
+  addOptBtn.textContent = `+ ${t("adminContent.dialog.mcq.addOption") || "Add option"}`;
+  addOptBtn.addEventListener("click", () => addMcqOptionRow(qId, optContainer, null, false));
+  item.appendChild(addOptBtn);
+
+  const options = Array.isArray(question?.options) ? question.options : [];
+  const correctAnswer = question?.correctAnswer;
+  for (let i = 0; i < options.length; i++) {
+    const optLocale = options[i];
+    let isCorrect = false;
+    if (correctAnswer && typeof correctAnswer === "object") {
+      const caEnGB = correctAnswer["en-GB"] ?? "";
+      const optEnGB = typeof optLocale === "object" ? (optLocale["en-GB"] ?? "") : (typeof optLocale === "string" ? optLocale : "");
+      isCorrect = caEnGB !== "" && caEnGB === optEnGB;
+    } else if (typeof correctAnswer === "string" && typeof optLocale === "string") {
+      isCorrect = optLocale === correctAnswer;
+    }
+    addMcqOptionRow(qId, optContainer, optLocale, isCorrect);
+  }
+
+  // Rationale per locale
+  item.appendChild(mkSectionLabel("adminContent.dialog.mcq.rationale", "Rationale"));
+  for (const locale of locales) {
+    const wrap = document.createElement("div");
+    wrap.dataset.locale = locale;
+    if (locale !== "en-GB") wrap.hidden = true;
+    const ta = document.createElement("textarea");
+    ta.className = "mcq-rationale";
+    ta.rows = 2;
+    ta.value = typeof question?.rationale === "object" && question.rationale !== null
+      ? (question.rationale[locale] ?? "")
+      : (locale === "en-GB" ? (typeof question?.rationale === "string" ? question.rationale : "") : "");
+    wrap.appendChild(ta);
+    item.appendChild(wrap);
+  }
+
+  return item;
+}
+
+function openMcqDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogMcq");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+  _mcqQCounter = 0;
+
+  const titleEl = document.getElementById("dlgMCQ_setTitle");
+  if (titleEl) titleEl.value = mcqSetTitleInput.value ?? "";
+
+  const list = document.getElementById("dlgMCQ_questionsList");
+  list.innerHTML = "";
+  let questions = [];
+  try { questions = JSON.parse(mcqQuestionsJsonInput.value.trim() || "[]"); } catch { questions = []; }
+  if (!Array.isArray(questions)) questions = [];
+  if (questions.length === 0) {
+    list.appendChild(createMcqQuestionEl(null, 0));
+  } else {
+    questions.forEach((q, i) => list.appendChild(createMcqQuestionEl(q, i)));
+  }
+
+  setActiveDialogLocaleTab(dialog, "en-GB");
+  setActiveMcqLocale("en-GB");
+  dialog.showModal();
+}
+
+function applyMcqDialog() {
+  const dialog = document.getElementById("dialogMcq");
+  const titleEl = document.getElementById("dlgMCQ_setTitle");
+  if (titleEl) mcqSetTitleInput.value = titleEl.value;
+
+  const locales = ["en-GB", "nb", "nn"];
+  const questions = [];
+  for (const qItem of document.querySelectorAll("#dlgMCQ_questionsList .mcq-question-item")) {
+    const stem = {}, rationale = {};
+    for (const locale of locales) {
+      stem[locale] = qItem.querySelector(`[data-locale="${locale}"] .mcq-stem`)?.value ?? "";
+      rationale[locale] = qItem.querySelector(`[data-locale="${locale}"] .mcq-rationale`)?.value ?? "";
+    }
+    const options = [];
+    const correctAnswer = {};
+    let foundCorrect = false;
+    for (const row of qItem.querySelectorAll(".mcq-option-row")) {
+      const opt = {};
+      for (const locale of locales) {
+        opt[locale] = row.querySelector(`.mcq-opt-text[data-locale="${locale}"]`)?.value ?? "";
+      }
+      options.push(opt);
+      if (row.querySelector("input[type='radio']")?.checked && !foundCorrect) {
+        for (const locale of locales) correctAnswer[locale] = opt[locale];
+        foundCorrect = true;
+      }
+    }
+    if (!foundCorrect && options.length > 0) {
+      for (const locale of locales) correctAnswer[locale] = options[0][locale];
+    }
+    questions.push({ stem, options, correctAnswer, rationale });
+  }
+
+  mcqQuestionsJsonInput.value = questions.length > 0 ? JSON.stringify(questions, null, 2) : "";
+  dirtyCards.add("mcq");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
+// ── Submission schema dialog (#151) ────────────────────────────────────────────
+
+let _ssFieldCounter = 0;
+
+function setActiveSsLocale(locale) {
+  const list = document.getElementById("dlgSS_fieldsList");
+  if (!list) return;
+  for (const el of list.querySelectorAll("[data-locale]")) {
+    el.hidden = el.dataset.locale !== locale;
+  }
+}
+
+function createSubmissionFieldRow(field, idx) {
+  const fId = `ssF_${_ssFieldCounter++}`;
+  const locales = ["en-GB", "nb", "nn"];
+
+  const row = document.createElement("div");
+  row.className = "ss-field-row";
+
+  const header = document.createElement("div");
+  header.className = "ss-field-header";
+  const titleSpan = document.createElement("span");
+  titleSpan.style.cssText = "font-size:12px;font-weight:700;color:var(--color-meta)";
+  titleSpan.textContent = `${t("adminContent.dialog.submissionSchema.fieldLabel") || "Field"} ${idx + 1}`;
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "ss-field-remove";
+  removeBtn.setAttribute("aria-label", "Remove");
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", () => row.remove());
+  header.append(titleSpan, removeBtn);
+  row.appendChild(header);
+
+  // ID + type row
+  const idTypeRow = document.createElement("div");
+  idTypeRow.className = "row";
+  const idWrap = document.createElement("div");
+  const idLabel = document.createElement("label");
+  idLabel.textContent = t("adminContent.dialog.submissionSchema.fieldId") || "ID";
+  const idInput = document.createElement("input");
+  idInput.className = "ss-field-id";
+  idInput.autocomplete = "off";
+  idInput.value = field?.id ?? "";
+  idInput.placeholder = "response";
+  idWrap.append(idLabel, idInput);
+  const typeWrap = document.createElement("div");
+  const typeLabel = document.createElement("label");
+  typeLabel.textContent = t("adminContent.dialog.submissionSchema.fieldType") || "Type";
+  const typeSelect = document.createElement("select");
+  typeSelect.className = "ss-field-type";
+  for (const opt of ["textarea", "text", "number"]) {
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt;
+    if (field?.type === opt) o.selected = true;
+    typeSelect.appendChild(o);
+  }
+  typeWrap.append(typeLabel, typeSelect);
+  idTypeRow.append(idWrap, typeWrap);
+  row.appendChild(idTypeRow);
+
+  // Required checkbox
+  const reqWrap = document.createElement("div");
+  const reqLabel = document.createElement("label");
+  reqLabel.className = "checkbox-label";
+  const reqCheck = document.createElement("input");
+  reqCheck.type = "checkbox";
+  reqCheck.className = "ss-field-required";
+  reqCheck.checked = field?.required !== false;
+  const reqSpan = document.createElement("span");
+  reqSpan.textContent = t("adminContent.dialog.submissionSchema.fieldRequired") || "Required";
+  reqLabel.append(reqCheck, reqSpan);
+  reqWrap.appendChild(reqLabel);
+  row.appendChild(reqWrap);
+
+  // Label per locale
+  const labelSectionEl = document.createElement("div");
+  labelSectionEl.className = "dialog-section-label";
+  labelSectionEl.textContent = t("adminContent.dialog.submissionSchema.fieldLabelLocale") || "Label";
+  row.appendChild(labelSectionEl);
+  const parsedLabel = typeof field?.label === "object" && field.label !== null ? field.label : (typeof field?.label === "string" ? { "en-GB": field.label } : {});
+  for (const locale of locales) {
+    const wrap = document.createElement("div");
+    wrap.dataset.locale = locale;
+    if (locale !== "en-GB") wrap.hidden = true;
+    const inp = document.createElement("input");
+    inp.className = "ss-field-label";
+    inp.autocomplete = "off";
+    inp.value = parsedLabel[locale] ?? "";
+    wrap.appendChild(inp);
+    row.appendChild(wrap);
+  }
+
+  // Default value per locale
+  const dvSectionEl = document.createElement("div");
+  dvSectionEl.className = "dialog-section-label";
+  dvSectionEl.textContent = t("adminContent.dialog.submissionSchema.fieldDefaultValue") || "Default value (opt.)";
+  row.appendChild(dvSectionEl);
+  const parsedDv = typeof field?.defaultValue === "object" && field.defaultValue !== null ? field.defaultValue : (typeof field?.defaultValue === "string" ? { "en-GB": field.defaultValue } : {});
+  for (const locale of locales) {
+    const wrap = document.createElement("div");
+    wrap.dataset.locale = locale;
+    if (locale !== "en-GB") wrap.hidden = true;
+    const inp = document.createElement("input");
+    inp.className = "ss-field-dv";
+    inp.autocomplete = "off";
+    inp.value = parsedDv[locale] ?? "";
+    wrap.appendChild(inp);
+    row.appendChild(wrap);
+  }
+
+  return row;
+}
+
+function openSubmissionSchemaDialog(triggerBtn) {
+  const dialog = document.getElementById("dialogSubmissionSchema");
+  if (!dialog) return;
+  _dialogTriggerRef = triggerBtn ?? null;
+  _ssFieldCounter = 0;
+
+  const list = document.getElementById("dlgSS_fieldsList");
+  list.innerHTML = "";
+  let schema = {};
+  try { schema = JSON.parse(moduleVersionSubmissionSchemaInput.value.trim() || "{}"); } catch { schema = {}; }
+  const fields = Array.isArray(schema?.fields) ? schema.fields : [];
+  if (fields.length === 0) {
+    list.appendChild(createSubmissionFieldRow({ id: "", type: "textarea", required: true }, 0));
+  } else {
+    fields.forEach((f, i) => list.appendChild(createSubmissionFieldRow(f, i)));
+  }
+
+  setActiveDialogLocaleTab(dialog, "en-GB");
+  setActiveSsLocale("en-GB");
+  dialog.showModal();
+}
+
+function applySubmissionSchemaDialog() {
+  const dialog = document.getElementById("dialogSubmissionSchema");
+  const locales = ["en-GB", "nb", "nn"];
+  const fields = [];
+
+  for (const row of document.querySelectorAll("#dlgSS_fieldsList .ss-field-row")) {
+    const id = row.querySelector(".ss-field-id")?.value.trim() ?? "";
+    if (!id) {
+      setMessage(t("adminContent.dialog.submissionSchema.errorIdRequired") || "All fields must have an ID.", "error");
+      return;
+    }
+    const type = row.querySelector(".ss-field-type")?.value ?? "textarea";
+    const required = row.querySelector(".ss-field-required")?.checked ?? true;
+    const label = {};
+    for (const locale of locales) {
+      label[locale] = row.querySelector(`[data-locale="${locale}"] .ss-field-label`)?.value ?? "";
+    }
+    const defaultValue = {};
+    let hasDv = false;
+    for (const locale of locales) {
+      const dv = row.querySelector(`[data-locale="${locale}"] .ss-field-dv`)?.value ?? "";
+      defaultValue[locale] = dv;
+      if (dv) hasDv = true;
+    }
+    const fieldObj = { id, label, type, required };
+    if (hasDv) fieldObj.defaultValue = defaultValue;
+    fields.push(fieldObj);
+  }
+
+  moduleVersionSubmissionSchemaInput.value = fields.length > 0 ? JSON.stringify({ fields }, null, 2) : "";
+  dirtyCards.add("submissionSchema");
+  syncAllTextareaHeights();
+  renderContentCards();
+  closeFieldDialog(dialog);
+}
+
 // ── End of card / dialog helpers ───────────────────────────────────────────────
 
 loadMeButton.addEventListener("click", async () => {
@@ -2571,6 +3049,18 @@ document.getElementById("editBtn_assessmentPolicy")?.addEventListener("click", (
   openAssessmentPolicyDialog(e.currentTarget);
 });
 
+document.getElementById("editBtn_prompt")?.addEventListener("click", (e) => {
+  openPromptDialog(e.currentTarget);
+});
+
+document.getElementById("editBtn_mcq")?.addEventListener("click", (e) => {
+  openMcqDialog(e.currentTarget);
+});
+
+document.getElementById("editBtn_submissionSchema")?.addEventListener("click", (e) => {
+  openSubmissionSchemaDialog(e.currentTarget);
+});
+
 // Scroll-to-section buttons (unimplemented cards)
 for (const btn of document.querySelectorAll("[data-card-scroll]")) {
   btn.addEventListener("click", () => {
@@ -2657,6 +3147,90 @@ document.getElementById("dlgRubric_addCriterion")?.addEventListener("click", () 
 document.getElementById("dialogRubric")?.addEventListener("cancel", (e) => {
   e.preventDefault();
   closeFieldDialog(document.getElementById("dialogRubric"));
+});
+
+// Prompt dialog controls
+document.getElementById("dialogPromptClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogPrompt"));
+});
+document.getElementById("dialogPromptCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogPrompt"));
+});
+document.getElementById("dialogPromptApply")?.addEventListener("click", () => {
+  applyPromptDialog();
+});
+document.getElementById("dlgPR_addExample")?.addEventListener("click", () => {
+  addPromptExampleRow("", "");
+});
+document.getElementById("dialogPrompt")?.addEventListener("click", (e) => {
+  const tab = e.target.closest(".dialog-locale-tab");
+  if (!tab) return;
+  const locale = tab.dataset.localeTab;
+  if (locale) setActiveDialogLocaleTab(document.getElementById("dialogPrompt"), locale);
+});
+document.getElementById("dialogPrompt")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogPrompt"));
+});
+
+// MCQ dialog controls
+document.getElementById("dialogMcqClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogMcq"));
+});
+document.getElementById("dialogMcqCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogMcq"));
+});
+document.getElementById("dialogMcqApply")?.addEventListener("click", () => {
+  applyMcqDialog();
+});
+document.getElementById("dlgMCQ_addQuestion")?.addEventListener("click", () => {
+  const list = document.getElementById("dlgMCQ_questionsList");
+  const idx = list.querySelectorAll(".mcq-question-item").length;
+  list.appendChild(createMcqQuestionEl(null, idx));
+  const activeTab = document.querySelector("#dialogMcq .dialog-locale-tab.active");
+  setActiveMcqLocale(activeTab?.dataset.localeTab ?? "en-GB");
+});
+document.getElementById("dialogMcq")?.addEventListener("click", (e) => {
+  const tab = e.target.closest(".dialog-locale-tab");
+  if (!tab) return;
+  const locale = tab.dataset.localeTab;
+  if (!locale) return;
+  setActiveDialogLocaleTab(document.getElementById("dialogMcq"), locale);
+  setActiveMcqLocale(locale);
+});
+document.getElementById("dialogMcq")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogMcq"));
+});
+
+// Submission schema dialog controls
+document.getElementById("dialogSubmissionSchemaClose")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogSubmissionSchema"));
+});
+document.getElementById("dialogSubmissionSchemaCancel")?.addEventListener("click", () => {
+  closeFieldDialog(document.getElementById("dialogSubmissionSchema"));
+});
+document.getElementById("dialogSubmissionSchemaApply")?.addEventListener("click", () => {
+  applySubmissionSchemaDialog();
+});
+document.getElementById("dlgSS_addField")?.addEventListener("click", () => {
+  const list = document.getElementById("dlgSS_fieldsList");
+  const idx = list.querySelectorAll(".ss-field-row").length;
+  list.appendChild(createSubmissionFieldRow({ id: "", type: "textarea", required: true }, idx));
+  const activeTab = document.querySelector("#dialogSubmissionSchema .dialog-locale-tab.active");
+  setActiveSsLocale(activeTab?.dataset.localeTab ?? "en-GB");
+});
+document.getElementById("dialogSubmissionSchema")?.addEventListener("click", (e) => {
+  const tab = e.target.closest(".dialog-locale-tab");
+  if (!tab) return;
+  const locale = tab.dataset.localeTab;
+  if (!locale) return;
+  setActiveDialogLocaleTab(document.getElementById("dialogSubmissionSchema"), locale);
+  setActiveSsLocale(locale);
+});
+document.getElementById("dialogSubmissionSchema")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeFieldDialog(document.getElementById("dialogSubmissionSchema"));
 });
 
 // Publish from content cards section

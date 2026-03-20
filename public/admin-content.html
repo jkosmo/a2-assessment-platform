@@ -54,7 +54,7 @@
       .content-card-summary.empty { font-style: italic; }
       @media (max-width: 700px) { .content-cards-grid { grid-template-columns: 1fr; } }
       /* Field dialogs */
-      .field-dialog { border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-2); max-width: 600px; width: calc(100vw - 2rem); box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+      .field-dialog { border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-2); max-width: 600px; width: calc(100vw - 2rem); box-shadow: 0 8px 32px rgba(0,0,0,0.18); max-height: 90vh; overflow-y: auto; }
       .field-dialog::backdrop { background: rgba(0,0,0,0.35); }
       .field-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-2); gap: var(--space-1); }
       .field-dialog-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0; }
@@ -74,6 +74,16 @@
       .json-fallback-panel > summary { font-size: 13px; font-weight: 600; color: var(--color-meta); cursor: pointer; padding: 4px 0; user-select: none; list-style: revert; }
       .json-fallback-panel > summary:hover { color: var(--color-text); }
       .json-fallback-panel[open] > summary { margin-bottom: var(--space-1); border-bottom: 1px solid var(--color-border-soft); padding-bottom: var(--space-1); }
+      .mcq-question-item { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
+      .mcq-q-header { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+      .mcq-q-remove, .mcq-opt-remove, .prompt-ex-remove, .ss-field-remove { background: none; border: none; color: var(--color-meta); cursor: pointer; padding: 2px 6px; font-size: 14px; line-height: 1; border-radius: 4px; }
+      .mcq-q-remove:hover, .mcq-opt-remove:hover, .prompt-ex-remove:hover, .ss-field-remove:hover { color: #c00; }
+      .mcq-option-row { display: grid; grid-template-columns: 20px 1fr 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+      .mcq-option-row input[type="radio"] { margin: 0; }
+      .prompt-example-row { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
+      .prompt-example-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.05em; }
+      .ss-field-row { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
+      .ss-field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     </style>
   </head>
   <body>
@@ -288,7 +298,7 @@
                 <span id="contentCard_prompt_unsaved" class="content-card-unsaved" hidden data-i18n="adminContent.cards.unsaved">Unsaved</span>
               </div>
             </div>
-            <button class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn" data-card-scroll="sectionPrompt">Edit</button>
+            <button class="btn-secondary content-card-edit-btn" id="editBtn_prompt" data-i18n="adminContent.cards.editBtn">Edit</button>
           </div>
           <div id="contentCard_prompt_summary" class="content-card-summary empty"></div>
         </div>
@@ -301,7 +311,7 @@
                 <span id="contentCard_mcq_unsaved" class="content-card-unsaved" hidden data-i18n="adminContent.cards.unsaved">Unsaved</span>
               </div>
             </div>
-            <button class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn" data-card-scroll="sectionMcq">Edit</button>
+            <button class="btn-secondary content-card-edit-btn" id="editBtn_mcq" data-i18n="adminContent.cards.editBtn">Edit</button>
           </div>
           <div id="contentCard_mcq_summary" class="content-card-summary empty"></div>
         </div>
@@ -314,7 +324,7 @@
                 <span id="contentCard_submissionSchema_unsaved" class="content-card-unsaved" hidden data-i18n="adminContent.cards.unsaved">Unsaved</span>
               </div>
             </div>
-            <button class="btn-secondary content-card-edit-btn" data-i18n="adminContent.cards.editBtn" data-card-scroll="sectionModuleVersion">Edit</button>
+            <button class="btn-secondary content-card-edit-btn" id="editBtn_submissionSchema" data-i18n="adminContent.cards.editBtn">Edit</button>
           </div>
           <div id="contentCard_submissionSchema_summary" class="content-card-summary empty"></div>
         </div>
@@ -341,23 +351,27 @@
     </section>
 
     <section class="card" id="sectionPrompt">
-      <h2 data-i18n="adminContent.prompt.title">6) LLM evaluation instruction</h2>
-      <div class="small" data-i18n="adminContent.help.promptOverview">Instruction used by the LLM during evaluation.</div>
-      <div><label for="promptSystemPrompt" data-i18n="adminContent.prompt.systemPrompt">System instruction to evaluator</label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.promptSystemPrompt">Global evaluator behavior and output constraints.</div>
-      <div><label for="promptUserPromptTemplate" data-i18n="adminContent.prompt.userPromptTemplate">Evaluation task instruction</label><textarea id="promptUserPromptTemplate" rows="3"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.promptUserTemplate">Task-specific evaluation instruction. This is often called the module evaluation prompt.</div>
-      <div><label for="promptExamplesJson" data-i18n="adminContent.prompt.examplesJson">Optional examples JSON array</label><textarea id="promptExamplesJson" rows="4"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.promptExamples">Optional few-shot examples. Keep these short and stable.</div>
+      <details class="json-fallback-panel">
+        <summary data-i18n="adminContent.jsonFallback.prompt">6) LLM prompt — raw JSON (advanced)</summary>
+        <div class="small" data-i18n="adminContent.help.promptOverview">Instruction used by the LLM during evaluation.</div>
+        <div><label for="promptSystemPrompt" data-i18n="adminContent.prompt.systemPrompt">System instruction to evaluator</label><textarea id="promptSystemPrompt" rows="3"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.promptSystemPrompt">Global evaluator behavior and output constraints.</div>
+        <div><label for="promptUserPromptTemplate" data-i18n="adminContent.prompt.userPromptTemplate">Evaluation task instruction</label><textarea id="promptUserPromptTemplate" rows="3"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.promptUserTemplate">Task-specific evaluation instruction. This is often called the module evaluation prompt.</div>
+        <div><label for="promptExamplesJson" data-i18n="adminContent.prompt.examplesJson">Optional examples JSON array</label><textarea id="promptExamplesJson" rows="4"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.promptExamples">Optional few-shot examples. Keep these short and stable.</div>
+      </details>
     </section>
 
     <section class="card" id="sectionMcq">
-      <h2 data-i18n="adminContent.mcq.title">7) Multiple-choice test</h2>
-      <div class="small" data-i18n="adminContent.help.mcqOverview">Defines the participant multiple-choice test.</div>
-      <div><label for="mcqSetTitle" data-i18n="adminContent.mcq.setTitle">Test title</label><input id="mcqSetTitle" /></div>
-      <div class="small" data-i18n="adminContent.help.mcqTitle">Shown in admin context and can be localized using locale JSON.</div>
-      <div><label for="mcqQuestionsJson" data-i18n="adminContent.mcq.questionsJson">Questions JSON array</label><textarea id="mcqQuestionsJson" rows="7"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.mcqQuestions">Supports plain strings or locale objects per field: stem/options/correctAnswer/rationale.</div>
+      <details class="json-fallback-panel">
+        <summary data-i18n="adminContent.jsonFallback.mcq">7) Multiple-choice test — raw JSON (advanced)</summary>
+        <div class="small" data-i18n="adminContent.help.mcqOverview">Defines the participant multiple-choice test.</div>
+        <div><label for="mcqSetTitle" data-i18n="adminContent.mcq.setTitle">Test title</label><input id="mcqSetTitle" /></div>
+        <div class="small" data-i18n="adminContent.help.mcqTitle">Shown in admin context and can be localized using locale JSON.</div>
+        <div><label for="mcqQuestionsJson" data-i18n="adminContent.mcq.questionsJson">Questions JSON array</label><textarea id="mcqQuestionsJson" rows="7"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.mcqQuestions">Supports plain strings or locale objects per field: stem/options/correctAnswer/rationale.</div>
+      </details>
     </section>
 
     <section class="card" id="sectionModuleVersion">
@@ -372,8 +386,11 @@
         <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
         <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
       </details>
-      <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
-      <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
+      <details class="json-fallback-panel">
+        <summary data-i18n="adminContent.jsonFallback.submissionSchema">Submission form schema — raw JSON (advanced)</summary>
+        <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
+      </details>
       <div class="row">
         <div><label for="moduleVersionRubricVersionId" data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
         <div><label for="moduleVersionPromptTemplateVersionId" data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>
@@ -561,6 +578,79 @@
       <div class="dialog-footer">
         <button type="button" id="dialogRubricCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
         <button type="button" id="dialogRubricApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
+      </div>
+    </dialog>
+
+    <dialog id="dialogPrompt" aria-labelledby="dialogPromptTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogPromptTitle" class="field-dialog-title" data-i18n="adminContent.dialog.prompt.title">Edit LLM prompt</h2>
+        <button type="button" id="dialogPromptClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="dialog-locale-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB" aria-controls="dlgPRPane_enGB">EN-GB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nb" aria-controls="dlgPRPane_nb">NB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn" aria-controls="dlgPRPane_nn">NN</button>
+      </div>
+      <div id="dlgPRPane_enGB" class="dialog-locale-pane active" role="tabpanel" data-locale-pane="en-GB">
+        <div><label for="dlgPR_sys_enGB" data-i18n="adminContent.dialog.prompt.systemPrompt">System prompt</label><textarea id="dlgPR_sys_enGB" rows="5"></textarea></div>
+        <div><label for="dlgPR_user_enGB" data-i18n="adminContent.dialog.prompt.userPromptTemplate">User prompt template</label><textarea id="dlgPR_user_enGB" rows="5"></textarea></div>
+      </div>
+      <div id="dlgPRPane_nb" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nb">
+        <div><label for="dlgPR_sys_nb" data-i18n="adminContent.dialog.prompt.systemPrompt">System prompt</label><textarea id="dlgPR_sys_nb" rows="5"></textarea></div>
+        <div><label for="dlgPR_user_nb" data-i18n="adminContent.dialog.prompt.userPromptTemplate">User prompt template</label><textarea id="dlgPR_user_nb" rows="5"></textarea></div>
+      </div>
+      <div id="dlgPRPane_nn" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nn">
+        <div><label for="dlgPR_sys_nn" data-i18n="adminContent.dialog.prompt.systemPrompt">System prompt</label><textarea id="dlgPR_sys_nn" rows="5"></textarea></div>
+        <div><label for="dlgPR_user_nn" data-i18n="adminContent.dialog.prompt.userPromptTemplate">User prompt template</label><textarea id="dlgPR_user_nn" rows="5"></textarea></div>
+      </div>
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.prompt.sectionExamples">Examples (optional)</div>
+      <div id="dlgPR_examplesList"></div>
+      <button type="button" id="dlgPR_addExample" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.prompt.addExample">Add example</span></button>
+      <div class="dialog-footer">
+        <button type="button" id="dialogPromptCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
+        <button type="button" id="dialogPromptApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
+      </div>
+    </dialog>
+
+    <dialog id="dialogMcq" aria-labelledby="dialogMcqTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogMcqTitle" class="field-dialog-title" data-i18n="adminContent.dialog.mcq.title">Edit multiple-choice test</h2>
+        <button type="button" id="dialogMcqClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div>
+        <label for="dlgMCQ_setTitle" data-i18n="adminContent.dialog.mcq.setTitle">Test title</label>
+        <input id="dlgMCQ_setTitle" autocomplete="off" />
+      </div>
+      <div class="dialog-locale-tabs" role="tablist" style="margin-top:var(--space-1)">
+        <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB">EN-GB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nb">NB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn">NN</button>
+      </div>
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.mcq.sectionQuestions">Questions</div>
+      <div id="dlgMCQ_questionsList"></div>
+      <button type="button" id="dlgMCQ_addQuestion" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.mcq.addQuestion">Add question</span></button>
+      <div class="dialog-footer">
+        <button type="button" id="dialogMcqCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
+        <button type="button" id="dialogMcqApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
+      </div>
+    </dialog>
+
+    <dialog id="dialogSubmissionSchema" aria-labelledby="dialogSubmissionSchemaTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogSubmissionSchemaTitle" class="field-dialog-title" data-i18n="adminContent.dialog.submissionSchema.title">Edit submission form</h2>
+        <button type="button" id="dialogSubmissionSchemaClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="dialog-locale-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB">EN-GB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nb">NB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn">NN</button>
+      </div>
+      <div class="dialog-section-label" data-i18n="adminContent.dialog.submissionSchema.sectionFields">Fields</div>
+      <div id="dlgSS_fieldsList"></div>
+      <button type="button" id="dlgSS_addField" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.submissionSchema.addField">Add field</span></button>
+      <div class="dialog-footer">
+        <button type="button" id="dialogSubmissionSchemaCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
+        <button type="button" id="dialogSubmissionSchemaApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
       </div>
     </dialog>
 
