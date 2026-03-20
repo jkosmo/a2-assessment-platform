@@ -1,13 +1,10 @@
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
-import { createAssessmentDecision } from "./decisionService.js";
 import { recordAuditEvent } from "./auditService.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
 import { normalizeLocale } from "../i18n/locale.js";
-import { notifyAssessmentResult } from "./participantNotificationService.js";
-import { localizeContentText } from "../i18n/content.js";
 import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
 import { runLlmEvaluationPipeline } from "./AssessmentEvaluator.js";
+import { applyAssessmentDecision } from "./AssessmentDecisionApplicationService.js";
 import {
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
@@ -68,9 +65,11 @@ async function runAssessment(jobId: string) {
     inputContext,
   });
 
-  const decisionResult = await createAssessmentDecision({
+  await applyAssessmentDecision({
+    jobId,
     submissionId: submission.id,
     userId: submission.userId,
+    moduleId: submission.moduleId,
     moduleVersionId: submission.moduleVersionId,
     rubricVersionId: submission.moduleVersion.rubricVersionId,
     promptTemplateVersionId: submission.moduleVersion.promptTemplateVersionId,
@@ -80,36 +79,10 @@ async function runAssessment(jobId: string) {
     forceManualReviewReason,
     assessmentPolicy: inputContext.assessmentPolicy,
     rubricMaxTotal: inputContext.rubricMaxTotal,
-  });
-
-  if (!decisionResult.needsManualReview) {
-    const moduleTitle = localizeContentText(submissionLocale, submission.moduleVersion.module.title) ?? submission.moduleId;
-    notifyAssessmentResult({
-      submissionId: submission.id,
-      submittedAt: submission.submittedAt,
-      recipientEmail: submission.user.email,
-      recipientName: submission.user.name,
-      moduleTitle,
-      moduleId: submission.moduleId,
-      passFailTotal: decisionResult.decision.passFailTotal,
-      locale: submissionLocale,
-    }).catch((error: unknown) => {
-      logOperationalEvent(
-        "participant_notification_failed",
-        {
-          submissionId: submission.id,
-          errorMessage: error instanceof Error ? error.message : "Unknown error",
-        },
-        "error",
-      );
-    });
-  }
-
-  await recordAuditEvent({
-    entityType: "assessment_job",
-    entityId: jobId,
-    action: "assessment_job_completed",
-    actorId: submission.userId,
-    metadata: { submissionId: submission.id },
+    moduleTitle: submission.moduleVersion.module.title,
+    submissionLocale,
+    submittedAt: submission.submittedAt,
+    recipientEmail: submission.user.email,
+    recipientName: submission.user.name,
   });
 }

@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.54 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentDecisionApplicationService fra assessmentJobService. Lukker #186.
+
+### Included
+- **`src/services/AssessmentDecisionApplicationService.ts`** (#186): Ny dedikert modul som orkestrerer den siste fasen av en assessmentjobb: oppretter beslutning via `createAssessmentDecision` (allerede transaksjonell i `decisionService.ts`), sender deltakervarsling og skriver jobbberedningsevent til audit-loggen.
+- **`src/services/assessmentJobService.ts`**: Er nå et tynt orkestreringssjikt som kobler `AssessmentJobRunner`, `AssessmentInputFactory`, `AssessmentEvaluator` og `AssessmentDecisionApplicationService`. Ingen adferdsendringer.
+- **`test/unit/assessment-decision-application-service.test.ts`**: Nye enhetstester for `applyAssessmentDecision` — dekker varsling ved autovedtak, manglende varsling ved manuell gjennomgang, feilhåndtering av varsling (swallows) og videreføring av `forceManualReviewReason`.
+
 ## 0.8.53 - 2026-03-20
 ### Summary
 Refactor: Ekstraher AssessmentEvaluator fra assessmentJobService. Lukker #185.
