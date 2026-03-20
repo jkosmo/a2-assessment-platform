@@ -2601,7 +2601,7 @@ function openMcqDialog(triggerBtn) {
     try {
       const parsed = JSON.parse(rawTitle);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        displayTitle = localizeContentValue(parsed);
+        displayTitle = parsed["en-GB"] ?? Object.values(parsed).find((v) => typeof v === "string" && v.trim()) ?? "";
       }
     } catch { /* not JSON, use as-is */ }
     titleEl.value = displayTitle;

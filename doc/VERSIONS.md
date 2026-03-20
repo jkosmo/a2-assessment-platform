@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.48 - 2026-03-20
+### Summary
+Fix: MCQ-dialog viste norsk tittel på EN-GB-fane.
+
+### Included
+- **`public/admin-content.js`**: `openMcqDialog` bruker nå `parsed["en-GB"]` i stedet for `localizeContentValue` for å hente tittelen fra et lokaliseringsobjekt — sikrer at en-GB-verdien alltid vises i det enkle tittfeltet, uavhengig av `currentLocale`.
+
 ## 0.8.47 - 2026-03-20
 ### Summary
 Fix: MCQ-dialog viste rå JSON i tittelfelt når tittel var et lokaliseringsobjekt.
