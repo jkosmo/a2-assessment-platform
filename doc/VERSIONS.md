@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.47 - 2026-03-20
+### Summary
+Fix: MCQ-dialog viste rå JSON i tittelfelt når tittel var et lokaliseringsobjekt.
+
+### Included
+- **`public/admin-content.js`**: `openMcqDialog` parser nå `mcqSetTitleInput.value` som JSON og trekker ut det lokaliserte tittelen via `localizeContentValue` i stedet for å vise den rå JSON-strengen (f.eks. `{"en-GB":"...","nb":"...","nn":"..."}`). Lagring fortsetter å fungere som normalt — plain string lagres tilbake til `mcqSetTitleInput` ved apply.
+
+## 0.8.46 - 2026-03-20
+### Summary
+Fix: i18n-paritetsfeil — `adminContent.moduleVersion.fillDefaultPolicy` manglet i en-GB baseline.
+
+### Included
+- **`public/i18n/admin-content-translations.js`**: La til manglende `adminContent.moduleVersion.fillDefaultPolicy` ("Fill in defaults") i `adminContentBase`. nb og nn hadde nøkkelen; en-GB manglet den, noe som brøt `admin-content-translations.test.js` paritetssjekktest med 479 vs 478 nøkler.
+
 ## 0.8.45 - 2026-03-20
 ### Summary
 UX: Fjernet X-knapp øverst i dialogbokser, tydeligere slette-knapper, kompakt tittellinje.

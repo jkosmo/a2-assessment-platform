@@ -2595,7 +2595,17 @@ function openMcqDialog(triggerBtn) {
   _mcqQCounter = 0;
 
   const titleEl = document.getElementById("dlgMCQ_setTitle");
-  if (titleEl) titleEl.value = mcqSetTitleInput.value ?? "";
+  if (titleEl) {
+    const rawTitle = mcqSetTitleInput.value ?? "";
+    let displayTitle = rawTitle;
+    try {
+      const parsed = JSON.parse(rawTitle);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        displayTitle = localizeContentValue(parsed);
+      }
+    } catch { /* not JSON, use as-is */ }
+    titleEl.value = displayTitle;
+  }
 
   const list = document.getElementById("dlgMCQ_questionsList");
   list.innerHTML = "";

@@ -78,6 +78,7 @@ const adminContentBase = {
   "adminContent.moduleVersion.create": "Create module version",
   "adminContent.moduleVersion.saveBundle": "Save all changes",
   "adminContent.moduleVersion.previewDraft": "Preview",
+  "adminContent.moduleVersion.fillDefaultPolicy": "Fill in defaults",
   "adminContent.publish.title": "9) Publish module version",
   "adminContent.publish.moduleVersionId": "Module version ID to publish",
   "adminContent.publish.publish": "Publish version",
