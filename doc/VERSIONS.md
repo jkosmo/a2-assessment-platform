@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.40 - 2026-03-20
+### Summary
+Test: 21 nye unit-tester for `resolveAssessmentDecision` og 34 RBAC-denialtester uten DB-avhengighet.
+
+### Included
+- **`test/unit/decision-service.test.ts`**: Nye describe-blokker for score/practicalPercent-beregning, borderline-vindu (grenser, policy-override), practicalMinPercent/mcqMinPercent-porter via policy, red flag-ruting og decision-reason-strenger. Totalt 36 tester (+21 nye). Dekker issues #174, #175, #176.
+- **`test/unit/rbac-matrix.test.ts`**: Ny testfil — 34 RBAC-denialtester for `/api/reviews`, `/api/appeals`, `/api/admin/content`, `/api/admin/sync/org`, `/api/reports`, `/api/submissions`. Kjøres uten database ved å mocke `userRepository`. Dekker issue #211.
+
+## 0.8.39 - 2026-03-19
+### Summary
+Feat: Dialog-basert redigering for LLM-prompt (#153), flervalgsspørsmål (#148) og innleveringsskjema (#151) — alle JSON-seksjoner er nå kollapset i `<details>`-paneler.
+
+### Included
+- **`admin-content.html`**: Tre nye `<dialog>`-elementer (`dialogPrompt`, `dialogMcq`, `dialogSubmissionSchema`). Seksjonene 6 (Prompt), 7 (MCQ) og submissionSchema-feltet i seksjon 8 er pakket inn i `<details class="json-fallback-panel">`. Redigerings-knapper for prompt, mcq og submissionSchema kobler nå til dialogen i stedet for å scrolle.
+- **`admin-content.js`**: `openPromptDialog`/`applyPromptDialog` med lokale tabs og dynamisk eksempelliste. `openMcqDialog`/`applyMcqDialog` med dynamisk spørsmålsliste, alternativer per spørsmål og lokale tabs. `openSubmissionSchemaDialog`/`applySubmissionSchemaDialog` med dynamisk feltliste og lokale tabs. Alle event-listeners koblet opp.
+- **`i18n/admin-content-translations.js`**: Nye i18n-nøkler for alle tre dialoger i EN-GB, NB og NN.
+
 ## 0.8.38 - 2026-03-19
 ### Summary
 UX: JSON-felter som er migrert til dialoger vises nå i kollapset `<details>`-panel — synkronisert med dialogverdiene.
