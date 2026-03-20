@@ -7,6 +7,42 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.54 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentDecisionApplicationService fra assessmentJobService. Lukker #186.
+
+### Included
+- **`src/services/AssessmentDecisionApplicationService.ts`** (#186): Ny dedikert modul som orkestrerer den siste fasen av en assessmentjobb: oppretter beslutning via `createAssessmentDecision` (allerede transaksjonell i `decisionService.ts`), sender deltakervarsling og skriver jobbberedningsevent til audit-loggen.
+- **`src/services/assessmentJobService.ts`**: Er nå et tynt orkestreringssjikt som kobler `AssessmentJobRunner`, `AssessmentInputFactory`, `AssessmentEvaluator` og `AssessmentDecisionApplicationService`. Ingen adferdsendringer.
+- **`test/unit/assessment-decision-application-service.test.ts`**: Nye enhetstester for `applyAssessmentDecision` — dekker varsling ved autovedtak, manglende varsling ved manuell gjennomgang, feilhåndtering av varsling (swallows) og videreføring av `forceManualReviewReason`.
+
+## 0.8.53 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentEvaluator fra assessmentJobService. Lukker #185.
+
+### Included
+- **`src/services/AssessmentEvaluator.ts`** (#185): Ny dedikert modul som isolerer LLM-kallene, responsregistrering i databasen og sekundærvurderingslogikk. Eksporterer `runLlmEvaluationPipeline` som returnerer `EvaluationResult` (det endelige LLM-resultatet og valgfri `forceManualReviewReason`).
+- **`src/services/assessmentJobService.ts`**: Bruker nå `runLlmEvaluationPipeline` i stedet for inlined LLM-kall og sekundærlogikk. Ingen adferdsendringer.
+- **`test/unit/assessment-evaluator.test.ts`**: Nye enhetstester for `runLlmEvaluationPipeline` — dekker primærsti, sekundærtriggering, uenighetsrouting og feilhåndtering for begge passeringer.
+
+## 0.8.52 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentInputFactory fra assessmentJobService. Lukker #184.
+
+### Included
+- **`src/services/AssessmentInputFactory.ts`** (#184): Ny dedikert modul som håndterer inndataforberedelse for LLM-evaluering: parsing av rubrikk-kriterie-IDer (`parseRubricCriteriaIds`), maksimal totalpoengsum (`parseRubricMaxTotal`), innsendingsfeltmerker (`parseSubmissionFieldLabels`), sensitiv dataforbehandling og lokaliseringsoppslag. Eksporterer `buildAssessmentInputContext` som produserer et komplett `AssessmentInputContext`-objekt.
+- **`src/services/assessmentJobService.ts`**: Bruker nå `buildAssessmentInputContext` i stedet for inline parserhjelperere. Ingen adferdsendringer.
+- **`test/unit/assessment-input-factory.test.ts`**: Nye enhetstester for parsere og `buildAssessmentInputContext` — dekker objektformat, arrayformat, ugyldige JSON, null-schema og policy-parsing.
+
+## 0.8.51 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentJobRunner fra assessmentJobService. Lukker #183.
+
+### Included
+- **`src/services/AssessmentJobRunner.ts`** (#183): Ny dedikert modul for køpoll, joblåsing, retry-logikk og overordnet feilhåndtering. Eksporterer `enqueueAssessmentJob`, `processNextJob`, `processAssessmentJobsNow` og `processSubmissionJobNow` med injiserbar `AssessmentRunFn` for testbarhet.
+- **`src/services/assessmentJobService.ts`**: Beholder samme offentlige API ved å re-eksportere fra `AssessmentJobRunner` og tilpasse de eksisterende funksjonene til å bruke den nye modulen. Ingen adferdsendringer.
+- **`test/unit/assessment-job-runner.test.ts`**: Nye enhetstester for `AssessmentJobRunner` — dekker lås-mislykkelse, retry-planlegging, FAILED-markering og enqueueing av nye jobber.
+
 ## 0.8.50 - 2026-03-20
 ### Summary
 Feat: Prisma $transaction-wrapping for kritiske domene-mutasjoner. Lukker #179, #180, #181, #182.
