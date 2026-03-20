@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.45 - 2026-03-20
+### Summary
+UX: Fjernet X-knapp øverst i dialogbokser, tydeligere slette-knapper, kompakt tittellinje.
+
+### Included
+- **`public/admin-content.html`**: Fjernet `field-dialog-close` X-knapp fra alle 7 dialoger — Cancel-knappen nedst er nok. Slette-knapper (`mcq-q-remove`, `mcq-opt-remove`, `prompt-ex-remove`, `ss-field-remove`) bruker nå `var(--color-error)` i stedet for `var(--color-meta)`; 0.7 opacity default, full opacity hover. Dialog-tittelen er nå 16px (var 18px) med `white-space: nowrap` og `text-overflow: ellipsis` — én linje alltid.
+
 ## 0.8.44 - 2026-03-20
 ### Summary
 Refactor: Standardiserte API-feilresponser (#159) og ekstraherte delte query-parsere (#160).

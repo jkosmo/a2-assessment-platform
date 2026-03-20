@@ -56,10 +56,8 @@
       /* Field dialogs */
       .field-dialog { border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-2); max-width: 600px; width: calc(100vw - 2rem); box-shadow: 0 8px 32px rgba(0,0,0,0.18); max-height: 90vh; overflow-y: auto; }
       .field-dialog::backdrop { background: rgba(0,0,0,0.35); }
-      .field-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-2); gap: var(--space-1); }
-      .field-dialog-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0; }
-      .field-dialog-close { background: none; border: none; cursor: pointer; font-size: 20px; color: var(--color-meta); padding: 0 4px; line-height: 1; flex-shrink: 0; }
-      .field-dialog-close:hover { color: var(--color-text); }
+      .field-dialog-header { margin-bottom: var(--space-2); }
+      .field-dialog-title { font-size: 16px; font-weight: 700; color: var(--color-text); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .dialog-locale-tabs { display: flex; gap: 2px; margin-bottom: var(--space-2); border-bottom: 1px solid var(--color-border-soft); }
       .dialog-locale-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--color-meta); cursor: pointer; margin-bottom: -1px; }
       .dialog-locale-tab.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
@@ -76,8 +74,8 @@
       .json-fallback-panel[open] > summary { margin-bottom: var(--space-1); border-bottom: 1px solid var(--color-border-soft); padding-bottom: var(--space-1); }
       .mcq-question-item { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
       .mcq-q-header { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 13px; margin-bottom: 8px; }
-      .mcq-q-remove, .mcq-opt-remove, .prompt-ex-remove, .ss-field-remove { background: none; border: none; color: var(--color-meta); cursor: pointer; padding: 2px 6px; font-size: 14px; line-height: 1; border-radius: 4px; }
-      .mcq-q-remove:hover, .mcq-opt-remove:hover, .prompt-ex-remove:hover, .ss-field-remove:hover { color: #c00; }
+      .mcq-q-remove, .mcq-opt-remove, .prompt-ex-remove, .ss-field-remove { background: none; border: none; color: var(--color-error); cursor: pointer; padding: 2px 6px; font-size: 14px; line-height: 1; border-radius: 4px; opacity: 0.7; }
+      .mcq-q-remove:hover, .mcq-opt-remove:hover, .prompt-ex-remove:hover, .ss-field-remove:hover { opacity: 1; }
       .mcq-option-row { display: grid; grid-template-columns: 20px 1fr 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
       .mcq-option-row input[type="radio"] { margin: 0; }
       .prompt-example-row { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
@@ -426,7 +424,7 @@
     <dialog id="dialogModuleDetails" aria-labelledby="dialogModuleDetailsTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogModuleDetailsTitle" class="field-dialog-title" data-i18n="adminContent.dialog.moduleDetails.title">Edit module details</h2>
-        <button type="button" id="dialogModuleDetailsClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
       <div class="dialog-locale-tabs" role="tablist">
         <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB" aria-controls="dlgMDPane_enGB">EN-GB</button>
@@ -461,7 +459,7 @@
     <dialog id="dialogVersionDetails" aria-labelledby="dialogVersionDetailsTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogVersionDetailsTitle" class="field-dialog-title" data-i18n="adminContent.dialog.versionDetails.title">Edit version details</h2>
-        <button type="button" id="dialogVersionDetailsClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
       <div class="dialog-locale-tabs" role="tablist">
         <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB" aria-controls="dlgVDPane_enGB">EN-GB</button>
@@ -489,7 +487,7 @@
     <dialog id="dialogAssessmentPolicy" aria-labelledby="dialogAssessmentPolicyTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogAssessmentPolicyTitle" class="field-dialog-title" data-i18n="adminContent.dialog.assessmentPolicy.title">Edit assessment policy</h2>
-        <button type="button" id="dialogAssessmentPolicyClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
 
       <div class="dialog-section-label" data-i18n="adminContent.dialog.assessmentPolicy.sectionScoring">Scoring weights</div>
@@ -544,7 +542,7 @@
     <dialog id="dialogRubric" aria-labelledby="dialogRubricTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogRubricTitle" class="field-dialog-title" data-i18n="adminContent.dialog.rubric.title">Edit rubric</h2>
-        <button type="button" id="dialogRubricClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
 
       <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionCriteria">Criteria</div>
@@ -584,7 +582,7 @@
     <dialog id="dialogPrompt" aria-labelledby="dialogPromptTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogPromptTitle" class="field-dialog-title" data-i18n="adminContent.dialog.prompt.title">Edit LLM prompt</h2>
-        <button type="button" id="dialogPromptClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
       <div class="dialog-locale-tabs" role="tablist">
         <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB" aria-controls="dlgPRPane_enGB">EN-GB</button>
@@ -615,7 +613,7 @@
     <dialog id="dialogMcq" aria-labelledby="dialogMcqTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogMcqTitle" class="field-dialog-title" data-i18n="adminContent.dialog.mcq.title">Edit multiple-choice test</h2>
-        <button type="button" id="dialogMcqClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
       <div>
         <label for="dlgMCQ_setTitle" data-i18n="adminContent.dialog.mcq.setTitle">Test title</label>
@@ -638,7 +636,7 @@
     <dialog id="dialogSubmissionSchema" aria-labelledby="dialogSubmissionSchemaTitle" class="field-dialog">
       <div class="field-dialog-header">
         <h2 id="dialogSubmissionSchemaTitle" class="field-dialog-title" data-i18n="adminContent.dialog.submissionSchema.title">Edit submission form</h2>
-        <button type="button" id="dialogSubmissionSchemaClose" class="field-dialog-close" aria-label="Close">&#x2715;</button>
+        
       </div>
       <div class="dialog-locale-tabs" role="tablist">
         <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB">EN-GB</button>
