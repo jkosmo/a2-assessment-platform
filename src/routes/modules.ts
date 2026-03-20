@@ -153,7 +153,7 @@ modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
   } catch (error) {
     response.status(400).json({
       error: "mcq_start_failed",
-      message: error instanceof Error ? error.message : "Could not start MCQ attempt.",
+      message: "Could not start MCQ attempt.",
     });
   }
 });
@@ -182,7 +182,7 @@ modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, re
   } catch (error) {
     response.status(400).json({
       error: "mcq_submit_failed",
-      message: error instanceof Error ? error.message : "Could not submit MCQ attempt.",
+      message: "Could not submit MCQ attempt.",
     });
   }
 });

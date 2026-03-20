@@ -6,6 +6,7 @@ import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole
 import { AppError } from "../errors/AppError.js";
 import { getCalibrationWorkspaceSnapshot } from "../services/calibrationWorkspaceService.js";
 import { publishModuleVersionWithThresholds } from "../services/adminContentService.js";
+import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
 
 const calibrationRouter = Router();
 
@@ -21,43 +22,12 @@ const calibrationQuerySchema = z.object({
 const allowedSubmissionStatuses = new Set<SubmissionStatusType>(Object.values(SubmissionStatus));
 
 function parseStatuses(input: string | undefined, fallback: SubmissionStatusType[]) {
-  if (!input) {
-    return fallback;
-  }
-
-  const values = input
-    .split(",")
-    .map((value) => value.trim().toUpperCase())
-    .filter((value): value is SubmissionStatusType => value.length > 0);
-
-  if (values.length === 0) {
-    return fallback;
-  }
-
+  const values = parseCsvFilter(input) as SubmissionStatusType[];
+  if (values.length === 0) return fallback;
   for (const status of values) {
-    if (!allowedSubmissionStatuses.has(status)) {
-      return null;
-    }
+    if (!allowedSubmissionStatuses.has(status)) return null;
   }
-
   return Array.from(new Set(values));
-}
-
-function parseDate(input: string | undefined, inclusiveEndOfDay: boolean) {
-  if (!input) {
-    return null;
-  }
-
-  const parsed = new Date(input);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  if (inclusiveEndOfDay && input.length <= 10) {
-    parsed.setHours(23, 59, 59, 999);
-  }
-
-  return parsed;
 }
 
 calibrationRouter.get("/workspace", async (request, response, next) => {
@@ -79,8 +49,8 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
     return;
   }
 
-  const dateFrom = parseDate(parsed.data.dateFrom, false);
-  const dateTo = parseDate(parsed.data.dateTo, true);
+  const dateFrom = parseQueryDate(parsed.data.dateFrom, false);
+  const dateTo = parseQueryDate(parsed.data.dateTo, true);
   if ((parsed.data.dateFrom && !dateFrom) || (parsed.data.dateTo && !dateTo)) {
     response.status(400).json({
       error: "validation_error",
@@ -117,7 +87,7 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
 
     response.status(500).json({
       error: "calibration_workspace_failed",
-      message: error instanceof Error ? error.message : "Could not load calibration workspace snapshot.",
+      message: "Could not load calibration workspace snapshot.",
     });
   }
 });
@@ -181,7 +151,7 @@ calibrationRouter.post("/workspace/publish-thresholds", async (request, response
 
     response.status(400).json({
       error: "publish_thresholds_failed",
-      message: error instanceof Error ? error.message : "Could not publish thresholds.",
+      message: "Could not publish thresholds.",
     });
   }
 });

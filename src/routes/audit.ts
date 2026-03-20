@@ -34,7 +34,7 @@ auditRouter.get("/submissions/:submissionId", async (request, response, next) =>
 
     response.status(500).json({
       error: "internal_error",
-      message: error instanceof Error ? error.message : "Could not load audit trail.",
+      message: "Could not load audit trail.",
     });
   }
 });

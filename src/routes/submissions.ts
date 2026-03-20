@@ -52,7 +52,7 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
       return;
     }
 
-    next(new ValidationError(error instanceof Error ? error.message : "Failed to create submission."));
+    next(new ValidationError("Failed to create submission."));
   }
 });
 
@@ -84,7 +84,7 @@ submissionsRouter.post("/:submissionId/appeals", async (request, response, next)
 
     response.status(400).json({
       error: "appeal_create_failed",
-      message: error instanceof Error ? error.message : "Failed to create appeal.",
+      message: "Failed to create appeal.",
     });
   }
 });

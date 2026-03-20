@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
 import {
   getAppealsReport,
   getAnalyticsCohortsReport,
@@ -187,7 +188,7 @@ reportsRouter.post("/recertification/reminders/run", async (request, response) =
     return;
   }
 
-  const asOf = parsed.data.asOf ? parseDate(parsed.data.asOf, false) : null;
+  const asOf = parsed.data.asOf ? parseQueryDate(parsed.data.asOf, false) : null;
   if (parsed.data.asOf && !asOf) {
     response.status(400).json({ error: "validation_error", message: "Invalid asOf date." });
     return;
@@ -245,8 +246,8 @@ function parseReportFilters(input: unknown): ReportFilters | null {
     return null;
   }
 
-  const dateFrom = parseDate(parsed.data.dateFrom, false);
-  const dateTo = parseDate(parsed.data.dateTo, true);
+  const dateFrom = parseQueryDate(parsed.data.dateFrom, false);
+  const dateTo = parseQueryDate(parsed.data.dateTo, true);
   if ((parsed.data.dateFrom && !dateFrom) || (parsed.data.dateTo && !dateTo)) {
     return null;
   }
@@ -261,28 +262,8 @@ function parseReportFilters(input: unknown): ReportFilters | null {
 }
 
 function parseStatuses(input?: string) {
-  if (!input) {
-    return undefined;
-  }
-  const statuses = input
-    .split(",")
-    .map((value) => value.trim().toUpperCase())
-    .filter((value) => value.length > 0);
-  return statuses.length > 0 ? statuses : undefined;
-}
-
-function parseDate(input: string | undefined, inclusiveEndOfDay: boolean) {
-  if (!input) {
-    return null;
-  }
-  const parsed = new Date(input);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  if (inclusiveEndOfDay && input.length <= 10) {
-    parsed.setHours(23, 59, 59, 999);
-  }
-  return parsed;
+  const values = parseCsvFilter(input);
+  return values.length > 0 ? values : undefined;
 }
 
 export { reportsRouter };

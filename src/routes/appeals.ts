@@ -84,7 +84,7 @@ appealsRouter.post("/:appealId/claim", async (request, response, next) => {
 
     response.status(400).json({
       error: "appeal_claim_failed",
-      message: error instanceof Error ? error.message : "Could not assign this appeal. Refresh the queue and try again.",
+      message: "Could not assign this appeal. Refresh the queue and try again.",
     });
   }
 });
@@ -117,7 +117,7 @@ appealsRouter.post("/:appealId/resolve", async (request, response, next) => {
 
     response.status(400).json({
       error: "appeal_resolution_failed",
-      message: error instanceof Error ? error.message : "Could not resolve this appeal. Refresh the queue and try again.",
+      message: "Could not resolve this appeal. Refresh the queue and try again.",
     });
   }
 });

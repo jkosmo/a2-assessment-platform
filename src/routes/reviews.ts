@@ -111,7 +111,7 @@ reviewsRouter.post("/:reviewId/claim", async (request, response, next) => {
 
     response.status(400).json({
       error: "review_claim_failed",
-      message: error instanceof Error ? error.message : "Could not claim manual review.",
+      message: "Could not claim manual review.",
     });
   }
 });
@@ -144,7 +144,7 @@ reviewsRouter.post("/:reviewId/override", async (request, response, next) => {
 
     response.status(400).json({
       error: "manual_override_failed",
-      message: error instanceof Error ? error.message : "Could not finalize manual override.",
+      message: "Could not finalize manual override.",
     });
   }
 });

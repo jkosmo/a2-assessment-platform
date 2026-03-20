@@ -192,7 +192,7 @@ adminContentRouter.post("/modules", async (request, response) => {
   } catch (error) {
     response.status(400).json({
       error: "create_module_failed",
-      message: error instanceof Error ? error.message : "Could not create module.",
+      message: "Could not create module.",
     });
   }
 });
@@ -215,7 +215,7 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
   } catch (error) {
     response.status(400).json({
       error: "delete_module_failed",
-      message: error instanceof Error ? error.message : "Could not delete module.",
+      message: "Could not delete module.",
     });
   }
 });
@@ -227,7 +227,7 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
   } catch (error) {
     response.status(404).json({
       error: "module_export_failed",
-      message: error instanceof Error ? error.message : "Could not export module.",
+      message: "Could not export module.",
     });
   }
 });
@@ -251,7 +251,7 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, re
   } catch (error) {
     response.status(400).json({
       error: "create_rubric_version_failed",
-      message: error instanceof Error ? error.message : "Could not create rubric version.",
+      message: "Could not create rubric version.",
     });
   }
 });
@@ -275,7 +275,7 @@ adminContentRouter.post("/modules/:moduleId/prompt-template-versions", async (re
   } catch (error) {
     response.status(400).json({
       error: "create_prompt_template_version_failed",
-      message: error instanceof Error ? error.message : "Could not create prompt template version.",
+      message: "Could not create prompt template version.",
     });
   }
 });
@@ -303,7 +303,7 @@ adminContentRouter.post("/modules/:moduleId/mcq-set-versions", async (request, r
   } catch (error) {
     response.status(400).json({
       error: "create_mcq_set_version_failed",
-      message: error instanceof Error ? error.message : "Could not create MCQ set version.",
+      message: "Could not create MCQ set version.",
     });
   }
 });
@@ -330,7 +330,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
   } catch (error) {
     response.status(400).json({
       error: "create_module_version_failed",
-      message: error instanceof Error ? error.message : "Could not create module version.",
+      message: "Could not create module version.",
     });
   }
 });
@@ -361,7 +361,7 @@ adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (
   } catch (error) {
     response.status(400).json({
       error: "create_benchmark_example_version_failed",
-      message: error instanceof Error ? error.message : "Could not create benchmark example version.",
+      message: "Could not create benchmark example version.",
     });
   }
 });
@@ -383,7 +383,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
   } catch (error) {
     response.status(400).json({
       error: "publish_module_version_failed",
-      message: error instanceof Error ? error.message : "Could not publish module version.",
+      message: "Could not publish module version.",
     });
   }
 });

@@ -1,9 +1,10 @@
 import type express from "express";
 import { AppError } from "../errors/AppError.js";
+import { logOperationalEvent } from "../observability/operationalLog.js";
 
 export function errorHandlingMiddleware(
   error: unknown,
-  _request: express.Request,
+  request: express.Request,
   response: express.Response,
   _next: express.NextFunction,
 ) {
@@ -21,6 +22,15 @@ export function errorHandlingMiddleware(
     return;
   }
 
-  const message = error instanceof Error ? error.message : "Unexpected server error.";
-  response.status(500).json({ error: "internal_error", message });
+  logOperationalEvent(
+    "unhandled_error",
+    {
+      correlationId: request.context?.correlationId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    },
+    "error",
+  );
+
+  response.status(500).json({ error: "internal_error", message: "An unexpected error occurred." });
 }

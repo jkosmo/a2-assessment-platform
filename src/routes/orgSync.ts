@@ -41,7 +41,7 @@ orgSyncRouter.post("/delta", async (request, response) => {
   } catch (error) {
     response.status(500).json({
       error: "org_sync_failed",
-      message: error instanceof Error ? error.message : "Org sync failed.",
+      message: "Org sync failed.",
     });
   }
 });

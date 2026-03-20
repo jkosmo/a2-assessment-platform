@@ -56,12 +56,12 @@ describe("errorHandlingMiddleware", () => {
     });
   });
 
-  it("falls back to 500 for non-AppError values", async () => {
+  it("falls back to 500 for non-AppError values without leaking internal message", async () => {
     const response = await request(buildTestApp(new Error("Unexpected failure."))).get("/test");
     expect(response.status).toBe(500);
     expect(response.body).toEqual({
       error: "internal_error",
-      message: "Unexpected failure.",
+      message: "An unexpected error occurred.",
     });
   });
 });

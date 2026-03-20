@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.44 - 2026-03-20
+### Summary
+Refactor: Standardiserte API-feilresponser (#159) og ekstraherte delte query-parsere (#160).
+
+### Included
+- **`src/middleware/errorHandling.ts`**: Logger uventede feil med correlationId via `logOperationalEvent`; returnerer generisk melding `"An unexpected error occurred."` istedenfor `error.message`. Dekker issue #159.
+- **`src/routes/*.ts`** (8 filer): Erstattet `error instanceof Error ? error.message : "fallback"` med den statiske fallback-strengen i alle catch-blokker. Interne feilmeldinger lekkes ikke lenger til klienten. Dekker issue #159.
+- **`src/routes/helpers/queryParsing.ts`** (ny): `parseQueryDate` og `parseCsvFilter` — delte query-parameter-hjelpere. Dekker issue #160.
+- **`src/routes/calibration.ts`** og **`src/routes/reports.ts`**: Bruker nå `parseQueryDate`/`parseCsvFilter` fra shared helper; duplikat `parseDate` og CSV-logikk fjernet.
+- **`test/app-error-middleware.test.ts`**: Oppdatert test — verifiserer nå at intern feilmelding IKKE lekkes (det korrekte).
+
 ## 0.8.43 - 2026-03-20
 ### Summary
 Docs: Fullstendig dokumentasjonsrydding — config-referanse, ops-runbook, GETTING_STARTED, API_REFERENCE, DOMAIN_LIFECYCLE, og README omskrevet til indeks. Lukker #217, #216, #214, #215.
