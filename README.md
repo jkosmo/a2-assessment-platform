@@ -1,424 +1,46 @@
 # A2 Assessment Platform
 
-This is an internal assessment platform for delivering modules, evaluating participant submissions, routing borderline cases to human handling, and preserving an auditable decision trail from first assessment to appeal resolution.
+Internal platform for delivering assessment modules, evaluating participant submissions, routing borderline cases to human review, and maintaining an auditable decision trail from first assessment to appeal resolution.
 
-## Purpose
-- support module-based participant assessment with both automated and human-assisted decision steps
-- separate operational work by role: participant, reviewer, appeal handler, calibrator, and administrator
-- keep assessment decisions traceable through immutable lineage, audit events, and reporting
-- make the platform deployable and operable in Azure with configuration-driven behaviour
+## What it does
 
-## Core functionality
-- module delivery with active/published version control
-- participant submission flow for free-text work and MCQ
-- asynchronous assessment job processing and decision creation
-- manual review workflow for cases that need human intervention
-- appeal workflow for disputed completed decisions
-- calibration and reporting surfaces for governance and quality follow-up
-- admin content management for rubrics, prompts, benchmark examples, MCQ sets, and module versions
-- localization baseline for `en-GB`, `nb`, and `nn`
+- Module-based assessment with automated LLM evaluation and human review fallback
+- Role-separated workspaces: participant, reviewer, appeal handler, calibrator, administrator
+- Immutable decision lineage with audit events throughout the assessment lifecycle
+- Configuration-driven behaviour; deployable to Azure App Service + PostgreSQL
 
-Current implementation includes MVP core flow, governance flow, and observability baseline:
-- Foundation auth/RBAC with mock + Entra modes.
-- Module/version retrieval and participant flow (submission + MCQ + assessment result).
-- Decision engine, async assessment worker, audit event pipeline.
-- Manual review and appeal workspace flow with immutable decision lineage.
-- Reporting endpoints + CSV export (completion, pass rates, manual review queue, appeals).
-- Admin content publication flow for rubric/prompt/MCQ/module versions.
-- Internationalization baseline (`en-GB`, `nb`, `nn`) for participant UI and key API payloads.
-- Azure deployment baseline (staging auto deploy, production approval gate, alerts/runbooks).
+## Stack
 
-Architecture overview: `doc/design/ARCHITECTURE.md`
+- Node.js 22 + TypeScript + Express
+- Prisma ORM + PostgreSQL
+- Azure App Service (hosting), Azure OpenAI (LLM), Microsoft Entra ID (auth)
 
-## Tech
-- Node.js + TypeScript + Express
-- Prisma ORM
-- PostgreSQL (default local/test bootstrap)
+---
 
-## Setup
-Prerequisite:
-```bash
-docker --version
-```
+## Documentation
 
-1. Install dependencies:
-```bash
-npm install
-```
+| Document | Contents |
+|---|---|
+| [Getting Started](doc/GETTING_STARTED.md) | Local setup, PostgreSQL automation, running tests, manual workspace walkthroughs |
+| [API Reference](doc/API_REFERENCE.md) | All routes with method, path, and required roles |
+| [Config Reference](doc/CONFIG_REFERENCE.md) | All `config/*.json` files — fields, types, defaults, bounded context |
+| [Architecture](doc/design/ARCHITECTURE.md) | System design, component overview, data model |
+| [Domain Lifecycle](doc/DOMAIN_LIFECYCLE.md) | State machines: submission → assessment → review → appeal; RBAC ownership |
+| [Operations Runbook](doc/OPERATIONS_RUNBOOK.md) | Startup sequence, migrations, worker health, failure diagnosis, tracing |
+| [Observability Runbook](doc/OBSERVABILITY_RUNBOOK.md) | Structured log events, Azure Monitor alerts, KQL queries |
+| [Azure Environments](doc/AZURE_ENVIRONMENTS.md) | Staging/production provisioning, GitHub secrets, environment variables |
+| [Appeals Operating Model](doc/APPEALS_OPERATING_MODEL.md) | SLA, ownership model, escalation process |
+| [Version History](doc/VERSIONS.md) | Release log |
 
-2. Start the local PostgreSQL environment:
-```bash
-npm run postgres:setup
-```
+### Design Notes
 
-3. Generate Prisma client and run schema bootstrap:
-```bash
-npm run prisma:generate
-npm run db:reset
-```
-
-4. Seed baseline data:
-```bash
-npx dotenv -e .env.postgres.local -- npm run prisma:seed
-```
-
-5. Start app:
-```bash
-npm run dev
-```
-
-## PostgreSQL automation
-The default local/test flow now targets PostgreSQL and is fully automatable.
-
-What this does:
-- starts a local PostgreSQL container on `127.0.0.1:54329`
-- creates `a2_assessment_dev` and `a2_assessment_test`
-- generates `.env.postgres.local` and `.env.postgres.test`
-
-One-command setup:
-```bash
-npm run postgres:setup
-```
-
-Useful follow-up commands:
-```bash
-npm run postgres:status
-npm run postgres:verify
-npm run postgres:stop
-npm run postgres:recreate
-npm run postgres:destroy
-npm run postgres:write-env
-```
-
-One-command bootstrap for both Postgres databases plus app seed/smoke:
-```bash
-npm run postgres:app:bootstrap
-```
-
-Additional app-level commands:
-```bash
-npm run postgres:prisma:generate
-npm run postgres:app:reset
-npm run postgres:test:reset
-npm run postgres:app:seed
-npm run postgres:test:seed
-npm run postgres:app:smoke
-npm run postgres:test:smoke
-```
-
-Files used by the automation:
-- `docker-compose.postgres.yml`
-- `scripts/postgres/localSetup.mjs`
-- `scripts/postgres/appBootstrap.mjs`
-- `scripts/postgres/seedPostgres.mts`
-- `scripts/postgres/smokePostgres.mts`
-- `scripts/postgres/init/01-create-test-db.sql`
-
-Current migration boundary:
-- the repo default has switched to PostgreSQL
-- the active Prisma migration path now starts from a PostgreSQL baseline migration
-- local/test reset now runs through Prisma migrate
-- runtime startup now prefers `prisma migrate deploy`
-- a temporary non-production compatibility fallback to `prisma db push` exists for already-provisioned environments while they are converged onto the new baseline
-- the old SQLite-specific migration runners are no longer part of the default flow
-
-## Automated Testing
-- Local:
-```bash
-npm run lint
-npm test
-npm run build
-```
-- CI:
-  - Workflow: `.github/workflows/ci.yml`
-  - Runs on PR + push to `main`.
-  - Includes Prisma generate, migrate/seed against `.env.test`, type-check, tests, and build.
-
-## Deploy and Runtime Automation
-- CI/CD deploy workflow: `.github/workflows/deploy-azure.yml`
-- `main` push: automatic staging deploy.
-- Production deploy: manual `workflow_dispatch` with environment approval gate.
-- Infrastructure as code: `infra/azure/main.bicep`
-- Deploy script: `scripts/azure/deploy-environment.ps1`
-- App Service startup entrypoint: `scripts/runtime/startup.mjs`
-
-## API
-- `GET /healthz`
-- `GET /version`
-- `GET /participant/config`
-- `GET /api/me`
-- `GET /api/modules`
-- `GET /api/modules/completed?limit=<n>`
-- `GET /api/modules/:moduleId`
-- `GET /api/modules/:moduleId/active-version`
-- `GET /api/modules/:moduleId/mcq/start?submissionId=<id>`
-- `POST /api/modules/:moduleId/mcq/submit`
-- `POST /api/submissions`
-- `GET /api/submissions/history?limit=<n>`
-- `POST /api/submissions/:submissionId/appeals`
-- `GET /api/submissions/:submissionId`
-- `GET /api/submissions/:submissionId/result`
-- `POST /api/assessments/:submissionId/run`
-- `GET /api/assessments/:submissionId`
-- `GET /api/audit/submissions/:submissionId`
-- `GET /api/reviews`
-- `GET /api/reviews/:reviewId`
-- `POST /api/reviews/:reviewId/claim`
-- `POST /api/reviews/:reviewId/override`
-- `GET /api/appeals`
-- `GET /api/appeals/:appealId`
-- `POST /api/appeals/:appealId/claim`
-- `POST /api/appeals/:appealId/resolve`
-- `GET /api/calibration/workspace?moduleId=<id>&status=<csv>&moduleVersionId=<id>&dateFrom=<ISO>&dateTo=<ISO>&limit=<n>`
-- `GET /api/reports/completion`
-- `GET /api/reports/pass-rates`
-- `GET /api/reports/manual-review-queue`
-- `GET /api/reports/appeals`
-- `GET /api/reports/mcq-quality`
-- `GET /api/reports/recertification`
-- `POST /api/reports/recertification/reminders/run?asOf=<ISO-date>`
-- `GET /api/reports/analytics/semantic-model`
-- `GET /api/reports/analytics/trends?granularity=<day|week|month>`
-- `GET /api/reports/analytics/cohorts?cohortBy=<month|department>`
-- `GET /api/reports/analytics/data-quality`
-- `GET /api/reports/export?type=<report>&format=csv`
-- `POST /api/admin/content/modules`
-- `POST /api/admin/content/modules/:moduleId/rubric-versions`
-- `POST /api/admin/content/modules/:moduleId/prompt-template-versions`
-- `POST /api/admin/content/modules/:moduleId/benchmark-example-versions`
-- `POST /api/admin/content/modules/:moduleId/mcq-set-versions`
-- `POST /api/admin/content/modules/:moduleId/module-versions`
-- `POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish`
-- `POST /api/admin/sync/org/delta`
-- `GET /participant` (manual participant test UI)
-- `GET /participant/completed` (manual completed-modules UI)
-- `GET /manual-review` (manual reviewer workspace UI)
-- `GET /appeal-handler` (manual appeal-handler workspace UI)
-- `GET /calibration` (manual calibration workspace UI)
-- `GET /admin-content` (manual content-management workspace UI)
-
-## Auth modes
-- `AUTH_MODE=mock` (default for local development)
-- `AUTH_MODE=entra` (JWT validation against Microsoft Entra ID)
-
-In mock mode, optional headers can override identity:
-- `x-user-id`
-- `x-user-email`
-- `x-user-name`
-- `x-user-department`
-- `x-user-roles` (comma-separated app roles)
-- `x-user-groups` (comma-separated Entra group object IDs)
-
-## Manual testing
-1. Start backend:
-```bash
-npm run dev
-```
-
-2. Open participant console:
-```text
-http://localhost:3000/participant
-```
-
-3. Run flow:
-- Load modules
-- Create submission (MCQ starts automatically)
-- Submit MCQ
-- Queue/check assessment
-- Check result
-- Create participant appeal (after `COMPLETED` result)
-
-Submission parser behavior:
-- `POST /api/submissions` supports optional attachment parsing fields:
-  - `attachmentBase64`
-  - `attachmentFilename`
-  - `attachmentMimeType`
-- PDF and DOCX attachments are parsed and stored in the submission `responseJson`.
-- If parsing fails and a text field is provided, it is used as fallback.
-- If parsing fails without fallback text, API returns a clear parse error message.
-
-4. Optional completed-modules view (`PARTICIPANT` role):
-```text
-http://localhost:3000/participant/completed
-```
-- Load module history and verify latest completion score/status per module
-
-5. Optional handler flow in dedicated workspace (`APPEAL_HANDLER`/`ADMINISTRATOR` role):
-```text
-http://localhost:3000/appeal-handler
-```
-- Queue auto-loads open/in-review appeals on page load; use status filter (`OPEN`, `IN_REVIEW`, optional `RESOLVED`) as needed
-- Status filter uses checkbox pill groups (keyboard: `Tab` + `Space`; arrow keys move between pills)
-- Use queue search for participant/module/appeal filtering
-- Select an appeal row and run `Claim Appeal`
-- Resolve using decision reason + resolution note + pass/fail value
-
-6. Optional reviewer flow in dedicated workspace (`REVIEWER`/`ADMINISTRATOR` role):
-```text
-http://localhost:3000/manual-review
-```
-- Queue auto-loads open/in-review manual reviews on page load; use status pills to expand to `RESOLVED` when needed
-- Select a review row and run `Claim review`
-- Finalize using decision reason + override note + pass/fail value
-
-7. Optional calibration flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
-```text
-http://localhost:3000/calibration
-```
-- Enter `moduleId` and load calibration snapshot
-- Use status/date/module-version filters to inspect historical outcomes (status filter uses checkbox pills)
-- Review benchmark-anchor coverage and quality-signal flags
-
-8. Optional admin content flow in dedicated workspace (`SUBJECT_MATTER_OWNER`/`ADMINISTRATOR` role):
-```text
-http://localhost:3000/admin-content
-```
-- Create a base module (title/description/certification/validity window)
-- Load/select module
-- Fill rubric, evaluation-instruction, and test fields
-- Save setup once with one action for steps 2-5
-- Publish module version
-- Text fields support either:
-  - plain text
-  - locale JSON object: `{"en-GB":"...","nb":"...","nn":"..."}`
-- For MCQ, `stem`, each `options` item, `correctAnswer`, and `rationale` can use plain text or locale JSON
-
-Participant console behavior is config-driven via:
-- `config/participant-console.json`
-- env key `PARTICIPANT_CONSOLE_CONFIG_FILE`
-- env key `PARTICIPANT_CONSOLE_DEBUG_MODE` controls whether raw debug panels are exposed in workspace UIs:
-  - `auto` = enabled unless `NODE_ENV=production`
-  - `true` = force enabled (useful in Azure staging)
-  - `false` = force disabled (recommended in Azure production)
-- shared workspace baseline styles live in `public/static/shared.css` and are loaded from `/static/shared.css` by all workspace pages
-- shared CSS exposes brand tokens in `:root` (spacing, colors, card elevation) and a common `.layout-container` for centered max-width page layout
-- semantic button variants are available globally: `.btn-primary`, `.btn-secondary`, `.btn-danger`
-- `navigation.items[]` controls shared top-menu entries and per-role visibility
-- `manualReviewWorkspace.queuePageSize` controls `/manual-review` queue fetch limit (max `200`)
-- `appealWorkspace.queuePageSize` controls `/appeal-handler` queue fetch limit (max `200`)
-- `flow.autoStartAfterMcq`, `flow.pollIntervalSeconds`, `flow.maxWaitSeconds` control auto assessment start/polling in participant UI
-  - when `flow.autoStartAfterMcq=true`, participant UI still keeps manual `Check progress` / `View result` fallback controls available
-- `calibrationWorkspace.accessRoles` controls API access roles for `/api/calibration/workspace`
-- `calibrationWorkspace.defaults.statuses`, `lookbackDays`, `maxRows` control default query behavior
-- `calibrationWorkspace.signalThresholds` controls pass/manual-review/benchmark-coverage flags
-- `identityDefaults.participant`, `identityDefaults.reviewer`, `identityDefaults.appealHandler`, `identityDefaults.calibrationOwner`, and `identityDefaults.contentAdmin` set default test identity per workspace
-
-LLM provider mode is env-driven via:
-- `LLM_MODE=stub|azure_openai`
-- Stub mode:
-  - `LLM_STUB_MODEL_NAME`
-- Azure OpenAI mode:
-  - `AZURE_OPENAI_ENDPOINT`
-  - `AZURE_OPENAI_API_KEY`
-  - `AZURE_OPENAI_DEPLOYMENT`
-  - `AZURE_OPENAI_API_VERSION` (default `2024-10-21`)
-  - `AZURE_OPENAI_TIMEOUT_MS` (default `30000`)
-  - `AZURE_OPENAI_TEMPERATURE` (default `0`)
-  - `AZURE_OPENAI_MAX_TOKENS` (default `1200`)
-  - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (`max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
-
-Azure OpenAI compatibility note:
-- for `gpt-5-nano`, use:
-  - `AZURE_OPENAI_TEMPERATURE=1`
-  - `AZURE_OPENAI_MAX_TOKENS=4000`
-  - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
-
-Sensitive-data preprocessing before LLM evaluation is config-driven via:
-- `config/assessment-rules.json`
-- `sensitiveData.enabledByDefault` toggles masking baseline
-- `sensitiveData.moduleOverrides.<moduleId>` enables/disables masking per module
-- `sensitiveData.rules[]` defines detection regex patterns and replacement tokens
-
-Secondary LLM assessment policy is config-driven via:
-- `config/assessment-rules.json`
-- `secondaryAssessment.enabledByDefault` toggles second-pass behavior globally
-- `secondaryAssessment.moduleOverrides.<moduleId>` enables/disables second-pass per module
-- `secondaryAssessment.triggerRules` controls when a second pass should run
-- `secondaryAssessment.disagreementRules` controls when pass disagreement must route to manual review
-
-Recertification policy is config-driven via:
-- `config/assessment-rules.json`
-- `recertification.validityDays` controls certification validity period
-- `recertification.dueOffsetDays` controls when recertification becomes due before expiry
-- `recertification.dueSoonDays` controls early warning status window
-- `recertification.reminderDaysBefore[]` controls pre-expiry reminder schedule offsets
-
-Advanced analytics reporting model is config-driven via:
-- `config/reporting-analytics.json`
-- `kpiDefinitions[]` defines semantic KPI catalog metadata
-- `trends.*` controls trend granularity behavior
-- `cohorts.*` controls cohort dimensions
-- `dataQuality.*` controls pipeline quality thresholds
-
-Benchmark example versioning policy is config-driven via:
-- `config/benchmark-examples.json`
-- `maxExamplesPerVersion` limits benchmark anchor set size
-- `maxTextLength` limits benchmark text field size
-- `requiredFields` enforces benchmark example structure
-
-Org delta sync policy is config-driven via:
-- `config/org-sync.json`
-- `conflictStrategy` controls identity collision handling (`merge_by_email` / `skip_conflict`)
-- `allowDepartmentOverwrite`, `allowManagerOverwrite`, `defaultActiveStatus` control update behavior
-
-Module completion policy is config-driven via:
-- `config/module-completion.json`
-- `completedSubmissionStatuses` defines what counts as completed
-- `hideCompletedInAvailableByDefault` controls `/api/modules` default filtering
-- `defaultCompletedHistoryLimit`, `maxCompletedHistoryLimit` control `/api/modules/completed` pagination defaults/bounds
-
-Seed baseline now includes two modules for multi-module flow checks:
-- `Generative AI Foundations`
-- `AI Governance and Risk Essentials`
-
-## Discovery output
-Borderline/manual review routing baseline is documented in:
-- `doc/design/M0_BORDERLINE_ROUTING.md`
-
-M0 architecture and implementation decisions are documented in:
-- `doc/design/M0_IMPLEMENTATION_DECISIONS.md`
-
-M1 implementation decisions are documented in:
-- `doc/design/M1_IMPLEMENTATION_DECISIONS.md`
-
-Version history is tracked in:
-- `doc/VERSIONS.md`
-
-Dev-tenant Entra auth target design is documented in:
-- `doc/design/DEV_TENANT_AUTH_TARGET_DESIGN.md`
-
-Dev-tenant auth onboarding and smoke tests are documented in:
-- `doc/ops/DEV_TENANT_AUTH_ONBOARDING.md`
-
-Dev-tenant auth bootstrap script:
-- `scripts/entra/setup-dev-tenant-auth.ps1`
-
-Azure staging/production runbook:
-- `doc/ops/AZURE_ENVIRONMENTS.md`
-
-Azure deployment workflow:
-- `.github/workflows/deploy-azure.yml`
-
-Internationalization baseline and translation workflow:
-- `doc/design/I18N.md`
-
-Appeals operating process (SLA, ownership, escalation):
-- `doc/ops/APPEALS_OPERATING_MODEL.md`
-
-Observability and incident response runbook:
-- `doc/ops/OBSERVABILITY_RUNBOOK.md`
-
-Production PostgreSQL backup and recovery target:
-- `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`
-
-Phase-2 design note for participant appeal notifications:
-- `doc/design/PHASE2_APPEAL_NOTIFICATIONS_DESIGN.md`
-
-Org sync conflict/override strategy:
-- `doc/design/ORG_SYNC_CONFLICT_STRATEGY.md`
-
-Phase-2 design note for Azure OpenAI assessment integration:
-- `doc/design/PHASE2_AZURE_OPENAI_INTEGRATION.md`
-
-Phase-2 design note for admin content workspace:
-- `doc/design/PHASE2_ADMIN_CONTENT_WORKSPACE_DESIGN.md`
+| Document | Contents |
+|---|---|
+| [M0 Borderline Routing](doc/design/M0_BORDERLINE_ROUTING.md) | Borderline/manual review routing baseline |
+| [M0 Implementation Decisions](doc/design/M0_IMPLEMENTATION_DECISIONS.md) | Foundational architecture decisions |
+| [M1 Implementation Decisions](doc/design/M1_IMPLEMENTATION_DECISIONS.md) | M1 decisions |
+| [Assessment Decision Policy](doc/design/ASSESSMENT_DECISION_POLICY.md) | Decision engine policy rules |
+| [I18N](doc/design/I18N.md) | Internationalisation baseline and translation workflow |
+| [Org Sync Conflict Strategy](doc/design/ORG_SYNC_CONFLICT_STRATEGY.md) | Identity conflict handling during org sync |
+| [Production PostgreSQL Backup and Recovery](doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md) | Backup target architecture |
+| [Dev Tenant Auth Target Design](doc/design/DEV_TENANT_AUTH_TARGET_DESIGN.md) | Entra auth setup |

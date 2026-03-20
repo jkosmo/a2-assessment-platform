@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.43 - 2026-03-20
+### Summary
+Docs: Fullstendig dokumentasjonsrydding — config-referanse, ops-runbook, GETTING_STARTED, API_REFERENCE, DOMAIN_LIFECYCLE, og README omskrevet til indeks. Lukker #217, #216, #214, #215.
+
+### Included
+- **`doc/CONFIG_REFERENCE.md`** (ny): Felt-for-felt referanse for alle 8 config-filer i `config/`. Dekker issue #217.
+- **`doc/OPERATIONS_RUNBOOK.md`** (ny): Prosessmodell, oppstartssekvens, migrasjoner, seeding, worker-helse, vanlige feilstater (DB nede, LLM-feil, stale jobs, notification-feil), og correlationId-tracing. Dekker issue #216.
+- **`doc/GETTING_STARTED.md`** (ny): Lokal setup, PostgreSQL-automatisering, testkommandoer, auth/LLM-modus, og manuelle workspace-gjennomganger for alle roller. Dekker hoveddelen av issue #214.
+- **`doc/API_REFERENCE.md`** (ny): Alle API-ruter med metode, path og påkrevde roller i tabellformat. Dekker issue #214.
+- **`doc/DOMAIN_LIFECYCLE.md`** (ny): Tilstandsmaskiner for submission, assessment job, manual review og appeal. Beslutningslinjen og immutabilitetsregelen. RBAC-eiermodellen med claim-ownership-regel. Dekker issue #215.
+- **`README.md`** (omskrevet): Fra 424 linjer til kort indeks med lenker til alle doc-filer. Dekker issue #214.
+
 ## 0.8.42 - 2026-03-20
 ### Summary
 Refactor: Replace over-specified HTML/CSS/JS assertions in workspace contract tests with smoke tests (issues #177, #178).
