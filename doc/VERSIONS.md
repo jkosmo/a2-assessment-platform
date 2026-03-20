@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.52 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentInputFactory fra assessmentJobService. Lukker #184.
+
+### Included
+- **`src/services/AssessmentInputFactory.ts`** (#184): Ny dedikert modul som håndterer inndataforberedelse for LLM-evaluering: parsing av rubrikk-kriterie-IDer (`parseRubricCriteriaIds`), maksimal totalpoengsum (`parseRubricMaxTotal`), innsendingsfeltmerker (`parseSubmissionFieldLabels`), sensitiv dataforbehandling og lokaliseringsoppslag. Eksporterer `buildAssessmentInputContext` som produserer et komplett `AssessmentInputContext`-objekt.
+- **`src/services/assessmentJobService.ts`**: Bruker nå `buildAssessmentInputContext` i stedet for inline parserhjelperere. Ingen adferdsendringer.
+- **`test/unit/assessment-input-factory.test.ts`**: Nye enhetstester for parsere og `buildAssessmentInputContext` — dekker objektformat, arrayformat, ugyldige JSON, null-schema og policy-parsing.
+
 ## 0.8.51 - 2026-03-20
 ### Summary
 Refactor: Ekstraher AssessmentJobRunner fra assessmentJobService. Lukker #183.

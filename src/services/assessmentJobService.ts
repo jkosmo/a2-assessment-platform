@@ -3,20 +3,19 @@ import { env } from "../config/env.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { evaluatePracticalWithLlm } from "./llmAssessmentService.js";
 import { sha256 } from "../utils/hash.js";
-import { createAssessmentDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
+import { createAssessmentDecision } from "./decisionService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
-import { preprocessSensitiveDataForLlm } from "./sensitiveDataMaskingService.js";
 import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
 } from "./secondaryAssessmentService.js";
 import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "./assessmentDecisionSignals.js";
-import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { notifyAssessmentResult } from "./participantNotificationService.js";
+import { localizeContentText } from "../i18n/content.js";
+import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
 import {
-  enqueueAssessmentJob as runnerEnqueueAssessmentJob,
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
   processNextJob as runnerProcessNextJob,
@@ -43,30 +42,13 @@ async function runAssessment(jobId: string) {
   const submissionLocale = normalizeLocale(submission.locale) ?? "en-GB";
   const mcqAttempt = submission.mcqAttempts[0];
 
-  const assessmentPolicy: ModuleAssessmentPolicy | null = submission.moduleVersion.assessmentPolicyJson
-    ? (() => {
-        try {
-          return JSON.parse(submission.moduleVersion.assessmentPolicyJson) as ModuleAssessmentPolicy;
-        } catch {
-          return null;
-        }
-      })()
-    : null;
-
-  const rubricCriteriaIds = parseRubricCriteriaIds(submission.moduleVersion.rubricVersion.criteriaJson);
-  const rubricMaxTotal = parseRubricMaxTotal(submission.moduleVersion.rubricVersion.scalingRuleJson);
-  const submissionFieldLabels = parseSubmissionFieldLabels(submission.moduleVersion.submissionSchemaJson);
-
   if (!mcqAttempt || mcqAttempt.scaledScore == null || mcqAttempt.percentScore == null) {
     throw new Error("Cannot assess submission before MCQ completion.");
   }
 
   await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
-  const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({
-    moduleId: submission.moduleId,
-    responseJson: JSON.parse(submission.responseJson) as Record<string, unknown>,
-  });
+  const inputContext = buildAssessmentInputContext(submission, submissionLocale);
 
   await recordAuditEvent({
     entityType: "submission",
@@ -75,11 +57,11 @@ async function runAssessment(jobId: string) {
     actorId: submission.userId,
     metadata: {
       moduleId: submission.moduleId,
-      maskingEnabled: sensitiveDataPreprocess.maskingEnabled,
-      maskingApplied: sensitiveDataPreprocess.maskingApplied,
-      totalMatches: sensitiveDataPreprocess.totalMatches,
-      ruleHits: sensitiveDataPreprocess.ruleHits,
-      fieldsMasked: sensitiveDataPreprocess.fieldsMasked,
+      maskingEnabled: inputContext.sensitiveDataPreprocess.maskingEnabled,
+      maskingApplied: inputContext.sensitiveDataPreprocess.maskingApplied,
+      totalMatches: inputContext.sensitiveDataPreprocess.totalMatches,
+      ruleHits: inputContext.sensitiveDataPreprocess.ruleHits,
+      fieldsMasked: inputContext.sensitiveDataPreprocess.fieldsMasked,
     },
   });
 
@@ -91,12 +73,12 @@ async function runAssessment(jobId: string) {
       moduleId: submission.moduleId,
       moduleVersionId: submission.moduleVersionId,
       assessmentPass,
-      responseJson: sensitiveDataPreprocess.payload.responseJson,
+      responseJson: inputContext.sensitiveDataPreprocess.payload.responseJson,
       sensitiveDataPreprocess: {
-        maskingEnabled: sensitiveDataPreprocess.maskingEnabled,
-        maskingApplied: sensitiveDataPreprocess.maskingApplied,
-        totalMatches: sensitiveDataPreprocess.totalMatches,
-        ruleHits: sensitiveDataPreprocess.ruleHits,
+        maskingEnabled: inputContext.sensitiveDataPreprocess.maskingEnabled,
+        maskingApplied: inputContext.sensitiveDataPreprocess.maskingApplied,
+        totalMatches: inputContext.sensitiveDataPreprocess.totalMatches,
+        ruleHits: inputContext.sensitiveDataPreprocess.ruleHits,
       },
     };
 
@@ -139,16 +121,16 @@ async function runAssessment(jobId: string) {
   try {
     primaryLlmResult = await evaluatePracticalWithLlm({
       moduleId: submission.moduleId,
-      responseJson: sensitiveDataPreprocess.payload.responseJson,
+      responseJson: inputContext.sensitiveDataPreprocess.payload.responseJson,
       responseLocale: submissionLocale,
       assessmentPass: "primary",
-      promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
-      promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
-      promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
-      moduleTaskText: localizeContentText(submissionLocale, submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
-      moduleGuidanceText: localizeContentText(submissionLocale, submission.moduleVersion.guidanceText) ?? undefined,
-      rubricCriteriaIds,
-      submissionFieldLabels,
+      promptTemplateSystem: inputContext.promptTemplateSystem,
+      promptTemplateUserTemplate: inputContext.promptTemplateUserTemplate,
+      promptTemplateExamplesJson: inputContext.promptTemplateExamplesJson,
+      moduleTaskText: inputContext.moduleTaskText,
+      moduleGuidanceText: inputContext.moduleGuidanceText,
+      rubricCriteriaIds: inputContext.rubricCriteriaIds,
+      submissionFieldLabels: inputContext.submissionFieldLabels,
     });
   } catch (error) {
     logOperationalEvent(
@@ -190,16 +172,16 @@ async function runAssessment(jobId: string) {
     try {
       secondaryLlmResult = await evaluatePracticalWithLlm({
         moduleId: submission.moduleId,
-        responseJson: sensitiveDataPreprocess.payload.responseJson,
+        responseJson: inputContext.sensitiveDataPreprocess.payload.responseJson,
         responseLocale: submissionLocale,
         assessmentPass: "secondary",
-        promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
-        promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
-        promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
-        moduleTaskText: localizeContentText(submissionLocale, submission.moduleVersion.taskText) ?? submission.moduleVersion.taskText,
-        moduleGuidanceText: localizeContentText(submissionLocale, submission.moduleVersion.guidanceText) ?? undefined,
-        rubricCriteriaIds,
-        submissionFieldLabels,
+        promptTemplateSystem: inputContext.promptTemplateSystem,
+        promptTemplateUserTemplate: inputContext.promptTemplateUserTemplate,
+        promptTemplateExamplesJson: inputContext.promptTemplateExamplesJson,
+        moduleTaskText: inputContext.moduleTaskText,
+        moduleGuidanceText: inputContext.moduleGuidanceText,
+        rubricCriteriaIds: inputContext.rubricCriteriaIds,
+        submissionFieldLabels: inputContext.submissionFieldLabels,
       });
     } catch (error) {
       logOperationalEvent(
@@ -254,8 +236,8 @@ async function runAssessment(jobId: string) {
     mcqPercentScore: mcqAttempt.percentScore,
     llmResult: finalLlmResult,
     forceManualReviewReason,
-    assessmentPolicy,
-    rubricMaxTotal,
+    assessmentPolicy: inputContext.assessmentPolicy,
+    rubricMaxTotal: inputContext.rubricMaxTotal,
   });
 
   if (!decisionResult.needsManualReview) {
@@ -288,51 +270,4 @@ async function runAssessment(jobId: string) {
     actorId: submission.userId,
     metadata: { submissionId: submission.id },
   });
-}
-
-function parseRubricCriteriaIds(criteriaJson: string): string[] {
-  try {
-    const parsed = JSON.parse(criteriaJson) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed.map((c: { id?: string }) => c.id).filter((id): id is string => typeof id === "string");
-    }
-    if (parsed && typeof parsed === "object") {
-      return Object.keys(parsed as Record<string, unknown>);
-    }
-  } catch {
-    // fall through
-  }
-  return [];
-}
-
-function parseRubricMaxTotal(scalingRuleJson: string): number {
-  try {
-    const parsed = JSON.parse(scalingRuleJson) as { max_total?: unknown };
-    if (typeof parsed.max_total === "number") {
-      return parsed.max_total;
-    }
-  } catch {
-    // fall through
-  }
-  return 20;
-}
-
-function parseSubmissionFieldLabels(submissionSchemaJson: string | null | undefined): string[] {
-  if (!submissionSchemaJson) return [];
-  try {
-    const parsed = JSON.parse(submissionSchemaJson) as {
-      fields?: Array<{ label?: string | Record<string, string>; id?: string }>;
-    };
-    if (!Array.isArray(parsed.fields)) return [];
-    return parsed.fields
-      .map((field) => {
-        const label = field.label;
-        if (!label) return field.id ?? "";
-        if (typeof label === "object") return label["en-GB"] ?? Object.values(label)[0] ?? field.id ?? "";
-        return label;
-      })
-      .filter((label) => label.length > 0);
-  } catch {
-    return [];
-  }
 }
