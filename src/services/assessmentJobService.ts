@@ -1,4 +1,4 @@
-import { AssessmentJobStatus, SubmissionStatus } from "../db/prismaRuntime.js";
+import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { env } from "../config/env.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { evaluatePracticalWithLlm } from "./llmAssessmentService.js";
@@ -15,116 +15,25 @@ import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from ".
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { notifyAssessmentResult } from "./participantNotificationService.js";
+import {
+  enqueueAssessmentJob as runnerEnqueueAssessmentJob,
+  processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
+  processSubmissionJobNow as runnerProcessSubmissionJobNow,
+  processNextJob as runnerProcessNextJob,
+} from "./AssessmentJobRunner.js";
 
-export async function enqueueAssessmentJob(submissionId: string) {
-  const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(submissionId, [
-    AssessmentJobStatus.PENDING,
-    AssessmentJobStatus.RUNNING,
-  ]);
-
-  if (existingPending) {
-    return existingPending;
-  }
-
-  const job = await assessmentJobRepository.createAssessmentJob({
-    submissionId,
-    status: AssessmentJobStatus.PENDING,
-    maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
-  });
-
-  await recordAuditEvent({
-    entityType: "assessment_job",
-    entityId: job.id,
-    action: "assessment_job_enqueued",
-    metadata: { submissionId },
-  });
-  await logQueueBacklog("enqueue", submissionId);
-
-  return job;
-}
+export { enqueueAssessmentJob } from "./AssessmentJobRunner.js";
 
 export async function processAssessmentJobsNow(maxJobs = 1) {
-  for (let i = 0; i < maxJobs; i += 1) {
-    const processed = await processNextJob();
-    if (!processed) {
-      break;
-    }
-  }
+  return runnerProcessAssessmentJobsNow(runAssessment, maxJobs);
 }
 
 export async function processSubmissionJobNow(submissionId: string, maxCycles = 25) {
-  for (let cycle = 0; cycle < maxCycles; cycle += 1) {
-    const submissionJob = await assessmentJobRepository.findPendingOrRunningJobIdForSubmission(submissionId, [
-      AssessmentJobStatus.PENDING,
-      AssessmentJobStatus.RUNNING,
-    ]);
-
-    if (!submissionJob) {
-      return;
-    }
-
-    const processed = await processNextJob(submissionId);
-    if (!processed) {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 50);
-      });
-    }
-  }
-
-  const unresolved = await assessmentJobRepository.findPendingOrRunningJobIdForSubmission(submissionId, [
-    AssessmentJobStatus.PENDING,
-    AssessmentJobStatus.RUNNING,
-  ]);
-  if (unresolved) {
-    throw new Error("Timed out while synchronously processing submission assessment.");
-  }
+  return runnerProcessSubmissionJobNow(runAssessment, submissionId, maxCycles);
 }
 
 export async function processNextJob(submissionId?: string): Promise<boolean> {
-  const now = new Date();
-  const candidate = await assessmentJobRepository.findNextRunnableJob(
-    now,
-    env.ASSESSMENT_JOB_MAX_ATTEMPTS,
-    submissionId,
-  );
-
-  if (!candidate) {
-    return false;
-  }
-
-  const lockResult = await assessmentJobRepository.tryLockPendingJob(candidate.id, now, "default-worker");
-
-  if (lockResult.count === 0) {
-    return false;
-  }
-
-  try {
-    await runAssessment(candidate.id);
-    await assessmentJobRepository.markJobSucceeded(candidate.id);
-  } catch (error) {
-    const job = await assessmentJobRepository.findAssessmentJobOrThrow(candidate.id);
-    const willRetry = job.attempts < job.maxAttempts;
-    await assessmentJobRepository.markJobForRetryOrFailure(candidate.id, {
-      status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
-      availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
-      errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
-    });
-
-    await recordAuditEvent({
-      entityType: "assessment_job",
-      entityId: candidate.id,
-      action: willRetry ? "assessment_job_retry_scheduled" : "assessment_job_failed",
-      metadata: {
-        submissionId: candidate.submissionId,
-        attempts: job.attempts,
-        maxAttempts: job.maxAttempts,
-        errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
-      },
-    });
-  } finally {
-    await logQueueBacklog("worker_cycle", candidate.submissionId);
-  }
-  return true;
+  return runnerProcessNextJob(runAssessment, submissionId);
 }
 
 async function runAssessment(jobId: string) {
@@ -378,18 +287,6 @@ async function runAssessment(jobId: string) {
     action: "assessment_job_completed",
     actorId: submission.userId,
     metadata: { submissionId: submission.id },
-  });
-}
-
-async function logQueueBacklog(trigger: string, submissionId: string) {
-  const pendingJobs = await assessmentJobRepository.countJobsByStatus(AssessmentJobStatus.PENDING);
-  const runningJobs = await assessmentJobRepository.countJobsByStatus(AssessmentJobStatus.RUNNING);
-
-  logOperationalEvent("assessment_queue_backlog", {
-    trigger,
-    submissionId,
-    pendingJobs,
-    runningJobs,
   });
 }
 

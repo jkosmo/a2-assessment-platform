@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.51 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentJobRunner fra assessmentJobService. Lukker #183.
+
+### Included
+- **`src/services/AssessmentJobRunner.ts`** (#183): Ny dedikert modul for køpoll, joblåsing, retry-logikk og overordnet feilhåndtering. Eksporterer `enqueueAssessmentJob`, `processNextJob`, `processAssessmentJobsNow` og `processSubmissionJobNow` med injiserbar `AssessmentRunFn` for testbarhet.
+- **`src/services/assessmentJobService.ts`**: Beholder samme offentlige API ved å re-eksportere fra `AssessmentJobRunner` og tilpasse de eksisterende funksjonene til å bruke den nye modulen. Ingen adferdsendringer.
+- **`test/unit/assessment-job-runner.test.ts`**: Nye enhetstester for `AssessmentJobRunner` — dekker lås-mislykkelse, retry-planlegging, FAILED-markering og enqueueing av nye jobber.
+
 ## 0.8.50 - 2026-03-20
 ### Summary
 Feat: Prisma $transaction-wrapping for kritiske domene-mutasjoner. Lukker #179, #180, #181, #182.
