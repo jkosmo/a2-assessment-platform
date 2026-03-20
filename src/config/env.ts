@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PROCESS_ROLE: z.enum(["web", "worker", "all"]).default("all"),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1),
   AUTH_MODE: z.enum(["mock", "entra"]).default("mock"),

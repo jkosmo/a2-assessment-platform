@@ -6,10 +6,14 @@ import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js"
 import { AssessmentWorker } from "./services/AssessmentWorker.js";
 import { AppealSlaMonitor } from "./services/AppealSlaMonitor.js";
 
+const role = env.PROCESS_ROLE;
+const startWeb = role === "web" || role === "all";
+const startWorkers = role === "worker" || role === "all";
+
 let server: ReturnType<typeof app.listen> | null = null;
 let shuttingDown = false;
-const assessmentWorker = new AssessmentWorker(env.ASSESSMENT_JOB_POLL_INTERVAL_MS);
-const appealSlaMonitor = new AppealSlaMonitor(env.APPEAL_SLA_MONITOR_INTERVAL_MS);
+const assessmentWorker = startWorkers ? new AssessmentWorker(env.ASSESSMENT_JOB_POLL_INTERVAL_MS) : null;
+const appealSlaMonitor = startWorkers ? new AppealSlaMonitor(env.APPEAL_SLA_MONITOR_INTERVAL_MS) : null;
 
 const gracefulShutdown = (exitCode = 0) => {
   if (shuttingDown) {
@@ -17,8 +21,8 @@ const gracefulShutdown = (exitCode = 0) => {
   }
 
   shuttingDown = true;
-  appealSlaMonitor.stop();
-  assessmentWorker.stop();
+  appealSlaMonitor?.stop();
+  assessmentWorker?.stop();
 
   if (!server) {
     process.exit(exitCode);
@@ -37,15 +41,22 @@ void startServer().catch((error) => {
 });
 
 async function startServer() {
-  await runBootstrapSeed();
+  if (startWeb) {
+    await runBootstrapSeed();
+    server = app.listen(env.PORT, () => {
+      // eslint-disable-next-line no-console
+      console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${role}]`);
+    });
+  }
 
-  server = app.listen(env.PORT, () => {
-    // eslint-disable-next-line no-console
-    console.log(`a2-assessment-platform listening on port ${env.PORT}`);
-  });
-
-  assessmentWorker.start();
-  appealSlaMonitor.start();
+  if (startWorkers) {
+    assessmentWorker!.start();
+    appealSlaMonitor!.start();
+    if (!startWeb) {
+      // eslint-disable-next-line no-console
+      console.log(`a2-assessment-platform workers started [role=${role}]`);
+    }
+  }
 }
 
 function runBootstrapSeed() {

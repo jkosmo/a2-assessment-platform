@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.49 - 2026-03-20
+### Summary
+Feat: PROCESS_ROLE env var med web/worker/all-modus. Lukker #200, #201.
+
+### Included
+- **`src/config/env.ts`**: Legger til `PROCESS_ROLE: z.enum(["web","worker","all"]).default("all")`.
+- **`src/index.ts`**: Startup er nå betinget — `web` starter kun HTTP + bootstrapSeed; `worker` starter kun AssessmentWorker + AppealSlaMonitor; `all` er eksisterende atferd. Graceful shutdown bruker optional chaining siden workers kan være null.
+- **`.env.example`**: Dokumenterer `PROCESS_ROLE=all` med kommentar.
+
 ## 0.8.48 - 2026-03-20
 ### Summary
 Fix: MCQ-dialog viste norsk tittel på EN-GB-fane.
