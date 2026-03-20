@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.53 - 2026-03-20
+### Summary
+Refactor: Ekstraher AssessmentEvaluator fra assessmentJobService. Lukker #185.
+
+### Included
+- **`src/services/AssessmentEvaluator.ts`** (#185): Ny dedikert modul som isolerer LLM-kallene, responsregistrering i databasen og sekundærvurderingslogikk. Eksporterer `runLlmEvaluationPipeline` som returnerer `EvaluationResult` (det endelige LLM-resultatet og valgfri `forceManualReviewReason`).
+- **`src/services/assessmentJobService.ts`**: Bruker nå `runLlmEvaluationPipeline` i stedet for inlined LLM-kall og sekundærlogikk. Ingen adferdsendringer.
+- **`test/unit/assessment-evaluator.test.ts`**: Nye enhetstester for `runLlmEvaluationPipeline` — dekker primærsti, sekundærtriggering, uenighetsrouting og feilhåndtering for begge passeringer.
+
 ## 0.8.52 - 2026-03-20
 ### Summary
 Refactor: Ekstraher AssessmentInputFactory fra assessmentJobService. Lukker #184.
