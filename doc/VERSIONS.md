@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.42 - 2026-03-20
+### Summary
+Refactor: Replace over-specified HTML/CSS/JS assertions in workspace contract tests with smoke tests (issues #177, #178).
+
+### Included
+- **`test/workspace-validation-accessibility.test.js`**: Erstattet 7 over-spesifiserte assertions: CSS-selektorer med braces-format krav (`".hint {"`) → `.hint`; Unicode-encoding krav → sjekker `"\\2139"`; `classList.add("field-error")`-mønster → `"field-error"` (class name). Fjernet `"review?.reviewer?.email"` (implementasjonsdetalj). Negative assertions for fjernede elementer beholdt som regresjonsguarder.
+
 ## 0.8.41 - 2026-03-20
 ### Summary
 Test: 36 negative config validation tests for `assessment-rules.json` zod schema (issue #213). Exports `rulesSchema` for direct unit-test access.
