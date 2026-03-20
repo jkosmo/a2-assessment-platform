@@ -8,12 +8,21 @@ const submissionUpdate = vi.fn();
 const recordAuditEvent = vi.fn();
 const upsertRecertificationStatusFromDecision = vi.fn();
 
+vi.mock("../../src/db/prisma.js", () => ({
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+}));
+
 vi.mock("../../src/repositories/decisionRepository.js", () => ({
   decisionRepository: {
     createAssessmentDecision: assessmentDecisionCreate,
     createManualReview: manualReviewCreate,
     updateSubmissionStatus: submissionUpdate,
   },
+  createDecisionRepository: () => ({
+    createAssessmentDecision: assessmentDecisionCreate,
+    createManualReview: manualReviewCreate,
+    updateSubmissionStatus: submissionUpdate,
+  }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -98,12 +107,13 @@ describe("decision service", () => {
     expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
       decisionId: "decision-1",
       actorId: "user-1",
-    });
+    }, expect.anything());
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "assessment_decision",
         entityId: "decision-1",
       }),
+      expect.anything(),
     );
     expect(result).toEqual({
       decision: {
@@ -159,12 +169,14 @@ describe("decision service", () => {
         entityType: "manual_review",
         entityId: "review-1",
       }),
+      expect.anything(),
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "assessment_decision",
         entityId: "decision-2",
       }),
+      expect.anything(),
     );
     expect(result).toEqual({
       decision: {
@@ -224,7 +236,7 @@ describe("decision service", () => {
     expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
       decisionId: "decision-3",
       actorId: "user-3",
-    });
+    }, expect.anything());
     expect(result).toEqual({
       decision: {
         id: "decision-3",

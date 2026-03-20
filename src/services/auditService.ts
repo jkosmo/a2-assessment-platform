@@ -1,8 +1,11 @@
 import { ForbiddenError } from "../errors/AppError.js";
-import { auditRepository } from "../repositories/auditRepository.js";
+import { auditRepository, createAuditRepository } from "../repositories/auditRepository.js";
 import { sha256 } from "../utils/hash.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
+import { prisma } from "../db/prisma.js";
+
+type AuditTxClient = Pick<typeof prisma, "auditEvent" | "submission">;
 
 type AuditInput = {
   entityType: string;
@@ -12,10 +15,11 @@ type AuditInput = {
   metadata?: Record<string, unknown>;
 };
 
-export async function recordAuditEvent(input: AuditInput) {
+export async function recordAuditEvent(input: AuditInput, tx?: AuditTxClient) {
   const metadataJson = JSON.stringify(input.metadata ?? {});
+  const repo = tx ? createAuditRepository(tx) : auditRepository;
 
-  await auditRepository.createAuditEvent({
+  await repo.createAuditEvent({
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,

@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.50 - 2026-03-20
+### Summary
+Feat: Prisma $transaction-wrapping for kritiske domene-mutasjoner. Lukker #179, #180, #181, #182.
+
+### Included
+- **`src/services/decisionService.ts`** (#179): `createAssessmentDecision` er nå pakket inn i `prisma.$transaction`. Alle DB-skrivinger bruker `createDecisionRepository(tx)`; `recordAuditEvent` og `upsertRecertificationStatusFromDecision` mottar `tx` for å delta i samme transaksjon.
+- **`src/services/manualReviewService.ts`** (#180, #182): `finalizeManualReviewOverride` bruker `prisma.$transaction` for `createOverrideDecision`, `resolveManualReview` og `updateSubmissionStatus`. `notifyAssessmentResult` kalles etter at transaksjonen er committed.
+- **`src/services/appealService.ts`** (#181, #182): `resolveAppeal` bruker `prisma.$transaction` for `createResolutionDecision`, `markAppealResolved` og `updateSubmissionStatus`. Notifikasjon skjer allerede utenfor transaksjonsblokken.
+- **`src/services/auditService.ts`**: `recordAuditEvent` aksepterer nå en valgfri `tx`-parameter for å delta i en aktiv transaksjon.
+- **`src/services/recertificationService.ts`**: `upsertRecertificationStatusFromDecision` aksepterer nå en valgfri `tx`-parameter; bruker repository-factory-funksjoner internt.
+- **`test/unit/`**: Oppdaterte tester for `decision-service`, `manual-review-service`, `appeal-service` og `recertification-service` — mocker `prisma.$transaction` og repository-fabrikkfunksjoner; assertions bruker `expect.anything()` for `tx`-argumentet.
+
 ## 0.8.49 - 2026-03-20
 ### Summary
 Feat: PROCESS_ROLE env var med web/worker/all-modus. Lukker #200, #201.

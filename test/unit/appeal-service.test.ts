@@ -17,6 +17,10 @@ const notifyAppealStatusTransition = vi.fn();
 const logOperationalEvent = vi.fn();
 const upsertRecertificationStatusFromDecision = vi.fn();
 
+vi.mock("../../src/db/prisma.js", () => ({
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+}));
+
 vi.mock("../../src/repositories/appealRepository.js", () => ({
   appealRepository: {
     findOwnedSubmissionWithLatestDecision,
@@ -30,6 +34,11 @@ vi.mock("../../src/repositories/appealRepository.js", () => ({
     createResolutionDecision,
     markAppealResolved,
   },
+  createAppealRepository: () => ({
+    createResolutionDecision,
+    markAppealResolved,
+    updateSubmissionStatus,
+  }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -233,13 +242,14 @@ describe("appeal service", () => {
     expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
       decisionId: "decision-2",
       actorId: "handler-1",
-    });
+    }, expect.anything());
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "assessment_decision",
         entityId: "decision-2",
         action: "appeal_resolution_decision_created",
       }),
+      expect.anything(),
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -247,6 +257,7 @@ describe("appeal service", () => {
         entityId: "appeal-1",
         action: "appeal_resolved",
       }),
+      expect.anything(),
     );
     expect(notifyAppealStatusTransition).toHaveBeenCalledWith(
       expect.objectContaining({

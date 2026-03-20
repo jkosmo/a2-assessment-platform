@@ -13,6 +13,10 @@ const upsertRecertificationStatusFromDecision = vi.fn();
 const notifyAssessmentResult = vi.fn();
 const logOperationalEvent = vi.fn();
 
+vi.mock("../../src/db/prisma.js", () => ({
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+}));
+
 vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForClaim,
@@ -22,6 +26,11 @@ vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
     resolveManualReview,
     updateSubmissionStatus,
   },
+  createManualReviewRepository: () => ({
+    createOverrideDecision,
+    resolveManualReview,
+    updateSubmissionStatus,
+  }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -178,13 +187,14 @@ describe("manual review service", () => {
     expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
       decisionId: "decision-2",
       actorId: "reviewer-1",
-    });
+    }, expect.anything());
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "assessment_decision",
         entityId: "decision-2",
         action: "manual_override_decision_created",
       }),
+      expect.anything(),
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -192,6 +202,7 @@ describe("manual review service", () => {
         entityId: "review-1",
         action: "manual_review_resolved",
       }),
+      expect.anything(),
     );
     expect(result).toEqual({
       review: {

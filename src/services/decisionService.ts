@@ -1,6 +1,7 @@
 import { DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
-import { decisionRepository } from "../repositories/decisionRepository.js";
+import { createDecisionRepository } from "../repositories/decisionRepository.js";
+import { prisma } from "../db/prisma.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
@@ -137,66 +138,70 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const resolved = resolveAssessmentDecision(input);
 
-  const decision = await decisionRepository.createAssessmentDecision({
-    submissionId: input.submissionId,
-    moduleVersionId: input.moduleVersionId,
-    rubricVersionId: input.rubricVersionId,
-    promptTemplateVersionId: input.promptTemplateVersionId,
-    mcqScaledScore: input.mcqScaledScore,
-    practicalScaledScore: practicalScoreScaled,
-    totalScore: resolved.totalScore,
-    redFlagsJson: JSON.stringify(input.llmResult.red_flags),
-    passFailTotal: resolved.passFailTotal,
-    decisionType: DecisionType.AUTOMATIC,
-    decisionReason: resolved.decisionReason,
-    finalisedById: input.userId,
-  });
+  return prisma.$transaction(async (tx) => {
+    const repo = createDecisionRepository(tx);
 
-  if (resolved.needsManualReview) {
-    const review = await decisionRepository.createManualReview({
+    const decision = await repo.createAssessmentDecision({
       submissionId: input.submissionId,
-      triggerReason: decision.decisionReason,
-      reviewStatus: "OPEN",
+      moduleVersionId: input.moduleVersionId,
+      rubricVersionId: input.rubricVersionId,
+      promptTemplateVersionId: input.promptTemplateVersionId,
+      mcqScaledScore: input.mcqScaledScore,
+      practicalScaledScore: practicalScoreScaled,
+      totalScore: resolved.totalScore,
+      redFlagsJson: JSON.stringify(input.llmResult.red_flags),
+      passFailTotal: resolved.passFailTotal,
+      decisionType: DecisionType.AUTOMATIC,
+      decisionReason: resolved.decisionReason,
+      finalisedById: input.userId,
     });
 
+    if (resolved.needsManualReview) {
+      const review = await repo.createManualReview({
+        submissionId: input.submissionId,
+        triggerReason: decision.decisionReason,
+        reviewStatus: "OPEN",
+      });
+
+      await recordAuditEvent({
+        entityType: "manual_review",
+        entityId: review.id,
+        action: "manual_review_opened",
+        actorId: input.userId,
+        metadata: {
+          submissionId: input.submissionId,
+          decisionId: decision.id,
+          triggerReason: review.triggerReason,
+        },
+      }, tx);
+    }
+
+    await repo.updateSubmissionStatus(
+      input.submissionId,
+      resolved.needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED,
+    );
+
+    if (!resolved.needsManualReview) {
+      await upsertRecertificationStatusFromDecision({
+        decisionId: decision.id,
+        actorId: input.userId,
+      }, tx);
+    }
+
     await recordAuditEvent({
-      entityType: "manual_review",
-      entityId: review.id,
-      action: "manual_review_opened",
+      entityType: "assessment_decision",
+      entityId: decision.id,
+      action: "decision_created",
       actorId: input.userId,
       metadata: {
         submissionId: input.submissionId,
-        decisionId: decision.id,
-        triggerReason: review.triggerReason,
+        totalScore: resolved.totalScore,
+        needsManualReview: resolved.needsManualReview,
+        forceManualReviewReason: input.forceManualReviewReason ?? null,
+        passFailTotal: decision.passFailTotal,
       },
-    });
-  }
+    }, tx);
 
-  await decisionRepository.updateSubmissionStatus(
-    input.submissionId,
-    resolved.needsManualReview ? SubmissionStatus.UNDER_REVIEW : SubmissionStatus.COMPLETED,
-  );
-
-  if (!resolved.needsManualReview) {
-    await upsertRecertificationStatusFromDecision({
-      decisionId: decision.id,
-      actorId: input.userId,
-    });
-  }
-
-  await recordAuditEvent({
-    entityType: "assessment_decision",
-    entityId: decision.id,
-    action: "decision_created",
-    actorId: input.userId,
-    metadata: {
-      submissionId: input.submissionId,
-      totalScore: resolved.totalScore,
-      needsManualReview: resolved.needsManualReview,
-      forceManualReviewReason: input.forceManualReviewReason ?? null,
-      passFailTotal: decision.passFailTotal,
-    },
+    return { decision, needsManualReview: resolved.needsManualReview };
   });
-
-  return { decision, needsManualReview: resolved.needsManualReview };
 }

@@ -3,10 +3,13 @@ import { getAssessmentRules } from "../config/assessmentRules.js";
 import { NotFoundError } from "../errors/AppError.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { auditRepository } from "../repositories/auditRepository.js";
-import { certificationRepository } from "../repositories/certificationRepository.js";
-import { decisionRepository } from "../repositories/decisionRepository.js";
+import { certificationRepository, createCertificationRepository } from "../repositories/certificationRepository.js";
+import { decisionRepository, createDecisionRepository } from "../repositories/decisionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { sendViaAcs } from "./participantNotificationService.js";
+import { prisma } from "../db/prisma.js";
+
+type RecertTxClient = Pick<typeof prisma, "assessmentDecision" | "manualReview" | "submission" | "certificationStatus" | "auditEvent">;
 
 export type RecertificationLifecycleStatus = "ACTIVE" | "DUE_SOON" | "DUE" | "EXPIRED" | "NOT_CERTIFIED";
 
@@ -17,8 +20,11 @@ type UpsertFromDecisionInput = {
 
 type ReminderChannel = "disabled" | "log" | "webhook" | "acs_email";
 
-export async function upsertRecertificationStatusFromDecision(input: UpsertFromDecisionInput) {
-  const decision = await decisionRepository.findDecisionWithSubmissionIdentifiers(input.decisionId);
+export async function upsertRecertificationStatusFromDecision(input: UpsertFromDecisionInput, tx?: RecertTxClient) {
+  const decisionRepo = tx ? createDecisionRepository(tx) : decisionRepository;
+  const certRepo = tx ? createCertificationRepository(tx) : certificationRepository;
+
+  const decision = await decisionRepo.findDecisionWithSubmissionIdentifiers(input.decisionId);
 
   if (!decision) {
     throw new NotFoundError("Decision", "decision_not_found", "Decision not found.");
@@ -47,7 +53,7 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
     status = "NOT_CERTIFIED";
   }
 
-  const certification = await certificationRepository.upsertCertificationStatus({
+  const certification = await certRepo.upsertCertificationStatus({
     userId,
     moduleId,
     latestDecisionId: decision.id,
@@ -71,7 +77,7 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
       expiryDate: expiryDate?.toISOString() ?? null,
       recertificationDueDate: recertificationDueDate?.toISOString() ?? null,
     },
-  });
+  }, tx);
 
   return certification;
 }

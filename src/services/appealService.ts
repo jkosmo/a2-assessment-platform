@@ -1,6 +1,7 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
-import { appealRepository } from "../repositories/appealRepository.js";
+import { appealRepository, createAppealRepository } from "../repositories/appealRepository.js";
+import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "./participantNotificationService.js";
@@ -202,60 +203,67 @@ export async function resolveAppeal(input: {
   }
 
   const finalisedAt = new Date();
-  const resolutionDecision = await appealRepository.createResolutionDecision({
-    submissionId: latestDecision.submissionId,
-    moduleVersionId: latestDecision.moduleVersionId,
-    rubricVersionId: latestDecision.rubricVersionId,
-    promptTemplateVersionId: latestDecision.promptTemplateVersionId,
-    mcqScaledScore: latestDecision.mcqScaledScore,
-    practicalScaledScore: latestDecision.practicalScaledScore,
-    totalScore: latestDecision.totalScore,
-    redFlagsJson: latestDecision.redFlagsJson,
-    passFailTotal: input.passFailTotal,
-    decisionType: DecisionType.APPEAL_RESOLUTION,
-    decisionReason: input.decisionReason,
-    finalisedAt,
-    finalisedById: input.handlerId,
-    parentDecisionId: latestDecision.id,
-  });
 
-  const resolvedAppeal = await appealRepository.markAppealResolved(
-    appeal.id,
-    input.handlerId,
-    finalisedAt,
-    input.resolutionNote,
-  );
+  const { resolutionDecision, resolvedAppeal } = await prisma.$transaction(async (tx) => {
+    const repo = createAppealRepository(tx);
 
-  await appealRepository.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
-
-  await upsertRecertificationStatusFromDecision({
-    decisionId: resolutionDecision.id,
-    actorId: input.handlerId,
-  });
-
-  await recordAuditEvent({
-    entityType: "assessment_decision",
-    entityId: resolutionDecision.id,
-    action: "appeal_resolution_decision_created",
-    actorId: input.handlerId,
-    metadata: {
+    const resolutionDecision = await repo.createResolutionDecision({
       submissionId: latestDecision.submissionId,
-      appealId: appeal.id,
+      moduleVersionId: latestDecision.moduleVersionId,
+      rubricVersionId: latestDecision.rubricVersionId,
+      promptTemplateVersionId: latestDecision.promptTemplateVersionId,
+      mcqScaledScore: latestDecision.mcqScaledScore,
+      practicalScaledScore: latestDecision.practicalScaledScore,
+      totalScore: latestDecision.totalScore,
+      redFlagsJson: latestDecision.redFlagsJson,
+      passFailTotal: input.passFailTotal,
+      decisionType: DecisionType.APPEAL_RESOLUTION,
+      decisionReason: input.decisionReason,
+      finalisedAt,
+      finalisedById: input.handlerId,
       parentDecisionId: latestDecision.id,
-      passFailTotal: resolutionDecision.passFailTotal,
-    },
-  });
+    });
 
-  await recordAuditEvent({
-    entityType: "appeal",
-    entityId: resolvedAppeal.id,
-    action: "appeal_resolved",
-    actorId: input.handlerId,
-    metadata: {
-      submissionId: latestDecision.submissionId,
-      resolutionDecisionId: resolutionDecision.id,
-      appealStatus: resolvedAppeal.appealStatus,
-    },
+    const resolvedAppeal = await repo.markAppealResolved(
+      appeal.id,
+      input.handlerId,
+      finalisedAt,
+      input.resolutionNote,
+    );
+
+    await repo.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
+
+    await upsertRecertificationStatusFromDecision({
+      decisionId: resolutionDecision.id,
+      actorId: input.handlerId,
+    }, tx);
+
+    await recordAuditEvent({
+      entityType: "assessment_decision",
+      entityId: resolutionDecision.id,
+      action: "appeal_resolution_decision_created",
+      actorId: input.handlerId,
+      metadata: {
+        submissionId: latestDecision.submissionId,
+        appealId: appeal.id,
+        parentDecisionId: latestDecision.id,
+        passFailTotal: resolutionDecision.passFailTotal,
+      },
+    }, tx);
+
+    await recordAuditEvent({
+      entityType: "appeal",
+      entityId: resolvedAppeal.id,
+      action: "appeal_resolved",
+      actorId: input.handlerId,
+      metadata: {
+        submissionId: latestDecision.submissionId,
+        resolutionDecisionId: resolutionDecision.id,
+        appealStatus: resolvedAppeal.appealStatus,
+      },
+    }, tx);
+
+    return { resolutionDecision, resolvedAppeal };
   });
 
   const resolveModuleTitle = localizeContentText(env.DEFAULT_LOCALE, appeal.submission.module.title) ?? latestDecision.submissionId;

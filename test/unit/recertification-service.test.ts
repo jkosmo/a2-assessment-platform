@@ -122,7 +122,7 @@ describe("recertification service", () => {
         expiryDate: "2027-03-11T00:00:00.000Z",
         recertificationDueDate: "2027-02-09T00:00:00.000Z",
       },
-    });
+    }, undefined);
     expect(result).toEqual({
       id: "cert-1",
       status: "ACTIVE",

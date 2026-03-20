@@ -1,6 +1,7 @@
 import { DecisionType, ReviewStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
-import { manualReviewRepository } from "../repositories/manualReviewRepository.js";
+import { manualReviewRepository, createManualReviewRepository } from "../repositories/manualReviewRepository.js";
+import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
 import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
 import { notifyAssessmentResult } from "./participantNotificationService.js";
@@ -94,37 +95,69 @@ export async function finalizeManualReviewOverride(input: {
   }
 
   const finalisedAt = new Date();
-  const overrideDecision = await manualReviewRepository.createOverrideDecision({
-    submissionId: latestDecision.submissionId,
-    moduleVersionId: latestDecision.moduleVersionId,
-    rubricVersionId: latestDecision.rubricVersionId,
-    promptTemplateVersionId: latestDecision.promptTemplateVersionId,
-    mcqScaledScore: latestDecision.mcqScaledScore,
-    practicalScaledScore: latestDecision.practicalScaledScore,
-    totalScore: latestDecision.totalScore,
-    redFlagsJson: latestDecision.redFlagsJson,
-    passFailTotal: input.passFailTotal,
-    decisionType: DecisionType.MANUAL_OVERRIDE,
-    decisionReason: input.decisionReason,
-    finalisedAt,
-    finalisedById: input.reviewerId,
-    parentDecisionId: latestDecision.id,
-  });
 
-  const resolvedReview = await manualReviewRepository.resolveManualReview({
-    reviewId: review.id,
-    reviewerId: input.reviewerId,
-    reviewStatus: ReviewStatus.RESOLVED,
-    reviewedAt: finalisedAt,
-    overrideDecision: input.passFailTotal ? "PASS" : "FAIL",
-    overrideReason: input.overrideReason,
-  });
+  const { overrideDecision, resolvedReview } = await prisma.$transaction(async (tx) => {
+    const repo = createManualReviewRepository(tx);
 
-  await manualReviewRepository.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
+    const overrideDecision = await repo.createOverrideDecision({
+      submissionId: latestDecision.submissionId,
+      moduleVersionId: latestDecision.moduleVersionId,
+      rubricVersionId: latestDecision.rubricVersionId,
+      promptTemplateVersionId: latestDecision.promptTemplateVersionId,
+      mcqScaledScore: latestDecision.mcqScaledScore,
+      practicalScaledScore: latestDecision.practicalScaledScore,
+      totalScore: latestDecision.totalScore,
+      redFlagsJson: latestDecision.redFlagsJson,
+      passFailTotal: input.passFailTotal,
+      decisionType: DecisionType.MANUAL_OVERRIDE,
+      decisionReason: input.decisionReason,
+      finalisedAt,
+      finalisedById: input.reviewerId,
+      parentDecisionId: latestDecision.id,
+    });
 
-  await upsertRecertificationStatusFromDecision({
-    decisionId: overrideDecision.id,
-    actorId: input.reviewerId,
+    const resolvedReview = await repo.resolveManualReview({
+      reviewId: review.id,
+      reviewerId: input.reviewerId,
+      reviewStatus: ReviewStatus.RESOLVED,
+      reviewedAt: finalisedAt,
+      overrideDecision: input.passFailTotal ? "PASS" : "FAIL",
+      overrideReason: input.overrideReason,
+    });
+
+    await repo.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
+
+    await upsertRecertificationStatusFromDecision({
+      decisionId: overrideDecision.id,
+      actorId: input.reviewerId,
+    }, tx);
+
+    await recordAuditEvent({
+      entityType: "assessment_decision",
+      entityId: overrideDecision.id,
+      action: "manual_override_decision_created",
+      actorId: input.reviewerId,
+      metadata: {
+        submissionId: latestDecision.submissionId,
+        reviewId: review.id,
+        parentDecisionId: latestDecision.id,
+        passFailTotal: overrideDecision.passFailTotal,
+      },
+    }, tx);
+
+    await recordAuditEvent({
+      entityType: "manual_review",
+      entityId: resolvedReview.id,
+      action: "manual_review_resolved",
+      actorId: input.reviewerId,
+      metadata: {
+        submissionId: latestDecision.submissionId,
+        overrideDecisionId: overrideDecision.id,
+        overrideDecision: resolvedReview.overrideDecision,
+      },
+    }, tx);
+
+    return { overrideDecision, resolvedReview };
   });
 
   const submissionLocale = normalizeLocale(review.submission.locale) ?? "en-GB";
@@ -147,31 +180,6 @@ export async function finalizeManualReviewOverride(input: {
       },
       "error",
     );
-  });
-
-  await recordAuditEvent({
-    entityType: "assessment_decision",
-    entityId: overrideDecision.id,
-    action: "manual_override_decision_created",
-    actorId: input.reviewerId,
-    metadata: {
-      submissionId: latestDecision.submissionId,
-      reviewId: review.id,
-      parentDecisionId: latestDecision.id,
-      passFailTotal: overrideDecision.passFailTotal,
-    },
-  });
-
-  await recordAuditEvent({
-    entityType: "manual_review",
-    entityId: resolvedReview.id,
-    action: "manual_review_resolved",
-    actorId: input.reviewerId,
-    metadata: {
-      submissionId: latestDecision.submissionId,
-      overrideDecisionId: overrideDecision.id,
-      overrideDecision: resolvedReview.overrideDecision,
-    },
   });
 
   return { review: resolvedReview, overrideDecision };
