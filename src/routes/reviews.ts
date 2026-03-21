@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { z } from "zod";
-import { AppError } from "../errors/AppError.js";
 import { localizeContentText } from "../i18n/content.js";
 import {
   claimManualReview,
@@ -104,15 +103,7 @@ reviewsRouter.post("/:reviewId/claim", async (request, response, next) => {
     const review = await claimManualReview(request.params.reviewId, userId);
     response.json({ review });
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(400).json({
-      error: "review_claim_failed",
-      message: "Could not claim manual review.",
-    });
+    next(error);
   }
 });
 
@@ -137,15 +128,7 @@ reviewsRouter.post("/:reviewId/override", async (request, response, next) => {
     });
     response.json(result);
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(400).json({
-      error: "manual_override_failed",
-      message: "Could not finalize manual override.",
-    });
+    next(error);
   }
 });
 

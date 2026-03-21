@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
 import { z } from "zod";
-import { AppError, ValidationError } from "../errors/AppError.js";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
 import { createSubmissionAppeal } from "../services/appealService.js";
 import { env } from "../config/env.js";
@@ -48,12 +47,7 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
     });
     response.status(201).json({ submission });
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    next(new ValidationError("Failed to create submission."));
+    next(error);
   }
 });
 
@@ -78,15 +72,7 @@ submissionsRouter.post("/:submissionId/appeals", async (request, response, next)
     });
     response.status(201).json({ appeal });
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(400).json({
-      error: "appeal_create_failed",
-      message: "Failed to create appeal.",
-    });
+    next(error);
   }
 });
 

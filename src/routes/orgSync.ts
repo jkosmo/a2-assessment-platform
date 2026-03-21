@@ -18,7 +18,7 @@ const orgSyncDeltaSchema = z.object({
   ),
 });
 
-orgSyncRouter.post("/delta", async (request, response) => {
+orgSyncRouter.post("/delta", async (request, response, next) => {
   const actorId = request.context?.userId;
   if (!actorId) {
     response.status(401).json({ error: "unauthorized" });
@@ -39,10 +39,7 @@ orgSyncRouter.post("/delta", async (request, response) => {
     });
     response.json({ run: result });
   } catch (error) {
-    response.status(500).json({
-      error: "org_sync_failed",
-      message: "Org sync failed.",
-    });
+    next(error);
   }
 });
 

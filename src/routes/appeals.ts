@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { z } from "zod";
-import { AppError } from "../errors/AppError.js";
 import { claimAppeal, getAppealWorkspace, listAppealQueue, resolveAppeal } from "../services/appealService.js";
 import { buildAppealSlaSnapshot } from "../services/appealSla.js";
 
@@ -77,15 +76,7 @@ appealsRouter.post("/:appealId/claim", async (request, response, next) => {
     const appeal = await claimAppeal(request.params.appealId, userId);
     response.json({ appeal });
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(400).json({
-      error: "appeal_claim_failed",
-      message: "Could not assign this appeal. Refresh the queue and try again.",
-    });
+    next(error);
   }
 });
 
@@ -110,15 +101,7 @@ appealsRouter.post("/:appealId/resolve", async (request, response, next) => {
     });
     response.json(result);
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(400).json({
-      error: "appeal_resolution_failed",
-      message: "Could not resolve this appeal. Refresh the queue and try again.",
-    });
+    next(error);
   }
 });
 

@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole.js";
-import { AppError } from "../errors/AppError.js";
 import { getCalibrationWorkspaceSnapshot } from "../services/calibrationWorkspaceService.js";
 import { publishModuleVersionWithThresholds } from "../services/adminContentService.js";
 import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
@@ -80,15 +79,7 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
     });
     response.json(body);
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(500).json({
-      error: "calibration_workspace_failed",
-      message: "Could not load calibration workspace snapshot.",
-    });
+    next(error);
   }
 });
 
@@ -110,7 +101,7 @@ const publishThresholdsBodySchema = z
     path: ["borderlineMax"],
   });
 
-calibrationRouter.post("/workspace/publish-thresholds", async (request, response) => {
+calibrationRouter.post("/workspace/publish-thresholds", async (request, response, next) => {
   const roles: string[] = (request.context?.roles as string[] | undefined) ?? [];
   const isAllowed =
     roles.includes("ADMINISTRATOR") || roles.includes("SUBJECT_MATTER_OWNER");
@@ -144,15 +135,7 @@ calibrationRouter.post("/workspace/publish-thresholds", async (request, response
     });
     response.status(201).json({ moduleVersion: published });
   } catch (error) {
-    if (error instanceof AppError) {
-      response.status(error.httpStatus ?? 400).json({ error: error.code, message: error.message });
-      return;
-    }
-
-    response.status(400).json({
-      error: "publish_thresholds_failed",
-      message: "Could not publish thresholds.",
-    });
+    next(error);
   }
 });
 

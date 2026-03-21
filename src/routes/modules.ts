@@ -132,7 +132,7 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   response.json({ activeVersion });
 });
 
-modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
+modulesRouter.get("/:moduleId/mcq/start", async (request, response, next) => {
   const userId = request.context?.userId;
   const moduleId = request.params.moduleId as string;
   if (!userId) {
@@ -151,14 +151,11 @@ modulesRouter.get("/:moduleId/mcq/start", async (request, response) => {
     const result = await startMcqAttempt(moduleId, parsed.data.submissionId, userId, locale);
     response.json(result);
   } catch (error) {
-    response.status(400).json({
-      error: "mcq_start_failed",
-      message: "Could not start MCQ attempt.",
-    });
+    next(error);
   }
 });
 
-modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, response) => {
+modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, response, next) => {
   const userId = request.context?.userId;
   const moduleId = request.params.moduleId as string;
   if (!userId) {
@@ -180,10 +177,7 @@ modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, re
     });
     response.json(result);
   } catch (error) {
-    response.status(400).json({
-      error: "mcq_submit_failed",
-      message: "Could not submit MCQ attempt.",
-    });
+    next(error);
   }
 });
 

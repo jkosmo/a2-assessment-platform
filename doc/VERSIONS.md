@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.73 - 2026-03-21
+### Summary
+Refactor (#231): standardize route error handling — all catch blocks converge to next(error).
+
+### Included
+- **`src/routes/audit.ts`**: simplified catch → `next(error)`; removed unused `AppError` import.
+- **`src/routes/appeals.ts`**: both claim and resolve handlers — simplified catch → `next(error)`; removed `AppError` import.
+- **`src/routes/reviews.ts`**: both claim and override handlers — simplified catch → `next(error)`; removed `AppError` import.
+- **`src/routes/submissions.ts`**: createSubmission and createAppeal handlers — simplified catch → `next(error)`; removed `AppError`/`ValidationError` imports.
+- **`src/routes/calibration.ts`**: GET workspace and POST publish-thresholds — simplified catch → `next(error)`; added `next` param to POST handler; removed `AppError` import.
+- **`src/routes/modules.ts`**: mcq/start and mcq/submit — added `next` param, simplified catch → `next(error)`.
+- **`src/routes/orgSync.ts`**: added `next` param, simplified catch → `next(error)`.
+
 ## 0.8.72 - 2026-03-21
 ### Summary
 Test (#234): trim low-signal assertions from workspace and contract tests.

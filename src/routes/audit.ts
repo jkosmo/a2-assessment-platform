@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { AppError } from "../errors/AppError.js";
 import { getSubmissionAuditTrail } from "../services/auditService.js";
 
 const auditRouter = Router();
@@ -27,15 +26,7 @@ auditRouter.get("/submissions/:submissionId", async (request, response, next) =>
 
     response.json(trail);
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
-    }
-
-    response.status(500).json({
-      error: "internal_error",
-      message: "Could not load audit trail.",
-    });
+    next(error);
   }
 });
 
