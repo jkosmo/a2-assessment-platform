@@ -1,8 +1,8 @@
 import type {
   AppealStatus as AppealStatusType,
-  Prisma,
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
+import type { CreateAssessmentDecisionInput } from "./decisionRepository.js";
 import { prisma } from "../db/prisma.js";
 
 type AppealRepositoryClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision">;
@@ -253,7 +253,7 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
       });
     },
 
-    createResolutionDecision(data: Prisma.AssessmentDecisionUncheckedCreateInput) {
+    createResolutionDecision(data: CreateAssessmentDecisionInput) {
       return client.assessmentDecision.create({ data });
     },
 

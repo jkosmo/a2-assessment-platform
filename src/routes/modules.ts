@@ -5,7 +5,7 @@ import {
   getModuleById,
   getActiveModuleVersion,
   listCompletedModulesForUser,
-} from "../repositories/moduleRepository.js";
+} from "../services/moduleService.js";
 import { startMcqAttempt, submitMcqAttempt } from "../services/mcqService.js";
 import {
   getCompletedSubmissionStatuses,

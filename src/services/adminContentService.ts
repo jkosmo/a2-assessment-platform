@@ -3,7 +3,8 @@ import { recordAuditEvent } from "./auditService.js";
 import { getBenchmarkExamplesConfig } from "../config/benchmarkExamples.js";
 import type { SupportedLocale } from "../i18n/locale.js";
 import { localizeContentText } from "../i18n/content.js";
-import type { ModuleAssessmentPolicy } from "./decisionService.js";
+import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../codecs/assessmentPolicyCodec.js";
+import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -62,36 +63,8 @@ type CreateBenchmarkExampleVersionInput = {
   actorId?: string;
 };
 
-type InlineLocalizedText = Partial<Record<"en-GB" | "nb" | "nn", string>>;
-
 function decodeLocalizedText(input: string | null | undefined) {
-  if (typeof input !== "string") {
-    return null;
-  }
-
-  const trimmed = input.trim();
-  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
-    return input;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return input;
-    }
-
-    const localized: InlineLocalizedText = {};
-    for (const locale of ["en-GB", "nb", "nn"] as const) {
-      const value = parsed[locale];
-      if (typeof value === "string" && value.trim().length > 0) {
-        localized[locale] = value.trim();
-      }
-    }
-
-    return Object.keys(localized).length > 0 ? localized : input;
-  } catch {
-    return input;
-  }
+  return localizedTextCodec.parse(input);
 }
 
 function safeParseJson(input: string) {
@@ -576,14 +549,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
     throw new Error("Active module version not found.");
   }
 
-  let existingPolicy: ModuleAssessmentPolicy = {};
-  if (sourceVersion.assessmentPolicyJson) {
-    try {
-      existingPolicy = JSON.parse(sourceVersion.assessmentPolicyJson) as ModuleAssessmentPolicy;
-    } catch {
-      existingPolicy = {};
-    }
-  }
+  const existingPolicy: ModuleAssessmentPolicy = assessmentPolicyCodec.parse(sourceVersion.assessmentPolicyJson) ?? {};
 
   const newPolicy: ModuleAssessmentPolicy = {
     ...existingPolicy,
@@ -611,7 +577,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
     promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
     mcqSetVersionId: sourceVersion.mcqSetVersionId,
     submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
-    assessmentPolicyJson: JSON.stringify(newPolicy),
+    assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
   });
 
   const published = await adminContentRepository.publishModuleVersion(

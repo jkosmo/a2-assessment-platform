@@ -2,7 +2,8 @@ import { NotFoundError } from "../errors/AppError.js";
 import { calibrationRepository } from "../repositories/calibrationRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
-import type { ModuleAssessmentPolicy } from "./decisionService.js";
+import { assessmentPolicyCodec } from "../codecs/assessmentPolicyCodec.js";
+import { redFlagsCodec } from "../codecs/redFlagsCodec.js";
 import { getAssessmentRules } from "../config/assessmentRules.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
@@ -43,18 +44,7 @@ function round2(value: number) {
 }
 
 function parseRedFlagCount(redFlagsJson: string) {
-  try {
-    const parsed = JSON.parse(redFlagsJson) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed.length;
-    }
-    if (parsed && typeof parsed === "object") {
-      return Object.keys(parsed).length;
-    }
-    return 0;
-  } catch {
-    return 0;
-  }
+  return redFlagsCodec.parse(redFlagsJson).length;
 }
 
 function parseBenchmarkExamples(rawJson: string) {
@@ -76,15 +66,8 @@ function toStringOrNull(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-function safeParsePolicy(json: string | null | undefined): ModuleAssessmentPolicy | null {
-  if (!json) {
-    return null;
-  }
-  try {
-    return JSON.parse(json) as ModuleAssessmentPolicy;
-  } catch {
-    return null;
-  }
+function safeParsePolicy(json: string | null | undefined) {
+  return assessmentPolicyCodec.parse(json);
 }
 
 function buildBenchmarkAnchors(

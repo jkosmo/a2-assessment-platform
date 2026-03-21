@@ -1,7 +1,7 @@
 import { preprocessSensitiveDataForLlm, type SensitiveDataPreprocessResult } from "./sensitiveDataMaskingService.js";
 import { localizeContentText } from "../i18n/content.js";
 import type { SupportedLocale } from "../i18n/locale.js";
-import type { ModuleAssessmentPolicy } from "./decisionService.js";
+import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../codecs/assessmentPolicyCodec.js";
 
 export type AssessmentInputContext = {
   /** Rubric criterion IDs extracted from the module rubric configuration. */
@@ -59,15 +59,7 @@ export function buildAssessmentInputContext(
   submission: SubmissionShape,
   submissionLocale: SupportedLocale,
 ): AssessmentInputContext {
-  const assessmentPolicy: ModuleAssessmentPolicy | null = submission.moduleVersion.assessmentPolicyJson
-    ? (() => {
-        try {
-          return JSON.parse(submission.moduleVersion.assessmentPolicyJson) as ModuleAssessmentPolicy;
-        } catch {
-          return null;
-        }
-      })()
-    : null;
+  const assessmentPolicy = assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson);
 
   const rubricCriteriaIds = parseRubricCriteriaIds(submission.moduleVersion.rubricVersion.criteriaJson);
   const rubricMaxTotal = parseRubricMaxTotal(submission.moduleVersion.rubricVersion.scalingRuleJson);

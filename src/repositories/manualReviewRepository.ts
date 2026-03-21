@@ -1,4 +1,5 @@
-import type { Prisma, ReviewStatus as ReviewStatusType, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
+import type { ReviewStatus as ReviewStatusType, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
+import type { CreateAssessmentDecisionInput } from "./decisionRepository.js";
 import { prisma } from "../db/prisma.js";
 
 type ManualReviewRepositoryClient = Pick<typeof prisma, "manualReview" | "assessmentDecision" | "submission">;
@@ -155,7 +156,7 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
       });
     },
 
-    createOverrideDecision(data: Prisma.AssessmentDecisionUncheckedCreateInput) {
+    createOverrideDecision(data: CreateAssessmentDecisionInput) {
       return client.assessmentDecision.create({ data });
     },
 

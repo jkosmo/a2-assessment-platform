@@ -1,5 +1,25 @@
-import type { AssessmentJobStatus as AssessmentJobStatusType, Prisma, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
+import type { AssessmentJobStatus as AssessmentJobStatusType, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+
+type CreateAssessmentJobInput = {
+  submissionId: string;
+  status: AssessmentJobStatusType;
+  maxAttempts: number;
+};
+
+type CreateLlmEvaluationInput = {
+  submissionId: string;
+  moduleVersionId: string;
+  modelName: string;
+  promptTemplateVersionId: string;
+  requestPayloadHash: string;
+  responseJson: string;
+  rubricTotal: number;
+  practicalScoreScaled: number;
+  passFailPractical: boolean;
+  manualReviewRecommended: boolean;
+  confidenceNote: string;
+};
 
 type AssessmentJobRepositoryClient = Pick<typeof prisma, "assessmentJob" | "submission" | "lLMEvaluation">;
 
@@ -24,7 +44,7 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       });
     },
 
-    createAssessmentJob(data: Prisma.AssessmentJobUncheckedCreateInput) {
+    createAssessmentJob(data: CreateAssessmentJobInput) {
       return client.assessmentJob.create({ data });
     },
 
@@ -106,7 +126,7 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       });
     },
 
-    createLlmEvaluation(data: Prisma.LLMEvaluationUncheckedCreateInput) {
+    createLlmEvaluation(data: CreateLlmEvaluationInput) {
       return client.lLMEvaluation.create({ data });
     },
 

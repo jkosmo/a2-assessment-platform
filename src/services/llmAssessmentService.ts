@@ -1,43 +1,9 @@
-import { z } from "zod";
 import { env } from "../config/env.js";
 import type { SupportedLocale } from "../i18n/locale.js";
 import { buildAllowedRedFlagCodesForPrompt, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
-
-const evidenceSufficiencySchema = z.enum(["sufficient", "insufficient", "uncertain"]);
-const recommendedOutcomeSchema = z.enum(["pass", "fail", "manual_review"]);
-const manualReviewReasonCodeSchema = z.enum([
-  "none",
-  "red_flag",
-  "borderline",
-  "low_confidence",
-  "disagreement",
-  "insufficient_evidence",
-  "policy",
-]);
-
-const llmResponseSchema = z.object({
-  module_id: z.string(),
-  rubric_scores: z.record(z.number().int().min(0)),
-  rubric_total: z.number().int().min(0),
-  practical_score_scaled: z.number().min(0).max(70),
-  pass_fail_practical: z.boolean(),
-  criterion_rationales: z.record(z.string()),
-  improvement_advice: z.array(z.string()).max(10),
-  red_flags: z.array(
-    z.object({
-      code: z.string(),
-      severity: z.string(),
-      description: z.string(),
-    }),
-  ),
-  manual_review_recommended: z.boolean(),
-  confidence_note: z.string(),
-  evidence_sufficiency: evidenceSufficiencySchema.optional(),
-  recommended_outcome: recommendedOutcomeSchema.optional(),
-  manual_review_reason_code: manualReviewReasonCodeSchema.optional(),
-});
-
-export type LlmStructuredAssessment = z.infer<typeof llmResponseSchema>;
+import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
+import type { LlmStructuredAssessment } from "../codecs/llmResponseCodec.js";
+export type { LlmStructuredAssessment };
 
 type AssessmentContext = {
   moduleId: string;
@@ -66,7 +32,7 @@ type AzureOpenAiRuntimeConfig = {
 
 export async function evaluatePracticalWithLlm(input: AssessmentContext): Promise<LlmStructuredAssessment> {
   if (env.LLM_MODE === "stub") {
-    const parsedAssessment = llmResponseSchema.parse(buildStubResponse(input));
+    const parsedAssessment = llmResponseCodec.parse(buildStubResponse(input));
     return {
       ...parsedAssessment,
       red_flags: normalizeRedFlags(parsedAssessment.red_flags),
@@ -132,7 +98,7 @@ export async function evaluatePracticalWithAzureOpenAi(
 
       const assistantContent = extractAssistantContent(responseBody);
       const parsedStructuredPayload = parseStructuredPayload(assistantContent);
-      const parsedAssessment = llmResponseSchema.parse(parsedStructuredPayload);
+      const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
 
       return {
         ...parsedAssessment,

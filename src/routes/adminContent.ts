@@ -1,5 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
+import { assessmentPolicyCodec } from "../codecs/assessmentPolicyCodec.js";
+import { submissionSchemaCodec } from "../codecs/submissionSchemaCodec.js";
+import { localizedTextCodec, type LocalizedText } from "../codecs/localizedTextCodec.js";
 import {
   createModule,
   createBenchmarkExampleVersion,
@@ -21,26 +24,13 @@ const localizedTextObjectSchema = z.object({
   nn: z.string().trim().min(1),
 });
 const localizedTextSchema = z.union([z.string().trim().min(1), localizedTextObjectSchema]);
-type LocalizedTextInput = z.infer<typeof localizedTextSchema>;
 
-function serializeLocalizedText(value: LocalizedTextInput): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  return JSON.stringify({
-    "en-GB": value["en-GB"].trim(),
-    nb: value.nb.trim(),
-    nn: value.nn.trim(),
-  });
-}
-
-function localizedTextIdentity(value: LocalizedTextInput): string {
+function localizedTextIdentity(value: LocalizedText): string {
   if (typeof value === "string") {
     return `plain:${value.trim()}`;
   }
 
-  return `locale:${value["en-GB"].trim()}|${value.nb.trim()}|${value.nn.trim()}`;
+  return `locale:${value["en-GB"] ?? ""}|${value.nb ?? ""}|${value.nn ?? ""}`;
 }
 
 const moduleCreateBodySchema = z.object({
@@ -179,10 +169,10 @@ adminContentRouter.post("/modules", async (request, response) => {
 
   try {
     const module = await createModule({
-      title: serializeLocalizedText(parsed.data.title),
-      description: parsed.data.description ? serializeLocalizedText(parsed.data.description) : undefined,
+      title: localizedTextCodec.serialize(parsed.data.title),
+      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
       certificationLevel: parsed.data.certificationLevel
-        ? serializeLocalizedText(parsed.data.certificationLevel)
+        ? localizedTextCodec.serialize(parsed.data.certificationLevel)
         : undefined,
       validFrom: validFrom ?? undefined,
       validTo: validTo ?? undefined,
@@ -266,8 +256,8 @@ adminContentRouter.post("/modules/:moduleId/prompt-template-versions", async (re
   try {
     const promptTemplateVersion = await createPromptTemplateVersion({
       moduleId: request.params.moduleId,
-      systemPrompt: serializeLocalizedText(parsed.data.systemPrompt),
-      userPromptTemplate: serializeLocalizedText(parsed.data.userPromptTemplate),
+      systemPrompt: localizedTextCodec.serialize(parsed.data.systemPrompt),
+      userPromptTemplate: localizedTextCodec.serialize(parsed.data.userPromptTemplate),
       examples: parsed.data.examples ?? [],
       active: parsed.data.active ?? true,
     });
@@ -290,12 +280,12 @@ adminContentRouter.post("/modules/:moduleId/mcq-set-versions", async (request, r
   try {
     const mcqSetVersion = await createMcqSetVersion({
       moduleId: request.params.moduleId,
-      title: serializeLocalizedText(parsed.data.title),
+      title: localizedTextCodec.serialize(parsed.data.title),
       questions: parsed.data.questions.map((question) => ({
-        stem: serializeLocalizedText(question.stem),
-        options: question.options.map((option) => serializeLocalizedText(option)),
-        correctAnswer: serializeLocalizedText(question.correctAnswer),
-        rationale: question.rationale ? serializeLocalizedText(question.rationale) : undefined,
+        stem: localizedTextCodec.serialize(question.stem),
+        options: question.options.map((option) => localizedTextCodec.serialize(option)),
+        correctAnswer: localizedTextCodec.serialize(question.correctAnswer),
+        rationale: question.rationale ? localizedTextCodec.serialize(question.rationale) : undefined,
       })),
       active: parsed.data.active ?? true,
     });
@@ -318,13 +308,17 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
   try {
     const moduleVersion = await createModuleVersion({
       moduleId: request.params.moduleId,
-      taskText: serializeLocalizedText(parsed.data.taskText),
-      guidanceText: parsed.data.guidanceText ? serializeLocalizedText(parsed.data.guidanceText) : undefined,
+      taskText: localizedTextCodec.serialize(parsed.data.taskText),
+      guidanceText: parsed.data.guidanceText ? localizedTextCodec.serialize(parsed.data.guidanceText) : undefined,
       rubricVersionId: parsed.data.rubricVersionId,
       promptTemplateVersionId: parsed.data.promptTemplateVersionId,
       mcqSetVersionId: parsed.data.mcqSetVersionId,
-      submissionSchemaJson: parsed.data.submissionSchema ? JSON.stringify(parsed.data.submissionSchema) : undefined,
-      assessmentPolicyJson: parsed.data.assessmentPolicy ? JSON.stringify(parsed.data.assessmentPolicy) : undefined,
+      submissionSchemaJson: parsed.data.submissionSchema
+        ? submissionSchemaCodec.serialize(parsed.data.submissionSchema)
+        : undefined,
+      assessmentPolicyJson: parsed.data.assessmentPolicy
+        ? assessmentPolicyCodec.serialize(parsed.data.assessmentPolicy)
+        : undefined,
     });
     response.status(201).json({ moduleVersion });
   } catch (error) {

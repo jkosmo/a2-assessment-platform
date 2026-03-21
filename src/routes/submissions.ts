@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
 import { z } from "zod";
 import { AppError, ValidationError } from "../errors/AppError.js";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
@@ -163,7 +164,9 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
   const latestAppeal = submission.appeals[0] ?? null;
   const llmEvaluation = submission.llmEvaluations[0] ?? null;
   const mcqAttempt = submission.mcqAttempts.find((attempt) => attempt.completedAt !== null) ?? null;
-  const llmStructured = parseLlmResponse(llmEvaluation?.responseJson);
+  const llmStructured = llmEvaluation?.responseJson
+    ? (() => { try { return llmResponseCodec.parse(JSON.parse(llmEvaluation.responseJson)); } catch { return null; } })()
+    : null;
 
   const scoreComponents = {
     mcqScaledScore: decision?.mcqScaledScore ?? mcqAttempt?.scaledScore ?? null,
@@ -202,22 +205,5 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
     },
   });
 });
-
-function parseLlmResponse(rawJson: string | undefined) {
-  if (!rawJson) {
-    return null;
-  }
-  try {
-    return JSON.parse(rawJson) as {
-      improvement_advice?: string[];
-      criterion_rationales?: Record<string, string>;
-      evidence_sufficiency?: string;
-      recommended_outcome?: string;
-      manual_review_reason_code?: string;
-    };
-  } catch {
-    return null;
-  }
-}
 
 export { submissionsRouter };

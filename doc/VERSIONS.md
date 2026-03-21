@@ -7,6 +7,46 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.63 - 2026-03-21
+### Summary
+Refactor: Lokalisering og JSON-parsing flyttes fra moduleRepository til moduleService. Lukker #188.
+
+### Included
+- **`src/services/moduleService.ts`** (ny): Eksporterer `listModules`, `getModuleById`, `getActiveModuleVersion`, `listCompletedModulesForUser`. Anvender `localizeContentText`, `assessmentPolicyCodec.parse` og `submissionSchemaCodec.parse` på rå query-resultater fra repository-laget.
+- **`src/repositories/moduleRepository.ts`**: Redusert til rene Prisma-spørringsfunksjoner uten lokalisering eller codec-kall. Eksporterer `queryModules`, `queryLatestSubmissionsForModules`, `queryCompletedSubmissionsForUser`, `queryModuleById`, `queryModuleVersion`, `getModuleWithActiveVersion`.
+- **`src/routes/modules.ts`**: Importerer `listModules`, `getModuleById`, `getActiveModuleVersion`, `listCompletedModulesForUser` fra `moduleService.ts` i stedet for `moduleRepository.ts`.
+
+## 0.8.62 - 2026-03-21
+### Summary
+Refactor: Fjerner rå Prisma-inputtyper fra repository-grensesnitt. Lukker #189.
+
+### Included
+- **`src/repositories/decisionRepository.ts`**: Eksporterer ny `CreateAssessmentDecisionInput`-type. Erstatter `Prisma.AssessmentDecisionUncheckedCreateInput` i `createAssessmentDecision`.
+- **`src/repositories/appealRepository.ts`**: Importerer `CreateAssessmentDecisionInput` fra `decisionRepository.ts`. Fjerner `Prisma`-import.
+- **`src/repositories/manualReviewRepository.ts`**: Samme som appealRepository.
+- **`src/repositories/assessmentJobRepository.ts`**: Definerer og bruker `CreateAssessmentJobInput` og `CreateLlmEvaluationInput`. Fjerner `Prisma`-import.
+- **`src/repositories/submissionRepository.ts`**: Definerer og bruker `CreateSubmissionInput`. Fjerner `Prisma`-import.
+
+## 0.8.61 - 2026-03-21
+### Summary
+Refactor: Typed JSON codecs for alle domenefelt – assessmentPolicy, submissionSchema, localizedText, LLM-respons og redFlags. Lukker #193, #194, #195.
+
+### Included
+- **`src/codecs/assessmentPolicyCodec.ts`** (ny): Eksporterer `ModuleAssessmentPolicy`-type og `assessmentPolicyCodec` med `parse`/`serialize`. Type flyttes hit fra `decisionService.ts`.
+- **`src/codecs/submissionSchemaCodec.ts`** (ny): Eksporterer `SubmissionSchema`/`SubmissionSchemaField`-typer og `submissionSchemaCodec` med `parse`/`serialize`.
+- **`src/codecs/localizedTextCodec.ts`** (ny): Eksporterer `LocalizedText`/`LocalizedTextObject`-typer og `localizedTextCodec` med `parse` (dekod lagret streng) og `serialize`.
+- **`src/codecs/llmResponseCodec.ts`** (ny): Flytter `llmResponseSchema` og `LlmStructuredAssessment`-type hit fra `llmAssessmentService.ts`. Eksporterer `llmResponseCodec` med `parse` (Zod-validert, kaster ved ugyldig) og `serialize`.
+- **`src/codecs/redFlagsCodec.ts`** (ny): Eksporterer `AssessmentRedFlag`-type og `redFlagsCodec` med `parse` (returnerer `[]` ved feil) og `serialize`.
+- **`test/unit/codecs.test.ts`** (ny): 27 enhetstester for alle 5 codecs – roundtrip, feilhåndtering, kanttilfeller.
+- **Oppdaterte kallsteder**: `decisionService.ts`, `adminContentService.ts`, `calibrationWorkspaceService.ts`, `AssessmentInputFactory.ts`, `AssessmentEvaluator.ts`, `llmAssessmentService.ts`, `assessmentRedFlagPolicy.ts`, `moduleRepository.ts`, `routes/adminContent.ts`, `routes/submissions.ts` – alle ad-hoc `JSON.parse`/`JSON.stringify`-kall for disse feltene er erstattet med codec-kall.
+
+## 0.8.60 - 2026-03-21
+### Summary
+Fix: Setter AUTH_MODE=mock i vitest.unit.config.ts for å løse 34 RBAC-testfeil.
+
+### Included
+- **`vitest.unit.config.ts`**: Legger til `env: { AUTH_MODE: "mock" }` i test-konfigen. Hindrer `dotenv/config`-import i `env.ts` fra å overskrive `AUTH_MODE` med verdien fra `.env` (`entra`), som forårsaket at alle RBAC-tester fikk 401 (Bearer-token mangler) i stedet for 403 (`requireAnyRole`).
+
 ## 0.8.59 - 2026-03-21
 ### Summary
 Feat: Operasjonelt varsel for assessment-jobber som henger i RUNNING. Lukker #205.

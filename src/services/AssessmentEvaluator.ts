@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { evaluatePracticalWithLlm, type LlmStructuredAssessment } from "./llmAssessmentService.js";
+import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
 import { sha256 } from "../utils/hash.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
@@ -69,7 +70,7 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
           : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
       promptTemplateVersionId,
       requestPayloadHash: sha256(JSON.stringify(requestPayload)),
-      responseJson: JSON.stringify(llmResult),
+      responseJson: llmResponseCodec.serialize(llmResult),
       rubricTotal: llmResult.rubric_total,
       practicalScoreScaled: llmResult.practical_score_scaled,
       passFailPractical: llmResult.pass_fail_practical,

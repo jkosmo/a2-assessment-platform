@@ -1,11 +1,22 @@
-import type { Prisma } from "@prisma/client";
+import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+
+type CreateSubmissionInput = {
+  userId: string;
+  moduleId: string;
+  moduleVersionId: string;
+  locale: string;
+  deliveryType: string;
+  responseJson: string;
+  attachmentUri?: string;
+  submissionStatus: SubmissionStatusType;
+};
 
 type SubmissionRepositoryClient = Pick<typeof prisma, "submission">;
 
 export function createSubmissionRepository(client: SubmissionRepositoryClient = prisma) {
   return {
-    create(data: Prisma.SubmissionUncheckedCreateInput) {
+    create(data: CreateSubmissionInput) {
       return client.submission.create({ data });
     },
 

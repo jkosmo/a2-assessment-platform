@@ -1,7 +1,6 @@
 import { getAssessmentRules } from "../config/assessmentRules.js";
-import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
-
-export type AssessmentRedFlag = LlmStructuredAssessment["red_flags"][number];
+import type { AssessmentRedFlag } from "../codecs/redFlagsCodec.js";
+export type { AssessmentRedFlag };
 
 function slugifyCode(value: string): string {
   return value

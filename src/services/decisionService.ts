@@ -11,22 +11,9 @@ import {
   hasOnlyInsufficientEvidenceRedFlags,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
-
-export type ModuleAssessmentPolicy = {
-  scoring?: {
-    practicalWeight?: number;
-    mcqWeight?: number;
-  };
-  passRules?: {
-    totalMin?: number;
-    practicalMinPercent?: number;
-    mcqMinPercent?: number;
-    borderlineWindow?: {
-      min?: number;
-      max?: number;
-    };
-  };
-};
+import { redFlagsCodec } from "../codecs/redFlagsCodec.js";
+import type { ModuleAssessmentPolicy } from "../codecs/assessmentPolicyCodec.js";
+export type { ModuleAssessmentPolicy };
 
 type BuildDecisionInput = {
   submissionId: string;
@@ -149,7 +136,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       mcqScaledScore: input.mcqScaledScore,
       practicalScaledScore: practicalScoreScaled,
       totalScore: resolved.totalScore,
-      redFlagsJson: JSON.stringify(input.llmResult.red_flags),
+      redFlagsJson: redFlagsCodec.serialize(input.llmResult.red_flags),
       passFailTotal: resolved.passFailTotal,
       decisionType: DecisionType.AUTOMATIC,
       decisionReason: resolved.decisionReason,
