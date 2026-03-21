@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.83 - 2026-03-21
+### Summary
+Fix: authoring prompt grounding constraints to prevent source-external framing (scenario/case drift).
+
+### Included
+- **`public/admin-content.js`**: `buildAuthoringPrompt` now includes explicit grounding constraints — two-phase instruction (identify concepts first, then build), prohibition on scenario/case/role framing unless source-supported, requirement that every substantive concept be traceable to the source material.
+
 ## 0.8.82 - 2026-03-21
 ### Summary
 Feat: participant console renders submissionSchema placeholder as textarea placeholder text.
