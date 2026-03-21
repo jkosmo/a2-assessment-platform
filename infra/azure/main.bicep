@@ -565,6 +565,10 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: 'worker'
         }
         {
+          name: 'SKIP_MIGRATE'
+          value: 'true'
+        }
+        {
           name: 'NODE_ENV'
           value: environmentName == 'production' ? 'production' : 'development'
         }

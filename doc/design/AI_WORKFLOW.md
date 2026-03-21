@@ -180,6 +180,14 @@ A deployment is not considered complete until smoke checks pass:
 1. Health endpoint is `200`.
 2. Critical API smoke path returns expected baseline data in staging.
 
+### 6. Autonomous deploy monitoring (independent mode)
+When working without active human supervision:
+- After triggering a deploy, always follow up to confirm whether the deploy succeeded.
+- Do not wait for the human to report a failure — proactively check health endpoints and container logs after deploy.
+- If a deploy fails, begin autonomous root-cause investigation using the evidence order in section 2 above.
+- Continue debugging and applying fixes independently until the deploy is healthy or the escalation rule triggers.
+- When the issue is resolved, summarize the root cause and fix in a follow-up message so the human is informed when they return.
+
 ### 6. Escalation rule
 Escalate when:
 - No convergence after 45 minutes, or

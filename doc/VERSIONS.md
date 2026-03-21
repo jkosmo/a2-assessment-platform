@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.67 - 2026-03-21
+### Summary
+Fix: worker App Service krasjet fordi `prisma migrate deploy` feilet; hopper nå over migrasjoner med `SKIP_MIGRATE=true`.
+
+### Included
+- **`scripts/runtime/startup.mjs`**: respekterer `SKIP_MIGRATE=true` — hopper over `migrate deploy` (worker trenger ikke kjøre migrasjoner siden web-appen gjør det).
+- **`infra/azure/main.bicep`**: legger til `SKIP_MIGRATE=true` i worker App Service-innstillinger.
+
 ## 0.8.66 - 2026-03-21
 ### Summary
 Refactor: split reportingService into dedicated sub-modules (closes #196, #197, #198, #199).
