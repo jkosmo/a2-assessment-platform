@@ -16,6 +16,7 @@ const findAssessmentJobOrThrow = vi.fn();
 const countJobsByStatus = vi.fn();
 const findExpiredRunningJobs = vi.fn();
 const resetExpiredJob = vi.fn();
+const findLongRunningJobs = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
@@ -29,6 +30,7 @@ vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
     countJobsByStatus,
     findExpiredRunningJobs,
     resetExpiredJob,
+    findLongRunningJobs,
     findPendingOrRunningJobForSubmission: vi.fn(),
     findPendingOrRunningJobIdForSubmission: vi.fn(),
     createAssessmentJob: vi.fn(),
@@ -55,6 +57,7 @@ describe("stale-lock recovery path", () => {
     countJobsByStatus.mockResolvedValue(0);
     findExpiredRunningJobs.mockReset();
     resetExpiredJob.mockReset().mockResolvedValue(undefined);
+    findLongRunningJobs.mockReset().mockResolvedValue([]);
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
     logOperationalEvent.mockReturnValue(undefined);
   });

@@ -5,10 +5,19 @@ const resetExpiredJob = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
+const findLongRunningJobs = vi.fn();
+
 vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findExpiredRunningJobs,
     resetExpiredJob,
+    findLongRunningJobs,
+  },
+}));
+
+vi.mock("../../src/config/env.js", () => ({
+  env: {
+    ASSESSMENT_JOB_STUCK_THRESHOLD_MS: 600_000,
   },
 }));
 
@@ -19,6 +28,7 @@ describe("stale-lock scanner", () => {
   beforeEach(() => {
     findExpiredRunningJobs.mockReset();
     resetExpiredJob.mockReset().mockResolvedValue(undefined);
+    findLongRunningJobs.mockReset().mockResolvedValue([]);
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
     logOperationalEvent.mockReset();
   });
@@ -107,5 +117,62 @@ describe("stale-lock scanner", () => {
     expect(result.reset).toBe(2);
     expect(result.failed).toBe(1);
     expect(resetExpiredJob).toHaveBeenCalledTimes(3);
+  });
+
+  describe("alertOnStuckJobs", () => {
+    it("emits no alert when no jobs are stuck", async () => {
+      findLongRunningJobs.mockResolvedValue([]);
+
+      const { alertOnStuckJobs } = await import("../../src/services/staleLockScanner.js");
+      await alertOnStuckJobs();
+
+      expect(logOperationalEvent).not.toHaveBeenCalled();
+    });
+
+    it("emits an error-level alert with correlationId for each stuck job", async () => {
+      const lockedAt = new Date("2026-03-21T06:00:00.000Z");
+      findLongRunningJobs.mockResolvedValue([
+        { id: "job-stuck-1", submissionId: "submission-1", lockedAt, lockedBy: "default-worker", attempts: 1 },
+      ]);
+
+      const { alertOnStuckJobs } = await import("../../src/services/staleLockScanner.js");
+      await alertOnStuckJobs();
+
+      expect(logOperationalEvent).toHaveBeenCalledWith(
+        "assessment_job_stuck_alert",
+        expect.objectContaining({
+          correlationId: "job-stuck-1",
+          jobId: "job-stuck-1",
+          submissionId: "submission-1",
+          lockedAt: lockedAt.toISOString(),
+          lockedBy: "default-worker",
+          attempts: 1,
+          stuckThresholdMs: 600_000,
+        }),
+        "error",
+      );
+    });
+
+    it("emits one alert per stuck job", async () => {
+      findLongRunningJobs.mockResolvedValue([
+        { id: "job-1", submissionId: "sub-1", lockedAt: new Date(), lockedBy: "worker", attempts: 1 },
+        { id: "job-2", submissionId: "sub-2", lockedAt: new Date(), lockedBy: "worker", attempts: 2 },
+      ]);
+
+      const { alertOnStuckJobs } = await import("../../src/services/staleLockScanner.js");
+      await alertOnStuckJobs();
+
+      expect(logOperationalEvent).toHaveBeenCalledTimes(2);
+      expect(logOperationalEvent).toHaveBeenCalledWith(
+        "assessment_job_stuck_alert",
+        expect.objectContaining({ correlationId: "job-1" }),
+        "error",
+      );
+      expect(logOperationalEvent).toHaveBeenCalledWith(
+        "assessment_job_stuck_alert",
+        expect.objectContaining({ correlationId: "job-2" }),
+        "error",
+      );
+    });
   });
 });

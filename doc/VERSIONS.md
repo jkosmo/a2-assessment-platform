@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.59 - 2026-03-21
+### Summary
+Feat: Operasjonelt varsel for assessment-jobber som henger i RUNNING. Lukker #205.
+
+### Included
+- **`src/services/staleLockScanner.ts`**: Ny `alertOnStuckJobs()`-funksjon. Finner `RUNNING`-jobber der `lockedAt < now - ASSESSMENT_JOB_STUCK_THRESHOLD_MS` og emitterer ett `assessment_job_stuck_alert`-event på `"error"`-nivå per jobb, med `correlationId` (= jobId) i payload. Azure Monitor kan konfigureres til å varsle på dette event-navnet fra loggstrøm.
+- **`src/config/env.ts`**: Legger til `ASSESSMENT_JOB_STUCK_THRESHOLD_MS` med standardverdi 600 000 ms (10 min).
+- **`src/repositories/assessmentJobRepository.ts`**: Legger til `findLongRunningJobs(lockedBefore)`.
+- **`src/services/AssessmentJobRunner.ts`**: Kaller `alertOnStuckJobs()` per poll-syklus (etter stale-lock reset).
+- **`test/unit/stale-lock-scanner.test.ts`**: 3 nye tester for `alertOnStuckJobs`.
+- Oppdaterte mock-definisjoner i `assessment-job-runner.test.ts`, `stale-lock-recovery.test.ts`, `assessment-job-service.test.ts`, `assessment-worker-process-error.test.ts`.
+
 ## 0.8.58 - 2026-03-21
 ### Summary
 Test: Recovery-sti-tester for stale-lock-deteksjon og reset. Lukker #206.

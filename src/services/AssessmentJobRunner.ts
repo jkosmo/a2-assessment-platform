@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
-import { scanAndResetStaleJobs } from "./staleLockScanner.js";
+import { alertOnStuckJobs, scanAndResetStaleJobs } from "./staleLockScanner.js";
 
 export type AssessmentRunFn = (jobId: string) => Promise<void>;
 
@@ -73,6 +73,7 @@ export async function processSubmissionJobNow(runAssessment: AssessmentRunFn, su
 
 export async function processNextJob(runAssessment: AssessmentRunFn, submissionId?: string): Promise<boolean> {
   await scanAndResetStaleJobs();
+  await alertOnStuckJobs();
 
   const now = new Date();
   const candidate = await assessmentJobRepository.findNextRunnableJob(

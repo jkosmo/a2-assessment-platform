@@ -8,6 +8,7 @@ vi.mock("../src/repositories/assessmentJobRepository.js", () => ({
     findNextRunnableJob,
     findExpiredRunningJobs: vi.fn().mockResolvedValue([]),
     resetExpiredJob: vi.fn().mockResolvedValue(undefined),
+    findLongRunningJobs: vi.fn().mockResolvedValue([]),
     countJobsByStatus: vi.fn().mockResolvedValue(0),
   },
 }));

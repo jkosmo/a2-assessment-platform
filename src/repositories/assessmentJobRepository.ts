@@ -126,6 +126,16 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       });
     },
 
+    findLongRunningJobs(lockedBefore: Date) {
+      return client.assessmentJob.findMany({
+        where: {
+          status: "RUNNING",
+          lockedAt: { lt: lockedBefore },
+        },
+        select: { id: true, submissionId: true, lockedAt: true, lockedBy: true, attempts: true },
+      });
+    },
+
     resetExpiredJob(jobId: string, data: {
       status: AssessmentJobStatusType;
       availableAt: Date;

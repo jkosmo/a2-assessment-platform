@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
@@ -53,4 +54,26 @@ export async function scanAndResetStaleJobs(): Promise<StaleLockScanResult> {
   }
 
   return { scannedAt: now.toISOString(), reset, failed };
+}
+
+export async function alertOnStuckJobs(): Promise<void> {
+  const now = new Date();
+  const lockedBefore = new Date(now.getTime() - env.ASSESSMENT_JOB_STUCK_THRESHOLD_MS);
+  const stuckJobs = await assessmentJobRepository.findLongRunningJobs(lockedBefore);
+
+  for (const job of stuckJobs) {
+    logOperationalEvent(
+      "assessment_job_stuck_alert",
+      {
+        correlationId: job.id,
+        jobId: job.id,
+        submissionId: job.submissionId,
+        lockedAt: job.lockedAt?.toISOString() ?? null,
+        lockedBy: job.lockedBy,
+        attempts: job.attempts,
+        stuckThresholdMs: env.ASSESSMENT_JOB_STUCK_THRESHOLD_MS,
+      },
+      "error",
+    );
+  }
 }
