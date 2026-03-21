@@ -206,11 +206,15 @@ $deployment = az deployment group create `
 Assert-LastExitCode "az deployment group create"
 
 $webAppName = $deployment.webAppName.value
+$workerAppName = $deployment.workerAppName.value
 $postgresServerName = $deployment.postgresServerName.value
 $postgresDatabaseName = $deployment.postgresDatabaseName.value
 
 if (-not $webAppName) {
   throw "webAppName output missing from deployment."
+}
+if (-not $workerAppName) {
+  throw "workerAppName output missing from deployment."
 }
 
 $tempBasePath = Get-TempBasePath
@@ -265,29 +269,38 @@ az webapp deploy `
   --restart true | Out-Null
 Assert-LastExitCode "az webapp deploy"
 
-$healthUrl = "https://$webAppName.azurewebsites.net/healthz"
-$maxHealthChecks = 30
-$healthCheckDelaySeconds = 5
-$healthy = $false
+Write-Host "Deploying app package to Worker App: $workerAppName"
+az webapp deploy `
+  --resource-group $ResourceGroupName `
+  --name $workerAppName `
+  --src-path $zipPath `
+  --type zip `
+  --track-status false `
+  --restart true | Out-Null
+Assert-LastExitCode "az webapp deploy (worker)"
 
-Write-Host "Validating deployment health endpoint: $healthUrl"
-for ($attempt = 1; $attempt -le $maxHealthChecks; $attempt++) {
-  try {
-    $response = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 10
-    if ($response.StatusCode -eq 200) {
-      Write-Host "Health check succeeded on attempt $attempt."
-      $healthy = $true
-      break
+function Wait-Healthy {
+  param([string]$Url, [string]$Label)
+  $maxChecks = 30
+  $delaySeconds = 5
+  Write-Host "Validating deployment health endpoint: $Url"
+  for ($attempt = 1; $attempt -le $maxChecks; $attempt++) {
+    try {
+      $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10
+      if ($response.StatusCode -eq 200) {
+        Write-Host "$Label health check succeeded on attempt $attempt."
+        return
+      }
+    } catch {
+      Write-Host "$Label health check attempt $attempt/$maxChecks failed; retrying..."
     }
-  } catch {
-    Write-Host "Health check attempt $attempt/$maxHealthChecks failed; retrying..."
+    Start-Sleep -Seconds $delaySeconds
   }
-  Start-Sleep -Seconds $healthCheckDelaySeconds
+  throw "Deployment package published, but health endpoint check failed at $Url."
 }
 
-if (-not $healthy) {
-  throw "Deployment package published, but health endpoint check failed at $healthUrl."
-}
+Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
+Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App"
 
 if ($BudgetContactEmail) {
   & "$PSScriptRoot/configure-cost-guardrails.ps1" `
@@ -299,6 +312,7 @@ if ($BudgetContactEmail) {
 
 Write-Host "Deployment complete."
 Write-Host "Web App URL: https://$webAppName.azurewebsites.net"
+Write-Host "Worker App URL: https://$workerAppName.azurewebsites.net"
 Write-Host "PostgreSQL server: $postgresServerName"
 Write-Host "PostgreSQL database: $postgresDatabaseName"
 

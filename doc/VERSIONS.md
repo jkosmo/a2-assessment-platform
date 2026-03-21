@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.64 - 2026-03-21
+### Summary
+Ops: `alwaysOn: true` for web-rolle, separat worker App Service med `PROCESS_ROLE=worker`. Lukker #202.
+
+### Included
+- **`infra/azure/main.bicep`**: `alwaysOn: true` på web app. `PROCESS_ROLE=web` lagt til web app. Ny `workerApp`-ressurs med `PROCESS_ROLE=worker`, `alwaysOn: true` og diagnostics.
+- **`src/index.ts`**: Minimal health-endpoint (port 8080) i worker-modus så Azure App Service anser prosessen som kjørende.
+- **`scripts/azure/deploy-environment.ps1`**: Deployer zip til både web og worker. Kjører `Wait-Healthy` mot begge.
+
 ## 0.8.63 - 2026-03-21
 ### Summary
 Refactor: Lokalisering og JSON-parsing flyttes fra moduleRepository til moduleService. Lukker #188.

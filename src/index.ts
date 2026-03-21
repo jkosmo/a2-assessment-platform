@@ -1,5 +1,6 @@
 import { env } from "./config/env.js";
 import { app } from "./app.js";
+import http from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js";
@@ -47,15 +48,20 @@ async function startServer() {
       // eslint-disable-next-line no-console
       console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${role}]`);
     });
+  } else {
+    // Worker-only mode: bind minimal health endpoint so Azure App Service keeps the process alive
+    server = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", role }));
+    }).listen(env.PORT, () => {
+      // eslint-disable-next-line no-console
+      console.log(`a2-assessment-platform workers started [role=${role}]`);
+    });
   }
 
   if (startWorkers) {
     assessmentWorker!.start();
     appealSlaMonitor!.start();
-    if (!startWeb) {
-      // eslint-disable-next-line no-console
-      console.log(`a2-assessment-platform workers started [role=${role}]`);
-    }
   }
 }
 

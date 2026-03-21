@@ -157,6 +157,7 @@ var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
 var webAppName = toLower('${appNamePrefix}-${envCode}-app-${suffix}')
+var workerAppName = toLower('${appNamePrefix}-${envCode}-worker-${suffix}')
 var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
@@ -360,10 +361,14 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     siteConfig: {
       linuxFxVersion: 'NODE|22-lts'
       appCommandLine: 'node scripts/runtime/startup.mjs'
-      alwaysOn: false
+      alwaysOn: true
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
+        {
+          name: 'PROCESS_ROLE'
+          value: 'web'
+        }
         {
           name: 'NODE_ENV'
           value: environmentName == 'production' ? 'production' : 'development'
@@ -516,6 +521,169 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   name: '${webAppName}-diagnostics'
   scope: webApp
+  properties: {
+    workspaceId: logAnalyticsWorkspace.id
+    logs: [
+      {
+        category: 'AppServiceConsoleLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: workerAppName
+  location: location
+  kind: 'app,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'NODE|22-lts'
+      appCommandLine: 'node scripts/runtime/startup.mjs'
+      alwaysOn: true
+      ftpsState: 'Disabled'
+      minTlsVersion: '1.2'
+      appSettings: [
+        {
+          name: 'PROCESS_ROLE'
+          value: 'worker'
+        }
+        {
+          name: 'NODE_ENV'
+          value: environmentName == 'production' ? 'production' : 'development'
+        }
+        {
+          name: 'PORT'
+          value: '8080'
+        }
+        {
+          name: 'WEBSITES_PORT'
+          value: '8080'
+        }
+        {
+          name: 'DATABASE_URL'
+          value: postgresConnectionString
+        }
+        {
+          name: 'LLM_MODE'
+          value: llmMode
+        }
+        {
+          name: 'LLM_STUB_MODEL_NAME'
+          value: llmStubModelName
+        }
+        {
+          name: 'AZURE_OPENAI_ENDPOINT'
+          value: azureOpenAiEndpoint
+        }
+        {
+          name: 'AZURE_OPENAI_API_KEY'
+          value: azureOpenAiApiKey
+        }
+        {
+          name: 'AZURE_OPENAI_DEPLOYMENT'
+          value: azureOpenAiDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_API_VERSION'
+          value: azureOpenAiApiVersion
+        }
+        {
+          name: 'AZURE_OPENAI_TIMEOUT_MS'
+          value: string(azureOpenAiTimeoutMs)
+        }
+        {
+          name: 'AZURE_OPENAI_TEMPERATURE'
+          value: azureOpenAiTemperature
+        }
+        {
+          name: 'AZURE_OPENAI_MAX_TOKENS'
+          value: string(azureOpenAiMaxTokens)
+        }
+        {
+          name: 'AZURE_OPENAI_TOKEN_LIMIT_PARAMETER'
+          value: azureOpenAiTokenLimitParameter
+        }
+        {
+          name: 'ASSESSMENT_RULES_FILE'
+          value: 'config/assessment-rules.json'
+        }
+        {
+          name: 'ASSESSMENT_JOB_POLL_INTERVAL_MS'
+          value: string(assessmentJobPollIntervalMs)
+        }
+        {
+          name: 'ASSESSMENT_JOB_MAX_ATTEMPTS'
+          value: string(assessmentJobMaxAttempts)
+        }
+        {
+          name: 'APPEAL_SLA_MONITOR_INTERVAL_MS'
+          value: string(appealSlaMonitorIntervalMs)
+        }
+        {
+          name: 'APPEAL_OVERDUE_ALERT_THRESHOLD'
+          value: string(appealOverdueAlertThreshold)
+        }
+        {
+          name: 'PARTICIPANT_NOTIFICATION_CHANNEL'
+          value: participantNotificationChannel
+        }
+        {
+          name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_URL'
+          value: participantNotificationWebhookUrl
+        }
+        {
+          name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
+          value: string(participantNotificationWebhookTimeoutMs)
+        }
+        {
+          name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
+          value: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+        }
+        {
+          name: 'ACS_EMAIL_SENDER'
+          value: createAcsEmail ? 'DoNotReply@${acsEmailDomain.properties.mailFromSenderDomain}' : ''
+        }
+        {
+          name: 'ACS_EMAIL_SENDER_DISPLAY_NAME'
+          value: acsEmailSenderDisplayName
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'false'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+      ]
+    }
+  }
+}
+
+resource workerAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: '${workerAppName}-diagnostics'
+  scope: workerApp
   properties: {
     workspaceId: logAnalyticsWorkspace.id
     logs: [
@@ -714,6 +882,7 @@ resource appealOverdueAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' 
 }
 
 output webAppName string = webApp.name
+output workerAppName string = workerApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
