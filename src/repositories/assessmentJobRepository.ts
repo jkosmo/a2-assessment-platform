@@ -115,6 +115,32 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
         where: { status },
       });
     },
+
+    findExpiredRunningJobs(now: Date) {
+      return client.assessmentJob.findMany({
+        where: {
+          status: "RUNNING",
+          leaseExpiresAt: { lt: now },
+        },
+        select: { id: true, attempts: true, maxAttempts: true, submissionId: true },
+      });
+    },
+
+    resetExpiredJob(jobId: string, data: {
+      status: AssessmentJobStatusType;
+      availableAt: Date;
+      errorMessage: string;
+    }) {
+      return client.assessmentJob.update({
+        where: { id: jobId },
+        data: {
+          ...data,
+          lockedAt: null,
+          lockedBy: null,
+          leaseExpiresAt: null,
+        },
+      });
+    },
   };
 }
 

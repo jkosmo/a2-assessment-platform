@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.57 - 2026-03-21
+### Summary
+Feat: Stale-lock scanner resetter utløpte RUNNING-jobber. Lukker #204.
+
+### Included
+- **`src/services/staleLockScanner.ts`**: Ny `scanAndResetStaleJobs()`-funksjon. Finner `RUNNING`-jobber der `leaseExpiresAt < now`, resetter dem til `PENDING` (eller `FAILED` hvis `attempts >= maxAttempts`), nullstiller låsfelter, og skriver audit-event + operasjonell logg per jobb.
+- **`src/repositories/assessmentJobRepository.ts`**: Legger til `findExpiredRunningJobs(now)` og `resetExpiredJob(jobId, data)` (nullstiller `lockedAt`, `lockedBy`, `leaseExpiresAt`).
+- **`src/services/AssessmentJobRunner.ts`**: Kaller `scanAndResetStaleJobs()` i starten av hver `processNextJob`-syklus.
+- **`test/unit/stale-lock-scanner.test.ts`**: 4 nye enhetstester.
+
 ## 0.8.56 - 2026-03-21
 ### Summary
 Feat: leaseExpiresAt på AssessmentJob og oppdatert lock-anskaffelse. Lukker #203.
