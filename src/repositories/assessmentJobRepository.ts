@@ -40,7 +40,7 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       });
     },
 
-    tryLockPendingJob(jobId: string, now: Date, lockedBy: string) {
+    tryLockPendingJob(jobId: string, now: Date, lockedBy: string, leaseExpiresAt: Date) {
       return client.assessmentJob.updateMany({
         where: {
           id: jobId,
@@ -50,6 +50,7 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
           status: "RUNNING",
           lockedAt: now,
           lockedBy,
+          leaseExpiresAt,
           attempts: { increment: 1 },
         },
       });
@@ -58,7 +59,7 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
     markJobSucceeded(jobId: string) {
       return client.assessmentJob.update({
         where: { id: jobId },
-        data: { status: "SUCCEEDED", errorMessage: null },
+        data: { status: "SUCCEEDED", errorMessage: null, leaseExpiresAt: null },
       });
     },
 
@@ -73,7 +74,7 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
     }) {
       return client.assessmentJob.update({
         where: { id: jobId },
-        data,
+        data: { ...data, leaseExpiresAt: null },
       });
     },
 

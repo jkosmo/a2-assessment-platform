@@ -82,7 +82,8 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
     return false;
   }
 
-  const lockResult = await assessmentJobRepository.tryLockPendingJob(candidate.id, now, "default-worker");
+  const leaseExpiresAt = new Date(now.getTime() + env.ASSESSMENT_JOB_LEASE_DURATION_MS);
+  const lockResult = await assessmentJobRepository.tryLockPendingJob(candidate.id, now, "default-worker", leaseExpiresAt);
 
   if (lockResult.count === 0) {
     return false;

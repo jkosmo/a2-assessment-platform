@@ -53,8 +53,9 @@ describe("assessment job repository", () => {
       },
     } as never);
     const now = new Date("2026-03-11T08:05:00.000Z");
+    const leaseExpiresAt = new Date("2026-03-11T08:10:00.000Z");
 
-    await repository.tryLockPendingJob("job-1", now, "default-worker");
+    await repository.tryLockPendingJob("job-1", now, "default-worker", leaseExpiresAt);
 
     expect(updateMany).toHaveBeenCalledWith({
       where: {
@@ -65,6 +66,7 @@ describe("assessment job repository", () => {
         status: "RUNNING",
         lockedAt: now,
         lockedBy: "default-worker",
+        leaseExpiresAt,
         attempts: { increment: 1 },
       },
     });

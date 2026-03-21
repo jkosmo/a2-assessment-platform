@@ -58,6 +58,7 @@ const envSchema = z.object({
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  ASSESSMENT_JOB_LEASE_DURATION_MS: z.coerce.number().int().positive().default(300000),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.56 - 2026-03-21
+### Summary
+Feat: leaseExpiresAt på AssessmentJob og oppdatert lock-anskaffelse. Lukker #203.
+
+### Included
+- **`prisma/schema.prisma`**: Legger til `leaseExpiresAt DateTime?` på `AssessmentJob`-modellen, med ny index `@@index([status, leaseExpiresAt])` for stale-lock-scanner-query (#204).
+- **`prisma/migrations/20260321000001_add_lease_expires_at_to_assessment_job/`**: Ny migrasjons-SQL (`ALTER TABLE "AssessmentJob" ADD COLUMN "leaseExpiresAt" TIMESTAMP(3)` + CREATE INDEX).
+- **`src/config/env.ts`**: Legger til `ASSESSMENT_JOB_LEASE_DURATION_MS` med standardverdi 300 000 ms (5 minutter).
+- **`src/repositories/assessmentJobRepository.ts`**: `tryLockPendingJob` setter nå `leaseExpiresAt = now + leaseDuration`. `markJobSucceeded` og `markJobForRetryOrFailure` nullstiller `leaseExpiresAt`.
+- **`src/services/AssessmentJobRunner.ts`**: Beregner og sender `leaseExpiresAt` til `tryLockPendingJob`.
+- **`test/unit/assessment-job-repository.test.ts`**: Oppdatert test for `tryLockPendingJob` med nytt `leaseExpiresAt`-argument.
+
 ## 0.8.55 - 2026-03-21
 ### Summary
 Test: Failure-injection-tester for transaksjonelle kommandostier. Lukker #212.

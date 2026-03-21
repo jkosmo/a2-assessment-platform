@@ -380,11 +380,13 @@ model AssessmentJob {
   availableAt   DateTime            @default(now())
   lockedAt      DateTime?
   lockedBy      String?
+  leaseExpiresAt DateTime?
   errorMessage  String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   submission    Submission          @relation(fields: [submissionId], references: [id], onDelete: Restrict)
 
   @@index([status, availableAt])
+  @@index([status, leaseExpiresAt])
   @@index([submissionId, createdAt])
 }
