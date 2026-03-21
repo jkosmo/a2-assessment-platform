@@ -147,7 +147,7 @@ const adminContentBase = {
   "adminContent.help.moduleVersionIds": "IDs are auto-filled when you save steps 5-8.",
   "adminContent.help.previewDraft": "Opens the current draft in participant preview mode in a new tab. Nothing is saved, submitted, or scored.",
   "adminContent.help.publishOverview": "Publishing makes this version active for participant submissions.",
-  "adminContent.defaults.criteriaJson": "{\"relevance_for_case\":{\"weight\":0.2},\"quality_and_utility\":{\"weight\":0.2},\"iteration_and_improvement\":{\"weight\":0.2},\"human_quality_assurance\":{\"weight\":0.2},\"responsible_use\":{\"weight\":0.2}}",
+  "adminContent.defaults.criteriaJson": "{\"task_comprehension\":{\"weight\":0.2},\"quality_and_depth\":{\"weight\":0.2},\"evidence_and_examples\":{\"weight\":0.2},\"reasoning_and_reflection\":{\"weight\":0.2},\"clarity_and_structure\":{\"weight\":0.2}}",
   "adminContent.defaults.scalingRuleJson": "{\"practical_weight\":70,\"max_total\":20}",
   "adminContent.defaults.passRuleJson": "{\"total_min\":70,\"practical_min_percent\":50,\"mcq_min_percent\":60,\"no_open_red_flags\":true}",
   "adminContent.defaults.examplesJson": "[{\"example\":\"Strong answer that directly addresses the task with clear reasoning and concrete examples.\"}]",

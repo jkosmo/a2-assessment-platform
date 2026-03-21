@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.69 - 2026-03-21
+### Summary
+Fix (#225): generaliser rubrikk-kriterier fra smal AI/LLM use case — LLM forventer ikke lenger iterasjon, QA eller ansvarlig AI-bruk i generelle besvarelser.
+
+### Included
+- **`src/services/llmAssessmentService.ts`**: `DEFAULT_CRITERIA_IDS` erstattet med generiske kriterier (`task_comprehension`, `quality_and_depth`, `evidence_and_examples`, `reasoning_and_reflection`, `clarity_and_structure`); stub og improvement_advice gjort domeneuavhengige.
+- **`prisma/seedCore.ts`**: seed-rubrikk oppdatert med de samme 5 generiske kriteriene.
+- **`public/i18n/admin-content-translations.js`**: `defaults.criteriaJson` oppdatert til generiske kriterier.
+- **`config/assessment-rules.json`**: fjernet AI-spesifikke aliases (`missing_mcq_and_notes`, `missing_iteration_and_qa`, `missing_iteration_qa`) fra `insufficient_submission`-kanonisering.
+
 ## 0.8.68 - 2026-03-21
 ### Summary
 Refactor (#224): generaliser hardkodede restanser fra opprinnelig smal AI/LLM use case — generisk innleveringsskjema, oversettelser, seed-data og batch-testcaser.

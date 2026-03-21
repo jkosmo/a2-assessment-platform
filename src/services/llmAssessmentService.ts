@@ -121,11 +121,11 @@ export async function evaluatePracticalWithAzureOpenAi(
 }
 
 const DEFAULT_CRITERIA_IDS = [
-  "relevance_for_case",
-  "quality_and_utility",
-  "iteration_and_improvement",
-  "human_quality_assurance",
-  "responsible_use",
+  "task_comprehension",
+  "quality_and_depth",
+  "evidence_and_examples",
+  "reasoning_and_reflection",
+  "clarity_and_structure",
 ];
 
 function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
@@ -142,8 +142,8 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
   const rubricScores: Record<string, number> = {};
   for (const [index, id] of criteriaIds.entries()) {
     const isLastCriteria = index === criteriaIds.length - 1;
-    const isIterationLike = id.includes("iteration") || id.includes("improvement");
-    const isSensitiveLike = id.includes("responsible") || id.includes("safety") || id.includes("risk");
+    const isIterationLike = id.includes("iteration") || id.includes("improvement") || id.includes("reasoning");
+    const isSensitiveLike = id.includes("responsible") || id.includes("safety") || id.includes("risk") || id.includes("clarity");
 
     let score = baseScore + passAdjustment;
     if (isIterationLike) score -= 1;
@@ -151,8 +151,8 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
     rubricScores[id] = Math.max(0, Math.min(4, score));
   }
 
-  // Detect sensitive data flag via the designated responsible-use criterion
-  const responsibleCriterionId = criteriaIds.find((id) => id.includes("responsible") || id.includes("safety")) ?? criteriaIds[criteriaIds.length - 1];
+  // Detect sensitive data flag via the designated clarity/structure criterion (fallback: last criterion)
+  const responsibleCriterionId = criteriaIds.find((id) => id.includes("responsible") || id.includes("safety") || id.includes("clarity")) ?? criteriaIds[criteriaIds.length - 1];
   const responsibleScore = hasSensitiveContent ? 1 : (rubricScores[responsibleCriterionId] ?? baseScore);
   rubricScores[responsibleCriterionId] = Math.max(0, Math.min(4, responsibleScore));
 
@@ -201,9 +201,9 @@ function buildStubResponse(input: AssessmentContext): LlmStructuredAssessment {
     pass_fail_practical: passFailPractical,
     criterion_rationales: criterionRationales,
     improvement_advice: [
-      "Provide clearer before/after examples.",
-      "Describe concrete validation checks you performed.",
-      "Reference responsible-use constraints explicitly.",
+      "Provide more specific examples to support your response.",
+      "Explain your reasoning in more detail.",
+      "Ensure your answer directly addresses all parts of the task.",
     ],
     red_flags: redFlags,
     manual_review_recommended: redFlags.length > 0,

@@ -200,11 +200,11 @@ async function createSeedModuleBundle(prisma: any, adminId: string, now: Date, i
       moduleId: module.id,
       versionNo: 1,
       criteriaJson: JSON.stringify({
-        relevance_for_case: "0-4",
-        quality_and_utility: "0-4",
-        iteration_and_improvement: "0-4",
-        human_quality_assurance: "0-4",
-        responsible_use: "0-4",
+        task_comprehension: "0-4",
+        quality_and_depth: "0-4",
+        evidence_and_examples: "0-4",
+        reasoning_and_reflection: "0-4",
+        clarity_and_structure: "0-4",
       }),
       scalingRuleJson: JSON.stringify({ practical_weight: 70, max_total: 20 }),
       passRuleJson: JSON.stringify({
