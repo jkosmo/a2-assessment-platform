@@ -54,6 +54,10 @@ const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
       subject: "Your appeal has been rejected",
       nextStepGuidance: "Review the latest case note and contact an administrator if clarification is required.",
     },
+    SUPERSEDED: {
+      subject: "Your appeal has been closed",
+      nextStepGuidance: "Your appeal was closed because you submitted a new attempt for this module.",
+    },
   },
   nb: {
     OPEN: {
@@ -72,6 +76,10 @@ const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
       subject: "Anken din er avvist",
       nextStepGuidance: "Se siste saksnotat og kontakt administrator ved behov for avklaring.",
     },
+    SUPERSEDED: {
+      subject: "Anken din er lukket",
+      nextStepGuidance: "Anken din ble lukket fordi du leverte et nytt forsøk for denne modulen.",
+    },
   },
   nn: {
     OPEN: {
@@ -89,6 +97,10 @@ const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
     REJECTED: {
       subject: "Anken di er avvist",
       nextStepGuidance: "Sjå siste saksnotat og kontakt administrator ved behov for avklaring.",
+    },
+    SUPERSEDED: {
+      subject: "Anken di er lukka",
+      nextStepGuidance: "Anken di vart lukka fordi du leverte eit nytt forsøk for denne modulen.",
     },
   },
 };

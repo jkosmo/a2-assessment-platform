@@ -6,7 +6,28 @@ type ManualReviewRepositoryClient = Pick<typeof prisma, "manualReview" | "assess
 
 export function createManualReviewRepository(client: ManualReviewRepositoryClient = prisma) {
   return {
-    findManualReviewQueue(statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED">, limit: number) {
+    findOpenByUserAndModule(userId: string, moduleId: string) {
+      return client.manualReview.findMany({
+        where: {
+          reviewStatus: "OPEN",
+          submission: { userId, moduleId },
+        },
+        select: { id: true, submissionId: true },
+      });
+    },
+
+    supersedeMany(reviewIds: string[], newSubmissionId: string, supersededAt: Date) {
+      return client.manualReview.updateMany({
+        where: { id: { in: reviewIds }, reviewStatus: "OPEN" },
+        data: {
+          reviewStatus: "SUPERSEDED",
+          reviewedAt: supersededAt,
+          overrideReason: `superseded_by_submission:${newSubmissionId}`,
+        },
+      });
+    },
+
+    findManualReviewQueue(statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "SUPERSEDED">, limit: number) {
       return client.manualReview.findMany({
         where: { reviewStatus: { in: statuses } },
         orderBy: { createdAt: "asc" },

@@ -7,6 +7,8 @@ const submissionCreate = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const resolveSubmissionResponseJson = vi.fn();
+const cancelSupersededReviews = vi.fn();
+const cancelSupersededAppeals = vi.fn();
 
 vi.mock("../../src/repositories/moduleRepository.js", () => ({
   getModuleWithActiveVersion,
@@ -30,6 +32,14 @@ vi.mock("../../src/services/documentParsingService.js", () => ({
   resolveSubmissionResponseJson,
 }));
 
+vi.mock("../../src/modules/review/index.js", () => ({
+  cancelSupersededReviews,
+}));
+
+vi.mock("../../src/modules/appeal/index.js", () => ({
+  cancelSupersededAppeals,
+}));
+
 describe("submission service", () => {
   beforeEach(() => {
     getModuleWithActiveVersion.mockReset();
@@ -37,6 +47,8 @@ describe("submission service", () => {
     recordAuditEvent.mockReset();
     logOperationalEvent.mockReset();
     resolveSubmissionResponseJson.mockReset();
+    cancelSupersededReviews.mockReset().mockResolvedValue(0);
+    cancelSupersededAppeals.mockReset().mockResolvedValue(0);
   });
 
   it("rejects submission creation when no published active module version exists", async () => {
@@ -134,5 +146,7 @@ describe("submission service", () => {
       moduleVersionId: "module-version-1",
       deliveryType: "document",
     });
+    expect(cancelSupersededReviews).toHaveBeenCalledWith("user-1", "module-1", "submission-1");
+    expect(cancelSupersededAppeals).toHaveBeenCalledWith("user-1", "module-1", "submission-1");
   });
 });

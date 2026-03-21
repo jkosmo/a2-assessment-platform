@@ -83,7 +83,7 @@ export async function createSubmissionAppeal(input: {
 }
 
 export async function listAppealQueue(input: {
-  statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED">;
+  statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | "SUPERSEDED">;
   limit: number;
 }) {
   const appeals = await appealRepository.findAppealsForQueue(input.statuses, input.limit);
@@ -124,7 +124,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
   if (!appeal) {
     throw new NotFoundError("Appeal");
   }
-  if (appeal.appealStatus === AppealStatus.RESOLVED || appeal.appealStatus === AppealStatus.REJECTED) {
+  if (appeal.appealStatus === AppealStatus.RESOLVED || appeal.appealStatus === AppealStatus.REJECTED || appeal.appealStatus === AppealStatus.SUPERSEDED) {
     throw new ConflictError(
       "appeal_already_resolved",
       "This appeal is already resolved. Refresh the queue to view the latest status.",
@@ -183,7 +183,7 @@ export async function resolveAppeal(input: {
   if (!appeal) {
     throw new NotFoundError("Appeal");
   }
-  if (appeal.appealStatus === AppealStatus.RESOLVED || appeal.appealStatus === AppealStatus.REJECTED) {
+  if (appeal.appealStatus === AppealStatus.RESOLVED || appeal.appealStatus === AppealStatus.REJECTED || appeal.appealStatus === AppealStatus.SUPERSEDED) {
     throw new ConflictError(
       "appeal_already_resolved",
       "This appeal is already resolved. Refresh the queue to view the latest status.",
@@ -269,6 +269,26 @@ export async function resolveAppeal(input: {
   });
 
   return { appeal: resolvedAppeal, resolutionDecision };
+}
+
+export async function cancelSupersededAppeals(userId: string, moduleId: string, newSubmissionId: string) {
+  const appeals = await appealRepository.findOpenByUserAndModule(userId, moduleId);
+  if (appeals.length === 0) return 0;
+
+  const now = new Date();
+  await appealRepository.supersedeMany(appeals.map((a) => a.id), newSubmissionId, now);
+
+  for (const appeal of appeals) {
+    await recordAuditEvent({
+      entityType: "appeal",
+      entityId: appeal.id,
+      action: "appeal_superseded",
+      actorId: undefined,
+      metadata: { newSubmissionId, supersededAt: now.toISOString() },
+    });
+  }
+
+  return appeals.length;
 }
 
 async function safeNotifyAppealStatusTransition(

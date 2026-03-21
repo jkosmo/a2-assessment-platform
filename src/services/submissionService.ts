@@ -6,6 +6,8 @@ import { submissionRepository } from "../repositories/submissionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { resolveSubmissionResponseJson } from "./documentParsingService.js";
+import { cancelSupersededReviews } from "../modules/review/index.js";
+import { cancelSupersededAppeals } from "../modules/appeal/index.js";
 
 export type CreateSubmissionInput = {
   userId: string;
@@ -63,6 +65,9 @@ export async function createSubmission(input: CreateSubmissionInput) {
     deliveryType: submission.deliveryType,
     parser: parseOutcome.parser,
   });
+
+  await cancelSupersededReviews(input.userId, input.moduleId, submission.id);
+  await cancelSupersededAppeals(input.userId, input.moduleId, submission.id);
 
   return submission;
 }

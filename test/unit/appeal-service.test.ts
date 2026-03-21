@@ -5,6 +5,8 @@ import { prisma as mockPrisma } from "../../src/db/prisma.js";
 
 const findOwnedSubmissionWithLatestDecision = vi.fn();
 const findActiveAppealForSubmission = vi.fn();
+const findOpenByUserAndModule = vi.fn();
+const supersedeMany = vi.fn();
 const createAppeal = vi.fn();
 const updateSubmissionStatus = vi.fn();
 const findUserNotificationRecipient = vi.fn();
@@ -25,6 +27,8 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findOwnedSubmissionWithLatestDecision,
     findActiveAppealForSubmission,
+    findOpenByUserAndModule,
+    supersedeMany,
     findUserNotificationRecipient,
     findAppealForClaim,
     markAppealInReview,
@@ -57,6 +61,8 @@ describe("appeal service", () => {
   beforeEach(() => {
     findOwnedSubmissionWithLatestDecision.mockReset();
     findActiveAppealForSubmission.mockReset();
+    findOpenByUserAndModule.mockReset();
+    supersedeMany.mockReset();
     createAppeal.mockReset();
     updateSubmissionStatus.mockReset();
     findUserNotificationRecipient.mockReset();
@@ -290,5 +296,55 @@ describe("appeal service", () => {
         decisionType: DecisionType.APPEAL_RESOLUTION,
       },
     });
+  });
+
+  it("rejects claim when appeal is superseded", async () => {
+    findAppealForClaim.mockResolvedValue({
+      id: "appeal-1",
+      submissionId: "submission-1",
+      appealStatus: AppealStatus.SUPERSEDED,
+      claimedAt: null,
+      resolvedById: null,
+      appealedBy: { id: "user-1", email: "user@company.com", name: "User" },
+      submission: { module: { title: "Module" } },
+    });
+
+    const { claimAppeal } = await import("../../src/modules/appeal/appealService.js");
+
+    await expect(claimAppeal("appeal-1", "handler-1")).rejects.toMatchObject({
+      code: "appeal_already_resolved",
+    });
+    expect(markAppealInReview).not.toHaveBeenCalled();
+  });
+
+  it("supersedes open appeals for a user+module", async () => {
+    findOpenByUserAndModule.mockResolvedValue([
+      { id: "appeal-1", submissionId: "submission-old-1" },
+    ]);
+    supersedeMany.mockResolvedValue({ count: 1 });
+    recordAuditEvent.mockResolvedValue({});
+
+    const { cancelSupersededAppeals } = await import("../../src/modules/appeal/appealService.js");
+
+    const count = await cancelSupersededAppeals("user-1", "module-1", "submission-new");
+
+    expect(count).toBe(1);
+    expect(supersedeMany).toHaveBeenCalledWith(["appeal-1"], "submission-new", expect.any(Date));
+    expect(recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: "appeal",
+      action: "appeal_superseded",
+      metadata: expect.objectContaining({ newSubmissionId: "submission-new" }),
+    }));
+  });
+
+  it("returns 0 when no open appeals exist for the user+module", async () => {
+    findOpenByUserAndModule.mockResolvedValue([]);
+
+    const { cancelSupersededAppeals } = await import("../../src/modules/appeal/appealService.js");
+
+    const count = await cancelSupersededAppeals("user-1", "module-1", "submission-new");
+
+    expect(count).toBe(0);
+    expect(supersedeMany).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { DecisionType, ReviewStatus } from "../../db/prismaRuntime.js";
+import { DecisionType, ReviewStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { manualReviewRepository, createManualReviewRepository } from "./manualReviewRepository.js";
 import { prisma } from "../../db/prisma.js";
@@ -10,7 +10,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 
 export async function listManualReviewQueue(input: {
-  statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED">;
+  statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "SUPERSEDED">;
   limit: number;
   locale: string;
 }) {
@@ -48,7 +48,7 @@ export async function claimManualReview(reviewId: string, reviewerId: string) {
   if (!review) {
     throw new NotFoundError("Manual review");
   }
-  if (review.reviewStatus === ReviewStatus.RESOLVED) {
+  if (review.reviewStatus === ReviewStatus.RESOLVED || review.reviewStatus === ReviewStatus.SUPERSEDED) {
     throw new ConflictError("review_already_resolved", "Manual review is already resolved.");
   }
   if (review.reviewerId && review.reviewerId !== reviewerId) {
@@ -82,7 +82,7 @@ export async function finalizeManualReviewOverride(input: {
   if (!review) {
     throw new NotFoundError("Manual review");
   }
-  if (review.reviewStatus === ReviewStatus.RESOLVED) {
+  if (review.reviewStatus === ReviewStatus.RESOLVED || review.reviewStatus === ReviewStatus.SUPERSEDED) {
     throw new ConflictError("review_already_resolved", "Manual review is already resolved.");
   }
   if (review.reviewerId && review.reviewerId !== input.reviewerId) {
@@ -166,4 +166,25 @@ export async function finalizeManualReviewOverride(input: {
   });
 
   return { review: resolvedReview, overrideDecision };
+}
+
+export async function cancelSupersededReviews(userId: string, moduleId: string, newSubmissionId: string) {
+  const reviews = await manualReviewRepository.findOpenByUserAndModule(userId, moduleId);
+  if (reviews.length === 0) return 0;
+
+  const now = new Date();
+  await manualReviewRepository.supersedeMany(reviews.map((r) => r.id), newSubmissionId, now);
+
+  for (const review of reviews) {
+    await manualReviewRepository.updateSubmissionStatus(review.submissionId, SubmissionStatus.COMPLETED);
+    await recordAuditEvent({
+      entityType: "manual_review",
+      entityId: review.id,
+      action: "review_superseded",
+      actorId: undefined,
+      metadata: { newSubmissionId, supersededAt: now.toISOString() },
+    });
+  }
+
+  return reviews.length;
 }

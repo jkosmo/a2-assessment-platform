@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.76 - 2026-03-21
+### Summary
+Feat (#238): cancel superseded manual reviews and appeals when a participant retakes a module.
+
+### Included
+- **`prisma/schema.prisma`**: added `SUPERSEDED` value to `ReviewStatus` and `AppealStatus` enums.
+- **`prisma/migrations/20260321000002_add_superseded_status_to_review_and_appeal`**: PostgreSQL `ALTER TYPE ... ADD VALUE` migration.
+- **`src/modules/review/manualReviewRepository.ts`**: `findOpenByUserAndModule`, `supersedeMany`; updated status array type to include `SUPERSEDED`.
+- **`src/modules/appeal/appealRepository.ts`**: `findOpenByUserAndModule`, `supersedeMany`; updated status array type to include `SUPERSEDED`.
+- **`src/modules/review/manualReviewService.ts`**: SUPERSEDED guard in `claimManualReview` and `finalizeManualReviewOverride`; new exported `cancelSupersededReviews(userId, moduleId, newSubmissionId)`.
+- **`src/modules/appeal/appealService.ts`**: SUPERSEDED guard in `claimAppeal` and `resolveAppeal`; new exported `cancelSupersededAppeals(userId, moduleId, newSubmissionId)`.
+- **`src/modules/review/index.ts`**, **`src/modules/appeal/index.ts`**: export new cancel functions.
+- **`src/services/submissionService.ts`**: calls `cancelSupersededReviews` and `cancelSupersededAppeals` after creating a new submission.
+- **`src/routes/reviews.ts`**, **`src/routes/appeals.ts`**: `SUPERSEDED` added as a valid queryable status filter.
+- **`src/i18n/notificationMessages.ts`**: `SUPERSEDED` notification templates for all 3 locales.
+- **Tests**: 7 new unit tests across submission-service, manual-review-service, appeal-service.
+
 ## 0.8.75 - 2026-03-21
 ### Summary
 Fix: prevent stale manual-review FAIL from downgrading a certification earned by a newer passing submission.

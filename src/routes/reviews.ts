@@ -16,13 +16,13 @@ const listQuerySchema = z.object({
     .optional()
     .transform((value) => {
       if (!value) {
-        return ["OPEN", "IN_REVIEW"] as Array<"OPEN" | "IN_REVIEW" | "RESOLVED">;
+        return ["OPEN", "IN_REVIEW"] as Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "SUPERSEDED">;
       }
       return value
         .split(",")
         .map((item) => item.trim().toUpperCase())
-        .filter((item): item is "OPEN" | "IN_REVIEW" | "RESOLVED" =>
-          item === "OPEN" || item === "IN_REVIEW" || item === "RESOLVED",
+        .filter((item): item is "OPEN" | "IN_REVIEW" | "RESOLVED" | "SUPERSEDED" =>
+          item === "OPEN" || item === "IN_REVIEW" || item === "RESOLVED" || item === "SUPERSEDED",
         );
     }),
   limit: z.coerce.number().int().min(1).max(200).default(50),

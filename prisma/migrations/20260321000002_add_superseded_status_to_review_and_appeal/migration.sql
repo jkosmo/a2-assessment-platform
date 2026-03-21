@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "ReviewStatus" ADD VALUE IF NOT EXISTS 'SUPERSEDED';
+
+-- AlterEnum
+ALTER TYPE "AppealStatus" ADD VALUE IF NOT EXISTS 'SUPERSEDED';

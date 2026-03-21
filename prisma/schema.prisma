@@ -30,12 +30,14 @@ enum AppealStatus {
   IN_REVIEW
   RESOLVED
   REJECTED
+  SUPERSEDED
 }
 
 enum ReviewStatus {
   OPEN
   IN_REVIEW
   RESOLVED
+  SUPERSEDED
 }
 
 enum DecisionType {

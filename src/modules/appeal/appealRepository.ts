@@ -27,6 +27,27 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
       });
     },
 
+    findOpenByUserAndModule(userId: string, moduleId: string) {
+      return client.appeal.findMany({
+        where: {
+          appealStatus: "OPEN",
+          submission: { userId, moduleId },
+        },
+        select: { id: true, submissionId: true },
+      });
+    },
+
+    supersedeMany(appealIds: string[], newSubmissionId: string, supersededAt: Date) {
+      return client.appeal.updateMany({
+        where: { id: { in: appealIds }, appealStatus: "OPEN" },
+        data: {
+          appealStatus: "SUPERSEDED",
+          resolvedAt: supersededAt,
+          resolutionNote: `superseded_by_submission:${newSubmissionId}`,
+        },
+      });
+    },
+
     findActiveAppealForSubmission(submissionId: string, statuses: AppealStatusType[]) {
       return client.appeal.findFirst({
         where: {
@@ -60,7 +81,7 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
       });
     },
 
-    findAppealsForQueue(statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED">, limit: number) {
+    findAppealsForQueue(statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | "SUPERSEDED">, limit: number) {
       return client.appeal.findMany({
         where: { appealStatus: { in: statuses } },
         orderBy: { createdAt: "asc" },

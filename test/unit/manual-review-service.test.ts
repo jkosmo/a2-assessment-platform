@@ -6,6 +6,9 @@ const findManualReviewForClaim = vi.fn();
 const markManualReviewClaimed = vi.fn();
 const findManualReviewForOverride = vi.fn();
 const resolveManualReview = vi.fn();
+const findOpenByUserAndModule = vi.fn();
+const supersedeMany = vi.fn();
+const updateSubmissionStatus = vi.fn();
 const recordAuditEvent = vi.fn();
 const appendDecisionWithLineage = vi.fn();
 const notifyAssessmentResult = vi.fn();
@@ -21,6 +24,9 @@ vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
     markManualReviewClaimed,
     findManualReviewForOverride,
     resolveManualReview,
+    findOpenByUserAndModule,
+    supersedeMany,
+    updateSubmissionStatus,
   },
   createManualReviewRepository: () => ({
     resolveManualReview,
@@ -49,6 +55,9 @@ describe("manual review service", () => {
     markManualReviewClaimed.mockReset();
     findManualReviewForOverride.mockReset();
     resolveManualReview.mockReset();
+    findOpenByUserAndModule.mockReset();
+    supersedeMany.mockReset();
+    updateSubmissionStatus.mockReset();
     recordAuditEvent.mockReset();
     appendDecisionWithLineage.mockReset();
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
@@ -105,6 +114,22 @@ describe("manual review service", () => {
     });
 
     expect(appendDecisionWithLineage).not.toHaveBeenCalled();
+  });
+
+  it("rejects claim when manual review is superseded", async () => {
+    findManualReviewForClaim.mockResolvedValue({
+      id: "review-1",
+      submissionId: "submission-1",
+      reviewStatus: ReviewStatus.SUPERSEDED,
+      reviewerId: null,
+    });
+
+    const { claimManualReview } = await import("../../src/modules/review/manualReviewService.js");
+
+    await expect(claimManualReview("review-1", "reviewer-1")).rejects.toMatchObject({
+      code: "review_already_resolved",
+    });
+    expect(markManualReviewClaimed).not.toHaveBeenCalled();
   });
 
   it("creates an override decision and resolves the review", async () => {
@@ -195,5 +220,41 @@ describe("manual review service", () => {
         decisionType: DecisionType.MANUAL_OVERRIDE,
       },
     });
+  });
+
+  it("supersedes open reviews for a user+module and marks submissions completed", async () => {
+    findOpenByUserAndModule.mockResolvedValue([
+      { id: "review-1", submissionId: "submission-old-1" },
+      { id: "review-2", submissionId: "submission-old-2" },
+    ]);
+    supersedeMany.mockResolvedValue({ count: 2 });
+    updateSubmissionStatus.mockResolvedValue({});
+    recordAuditEvent.mockResolvedValue({});
+
+    const { cancelSupersededReviews } = await import("../../src/modules/review/manualReviewService.js");
+
+    const count = await cancelSupersededReviews("user-1", "module-1", "submission-new");
+
+    expect(count).toBe(2);
+    expect(supersedeMany).toHaveBeenCalledWith(["review-1", "review-2"], "submission-new", expect.any(Date));
+    expect(updateSubmissionStatus).toHaveBeenCalledTimes(2);
+    expect(recordAuditEvent).toHaveBeenCalledTimes(2);
+    expect(recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: "manual_review",
+      action: "review_superseded",
+      metadata: expect.objectContaining({ newSubmissionId: "submission-new" }),
+    }));
+  });
+
+  it("returns 0 when no open reviews exist for the user+module", async () => {
+    findOpenByUserAndModule.mockResolvedValue([]);
+
+    const { cancelSupersededReviews } = await import("../../src/modules/review/manualReviewService.js");
+
+    const count = await cancelSupersededReviews("user-1", "module-1", "submission-new");
+
+    expect(count).toBe(0);
+    expect(supersedeMany).not.toHaveBeenCalled();
+    expect(updateSubmissionStatus).not.toHaveBeenCalled();
   });
 });
