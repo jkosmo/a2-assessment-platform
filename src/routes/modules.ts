@@ -5,13 +5,13 @@ import {
   getModuleById,
   getActiveModuleVersion,
   listCompletedModulesForUser,
-} from "../services/moduleService.js";
+} from "../modules/module/index.js";
 import { startMcqAttempt, submitMcqAttempt } from "../modules/assessment/index.js";
 import {
   getCompletedSubmissionStatuses,
   resolveCompletedHistoryLimit,
   resolveIncludeCompletedForAvailableModules,
-} from "../services/moduleCompletionPolicyService.js";
+} from "../modules/module/index.js";
 import { t } from "../i18n/messages.js";
 import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
 

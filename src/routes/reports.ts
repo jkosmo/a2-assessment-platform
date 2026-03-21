@@ -15,7 +15,7 @@ import {
   toCsv,
   type ReportFilters,
 } from "../modules/reporting/index.js";
-import { runRecertificationReminderSchedule } from "../services/recertificationService.js";
+import { runRecertificationReminderSchedule } from "../modules/certification/index.js";
 
 const reportsRouter = Router();
 

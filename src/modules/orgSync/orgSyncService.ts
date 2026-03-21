@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { getOrgSyncConfig } from "../config/orgSync.js";
-import { ConflictError } from "../errors/AppError.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
+import { getOrgSyncConfig } from "../../config/orgSync.js";
+import { ConflictError } from "../../errors/AppError.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
 import {
   createUserForOrgSync,
   findUserForOrgSyncByEmail,
   findUserForOrgSyncByExternalId,
   updateUserForOrgSync,
-} from "../repositories/userRepository.js";
-import { recordAuditEvent } from "./auditService.js";
+} from "../../repositories/userRepository.js";
+import { recordAuditEvent } from "../../services/auditService.js";
 
 type OrgSyncDeltaRecord = {
   externalId: string;

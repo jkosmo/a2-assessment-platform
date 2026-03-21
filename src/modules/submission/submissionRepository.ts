@@ -1,5 +1,5 @@
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
-import { prisma } from "../db/prisma.js";
+import { prisma } from "../../db/prisma.js";
 
 type CreateSubmissionInput = {
   userId: string;

@@ -7,7 +7,7 @@ import {
 import {
   notifyAssessmentResult,
   sendAppealStatusNotification,
-} from "../src/services/participantNotificationService.js";
+} from "../src/modules/certification/index.js";
 
 describe("participant notification service", () => {
   const originalChannel = env.PARTICIPANT_NOTIFICATION_CHANNEL;

@@ -37,11 +37,11 @@ vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
 
-vi.mock("../../src/services/decisionLineageService.js", () => ({
+vi.mock("../../src/modules/assessment/decisionLineageService.js", () => ({
   appendDecisionWithLineage,
 }));
 
-vi.mock("../../src/services/participantNotificationService.js", () => ({
+vi.mock("../../src/modules/certification/index.js", () => ({
   notifyAssessmentResult,
 }));
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCertificationRepository } from "../../src/repositories/certificationRepository.js";
+import { createCertificationRepository } from "../../src/modules/certification/certificationRepository.js";
 
 describe("certification repository", () => {
   it("upserts certification status through the Prisma client", async () => {

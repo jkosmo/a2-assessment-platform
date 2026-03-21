@@ -19,7 +19,7 @@ const publishModuleVersionRecord = vi.fn();
 const deleteModuleRecord = vi.fn();
 const recordAuditEvent = vi.fn();
 
-vi.mock("../../src/repositories/adminContentRepository.js", () => ({
+vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
   adminContentRepository: {
     findModuleSummary,
     findModuleDeleteSummary,
@@ -76,7 +76,7 @@ describe("admin content service", () => {
   });
 
   it("rejects module creation when validTo is before validFrom", async () => {
-    const { createModule } = await import("../../src/services/adminContentService.js");
+    const { createModule } = await import("../../src/modules/adminContent/index.js");
 
     await expect(
       createModule({
@@ -96,7 +96,7 @@ describe("admin content service", () => {
       validTo: new Date("2027-03-01T00:00:00.000Z"),
     });
 
-    const { createModule } = await import("../../src/services/adminContentService.js");
+    const { createModule } = await import("../../src/modules/adminContent/index.js");
 
     const result = await createModule({
       title: "Module One",
@@ -203,7 +203,7 @@ describe("admin content service", () => {
       ],
     });
 
-    const { getModuleContentBundle } = await import("../../src/services/adminContentService.js");
+    const { getModuleContentBundle } = await import("../../src/modules/adminContent/index.js");
 
     const result = await getModuleContentBundle("module-1");
 
@@ -287,7 +287,7 @@ describe("admin content service", () => {
       mcqSetVersions: [],
     });
 
-    const { getModuleContentBundle } = await import("../../src/services/adminContentService.js");
+    const { getModuleContentBundle } = await import("../../src/modules/adminContent/index.js");
 
     const result = await getModuleContentBundle("module-1");
 
@@ -317,7 +317,7 @@ describe("admin content service", () => {
       title: "Module One",
     });
 
-    const { deleteModule } = await import("../../src/services/adminContentService.js");
+    const { deleteModule } = await import("../../src/modules/adminContent/index.js");
 
     const result = await deleteModule("module-1", "admin-1");
 
@@ -353,7 +353,7 @@ describe("admin content service", () => {
       },
     });
 
-    const { deleteModule } = await import("../../src/services/adminContentService.js");
+    const { deleteModule } = await import("../../src/modules/adminContent/index.js");
 
     await expect(deleteModule("module-1", "admin-1")).rejects.toThrow(
       "Module cannot be deleted because it still has dependencies:",
@@ -371,7 +371,7 @@ describe("admin content service", () => {
       { id: "mcq-1", moduleId: "module-1" },
     ]);
 
-    const { createModuleVersion } = await import("../../src/services/adminContentService.js");
+    const { createModuleVersion } = await import("../../src/modules/adminContent/index.js");
 
     await expect(
       createModuleVersion({
@@ -408,7 +408,7 @@ describe("admin content service", () => {
       createdAt: new Date("2026-03-11T12:00:00.000Z"),
     });
 
-    const { createBenchmarkExampleVersion } = await import("../../src/services/adminContentService.js");
+    const { createBenchmarkExampleVersion } = await import("../../src/modules/adminContent/index.js");
 
     const result = await createBenchmarkExampleVersion({
       moduleId: "module-1",
@@ -482,7 +482,7 @@ describe("admin content service", () => {
       publishedBy: "admin-1",
     });
 
-    const { publishModuleVersion } = await import("../../src/services/adminContentService.js");
+    const { publishModuleVersion } = await import("../../src/modules/adminContent/index.js");
 
     const result = await publishModuleVersion("module-1", "module-version-3", "admin-1");
 

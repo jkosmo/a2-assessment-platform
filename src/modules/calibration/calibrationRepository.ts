@@ -1,4 +1,4 @@
-import { prisma } from "../db/prisma.js";
+import { prisma } from "../../db/prisma.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 
 type CalibrationRepositoryClient = Pick<typeof prisma, "module" | "submission" | "promptTemplateVersion">;

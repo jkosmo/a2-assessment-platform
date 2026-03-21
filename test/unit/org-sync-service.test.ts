@@ -75,7 +75,7 @@ describe("org sync service", () => {
       })
       .mockResolvedValueOnce(null);
 
-    const { applyOrgDeltaSync } = await import("../../src/services/orgSyncService.js");
+    const { applyOrgDeltaSync } = await import("../../src/modules/orgSync/index.js");
 
     const result = await applyOrgDeltaSync({
       source: "hr-feed",
@@ -180,7 +180,7 @@ describe("org sync service", () => {
       activeStatus: true,
     });
 
-    const { applyOrgDeltaSync } = await import("../../src/services/orgSyncService.js");
+    const { applyOrgDeltaSync } = await import("../../src/modules/orgSync/index.js");
 
     const result = await applyOrgDeltaSync({
       source: "hr-feed",

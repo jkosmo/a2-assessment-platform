@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSubmissionRepository } from "../../src/repositories/submissionRepository.js";
+import { createSubmissionRepository } from "../../src/modules/submission/submissionRepository.js";
 
 describe("submission repository", () => {
   it("creates a submission through the Prisma client", async () => {

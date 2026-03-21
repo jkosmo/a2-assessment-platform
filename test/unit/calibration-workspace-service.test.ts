@@ -6,7 +6,7 @@ const findSubmissionsForWorkspace = vi.fn();
 const findPromptTemplateVersionsForBenchmarkAnchors = vi.fn();
 const recordAuditEvent = vi.fn();
 
-vi.mock("../../src/repositories/calibrationRepository.js", () => ({
+vi.mock("../../src/modules/calibration/calibrationRepository.js", () => ({
   calibrationRepository: {
     findModuleSummary,
     findSubmissionsForWorkspace,
@@ -29,7 +29,7 @@ describe("calibration workspace service", () => {
   it("rejects snapshot requests when the module does not exist", async () => {
     findModuleSummary.mockResolvedValue(null);
 
-    const { getCalibrationWorkspaceSnapshot } = await import("../../src/services/calibrationWorkspaceService.js");
+    const { getCalibrationWorkspaceSnapshot } = await import("../../src/modules/calibration/index.js");
 
     await expect(
       getCalibrationWorkspaceSnapshot({
@@ -133,7 +133,7 @@ describe("calibration workspace service", () => {
       },
     ]);
 
-    const { getCalibrationWorkspaceSnapshot } = await import("../../src/services/calibrationWorkspaceService.js");
+    const { getCalibrationWorkspaceSnapshot } = await import("../../src/modules/calibration/index.js");
 
     const snapshot = await getCalibrationWorkspaceSnapshot({
       actorId: "smo-1",

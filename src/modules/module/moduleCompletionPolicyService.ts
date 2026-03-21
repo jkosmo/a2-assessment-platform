@@ -1,4 +1,4 @@
-import { getModuleCompletionConfig } from "../config/moduleCompletion.js";
+import { getModuleCompletionConfig } from "../../config/moduleCompletion.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 
 export function isSubmissionStatusCompleted(status: SubmissionStatusType | null | undefined) {

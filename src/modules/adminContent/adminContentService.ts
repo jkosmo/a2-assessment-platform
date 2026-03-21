@@ -1,10 +1,10 @@
-import { adminContentRepository } from "../repositories/adminContentRepository.js";
-import { recordAuditEvent } from "./auditService.js";
-import { getBenchmarkExamplesConfig } from "../config/benchmarkExamples.js";
-import type { SupportedLocale } from "../i18n/locale.js";
-import { localizeContentText } from "../i18n/content.js";
-import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../codecs/assessmentPolicyCodec.js";
-import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { adminContentRepository } from "./adminContentRepository.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { localizeContentText } from "../../i18n/content.js";
+import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -19,13 +19,13 @@ type CreatePromptTemplateVersionInput = {
   systemPrompt: string;
   userPromptTemplate: string;
   examples: Array<Record<string, unknown>>;
-  active: boolean;
+  active?: boolean;
 };
 
 type CreateMcqSetVersionInput = {
   moduleId: string;
   title: string;
-  active: boolean;
+  active?: boolean;
   questions: Array<{
     stem: string;
     options: string[];
@@ -361,7 +361,7 @@ export async function createPromptTemplateVersion(input: CreatePromptTemplateVer
     systemPrompt: input.systemPrompt,
     userPromptTemplate: input.userPromptTemplate,
     examplesJson: JSON.stringify(input.examples),
-    active: input.active,
+    active: input.active ?? true,
   });
 }
 
@@ -373,7 +373,7 @@ export async function createMcqSetVersion(input: CreateMcqSetVersionInput) {
     moduleId: input.moduleId,
     versionNo,
     title: input.title,
-    active: input.active,
+    active: input.active ?? true,
     questions: input.questions.map((question) => ({
       moduleId: input.moduleId,
       stem: question.stem,

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
 import { z } from "zod";
-import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
+import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../modules/submission/index.js";
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
 import { env } from "../config/env.js";
 import { localizeContentText } from "../i18n/content.js";

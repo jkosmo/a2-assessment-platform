@@ -29,7 +29,7 @@ vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
 
-vi.mock("../../src/services/recertificationService.js", () => ({
+vi.mock("../../src/modules/certification/index.js", () => ({
   upsertRecertificationStatusFromDecision,
 }));
 

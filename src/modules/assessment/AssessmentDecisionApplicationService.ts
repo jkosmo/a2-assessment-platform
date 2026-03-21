@@ -1,7 +1,7 @@
 import { createAssessmentDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
-import { notifyAssessmentResult } from "../../services/participantNotificationService.js";
+import { notifyAssessmentResult } from "../certification/index.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import type { SupportedLocale } from "../../i18n/locale.js";

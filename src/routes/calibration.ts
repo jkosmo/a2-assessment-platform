@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole.js";
-import { getCalibrationWorkspaceSnapshot } from "../services/calibrationWorkspaceService.js";
-import { publishModuleVersionWithThresholds } from "../services/adminContentService.js";
+import { getCalibrationWorkspaceSnapshot } from "../modules/calibration/index.js";
+import { publishModuleVersionWithThresholds } from "../modules/adminContent/index.js";
 import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
 
 const calibrationRouter = Router();

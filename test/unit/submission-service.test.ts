@@ -14,7 +14,7 @@ vi.mock("../../src/repositories/moduleRepository.js", () => ({
   getModuleWithActiveVersion,
 }));
 
-vi.mock("../../src/repositories/submissionRepository.js", () => ({
+vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
   submissionRepository: {
     create: submissionCreate,
   },
@@ -57,7 +57,7 @@ describe("submission service", () => {
       activeVersion: null,
     });
 
-    const { createSubmission } = await import("../../src/services/submissionService.js");
+    const { createSubmission } = await import("../../src/modules/submission/index.js");
 
     await expect(
       createSubmission({
@@ -92,7 +92,7 @@ describe("submission service", () => {
       deliveryType: "document",
     });
 
-    const { createSubmission } = await import("../../src/services/submissionService.js");
+    const { createSubmission } = await import("../../src/modules/submission/index.js");
 
     const result = await createSubmission({
       userId: "user-1",

@@ -4,7 +4,7 @@ import { createDecisionRepository } from "../../repositories/decisionRepository.
 import { prisma } from "../../db/prisma.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { upsertRecertificationStatusFromDecision } from "../../services/recertificationService.js";
+import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
 import {
   hasForcingRedFlag,
   hasInsufficientEvidenceSignal,

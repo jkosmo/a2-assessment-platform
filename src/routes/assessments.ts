@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "../modules/assessment/index.js";
 import { assessmentRunLimiter } from "../middleware/rateLimiting.js";
-import { getOwnedSubmission, getSubmissionForAssessmentView } from "../services/submissionService.js";
+import { getOwnedSubmission, getSubmissionForAssessmentView } from "../modules/submission/index.js";
 
 const assessmentsRouter = Router();
 const runBodySchema = z.object({

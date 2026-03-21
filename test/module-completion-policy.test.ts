@@ -4,7 +4,7 @@ import {
   isSubmissionStatusCompleted,
   resolveCompletedHistoryLimit,
   resolveIncludeCompletedForAvailableModules,
-} from "../src/services/moduleCompletionPolicyService.js";
+} from "../src/modules/module/index.js";
 
 describe("module completion policy service", () => {
   it("classifies completed submission statuses from config", () => {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { applyOrgDeltaSync } from "../services/orgSyncService.js";
+import { applyOrgDeltaSync } from "../modules/orgSync/index.js";
 
 const orgSyncRouter = Router();
 

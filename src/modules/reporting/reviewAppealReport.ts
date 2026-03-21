@@ -3,7 +3,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
 import { buildAppealSlaSnapshot } from "../../modules/appeal/index.js";
-import { deriveRecertificationStatus } from "../../services/recertificationService.js";
+import { deriveRecertificationStatus } from "../certification/index.js";
 import type {
   ReviewStatus as ReviewStatusType,
   AppealStatus as AppealStatusType,

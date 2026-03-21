@@ -4,10 +4,10 @@ import { appealRepository, createAppealRepository } from "./appealRepository.js"
 import { prisma } from "../../db/prisma.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
-import { notifyAppealStatusTransition } from "../../services/participantNotificationService.js";
+import { notifyAppealStatusTransition } from "../certification/index.js";
 import { env } from "../../config/env.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
-import { appendDecisionWithLineage } from "../../services/decisionLineageService.js";
+import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { localizeContentText } from "../../i18n/content.js";
 
 export async function createSubmissionAppeal(input: {

@@ -1,10 +1,10 @@
 import { EmailClient } from "@azure/communication-email";
 import type { AppealStatus } from "@prisma/client";
-import { env } from "../config/env.js";
-import type { SupportedLocale } from "../i18n/locale.js";
-import { getAppealNotificationMessage, getAssessmentResultNotificationMessage } from "../i18n/notificationMessages.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
-import { recordAuditEvent } from "./auditService.js";
+import { env } from "../../config/env.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { getAppealNotificationMessage, getAssessmentResultNotificationMessage } from "../../i18n/notificationMessages.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { recordAuditEvent } from "../../services/auditService.js";
 
 type NotificationChannel = "disabled" | "log" | "webhook" | "acs_email";
 

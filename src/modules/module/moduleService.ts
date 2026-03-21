@@ -1,16 +1,16 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
-import { AppRole } from "../db/prismaRuntime.js";
-import type { SupportedLocale } from "../i18n/locale.js";
-import { localizeContentText } from "../i18n/content.js";
-import { assessmentPolicyCodec } from "../codecs/assessmentPolicyCodec.js";
-import { submissionSchemaCodec } from "../codecs/submissionSchemaCodec.js";
+import { AppRole } from "../../db/prismaRuntime.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { localizeContentText } from "../../i18n/content.js";
+import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
+import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
 import {
   queryModules,
   queryLatestSubmissionsForModules,
   queryCompletedSubmissionsForUser,
   queryModuleById,
   queryModuleVersion,
-} from "../repositories/moduleRepository.js";
+} from "../../repositories/moduleRepository.js";
 import {
   getCompletedSubmissionStatuses,
   isSubmissionStatusCompleted,

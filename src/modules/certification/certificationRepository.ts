@@ -1,4 +1,4 @@
-import { prisma } from "../db/prisma.js";
+import { prisma } from "../../db/prisma.js";
 
 type CertificationRepositoryClient = Pick<typeof prisma, "certificationStatus">;
 

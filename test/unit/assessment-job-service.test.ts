@@ -64,7 +64,7 @@ vi.mock("../../src/utils/hash.js", () => ({
   sha256: vi.fn(() => "hash"),
 }));
 
-vi.mock("../../src/services/participantNotificationService.js", () => ({
+vi.mock("../../src/modules/certification/index.js", () => ({
   notifyAssessmentResult: vi.fn().mockResolvedValue(undefined),
 }));
 

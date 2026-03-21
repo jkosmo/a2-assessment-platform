@@ -7,6 +7,39 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.86 - 2026-03-21
+### Summary
+Refactor: slim admin-content route — extract Zod schemas and mapper into dedicated files (issue #232).
+
+### Included
+- **`src/modules/adminContent/adminContentSchemas.ts`** (new): all Zod validation schemas for admin-content routes, plus `parseRequest` and `parseOptionalDate` helpers.
+- **`src/modules/adminContent/adminContentMapper.ts`** (new): mapper functions (`toCreateModuleInput`, `toCreatePromptTemplateVersionInput`, `toCreateMcqSetVersionInput`, `toCreateModuleVersionInput`) handling codec serialization.
+- **`src/routes/adminContent.ts`**: rewritten to thin route handlers — all validation and mapping delegated to schemas/mapper files.
+- Service input types for `CreatePromptTemplateVersionInput` and `CreateMcqSetVersionInput` now accept `active?: boolean` (defaulted internally), resolving cross-module Zod type inference incompatibilities.
+- `submissionSchemaFieldSchema.required` changed from `.default(false)` to `.optional()` for consistent cross-module type inference.
+
+## 0.8.85 - 2026-03-21
+### Summary
+Refactor: migrate adminContent, module, orgSync, and decisionLineage to feature modules.
+
+### Included
+- **`src/modules/adminContent/`**: new module — `adminContentRepository.ts`, `adminContentService.ts`, `index.ts`. Replaces `src/services/adminContentService.ts` and `src/repositories/adminContentRepository.ts`.
+- **`src/modules/module/`**: new module — `moduleService.ts`, `moduleCompletionPolicyService.ts`, `index.ts`. Replaces `src/services/moduleService.ts` and `src/services/moduleCompletionPolicyService.ts`.
+- **`src/modules/orgSync/`**: new module — `orgSyncService.ts`, `index.ts`. Replaces `src/services/orgSyncService.ts`.
+- **`src/modules/assessment/decisionLineageService.ts`**: moved from `src/services/decisionLineageService.ts` into the assessment module.
+- `src/services/` now contains only shared infra: `auditService.ts`. All domain logic has been migrated to feature modules.
+- All consumers (routes, modules, tests) updated to import from new module paths.
+
+## 0.8.84 - 2026-03-21
+### Summary
+Refactor: migrate calibration, certification, and submission to feature modules.
+
+### Included
+- **`src/modules/calibration/`**: new module — `calibrationRepository.ts`, `calibrationWorkspaceService.ts`, `index.ts`. Replaces `src/services/calibrationWorkspaceService.ts` and `src/repositories/calibrationRepository.ts`.
+- **`src/modules/certification/`**: new module — `certificationRepository.ts`, `participantNotificationService.ts`, `recertificationService.ts`, `index.ts`. Replaces `src/services/recertificationService.ts`, `src/services/participantNotificationService.ts`, and `src/repositories/certificationRepository.ts`.
+- **`src/modules/submission/`**: new module — `submissionRepository.ts`, `submissionService.ts`, `index.ts`. Replaces `src/services/submissionService.ts` and `src/repositories/submissionRepository.ts`.
+- All consumers (routes, modules, tests) updated to import from new module paths.
+
 ## 0.8.83 - 2026-03-21
 ### Summary
 Fix: authoring prompt grounding constraints to prevent source-external framing (scenario/case drift).

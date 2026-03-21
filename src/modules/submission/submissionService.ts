@@ -1,13 +1,13 @@
-import { SubmissionStatus } from "../db/prismaRuntime.js";
-import { ValidationError } from "../errors/AppError.js";
-import type { SupportedLocale } from "../i18n/locale.js";
-import { getModuleWithActiveVersion } from "../repositories/moduleRepository.js";
-import { submissionRepository } from "../repositories/submissionRepository.js";
-import { recordAuditEvent } from "./auditService.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
-import { resolveSubmissionResponseJson } from "../modules/assessment/documentParsingService.js";
-import { cancelSupersededReviews } from "../modules/review/index.js";
-import { cancelSupersededAppeals } from "../modules/appeal/index.js";
+import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { ValidationError } from "../../errors/AppError.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { getModuleWithActiveVersion } from "../../repositories/moduleRepository.js";
+import { submissionRepository } from "./submissionRepository.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { resolveSubmissionResponseJson } from "../assessment/documentParsingService.js";
+import { cancelSupersededReviews } from "../review/index.js";
+import { cancelSupersededAppeals } from "../appeal/index.js";
 
 export type CreateSubmissionInput = {
   userId: string;

@@ -37,7 +37,7 @@ vi.mock("../../src/config/reportingAnalytics.js", () => ({
   }),
 }));
 
-vi.mock("../../src/services/recertificationService.js", () => ({
+vi.mock("../../src/modules/certification/index.js", () => ({
   deriveRecertificationStatus: vi.fn(),
 }));
 

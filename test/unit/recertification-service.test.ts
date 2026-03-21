@@ -34,7 +34,7 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
   },
 }));
 
-vi.mock("../../src/repositories/certificationRepository.js", () => ({
+vi.mock("../../src/modules/certification/index.js", () => ({
   certificationRepository: {
     upsertCertificationStatus,
     findByUserAndModule,
@@ -70,7 +70,7 @@ describe("recertification service", () => {
   it("rejects recertification upsert when the decision does not exist", async () => {
     findDecisionWithSubmissionIdentifiers.mockResolvedValue(null);
 
-    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
     await expect(
       upsertRecertificationStatusFromDecision({
@@ -96,7 +96,7 @@ describe("recertification service", () => {
       status: "ACTIVE",
     });
 
-    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
     const result = await upsertRecertificationStatusFromDecision({
       decisionId: "decision-1",
@@ -134,7 +134,7 @@ describe("recertification service", () => {
   });
 
   it("derives due-soon state before recertification due date", async () => {
-    const { deriveRecertificationStatus } = await import("../../src/services/recertificationService.js");
+    const { deriveRecertificationStatus } = await import("../../src/modules/certification/index.js");
 
     const status = deriveRecertificationStatus({
       now: new Date("2027-02-01T00:00:00.000Z"),
@@ -160,7 +160,7 @@ describe("recertification service", () => {
     findByUserAndModule.mockResolvedValue(null);
     upsertCertificationStatus.mockResolvedValue({ id: "cert-1", status: "NOT_CERTIFIED" });
 
-    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
     await upsertRecertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
 
@@ -192,7 +192,7 @@ describe("recertification service", () => {
     });
     findByUserAndModule.mockResolvedValue(passingCert);
 
-    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
     const result = await upsertRecertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
 
@@ -226,7 +226,7 @@ describe("recertification service", () => {
     });
     upsertCertificationStatus.mockResolvedValue({ id: "cert-1", status: "NOT_CERTIFIED" });
 
-    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/modules/certification/index.js");
 
     await upsertRecertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
 
@@ -271,7 +271,7 @@ describe("recertification service", () => {
         },
       ]);
 
-    const { runRecertificationReminderSchedule } = await import("../../src/services/recertificationService.js");
+    const { runRecertificationReminderSchedule } = await import("../../src/modules/certification/index.js");
 
     const result = await runRecertificationReminderSchedule({
       asOf: new Date("2026-03-01T00:00:00.000Z"),
