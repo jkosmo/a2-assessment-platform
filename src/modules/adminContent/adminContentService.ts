@@ -1,4 +1,5 @@
-import { adminContentRepository } from "./adminContentRepository.js";
+import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
+import { prisma } from "../../db/prisma.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -507,7 +508,9 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
   const module = await ensureModuleExists(moduleId);
   const now = new Date();
 
-  const published = await adminContentRepository.publishModuleVersion(moduleId, moduleVersionId, actorId, now);
+  const published = await prisma.$transaction((tx) =>
+    createAdminContentRepository(tx).publishModuleVersion(moduleId, moduleVersionId, actorId, now),
+  );
 
   await recordAuditEvent({
     entityType: "module_version",
@@ -568,24 +571,22 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
   const versionNo = await getNextVersionNo("module", input.moduleId);
   const now = new Date();
 
-  const newVersion = await adminContentRepository.createModuleVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    taskText: sourceVersion.taskText,
-    guidanceText: sourceVersion.guidanceText ?? undefined,
-    rubricVersionId: sourceVersion.rubricVersionId,
-    promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
-    mcqSetVersionId: sourceVersion.mcqSetVersionId,
-    submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
-    assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
+  const { newVersion, published } = await prisma.$transaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const newVersion = await repo.createModuleVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      taskText: sourceVersion.taskText,
+      guidanceText: sourceVersion.guidanceText ?? undefined,
+      rubricVersionId: sourceVersion.rubricVersionId,
+      promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
+      mcqSetVersionId: sourceVersion.mcqSetVersionId,
+      submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
+      assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
+    });
+    const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now);
+    return { newVersion, published };
   });
-
-  const published = await adminContentRepository.publishModuleVersion(
-    input.moduleId,
-    newVersion.id,
-    input.actorId,
-    now,
-  );
 
   await recordAuditEvent({
     entityType: "module_version",

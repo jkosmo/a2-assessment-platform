@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.89 - 2026-03-21
+### Summary
+refactor: publishModuleVersionWithThresholds is now fully atomic (#237)
+
+### Included
+- **`src/modules/adminContent/adminContentRepository.ts`**: `publishModuleVersion` no longer wraps its 3 DB operations in an internal `client.$transaction()`. Client type narrowed to `Pick<...>` (no `$transaction` needed). The function now runs directly on whatever client (full prisma or tx) is passed in.
+- **`src/modules/adminContent/adminContentService.ts`**: imports `createAdminContentRepository` and `prisma`. Standalone `publishModuleVersion` wraps the repo call in `prisma.$transaction()` to preserve atomicity. `publishModuleVersionWithThresholds` wraps `createModuleVersion` + `publishModuleVersion` in a single `prisma.$transaction()`, making create-then-publish atomic (previously two non-atomic calls — an orphaned unpublished version could be left if publish failed).
+
 ## 0.8.88 - 2026-03-21
 ### Summary
 fix: appeal resolution email now includes outcome + resolution note, and uses submission locale.

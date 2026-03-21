@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 
-type AdminContentRepositoryClient = typeof prisma;
+type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion">;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
@@ -368,47 +368,45 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date) {
-      return client.$transaction(async (tx) => {
-        const moduleVersion = await tx.moduleVersion.findUnique({
-          where: { id: moduleVersionId },
-          select: {
-            id: true,
-            moduleId: true,
-            versionNo: true,
-            publishedAt: true,
-            publishedBy: true,
-          },
-        });
-
-        if (!moduleVersion || moduleVersion.moduleId !== moduleId) {
-          throw new Error("Module version not found for module.");
-        }
-
-        const publishedVersion = await tx.moduleVersion.update({
-          where: { id: moduleVersionId },
-          data: moduleVersion.publishedAt
-            ? {}
-            : {
-                publishedAt: now,
-                publishedBy: actorId,
-              },
-          select: {
-            id: true,
-            moduleId: true,
-            versionNo: true,
-            publishedAt: true,
-            publishedBy: true,
-          },
-        });
-
-        await tx.module.update({
-          where: { id: moduleId },
-          data: { activeVersionId: moduleVersionId },
-        });
-
-        return publishedVersion;
+    async publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date) {
+      const moduleVersion = await client.moduleVersion.findUnique({
+        where: { id: moduleVersionId },
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          publishedAt: true,
+          publishedBy: true,
+        },
       });
+
+      if (!moduleVersion || moduleVersion.moduleId !== moduleId) {
+        throw new Error("Module version not found for module.");
+      }
+
+      const publishedVersion = await client.moduleVersion.update({
+        where: { id: moduleVersionId },
+        data: moduleVersion.publishedAt
+          ? {}
+          : {
+              publishedAt: now,
+              publishedBy: actorId,
+            },
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          publishedAt: true,
+          publishedBy: true,
+        },
+      });
+
+      await client.module.update({
+        where: { id: moduleId },
+        data: { activeVersionId: moduleVersionId },
+      });
+
+      return publishedVersion;
     },
   };
 }
