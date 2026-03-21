@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.80 - 2026-03-21
+### Summary
+UI: move locale selector to compact top-right position in participant console.
+
+### Included
+- **`public/participant.html`**: locale select moved from standalone card to a small `locale-select-compact` in the top-right of the page header row. Label is visually hidden (`sr-only`) for screen readers. Old card removed.
+
 ## 0.8.79 - 2026-03-21
 ### Summary
 Refactor (#210): migrate reporting services to src/modules/reporting/.
