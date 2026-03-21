@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.65 - 2026-03-21
+### Summary
+Fix: deploy-retry og #190 extract shared decision lineage utility.
+
+### Included
+- **`scripts/azure/deploy-environment.ps1`**: `Invoke-WebAppDeploy` med 5 forsøk og 15s pause — fikser transient 502 fra Kudu SCM etter Bicep-oppdatering.
+- **`src/services/decisionLineageService.ts`** (ny): `appendDecisionWithLineage` — felles utility for create decision + updateSubmissionStatus + upsertRecertification + audit event. Lukker #190.
+- **`src/services/manualReviewService.ts`**: bruker `appendDecisionWithLineage`.
+- **`src/services/appealService.ts`**: bruker `appendDecisionWithLineage`.
+
 ## 0.8.64 - 2026-03-21
 ### Summary
 Ops: `alwaysOn: true` for web-rolle, separat worker App Service med `PROCESS_ROLE=worker`. Lukker #202.

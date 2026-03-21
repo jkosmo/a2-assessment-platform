@@ -10,12 +10,11 @@ const findUserNotificationRecipient = vi.fn();
 const findAppealForClaim = vi.fn();
 const markAppealInReview = vi.fn();
 const findAppealForResolution = vi.fn();
-const createResolutionDecision = vi.fn();
 const markAppealResolved = vi.fn();
 const recordAuditEvent = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 const logOperationalEvent = vi.fn();
-const upsertRecertificationStatusFromDecision = vi.fn();
+const appendDecisionWithLineage = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
@@ -31,18 +30,19 @@ vi.mock("../../src/repositories/appealRepository.js", () => ({
     findAppealForClaim,
     markAppealInReview,
     findAppealForResolution,
-    createResolutionDecision,
     markAppealResolved,
   },
   createAppealRepository: () => ({
-    createResolutionDecision,
     markAppealResolved,
-    updateSubmissionStatus,
   }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
+}));
+
+vi.mock("../../src/services/decisionLineageService.js", () => ({
+  appendDecisionWithLineage,
 }));
 
 vi.mock("../../src/services/participantNotificationService.js", () => ({
@@ -51,10 +51,6 @@ vi.mock("../../src/services/participantNotificationService.js", () => ({
 
 vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
-}));
-
-vi.mock("../../src/services/recertificationService.js", () => ({
-  upsertRecertificationStatusFromDecision,
 }));
 
 describe("appeal service", () => {
@@ -67,12 +63,11 @@ describe("appeal service", () => {
     findAppealForClaim.mockReset();
     markAppealInReview.mockReset();
     findAppealForResolution.mockReset();
-    createResolutionDecision.mockReset();
     markAppealResolved.mockReset();
     recordAuditEvent.mockReset();
     notifyAppealStatusTransition.mockReset();
     logOperationalEvent.mockReset();
-    upsertRecertificationStatusFromDecision.mockReset();
+    appendDecisionWithLineage.mockReset();
   });
 
   it("rejects appeal creation when the submission is missing", async () => {
@@ -199,7 +194,7 @@ describe("appeal service", () => {
         module: { title: "Test Module" },
       },
     });
-    createResolutionDecision.mockResolvedValue({
+    appendDecisionWithLineage.mockResolvedValue({
       id: "decision-2",
       passFailTotal: true,
       decisionType: DecisionType.APPEAL_RESOLUTION,
@@ -208,7 +203,6 @@ describe("appeal service", () => {
       id: "appeal-1",
       appealStatus: AppealStatus.RESOLVED,
     });
-    updateSubmissionStatus.mockResolvedValue({ id: "submission-1" });
     notifyAppealStatusTransition.mockResolvedValue(undefined);
 
     const { resolveAppeal } = await import("../../src/services/appealService.js");
@@ -221,35 +215,23 @@ describe("appeal service", () => {
       resolutionNote: "Resolved after human review.",
     });
 
-    expect(createResolutionDecision).toHaveBeenCalledWith(
+    expect(appendDecisionWithLineage).toHaveBeenCalledWith(
       expect.objectContaining({
-        submissionId: "submission-1",
+        parentDecision: expect.objectContaining({ id: "decision-1", submissionId: "submission-1" }),
         decisionType: DecisionType.APPEAL_RESOLUTION,
-        parentDecisionId: "decision-1",
         passFailTotal: true,
         decisionReason: "Appeal accepted.",
         finalisedById: "handler-1",
         finalisedAt: expect.any(Date),
+        auditAction: "appeal_resolution_decision_created",
       }),
+      expect.anything(),
     );
     expect(markAppealResolved).toHaveBeenCalledWith(
       "appeal-1",
       "handler-1",
       expect.any(Date),
       "Resolved after human review.",
-    );
-    expect(updateSubmissionStatus).toHaveBeenCalledWith("submission-1", SubmissionStatus.COMPLETED);
-    expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
-      decisionId: "decision-2",
-      actorId: "handler-1",
-    }, expect.anything());
-    expect(recordAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: "assessment_decision",
-        entityId: "decision-2",
-        action: "appeal_resolution_decision_created",
-      }),
-      expect.anything(),
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({

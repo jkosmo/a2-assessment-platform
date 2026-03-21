@@ -290,7 +290,7 @@ describe("transactional failure injection", () => {
   describe("finalizeManualReviewOverride", () => {
     it("halts the pipeline when createOverrideDecision fails", async () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
-      createOverrideDecision.mockRejectedValue(new Error("DB write failed"));
+      assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
       const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
 
@@ -305,7 +305,7 @@ describe("transactional failure injection", () => {
       ).rejects.toThrow("DB write failed");
 
       expect(resolveManualReview).not.toHaveBeenCalled();
-      expect(manualReviewSubmissionUpdate).not.toHaveBeenCalled();
+      expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAssessmentResult).not.toHaveBeenCalled();
@@ -313,11 +313,12 @@ describe("transactional failure injection", () => {
 
     it("halts the pipeline when resolveManualReview fails mid-transaction", async () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
-      createOverrideDecision.mockResolvedValue({
+      assessmentDecisionCreate.mockResolvedValue({
         id: "decision-2",
         passFailTotal: true,
         decisionType: DecisionType.MANUAL_OVERRIDE,
       });
+      decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       resolveManualReview.mockRejectedValue(new Error("Row locked by concurrent request"));
 
       const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
@@ -332,24 +333,17 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("Row locked by concurrent request");
 
-      expect(manualReviewSubmissionUpdate).not.toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(notifyAssessmentResult).not.toHaveBeenCalled();
     });
 
     it("halts the pipeline when updateSubmissionStatus fails mid-transaction", async () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
-      createOverrideDecision.mockResolvedValue({
+      assessmentDecisionCreate.mockResolvedValue({
         id: "decision-2",
         passFailTotal: false,
         decisionType: DecisionType.MANUAL_OVERRIDE,
       });
-      resolveManualReview.mockResolvedValue({
-        id: "review-1",
-        reviewStatus: ReviewStatus.RESOLVED,
-        overrideDecision: "FAIL",
-      });
-      manualReviewSubmissionUpdate.mockRejectedValue(new Error("FK constraint violation"));
+      decisionSubmissionUpdate.mockRejectedValue(new Error("FK constraint violation"));
 
       const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
 
@@ -363,6 +357,7 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("FK constraint violation");
 
+      expect(resolveManualReview).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAssessmentResult).not.toHaveBeenCalled();
@@ -370,17 +365,17 @@ describe("transactional failure injection", () => {
 
     it("tolerates notification failure after a successful transaction", async () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
-      createOverrideDecision.mockResolvedValue({
+      assessmentDecisionCreate.mockResolvedValue({
         id: "decision-2",
         passFailTotal: true,
         decisionType: DecisionType.MANUAL_OVERRIDE,
       });
+      decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       resolveManualReview.mockResolvedValue({
         id: "review-1",
         reviewStatus: ReviewStatus.RESOLVED,
         overrideDecision: "PASS",
       });
-      manualReviewSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       notifyAssessmentResult.mockRejectedValue(new Error("webhook unreachable"));
 
       const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
@@ -410,7 +405,7 @@ describe("transactional failure injection", () => {
   describe("resolveAppeal", () => {
     it("halts the pipeline when createResolutionDecision fails", async () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
-      createResolutionDecision.mockRejectedValue(new Error("DB write failed"));
+      assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
       const { resolveAppeal } = await import("../../src/services/appealService.js");
 
@@ -425,7 +420,7 @@ describe("transactional failure injection", () => {
       ).rejects.toThrow("DB write failed");
 
       expect(markAppealResolved).not.toHaveBeenCalled();
-      expect(appealSubmissionUpdate).not.toHaveBeenCalled();
+      expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
@@ -433,11 +428,12 @@ describe("transactional failure injection", () => {
 
     it("halts the pipeline when markAppealResolved fails mid-transaction", async () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
-      createResolutionDecision.mockResolvedValue({
+      assessmentDecisionCreate.mockResolvedValue({
         id: "decision-2",
         passFailTotal: true,
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
+      decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       markAppealResolved.mockRejectedValue(new Error("Optimistic lock conflict"));
 
       const { resolveAppeal } = await import("../../src/services/appealService.js");
@@ -452,24 +448,17 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("Optimistic lock conflict");
 
-      expect(appealSubmissionUpdate).not.toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
-      expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
     });
 
     it("halts the pipeline when updateSubmissionStatus fails mid-transaction", async () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
-      createResolutionDecision.mockResolvedValue({
+      assessmentDecisionCreate.mockResolvedValue({
         id: "decision-2",
         passFailTotal: true,
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
-      markAppealResolved.mockResolvedValue({
-        id: "appeal-1",
-        appealStatus: AppealStatus.RESOLVED,
-      });
-      appealSubmissionUpdate.mockRejectedValue(new Error("Deadlock detected"));
+      decisionSubmissionUpdate.mockRejectedValue(new Error("Deadlock detected"));
 
       const { resolveAppeal } = await import("../../src/services/appealService.js");
 
@@ -483,6 +472,7 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("Deadlock detected");
 
+      expect(markAppealResolved).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
@@ -490,16 +480,16 @@ describe("transactional failure injection", () => {
 
     it("tolerates notification failure after a successful transaction", async () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
-      createResolutionDecision.mockResolvedValue({
+      assessmentDecisionCreate.mockResolvedValue({
         id: "decision-2",
         passFailTotal: true,
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
+      decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       markAppealResolved.mockResolvedValue({
         id: "appeal-1",
         appealStatus: AppealStatus.RESOLVED,
       });
-      appealSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       notifyAppealStatusTransition.mockRejectedValue(new Error("webhook timeout"));
 
       const { resolveAppeal } = await import("../../src/services/appealService.js");

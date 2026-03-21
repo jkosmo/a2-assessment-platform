@@ -1,9 +1,9 @@
-import { DecisionType, ReviewStatus, SubmissionStatus } from "../db/prismaRuntime.js";
+import { DecisionType, ReviewStatus } from "../db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../errors/AppError.js";
 import { manualReviewRepository, createManualReviewRepository } from "../repositories/manualReviewRepository.js";
 import { prisma } from "../db/prisma.js";
 import { recordAuditEvent } from "./auditService.js";
-import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
+import { appendDecisionWithLineage } from "./decisionLineageService.js";
 import { notifyAssessmentResult } from "./participantNotificationService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { localizeContentText } from "../i18n/content.js";
@@ -99,22 +99,25 @@ export async function finalizeManualReviewOverride(input: {
   const { overrideDecision, resolvedReview } = await prisma.$transaction(async (tx) => {
     const repo = createManualReviewRepository(tx);
 
-    const overrideDecision = await repo.createOverrideDecision({
-      submissionId: latestDecision.submissionId,
-      moduleVersionId: latestDecision.moduleVersionId,
-      rubricVersionId: latestDecision.rubricVersionId,
-      promptTemplateVersionId: latestDecision.promptTemplateVersionId,
-      mcqScaledScore: latestDecision.mcqScaledScore,
-      practicalScaledScore: latestDecision.practicalScaledScore,
-      totalScore: latestDecision.totalScore,
-      redFlagsJson: latestDecision.redFlagsJson,
-      passFailTotal: input.passFailTotal,
-      decisionType: DecisionType.MANUAL_OVERRIDE,
-      decisionReason: input.decisionReason,
-      finalisedAt,
-      finalisedById: input.reviewerId,
-      parentDecisionId: latestDecision.id,
-    });
+    const overrideDecision = await appendDecisionWithLineage(
+      {
+        parentDecision: latestDecision,
+        passFailTotal: input.passFailTotal,
+        decisionType: DecisionType.MANUAL_OVERRIDE,
+        decisionReason: input.decisionReason,
+        finalisedAt,
+        finalisedById: input.reviewerId,
+        actorId: input.reviewerId,
+        auditAction: "manual_override_decision_created",
+        auditMetadata: {
+          submissionId: latestDecision.submissionId,
+          reviewId: review.id,
+          parentDecisionId: latestDecision.id,
+          passFailTotal: input.passFailTotal,
+        },
+      },
+      tx,
+    );
 
     const resolvedReview = await repo.resolveManualReview({
       reviewId: review.id,
@@ -124,26 +127,6 @@ export async function finalizeManualReviewOverride(input: {
       overrideDecision: input.passFailTotal ? "PASS" : "FAIL",
       overrideReason: input.overrideReason,
     });
-
-    await repo.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
-
-    await upsertRecertificationStatusFromDecision({
-      decisionId: overrideDecision.id,
-      actorId: input.reviewerId,
-    }, tx);
-
-    await recordAuditEvent({
-      entityType: "assessment_decision",
-      entityId: overrideDecision.id,
-      action: "manual_override_decision_created",
-      actorId: input.reviewerId,
-      metadata: {
-        submissionId: latestDecision.submissionId,
-        reviewId: review.id,
-        parentDecisionId: latestDecision.id,
-        passFailTotal: overrideDecision.passFailTotal,
-      },
-    }, tx);
 
     await recordAuditEvent({
       entityType: "manual_review",

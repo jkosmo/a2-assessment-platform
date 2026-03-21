@@ -85,6 +85,27 @@ function Assert-LastExitCode([string]$stepName) {
   }
 }
 
+function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$ZipPath) {
+  $maxAttempts = 5
+  $delaySeconds = 15
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Host "Deploying app package to $AppName (attempt $attempt/$maxAttempts)..."
+    az webapp deploy `
+      --resource-group $ResourceGroup `
+      --name $AppName `
+      --src-path $ZipPath `
+      --type zip `
+      --track-status false `
+      --restart true | Out-Null
+    if ($LASTEXITCODE -eq 0) { return }
+    if ($attempt -lt $maxAttempts) {
+      Write-Host "Deploy attempt $attempt failed (exit $LASTEXITCODE); retrying in ${delaySeconds}s..."
+      Start-Sleep -Seconds $delaySeconds
+    }
+  }
+  throw "az webapp deploy to $AppName failed after $maxAttempts attempts."
+}
+
 function Copy-DeploymentSources([string]$destinationRoot) {
   $repoRoot = (git rev-parse --show-toplevel).Trim()
   Assert-LastExitCode "git rev-parse --show-toplevel"
@@ -259,25 +280,8 @@ if ($IsLinux -or $IsMacOS) {
   [System.IO.Compression.ZipFile]::CreateFromDirectory($tmpRoot, $zipPath)
 }
 
-Write-Host "Deploying app package to Web App: $webAppName"
-az webapp deploy `
-  --resource-group $ResourceGroupName `
-  --name $webAppName `
-  --src-path $zipPath `
-  --type zip `
-  --track-status false `
-  --restart true | Out-Null
-Assert-LastExitCode "az webapp deploy"
-
-Write-Host "Deploying app package to Worker App: $workerAppName"
-az webapp deploy `
-  --resource-group $ResourceGroupName `
-  --name $workerAppName `
-  --src-path $zipPath `
-  --type zip `
-  --track-status false `
-  --restart true | Out-Null
-Assert-LastExitCode "az webapp deploy (worker)"
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
 
 function Wait-Healthy {
   param([string]$Url, [string]$Label)

@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DecisionType, ReviewStatus, SubmissionStatus } from "../../src/db/prismaRuntime.js";
+import { DecisionType, ReviewStatus } from "../../src/db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../src/errors/AppError.js";
 
 const findManualReviewForClaim = vi.fn();
 const markManualReviewClaimed = vi.fn();
 const findManualReviewForOverride = vi.fn();
-const createOverrideDecision = vi.fn();
 const resolveManualReview = vi.fn();
-const updateSubmissionStatus = vi.fn();
 const recordAuditEvent = vi.fn();
-const upsertRecertificationStatusFromDecision = vi.fn();
+const appendDecisionWithLineage = vi.fn();
 const notifyAssessmentResult = vi.fn();
 const logOperationalEvent = vi.fn();
 
@@ -22,14 +20,10 @@ vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
     findManualReviewForClaim,
     markManualReviewClaimed,
     findManualReviewForOverride,
-    createOverrideDecision,
     resolveManualReview,
-    updateSubmissionStatus,
   },
   createManualReviewRepository: () => ({
-    createOverrideDecision,
     resolveManualReview,
-    updateSubmissionStatus,
   }),
 }));
 
@@ -37,8 +31,8 @@ vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
 
-vi.mock("../../src/services/recertificationService.js", () => ({
-  upsertRecertificationStatusFromDecision,
+vi.mock("../../src/services/decisionLineageService.js", () => ({
+  appendDecisionWithLineage,
 }));
 
 vi.mock("../../src/services/participantNotificationService.js", () => ({
@@ -54,11 +48,9 @@ describe("manual review service", () => {
     findManualReviewForClaim.mockReset();
     markManualReviewClaimed.mockReset();
     findManualReviewForOverride.mockReset();
-    createOverrideDecision.mockReset();
     resolveManualReview.mockReset();
-    updateSubmissionStatus.mockReset();
     recordAuditEvent.mockReset();
-    upsertRecertificationStatusFromDecision.mockReset();
+    appendDecisionWithLineage.mockReset();
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
     logOperationalEvent.mockReset();
   });
@@ -112,7 +104,7 @@ describe("manual review service", () => {
       code: "missing_decision",
     });
 
-    expect(createOverrideDecision).not.toHaveBeenCalled();
+    expect(appendDecisionWithLineage).not.toHaveBeenCalled();
   });
 
   it("creates an override decision and resolves the review", async () => {
@@ -142,7 +134,7 @@ describe("manual review service", () => {
         ],
       },
     });
-    createOverrideDecision.mockResolvedValue({
+    appendDecisionWithLineage.mockResolvedValue({
       id: "decision-2",
       passFailTotal: false,
       decisionType: DecisionType.MANUAL_OVERRIDE,
@@ -152,7 +144,6 @@ describe("manual review service", () => {
       reviewStatus: ReviewStatus.RESOLVED,
       overrideDecision: "FAIL",
     });
-    updateSubmissionStatus.mockResolvedValue({ id: "submission-1" });
 
     const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
 
@@ -164,16 +155,17 @@ describe("manual review service", () => {
       overrideReason: "Human reviewer found the response insufficient.",
     });
 
-    expect(createOverrideDecision).toHaveBeenCalledWith(
+    expect(appendDecisionWithLineage).toHaveBeenCalledWith(
       expect.objectContaining({
-        submissionId: "submission-1",
+        parentDecision: expect.objectContaining({ id: "decision-1", submissionId: "submission-1" }),
         decisionType: DecisionType.MANUAL_OVERRIDE,
-        parentDecisionId: "decision-1",
         passFailTotal: false,
         decisionReason: "Override fail.",
         finalisedById: "reviewer-1",
         finalisedAt: expect.any(Date),
+        auditAction: "manual_override_decision_created",
       }),
+      expect.anything(),
     );
     expect(resolveManualReview).toHaveBeenCalledWith({
       reviewId: "review-1",
@@ -183,19 +175,6 @@ describe("manual review service", () => {
       overrideDecision: "FAIL",
       overrideReason: "Human reviewer found the response insufficient.",
     });
-    expect(updateSubmissionStatus).toHaveBeenCalledWith("submission-1", SubmissionStatus.COMPLETED);
-    expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
-      decisionId: "decision-2",
-      actorId: "reviewer-1",
-    }, expect.anything());
-    expect(recordAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: "assessment_decision",
-        entityId: "decision-2",
-        action: "manual_override_decision_created",
-      }),
-      expect.anything(),
-    );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "manual_review",

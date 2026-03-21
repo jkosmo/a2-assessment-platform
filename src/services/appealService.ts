@@ -7,7 +7,7 @@ import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "./participantNotificationService.js";
 import { env } from "../config/env.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
-import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
+import { appendDecisionWithLineage } from "./decisionLineageService.js";
 import { localizeContentText } from "../i18n/content.js";
 
 export async function createSubmissionAppeal(input: {
@@ -207,22 +207,25 @@ export async function resolveAppeal(input: {
   const { resolutionDecision, resolvedAppeal } = await prisma.$transaction(async (tx) => {
     const repo = createAppealRepository(tx);
 
-    const resolutionDecision = await repo.createResolutionDecision({
-      submissionId: latestDecision.submissionId,
-      moduleVersionId: latestDecision.moduleVersionId,
-      rubricVersionId: latestDecision.rubricVersionId,
-      promptTemplateVersionId: latestDecision.promptTemplateVersionId,
-      mcqScaledScore: latestDecision.mcqScaledScore,
-      practicalScaledScore: latestDecision.practicalScaledScore,
-      totalScore: latestDecision.totalScore,
-      redFlagsJson: latestDecision.redFlagsJson,
-      passFailTotal: input.passFailTotal,
-      decisionType: DecisionType.APPEAL_RESOLUTION,
-      decisionReason: input.decisionReason,
-      finalisedAt,
-      finalisedById: input.handlerId,
-      parentDecisionId: latestDecision.id,
-    });
+    const resolutionDecision = await appendDecisionWithLineage(
+      {
+        parentDecision: latestDecision,
+        passFailTotal: input.passFailTotal,
+        decisionType: DecisionType.APPEAL_RESOLUTION,
+        decisionReason: input.decisionReason,
+        finalisedAt,
+        finalisedById: input.handlerId,
+        actorId: input.handlerId,
+        auditAction: "appeal_resolution_decision_created",
+        auditMetadata: {
+          submissionId: latestDecision.submissionId,
+          appealId: appeal.id,
+          parentDecisionId: latestDecision.id,
+          passFailTotal: input.passFailTotal,
+        },
+      },
+      tx,
+    );
 
     const resolvedAppeal = await repo.markAppealResolved(
       appeal.id,
@@ -230,26 +233,6 @@ export async function resolveAppeal(input: {
       finalisedAt,
       input.resolutionNote,
     );
-
-    await repo.updateSubmissionStatus(latestDecision.submissionId, SubmissionStatus.COMPLETED);
-
-    await upsertRecertificationStatusFromDecision({
-      decisionId: resolutionDecision.id,
-      actorId: input.handlerId,
-    }, tx);
-
-    await recordAuditEvent({
-      entityType: "assessment_decision",
-      entityId: resolutionDecision.id,
-      action: "appeal_resolution_decision_created",
-      actorId: input.handlerId,
-      metadata: {
-        submissionId: latestDecision.submissionId,
-        appealId: appeal.id,
-        parentDecisionId: latestDecision.id,
-        passFailTotal: resolutionDecision.passFailTotal,
-      },
-    }, tx);
 
     await recordAuditEvent({
       entityType: "appeal",
