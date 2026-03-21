@@ -31,6 +31,14 @@ export function createCertificationRepository(client: CertificationRepositoryCli
       });
     },
 
+    findByUserAndModule(userId: string, moduleId: string) {
+      return client.certificationStatus.findUnique({
+        where: {
+          userId_moduleId: { userId, moduleId },
+        },
+      });
+    },
+
     findCertificationsForReminderSchedule() {
       return client.certificationStatus.findMany({
         where: {

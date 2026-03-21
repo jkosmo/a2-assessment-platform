@@ -50,6 +50,20 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
       dueSoonDays: rules.dueSoonDays,
     });
   } else {
+    // Guard: do not overwrite a passing certification established by a newer submission.
+    // This prevents a late-resolving manual review FAIL on submission N from downgrading
+    // a certification that was earned by submission M > N.
+    const existing = await certRepo.findByUserAndModule(userId, moduleId);
+    if (existing?.passedAt && existing.passedAt > decision.submission.submittedAt) {
+      logOperationalEvent("recertification_downgrade_skipped", {
+        userId,
+        moduleId,
+        decisionId: decision.id,
+        existingPassedAt: existing.passedAt.toISOString(),
+        decisionSubmittedAt: decision.submission.submittedAt.toISOString(),
+      });
+      return existing;
+    }
     status = "NOT_CERTIFIED";
   }
 

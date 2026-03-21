@@ -3,6 +3,7 @@ import { NotFoundError } from "../../src/errors/AppError.js";
 
 const findDecisionWithSubmissionIdentifiers = vi.fn();
 const upsertCertificationStatus = vi.fn();
+const findByUserAndModule = vi.fn();
 const findCertificationsForReminderSchedule = vi.fn();
 const findAuditEventMetadataByEntityAndAction = vi.fn();
 const recordAuditEvent = vi.fn();
@@ -36,6 +37,7 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
 vi.mock("../../src/repositories/certificationRepository.js", () => ({
   certificationRepository: {
     upsertCertificationStatus,
+    findByUserAndModule,
     findCertificationsForReminderSchedule,
   },
 }));
@@ -58,6 +60,7 @@ describe("recertification service", () => {
   beforeEach(() => {
     findDecisionWithSubmissionIdentifiers.mockReset();
     upsertCertificationStatus.mockReset();
+    findByUserAndModule.mockReset();
     findCertificationsForReminderSchedule.mockReset();
     findAuditEventMetadataByEntityAndAction.mockReset();
     recordAuditEvent.mockReset();
@@ -85,6 +88,7 @@ describe("recertification service", () => {
       submission: {
         userId: "user-1",
         moduleId: "module-1",
+        submittedAt: new Date("2026-03-11T00:00:00.000Z"),
       },
     });
     upsertCertificationStatus.mockResolvedValue({
@@ -140,6 +144,96 @@ describe("recertification service", () => {
     });
 
     expect(status).toBe("DUE_SOON");
+  });
+
+  it("upserts NOT_CERTIFIED from a failing decision when no prior certification exists", async () => {
+    findDecisionWithSubmissionIdentifiers.mockResolvedValue({
+      id: "decision-fail",
+      passFailTotal: false,
+      finalisedAt: new Date("2026-03-11T00:00:00.000Z"),
+      submission: {
+        userId: "user-1",
+        moduleId: "module-1",
+        submittedAt: new Date("2026-03-10T00:00:00.000Z"),
+      },
+    });
+    findByUserAndModule.mockResolvedValue(null);
+    upsertCertificationStatus.mockResolvedValue({ id: "cert-1", status: "NOT_CERTIFIED" });
+
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+
+    await upsertRecertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
+
+    expect(upsertCertificationStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "NOT_CERTIFIED" }),
+    );
+  });
+
+  it("skips downgrade when a failing decision is from an older submission than the existing passing cert", async () => {
+    // Scenario: submission #1 (submitted T1) → manual review → resolves FAIL at T3
+    //           submission #2 (submitted T2 > T1) → auto-pass → passedAt = T2
+    //           Result: upserting FAIL from #1 must NOT downgrade the cert from #2
+    const passingCert = {
+      id: "cert-1",
+      status: "ACTIVE",
+      passedAt: new Date("2026-03-15T00:00:00.000Z"), // T2: established by submission #2
+      expiryDate: new Date("2027-03-15T00:00:00.000Z"),
+      recertificationDueDate: new Date("2027-02-13T00:00:00.000Z"),
+    };
+    findDecisionWithSubmissionIdentifiers.mockResolvedValue({
+      id: "decision-fail",
+      passFailTotal: false,
+      finalisedAt: new Date("2026-03-20T00:00:00.000Z"),
+      submission: {
+        userId: "user-1",
+        moduleId: "module-1",
+        submittedAt: new Date("2026-03-10T00:00:00.000Z"), // T1: older submission
+      },
+    });
+    findByUserAndModule.mockResolvedValue(passingCert);
+
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+
+    const result = await upsertRecertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
+
+    expect(upsertCertificationStatus).not.toHaveBeenCalled();
+    expect(logOperationalEvent).toHaveBeenCalledWith(
+      "recertification_downgrade_skipped",
+      expect.objectContaining({
+        userId: "user-1",
+        moduleId: "module-1",
+        decisionId: "decision-fail",
+      }),
+    );
+    expect(result).toEqual(passingCert);
+  });
+
+  it("applies NOT_CERTIFIED when a failing decision is newer than any existing cert's passedAt", async () => {
+    findDecisionWithSubmissionIdentifiers.mockResolvedValue({
+      id: "decision-fail",
+      passFailTotal: false,
+      finalisedAt: new Date("2026-03-20T00:00:00.000Z"),
+      submission: {
+        userId: "user-1",
+        moduleId: "module-1",
+        submittedAt: new Date("2026-03-18T00:00:00.000Z"), // newer than existing passedAt
+      },
+    });
+    findByUserAndModule.mockResolvedValue({
+      id: "cert-1",
+      status: "ACTIVE",
+      passedAt: new Date("2026-03-10T00:00:00.000Z"), // older passing cert
+    });
+    upsertCertificationStatus.mockResolvedValue({ id: "cert-1", status: "NOT_CERTIFIED" });
+
+    const { upsertRecertificationStatusFromDecision } = await import("../../src/services/recertificationService.js");
+
+    await upsertRecertificationStatusFromDecision({ decisionId: "decision-fail", actorId: "admin-1" });
+
+    expect(upsertCertificationStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "NOT_CERTIFIED" }),
+    );
+    expect(logOperationalEvent).not.toHaveBeenCalledWith("recertification_downgrade_skipped", expect.anything());
   });
 
   it("runs reminder scheduling with log delivery and duplicate-send protection", async () => {

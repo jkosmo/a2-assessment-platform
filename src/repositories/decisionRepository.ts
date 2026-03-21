@@ -34,6 +34,7 @@ export function createDecisionRepository(client: DecisionRepositoryClient = pris
             select: {
               userId: true,
               moduleId: true,
+              submittedAt: true,
             },
           },
         },

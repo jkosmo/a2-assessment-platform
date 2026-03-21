@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.75 - 2026-03-21
+### Summary
+Fix: prevent stale manual-review FAIL from downgrading a certification earned by a newer passing submission.
+
+### Included
+- **`src/repositories/decisionRepository.ts`**: `findDecisionWithSubmissionIdentifiers` now selects `submittedAt` from the submission.
+- **`src/repositories/certificationRepository.ts`**: added `findByUserAndModule(userId, moduleId)` lookup.
+- **`src/services/recertificationService.ts`**: `upsertRecertificationStatusFromDecision` now checks, before writing NOT_CERTIFIED, whether the existing certification has a `passedAt` that post-dates the current decision's `submission.submittedAt`. If so, the downgrade is skipped and `recertification_downgrade_skipped` is emitted via `logOperationalEvent`.
+- **`test/unit/recertification-service.test.ts`**: three new cases covering no-prior-cert FAIL, downgrade-skipped scenario, and FAIL applying correctly when submission is newer.
+
 ## 0.8.74 - 2026-03-21
 ### Summary
 Refactor (#209): migrate review and appeal to feature modules under src/modules/.
