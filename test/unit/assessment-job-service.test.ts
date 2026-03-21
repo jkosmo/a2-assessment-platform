@@ -25,6 +25,8 @@ vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
     countJobsByStatus,
     markJobForRetryOrFailure,
     findAssessmentJobOrThrow,
+    findExpiredRunningJobs: vi.fn().mockResolvedValue([]),
+    resetExpiredJob: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

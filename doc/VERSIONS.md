@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.58 - 2026-03-21
+### Summary
+Test: Recovery-sti-tester for stale-lock-deteksjon og reset. Lukker #206.
+
+### Included
+- **`test/unit/stale-lock-recovery.test.ts`**: 5 nye integrasjonstester som simulerer hele recovery-stien: jobb stikker i RUNNING med utløpt lease → scanner resetter den → `processNextJob` plukker den opp og fullfører. Dekker også: max attempts → FAILED og ikke plukket opp, scanner-feil propagerer sikkert.
+- **`test/unit/assessment-job-runner.test.ts`**: Oppdatert mock med `findExpiredRunningJobs` (returnerer `[]`) og `resetExpiredJob` slik at eksisterende tester ikke forstyrres av scanner-kallet.
+- **`test/unit/assessment-job-service.test.ts`**: Samme mock-oppdatering.
+- **`test/assessment-worker-process-error.test.ts`**: Samme mock-oppdatering.
+
 ## 0.8.57 - 2026-03-21
 ### Summary
 Feat: Stale-lock scanner resetter utløpte RUNNING-jobber. Lukker #204.

@@ -6,6 +6,9 @@ const logOperationalEvent = vi.fn();
 vi.mock("../src/repositories/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findNextRunnableJob,
+    findExpiredRunningJobs: vi.fn().mockResolvedValue([]),
+    resetExpiredJob: vi.fn().mockResolvedValue(undefined),
+    countJobsByStatus: vi.fn().mockResolvedValue(0),
   },
 }));
 

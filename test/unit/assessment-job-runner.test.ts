@@ -9,6 +9,8 @@ const findPendingOrRunningJobForSubmission = vi.fn();
 const findPendingOrRunningJobIdForSubmission = vi.fn();
 const createAssessmentJob = vi.fn();
 const countJobsByStatus = vi.fn();
+const findExpiredRunningJobs = vi.fn();
+const resetExpiredJob = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
@@ -23,6 +25,8 @@ vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
     findPendingOrRunningJobIdForSubmission,
     createAssessmentJob,
     countJobsByStatus,
+    findExpiredRunningJobs,
+    resetExpiredJob,
   },
 }));
 
@@ -46,6 +50,8 @@ describe("AssessmentJobRunner", () => {
     findPendingOrRunningJobIdForSubmission.mockReset();
     createAssessmentJob.mockReset();
     countJobsByStatus.mockResolvedValue(0);
+    findExpiredRunningJobs.mockResolvedValue([]);
+    resetExpiredJob.mockResolvedValue(undefined);
     recordAuditEvent.mockResolvedValue(undefined);
     logOperationalEvent.mockReturnValue(undefined);
   });
