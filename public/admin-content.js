@@ -93,10 +93,11 @@ function buildAuthoringPrompt(mcqCount, fields) {
   const questionsJson = Array.from({ length: mcqCount }, () => questionStub).join(",\n      ");
   const fieldIds = fields.map((f) => `"${f.id}"`).join(", ");
   const schemaNote = fields.length > 0
-    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. The array MUST contain EXACTLY ${fields.length} field${fields.length !== 1 ? "s" : ""} with id${fields.length !== 1 ? "s" : ""} [${fieldIds}]. Do NOT add, remove, or rename any field. Fill in label (locale object), type, required, and defaultValue (locale object with en-GB, nb, nn — a short, realistic, module-specific placeholder answer for each locale).`
+    ? `\n- moduleVersion.submissionSchemaJson defines the participant submission form. The array MUST contain EXACTLY ${fields.length} field${fields.length !== 1 ? "s" : ""} with id${fields.length !== 1 ? "s" : ""} [${fieldIds}]. Do NOT add, remove, or rename any field. Fill in label (locale object), type, required, placeholder (locale object with en-GB, nb, nn — short guidance text shown to participants inside the input field, e.g. what to write or what a good answer includes), and defaultValue (locale object with en-GB, nb, nn — a short, realistic, module-specific placeholder answer for each locale).`
     : "";
+  const fieldsWithPlaceholder = fields.map((f) => ({ ...f, placeholder: { "en-GB": "", nb: "", nn: "" } }));
   const schemaShape = fields.length > 0
-    ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields }, null, 4).split("\n").join("\n    ")}`
+    ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields: fieldsWithPlaceholder }, null, 4).split("\n").join("\n    ")}`
     : "";
   return `You are producing a module draft JSON for an assessment platform.
 

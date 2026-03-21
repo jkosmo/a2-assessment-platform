@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.81 - 2026-03-21
+### Summary
+Fix: LLM authoring prompt now instructs model to populate placeholder field per locale.
+
+### Included
+- **`public/admin-content.js`**: `buildAuthoringPrompt` schema note now mentions `placeholder` (locale object with guidance text). JSON shape template includes empty `placeholder` stubs per field so the LLM knows the expected structure.
+
 ## 0.8.80 - 2026-03-21
 ### Summary
 UI: move locale selector to compact top-right position in participant console.
