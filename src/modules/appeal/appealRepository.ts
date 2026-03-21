@@ -30,7 +30,7 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
     findOpenByUserAndModule(userId: string, moduleId: string) {
       return client.appeal.findMany({
         where: {
-          appealStatus: "OPEN",
+          appealStatus: { in: ["OPEN", "IN_REVIEW"] },
           submission: { userId, moduleId },
         },
         select: { id: true, submissionId: true },
@@ -39,7 +39,7 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
 
     supersedeMany(appealIds: string[], newSubmissionId: string, supersededAt: Date) {
       return client.appeal.updateMany({
-        where: { id: { in: appealIds }, appealStatus: "OPEN" },
+        where: { id: { in: appealIds }, appealStatus: { in: ["OPEN", "IN_REVIEW"] } },
         data: {
           appealStatus: "SUPERSEDED",
           resolvedAt: supersededAt,

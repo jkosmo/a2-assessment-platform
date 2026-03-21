@@ -9,7 +9,7 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
     findOpenByUserAndModule(userId: string, moduleId: string) {
       return client.manualReview.findMany({
         where: {
-          reviewStatus: "OPEN",
+          reviewStatus: { in: ["OPEN", "IN_REVIEW"] },
           submission: { userId, moduleId },
         },
         select: { id: true, submissionId: true },
@@ -18,7 +18,7 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
 
     supersedeMany(reviewIds: string[], newSubmissionId: string, supersededAt: Date) {
       return client.manualReview.updateMany({
-        where: { id: { in: reviewIds }, reviewStatus: "OPEN" },
+        where: { id: { in: reviewIds }, reviewStatus: { in: ["OPEN", "IN_REVIEW"] } },
         data: {
           reviewStatus: "SUPERSEDED",
           reviewedAt: supersededAt,

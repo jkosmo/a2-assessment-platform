@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.90 - 2026-03-21
+### Summary
+fix: supersede IN_REVIEW appeals and manual reviews on retake (#238)
+
+### Included
+- **`src/modules/appeal/appealRepository.ts`**: `findOpenByUserAndModule` now fetches both `OPEN` and `IN_REVIEW` appeals. `supersedeMany` guard also expanded to `{ in: ["OPEN", "IN_REVIEW"] }` — previously a claimed (IN_REVIEW) appeal was left dangling when the participant retook the module.
+- **`src/modules/review/manualReviewRepository.ts`**: Same fix — `findOpenByUserAndModule` and `supersedeMany` both expanded to include `IN_REVIEW` manual reviews.
+
 ## 0.8.89 - 2026-03-21
 ### Summary
 refactor: publishModuleVersionWithThresholds is now fully atomic (#237)
