@@ -1864,7 +1864,7 @@ function resolvePromptFields() {
     fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
   }
   if (promptFieldPromptExcerpt.checked) {
-    fields.push({ id: "promptExcerpt", label: { "en-GB": "Prompt excerpt", "nb": "Utdrag fra oppgave", "nn": "Utdrag frå oppgåve" }, type: "text", required: false, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
+    fields.push({ id: "promptExcerpt", label: { "en-GB": "Supporting material", "nb": "Støttemateriale", "nn": "Støttemateriell" }, type: "text", required: false, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
   }
   return fields;
 }

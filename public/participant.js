@@ -182,9 +182,7 @@ const defaultFieldBindings = [
 ];
 
 const DEFAULT_SUBMISSION_FIELDS = [
-  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 5, required: true },
-  { id: "reflection", label: "Reflection (what you changed and why)", labelKey: "submission.reflection", type: "textarea", rows: 4, required: false },
-  { id: "promptExcerpt", label: "Instruction used (paste prompt or task text)", labelKey: "submission.promptExcerpt", type: "textarea", rows: 3, required: false },
+  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 8, required: true },
 ];
 
 let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;

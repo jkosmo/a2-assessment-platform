@@ -93,8 +93,8 @@ export async function runSeed(prisma: any) {
     title: "Generative AI Foundations",
     description: "M0 seeded module for development and integration testing.",
     certificationLevel: "foundation",
-    taskText: "Submit a practical reflection and complete the MCQ.",
-    guidanceText: "Include iteration and quality assurance notes.",
+    taskText: "Complete the assignment and submit your response.",
+    guidanceText: "Include concrete examples and reasoning that support your answer.",
     promptSystem: "You are an assessment assistant. Return strict JSON only.",
     promptTemplate: "Evaluate submission against rubric and provide criterion rationales.",
     promptExample: "Strong response with clear iteration evidence.",
@@ -306,9 +306,6 @@ async function createSeedPendingManualReview(
       responseJson: JSON.stringify({
         response:
           "Seeded response for manual review queue visibility. The answer is useful, but contains enough ambiguity to require a human decision.",
-        reflection:
-          "I iterated several times and documented quality checks, but I am not fully confident in the governance section.",
-        promptExcerpt: "Assess governance quality, risk handling, and human oversight.",
       }),
       submittedAt,
       submissionStatus: "UNDER_REVIEW",

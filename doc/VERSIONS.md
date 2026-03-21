@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.68 - 2026-03-21
+### Summary
+Refactor (#224): generaliser hardkodede restanser fra opprinnelig smal AI/LLM use case — generisk innleveringsskjema, oversettelser, seed-data og batch-testcaser.
+
+### Included
+- **`public/participant.js`**: `DEFAULT_SUBMISSION_FIELDS` redusert til kun `response`-felt (fjernet reflection og promptExcerpt).
+- **`public/i18n/participant-translations.js`**: reflection- og promptExcerpt-etiketter gjort generiske i alle tre lokaler (en-GB, nb, nn).
+- **`public/i18n/admin-content-translations.js`**: standardtekster for oppgave, veiledning og eksempler gjort domene-agnostiske; "Utdrag fra oppgave" → "Støttemateriale"; hjelpe-tekst for submissionSchema oppdatert.
+- **`public/admin-content.js`**: promptExcerpt-label i felt-byggeren gjort generisk ("Supporting material").
+- **`prisma/seedCore.ts`**: reflection og promptExcerpt fjernet fra seed-innlevering; standard oppgavetekst gjort generisk.
+- **`src/scripts/assessmentBatchCases.ts`**: AI-spesifikke testcaser erstattet med domene-agnostiske ekvivalenter.
+
 ## 0.8.67 - 2026-03-21
 ### Summary
 Fix: worker App Service krasjet fordi `prisma migrate deploy` feilet; hopper nå over migrasjoner med `SKIP_MIGRATE=true`.

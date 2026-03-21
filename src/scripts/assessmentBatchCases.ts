@@ -22,11 +22,9 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     moduleId: "seed_module_genai_foundations",
     responseJson: {
       response: "Hepp Hepp Hepp som det. Hvorfor er alt rødt nå",
-      reflection: "Hepp hopp topp",
-      promptExcerpt: "Promp",
     },
-    moduleTaskText: "Submit a practical reflection and complete the MCQ.",
-    moduleGuidanceText: "Include iteration and quality assurance notes.",
+    moduleTaskText: "Complete the assignment and submit your response.",
+    moduleGuidanceText: "Include concrete examples and reasoning that support your answer.",
   },
   {
     id: "yellow_sensitive_data",
@@ -37,14 +35,9 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     moduleId: "seed_module_genai_foundations",
     responseJson: {
       response:
-        "I copied a customer list with names, email addresses, and personal identification numbers into a public generative AI tool to summarize it faster. I then planned to reuse the output without masking or approval.",
-      reflection:
-        "I did not perform a quality assurance step before sharing the result. I am unsure whether this handling is acceptable, but I thought the productivity gain justified it.",
-      promptExcerpt:
-        "Summarize this client data set, keep the identifiable details, and produce a shareable output for the project team.",
+        "I copied a customer list containing full names, email addresses, and personal identification numbers into a shared public document to prepare a summary for a project handoff. I then distributed the output to the full project team without masking any identifiable details or obtaining approval for the data handling.",
     },
-    moduleTaskText:
-      "Describe a realistic AI-assisted work process and reflect on quality assurance and responsible use.",
+    moduleTaskText: "Complete the assignment and submit your response.",
     moduleGuidanceText:
       "Responsible-use and data-handling concerns should be surfaced clearly when content includes sensitive or non-compliant handling.",
   },
@@ -57,15 +50,9 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     moduleId: "seed_module_genai_foundations",
     responseJson: {
       response:
-        "I used generative AI to improve a draft workshop agenda and summary for an internal stakeholder meeting. First I summarized the original notes, then I asked the model to restructure the agenda by objective, decision point, and time box. I compared the draft against the meeting goal and removed vague items. After that I ran a second prompt to create a concise decision log and checked each item against the original notes before accepting it. The final output was a clearer agenda and a corrected summary that reduced preparation time while keeping the final wording under my control.",
-      reflection:
-        "The first prompt produced a generic agenda, so I refined it with explicit instructions about outcome, participants, and decision points. I then performed manual QA by comparing the AI output to the original notes, correcting one invented dependency and tightening the action items. The second iteration was substantially better because the prompt added structure and acceptance criteria. I would reuse the pattern, but only with a final human review before distribution.",
-      promptExcerpt:
-        "Rewrite this internal meeting draft into a professional agenda and decision log. Keep only evidence present in the source, add section headings, and avoid inventing facts.",
+        "I completed the task by first reviewing the brief and identifying the core objective, then structured my approach into three stages: initial draft, quality review, and final output. In the first stage I produced a draft addressing each required element. In the second stage I compared the draft against the original requirements, corrected two factual gaps, and tightened the action items. In the third stage I confirmed the output met the acceptance criteria and removed content that was not grounded in the source material. The final result was a clear, evidence-based response that directly addressed the task with concrete examples and a documented review step.",
     },
-    moduleTaskText:
-      "Write a practical reflection showing how generative AI was used, what changed through iteration, and how the work was quality assured.",
-    moduleGuidanceText:
-      "A strong submission is concrete, shows iteration, documents QA checks, and explains responsible use decisions.",
+    moduleTaskText: "Complete the assignment and submit your response.",
+    moduleGuidanceText: "Include concrete examples and reasoning that support your answer.",
   },
 ];
