@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.87 - 2026-03-21
+### Summary
+UI: move locale picker inline with page title on all screens.
+
+### Included
+- **`public/admin-content.html`**, **`calibration.html`**, **`manual-review.html`**, **`appeal-handler.html`**, **`results.html`**, **`participant-completed.html`**: locale picker moved from a standalone card section into a `page-header-row` flex container beside the `<h1>`, matching the pattern already applied to `participant.html`. Label is now visually hidden (`sr-only`) and the select uses `locale-select-compact` styling.
+
 ## 0.8.86 - 2026-03-21
 ### Summary
 Refactor: slim admin-content route — extract Zod schemas and mapper into dedicated files (issue #232).
