@@ -36,24 +36,30 @@ export async function createSubmissionAppeal(input: {
     throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
   }
 
-  const appeal = await appealRepository.createAppeal({
-    submissionId: submission.id,
-    appealedById: input.appealedById,
-    appealReason: input.appealReason,
-    appealStatus: AppealStatus.OPEN,
-  });
+  const appeal = await prisma.$transaction(async (tx) => {
+    const txRepo = createAppealRepository(tx);
 
-  await appealRepository.updateSubmissionStatus(submission.id, SubmissionStatus.UNDER_REVIEW);
-
-  await recordAuditEvent({
-    entityType: "appeal",
-    entityId: appeal.id,
-    action: "appeal_created",
-    actorId: input.appealedById,
-    metadata: {
+    const createdAppeal = await txRepo.createAppeal({
       submissionId: submission.id,
-      appealStatus: appeal.appealStatus,
-    },
+      appealedById: input.appealedById,
+      appealReason: input.appealReason,
+      appealStatus: AppealStatus.OPEN,
+    });
+
+    await txRepo.updateSubmissionStatus(submission.id, SubmissionStatus.UNDER_REVIEW);
+
+    await recordAuditEvent({
+      entityType: "appeal",
+      entityId: createdAppeal.id,
+      action: "appeal_created",
+      actorId: input.appealedById,
+      metadata: {
+        submissionId: submission.id,
+        appealStatus: createdAppeal.appealStatus,
+      },
+    }, tx);
+
+    return createdAppeal;
   });
 
   const appealedBy = await appealRepository.findUserNotificationRecipient(input.appealedById);

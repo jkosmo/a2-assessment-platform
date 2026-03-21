@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.70 - 2026-03-21
+### Summary
+Fix (#229, #230): gjør createSubmissionAppeal atomisk; audit av øvrige multi-step writes.
+
+### Included
+- **`src/services/appealService.ts`**: `createSubmissionAppeal` wrapper nå `createAppeal`, `updateSubmissionStatus` og `recordAuditEvent` i én `prisma.$transaction`. Notifikasjon forblir utenfor transaksjonen.
+- **`test/unit/appeal-service.test.ts`**: mock oppdatert til tx-mønsteret; ny test verifiserer at begge skrivene skjer innenfor én transaksjon.
+- `publishModuleVersionWithThresholds` — trenger refaktor av `publishModuleVersion` i repository (nestede transaksjoner ikke støttet i Prisma). Ny follow-up issue opprettes.
+
 ## 0.8.69 - 2026-03-21
 ### Summary
 Fix (#225): generaliser rubrikk-kriterier fra smal AI/LLM use case — LLM forventer ikke lenger iterasjon, QA eller ansvarlig AI-bruk i generelle besvarelser.

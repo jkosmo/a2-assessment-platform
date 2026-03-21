@@ -24,15 +24,14 @@ vi.mock("../../src/repositories/appealRepository.js", () => ({
   appealRepository: {
     findOwnedSubmissionWithLatestDecision,
     findActiveAppealForSubmission,
-    createAppeal,
-    updateSubmissionStatus,
     findUserNotificationRecipient,
     findAppealForClaim,
     markAppealInReview,
     findAppealForResolution,
-    markAppealResolved,
   },
   createAppealRepository: () => ({
+    createAppeal,
+    updateSubmissionStatus,
     markAppealResolved,
   }),
 }));
@@ -127,6 +126,7 @@ describe("appeal service", () => {
         entityId: "appeal-1",
         action: "appeal_created",
       }),
+      expect.anything(), // tx client passed for transactional audit
     );
     expect(logOperationalEvent).toHaveBeenCalledWith(
       "participant_notification_pipeline_failed",
@@ -142,6 +142,32 @@ describe("appeal service", () => {
       id: "appeal-1",
       appealStatus: AppealStatus.OPEN,
     });
+  });
+
+  it("wraps appeal creation and submission status update in a single transaction", async () => {
+    findOwnedSubmissionWithLatestDecision.mockResolvedValue({
+      id: "submission-1",
+      decisions: [{ id: "decision-1" }],
+      module: { title: "Test Module" },
+    });
+    findActiveAppealForSubmission.mockResolvedValue(null);
+    createAppeal.mockResolvedValue({ id: "appeal-1", appealStatus: AppealStatus.OPEN });
+    updateSubmissionStatus.mockResolvedValue({ id: "submission-1" });
+    findUserNotificationRecipient.mockResolvedValue(null);
+
+    const { prisma: mockPrisma } = await import("../../src/db/prisma.js");
+    const { createSubmissionAppeal } = await import("../../src/services/appealService.js");
+
+    await createSubmissionAppeal({
+      submissionId: "submission-1",
+      appealedById: "user-1",
+      appealReason: "Appeal reason.",
+    });
+
+    // Both writes must occur inside prisma.$transaction
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(createAppeal).toHaveBeenCalledTimes(1);
+    expect(updateSubmissionStatus).toHaveBeenCalledTimes(1);
   });
 
   it("rejects claim when the appeal is already assigned to another handler", async () => {
