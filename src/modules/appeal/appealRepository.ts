@@ -229,6 +229,7 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
           },
           submission: {
             select: {
+              locale: true,
               module: {
                 select: { title: true },
               },

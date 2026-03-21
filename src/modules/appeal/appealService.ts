@@ -9,6 +9,7 @@ import { env } from "../../config/env.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { localizeContentText } from "../../i18n/content.js";
+import { normalizeLocale } from "../../i18n/locale.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -65,7 +66,8 @@ export async function createSubmissionAppeal(input: {
   const appealedBy = await appealRepository.findUserNotificationRecipient(input.appealedById);
 
   if (appealedBy) {
-    const moduleTitle = localizeContentText(env.DEFAULT_LOCALE, submission.module.title) ?? submission.moduleId;
+    const locale = normalizeLocale(submission.locale) ?? env.DEFAULT_LOCALE;
+    const moduleTitle = localizeContentText(locale, submission.module.title) ?? submission.moduleId;
     await safeNotifyAppealStatusTransition({
       appealId: appeal.id,
       submissionId: submission.id,
@@ -75,7 +77,7 @@ export async function createSubmissionAppeal(input: {
       recipientEmail: appealedBy.email,
       recipientName: appealedBy.name,
       moduleTitle,
-      locale: env.DEFAULT_LOCALE,
+      locale,
     });
   }
 
@@ -155,7 +157,8 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     },
   });
 
-  const claimModuleTitle = localizeContentText(env.DEFAULT_LOCALE, appeal.submission.module.title) ?? appeal.submissionId;
+  const claimLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
+  const claimModuleTitle = localizeContentText(claimLocale, appeal.submission.module.title) ?? appeal.submissionId;
   await safeNotifyAppealStatusTransition({
     appealId: claimed.id,
     submissionId: appeal.submissionId,
@@ -165,7 +168,7 @@ export async function claimAppeal(appealId: string, handlerId: string) {
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
     moduleTitle: claimModuleTitle,
-    locale: env.DEFAULT_LOCALE,
+    locale: claimLocale,
   });
 
   return claimed;
@@ -255,7 +258,8 @@ export async function resolveAppeal(input: {
     return { resolutionDecision, resolvedAppeal };
   });
 
-  const resolveModuleTitle = localizeContentText(env.DEFAULT_LOCALE, appeal.submission.module.title) ?? latestDecision.submissionId;
+  const resolveLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
+  const resolveModuleTitle = localizeContentText(resolveLocale, appeal.submission.module.title) ?? latestDecision.submissionId;
   await safeNotifyAppealStatusTransition({
     appealId: resolvedAppeal.id,
     submissionId: latestDecision.submissionId,
@@ -265,7 +269,9 @@ export async function resolveAppeal(input: {
     recipientEmail: appeal.appealedBy.email,
     recipientName: appeal.appealedBy.name,
     moduleTitle: resolveModuleTitle,
-    locale: env.DEFAULT_LOCALE,
+    locale: resolveLocale,
+    passFailTotal: input.passFailTotal,
+    resolutionNote: input.resolutionNote,
   });
 
   return { appeal: resolvedAppeal, resolutionDecision };

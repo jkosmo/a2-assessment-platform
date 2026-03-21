@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.88 - 2026-03-21
+### Summary
+fix: appeal resolution email now includes outcome + resolution note, and uses submission locale.
+
+### Included
+- **`src/i18n/notificationMessages.ts`**: `getAppealNotificationMessage` accepts optional `resolution: { passFailTotal, resolutionNote }` for RESOLVED status. Email body now includes localized outcome line ("Outcome: Passed/Not passed" / "Resultat: Bestått/Ikke bestått") and the handler's resolution note before the standard guidance text.
+- **`src/modules/certification/participantNotificationService.ts`**: `AppealNotificationInput` extended with optional `passFailTotal` and `resolutionNote`; passed to message builder.
+- **`src/modules/appeal/appealService.ts`**: All three notification call sites (`createSubmissionAppeal`, `claimAppeal`, `resolveAppeal`) now use `normalizeLocale(submission.locale) ?? env.DEFAULT_LOCALE` instead of hardcoded `env.DEFAULT_LOCALE`. `resolveAppeal` passes `passFailTotal` and `resolutionNote` to the notification.
+- **`src/modules/appeal/appealRepository.ts`**: `findAppealForClaim` select now includes `submission.locale` so `claimAppeal` can use the participant's locale.
+
 ## 0.8.87 - 2026-03-21
 ### Summary
 UI: move locale picker inline with page title on all screens.

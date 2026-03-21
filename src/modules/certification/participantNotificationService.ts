@@ -18,6 +18,8 @@ export type AppealNotificationInput = {
   recipientName: string | null;
   moduleTitle: string;
   locale: SupportedLocale;
+  passFailTotal?: boolean;
+  resolutionNote?: string;
 };
 
 type NotificationResult = {
@@ -29,7 +31,11 @@ type NotificationResult = {
 };
 
 export async function sendAppealStatusNotification(input: AppealNotificationInput): Promise<NotificationResult> {
-  const message = getAppealNotificationMessage(input.locale, input.currentStatus, { moduleTitle: input.moduleTitle });
+  const resolution =
+    input.currentStatus === "RESOLVED" && input.passFailTotal !== undefined && input.resolutionNote !== undefined
+      ? { passFailTotal: input.passFailTotal, resolutionNote: input.resolutionNote }
+      : undefined;
+  const message = getAppealNotificationMessage(input.locale, input.currentStatus, { moduleTitle: input.moduleTitle, resolution });
   const payload = {
     notificationType: "appeal_status_transition",
     appealId: input.appealId,

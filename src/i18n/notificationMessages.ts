@@ -11,6 +11,13 @@ type NotificationMessage = {
 type StatusTemplates = Record<AppealStatus, NotificationMessage>;
 
 type ContextLabels = { module: string; submitted: string };
+type ResolutionLabels = { outcome: string; passed: string; notPassed: string; resolutionNote: string };
+
+const resolutionLabels: Record<SupportedLocale, ResolutionLabels> = {
+  "en-GB": { outcome: "Outcome", passed: "Passed", notPassed: "Not passed", resolutionNote: "Resolution note" },
+  nb: { outcome: "Resultat", passed: "Bestått", notPassed: "Ikke bestått", resolutionNote: "Begrunnelse" },
+  nn: { outcome: "Resultat", passed: "Bestått", notPassed: "Ikkje bestått", resolutionNote: "Grunngjeving" },
+};
 
 const contextLabels: Record<SupportedLocale, ContextLabels> = {
   "en-GB": { module: "Module", submitted: "Submitted" },
@@ -108,13 +115,20 @@ const notificationMessages: Record<SupportedLocale, StatusTemplates> = {
 export function getAppealNotificationMessage(
   locale: SupportedLocale,
   status: AppealStatus,
-  context: { moduleTitle: string },
+  context: { moduleTitle: string; resolution?: { passFailTotal: boolean; resolutionNote: string } },
 ): NotificationMessage {
   const template = notificationMessages[locale][status];
   const header = buildAppealContextHeader(locale, context);
+  let body = `${header}\n\n`;
+  if (status === "RESOLVED" && context.resolution !== undefined) {
+    const labels = resolutionLabels[locale];
+    const outcomeText = context.resolution.passFailTotal ? labels.passed : labels.notPassed;
+    body += `${labels.outcome}: ${outcomeText}\n${labels.resolutionNote}: ${context.resolution.resolutionNote}\n\n`;
+  }
+  body += template.nextStepGuidance;
   return {
     subject: template.subject,
-    nextStepGuidance: `${header}\n\n${template.nextStepGuidance}`,
+    nextStepGuidance: body,
   };
 }
 
