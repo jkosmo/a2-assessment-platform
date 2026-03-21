@@ -1,178 +1,246 @@
 # Domain Lifecycle Reference
 
-Authoritative reference for all domain state machines, decision lineage rules, and RBAC ownership.
-
----
+Authoritative reference for:
+- submission lifecycle
+- assessment job lifecycle
+- manual review lifecycle
+- appeal lifecycle
+- immutable decision lineage
+- certification status behavior
+- RBAC ownership expectations
 
 ## Submission Lifecycle
 
-A `Submission` represents one participant attempt at a module version.
+A `Submission` represents one participant attempt against an active module version.
 
-```
+Primary status progression:
+
+```text
 SUBMITTED
-    │
-    │  Assessment job created, MCQ attempted
-    ▼
-PROCESSING
-    │
-    │  LLM evaluation complete, scores computed
-    ▼
-SCORED
-    │
-    ├── automatic pass/fail (no red flags, not borderline) ──────────────────► COMPLETED
-    │
-    └── manual review required (borderline, red flag, or LLM recommends it)
-            │
-            ▼
-        UNDER_REVIEW
-            │
-            │  Reviewer claims and overrides
-            ▼
-        COMPLETED  ◄── or ── REJECTED (edge case: reviewer rejects)
+  -> PROCESSING
+  -> SCORED
+  -> COMPLETED
 ```
+
+Manual-review and appeal routing can move the submission through `UNDER_REVIEW` before it returns to `COMPLETED`.
+
+Current statuses:
 
 | Status | Meaning |
 |---|---|
-| `SUBMITTED` | Submission received; MCQ may still be in progress |
-| `PROCESSING` | Assessment job is running (LLM evaluation in progress) |
-| `SCORED` | Scores computed; routing decision pending |
-| `UNDER_REVIEW` | Routed to manual review queue |
-| `COMPLETED` | Final decision recorded (pass or fail) |
-| `REJECTED` | Submission rejected (invalid or unreviewable) |
+| `SUBMITTED` | Submission has been created |
+| `PROCESSING` | Assessment work is in progress |
+| `SCORED` | Automatic scoring finished and routing decision is being applied |
+| `UNDER_REVIEW` | Human review or appeal handling is in progress |
+| `COMPLETED` | Latest authoritative outcome is available |
+| `REJECTED` | Reserved status for rejected/unusable submissions |
 
-**Transitions are append-only.** There is no mechanism to move a submission backwards in the lifecycle.
+Important notes:
+- the submission status is mutable operational state
+- the decision history is immutable
+- new authoritative outcomes are expressed by appending decisions, not rewriting old ones
 
----
+### Submission plus manual review
+
+Typical review path:
+
+```text
+SUBMITTED
+  -> PROCESSING
+  -> SCORED
+  -> UNDER_REVIEW
+  -> COMPLETED
+```
+
+### Submission plus appeal
+
+Current implemented appeal path:
+
+```text
+COMPLETED
+  -> UNDER_REVIEW   (appeal created)
+  -> UNDER_REVIEW   (appeal in review)
+  -> COMPLETED      (appeal resolved with new decision)
+```
+
+This is important:
+- appeal creation currently updates `Submission.submissionStatus` to `UNDER_REVIEW`
+- appeal resolution returns the submission to `COMPLETED` through shared decision-lineage logic
 
 ## Assessment Job Lifecycle
 
-An `AssessmentJob` is the async unit of work that evaluates a submission.
+An `AssessmentJob` is the async unit processed by the worker role.
 
-```
-PENDING ──► RUNNING ──► SUCCEEDED
-                  │
-                  └──► FAILED  (after ASSESSMENT_JOB_MAX_ATTEMPTS retries)
+Current statuses:
+
+```text
+PENDING -> RUNNING -> SUCCEEDED
+                    -> FAILED
 ```
 
 | Status | Meaning |
 |---|---|
-| `PENDING` | Awaiting pickup by the AssessmentWorker |
-| `RUNNING` | Claimed by a worker; evaluation in progress |
-| `SUCCEEDED` | Evaluation complete; decision recorded |
-| `FAILED` | All retry attempts exhausted; requires manual intervention |
+| `PENDING` | Runnable job waiting for pickup |
+| `RUNNING` | Claimed by a worker and under lease |
+| `SUCCEEDED` | Assessment run completed successfully |
+| `FAILED` | Retry budget exhausted or stale-lock recovery failed the job |
 
-A `workerId` is stamped on the job when it moves to `RUNNING` to prevent double-processing. If a worker crashes while `RUNNING`, the job becomes stale (see [OPERATIONS_RUNBOOK.md — Stale Jobs](OPERATIONS_RUNBOOK.md)).
-
----
+Operational details:
+- jobs are leased with `lockedAt`, `lockedBy`, and `leaseExpiresAt`
+- stale running jobs are automatically reset or failed
+- backlog and stuck-job signals are emitted for observability
 
 ## Manual Review Lifecycle
 
-A `ManualReview` is created when a submission is routed to the review queue. One reviewer handles it.
+A `ManualReview` exists when automatic scoring routes a submission into human review.
 
-```
-OPEN ──► IN_REVIEW ──► RESOLVED
+Current lifecycle:
+
+```text
+OPEN -> IN_REVIEW -> RESOLVED
 ```
 
 | Status | Meaning |
 |---|---|
-| `OPEN` | In the queue; not yet claimed |
-| `IN_REVIEW` | Claimed by a reviewer; awaiting override decision |
-| `RESOLVED` | Reviewer has submitted an override; a new `AssessmentDecision` of type `MANUAL_OVERRIDE` has been recorded |
+| `OPEN` | Waiting in the review queue |
+| `IN_REVIEW` | Claimed by a reviewer |
+| `RESOLVED` | Reviewer finalised an override |
 
-Claiming a review sets `reviewerId` and transitions to `IN_REVIEW`. Only the reviewer who claimed it (or an ADMINISTRATOR) may finalise it.
+Resolution behavior:
+- resolving a manual review appends a new decision of type `MANUAL_OVERRIDE`
+- the new decision becomes the latest authoritative outcome
+- the submission is moved to `COMPLETED`
 
-When resolved, `overrideDecision` (`pass` / `fail`) and `overrideReason` are recorded. The submission moves to `COMPLETED`.
-
----
+Ownership rule:
+- the assigned reviewer may finalize it
+- `ADMINISTRATOR` may act across ownership boundaries at route level
 
 ## Appeal Lifecycle
 
-An `Appeal` is created by a participant after a submission reaches `COMPLETED` status.
+An `Appeal` is created by the participant after an existing outcome exists.
 
+Current implemented lifecycle:
+
+```text
+OPEN -> IN_REVIEW -> RESOLVED
 ```
-OPEN ──► IN_REVIEW ──► RESOLVED
-                 │
-                 └──► REJECTED
-```
 
-| Status | Meaning |
-|---|---|
-| `OPEN` | Filed; awaiting pickup by an appeal handler |
-| `IN_REVIEW` | Claimed by an appeal handler |
-| `RESOLVED` | Appeal handler has resolved with `resolutionNote`; a new `AssessmentDecision` of type `APPEAL_RESOLUTION` has been recorded |
-| `REJECTED` | Appeal rejected as invalid (no new decision recorded) |
+Current enum values:
+- `OPEN`
+- `IN_REVIEW`
+- `RESOLVED`
+- `REJECTED`
 
-An appeal does not change the `SubmissionStatus` — the submission remains `COMPLETED`. The new decision is appended to the lineage and is the authoritative outcome.
+Important implementation note:
+- `REJECTED` exists in the model and is understood by reporting/SLA logic
+- the current appeal handler HTTP workflow exposes claim and resolve actions, not a dedicated reject action
 
----
+Claim/ownership behavior:
+- claim sets the appeal to `IN_REVIEW`
+- claim ownership is currently tracked via `resolvedById`
+- `claimedAt` is set on first claim
+
+Resolution behavior:
+- appeal resolution appends a new decision of type `APPEAL_RESOLUTION`
+- the submission returns to `COMPLETED`
+- the new decision becomes the authoritative outcome
 
 ## Decision Lineage and Immutability
 
-Each `AssessmentDecision` is **immutable** — decisions are never updated or deleted. A revised outcome is expressed by creating a new decision that references the prior one via `parentDecisionId`.
+`AssessmentDecision` is append-only.
 
+Later outcomes are represented by a new decision with `parentDecisionId` pointing at the prior authoritative decision.
+
+Typical lineage:
+
+```text
+AUTOMATIC
+  -> MANUAL_OVERRIDE
+  -> APPEAL_RESOLUTION
 ```
-AssessmentDecision (AUTOMATIC, parentDecisionId = null)
-    │
-    └──► AssessmentDecision (MANUAL_OVERRIDE, parentDecisionId = <above>)
-              │
-              └──► AssessmentDecision (APPEAL_RESOLUTION, parentDecisionId = <above>)
-```
 
-| `decisionType` | Created by | Trigger |
-|---|---|---|
-| `AUTOMATIC` | Assessment engine | Submission scores processed by the decision engine |
-| `MANUAL_OVERRIDE` | Reviewer | Manual review resolved with an override |
-| `APPEAL_RESOLUTION` | Appeal handler | Appeal resolved |
+Current decision types:
 
-The **latest decision** in the chain is the authoritative outcome. `CertificationStatus` always points to `latestDecisionId`.
+| Decision type | Created by |
+|---|---|
+| `AUTOMATIC` | assessment engine |
+| `MANUAL_OVERRIDE` | reviewer workflow |
+| `APPEAL_RESOLUTION` | appeal workflow |
 
-All decisions include: `totalScore`, `passFailTotal`, `decisionReason`, `finalisedAt`, and the LLM evaluation reference (`redFlagsJson`). Decisions that carry a `finalisedById` have a human actor in the lineage.
+Shared lineage behavior is implemented through `appendDecisionWithLineage(...)`.
+That helper currently:
+- creates the new decision
+- sets `parentDecisionId`
+- moves the submission to `COMPLETED`
+- updates certification status from the new decision
+- records decision audit data
 
----
+This means:
+- workflow-specific status changes happen around the decision
+- authoritative outcome changes happen through appended decisions, not mutation
+
+## Certification Status
+
+A `CertificationStatus` is maintained per `(userId, moduleId)`.
+
+Current behavior:
+- every new authoritative decision updates `latestDecisionId`
+- passing decisions produce a recertification lifecycle state
+- failing decisions produce `NOT_CERTIFIED`
+
+Current lifecycle values:
+- `ACTIVE`
+- `DUE_SOON`
+- `DUE`
+- `EXPIRED`
+- `NOT_CERTIFIED`
+
+Fields maintained from the latest authoritative decision:
+- `latestDecisionId`
+- `status`
+- `passedAt`
+- `expiryDate`
+- `recertificationDueDate`
+
+This is why a later manual override or appeal resolution can replace the effective certification outcome without mutating older decisions.
 
 ## RBAC Ownership Model
 
-### Roles
+Current application roles:
 
-| Role | Description |
+| Role | Meaning |
 |---|---|
-| `PARTICIPANT` | Submits assessments, views own results, files appeals |
-| `REVIEWER` | Handles manual review queue; may override automatic decisions |
-| `APPEAL_HANDLER` | Handles appeal queue; may resolve or reject appeals |
-| `SUBJECT_MATTER_OWNER` | Manages module content; views calibration and reports |
-| `REPORT_READER` | Read-only access to reporting endpoints |
-| `ADMINISTRATOR` | Full access to all routes and all role capabilities |
+| `PARTICIPANT` | submit work, view own results, create appeals |
+| `REVIEWER` | manual review workspace |
+| `APPEAL_HANDLER` | appeal workspace |
+| `SUBJECT_MATTER_OWNER` | calibration, admin-content, some reporting |
+| `REPORT_READER` | reporting read access |
+| `ADMINISTRATOR` | broad cross-workflow access |
 
-### Route ownership summary
+### Sensitive route families
 
-| Action | Allowed roles |
+| Route family | Intended roles |
 |---|---|
-| Submit work, view own submission/result | PARTICIPANT, REVIEWER, ADMINISTRATOR |
-| File an appeal | PARTICIPANT, ADMINISTRATOR |
-| View/claim/override manual reviews | REVIEWER, ADMINISTRATOR |
-| View/claim/resolve appeals | APPEAL_HANDLER, ADMINISTRATOR |
-| Manage module content | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
-| View calibration workspace | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
-| View reports | REPORT_READER, SUBJECT_MATTER_OWNER, ADMINISTRATOR |
-| Org sync | ADMINISTRATOR only |
+| participant submissions/results | `PARTICIPANT`, `ADMINISTRATOR`, some reviewer/admin support paths |
+| manual review | `REVIEWER`, `ADMINISTRATOR` |
+| appeals | `APPEAL_HANDLER`, `ADMINISTRATOR` |
+| calibration | `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR` |
+| admin content | `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR` |
+| reports | `REPORT_READER`, `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR` |
+| org sync | `ADMINISTRATOR` |
 
-### Claim ownership rule
+### Ownership rules inside workflows
 
-A review or appeal may only be finalised by the user who claimed it. An `ADMINISTRATOR` can finalise any claimed item regardless of who claimed it. This prevents two handlers working on the same item simultaneously.
+- a claimed manual review should only be finalized by the same reviewer unless an admin intervenes
+- a claimed appeal should only be resolved by the same handler unless an admin intervenes
+- participants cannot alter historical decisions directly
 
-### Immutability constraint
+## Domain Invariants
 
-Participants cannot modify submissions after creation. Reviewers and appeal handlers can only act on items in the correct status (`OPEN` or `IN_REVIEW`). An item in `RESOLVED` status is closed; reopening is not supported in the current implementation.
+The key invariants that should stay true:
 
----
-
-## CertificationStatus
-
-A `CertificationStatus` record is maintained per `(userId, moduleId)` pair. It is created or updated whenever a new passing `AssessmentDecision` is recorded. It tracks:
-
-- `status` — e.g. `certified`, `expired`, `due_soon`, `due`
-- `passedAt` — when the passing decision was first recorded
-- `expiryDate` — computed from `passedAt + recertification.validityDays`
-- `recertificationDueDate` — when the `due` window begins
-
-If a passing decision is later overridden to a fail (via manual review or appeal), the certification status is updated to reflect the revised outcome.
+1. Decisions are immutable.
+2. Latest authoritative outcome is represented by the newest decision in the lineage.
+3. Submission operational state may change, but prior decisions must remain inspectable.
+4. Manual review and appeals are separate workflows even when they affect the same submission.
+5. Certification status is derived from the latest authoritative decision, not from stale workflow state.

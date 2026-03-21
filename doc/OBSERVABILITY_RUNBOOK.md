@@ -1,103 +1,247 @@
-# Observability Runbook (MVP Baseline)
+# Observability Runbook
 
-## Scope
-This runbook covers first-response operations for:
-- HTTP latency degradation
-- LLM evaluation failures
-- Assessment queue backlog growth
-- Overdue appeal escalation
+This runbook covers the currently implemented observability model for:
+- request tracing
+- worker health
+- queue behavior
+- LLM failures
+- appeal SLA monitoring
+- participant notification delivery
+- unhandled runtime failures
 
-This baseline is implemented through:
-- Correlation ID request logging (`x-correlation-id`)
-- Structured operational log events
-- Azure Monitor alerts (metric + log alerts)
+Related documents:
+- [OPERATIONS_RUNBOOK.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/OPERATIONS_RUNBOOK.md)
+- [AZURE_ENVIRONMENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/AZURE_ENVIRONMENTS.md)
+- [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md)
 
-## Deployed Signals
-### Correlation ID
-- Request middleware sets or propagates `x-correlation-id`.
-- Response includes `x-correlation-id` for every request.
-- Request completion log includes correlation id, status code, and duration.
+## Current Signal Model
 
-### Structured Events
-- `llm_evaluation_failed`
+Structured operational logs are emitted through:
+- `src/observability/operationalLog.ts`
+
+Request-scoped observability is attached through:
+- `src/middleware/requestObservability.ts`
+
+Unhandled runtime failures are surfaced through:
+- `src/middleware/errorHandling.ts`
+
+Current Azure deployment sends diagnostics from both:
+- web App Service
+- worker App Service
+
+into Log Analytics.
+
+## Request Tracing
+
+Header:
+- `x-correlation-id`
+
+Behavior:
+- propagated if present
+- generated if absent
+- returned in the response header
+- included in `http_request`
+- included in `unhandled_error`
+
+Primary request event:
+- `http_request`
+
+Current payload includes:
+- `correlationId`
+- `method`
+- `path`
+- `statusCode`
+- `durationMs`
+- `userId`
+
+Use correlation IDs first when diagnosing single-request or single-user failures.
+
+## Current Structured Events
+
+### Web/runtime events
+- `http_request`
+- `unhandled_error`
+- `submission_document_parse`
+
+### Assessment worker events
 - `assessment_queue_backlog`
+- `llm_evaluation_failed`
+- `assessment_job_stale_lock_detected`
+- `assessment_job_stuck_alert`
+
+### Appeal monitoring events
 - `appeal_sla_backlog`
 - `appeal_overdue_detected`
+
+### Notification events
 - `participant_notification_sent`
 - `participant_notification_failed`
 - `participant_notification_pipeline_failed`
-- `http_request`
+- `recertification_reminder_sent`
+- `recertification_reminder_failed`
 
 ## Alert Baseline
-### Latency Alert
-- Signal: App Service metric `AverageResponseTime`
-- Window/Frequency: 5m / 5m
+
+The current Azure alert baseline is narrower than the full signal list.
+
+Implemented alert-backed concerns:
+
+### Latency alert
+- Source: App Service metric `AverageResponseTime`
+- Severity: Sev2
+- Evaluates HTTP latency on the web app
+
+### LLM failure alert
+- Source: log query over `llm_evaluation_failed`
 - Severity: Sev2
 
-### LLM Failure Alert
-- Signal: Log query for `llm_evaluation_failed`
-- Window/Frequency: 5m / 5m
+### Queue backlog alert
+- Source: log query over `assessment_queue_backlog`
+- Severity: Sev2
+- Alert logic applies a pending-job threshold in Azure query configuration
+
+### Appeal overdue alert
+- Source: log query over `appeal_overdue_detected`
 - Severity: Sev2
 
-### Queue Backlog Alert
-- Signal: Log query for `assessment_queue_backlog` with `pendingJobs >= threshold`
-- Window/Frequency: 10m / 10m
-- Severity: Sev2
+## Signals Without Dedicated Azure Alerts
 
-### Appeal Overdue Alert
-- Signal: Log query for `appeal_overdue_detected` with `overdueAppeals >= threshold`
-- Window/Frequency: 10m / 10m
-- Severity: Sev2
+These events are useful today but are not described as first-class Azure alerts in the baseline:
+- `assessment_job_stale_lock_detected`
+- `assessment_job_stuck_alert`
+- `unhandled_error`
+- `submission_document_parse`
+- notification success/failure events
+- recertification reminder events
+
+They should still be queried during incident response.
 
 ## First Response Checklist
-1. Confirm service health:
-   - `GET /healthz`
-2. Check recent deploys in GitHub Actions and App Service deployment history.
-3. Pull the correlation id from failing client response/header.
-4. Query logs around that correlation id and time window.
-5. Determine impact scope:
-   - single user/module or broad system issue
-6. Apply immediate mitigation:
-   - retry transient jobs
-   - reduce load/test traffic
-   - rollback last deploy if regression is confirmed
-7. For appeal-overdue incidents:
-   - confirm queue ownership and assign handler
-   - acknowledge alert in operations channel/ticket system
-   - capture expected resolution timestamp
-8. Record incident summary and follow-up issue.
-9. Add or update the relevant entry in [INCIDENTS.md](/C:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md).
 
-## KQL Queries
-Replace `<workspace-id>` and adjust time window as needed.
+1. Confirm whether the problem is:
+   - request/web only
+   - worker/queue only
+   - both
+2. Check `/healthz` and `/version` on the web app.
+3. Check latest deploys and recent restart activity.
+4. Pull a correlation ID if a specific request or user flow failed.
+5. Query recent worker signals:
+   - `assessment_queue_backlog`
+   - `llm_evaluation_failed`
+   - `assessment_job_stuck_alert`
+   - `assessment_job_stale_lock_detected`
+6. Query appeal monitor signals if the incident is queue/SLA related:
+   - `appeal_sla_backlog`
+   - `appeal_overdue_detected`
+7. Query notification events if users are missing status updates.
+8. Record findings in [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md).
 
-### LLM Failures (recent)
+## Core KQL Queries
+
+All queries below assume data is coming from App Service console logs and Azure diagnostics.
+
+### Trace a correlation ID
+
 ```kusto
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
-| where TimeGenerated > ago(1h)
-| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
+| where raw has "<corr-id>"
+| project TimeGenerated, raw
+| order by TimeGenerated asc
+```
+
+### Recent unhandled errors
+
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
+| where raw has "\"event\":\"unhandled_error\""
+| project TimeGenerated, raw
+| order by TimeGenerated desc
+```
+
+### Recent LLM failures
+
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
 | where raw has "\"event\":\"llm_evaluation_failed\""
 | project TimeGenerated, raw
 | order by TimeGenerated desc
 ```
 
-### Queue Backlog Trend
+### Queue backlog trend
+
 ```kusto
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
-| where TimeGenerated > ago(1h)
-| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
 | where raw has "\"event\":\"assessment_queue_backlog\""
 | extend pendingJobs = toint(extract("\"pendingJobs\":([0-9]+)", 1, raw))
-| where isnotnull(pendingJobs)
-| summarize maxPending = max(pendingJobs), avgPending = avg(pendingJobs) by bin(TimeGenerated, 5m)
+| extend runningJobs = toint(extract("\"runningJobs\":([0-9]+)", 1, raw))
+| summarize maxPending = max(pendingJobs), maxRunning = max(runningJobs) by bin(TimeGenerated, 5m)
 | order by TimeGenerated desc
 ```
 
-### Slow Requests
+### Stale-lock resets or failures
+
 ```kusto
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
-| where TimeGenerated > ago(1h)
-| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
+| where raw has "\"event\":\"assessment_job_stale_lock_detected\""
+| project TimeGenerated, raw
+| order by TimeGenerated desc
+```
+
+### Stuck-job alerts
+
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
+| where raw has "\"event\":\"assessment_job_stuck_alert\""
+| project TimeGenerated, raw
+| order by TimeGenerated desc
+```
+
+### Slow request trend
+
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
 | where raw has "\"event\":\"http_request\""
 | extend durationMs = todouble(extract("\"durationMs\":([0-9]+)", 1, raw))
 | where isnotnull(durationMs)
@@ -105,41 +249,72 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | order by TimeGenerated desc
 ```
 
-### Overdue Appeals (recent)
-```kusto
-union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
-| where TimeGenerated > ago(1h)
-| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
-| where raw has "\"event\":\"appeal_overdue_detected\""
-| extend overdueAppeals = toint(extract("\"overdueAppeals\":([0-9]+)", 1, raw))
-| extend overdueThreshold = toint(extract("\"overdueThreshold\":([0-9]+)", 1, raw))
-| extend oldestOverdueHours = todouble(extract("\"oldestOverdueHours\":([0-9.]+)", 1, raw))
-| project TimeGenerated, overdueAppeals, overdueThreshold, oldestOverdueHours, raw
-| order by TimeGenerated desc
-```
+### Appeal SLA backlog and overdue cases
 
-### Participant Notification Delivery (recent)
 ```kusto
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
-| where TimeGenerated > ago(1h)
-| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
-| where raw has_any ("\"event\":\"participant_notification_sent\"", "\"event\":\"participant_notification_failed\"", "\"event\":\"participant_notification_pipeline_failed\"")
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
+| where raw has_any ("\"event\":\"appeal_sla_backlog\"", "\"event\":\"appeal_overdue_detected\"")
 | project TimeGenerated, raw
 | order by TimeGenerated desc
 ```
 
-## Useful Azure CLI Commands
+### Notification delivery failures
+
+```kusto
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(2h)
+| extend raw = coalesce(
+    tostring(column_ifexists("ResultDescription", "")),
+    tostring(column_ifexists("Message", "")),
+    tostring(column_ifexists("Log_s", ""))
+  )
+| where raw has_any (
+    "\"event\":\"participant_notification_failed\"",
+    "\"event\":\"participant_notification_pipeline_failed\"",
+    "\"event\":\"recertification_reminder_failed\""
+  )
+| project TimeGenerated, raw
+| order by TimeGenerated desc
+```
+
+## Azure CLI Shortcuts
+
 ```bash
-# List alerts in resource group
 az monitor metrics alert list -g <resource-group> -o table
 az monitor scheduled-query list -g <resource-group> -o table
-
-# List App Insights + Log Analytics
 az monitor app-insights component list -g <resource-group> -o table
 az monitor log-analytics workspace list -g <resource-group> -o table
 ```
 
-## Follow-up Improvements (Post-MVP)
-- Route alerts to Teams/incident system webhook.
-- Add SLO dashboard/workbook for latency, queue depth, and failure rates.
-- Add synthetic probes for key user journeys.
+## Interpretation Notes
+
+### `assessment_queue_backlog`
+- emitted on enqueue and worker cycle
+- not every emission means an incident
+- watch the trend, not one isolated event
+
+### `assessment_job_stale_lock_detected`
+- means a leased running job expired and was reset or failed
+- repeated occurrences point to worker instability or downstream latency
+
+### `assessment_job_stuck_alert`
+- means a running job exceeded the stuck threshold
+- treat as warning for investigation even if recovery later succeeds
+
+### `participant_notification_pipeline_failed`
+- means the workflow finished but the notification side-effect failed
+- do not assume the business write failed just because the notification did
+
+## Follow-up Directions
+
+The current baseline is useful but still modest.
+Natural next observability upgrades:
+- dashboards/workbooks for queue and worker posture
+- alerting for stuck-job patterns and unhandled-error rates
+- synthetic probes for key participant and admin flows

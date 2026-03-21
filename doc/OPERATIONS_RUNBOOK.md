@@ -1,233 +1,397 @@
 # Operations Runbook
 
-Covers day-to-day operation of the a2 Assessment Platform: startup, migrations, seeding, worker health, failure diagnosis, and tracing.
+This runbook covers day-to-day runtime operations for the A2 Assessment Platform:
+- startup behavior
+- migrations and seed behavior
+- web/worker role topology
+- assessment job processing health
+- stale-lock and stuck-job recovery
+- first-response failure diagnosis
 
-For Azure alerting signals and KQL queries see [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md).
-For environment variables and provisioning see [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md).
+Related documents:
+- [OBSERVABILITY_RUNBOOK.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/OBSERVABILITY_RUNBOOK.md)
+- [AZURE_ENVIRONMENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/AZURE_ENVIRONMENTS.md)
+- [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md)
 
----
+## Runtime Topology
 
-## Process Model
+The current runtime no longer assumes a single all-in-one production process.
 
-The platform runs as a **single Node.js process** that handles both HTTP requests and background work:
+Application code supports three roles through `PROCESS_ROLE`:
 
-| Component | Role |
-|---|---|
-| Express HTTP server | Serves all API routes and static workspace files |
-| `AssessmentWorker` | Polls for pending assessment jobs and processes them asynchronously |
-| `AppealSlaMonitor` | Checks for overdue appeals on a configurable interval and emits alerts |
+| Role | Starts HTTP app | Starts AssessmentWorker | Starts AppealSlaMonitor |
+|---|---|---|---|
+| `web` | yes | no | no |
+| `worker` | minimal listener only | yes | yes |
+| `all` | yes | yes | yes |
 
-Both background components start automatically on process startup and stop gracefully on `SIGTERM`/`SIGINT`.
+Current Azure shape:
+- one App Service for web traffic with `PROCESS_ROLE=web`
+- one App Service for background work with `PROCESS_ROLE=worker`
+- both currently share the same App Service Plan
+- both have `alwaysOn=true`
 
-> **Planned:** Web/worker process separation is tracked in epic #169. When implemented, a `PROCESS_ROLE` env var will control which components start (`web`, `worker`, or `all`). Until then, all roles run in the same process.
+The worker app exists so background processing does not depend on the web role staying warm.
 
-### Startup sequence
+## Startup Behavior
 
+Entrypoint:
+- `scripts/runtime/startup.mjs`
+
+Built app entrypoint:
+- `dist/src/index.js`
+
+### Web role startup
+
+Normal web startup sequence:
+
+1. `startup.mjs` checks that the built app exists
+2. unless `SKIP_MIGRATE=true`, it runs:
+   - `prisma migrate deploy`
+   - optional compatibility fallback to `prisma db push --skip-generate` only when `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true`
+3. it imports `dist/src/index.js`
+4. `src/index.ts` starts the Express server
+5. `src/index.ts` runs `scripts/runtime/bootstrapSeed.mjs` before binding the web listener
+
+Important notes:
+- bootstrap seed only runs when the runtime role starts the web application
+- `bootstrapSeed.mjs` also checks `BOOTSTRAP_SEED=true`
+- production Azure config sets `BOOTSTRAP_SEED=false`
+
+### Worker role startup
+
+Worker startup differs intentionally:
+
+1. `startup.mjs` runs
+2. Azure worker app sets `SKIP_MIGRATE=true`, so migrations are skipped
+3. `dist/src/index.js` is imported
+4. `src/index.ts` starts a minimal HTTP listener and starts:
+   - `AssessmentWorker`
+   - `AppealSlaMonitor`
+
+The worker listener is only there so App Service keeps the process alive. It is not a full application surface.
+
+## Health Checks
+
+### Web app
+
+Use:
+- `GET /healthz`
+- `GET /version`
+
+`/healthz` confirms the HTTP app is up.
+It does not prove:
+- database connectivity
+- worker health
+- queue drain behavior
+
+### Worker app
+
+In worker-only mode, `src/index.ts` starts a minimal HTTP server that returns:
+
+```json
+{"status":"ok","role":"worker"}
 ```
-npm start
-  └── scripts/runtime/startup.mjs
-        1. prisma migrate deploy        # apply pending schema migrations
-        2. (fallback) prisma db push    # only if PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true
-        3. scripts/runtime/bootstrapSeed.mjs   # idempotent seed for lookup data
-        4. src/index.ts                 # start HTTP server + AssessmentWorker + AppealSlaMonitor
-```
 
-The process will **exit with code 1** if migrations or the seed step fail. Check logs for the exact Prisma error before restarting.
+for incoming requests. This is only a process heartbeat. It does not prove that:
+- jobs are being picked up
+- stale locks are being reset
+- LLM calls are succeeding
 
-### Health check
+Use logs and queue signals for worker health.
 
-```
-GET /healthz
-```
+## Migrations and Schema Changes
 
-Returns `200 OK` when the HTTP server is up. Does not check database connectivity or worker state — use the structured log signals for that (see below).
+### Production and staging
 
----
+Current expectation:
+- the web role owns runtime schema application
+- worker role skips migrations
 
-## Running Migrations
+Normal deploy path:
+- deploy artifact
+- web role starts
+- `prisma migrate deploy` runs
+- app starts
 
-### Production / staging (CI/CD)
+Compatibility fallback:
+- `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true` allows a non-production fallback to `prisma db push`
+- production should keep this `false`
 
-Migrations run automatically at startup via `startup.mjs`. No manual step is needed for normal deploys.
+### Manual migration commands
 
-### Manual migration (emergency or local)
+Apply pending migrations:
 
 ```bash
-# Apply pending migrations
 npm run db:migrate
-
-# Reset and re-seed (destroys all data — dev/test only)
-npm run db:reset && tsx prisma/seed.ts
 ```
 
-Migration files live in `prisma/migrations/`. Never edit existing migration files — add new ones with `prisma migrate dev --name <description>`.
-
----
-
-## Seeding
-
-### Bootstrap seed (runs at every startup)
-
-`scripts/runtime/bootstrapSeed.mjs` is idempotent and runs at every process start. It creates or updates reference data that the application requires to function (e.g. default module data).
-
-### Full development seed
+Reset database and skip seed:
 
 ```bash
-# After a db reset, restore a full dev dataset
+npm run db:reset
+```
+
+Generate Prisma client:
+
+```bash
+npm run prisma:generate
+```
+
+Never edit an already-applied migration in place.
+
+## Seed Behavior
+
+### Bootstrap seed
+
+File:
+- `scripts/runtime/bootstrapSeed.mjs`
+
+This seed is:
+- idempotent
+- intended for non-production environments
+- gated by `BOOTSTRAP_SEED=true`
+
+Current Azure expectation:
+- staging may use bootstrap seed
+- production should not
+
+### Full local/test seed
+
+Examples:
+
+```bash
 npm run postgres:app:seed
-# or
+npm run postgres:test:seed
+```
+
+or
+
+```bash
 tsx prisma/seed.ts
 ```
 
-### Test seed
+## Assessment Job Processing
 
-```bash
-npm run postgres:test:seed
-# or
-dotenv -e .env.test -- tsx prisma/seed.ts
+Core files:
+- `src/services/AssessmentWorker.ts`
+- `src/services/AssessmentJobRunner.ts`
+- `src/services/staleLockScanner.ts`
+
+Assessment job statuses:
+- `PENDING`
+- `RUNNING`
+- `SUCCEEDED`
+- `FAILED`
+
+Current processing cycle:
+1. scan for expired running jobs and reset/fail them
+2. emit alerts for long-running stuck jobs
+3. find next runnable `PENDING` job
+4. attempt to lock it with:
+   - `lockedAt`
+   - `lockedBy`
+   - `leaseExpiresAt`
+5. run assessment
+6. mark job `SUCCEEDED`
+7. on failure, either:
+   - return job to `PENDING` with delay
+   - mark job `FAILED` if max attempts are exhausted
+
+Relevant env vars:
+
+| Var | Default | Meaning |
+|---|---|---|
+| `ASSESSMENT_JOB_POLL_INTERVAL_MS` | `4000` | Worker poll interval |
+| `ASSESSMENT_JOB_MAX_ATTEMPTS` | `3` | Retry ceiling |
+| `ASSESSMENT_JOB_LEASE_DURATION_MS` | `300000` | Lease duration before a running job is considered stale |
+| `ASSESSMENT_JOB_STUCK_THRESHOLD_MS` | `600000` | Threshold for emitting stuck-job alerts |
+
+## Stale-Lock Recovery
+
+Stale-lock recovery is implemented now.
+
+What happens:
+- before processing each job cycle, the worker calls `scanAndResetStaleJobs()`
+- jobs whose lease has expired are reset automatically
+- if attempts are exhausted, the stale job is marked `FAILED` instead of being re-queued
+
+Observed signals:
+- `assessment_job_stale_lock_detected`
+- audit events:
+  - `assessment_job_stale_lock_reset`
+  - `assessment_job_stale_lock_failed`
+
+This means stale `RUNNING` jobs do not normally require immediate manual SQL intervention anymore.
+
+### Manual intervention still needed when
+
+- the same jobs repeatedly go stale
+- a job reaches `FAILED` and should be retried after a fix
+- a deeper worker/LLM bug is causing repeated lease expiry
+
+Useful SQL:
+
+```sql
+SELECT id, "submissionId", status, attempts, "lockedAt", "leaseExpiresAt", "errorMessage"
+FROM "AssessmentJob"
+WHERE status IN ('PENDING', 'RUNNING', 'FAILED')
+ORDER BY "updatedAt" DESC;
 ```
 
----
+Re-queue a failed job only after understanding the failure cause:
 
-## Worker Role and Health Indicators
-
-### AssessmentWorker
-
-Polls `assessmentJob` table for jobs in `PENDING` status. Each tick:
-1. Claims the next available job (sets status → `PROCESSING`, locks with `workerId`)
-2. Runs LLM evaluation and decision logic
-3. Writes the decision, updates submission status, emits audit events
-4. On failure: increments attempt counter; after `ASSESSMENT_JOB_MAX_ATTEMPTS` marks the job `FAILED`
-
-**Key env vars:**
-
-| Var | Default | Description |
-|---|---|---|
-| `ASSESSMENT_JOB_POLL_INTERVAL_MS` | `5000` | How often the worker polls for new jobs |
-| `ASSESSMENT_JOB_MAX_ATTEMPTS` | `3` | Max attempts before a job is marked FAILED |
-
-**Health signals** (check via structured logs or KQL):
-- `assessment_queue_backlog` — emitted when pending job count exceeds threshold; indicates worker is falling behind
-- `llm_evaluation_failed` — emitted on each LLM call failure; persistent pattern = LLM connectivity or quota issue
-
-**Stale jobs:** A job stuck in `PROCESSING` for an unexpectedly long time may indicate a crashed worker that did not release the lock. These require manual intervention until stale-lock recovery (#170) is implemented:
 ```sql
--- Identify stale PROCESSING jobs
-SELECT id, "submissionId", "workerId", "updatedAt"
-FROM "AssessmentJob"
-WHERE status = 'PROCESSING'
-  AND "updatedAt" < NOW() - INTERVAL '10 minutes';
-
--- Reset a stale job back to PENDING (after confirming worker is dead)
 UPDATE "AssessmentJob"
-SET status = 'PENDING', "workerId" = NULL, "attemptCount" = "attemptCount"
+SET status = 'PENDING',
+    "availableAt" = NOW(),
+    "lockedAt" = NULL,
+    "lockedBy" = NULL,
+    "leaseExpiresAt" = NULL
 WHERE id = '<job-id>';
 ```
 
-### AppealSlaMonitor
+## Stuck-Job Alerts
 
-Checks for appeals past their SLA deadline on a configurable interval.
+Stuck-job alerts are also implemented.
 
-**Key env vars:**
+What they do:
+- `alertOnStuckJobs()` scans for jobs running beyond `ASSESSMENT_JOB_STUCK_THRESHOLD_MS`
+- each stuck job emits an error-level `assessment_job_stuck_alert`
 
-| Var | Default | Description |
+This is an operational warning, not automatic remediation.
+Auto-remediation is handled by stale-lock reset once the lease expires.
+
+Interpretation:
+- `assessment_job_stuck_alert` means a worker run is taking unusually long
+- repeated alerts for the same job usually indicate:
+  - LLM timeouts
+  - process stalls
+  - unhandled runtime bugs
+
+## Appeal SLA Monitor
+
+Core files:
+- `src/services/AppealSlaMonitor.ts`
+- `src/services/appealSlaMonitorService.ts`
+
+What it does:
+- runs on the worker role
+- scans appeals in `OPEN` and `IN_REVIEW`
+- emits queue posture and overdue signals
+
+Relevant env vars:
+
+| Var | Default | Meaning |
 |---|---|---|
-| `APPEAL_SLA_MONITOR_INTERVAL_MS` | `600000` (10m) | Check interval |
-| `APPEAL_OVERDUE_ALERT_THRESHOLD` | `1` | Minimum overdue count before an alert is emitted |
+| `APPEAL_SLA_MONITOR_INTERVAL_MS` | `600000` | Monitor interval |
+| `APPEAL_OVERDUE_ALERT_THRESHOLD` | `1` | Threshold for overdue alerting |
 
-**Health signal:** `appeal_overdue_detected` — contains `overdueAppeals` count and `oldestOverdueHours`.
+Observed signals:
+- `appeal_sla_backlog`
+- `appeal_overdue_detected`
 
----
+## Common Failure Modes
 
-## Common Failure States
+### Web app fails during startup
 
-### Database unreachable at startup
+Symptoms:
+- App Service restart loop
+- `/healthz` unavailable
+- startup logs stop before "Starting application runtime..."
 
-**Symptom:** Process exits immediately with a Prisma `Can't reach database server` error.
+Check:
+1. migration error output from `startup.mjs`
+2. database connectivity
+3. whether built artifact contains `dist/src/index.js`
+4. whether production accidentally has `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true`
 
-**Steps:**
-1. Confirm `DATABASE_URL` is set and points to the correct host/port.
-2. Check PostgreSQL server status (App Service → PostgreSQL resource → Overview).
-3. If the DB is healthy, check App Service network/VNet configuration.
-4. Check for pending firewall rules blocking the connection.
+### Worker app is alive but queue does not drain
 
-### Migration fails at startup
+Symptoms:
+- worker process heartbeat is healthy
+- `assessment_queue_backlog` keeps rising
+- no recent `SUCCEEDED` jobs
 
-**Symptom:** `startup.mjs` exits with a non-zero code before the HTTP server starts.
+Check:
+1. `llm_evaluation_failed` events
+2. `assessment_job_stuck_alert` events
+3. repeated stale-lock detection for same submissions
+4. whether worker app is running the intended artifact and env vars
 
-**Steps:**
-1. Check the migration log for the specific error.
-2. If the migration has a schema conflict, roll back to the previous deploy via GitHub Actions (Deployments tab → re-run previous workflow).
-3. If it's a new migration that needs to be applied manually, run `npm run db:migrate` from a connected environment.
+### Repeated stale-lock resets
 
-> `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true` enables a `prisma db push` fallback — use only for non-production environments during initial database provisioning. Never use in production.
+Symptoms:
+- many `assessment_job_stale_lock_detected`
+- same submission cycles between `RUNNING` and retry/failure
 
-### LLM evaluation failures
+Check:
+1. downstream LLM/API failures
+2. process crashes or unhandled errors
+3. whether lease duration is too short for the current workload
 
-**Symptom:** `llm_evaluation_failed` log events; submissions stuck in `PENDING` assessment state.
+### Appeal monitor alerts
 
-**Steps:**
-1. Check `LLM_MODE` env var. `stub` mode should never fail — if it does, it's a code bug.
-2. For `azure_openai` mode: verify `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, and `AZURE_OPENAI_API_KEY` are set correctly.
-3. Check Azure OpenAI quota and rate limits in the Azure portal.
-4. If the deployment is down: jobs will retry up to `ASSESSMENT_JOB_MAX_ATTEMPTS` times. After that the job is marked `FAILED` — manual re-queuing is required (set `status = 'PENDING'` in the database).
+Symptoms:
+- `appeal_overdue_detected`
+- high `openAppeals` / `inReviewAppeals` backlog in logs
 
-### Assessment queue backlog growing
+Check:
+1. whether handler capacity is sufficient
+2. whether appeal ownership is clear
+3. whether queue is moving from `OPEN` to `IN_REVIEW` and `RESOLVED`
 
-**Symptom:** `assessment_queue_backlog` alert fires; queue depth increasing over time.
+### Participant notification problems
 
-**Steps:**
-1. Confirm the AssessmentWorker is running — check for `assessmentWorker.start()` in startup logs.
-2. Check for LLM failures (stalled evaluation = jobs not completing).
-3. Check `ASSESSMENT_JOB_POLL_INTERVAL_MS` — if set very high, reduce it.
-4. If backlog is due to a spike in submissions, it should drain automatically. Monitor queue depth trend.
+Signals:
+- `participant_notification_sent`
+- `participant_notification_failed`
+- `participant_notification_pipeline_failed`
 
-### Worker process crash (unhandled exception)
+Check:
+1. `PARTICIPANT_NOTIFICATION_CHANNEL`
+2. webhook configuration if channel is `webhook`
+3. ACS configuration if channel is `acs_email`
 
-**Symptom:** No log output from worker; new submissions not progressing to assessment.
+## Correlation IDs
 
-**Steps:**
-1. Restart the App Service instance (or trigger a new deploy).
-2. Check `uncaughtException` / `unhandledRejection` events in structured logs.
-3. Jobs left in `PROCESSING` after the crash need manual reset (see stale job query above).
+Correlation IDs are attached by:
+- `src/middleware/requestObservability.ts`
 
-### Participant notifications not delivered
+Behavior:
+- request header `x-correlation-id` is propagated when present
+- otherwise a UUID is generated
+- response always includes `x-correlation-id`
+- request completion logs include the correlation ID
+- unhandled errors include the correlation ID in `unhandled_error`
 
-**Symptom:** `participant_notification_failed` or `participant_notification_pipeline_failed` events in logs.
+Use the correlation ID to reconstruct a request path in logs before jumping to deeper incident hypotheses.
 
-**Steps:**
-1. Check `PARTICIPANT_NOTIFICATION_CHANNEL` (`log`, `webhook`, or `email`).
-2. For `webhook` mode: verify `PARTICIPANT_NOTIFICATION_WEBHOOK_URL` is reachable and returns 2xx.
-3. For `email` mode: verify Azure Communication Services credentials are configured.
-4. For `log` mode: this should never fail — if it does, it's a code bug.
+## Operational First Response
 
----
+1. Confirm whether the problem is on the web side, worker side, or both.
+2. Check latest deploy and startup logs.
+3. Check `/healthz` and `/version` on the web app.
+4. Inspect recent worker signals:
+   - `assessment_queue_backlog`
+   - `assessment_job_stuck_alert`
+   - `assessment_job_stale_lock_detected`
+   - `llm_evaluation_failed`
+   - `appeal_overdue_detected`
+5. Use correlation IDs for request-scoped failures.
+6. If participant-impacting, capture:
+   - affected module
+   - affected submission IDs
+   - queue status
+   - whether decisions were written
+7. Add or update the incident entry in [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md).
 
-## Tracing with Correlation ID
+## Manual Verification Checklist
 
-Every request gets a `x-correlation-id` header (generated or propagated from the client). It appears in:
-- The response header `x-correlation-id`
-- Every structured log event emitted during that request
-
-**To trace a failing request:**
-
-1. Get the correlation ID from the failing response header, client error log, or user report.
-2. Query logs by correlation ID (replace `<corr-id>`):
-
-```kusto
-union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
-| where TimeGenerated > ago(2h)
-| extend raw = coalesce(
-    tostring(column_ifexists("ResultDescription", "")),
-    tostring(column_ifexists("Message", "")),
-    tostring(column_ifexists("Log_s", ""))
-  )
-| where raw has "<corr-id>"
-| project TimeGenerated, raw
-| order by TimeGenerated asc
-```
-
-3. Review the full event sequence: auth → route handler → service calls → response.
-4. For assessment jobs spawned by the request, the job ID is logged at submission time — search for it to follow the async path.
-
-For additional KQL queries (LLM failures, queue backlog, slow requests, overdue appeals) see [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md).
+After a deploy or recovery step:
+1. Verify web `/healthz`.
+2. Verify web `/version`.
+3. Verify worker process is emitting fresh logs.
+4. Submit or re-check one known assessment flow if relevant.
+5. Confirm queue backlog is stable or decreasing.
+6. Confirm no repeated stale-lock or stuck-job alerts remain unexplained.
