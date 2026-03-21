@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.66 - 2026-03-21
+### Summary
+Refactor: split reportingService into dedicated sub-modules (closes #196, #197, #198, #199).
+
+### Included
+- **`src/services/reporting/types.ts`** (ny): felles `ReportFilters`-type.
+- **`src/services/reporting/csvExport.ts`** (ny): `toCsv`, `normalizeFilters`, `round2`, `buildDateRangeWhere` — delt CSV-eksport og filter-hjelpere (lukker #199).
+- **`src/services/reporting/completionReport.ts`** (ny): `getCompletionReport`, `getPassRatesReport` (lukker #196).
+- **`src/services/reporting/reviewAppealReport.ts`** (ny): `getManualReviewQueueReport`, `getAppealsReport`, `getRecertificationStatusReport` (lukker #197).
+- **`src/services/reporting/mcqSemanticReport.ts`** (ny): `getMcqQualityReport`, `getAnalyticsSemanticModel`, `getAnalyticsTrendsReport`, `getAnalyticsCohortsReport` (lukker #198).
+- **`src/services/reporting/dataQualityReport.ts`** (ny): `getReportingDataQualityReport` (lukker #198).
+- **`src/services/reportingService.ts`**: konvertert til re-eksport-fasade — alle eksisterende importer forblir uendret.
+
 ## 0.8.65 - 2026-03-21
 ### Summary
 Fix: deploy-retry og #190 extract shared decision lineage utility.
