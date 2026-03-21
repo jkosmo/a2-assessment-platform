@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.79 - 2026-03-21
+### Summary
+Refactor (#210): migrate reporting services to src/modules/reporting/.
+
+### Included
+- **`src/modules/reporting/`** (new): 6 files moved from `src/services/reporting/`:
+  `types.ts`, `csvExport.ts`, `completionReport.ts`, `reviewAppealReport.ts`, `mcqSemanticReport.ts`, `dataQualityReport.ts`.
+- **`src/modules/reporting/index.ts`**: barrel export with identical public API as the old `reportingService.ts` facade.
+- **Deleted**: `src/services/reporting/` directory and `src/services/reportingService.ts`.
+- **`src/routes/reports.ts`**: updated import to `../modules/reporting/index.js`.
+- **`test/unit/reporting-service.test.ts`**: updated import paths.
+- Fixed one internal import in `reviewAppealReport.ts`: `../recertificationService.js` → `../../services/recertificationService.js`.
+- No functional changes.
+
 ## 0.8.78 - 2026-03-21
 ### Summary
 Feat: per-field placeholder/guidance text on submission form fields.

@@ -14,7 +14,7 @@ import {
   getRecertificationStatusReport,
   toCsv,
   type ReportFilters,
-} from "../services/reportingService.js";
+} from "../modules/reporting/index.js";
 import { runRecertificationReminderSchedule } from "../services/recertificationService.js";
 
 const reportsRouter = Router();

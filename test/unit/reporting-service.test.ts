@@ -69,7 +69,7 @@ describe("reporting service", () => {
       },
     ]);
 
-    const { getPassRatesReport } = await import("../../src/services/reportingService.js");
+    const { getPassRatesReport } = await import("../../src/modules/reporting/index.js");
 
     const report = await getPassRatesReport({
       moduleId: "module-1",
@@ -136,7 +136,7 @@ describe("reporting service", () => {
       },
     ]);
 
-    const { getMcqQualityReport } = await import("../../src/services/reportingService.js");
+    const { getMcqQualityReport } = await import("../../src/modules/reporting/index.js");
 
     const report = await getMcqQualityReport({
       moduleId: "module-1",
@@ -173,7 +173,7 @@ describe("reporting service", () => {
   });
 
   it("exports CSV with escaping for commas, quotes, and null values", async () => {
-    const { toCsv } = await import("../../src/services/reportingService.js");
+    const { toCsv } = await import("../../src/modules/reporting/index.js");
 
     const csv = toCsv(
       [
