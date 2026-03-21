@@ -78,8 +78,8 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
-vi.mock("../../src/modules/certification/index.js", () => ({ upsertRecertificationStatusFromDecision }));
 vi.mock("../../src/modules/certification/index.js", () => ({
+  upsertRecertificationStatusFromDecision,
   notifyAssessmentResult,
   notifyAppealStatusTransition,
 }));

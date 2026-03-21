@@ -34,12 +34,17 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
   },
 }));
 
-vi.mock("../../src/modules/certification/index.js", () => ({
+vi.mock("../../src/modules/certification/certificationRepository.js", () => ({
   certificationRepository: {
     upsertCertificationStatus,
     findByUserAndModule,
     findCertificationsForReminderSchedule,
   },
+  createCertificationRepository: () => ({
+    upsertCertificationStatus,
+    findByUserAndModule,
+    findCertificationsForReminderSchedule,
+  }),
 }));
 
 vi.mock("../../src/repositories/auditRepository.js", () => ({
