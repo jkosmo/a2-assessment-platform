@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.55 - 2026-03-21
+### Summary
+Test: Failure-injection-tester for transaksjonelle kommandostier. Lukker #212.
+
+### Included
+- **`test/unit/transactional-failure-injection.test.ts`**: 11 nye tester som simulerer DB-feil midt i `prisma.$transaction` for `createAssessmentDecision`, `finalizeManualReviewOverride` og `resolveAppeal`. Verifiserer at ingen etterfølgende skrivinger kalles ved feil (ingen partial state), og at notifikasjons-feil etter vellykket transaksjon svelges korrekt.
+
 ## 0.8.54 - 2026-03-20
 ### Summary
 Refactor: Ekstraher AssessmentDecisionApplicationService fra assessmentJobService. Lukker #186.
