@@ -15,7 +15,7 @@ vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
 }));
 
-vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
+vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForClaim,
     markManualReviewClaimed,
@@ -58,7 +58,7 @@ describe("manual review service", () => {
   it("rejects claim when the manual review is missing", async () => {
     findManualReviewForClaim.mockResolvedValue(null);
 
-    const { claimManualReview } = await import("../../src/services/manualReviewService.js");
+    const { claimManualReview } = await import("../../src/modules/review/manualReviewService.js");
 
     await expect(claimManualReview("review-1", "reviewer-1")).rejects.toBeInstanceOf(NotFoundError);
     expect(markManualReviewClaimed).not.toHaveBeenCalled();
@@ -72,7 +72,7 @@ describe("manual review service", () => {
       reviewerId: "reviewer-2",
     });
 
-    const { claimManualReview } = await import("../../src/services/manualReviewService.js");
+    const { claimManualReview } = await import("../../src/modules/review/manualReviewService.js");
 
     await expect(claimManualReview("review-1", "reviewer-1")).rejects.toMatchObject({
       code: "review_already_assigned",
@@ -90,7 +90,7 @@ describe("manual review service", () => {
       },
     });
 
-    const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
+    const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
     await expect(
       finalizeManualReviewOverride({
@@ -145,7 +145,7 @@ describe("manual review service", () => {
       overrideDecision: "FAIL",
     });
 
-    const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
+    const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
     const result = await finalizeManualReviewOverride({
       reviewId: "review-1",

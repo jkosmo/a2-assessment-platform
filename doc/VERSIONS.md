@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.74 - 2026-03-21
+### Summary
+Refactor (#209): migrate review and appeal to feature modules under src/modules/.
+
+### Included
+- **`src/modules/review/`**: `manualReviewRepository.ts`, `manualReviewService.ts`, `index.ts` (public API).
+- **`src/modules/appeal/`**: `appealRepository.ts`, `appealService.ts`, `appealSla.ts`, `AppealSlaMonitor.ts`, `appealSlaMonitorService.ts`, `index.ts` (public API).
+- Old files removed: `src/services/manualReviewService.ts`, `src/services/appealService.ts`, `src/services/appealSla.ts`, `src/services/AppealSlaMonitor.ts`, `src/services/appealSlaMonitorService.ts`, `src/repositories/appealRepository.ts`, `src/repositories/manualReviewRepository.ts`.
+- Consumers updated: `routes/reviews.ts`, `routes/appeals.ts`, `routes/submissions.ts`, `src/index.ts`, `services/reporting/reviewAppealReport.ts`, all affected unit and integration tests.
+- No functional changes.
+
 ## 0.8.73 - 2026-03-21
 ### Summary
 Refactor (#231): standardize route error handling — all catch blocks converge to next(error).

@@ -1,7 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
-import { collectAppealSlaMonitorSnapshot } from "../src/services/appealSlaMonitorService.js";
+import { collectAppealSlaMonitorSnapshot } from "../src/modules/appeal/appealSlaMonitorService.js";
 
 const participantAHeaders = {
   "x-user-id": "appeal-sla-participant-a",

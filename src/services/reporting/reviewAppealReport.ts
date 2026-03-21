@@ -2,7 +2,7 @@ import { ReviewStatus, AppealStatus } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
-import { buildAppealSlaSnapshot } from "../appealSla.js";
+import { buildAppealSlaSnapshot } from "../../modules/appeal/index.js";
 import { deriveRecertificationStatus } from "../recertificationService.js";
 import type {
   ReviewStatus as ReviewStatusType,

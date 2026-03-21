@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAppealRepository } from "../../src/repositories/appealRepository.js";
+import { createAppealRepository } from "../../src/modules/appeal/appealRepository.js";
 
 describe("appeal repository", () => {
   it("queries the submission ownership and latest decision shape for appeal creation", async () => {

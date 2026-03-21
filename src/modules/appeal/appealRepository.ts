@@ -2,8 +2,8 @@ import type {
   AppealStatus as AppealStatusType,
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
-import type { CreateAssessmentDecisionInput } from "./decisionRepository.js";
-import { prisma } from "../db/prisma.js";
+import type { CreateAssessmentDecisionInput } from "../../repositories/decisionRepository.js";
+import { prisma } from "../../db/prisma.js";
 
 type AppealRepositoryClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision">;
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AppealSlaMonitor } from "../../src/services/AppealSlaMonitor.js";
+import { AppealSlaMonitor } from "../../src/modules/appeal/AppealSlaMonitor.js";
 
 describe("AppealSlaMonitor", () => {
   afterEach(() => {

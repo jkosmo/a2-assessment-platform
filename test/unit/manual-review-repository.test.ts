@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createManualReviewRepository } from "../../src/repositories/manualReviewRepository.js";
+import { createManualReviewRepository } from "../../src/modules/review/manualReviewRepository.js";
 
 describe("manual review repository", () => {
   it("queries the claim shape for a manual review", async () => {

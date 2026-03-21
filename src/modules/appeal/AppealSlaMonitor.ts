@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { env } from "../../config/env.js";
 import { runAppealSlaMonitorNow, type AppealSlaMonitorSnapshot } from "./appealSlaMonitorService.js";
 
 type AppealSlaMonitorRunner = () => Promise<AppealSlaMonitorSnapshot>;

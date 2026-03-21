@@ -21,7 +21,7 @@ vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
 }));
 
-vi.mock("../../src/repositories/appealRepository.js", () => ({
+vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findOwnedSubmissionWithLatestDecision,
     findActiveAppealForSubmission,
@@ -76,7 +76,7 @@ describe("appeal service", () => {
   it("rejects appeal creation when the submission is missing", async () => {
     findOwnedSubmissionWithLatestDecision.mockResolvedValue(null);
 
-    const { createSubmissionAppeal } = await import("../../src/services/appealService.js");
+    const { createSubmissionAppeal } = await import("../../src/modules/appeal/appealService.js");
 
     await expect(
       createSubmissionAppeal({
@@ -109,7 +109,7 @@ describe("appeal service", () => {
     });
     notifyAppealStatusTransition.mockRejectedValue(new Error("webhook failed"));
 
-    const { createSubmissionAppeal } = await import("../../src/services/appealService.js");
+    const { createSubmissionAppeal } = await import("../../src/modules/appeal/appealService.js");
 
     const result = await createSubmissionAppeal({
       submissionId: "submission-1",
@@ -159,7 +159,7 @@ describe("appeal service", () => {
     updateSubmissionStatus.mockResolvedValue({ id: "submission-1" });
     findUserNotificationRecipient.mockResolvedValue(null);
 
-    const { createSubmissionAppeal } = await import("../../src/services/appealService.js");
+    const { createSubmissionAppeal } = await import("../../src/modules/appeal/appealService.js");
 
     await createSubmissionAppeal({
       submissionId: "submission-1",
@@ -187,7 +187,7 @@ describe("appeal service", () => {
       },
     });
 
-    const { claimAppeal } = await import("../../src/services/appealService.js");
+    const { claimAppeal } = await import("../../src/modules/appeal/appealService.js");
 
     await expect(claimAppeal("appeal-1", "handler-1")).rejects.toMatchObject({
       code: "appeal_already_assigned",
@@ -234,7 +234,7 @@ describe("appeal service", () => {
     });
     notifyAppealStatusTransition.mockResolvedValue(undefined);
 
-    const { resolveAppeal } = await import("../../src/services/appealService.js");
+    const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
     const result = await resolveAppeal({
       appealId: "appeal-1",

@@ -1,5 +1,5 @@
-import { AppealStatus } from "../db/prismaRuntime.js";
-import { env } from "../config/env.js";
+import { AppealStatus } from "../../db/prismaRuntime.js";
+import { env } from "../../config/env.js";
 import type { AppealStatus as AppealStatusType } from "@prisma/client";
 
 export type AppealSlaSnapshot = {

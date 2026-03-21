@@ -6,7 +6,7 @@ import {
   finalizeManualReviewOverride,
   getManualReviewWorkspace,
   listManualReviewQueue,
-} from "../services/manualReviewService.js";
+} from "../modules/review/index.js";
 
 const reviewsRouter = Router();
 

@@ -1,14 +1,14 @@
-import { AppealStatus, DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
-import { ConflictError, NotFoundError } from "../errors/AppError.js";
-import { appealRepository, createAppealRepository } from "../repositories/appealRepository.js";
-import { prisma } from "../db/prisma.js";
-import { recordAuditEvent } from "./auditService.js";
+import { AppealStatus, DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { ConflictError, NotFoundError } from "../../errors/AppError.js";
+import { appealRepository, createAppealRepository } from "./appealRepository.js";
+import { prisma } from "../../db/prisma.js";
+import { recordAuditEvent } from "../../services/auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
-import { notifyAppealStatusTransition } from "./participantNotificationService.js";
-import { env } from "../config/env.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
-import { appendDecisionWithLineage } from "./decisionLineageService.js";
-import { localizeContentText } from "../i18n/content.js";
+import { notifyAppealStatusTransition } from "../../services/participantNotificationService.js";
+import { env } from "../../config/env.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { appendDecisionWithLineage } from "../../services/decisionLineageService.js";
+import { localizeContentText } from "../../i18n/content.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;

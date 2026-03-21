@@ -1,8 +1,8 @@
-import { AppealStatus } from "../db/prismaRuntime.js";
-import { env } from "../config/env.js";
-import { appealRepository } from "../repositories/appealRepository.js";
+import { AppealStatus } from "../../db/prismaRuntime.js";
+import { env } from "../../config/env.js";
+import { appealRepository } from "./appealRepository.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
 
 type SlaState = "ON_TRACK" | "AT_RISK" | "OVERDUE" | "RESOLVED";
 

@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { claimAppeal, getAppealWorkspace, listAppealQueue, resolveAppeal } from "../services/appealService.js";
-import { buildAppealSlaSnapshot } from "../services/appealSla.js";
+import { claimAppeal, getAppealWorkspace, listAppealQueue, resolveAppeal, buildAppealSlaSnapshot } from "../modules/appeal/index.js";
 
 const appealsRouter = Router();
 

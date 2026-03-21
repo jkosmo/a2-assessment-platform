@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppealStatus } from "../../src/db/prismaRuntime.js";
-import { buildAppealSlaSnapshot } from "../../src/services/appealSla.js";
+import { buildAppealSlaSnapshot } from "../../src/modules/appeal/appealSla.js";
 
 const createdAt = new Date("2026-03-10T00:00:00.000Z");
 

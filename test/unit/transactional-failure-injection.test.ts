@@ -49,7 +49,7 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
   }),
 }));
 
-vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
+vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForOverride,
     createOverrideDecision,
@@ -63,7 +63,7 @@ vi.mock("../../src/repositories/manualReviewRepository.js", () => ({
   }),
 }));
 
-vi.mock("../../src/repositories/appealRepository.js", () => ({
+vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findAppealForResolution,
     createResolutionDecision,
@@ -292,7 +292,7 @@ describe("transactional failure injection", () => {
       findManualReviewForOverride.mockResolvedValue(BASE_MANUAL_REVIEW);
       assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
-      const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
+      const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
       await expect(
         finalizeManualReviewOverride({
@@ -321,7 +321,7 @@ describe("transactional failure injection", () => {
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       resolveManualReview.mockRejectedValue(new Error("Row locked by concurrent request"));
 
-      const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
+      const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
       await expect(
         finalizeManualReviewOverride({
@@ -345,7 +345,7 @@ describe("transactional failure injection", () => {
       });
       decisionSubmissionUpdate.mockRejectedValue(new Error("FK constraint violation"));
 
-      const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
+      const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
       await expect(
         finalizeManualReviewOverride({
@@ -378,7 +378,7 @@ describe("transactional failure injection", () => {
       });
       notifyAssessmentResult.mockRejectedValue(new Error("webhook unreachable"));
 
-      const { finalizeManualReviewOverride } = await import("../../src/services/manualReviewService.js");
+      const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
       const result = await finalizeManualReviewOverride({
         reviewId: "review-1",
@@ -407,7 +407,7 @@ describe("transactional failure injection", () => {
       findAppealForResolution.mockResolvedValue(BASE_APPEAL);
       assessmentDecisionCreate.mockRejectedValue(new Error("DB write failed"));
 
-      const { resolveAppeal } = await import("../../src/services/appealService.js");
+      const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
       await expect(
         resolveAppeal({
@@ -436,7 +436,7 @@ describe("transactional failure injection", () => {
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       markAppealResolved.mockRejectedValue(new Error("Optimistic lock conflict"));
 
-      const { resolveAppeal } = await import("../../src/services/appealService.js");
+      const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
       await expect(
         resolveAppeal({
@@ -460,7 +460,7 @@ describe("transactional failure injection", () => {
       });
       decisionSubmissionUpdate.mockRejectedValue(new Error("Deadlock detected"));
 
-      const { resolveAppeal } = await import("../../src/services/appealService.js");
+      const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
       await expect(
         resolveAppeal({
@@ -492,7 +492,7 @@ describe("transactional failure injection", () => {
       });
       notifyAppealStatusTransition.mockRejectedValue(new Error("webhook timeout"));
 
-      const { resolveAppeal } = await import("../../src/services/appealService.js");
+      const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
       const result = await resolveAppeal({
         appealId: "appeal-1",

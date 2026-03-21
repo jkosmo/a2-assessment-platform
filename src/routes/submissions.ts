@@ -2,7 +2,7 @@ import { Router } from "express";
 import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
 import { z } from "zod";
 import { createSubmission, getOwnedSubmission, getOwnedSubmissionHistory } from "../services/submissionService.js";
-import { createSubmissionAppeal } from "../services/appealService.js";
+import { createSubmissionAppeal } from "../modules/appeal/index.js";
 import { env } from "../config/env.js";
 import { localizeContentText } from "../i18n/content.js";
 import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
