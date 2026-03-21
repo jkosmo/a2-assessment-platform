@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../src/errors/AppError.js";
+import { prisma as mockPrisma } from "../../src/db/prisma.js";
 
 const findOwnedSubmissionWithLatestDecision = vi.fn();
 const findActiveAppealForSubmission = vi.fn();
@@ -67,6 +68,9 @@ describe("appeal service", () => {
     notifyAppealStatusTransition.mockReset();
     logOperationalEvent.mockReset();
     appendDecisionWithLineage.mockReset();
+    vi.mocked(mockPrisma.$transaction).mockReset();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(mockPrisma.$transaction).mockImplementation((cb: any) => cb({}));
   });
 
   it("rejects appeal creation when the submission is missing", async () => {
@@ -155,7 +159,6 @@ describe("appeal service", () => {
     updateSubmissionStatus.mockResolvedValue({ id: "submission-1" });
     findUserNotificationRecipient.mockResolvedValue(null);
 
-    const { prisma: mockPrisma } = await import("../../src/db/prisma.js");
     const { createSubmissionAppeal } = await import("../../src/services/appealService.js");
 
     await createSubmissionAppeal({
