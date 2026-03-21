@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.77 - 2026-03-21
+### Summary
+Refactor (#208): migrate assessment hotspot to src/modules/assessment/.
+
+### Included
+- **`src/modules/assessment/`** (new): 17 files moved from `src/services/` and `src/repositories/`:
+  - Services: `AssessmentWorker.ts`, `AssessmentJobRunner.ts`, `assessmentJobService.ts`, `staleLockScanner.ts`, `AssessmentEvaluator.ts`, `llmAssessmentService.ts`, `secondaryAssessmentService.ts`, `AssessmentDecisionApplicationService.ts`, `decisionService.ts`, `assessmentDecisionSignals.ts`, `assessmentRedFlagPolicy.ts`, `mcqService.ts`, `AssessmentInputFactory.ts`, `documentParsingService.ts`, `sensitiveDataMaskingService.ts`.
+  - Repositories: `assessmentJobRepository.ts`, `mcqRepository.ts`.
+  - `index.ts` exports public API: `AssessmentWorker`, `enqueueAssessmentJob`, `processAssessmentJobsNow`, `processSubmissionJobNow`, `processNextJob`, `startMcqAttempt`, `submitMcqAttempt`.
+- **Deleted** old files from `src/services/` and `src/repositories/`.
+- **Consumers updated**: `src/routes/assessments.ts`, `src/routes/modules.ts`, `src/index.ts`, `src/services/submissionService.ts`, `src/scripts/runAssessmentBatchRegression.ts`, all affected tests.
+- No functional changes.
+
 ## 0.8.76 - 2026-03-21
 ### Summary
 Feat (#238): cancel superseded manual reviews and appeals when a participant retakes a module.

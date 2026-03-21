@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAssessmentJobRepository } from "../../src/repositories/assessmentJobRepository.js";
+import { createAssessmentJobRepository } from "../../src/modules/assessment/assessmentJobRepository.js";
 
 describe("assessment job repository", () => {
   it("queries the next runnable pending job with the expected filter", async () => {

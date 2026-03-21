@@ -6,7 +6,7 @@ import {
   getActiveModuleVersion,
   listCompletedModulesForUser,
 } from "../services/moduleService.js";
-import { startMcqAttempt, submitMcqAttempt } from "../services/mcqService.js";
+import { startMcqAttempt, submitMcqAttempt } from "../modules/assessment/index.js";
 import {
   getCompletedSubmissionStatuses,
   resolveCompletedHistoryLimit,

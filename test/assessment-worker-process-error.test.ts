@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const findNextRunnableJob = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findNextRunnableJob,
     findExpiredRunningJobs: vi.fn().mockResolvedValue([]),
@@ -36,7 +36,7 @@ describe("assessment worker process error handling", () => {
     findNextRunnableJob.mockRejectedValue(error);
 
     const { registerProcessErrorHandlers } = await import("../src/process/processErrorHandlers.js");
-    const { AssessmentWorker } = await import("../src/services/AssessmentWorker.js");
+    const { AssessmentWorker } = await import("../src/modules/assessment/AssessmentWorker.js");
 
     const detachHandlers = registerProcessErrorHandlers(vi.fn());
     const worker = new AssessmentWorker(10);

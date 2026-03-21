@@ -1,4 +1,4 @@
-import { getAssessmentRules } from "../config/assessmentRules.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
 
 type LlmPayloadInput = {
   moduleId: string;

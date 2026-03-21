@@ -16,7 +16,7 @@ const updateSubmissionStatus = vi.fn();
 const enqueueAssessmentJobMock = vi.fn();
 const recordAuditEvent = vi.fn();
 
-vi.mock("../../src/repositories/mcqRepository.js", () => ({
+vi.mock("../../src/modules/assessment/mcqRepository.js", () => ({
   mcqRepository: {
     findSubmissionForModuleMcq,
     findOpenAttemptForSubmission,
@@ -29,13 +29,13 @@ vi.mock("../../src/repositories/mcqRepository.js", () => ({
   },
 }));
 
-vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     updateSubmissionStatus,
   },
 }));
 
-vi.mock("../../src/services/assessmentJobService.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobService.js", () => ({
   enqueueAssessmentJob: enqueueAssessmentJobMock,
 }));
 
@@ -95,7 +95,7 @@ describe("mcq service — submitMcqAttempt", () => {
   });
 
   it("calculates correct rawScore, percentScore, and scaledScore for a fully correct submission", async () => {
-    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     const result = await submitMcqAttempt({
       moduleId: "module-1",
@@ -116,7 +116,7 @@ describe("mcq service — submitMcqAttempt", () => {
   });
 
   it("calculates correct scores when only one of two answers is correct", async () => {
-    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     const result = await submitMcqAttempt({
       moduleId: "module-1",
@@ -136,7 +136,7 @@ describe("mcq service — submitMcqAttempt", () => {
   });
 
   it("ignores responses for unknown question IDs and does not count them", async () => {
-    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     const result = await submitMcqAttempt({
       moduleId: "module-1",
@@ -160,7 +160,7 @@ describe("mcq service — submitMcqAttempt", () => {
       completedAt: new Date("2026-03-15T10:00:00.000Z"),
     });
 
-    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     await expect(
       submitMcqAttempt({
@@ -174,7 +174,7 @@ describe("mcq service — submitMcqAttempt", () => {
   });
 
   it("records an audit event with rawScore, percentScore, and scaledScore after submission", async () => {
-    const { submitMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     await submitMcqAttempt({
       moduleId: "module-1",
@@ -238,7 +238,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
       },
     ]);
 
-    const { startMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     const result = await startMcqAttempt("module-1", "submission-1", "user-1", "en-GB");
 
@@ -269,7 +269,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
       },
     ]);
 
-    const { startMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     const result = await startMcqAttempt("module-1", "submission-1", "user-1", "en-GB");
 
@@ -305,7 +305,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
       return Promise.resolve([capturedQuestion]);
     });
 
-    const { startMcqAttempt } = await import("../../src/services/mcqService.js");
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
 
     await startMcqAttempt("module-1", "submission-1", "user-1", "en-GB");
 

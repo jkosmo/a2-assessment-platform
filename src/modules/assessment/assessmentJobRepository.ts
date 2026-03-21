@@ -1,5 +1,5 @@
 import type { AssessmentJobStatus as AssessmentJobStatusType, SubmissionStatus as SubmissionStatusType } from "@prisma/client";
-import { prisma } from "../db/prisma.js";
+import { prisma } from "../../db/prisma.js";
 
 type CreateAssessmentJobInput = {
   submissionId: string;

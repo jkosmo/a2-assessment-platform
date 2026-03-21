@@ -1,11 +1,11 @@
 import { env } from "../config/env.js";
-import { evaluatePracticalWithLlm } from "../services/llmAssessmentService.js";
-import { resolveAssessmentDecision } from "../services/decisionService.js";
+import { evaluatePracticalWithLlm } from "../modules/assessment/llmAssessmentService.js";
+import { resolveAssessmentDecision } from "../modules/assessment/decisionService.js";
 import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
-} from "../services/secondaryAssessmentService.js";
-import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "../services/assessmentDecisionSignals.js";
+} from "../modules/assessment/secondaryAssessmentService.js";
+import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "../modules/assessment/assessmentDecisionSignals.js";
 import { assessmentBatchCases, type AssessmentBatchCase, type BatchExpectedOutcome } from "./assessmentBatchCases.js";
 
 type BatchRunRecord = {

@@ -1,15 +1,15 @@
-import { SubmissionStatus } from "../db/prismaRuntime.js";
-import { getAssessmentRules } from "../config/assessmentRules.js";
-import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
-import { mcqRepository } from "../repositories/mcqRepository.js";
+import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
+import { assessmentJobRepository } from "./assessmentJobRepository.js";
+import { mcqRepository } from "./mcqRepository.js";
 import { enqueueAssessmentJob } from "./assessmentJobService.js";
-import { recordAuditEvent } from "./auditService.js";
-import type { SupportedLocale } from "../i18n/locale.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import {
   localizeContentArray,
   localizeContentText,
   matchesLocalizedContentVariant,
-} from "../i18n/content.js";
+} from "../../i18n/content.js";
 
 export async function startMcqAttempt(
   moduleId: string,

@@ -7,7 +7,7 @@ const logOperationalEvent = vi.fn();
 
 const findLongRunningJobs = vi.fn();
 
-vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findExpiredRunningJobs,
     resetExpiredJob,
@@ -36,7 +36,7 @@ describe("stale-lock scanner", () => {
   it("returns zero counts when no expired jobs are found", async () => {
     findExpiredRunningJobs.mockResolvedValue([]);
 
-    const { scanAndResetStaleJobs } = await import("../../src/services/staleLockScanner.js");
+    const { scanAndResetStaleJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
 
     const result = await scanAndResetStaleJobs();
 
@@ -52,7 +52,7 @@ describe("stale-lock scanner", () => {
       { id: "job-1", attempts: 1, maxAttempts: 3, submissionId: "submission-1" },
     ]);
 
-    const { scanAndResetStaleJobs } = await import("../../src/services/staleLockScanner.js");
+    const { scanAndResetStaleJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
 
     const result = await scanAndResetStaleJobs();
 
@@ -85,7 +85,7 @@ describe("stale-lock scanner", () => {
       { id: "job-2", attempts: 3, maxAttempts: 3, submissionId: "submission-2" },
     ]);
 
-    const { scanAndResetStaleJobs } = await import("../../src/services/staleLockScanner.js");
+    const { scanAndResetStaleJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
 
     const result = await scanAndResetStaleJobs();
 
@@ -110,7 +110,7 @@ describe("stale-lock scanner", () => {
       { id: "job-3", attempts: 2, maxAttempts: 3, submissionId: "submission-3" },
     ]);
 
-    const { scanAndResetStaleJobs } = await import("../../src/services/staleLockScanner.js");
+    const { scanAndResetStaleJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
 
     const result = await scanAndResetStaleJobs();
 
@@ -123,7 +123,7 @@ describe("stale-lock scanner", () => {
     it("emits no alert when no jobs are stuck", async () => {
       findLongRunningJobs.mockResolvedValue([]);
 
-      const { alertOnStuckJobs } = await import("../../src/services/staleLockScanner.js");
+      const { alertOnStuckJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
       await alertOnStuckJobs();
 
       expect(logOperationalEvent).not.toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe("stale-lock scanner", () => {
         { id: "job-stuck-1", submissionId: "submission-1", lockedAt, lockedBy: "default-worker", attempts: 1 },
       ]);
 
-      const { alertOnStuckJobs } = await import("../../src/services/staleLockScanner.js");
+      const { alertOnStuckJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
       await alertOnStuckJobs();
 
       expect(logOperationalEvent).toHaveBeenCalledWith(
@@ -159,7 +159,7 @@ describe("stale-lock scanner", () => {
         { id: "job-2", submissionId: "sub-2", lockedAt: new Date(), lockedBy: "worker", attempts: 2 },
       ]);
 
-      const { alertOnStuckJobs } = await import("../../src/services/staleLockScanner.js");
+      const { alertOnStuckJobs } = await import("../../src/modules/assessment/staleLockScanner.js");
       await alertOnStuckJobs();
 
       expect(logOperationalEvent).toHaveBeenCalledTimes(2);

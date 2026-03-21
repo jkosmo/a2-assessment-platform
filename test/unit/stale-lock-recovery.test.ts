@@ -20,7 +20,7 @@ const findLongRunningJobs = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findNextRunnableJob,
     tryLockPendingJob,
@@ -75,7 +75,7 @@ describe("stale-lock recovery path", () => {
     findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "submission-1" });
     tryLockPendingJob.mockResolvedValue({ count: 1 });
 
-    const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+    const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
     const runAssessment = vi.fn().mockResolvedValue(undefined);
 
     const result = await processNextJob(runAssessment);
@@ -107,7 +107,7 @@ describe("stale-lock recovery path", () => {
     // After FAILED transition, no PENDING job is available
     findNextRunnableJob.mockResolvedValue(null);
 
-    const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+    const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
     const runAssessment = vi.fn();
 
     const result = await processNextJob(runAssessment);
@@ -132,7 +132,7 @@ describe("stale-lock recovery path", () => {
     findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "submission-1" });
     tryLockPendingJob.mockResolvedValue({ count: 1 });
 
-    const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+    const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
     const runAssessment = vi.fn().mockResolvedValue(undefined);
 
     await processNextJob(runAssessment);
@@ -147,7 +147,7 @@ describe("stale-lock recovery path", () => {
     findNextRunnableJob.mockResolvedValue({ id: "job-3", submissionId: "submission-3" });
     tryLockPendingJob.mockResolvedValue({ count: 1 });
 
-    const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+    const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
     const runAssessment = vi.fn().mockResolvedValue(undefined);
 
     const result = await processNextJob(runAssessment);
@@ -163,7 +163,7 @@ describe("stale-lock recovery path", () => {
     findNextRunnableJob.mockResolvedValue({ id: "job-4", submissionId: "submission-4" });
     tryLockPendingJob.mockResolvedValue({ count: 1 });
 
-    const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+    const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
     const runAssessment = vi.fn().mockResolvedValue(undefined);
 
     // Scanner failure should propagate — the whole cycle fails safely

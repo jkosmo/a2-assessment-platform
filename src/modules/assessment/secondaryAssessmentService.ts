@@ -1,4 +1,4 @@
-import { getAssessmentRules } from "../config/assessmentRules.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import {
   hasOnlyInsufficientEvidenceRedFlags,

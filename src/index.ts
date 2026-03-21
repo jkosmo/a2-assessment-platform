@@ -4,7 +4,7 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js";
-import { AssessmentWorker } from "./services/AssessmentWorker.js";
+import { AssessmentWorker } from "./modules/assessment/index.js";
 import { AppealSlaMonitor } from "./modules/appeal/index.js";
 
 const role = env.PROCESS_ROLE;

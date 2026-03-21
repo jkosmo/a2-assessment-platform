@@ -1,7 +1,7 @@
-import { env } from "../config/env.js";
-import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
-import { recordAuditEvent } from "./auditService.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
+import { env } from "../../config/env.js";
+import { assessmentJobRepository } from "./assessmentJobRepository.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
 
 export type StaleLockScanResult = {
   scannedAt: string;

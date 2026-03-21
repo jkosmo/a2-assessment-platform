@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { evaluatePracticalWithAzureOpenAi } from "../src/services/llmAssessmentService.js";
+import { evaluatePracticalWithAzureOpenAi } from "../src/modules/assessment/llmAssessmentService.js";
 
 const originalFetch = global.fetch;
 

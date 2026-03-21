@@ -28,7 +28,7 @@ vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
 
-vi.mock("../../src/services/documentParsingService.js", () => ({
+vi.mock("../../src/modules/assessment/documentParsingService.js", () => ({
   resolveSubmissionResponseJson,
 }));
 

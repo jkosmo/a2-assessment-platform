@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DecisionType, SubmissionStatus } from "../../src/db/prismaRuntime.js";
-import type { LlmStructuredAssessment } from "../../src/services/llmAssessmentService.js";
+import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
 
 const assessmentDecisionCreate = vi.fn();
 const manualReviewCreate = vi.fn();
@@ -81,7 +81,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-1" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-1",
@@ -137,7 +137,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-2" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-2",
@@ -196,7 +196,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-3" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-3",
@@ -259,7 +259,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-4" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-4",
@@ -304,7 +304,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-4b" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-4b",
@@ -358,7 +358,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-4c" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-4c",
@@ -407,7 +407,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-5" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-5",
@@ -454,7 +454,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-6" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-6",
@@ -493,7 +493,7 @@ describe("decision service", () => {
       // mcqPercentScore=80, mcqWeight=40 → effectiveMcqScaledScore = (80/100)*40 = 32
       // practical_score_scaled=45, no practicalWeight → effectivePracticalScaledScore=45
       // totalScore = 45 + 32 = 77
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 24, // would give 45+24=69 without weight override (fail)
         mcqPercentScore: 80,
@@ -509,7 +509,7 @@ describe("decision service", () => {
       // effectivePracticalScaledScore = (35/70)*60 = 30
       // mcqScaledScore=30, no mcqWeight → effectiveMcqScaledScore=30
       // totalScore = 30 + 30 = 60
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -523,7 +523,7 @@ describe("decision service", () => {
       // practicalMaxScore=70, practical_score_scaled=70, practicalWeight=60 → effectivePractical=(70/70)*60=60
       // mcqPercentScore=100, mcqWeight=40 → effectiveMcq=(100/100)*40=40
       // totalScore = 60 + 40 = 100
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -538,7 +538,7 @@ describe("decision service", () => {
   describe("assessmentPolicy override", () => {
     it("passes when module-level totalMin is lower than global and score is above module threshold", async () => {
       // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=20 → total=65 (fails globally)
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 20,
         mcqPercentScore: 66,
@@ -552,7 +552,7 @@ describe("decision service", () => {
 
     it("fails when module-level totalMin is higher than global and score is below module threshold", async () => {
       // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=30 → total=75 (passes globally)
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -565,7 +565,7 @@ describe("decision service", () => {
 
     it("falls back to global rules when assessmentPolicy is null", async () => {
       // practicalScoreScaled=45, mcqScaledScore=30 → total=75 passes global default (70)
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -579,7 +579,7 @@ describe("decision service", () => {
 
   describe("resolveAssessmentDecision — score and practicalPercent", () => {
     it("returns totalScore = practical + mcq with default weights", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -590,7 +590,7 @@ describe("decision service", () => {
     });
 
     it("computes practicalPercent as rubric_total / rubricMaxTotal * 100", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -602,7 +602,7 @@ describe("decision service", () => {
     });
 
     it("returns practicalPercent null when rubricMaxTotal is 0", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -614,7 +614,7 @@ describe("decision service", () => {
     });
 
     it("uses the provided rubricMaxTotal instead of the default of 20", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -626,7 +626,7 @@ describe("decision service", () => {
     });
 
     it("rounds totalScore to 2 decimal places", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // effectivePractical = (10 / 70) * 30 = 4.285714... → combined with mcq=30 → 34.285714... → 34.29
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
@@ -642,7 +642,7 @@ describe("decision service", () => {
     // Global borderline: { min: 67, max: 73 }, global totalMin: 70
 
     it("routes to manual review when totalScore is inside the borderline window", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 45 + 25 = 70 — passes totalMin but is inside [67, 73]
       const result = resolveAssessmentDecision({
         mcqScaledScore: 25,
@@ -656,7 +656,7 @@ describe("decision service", () => {
     });
 
     it("returns inBorderlineWindow=true at the lower window boundary (67)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 45 + 22 = 67 = window min
       const result = resolveAssessmentDecision({
         mcqScaledScore: 22,
@@ -669,7 +669,7 @@ describe("decision service", () => {
     });
 
     it("returns inBorderlineWindow=true at the upper window boundary (73)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 45 + 28 = 73 = window max
       const result = resolveAssessmentDecision({
         mcqScaledScore: 28,
@@ -682,7 +682,7 @@ describe("decision service", () => {
     });
 
     it("does not trigger borderline when score is one point above the window (74)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 45 + 29 = 74 > window max (73)
       const result = resolveAssessmentDecision({
         mcqScaledScore: 29,
@@ -696,7 +696,7 @@ describe("decision service", () => {
     });
 
     it("does not trigger borderline when score is one point below the window (66)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 45 + 21 = 66 < window min (67)
       const result = resolveAssessmentDecision({
         mcqScaledScore: 21,
@@ -709,7 +709,7 @@ describe("decision service", () => {
     });
 
     it("respects policy-level borderline window override", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // Score 80 is outside global window [67,73] but inside policy window [78,82]
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
@@ -727,7 +727,7 @@ describe("decision service", () => {
     // Global: practicalMinPercent=50, mcqMinPercent=60
 
     it("fails passesThresholds when practicalPercent is below global practicalMinPercent (50%)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // rubric_total=9, rubricMaxTotal=20 → practicalPercent=45% < 50%
       // totalScore=80 is above totalMin=70, but practical gate fails
       const result = resolveAssessmentDecision({
@@ -743,7 +743,7 @@ describe("decision service", () => {
     });
 
     it("passes when practicalPercent is below global but above module-level practicalMinPercent override", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // rubric_total=9, rubricMaxTotal=20 → practicalPercent=45%; global gate=50 fails, policy gate=40 passes
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
@@ -757,7 +757,7 @@ describe("decision service", () => {
     });
 
     it("fails passesThresholds when mcqPercentScore is below global mcqMinPercent (60%)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // totalScore=65, above totalMin=70? No — 45+20=65<70 anyway. Let's use high practical.
       // total = 55 + 20 = 75 ≥ 70, but mcqPercentScore=50 < 60%
       const result = resolveAssessmentDecision({
@@ -770,7 +770,7 @@ describe("decision service", () => {
     });
 
     it("passes when mcqPercentScore is below global but above module-level mcqMinPercent override", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 55 + 20 = 75 ≥ 70, mcqPercentScore=50 < global 60% but above policy 40%
       const result = resolveAssessmentDecision({
         mcqScaledScore: 20,
@@ -784,7 +784,7 @@ describe("decision service", () => {
 
   describe("resolveAssessmentDecision — red flag routing", () => {
     it("sets hasOpenRedFlag=true and passesThresholds=false even when total score is above threshold", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // POTENTIAL_SENSITIVE_DATA is in redFlagCodes and "high" is in redFlagSeverities → forcing flag
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
@@ -804,7 +804,7 @@ describe("decision service", () => {
     });
 
     it("routes to manual review when LLM recommends it with no red flags and no borderline", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // Score 80 passes all gates; LLM says manual_review due to low_confidence
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
@@ -826,7 +826,7 @@ describe("decision service", () => {
 
   describe("resolveAssessmentDecision — decision reason strings", () => {
     it("returns 'Automatic pass by threshold rules.' for a clean pass", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
@@ -838,7 +838,7 @@ describe("decision service", () => {
     });
 
     it("returns 'Automatic fail by threshold rules.' for a score below threshold with no insufficient signal", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 40 + 20 = 60 < 70; score below borderline[67,73]; confidence_note has no patterns
       const result = resolveAssessmentDecision({
         mcqScaledScore: 20,
@@ -862,7 +862,7 @@ describe("decision service", () => {
     });
 
     it("returns 'Automatic fail due to insufficient submission evidence.' when insufficient signal is present", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 0,
         mcqPercentScore: 0,
@@ -883,7 +883,7 @@ describe("decision service", () => {
     });
 
     it("returns the manual review reason for borderline scores", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // total = 45 + 25 = 70 — inside window [67, 73]
       const result = resolveAssessmentDecision({
         mcqScaledScore: 25,
@@ -906,7 +906,7 @@ describe("decision service", () => {
     });
     submissionUpdate.mockResolvedValue({ id: "submission-7" });
 
-    const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({
       submissionId: "submission-7",

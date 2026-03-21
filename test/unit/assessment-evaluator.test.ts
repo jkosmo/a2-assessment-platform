@@ -13,12 +13,12 @@ const evaluateSecondaryAssessmentTrigger = vi.fn();
 const evaluateSecondaryAssessmentDisagreement = vi.fn();
 const shouldSuppressManualReviewForInsufficientEvidenceDisagreement = vi.fn();
 
-vi.mock("../../src/services/secondaryAssessmentService.js", () => ({
+vi.mock("../../src/modules/assessment/secondaryAssessmentService.js", () => ({
   evaluateSecondaryAssessmentTrigger,
   evaluateSecondaryAssessmentDisagreement,
 }));
 
-vi.mock("../../src/services/assessmentDecisionSignals.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentDecisionSignals.js", () => ({
   shouldSuppressManualReviewForInsufficientEvidenceDisagreement,
 }));
 
@@ -28,11 +28,11 @@ const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const sha256 = vi.fn(() => "hash");
 
-vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: { createLlmEvaluation },
 }));
 
-vi.mock("../../src/services/llmAssessmentService.js", () => ({
+vi.mock("../../src/modules/assessment/llmAssessmentService.js", () => ({
   evaluatePracticalWithLlm,
 }));
 
@@ -125,7 +125,7 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
     const primaryResult = buildLlmResult();
     evaluatePracticalWithLlm.mockResolvedValue(primaryResult);
 
-    const { runLlmEvaluationPipeline } = await import("../../src/services/AssessmentEvaluator.js");
+    const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
     const result = await runLlmEvaluationPipeline({
       ...BASE_CTX,
       inputContext: buildInputContext(),
@@ -162,7 +162,7 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
       .mockResolvedValueOnce({ id: "eval-primary" })
       .mockResolvedValueOnce({ id: "eval-secondary" });
 
-    const { runLlmEvaluationPipeline } = await import("../../src/services/AssessmentEvaluator.js");
+    const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
     const result = await runLlmEvaluationPipeline({
       ...BASE_CTX,
       inputContext: buildInputContext(),
@@ -205,7 +205,7 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
       .mockResolvedValueOnce(secondaryResult);
     createLlmEvaluation.mockResolvedValue({ id: "eval" });
 
-    const { runLlmEvaluationPipeline } = await import("../../src/services/AssessmentEvaluator.js");
+    const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
     const result = await runLlmEvaluationPipeline({
       ...BASE_CTX,
       inputContext: buildInputContext(),
@@ -219,7 +219,7 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
   it("logs and rethrows when the primary LLM call fails", async () => {
     evaluatePracticalWithLlm.mockRejectedValue(new Error("LLM timeout"));
 
-    const { runLlmEvaluationPipeline } = await import("../../src/services/AssessmentEvaluator.js");
+    const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
     await expect(
       runLlmEvaluationPipeline({ ...BASE_CTX, inputContext: buildInputContext() }),
     ).rejects.toThrow("LLM timeout");
@@ -247,7 +247,7 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
       .mockRejectedValueOnce(new Error("Secondary timeout"));
     createLlmEvaluation.mockResolvedValue({ id: "eval-primary" });
 
-    const { runLlmEvaluationPipeline } = await import("../../src/services/AssessmentEvaluator.js");
+    const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
     await expect(
       runLlmEvaluationPipeline({ ...BASE_CTX, inputContext: buildInputContext() }),
     ).rejects.toThrow("Secondary timeout");

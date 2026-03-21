@@ -2,7 +2,7 @@ import type { Express } from "express";
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/db/prisma.js";
-import type { LlmStructuredAssessment } from "../src/services/llmAssessmentService.js";
+import type { LlmStructuredAssessment } from "../src/modules/assessment/llmAssessmentService.js";
 import {
   createSubmission,
   findModuleIdByTitle,
@@ -13,9 +13,9 @@ import {
 
 const mockEvaluatePracticalWithLlm = vi.hoisted(() => vi.fn());
 
-vi.mock("../src/services/llmAssessmentService.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/services/llmAssessmentService.js")>(
-    "../src/services/llmAssessmentService.js",
+vi.mock("../src/modules/assessment/llmAssessmentService.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/modules/assessment/llmAssessmentService.js")>(
+    "../src/modules/assessment/llmAssessmentService.js",
   );
 
   return {

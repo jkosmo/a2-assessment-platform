@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../src/services/sensitiveDataMaskingService.js", () => ({
+vi.mock("../../src/modules/assessment/sensitiveDataMaskingService.js", () => ({
   preprocessSensitiveDataForLlm: vi.fn((input) => ({
     payload: { responseJson: input.responseJson },
     maskingEnabled: false,
@@ -18,7 +18,7 @@ vi.mock("../../src/i18n/content.js", () => ({
 describe("AssessmentInputFactory", () => {
   describe("parseRubricCriteriaIds", () => {
     it("extracts keys when criteriaJson is an object", async () => {
-      const { parseRubricCriteriaIds } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseRubricCriteriaIds } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       const ids = parseRubricCriteriaIds(
         JSON.stringify({ relevance_for_case: "0-4", quality_and_utility: "0-4" }),
       );
@@ -26,7 +26,7 @@ describe("AssessmentInputFactory", () => {
     });
 
     it("extracts id fields when criteriaJson is an array", async () => {
-      const { parseRubricCriteriaIds } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseRubricCriteriaIds } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       const ids = parseRubricCriteriaIds(
         JSON.stringify([{ id: "criterion_a" }, { id: "criterion_b" }]),
       );
@@ -34,31 +34,31 @@ describe("AssessmentInputFactory", () => {
     });
 
     it("returns empty array for invalid JSON", async () => {
-      const { parseRubricCriteriaIds } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseRubricCriteriaIds } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       expect(parseRubricCriteriaIds("not-json")).toEqual([]);
     });
   });
 
   describe("parseRubricMaxTotal", () => {
     it("extracts max_total from scalingRuleJson", async () => {
-      const { parseRubricMaxTotal } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseRubricMaxTotal } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       expect(parseRubricMaxTotal(JSON.stringify({ max_total: 25 }))).toBe(25);
     });
 
     it("returns default 20 when max_total is missing", async () => {
-      const { parseRubricMaxTotal } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseRubricMaxTotal } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       expect(parseRubricMaxTotal(JSON.stringify({ other_field: 5 }))).toBe(20);
     });
 
     it("returns default 20 for invalid JSON", async () => {
-      const { parseRubricMaxTotal } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseRubricMaxTotal } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       expect(parseRubricMaxTotal("bad json")).toBe(20);
     });
   });
 
   describe("parseSubmissionFieldLabels", () => {
     it("extracts string labels from schema fields", async () => {
-      const { parseSubmissionFieldLabels } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       const schema = JSON.stringify({
         fields: [
           { id: "field1", label: "My Field" },
@@ -69,7 +69,7 @@ describe("AssessmentInputFactory", () => {
     });
 
     it("extracts en-GB label from localized label objects", async () => {
-      const { parseSubmissionFieldLabels } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       const schema = JSON.stringify({
         fields: [{ id: "field1", label: { "en-GB": "English Label", nb: "Norsk etikett" } }],
       });
@@ -77,20 +77,20 @@ describe("AssessmentInputFactory", () => {
     });
 
     it("falls back to field id when label is missing", async () => {
-      const { parseSubmissionFieldLabels } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       const schema = JSON.stringify({ fields: [{ id: "my_field_id" }] });
       expect(parseSubmissionFieldLabels(schema)).toEqual(["my_field_id"]);
     });
 
     it("returns empty array when schema is null", async () => {
-      const { parseSubmissionFieldLabels } = await import("../../src/services/AssessmentInputFactory.js");
+      const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       expect(parseSubmissionFieldLabels(null)).toEqual([]);
     });
   });
 
   describe("buildAssessmentInputContext", () => {
     it("builds a complete context from a submission fixture", async () => {
-      const { buildAssessmentInputContext } = await import("../../src/services/AssessmentInputFactory.js");
+      const { buildAssessmentInputContext } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
 
       const submission = {
         moduleId: "module-1",
@@ -124,7 +124,7 @@ describe("AssessmentInputFactory", () => {
     });
 
     it("parses assessmentPolicyJson when present", async () => {
-      const { buildAssessmentInputContext } = await import("../../src/services/AssessmentInputFactory.js");
+      const { buildAssessmentInputContext } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
 
       const policy = { passRules: { totalMin: 65 } };
       const submission = {

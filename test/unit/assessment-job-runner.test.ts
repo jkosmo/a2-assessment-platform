@@ -15,7 +15,7 @@ const findLongRunningJobs = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findNextRunnableJob,
     tryLockPendingJob,
@@ -66,7 +66,7 @@ describe("AssessmentJobRunner", () => {
   describe("processNextJob", () => {
     it("returns false when no runnable job is found", async () => {
       findNextRunnableJob.mockResolvedValue(null);
-      const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn();
 
       const result = await processNextJob(runAssessment);
@@ -78,7 +78,7 @@ describe("AssessmentJobRunner", () => {
     it("returns false when lock cannot be acquired", async () => {
       findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "sub-1" });
       tryLockPendingJob.mockResolvedValue({ count: 0 });
-      const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn();
 
       const result = await processNextJob(runAssessment);
@@ -91,7 +91,7 @@ describe("AssessmentJobRunner", () => {
       findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "sub-1" });
       tryLockPendingJob.mockResolvedValue({ count: 1 });
       markJobSucceeded.mockResolvedValue(undefined);
-      const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn().mockResolvedValue(undefined);
 
       const result = await processNextJob(runAssessment);
@@ -111,7 +111,7 @@ describe("AssessmentJobRunner", () => {
         availableAt: new Date(),
       });
       markJobForRetryOrFailure.mockResolvedValue(undefined);
-      const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn().mockRejectedValue(new Error("LLM timeout"));
 
       const result = await processNextJob(runAssessment);
@@ -136,7 +136,7 @@ describe("AssessmentJobRunner", () => {
         availableAt: new Date(),
       });
       markJobForRetryOrFailure.mockResolvedValue(undefined);
-      const { processNextJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn().mockRejectedValue(new Error("Persistent error"));
 
       await processNextJob(runAssessment);
@@ -155,7 +155,7 @@ describe("AssessmentJobRunner", () => {
     it("returns existing job when a pending/running job already exists", async () => {
       const existingJob = { id: "job-existing", submissionId: "sub-1" };
       findPendingOrRunningJobForSubmission.mockResolvedValue(existingJob);
-      const { enqueueAssessmentJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { enqueueAssessmentJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
 
       const result = await enqueueAssessmentJob("sub-1");
 
@@ -167,7 +167,7 @@ describe("AssessmentJobRunner", () => {
       findPendingOrRunningJobForSubmission.mockResolvedValue(null);
       const newJob = { id: "job-new", submissionId: "sub-1" };
       createAssessmentJob.mockResolvedValue(newJob);
-      const { enqueueAssessmentJob } = await import("../../src/services/AssessmentJobRunner.js");
+      const { enqueueAssessmentJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
 
       const result = await enqueueAssessmentJob("sub-1");
 

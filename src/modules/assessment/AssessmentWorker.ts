@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { env } from "../../config/env.js";
 import { processNextJob } from "./assessmentJobService.js";
 
 type AssessmentWorkerRunner = () => Promise<boolean>;

@@ -5,7 +5,7 @@ import { getModuleWithActiveVersion } from "../repositories/moduleRepository.js"
 import { submissionRepository } from "../repositories/submissionRepository.js";
 import { recordAuditEvent } from "./auditService.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
-import { resolveSubmissionResponseJson } from "./documentParsingService.js";
+import { resolveSubmissionResponseJson } from "../modules/assessment/documentParsingService.js";
 import { cancelSupersededReviews } from "../modules/review/index.js";
 import { cancelSupersededAppeals } from "../modules/appeal/index.js";
 

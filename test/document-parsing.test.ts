@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSubmissionResponseJson, type DocumentParserAdapters } from "../src/services/documentParsingService.js";
+import { resolveSubmissionResponseJson, type DocumentParserAdapters } from "../src/modules/assessment/documentParsingService.js";
 
 const fakeAdapters: DocumentParserAdapters = {
   async parsePdf() {

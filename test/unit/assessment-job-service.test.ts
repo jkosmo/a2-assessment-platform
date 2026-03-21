@@ -14,7 +14,7 @@ const evaluatePracticalWithLlm = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
   assessmentJobRepository: {
     findNextRunnableJob,
     tryLockPendingJob,
@@ -31,11 +31,11 @@ vi.mock("../../src/repositories/assessmentJobRepository.js", () => ({
   },
 }));
 
-vi.mock("../../src/services/decisionService.js", () => ({
+vi.mock("../../src/modules/assessment/decisionService.js", () => ({
   createAssessmentDecision,
 }));
 
-vi.mock("../../src/services/llmAssessmentService.js", () => ({
+vi.mock("../../src/modules/assessment/llmAssessmentService.js", () => ({
   evaluatePracticalWithLlm,
 }));
 
@@ -47,7 +47,7 @@ vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
 
-vi.mock("../../src/services/sensitiveDataMaskingService.js", () => ({
+vi.mock("../../src/modules/assessment/sensitiveDataMaskingService.js", () => ({
   preprocessSensitiveDataForLlm: vi.fn((input) => ({
     payload: {
       responseJson: input.responseJson,
@@ -208,7 +208,7 @@ describe("assessment job service traffic-light policy", () => {
         }),
       );
 
-    const { processNextJob } = await import("../../src/services/assessmentJobService.js");
+    const { processNextJob } = await import("../../src/modules/assessment/assessmentJobService.js");
 
     const processed = await processNextJob();
 
@@ -243,7 +243,7 @@ describe("assessment job service traffic-light policy", () => {
         }),
       );
 
-    const { processNextJob } = await import("../../src/services/assessmentJobService.js");
+    const { processNextJob } = await import("../../src/modules/assessment/assessmentJobService.js");
 
     const processed = await processNextJob();
 
@@ -283,7 +283,7 @@ describe("assessment job service traffic-light policy", () => {
       }),
     );
 
-    const { processNextJob } = await import("../../src/services/assessmentJobService.js");
+    const { processNextJob } = await import("../../src/modules/assessment/assessmentJobService.js");
 
     const processed = await processNextJob();
 
@@ -352,7 +352,7 @@ describe("assessment job service traffic-light policy", () => {
         }),
       );
 
-    const { processNextJob } = await import("../../src/services/assessmentJobService.js");
+    const { processNextJob } = await import("../../src/modules/assessment/assessmentJobService.js");
 
     const processed = await processNextJob();
 

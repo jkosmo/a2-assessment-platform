@@ -1,7 +1,7 @@
 import { preprocessSensitiveDataForLlm, type SensitiveDataPreprocessResult } from "./sensitiveDataMaskingService.js";
-import { localizeContentText } from "../i18n/content.js";
-import type { SupportedLocale } from "../i18n/locale.js";
-import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../codecs/assessmentPolicyCodec.js";
+import { localizeContentText } from "../../i18n/content.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 
 export type AssessmentInputContext = {
   /** Rubric criterion IDs extracted from the module rubric configuration. */

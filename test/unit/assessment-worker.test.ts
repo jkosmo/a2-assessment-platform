@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AssessmentWorker } from "../../src/services/AssessmentWorker.js";
+import { AssessmentWorker } from "../../src/modules/assessment/AssessmentWorker.js";
 
 describe("AssessmentWorker", () => {
   afterEach(() => {

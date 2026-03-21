@@ -1,8 +1,8 @@
-import { AssessmentJobStatus } from "../db/prismaRuntime.js";
-import { env } from "../config/env.js";
-import { assessmentJobRepository } from "../repositories/assessmentJobRepository.js";
-import { recordAuditEvent } from "./auditService.js";
-import { logOperationalEvent } from "../observability/operationalLog.js";
+import { AssessmentJobStatus } from "../../db/prismaRuntime.js";
+import { env } from "../../config/env.js";
+import { assessmentJobRepository } from "./assessmentJobRepository.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { alertOnStuckJobs, scanAndResetStaleJobs } from "./staleLockScanner.js";
 
 export type AssessmentRunFn = (jobId: string) => Promise<void>;

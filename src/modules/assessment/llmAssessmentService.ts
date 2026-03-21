@@ -1,8 +1,8 @@
-import { env } from "../config/env.js";
-import type { SupportedLocale } from "../i18n/locale.js";
+import { env } from "../../config/env.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { buildAllowedRedFlagCodesForPrompt, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
-import { llmResponseCodec } from "../codecs/llmResponseCodec.js";
-import type { LlmStructuredAssessment } from "../codecs/llmResponseCodec.js";
+import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
+import type { LlmStructuredAssessment } from "../../codecs/llmResponseCodec.js";
 export type { LlmStructuredAssessment };
 
 type AssessmentContext = {

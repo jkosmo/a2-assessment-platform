@@ -1,18 +1,18 @@
-import { DecisionType, SubmissionStatus } from "../db/prismaRuntime.js";
-import { getAssessmentRules } from "../config/assessmentRules.js";
-import { createDecisionRepository } from "../repositories/decisionRepository.js";
-import { prisma } from "../db/prisma.js";
+import { DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
+import { createDecisionRepository } from "../../repositories/decisionRepository.js";
+import { prisma } from "../../db/prisma.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
-import { recordAuditEvent } from "./auditService.js";
-import { upsertRecertificationStatusFromDecision } from "./recertificationService.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { upsertRecertificationStatusFromDecision } from "../../services/recertificationService.js";
 import {
   hasForcingRedFlag,
   hasInsufficientEvidenceSignal,
   hasOnlyInsufficientEvidenceRedFlags,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
-import { redFlagsCodec } from "../codecs/redFlagsCodec.js";
-import type { ModuleAssessmentPolicy } from "../codecs/assessmentPolicyCodec.js";
+import { redFlagsCodec } from "../../codecs/redFlagsCodec.js";
+import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 export type { ModuleAssessmentPolicy };
 
 type BuildDecisionInput = {

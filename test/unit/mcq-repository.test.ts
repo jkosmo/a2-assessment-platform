@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMcqRepository } from "../../src/repositories/mcqRepository.js";
+import { createMcqRepository } from "../../src/modules/assessment/mcqRepository.js";
 
 describe("mcq repository", () => {
   it("queries an owned submission for MCQ flow", async () => {

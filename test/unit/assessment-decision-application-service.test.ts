@@ -6,7 +6,7 @@ const logOperationalEvent = vi.fn();
 const notifyAssessmentResult = vi.fn();
 const localizeContentText = vi.fn((_, text) => text ?? null);
 
-vi.mock("../../src/services/decisionService.js", () => ({
+vi.mock("../../src/modules/assessment/decisionService.js", () => ({
   createAssessmentDecision,
 }));
 
@@ -89,7 +89,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     });
     notifyAssessmentResult.mockResolvedValue(undefined);
 
-    const { applyAssessmentDecision } = await import("../../src/services/AssessmentDecisionApplicationService.js");
+    const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
     await applyAssessmentDecision({ ...BASE_INPUT, llmResult: buildLlmResult() });
 
     expect(createAssessmentDecision).toHaveBeenCalledWith(
@@ -123,7 +123,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
       needsManualReview: true,
     });
 
-    const { applyAssessmentDecision } = await import("../../src/services/AssessmentDecisionApplicationService.js");
+    const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
     await applyAssessmentDecision({
       ...BASE_INPUT,
       llmResult: buildLlmResult(),
@@ -143,7 +143,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     });
     notifyAssessmentResult.mockRejectedValue(new Error("Email service unavailable"));
 
-    const { applyAssessmentDecision } = await import("../../src/services/AssessmentDecisionApplicationService.js");
+    const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
 
     // Should not throw even though notification failed
     await expect(
@@ -166,7 +166,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
       needsManualReview: true,
     });
 
-    const { applyAssessmentDecision } = await import("../../src/services/AssessmentDecisionApplicationService.js");
+    const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
     await applyAssessmentDecision({
       ...BASE_INPUT,
       llmResult: buildLlmResult(),

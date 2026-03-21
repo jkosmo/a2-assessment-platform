@@ -1,5 +1,5 @@
-import { getAssessmentRules } from "../config/assessmentRules.js";
-import type { AssessmentRedFlag } from "../codecs/redFlagsCodec.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
+import type { AssessmentRedFlag } from "../../codecs/redFlagsCodec.js";
 export type { AssessmentRedFlag };
 
 function slugifyCode(value: string): string {

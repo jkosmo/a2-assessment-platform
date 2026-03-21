@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppealStatus, DecisionType, ReviewStatus } from "../../src/db/prismaRuntime.js";
-import type { LlmStructuredAssessment } from "../../src/services/llmAssessmentService.js";
+import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
 
 // ─── Shared mocks ────────────────────────────────────────────────────────────
 
@@ -237,7 +237,7 @@ describe("transactional failure injection", () => {
     it("halts the pipeline when the decision DB write fails", async () => {
       assessmentDecisionCreate.mockRejectedValue(new Error("DB connection lost"));
 
-      const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
         createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
@@ -256,7 +256,7 @@ describe("transactional failure injection", () => {
       });
       decisionSubmissionUpdate.mockRejectedValue(new Error("Unique constraint violation"));
 
-      const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
         createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
@@ -275,7 +275,7 @@ describe("transactional failure injection", () => {
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
       upsertRecertificationStatusFromDecision.mockRejectedValue(new Error("Recert write failed"));
 
-      const { createAssessmentDecision } = await import("../../src/services/decisionService.js");
+      const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
         createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),

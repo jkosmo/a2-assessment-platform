@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { preprocessSensitiveDataForLlm, type SensitiveDataPolicy } from "../src/services/sensitiveDataMaskingService.js";
+import { preprocessSensitiveDataForLlm, type SensitiveDataPolicy } from "../src/modules/assessment/sensitiveDataMaskingService.js";
 
 const basePolicy: SensitiveDataPolicy = {
   enabledByDefault: false,

@@ -3,8 +3,8 @@ import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
   type SecondaryAssessmentPolicy,
-} from "../src/services/secondaryAssessmentService.js";
-import type { LlmStructuredAssessment } from "../src/services/llmAssessmentService.js";
+} from "../src/modules/assessment/secondaryAssessmentService.js";
+import type { LlmStructuredAssessment } from "../src/modules/assessment/llmAssessmentService.js";
 
 const basePolicy: SecondaryAssessmentPolicy = {
   enabledByDefault: true,
