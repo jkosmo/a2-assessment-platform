@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.78 - 2026-03-21
+### Summary
+Feat: per-field placeholder/guidance text on submission form fields.
+
+### Included
+- **`src/codecs/submissionSchemaCodec.ts`**: added `placeholder?: LocalizedText` to `SubmissionSchemaField`.
+- **`src/routes/adminContent.ts`**: added `placeholder: localizedTextSchema.optional()` to the submission schema field validation so admins can author per-field guidance.
+- **`src/modules/assessment/AssessmentInputFactory.ts`**: `parseSubmissionFieldLabels` now accepts an optional locale and appends placeholder text as `"Label (guidance: …)"` in the LLM prompt context when a field has a placeholder defined.
+- **`test/unit/assessment-input-factory.test.ts`**: two new tests — plain placeholder appended to label, localized placeholder resolved to correct locale.
+
 ## 0.8.77 - 2026-03-21
 ### Summary
 Refactor (#208): migrate assessment hotspot to src/modules/assessment/.

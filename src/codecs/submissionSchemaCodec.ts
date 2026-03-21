@@ -3,6 +3,7 @@ export type SubmissionSchemaField = {
   label: string | Partial<Record<"en-GB" | "nb" | "nn", string>>;
   type: "textarea" | "text";
   required?: boolean;
+  placeholder?: string | Partial<Record<"en-GB" | "nb" | "nn", string>>;
 };
 
 export type SubmissionSchema = {

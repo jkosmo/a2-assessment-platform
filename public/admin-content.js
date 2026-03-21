@@ -2756,6 +2756,24 @@ function createSubmissionFieldRow(field, idx) {
     row.appendChild(wrap);
   }
 
+  // Placeholder per locale
+  const phSectionEl = document.createElement("div");
+  phSectionEl.className = "dialog-section-label";
+  phSectionEl.textContent = t("adminContent.dialog.submissionSchema.fieldPlaceholder") || "Placeholder / guidance text (opt.)";
+  row.appendChild(phSectionEl);
+  const parsedPh = typeof field?.placeholder === "object" && field.placeholder !== null ? field.placeholder : (typeof field?.placeholder === "string" ? { "en-GB": field.placeholder } : {});
+  for (const locale of locales) {
+    const wrap = document.createElement("div");
+    wrap.dataset.locale = locale;
+    if (locale !== "en-GB") wrap.hidden = true;
+    const inp = document.createElement("input");
+    inp.className = "ss-field-ph";
+    inp.autocomplete = "off";
+    inp.value = parsedPh[locale] ?? "";
+    wrap.appendChild(inp);
+    row.appendChild(wrap);
+  }
+
   // Default value per locale
   const dvSectionEl = document.createElement("div");
   dvSectionEl.className = "dialog-section-label";
@@ -2816,6 +2834,13 @@ function applySubmissionSchemaDialog() {
     for (const locale of locales) {
       label[locale] = row.querySelector(`[data-locale="${locale}"] .ss-field-label`)?.value ?? "";
     }
+    const placeholder = {};
+    let hasPh = false;
+    for (const locale of locales) {
+      const ph = row.querySelector(`[data-locale="${locale}"] .ss-field-ph`)?.value ?? "";
+      placeholder[locale] = ph;
+      if (ph) hasPh = true;
+    }
     const defaultValue = {};
     let hasDv = false;
     for (const locale of locales) {
@@ -2824,6 +2849,7 @@ function applySubmissionSchemaDialog() {
       if (dv) hasDv = true;
     }
     const fieldObj = { id, label, type, required };
+    if (hasPh) fieldObj.placeholder = placeholder;
     if (hasDv) fieldObj.defaultValue = defaultValue;
     fields.push(fieldObj);
   }

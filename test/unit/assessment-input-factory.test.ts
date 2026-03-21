@@ -86,6 +86,36 @@ describe("AssessmentInputFactory", () => {
       const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
       expect(parseSubmissionFieldLabels(null)).toEqual([]);
     });
+
+    it("appends placeholder as guidance when present", async () => {
+      const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
+      const schema = JSON.stringify({
+        fields: [
+          { id: "field1", label: "Ditt svar", placeholder: "Skriv svaret ditt her..." },
+          { id: "field2", label: "Refleksjon" },
+        ],
+      });
+      expect(parseSubmissionFieldLabels(schema)).toEqual([
+        "Ditt svar (guidance: Skriv svaret ditt her...)",
+        "Refleksjon",
+      ]);
+    });
+
+    it("resolves localized placeholder to the given locale", async () => {
+      const { parseSubmissionFieldLabels } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
+      const schema = JSON.stringify({
+        fields: [
+          {
+            id: "field1",
+            label: { "en-GB": "Your answer", nb: "Ditt svar" },
+            placeholder: { "en-GB": "Write your answer here", nb: "Skriv svaret ditt her" },
+          },
+        ],
+      });
+      expect(parseSubmissionFieldLabels(schema, "nb")).toEqual([
+        "Ditt svar (guidance: Skriv svaret ditt her)",
+      ]);
+    });
   });
 
   describe("buildAssessmentInputContext", () => {

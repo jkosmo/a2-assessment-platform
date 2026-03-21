@@ -254,6 +254,7 @@ const adminContentBase = {
   "adminContent.dialog.submissionSchema.fieldRequired": "Required",
   "adminContent.dialog.submissionSchema.fieldLabelLocale": "Label",
   "adminContent.dialog.submissionSchema.fieldDefaultValue": "Default value (opt.)",
+  "adminContent.dialog.submissionSchema.fieldPlaceholder": "Placeholder / guidance text (opt.)",
   "adminContent.dialog.submissionSchema.errorIdRequired": "All fields must have an ID.",
 };
 const nbOverrides = {
@@ -497,6 +498,7 @@ const nbOverrides = {
   "adminContent.dialog.submissionSchema.fieldRequired": "Obligatorisk",
   "adminContent.dialog.submissionSchema.fieldLabelLocale": "Etikett",
   "adminContent.dialog.submissionSchema.fieldDefaultValue": "Standardverdi (valgfri)",
+  "adminContent.dialog.submissionSchema.fieldPlaceholder": "Plassholdertekst / veiledning (valgfri)",
   "adminContent.dialog.submissionSchema.errorIdRequired": "Alle felt må ha en ID.",
 };
 const nnOverrides = {
@@ -738,6 +740,7 @@ const nnOverrides = {
   "adminContent.dialog.submissionSchema.fieldRequired": "Obligatorisk",
   "adminContent.dialog.submissionSchema.fieldLabelLocale": "Etikett",
   "adminContent.dialog.submissionSchema.fieldDefaultValue": "Standardverdi (valfri)",
+  "adminContent.dialog.submissionSchema.fieldPlaceholder": "Plassholdertekst / rettleiing (valfri)",
   "adminContent.dialog.submissionSchema.errorIdRequired": "Alle felt må ha ein ID.",
 };
 

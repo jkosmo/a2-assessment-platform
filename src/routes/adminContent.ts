@@ -84,6 +84,7 @@ const submissionSchemaFieldSchema = z.object({
   label: localizedTextSchema,
   type: z.enum(["textarea", "text"]),
   required: z.boolean().optional().default(false),
+  placeholder: localizedTextSchema.optional(),
 });
 
 const submissionSchemaBodySchema = z.object({

@@ -63,7 +63,7 @@ export function buildAssessmentInputContext(
 
   const rubricCriteriaIds = parseRubricCriteriaIds(submission.moduleVersion.rubricVersion.criteriaJson);
   const rubricMaxTotal = parseRubricMaxTotal(submission.moduleVersion.rubricVersion.scalingRuleJson);
-  const submissionFieldLabels = parseSubmissionFieldLabels(submission.moduleVersion.submissionSchemaJson);
+  const submissionFieldLabels = parseSubmissionFieldLabels(submission.moduleVersion.submissionSchemaJson, submissionLocale);
 
   const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({
     moduleId: submission.moduleId,
@@ -118,22 +118,39 @@ export function parseRubricMaxTotal(scalingRuleJson: string): number {
   return 20;
 }
 
-export function parseSubmissionFieldLabels(submissionSchemaJson: string | null | undefined): string[] {
+export function parseSubmissionFieldLabels(
+  submissionSchemaJson: string | null | undefined,
+  locale?: string,
+): string[] {
   if (!submissionSchemaJson) return [];
   try {
     const parsed = JSON.parse(submissionSchemaJson) as {
-      fields?: Array<{ label?: string | Record<string, string>; id?: string }>;
+      fields?: Array<{
+        label?: string | Record<string, string>;
+        placeholder?: string | Record<string, string>;
+        id?: string;
+      }>;
     };
     if (!Array.isArray(parsed.fields)) return [];
     return parsed.fields
       .map((field) => {
-        const label = field.label;
-        if (!label) return field.id ?? "";
-        if (typeof label === "object") return label["en-GB"] ?? Object.values(label)[0] ?? field.id ?? "";
-        return label;
+        const resolvedLabel = resolveLocalizedText(field.label, locale) ?? field.id ?? "";
+        if (!resolvedLabel) return "";
+        const resolvedPlaceholder = resolveLocalizedText(field.placeholder, locale);
+        return resolvedPlaceholder ? `${resolvedLabel} (guidance: ${resolvedPlaceholder})` : resolvedLabel;
       })
       .filter((label) => label.length > 0);
   } catch {
     return [];
   }
+}
+
+function resolveLocalizedText(
+  value: string | Record<string, string> | null | undefined,
+  locale?: string,
+): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (locale && value[locale]) return value[locale];
+  return value["en-GB"] ?? Object.values(value)[0] ?? null;
 }
