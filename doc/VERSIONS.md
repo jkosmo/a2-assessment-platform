@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.71 - 2026-03-21
+### Summary
+Test (#233): table-driven RBAC matrix tests — full route family coverage, missing route families added.
+
+### Included
+- **`test/unit/rbac-matrix.test.ts`**: rewritten to table-driven `it.each` format; added `/api/assessments`, `/api/audit`, and `/api/calibration` coverage; 10 new tests (285 total).
+
 ## 0.8.70 - 2026-03-21
 ### Summary
 Fix (#229, #230): gjør createSubmissionAppeal atomisk; audit av øvrige multi-step writes.
