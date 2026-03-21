@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.82 - 2026-03-21
+### Summary
+Feat: participant console renders submissionSchema placeholder as textarea placeholder text.
+
+### Included
+- **`public/participant.js`**: `getSubmissionFields` now passes `placeholder` through from schema fields. `renderSubmissionFields` sets `textarea.placeholder` using `localizePreviewText` (resolves locale object or plain string).
+
 ## 0.8.81 - 2026-03-21
 ### Summary
 Fix: LLM authoring prompt now instructs model to populate placeholder field per locale.

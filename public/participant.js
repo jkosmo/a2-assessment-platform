@@ -574,6 +574,7 @@ function getSubmissionFields(selectedModule) {
       rows: f.type === "text" ? 1 : 3,
       required: f.required ?? false,
       ...(f.defaultValue !== undefined && f.defaultValue !== "" && { defaultValue: f.defaultValue }),
+      ...(f.placeholder !== undefined && f.placeholder !== "" && { placeholder: f.placeholder }),
     }));
   }
   return DEFAULT_SUBMISSION_FIELDS;
@@ -595,6 +596,9 @@ function renderSubmissionFields(fields) {
     const textarea = document.createElement("textarea");
     textarea.setAttribute("data-field-id", field.id);
     textarea.rows = field.rows ?? 3;
+    if (field.placeholder) {
+      textarea.placeholder = localizePreviewText(field.placeholder);
+    }
     if (preserved[field.id] !== undefined) {
       textarea.value = preserved[field.id];
     }
