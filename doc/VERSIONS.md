@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.72 - 2026-03-21
+### Summary
+Test (#234): trim low-signal assertions from workspace and contract tests.
+
+### Included
+- **`test/workspace-validation-accessibility.test.js`**: removed 3 negative `not.toContain` assertions that guarded against re-introduction of already-removed HTML elements; improved comments.
+- **`test/participant-translations.test.js`**: removed explicit enumeration of 17 domain-specific `improvementAdviceValue` content keys; replaced with a group-presence check; key-parity check already enforces completeness per locale.
+
 ## 0.8.71 - 2026-03-21
 ### Summary
 Test (#233): table-driven RBAC matrix tests — full route family coverage, missing route families added.

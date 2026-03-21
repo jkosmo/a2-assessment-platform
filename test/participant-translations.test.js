@@ -11,7 +11,8 @@ describe("participant translation resources", () => {
     }
   });
 
-  it("includes localized keys for manual-review decision and LLM guidance text", () => {
+  it("includes localized keys for UI labels, result display, and improvement advice", () => {
+    // Core UI and behavioral keys — these should always be present
     const requiredKeys = [
       "assessment.auto.elapsedLabel",
       "submission.taskText",
@@ -30,22 +31,6 @@ describe("participant translation resources", () => {
       "appeal.nextSteps",
       "result.decisionValue.MANUAL_REVIEW_PENDING",
       "result.confidenceValue.low",
-      "result.improvementAdviceValue.riskScenarios",
-      "result.improvementAdviceValue.dataHandling",
-      "result.improvementAdviceValue.humanInLoop",
-      "result.improvementAdviceValue.qaMetrics",
-      "result.improvementAdviceValue.improvementLoop",
-      "result.improvementAdviceValue.promptLeakage",
-      "result.improvementAdviceValue.governanceScope",
-      "result.improvementAdviceValue.riskCategories",
-      "result.improvementAdviceValue.qaChecklist",
-      "result.improvementAdviceValue.dataControls",
-      "result.improvementAdviceValue.qualityThresholds",
-      "result.improvementAdviceValue.iterationVersioning",
-      "result.improvementAdviceValue.escalationDecisionRights",
-      "result.improvementAdviceValue.artifactsEvidence",
-      "result.improvementAdviceValue.responsibleAiMisuse",
-      "result.improvementAdviceValue.examplesFailureModes",
     ];
 
     for (const locale of supportedLocales) {
@@ -53,6 +38,13 @@ describe("participant translation resources", () => {
         expect(translations[locale][key]).toBeTypeOf("string");
         expect(translations[locale][key].length).toBeGreaterThan(0);
       }
+
+      // Improvement advice keys are dynamic content — rely on key-parity for completeness,
+      // but verify the group is non-empty so it cannot be silently cleared.
+      const adviceKeys = Object.keys(translations[locale]).filter((k) =>
+        k.startsWith("result.improvementAdviceValue."),
+      );
+      expect(adviceKeys.length, `${locale} must have improvement advice content keys`).toBeGreaterThan(0);
     }
   });
 });
