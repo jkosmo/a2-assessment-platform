@@ -595,6 +595,14 @@ setLocale(currentLocale);
 (async () => {
   await loadConsoleConfig();
   try {
+    const versionData = await apiFetch("/version", { headers: {} });
+    const appVersionEl = document.getElementById("appVersion");
+    if (appVersionEl) appVersionEl.textContent = `v${versionData.version ?? "unknown"}`;
+  } catch {
+    const appVersionEl = document.getElementById("appVersion");
+    if (appVersionEl) appVersionEl.textContent = "unknown";
+  }
+  try {
     await loadProfileData();
   } catch (err) {
     if (profileContent) {
