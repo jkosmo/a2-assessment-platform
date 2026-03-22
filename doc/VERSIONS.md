@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.6 - 2026-03-22
+### Summary
+refactor: flytt Fullførte moduler til Profil og skjul nav for ren deltaker (v0.9.6)
+
+### Included
+- **`config/participant-console.json`**: Fjernet `participant-completed` fra workspace-nav — innholdet er allerede tilgjengelig som seksjon i Profil-siden.
+- **`public/static/shared.css`**: Nav skjules automatisk (CSS `:has()`) når bruker kun har 0–1 synlige lenker — gir rent grensesnitt for deltakere med kun én rolle. `locale-picker` bruker `margin-left: auto` for konsistent høyre-justering uavhengig av nav-tilstand.
+
 ## 0.9.5 - 2026-03-22
 ### Summary
 refactor: flytt workspace-nav øverst og versjonsnummer til høyre hjørne (v0.9.5)

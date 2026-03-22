@@ -16,12 +16,6 @@
         "requiredRoles": ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"]
       },
       {
-        "id": "participant-completed",
-        "path": "/participant/completed",
-        "labelKey": "nav.completedModules",
-        "requiredRoles": ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"]
-      },
-      {
         "id": "manual-review",
         "path": "/manual-review",
         "labelKey": "nav.manualReview",

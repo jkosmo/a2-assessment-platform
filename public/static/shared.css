@@ -293,7 +293,7 @@ button:focus-visible {
 .page-top-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-1);
   margin-bottom: var(--space-1);
 }
@@ -303,11 +303,17 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
+/* Hide nav when 0 or 1 visible links — nothing useful to navigate to */
+.page-top-bar > .workspace-nav:not(:has(> .workspace-nav-link ~ .workspace-nav-link)) {
+  display: none;
+}
+
 .locale-picker {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .locale-select-compact {
