@@ -18,3 +18,4 @@ doc/Usability raport.md
 doc/WCAG_EVALUATION.docx
 fic-staging.json
 infra/azure/main.json
+doc/design/GAP_ANALYSIS_DELTA_*.md
