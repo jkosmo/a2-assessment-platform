@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.22 - 2026-03-22
+### Summary
+fix: gi benchmark-workflow skrivetilgang for å committe rapport (v0.9.22)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: Legger til `permissions: contents: write` — github-actions[bot] mangler skrivetilgang som standard.
+
 ## 0.9.21 - 2026-03-22
 ### Summary
 fix: sett AZURE_OPENAI_DEPLOYMENT i benchmark-workflow (v0.9.21)

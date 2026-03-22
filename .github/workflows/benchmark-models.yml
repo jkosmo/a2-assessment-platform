@@ -20,6 +20,8 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
