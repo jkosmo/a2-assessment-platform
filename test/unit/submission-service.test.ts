@@ -7,17 +7,20 @@ const submissionCreate = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const resolveSubmissionResponseJson = vi.fn();
-const cancelSupersededReviews = vi.fn();
-const cancelSupersededAppeals = vi.fn();
+const supersedeEligibleReviewsForRetake = vi.fn();
+const supersedeEligibleAppealsForRetake = vi.fn();
+
+vi.mock("../../src/db/prisma.js", () => ({
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+}));
 
 vi.mock("../../src/repositories/moduleRepository.js", () => ({
   getModuleWithActiveVersion,
 }));
 
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
-  submissionRepository: {
-    create: submissionCreate,
-  },
+  submissionRepository: { create: submissionCreate },
+  createSubmissionRepository: () => ({ create: submissionCreate }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -33,22 +36,22 @@ vi.mock("../../src/modules/assessment/documentParsingService.js", () => ({
 }));
 
 vi.mock("../../src/modules/review/index.js", () => ({
-  cancelSupersededReviews,
+  supersedeEligibleReviewsForRetake,
 }));
 
 vi.mock("../../src/modules/appeal/index.js", () => ({
-  cancelSupersededAppeals,
+  supersedeEligibleAppealsForRetake,
 }));
 
 describe("submission service", () => {
   beforeEach(() => {
     getModuleWithActiveVersion.mockReset();
     submissionCreate.mockReset();
-    recordAuditEvent.mockReset();
+    recordAuditEvent.mockReset().mockResolvedValue(undefined);
     logOperationalEvent.mockReset();
     resolveSubmissionResponseJson.mockReset();
-    cancelSupersededReviews.mockReset().mockResolvedValue(0);
-    cancelSupersededAppeals.mockReset().mockResolvedValue(0);
+    supersedeEligibleReviewsForRetake.mockReset().mockResolvedValue(0);
+    supersedeEligibleAppealsForRetake.mockReset().mockResolvedValue(0);
   });
 
   it("rejects submission creation when no published active module version exists", async () => {
@@ -122,18 +125,21 @@ describe("submission service", () => {
       attachmentUri: "https://storage.example/submission.pdf",
       submissionStatus: SubmissionStatus.SUBMITTED,
     });
-    expect(recordAuditEvent).toHaveBeenCalledWith({
-      entityType: "submission",
-      entityId: "submission-1",
-      action: "submission_created",
-      actorId: "user-1",
-      metadata: {
-        submissionId: "submission-1",
-        moduleId: "module-1",
-        moduleVersionId: "module-version-1",
-        parser: "pdf",
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      {
+        entityType: "submission",
+        entityId: "submission-1",
+        action: "submission_created",
+        actorId: "user-1",
+        metadata: {
+          submissionId: "submission-1",
+          moduleId: "module-1",
+          moduleVersionId: "module-version-1",
+          parser: "pdf",
+        },
       },
-    });
+      {},
+    );
     expect(logOperationalEvent).toHaveBeenCalledWith("submission_document_parse", {
       submissionId: "submission-1",
       moduleId: "module-1",
@@ -146,7 +152,49 @@ describe("submission service", () => {
       moduleVersionId: "module-version-1",
       deliveryType: "document",
     });
-    expect(cancelSupersededReviews).toHaveBeenCalledWith("user-1", "module-1", "submission-1");
-    expect(cancelSupersededAppeals).toHaveBeenCalledWith("user-1", "module-1", "submission-1");
+    expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", {});
+    expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", {});
+  });
+
+  it("does not emit retake_supersede_completed when no prior open items exist", async () => {
+    getModuleWithActiveVersion.mockResolvedValue({
+      id: "module-1",
+      activeVersion: { id: "module-version-1", publishedAt: new Date() },
+    });
+    resolveSubmissionResponseJson.mockResolvedValue({ resolvedResponseJson: {}, parser: "json" });
+    submissionCreate.mockResolvedValue({ id: "submission-1", moduleId: "module-1", moduleVersionId: "module-version-1", deliveryType: "text" });
+    supersedeEligibleReviewsForRetake.mockResolvedValue(0);
+    supersedeEligibleAppealsForRetake.mockResolvedValue(0);
+
+    const { createSubmission } = await import("../../src/modules/submission/index.js");
+    await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+
+    const actions = recordAuditEvent.mock.calls.map((c) => c[0].action);
+    expect(actions).not.toContain("retake_supersede_completed");
+  });
+
+  it("emits retake_supersede_completed with correct counts when prior items are superseded", async () => {
+    getModuleWithActiveVersion.mockResolvedValue({
+      id: "module-1",
+      activeVersion: { id: "module-version-1", publishedAt: new Date() },
+    });
+    resolveSubmissionResponseJson.mockResolvedValue({ resolvedResponseJson: {}, parser: "json" });
+    submissionCreate.mockResolvedValue({ id: "submission-1", moduleId: "module-1", moduleVersionId: "module-version-1", deliveryType: "text" });
+    supersedeEligibleReviewsForRetake.mockResolvedValue(1);
+    supersedeEligibleAppealsForRetake.mockResolvedValue(1);
+
+    const { createSubmission } = await import("../../src/modules/submission/index.js");
+    await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      {
+        entityType: "submission",
+        entityId: "submission-1",
+        action: "retake_supersede_completed",
+        actorId: "user-1",
+        metadata: { supersededReviewCount: 1, supersededAppealCount: 1 },
+      },
+      {},
+    );
   });
 });

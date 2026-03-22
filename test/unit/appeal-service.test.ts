@@ -38,6 +38,8 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
     createAppeal,
     updateSubmissionStatus,
     markAppealResolved,
+    findOpenByUserAndModule,
+    supersedeMany,
   }),
 }));
 
@@ -324,9 +326,9 @@ describe("appeal service", () => {
     supersedeMany.mockResolvedValue({ count: 1 });
     recordAuditEvent.mockResolvedValue({});
 
-    const { cancelSupersededAppeals } = await import("../../src/modules/appeal/appealService.js");
+    const { supersedeEligibleAppealsForRetake } = await import("../../src/modules/appeal/appealService.js");
 
-    const count = await cancelSupersededAppeals("user-1", "module-1", "submission-new");
+    const count = await supersedeEligibleAppealsForRetake("user-1", "module-1", "submission-new", {} as never);
 
     expect(count).toBe(1);
     expect(supersedeMany).toHaveBeenCalledWith(["appeal-1"], "submission-new", expect.any(Date));
@@ -334,15 +336,15 @@ describe("appeal service", () => {
       entityType: "appeal",
       action: "appeal_superseded",
       metadata: expect.objectContaining({ newSubmissionId: "submission-new" }),
-    }));
+    }), {});
   });
 
   it("returns 0 when no open appeals exist for the user+module", async () => {
     findOpenByUserAndModule.mockResolvedValue([]);
 
-    const { cancelSupersededAppeals } = await import("../../src/modules/appeal/appealService.js");
+    const { supersedeEligibleAppealsForRetake } = await import("../../src/modules/appeal/appealService.js");
 
-    const count = await cancelSupersededAppeals("user-1", "module-1", "submission-new");
+    const count = await supersedeEligibleAppealsForRetake("user-1", "module-1", "submission-new", {} as never);
 
     expect(count).toBe(0);
     expect(supersedeMany).not.toHaveBeenCalled();

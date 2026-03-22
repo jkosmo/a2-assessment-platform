@@ -8,6 +8,14 @@ const recordAuditEvent = vi.fn();
 const upsertRecertificationStatusFromDecision = vi.fn();
 const logOperationalEvent = vi.fn();
 
+// ─── createSubmission / retake supersede mocks ────────────────────────────────
+
+const submissionCreate = vi.fn();
+const resolveSubmissionResponseJson = vi.fn();
+const getModuleWithActiveVersion = vi.fn();
+const supersedeEligibleReviewsForRetake = vi.fn();
+const supersedeEligibleAppealsForRetake = vi.fn();
+
 // ─── decisionService mocks ───────────────────────────────────────────────────
 
 const assessmentDecisionCreate = vi.fn();
@@ -35,6 +43,15 @@ const notifyAppealStatusTransition = vi.fn();
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
 }));
+
+vi.mock("../../src/repositories/moduleRepository.js", () => ({ getModuleWithActiveVersion }));
+vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
+  submissionRepository: { create: submissionCreate },
+  createSubmissionRepository: () => ({ create: submissionCreate }),
+}));
+vi.mock("../../src/modules/assessment/documentParsingService.js", () => ({ resolveSubmissionResponseJson }));
+vi.mock("../../src/modules/review/index.js", () => ({ supersedeEligibleReviewsForRetake }));
+vi.mock("../../src/modules/appeal/index.js", () => ({ supersedeEligibleAppealsForRetake }));
 
 vi.mock("../../src/repositories/decisionRepository.js", () => ({
   decisionRepository: {
@@ -511,6 +528,91 @@ describe("transactional failure injection", () => {
         expect.objectContaining({ appealId: "appeal-1" }),
         "error",
       );
+    });
+  });
+
+  // ── createSubmission / retake supersede ───────────────────────────────────
+
+  describe("createSubmission retake supersede", () => {
+    const BASE_MODULE = {
+      id: "module-1",
+      activeVersion: { id: "module-version-1", publishedAt: new Date("2026-01-01T00:00:00.000Z") },
+    };
+    const BASE_PARSE = { resolvedResponseJson: { response: "text" }, parser: "json" as const };
+    const BASE_SUBMISSION = { id: "submission-1", moduleId: "module-1", moduleVersionId: "module-version-1", deliveryType: "text" };
+
+    beforeEach(() => {
+      getModuleWithActiveVersion.mockResolvedValue(BASE_MODULE);
+      resolveSubmissionResponseJson.mockResolvedValue(BASE_PARSE);
+      submissionCreate.mockResolvedValue(BASE_SUBMISSION);
+      supersedeEligibleReviewsForRetake.mockResolvedValue(0);
+      supersedeEligibleAppealsForRetake.mockResolvedValue(0);
+    });
+
+    it("halts the transaction when submission create fails", async () => {
+      submissionCreate.mockRejectedValue(new Error("DB write failed"));
+
+      const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
+
+      await expect(
+        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+      ).rejects.toThrow("DB write failed");
+
+      expect(supersedeEligibleReviewsForRetake).not.toHaveBeenCalled();
+      expect(supersedeEligibleAppealsForRetake).not.toHaveBeenCalled();
+      expect(recordAuditEvent).not.toHaveBeenCalled();
+    });
+
+    it("halts the transaction when review supersede fails mid-orchestration", async () => {
+      supersedeEligibleReviewsForRetake.mockRejectedValue(new Error("Review supersede failed"));
+
+      const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
+
+      await expect(
+        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+      ).rejects.toThrow("Review supersede failed");
+
+      expect(supersedeEligibleAppealsForRetake).not.toHaveBeenCalled();
+    });
+
+    it("halts the transaction when appeal supersede fails mid-orchestration", async () => {
+      supersedeEligibleReviewsForRetake.mockResolvedValue(1);
+      supersedeEligibleAppealsForRetake.mockRejectedValue(new Error("Appeal supersede failed"));
+
+      const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
+
+      await expect(
+        createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} }),
+      ).rejects.toThrow("Appeal supersede failed");
+    });
+
+    it("supersedes both review and appeal in the same transaction", async () => {
+      supersedeEligibleReviewsForRetake.mockResolvedValue(1);
+      supersedeEligibleAppealsForRetake.mockResolvedValue(1);
+
+      const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
+
+      const result = await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+
+      expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", {});
+      expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", {});
+      expect(recordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "retake_supersede_completed", metadata: { supersededReviewCount: 1, supersededAppealCount: 1 } }),
+        {},
+      );
+      expect(result).toMatchObject({ id: "submission-1" });
+    });
+
+    it("succeeds without supersede audit when no prior open items exist", async () => {
+      supersedeEligibleReviewsForRetake.mockResolvedValue(0);
+      supersedeEligibleAppealsForRetake.mockResolvedValue(0);
+
+      const { createSubmission } = await import("../../src/modules/submission/submissionService.js");
+      await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
+
+      const actions = recordAuditEvent.mock.calls.map((c: unknown[]) => (c[0] as { action: string }).action);
+      expect(actions).toContain("submission_created");
+      expect(actions).not.toContain("retake_supersede_completed");
     });
   });
 });

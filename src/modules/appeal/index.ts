@@ -4,7 +4,7 @@ export {
   getAppealWorkspace,
   claimAppeal,
   resolveAppeal,
-  cancelSupersededAppeals,
+  supersedeEligibleAppealsForRetake,
 } from "./appealService.js";
 
 export { buildAppealSlaSnapshot, type AppealSlaSnapshot } from "./appealSla.js";

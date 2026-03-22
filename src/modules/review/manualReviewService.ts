@@ -168,22 +168,30 @@ export async function finalizeManualReviewOverride(input: {
   return { review: resolvedReview, overrideDecision };
 }
 
-export async function cancelSupersededReviews(userId: string, moduleId: string, newSubmissionId: string) {
-  const reviews = await manualReviewRepository.findOpenByUserAndModule(userId, moduleId);
+type SupersedeTxClient = Pick<typeof prisma, "manualReview" | "assessmentDecision" | "submission" | "auditEvent">;
+
+export async function supersedeEligibleReviewsForRetake(
+  userId: string,
+  moduleId: string,
+  newSubmissionId: string,
+  tx: SupersedeTxClient,
+): Promise<number> {
+  const repo = createManualReviewRepository(tx);
+  const reviews = await repo.findOpenByUserAndModule(userId, moduleId);
   if (reviews.length === 0) return 0;
 
   const now = new Date();
-  await manualReviewRepository.supersedeMany(reviews.map((r) => r.id), newSubmissionId, now);
+  await repo.supersedeMany(reviews.map((r) => r.id), newSubmissionId, now);
 
   for (const review of reviews) {
-    await manualReviewRepository.updateSubmissionStatus(review.submissionId, SubmissionStatus.COMPLETED);
+    await repo.updateSubmissionStatus(review.submissionId, SubmissionStatus.COMPLETED);
     await recordAuditEvent({
       entityType: "manual_review",
       entityId: review.id,
       action: "review_superseded",
       actorId: undefined,
       metadata: { newSubmissionId, supersededAt: now.toISOString() },
-    });
+    }, tx);
   }
 
   return reviews.length;

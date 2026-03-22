@@ -19,26 +19,33 @@ const publishModuleVersionRecord = vi.fn();
 const deleteModuleRecord = vi.fn();
 const recordAuditEvent = vi.fn();
 
+vi.mock("../../src/db/prisma.js", () => ({
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+}));
+
+const adminContentRepositoryMock = {
+  findModuleSummary,
+  findModuleDeleteSummary,
+  createModule: createModuleRecord,
+  findModuleContentBundle,
+  findLatestRubricVersion,
+  findLatestPromptTemplateVersion,
+  findLatestMcqSetVersion,
+  findLatestModuleVersion,
+  createRubricVersion: createRubricVersionRecord,
+  createPromptTemplateVersion: createPromptTemplateVersionRecord,
+  createMcqSetVersion: createMcqSetVersionRecord,
+  findVersionDependencies,
+  createModuleVersion: createModuleVersionRecord,
+  findPromptTemplateSummary,
+  findModuleVersionSummary,
+  publishModuleVersion: publishModuleVersionRecord,
+  deleteModule: deleteModuleRecord,
+};
+
 vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
-  adminContentRepository: {
-    findModuleSummary,
-    findModuleDeleteSummary,
-    createModule: createModuleRecord,
-    findModuleContentBundle,
-    findLatestRubricVersion,
-    findLatestPromptTemplateVersion,
-    findLatestMcqSetVersion,
-    findLatestModuleVersion,
-    createRubricVersion: createRubricVersionRecord,
-    createPromptTemplateVersion: createPromptTemplateVersionRecord,
-    createMcqSetVersion: createMcqSetVersionRecord,
-    findVersionDependencies,
-    createModuleVersion: createModuleVersionRecord,
-    findPromptTemplateSummary,
-    findModuleVersionSummary,
-    publishModuleVersion: publishModuleVersionRecord,
-    deleteModule: deleteModuleRecord,
-  },
+  adminContentRepository: adminContentRepositoryMock,
+  createAdminContentRepository: () => adminContentRepositoryMock,
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({

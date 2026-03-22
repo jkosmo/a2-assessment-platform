@@ -3,5 +3,5 @@ export {
   getManualReviewWorkspace,
   claimManualReview,
   finalizeManualReviewOverride,
-  cancelSupersededReviews,
+  supersedeEligibleReviewsForRetake,
 } from "./manualReviewService.js";

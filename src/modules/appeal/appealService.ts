@@ -277,12 +277,20 @@ export async function resolveAppeal(input: {
   return { appeal: resolvedAppeal, resolutionDecision };
 }
 
-export async function cancelSupersededAppeals(userId: string, moduleId: string, newSubmissionId: string) {
-  const appeals = await appealRepository.findOpenByUserAndModule(userId, moduleId);
+type SupersedeTxClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision" | "auditEvent">;
+
+export async function supersedeEligibleAppealsForRetake(
+  userId: string,
+  moduleId: string,
+  newSubmissionId: string,
+  tx: SupersedeTxClient,
+): Promise<number> {
+  const repo = createAppealRepository(tx);
+  const appeals = await repo.findOpenByUserAndModule(userId, moduleId);
   if (appeals.length === 0) return 0;
 
   const now = new Date();
-  await appealRepository.supersedeMany(appeals.map((a) => a.id), newSubmissionId, now);
+  await repo.supersedeMany(appeals.map((a) => a.id), newSubmissionId, now);
 
   for (const appeal of appeals) {
     await recordAuditEvent({
@@ -291,7 +299,7 @@ export async function cancelSupersededAppeals(userId: string, moduleId: string, 
       action: "appeal_superseded",
       actorId: undefined,
       metadata: { newSubmissionId, supersededAt: now.toISOString() },
-    });
+    }, tx);
   }
 
   return appeals.length;

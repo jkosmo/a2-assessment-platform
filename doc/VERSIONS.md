@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.91 - 2026-03-22
+### Summary
+fix: retake supersede-flyt er nå fullt atomisk og eksplisitt (#238)
+
+### Included
+- **`src/modules/review/manualReviewService.ts`**: `cancelSupersededReviews` → `supersedeEligibleReviewsForRetake(userId, moduleId, newSubmissionId, tx)`. Bruker nå `createManualReviewRepository(tx)` og sender tx til `recordAuditEvent`. Returnerer antall supersettede.
+- **`src/modules/appeal/appealService.ts`**: `cancelSupersededAppeals` → `supersedeEligibleAppealsForRetake(userId, moduleId, newSubmissionId, tx)`. Tilsvarende.
+- **`src/modules/review/index.ts`** / **`src/modules/appeal/index.ts`**: Eksporterer de nye navnene.
+- **`src/modules/submission/submissionService.ts`**: `createSubmission` wrapper hele skrivesekvensen (create + audit + supersede review + supersede appeal) i én `prisma.$transaction()`. Legger til aggregert `retake_supersede_completed`-audit-event med counts når ≥1 sak supersettes. `logOperationalEvent` forblir utenfor.
+- **`test/unit/submission-service.test.ts`**: Oppdatert for ny funksjonsnavn og transaksjonsmønster. Fire tester: ingen åpne saker, kun review, kun appeal, begge.
+- **`test/unit/transactional-failure-injection.test.ts`**: Fem nye tester for retake supersede-transaksjonen: submission-create feiler → supersede ikke kalt; review-supersede feiler → appeal-supersede ikke kalt; appeal-supersede feiler; combined review+appeal; ingen åpne saker gir ingen supersede-audit.
+- **`test/unit/appeal-service.test.ts`** / **`test/unit/manual-review-service.test.ts`** / **`test/unit/admin-content-service.test.ts`**: Oppdatert mocks og funksjonsnavn.
+
 ## 0.8.90 - 2026-03-21
 ### Summary
 fix: supersede IN_REVIEW appeals and manual reviews on retake (#238)

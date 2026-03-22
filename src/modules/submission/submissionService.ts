@@ -2,12 +2,13 @@ import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { ValidationError } from "../../errors/AppError.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { getModuleWithActiveVersion } from "../../repositories/moduleRepository.js";
-import { submissionRepository } from "./submissionRepository.js";
+import { submissionRepository, createSubmissionRepository } from "./submissionRepository.js";
+import { prisma } from "../../db/prisma.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { resolveSubmissionResponseJson } from "../assessment/documentParsingService.js";
-import { cancelSupersededReviews } from "../review/index.js";
-import { cancelSupersededAppeals } from "../appeal/index.js";
+import { supersedeEligibleReviewsForRetake } from "../review/index.js";
+import { supersedeEligibleAppealsForRetake } from "../appeal/index.js";
 
 export type CreateSubmissionInput = {
   userId: string;
@@ -35,28 +36,45 @@ export async function createSubmission(input: CreateSubmissionInput) {
     attachmentMimeType: input.attachmentMimeType,
   });
 
-  const submission = await submissionRepository.create({
-    userId: input.userId,
-    moduleId: module.id,
-    moduleVersionId: module.activeVersion.id,
-    locale: input.locale,
-    deliveryType: input.deliveryType,
-    responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
-    attachmentUri: input.attachmentUri,
-    submissionStatus: SubmissionStatus.SUBMITTED,
-  });
+  const submission = await prisma.$transaction(async (tx) => {
+    const submission = await createSubmissionRepository(tx).create({
+      userId: input.userId,
+      moduleId: module.id,
+      moduleVersionId: module.activeVersion!.id,
+      locale: input.locale,
+      deliveryType: input.deliveryType,
+      responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
+      attachmentUri: input.attachmentUri,
+      submissionStatus: SubmissionStatus.SUBMITTED,
+    });
 
-  await recordAuditEvent({
-    entityType: "submission",
-    entityId: submission.id,
-    action: "submission_created",
-    actorId: input.userId,
-    metadata: {
-      submissionId: submission.id,
-      moduleId: submission.moduleId,
-      moduleVersionId: submission.moduleVersionId,
-      parser: parseOutcome.parser,
-    },
+    await recordAuditEvent({
+      entityType: "submission",
+      entityId: submission.id,
+      action: "submission_created",
+      actorId: input.userId,
+      metadata: {
+        submissionId: submission.id,
+        moduleId: submission.moduleId,
+        moduleVersionId: submission.moduleVersionId,
+        parser: parseOutcome.parser,
+      },
+    }, tx);
+
+    const supersededReviewCount = await supersedeEligibleReviewsForRetake(input.userId, input.moduleId, submission.id, tx);
+    const supersededAppealCount = await supersedeEligibleAppealsForRetake(input.userId, input.moduleId, submission.id, tx);
+
+    if (supersededReviewCount + supersededAppealCount > 0) {
+      await recordAuditEvent({
+        entityType: "submission",
+        entityId: submission.id,
+        action: "retake_supersede_completed",
+        actorId: input.userId,
+        metadata: { supersededReviewCount, supersededAppealCount },
+      }, tx);
+    }
+
+    return submission;
   });
 
   logOperationalEvent("submission_document_parse", {
@@ -65,9 +83,6 @@ export async function createSubmission(input: CreateSubmissionInput) {
     deliveryType: submission.deliveryType,
     parser: parseOutcome.parser,
   });
-
-  await cancelSupersededReviews(input.userId, input.moduleId, submission.id);
-  await cancelSupersededAppeals(input.userId, input.moduleId, submission.id);
 
   return submission;
 }

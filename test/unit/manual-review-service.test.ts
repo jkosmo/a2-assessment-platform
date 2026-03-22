@@ -30,6 +30,9 @@ vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   },
   createManualReviewRepository: () => ({
     resolveManualReview,
+    findOpenByUserAndModule,
+    supersedeMany,
+    updateSubmissionStatus,
   }),
 }));
 
@@ -231,9 +234,9 @@ describe("manual review service", () => {
     updateSubmissionStatus.mockResolvedValue({});
     recordAuditEvent.mockResolvedValue({});
 
-    const { cancelSupersededReviews } = await import("../../src/modules/review/manualReviewService.js");
+    const { supersedeEligibleReviewsForRetake } = await import("../../src/modules/review/manualReviewService.js");
 
-    const count = await cancelSupersededReviews("user-1", "module-1", "submission-new");
+    const count = await supersedeEligibleReviewsForRetake("user-1", "module-1", "submission-new", {} as never);
 
     expect(count).toBe(2);
     expect(supersedeMany).toHaveBeenCalledWith(["review-1", "review-2"], "submission-new", expect.any(Date));
@@ -243,15 +246,15 @@ describe("manual review service", () => {
       entityType: "manual_review",
       action: "review_superseded",
       metadata: expect.objectContaining({ newSubmissionId: "submission-new" }),
-    }));
+    }), {});
   });
 
   it("returns 0 when no open reviews exist for the user+module", async () => {
     findOpenByUserAndModule.mockResolvedValue([]);
 
-    const { cancelSupersededReviews } = await import("../../src/modules/review/manualReviewService.js");
+    const { supersedeEligibleReviewsForRetake } = await import("../../src/modules/review/manualReviewService.js");
 
-    const count = await cancelSupersededReviews("user-1", "module-1", "submission-new");
+    const count = await supersedeEligibleReviewsForRetake("user-1", "module-1", "submission-new", {} as never);
 
     expect(count).toBe(0);
     expect(supersedeMany).not.toHaveBeenCalled();
