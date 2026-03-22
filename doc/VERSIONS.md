@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.24 - 2026-03-22
+### Summary
+fix: legg tilbake environment: staging i benchmark-workflow (v0.9.24)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: `BENCHMARK_AZURE_OPENAI_ENDPOINT` og `BENCHMARK_AZURE_OPENAI_API_KEY` er scopet til staging-miljøet, ikke repo-nivå.
+
 ## 0.9.23 - 2026-03-22
 ### Summary
 fix: benchmark-workflow bruker nå dedikerte repo-variabler og korrekte deployment-navn (v0.9.23)
