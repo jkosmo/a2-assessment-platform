@@ -1,0 +1,78 @@
+name: Model Comparison Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: "Iterations per model per case"
+        required: true
+        default: "20"
+      models:
+        description: "Models (label:deployment,...)"
+        required: true
+        default: "full:gpt-5.4,mini:gpt-5.4-mini,nano:gpt-5.4-nano"
+      cases:
+        description: "Cases to run (comma-separated, leave blank for default)"
+        required: false
+        default: ""
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost/dummy
+
+      - name: Run benchmark
+        run: |
+          CASES_ARG=""
+          if [ -n "${{ inputs.cases }}" ]; then
+            CASES_ARG="--cases=${{ inputs.cases }}"
+          fi
+          tsx src/scripts/runModelComparisonBenchmark.ts \
+            --repeat=${{ inputs.repeat }} \
+            --models=${{ inputs.models }} \
+            --output=doc/benchmarks/model-comparison-$(date +%Y-%m-%d) \
+            $CASES_ARG
+        env:
+          LLM_MODE: azure_openai
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}
+          AZURE_OPENAI_TIMEOUT_MS: "120000"
+          AZURE_OPENAI_TEMPERATURE: "0"
+          AZURE_OPENAI_MAX_TOKENS: "1200"
+          AZURE_OPENAI_TOKEN_LIMIT_PARAMETER: auto
+          DATABASE_URL: postgresql://dummy:dummy@localhost/dummy
+          AUTH_MODE: mock
+
+      - name: Upload results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: doc/benchmarks/
+          retention-days: 90
+
+      - name: Commit markdown report
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add doc/benchmarks/
+          git diff --staged --quiet || git commit -m "benchmark: model comparison results $(date +%Y-%m-%d) [skip ci]"
+          git push
