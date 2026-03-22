@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.4 - 2026-03-22
+### Summary
+fix: versjonsnummer på profilsiden og CI-test for navigasjon (v0.9.4)
+
+### Included
+- **`public/profile.html`**: Versjonsnummer flyttet ut av `page-header-row` og ned under tittelen — samme plassering som alle andre sider.
+- **`public/i18n/profile-translations.js`**: Lagt til `page.versionLabel` i alle tre lokaler (oversettelsen fantes ikke i den standalone filen, nøkkelen ble vist rå).
+- **`test/participant-console-config.test.ts`**: Oppdatert forventet nav-liste med `admin-platform`-elementet som ble lagt til i `participant-console.json`.
+
 ## 0.9.3 - 2026-03-22
 ### Summary
 fix: rettighetskortet i profil bruker nå vertikal layout (v0.9.3)

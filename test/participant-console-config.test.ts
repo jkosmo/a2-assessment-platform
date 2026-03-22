@@ -61,6 +61,12 @@ describe("participant console runtime config", () => {
           labelKey: "nav.results",
           requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"],
         },
+        {
+          id: "admin-platform",
+          path: "/admin-platform",
+          labelKey: "nav.adminPlatform",
+          requiredRoles: ["ADMINISTRATOR"],
+        },
       ],
     });
     expect(response.body.drafts).toEqual({

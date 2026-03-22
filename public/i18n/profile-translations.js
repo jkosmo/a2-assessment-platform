@@ -19,6 +19,7 @@ export const translations = {
     "nav.results": "Reports",
     "nav.profile": "Profile",
     "locale.label": "Language",
+    "page.versionLabel": "Version:",
 
     // Consent dialog
     "consent.title": "Your personal data in {platformName}",
@@ -102,6 +103,7 @@ export const translations = {
     "nav.results": "Rapporter",
     "nav.profile": "Profil",
     "locale.label": "Språk",
+    "page.versionLabel": "Versjon:",
 
     "consent.title": "Dine personopplysninger i {platformName}",
     "consent.newVersion": "Vi har oppdatert personvernerklæringen — her er hva som har endret seg:",
@@ -178,6 +180,7 @@ export const translations = {
     "nav.results": "Rapportar",
     "nav.profile": "Profil",
     "locale.label": "Språk",
+    "page.versionLabel": "Versjon:",
 
     "consent.title": "Personopplysningane dine i {platformName}",
     "consent.newVersion": "Vi har oppdatert personvernerklæringa — her er kva som har endra seg:",
