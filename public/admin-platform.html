@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Platform settings</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      .settings-section { margin-top: var(--space-2); }
+      .settings-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-link-active); margin-bottom: var(--space-1); }
+      .field-group { display: grid; gap: 6px; margin-bottom: var(--space-1); }
+      .field-group label { font-size: 13px; font-weight: 600; color: var(--color-text); }
+      .field-hint { font-size: 12px; color: var(--color-meta); margin-top: 2px; }
+      .tab-bar { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+      .tab-btn { padding: 5px 12px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); color: var(--color-navy); font-size: 12px; cursor: pointer; }
+      .tab-btn.active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); font-weight: 600; }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
+      textarea { width: 100%; min-height: 260px; font-size: 12px; font-family: monospace; padding: 8px; box-sizing: border-box; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); resize: vertical; }
+      .page-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-1); }
+      .locale-picker { flex-shrink: 0; padding-top: 6px; }
+      .locale-select-compact { width: auto; min-width: 70px; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: var(--color-surface); color: var(--color-meta); }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+      .save-bar { display: flex; align-items: center; gap: var(--space-1); margin-top: var(--space-2); }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+
+    <main id="main-content" class="layout-container">
+      <div class="page-header-row">
+        <h1 data-i18n="adminPlatform.title">Platform settings</h1>
+        <div class="locale-picker">
+          <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+      <p class="small" data-i18n="adminPlatform.subtitle">System-level configuration. Visible to administrators only.</p>
+
+      <nav id="workspaceNav" class="workspace-nav"></nav>
+
+      <!-- Mock identity (dev only) -->
+      <section class="card mock-identity-card">
+        <details class="mock-identity-panel">
+          <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
+          <div class="mock-identity-panel-body">
+            <div class="row">
+              <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="admin-1" autocomplete="off" /></div>
+              <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="admin@company.com" autocomplete="email" /></div>
+            </div>
+            <div class="row">
+              <div><label for="name" data-i18n="identity.name">Name</label><input id="name" value="Platform Administrator" autocomplete="name" /></div>
+              <div><label for="department" data-i18n="identity.department">Department</label><input id="department" value="IT" autocomplete="organization" /></div>
+            </div>
+            <div>
+              <label for="roles" data-i18n="identity.roles">Roles (comma-separated)</label>
+              <input id="roles" value="ADMINISTRATOR" autocomplete="off" />
+            </div>
+            <div id="mockRolePresetContainer">
+              <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
+              <select id="mockRolePreset"></select>
+              <p id="mockRolePresetHint" class="small"></p>
+            </div>
+            <button id="loadMe" class="btn btn-primary" data-i18n="identity.load">Load</button>
+          </div>
+        </details>
+      </section>
+
+      <div id="settingsContent" style="display:none">
+
+        <!-- General section -->
+        <section class="card settings-section">
+          <h2 class="settings-section-title" data-i18n="adminPlatform.section.general">General</h2>
+          <div class="field-group">
+            <label for="platformName" data-i18n="adminPlatform.field.platformName">Platform name</label>
+            <input id="platformName" type="text" />
+            <p class="field-hint" data-i18n="adminPlatform.field.platformName.hint">Shown in the consent dialog title.</p>
+          </div>
+        </section>
+
+        <!-- DPO section -->
+        <section class="card settings-section">
+          <h2 class="settings-section-title" data-i18n="adminPlatform.section.dpo">Data protection officer</h2>
+          <div class="row">
+            <div class="field-group">
+              <label for="dpoName" data-i18n="adminPlatform.field.dpoName">Name</label>
+              <input id="dpoName" type="text" />
+            </div>
+            <div class="field-group">
+              <label for="dpoEmail" data-i18n="adminPlatform.field.dpoEmail">Email</label>
+              <input id="dpoEmail" type="email" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Consent body section -->
+        <section class="card settings-section">
+          <h2 class="settings-section-title" data-i18n="adminPlatform.section.consent">Privacy notice text</h2>
+          <p class="small field-hint" data-i18n="adminPlatform.consent.hint">Override the default text per language. Leave empty to use the built-in default.</p>
+          <div class="tab-bar" style="margin-top: var(--space-1)">
+            <button class="tab-btn active" data-tab="nb" data-i18n="adminPlatform.consent.tab.nb">Norwegian (bokmål)</button>
+            <button class="tab-btn" data-tab="nn" data-i18n="adminPlatform.consent.tab.nn">Norwegian (nynorsk)</button>
+            <button class="tab-btn" data-tab="en-GB" data-i18n="adminPlatform.consent.tab.enGB">English (UK)</button>
+          </div>
+          <div id="tab-nb" class="tab-panel active">
+            <textarea id="consentBodyNb" placeholder="Norsk bokmål…"></textarea>
+          </div>
+          <div id="tab-nn" class="tab-panel">
+            <textarea id="consentBodyNn" placeholder="Norsk nynorsk…"></textarea>
+          </div>
+          <div id="tab-en-GB" class="tab-panel">
+            <textarea id="consentBodyEnGb" placeholder="English (UK)…"></textarea>
+          </div>
+        </section>
+
+        <div class="save-bar">
+          <button id="saveBtn" class="btn btn-primary" data-i18n="adminPlatform.save">Save settings</button>
+          <span id="saveFeedback" class="small" style="display:none"></span>
+        </div>
+
+      </div><!-- /settingsContent -->
+    </main>
+
+    <script type="module" src="/static/admin-platform.js"></script>
+  </body>
+</html>

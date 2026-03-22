@@ -132,6 +132,12 @@ let participantRuntimeConfig = {
         requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
       },
       {
+        id: "admin-platform",
+        path: "/admin-platform",
+        labelKey: "nav.adminPlatform",
+        requiredRoles: ["ADMINISTRATOR"],
+      },
+      {
         id: "profile",
         path: "/profile",
         labelKey: "nav.profile",
@@ -223,6 +229,12 @@ const defaultWorkspaceNavigationItems = [
     path: "/admin-content",
     labelKey: "nav.adminContent",
     requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+  },
+  {
+    id: "admin-platform",
+    path: "/admin-platform",
+    labelKey: "nav.adminPlatform",
+    requiredRoles: ["ADMINISTRATOR"],
   },
 ];
 

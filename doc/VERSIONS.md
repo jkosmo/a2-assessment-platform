@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.99 - 2026-03-22
+### Summary
+feat: dedikert admin-plattform-side for systemnivå-konfigurasjon (v0.8.99)
+
+### Included
+- **`src/routes/adminPlatform.ts`** (ny): `GET /api/admin/platform` returnerer gjeldende plattformkonfigurasjon (platformName, dpoName, dpoEmail, consentBody per lokale). `PUT /api/admin/platform` lagrer endringer via `upsertConsentConfig`. Kun tilgjengelig for ADMINISTRATOR.
+- **`src/app.ts`**: Registrert `adminPlatformRouter` med `requireAnyRole([AppRole.ADMINISTRATOR])`. Ny side-rute `GET /admin-platform`.
+- **`public/admin-platform.html`** (ny): Fullstendig administrasjonsside med Generelt-seksjon (plattformnavn), DPO-seksjon (navn, e-post) og Personverntekst-seksjon med faner per lokale (nb/nn/en-GB). Samme layout som øvrige sider.
+- **`public/admin-platform.js`** (ny): Henter og lagrer konfigurasjon via API. Følger samme boot-mønster som øvrige sider (loadConsoleConfig → initConsentGuard → loadSettings). Fane-logikk for samtykketekst.
+- **`public/i18n/admin-platform-translations.js`** (ny): Utvider `participant-translations.js` med alle `adminPlatform.*`-nøkler for nb/nn/en-GB.
+- **`public/i18n/participant-translations.js`**: Lagt til `nav.adminPlatform` i alle tre lokaler (kaskaderer til alle utvidende oversettelser).
+- **`public/i18n/profile-translations.js`**: Lagt til `nav.adminPlatform` i alle tre lokaler.
+- **Alle 8 side-JS-filer** (`participant.js`, `manual-review.js`, `calibration.js`, `admin-content.js`, `appeal-handler.js`, `results.js`, `participant-completed.js`, `profile.js`): `admin-platform`-navigasjonselement lagt til i `defaultWorkspaceNavigationItems`.
+
 ## 0.8.98 - 2026-03-22
 ### Summary
 fix: UX-forbedringer samtykke og profil etter manuell testing (v0.8.98)

@@ -18,6 +18,7 @@ import { reviewsRouter } from "./routes/reviews.js";
 import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
 import { adminContentRouter } from "./routes/adminContent.js";
+import { adminPlatformRouter } from "./routes/adminPlatform.js";
 import { orgSyncRouter } from "./routes/orgSync.js";
 import { calibrationRouter } from "./routes/calibration.js";
 
@@ -80,6 +81,10 @@ app.get("/profile", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "profile.html"));
 });
 
+app.get("/admin-platform", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-platform.html"));
+});
+
 app.use("/api", authenticate, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
@@ -134,6 +139,7 @@ app.use(
   requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]),
   adminContentRouter,
 );
+app.use("/api/admin/platform", requireAnyRole([AppRole.ADMINISTRATOR]), adminPlatformRouter);
 app.use("/api/admin/sync/org", requireAnyRole([AppRole.ADMINISTRATOR]), orgSyncRouter);
 
 app.use(errorHandlingMiddleware);

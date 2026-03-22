@@ -68,6 +68,12 @@ const defaultWorkspaceNavigationItems = [
     requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
   },
   {
+    id: "admin-platform",
+    path: "/admin-platform",
+    labelKey: "nav.adminPlatform",
+    requiredRoles: ["ADMINISTRATOR"],
+  },
+  {
     id: "profile",
     path: "/profile",
     labelKey: "nav.profile",

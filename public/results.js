@@ -38,6 +38,7 @@ const defaultWorkspaceNavigationItems = [
   { id: "appeal-handler", path: "/appeal-handler", labelKey: "nav.appealHandler", requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"] },
   { id: "calibration", path: "/calibration", labelKey: "nav.calibration", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
   { id: "admin-content", path: "/admin-content", labelKey: "nav.adminContent", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
+  { id: "admin-platform", path: "/admin-platform", labelKey: "nav.adminPlatform", requiredRoles: ["ADMINISTRATOR"] },
   { id: "results", path: "/results", labelKey: "nav.results", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"] },
   { id: "profile", path: "/profile", labelKey: "nav.profile", requiredRoles: [] },
 ];

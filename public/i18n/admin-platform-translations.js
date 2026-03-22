@@ -1,0 +1,81 @@
+import {
+  localeLabels as baseLocaleLabels,
+  supportedLocales as baseSupportedLocales,
+  translations as participantTranslations,
+} from "./participant-translations.js";
+
+export const supportedLocales = baseSupportedLocales;
+export const localeLabels = baseLocaleLabels;
+
+const extraTranslations = {
+  "en-GB": {
+    "nav.adminPlatform": "Platform settings",
+    "adminPlatform.title": "Platform settings",
+    "adminPlatform.subtitle": "System-level configuration. Visible to administrators only.",
+    "adminPlatform.section.general": "General",
+    "adminPlatform.field.platformName": "Platform name",
+    "adminPlatform.field.platformName.hint": "Shown in the consent dialog title.",
+    "adminPlatform.section.dpo": "Data protection officer",
+    "adminPlatform.field.dpoName": "Name",
+    "adminPlatform.field.dpoEmail": "Email",
+    "adminPlatform.section.consent": "Privacy notice text",
+    "adminPlatform.consent.hint": "Override the default privacy notice per language. Leave empty to use the built-in default.",
+    "adminPlatform.consent.tab.nb": "Norwegian (bokmål)",
+    "adminPlatform.consent.tab.nn": "Norwegian (nynorsk)",
+    "adminPlatform.consent.tab.enGB": "English (UK)",
+    "adminPlatform.save": "Save settings",
+    "adminPlatform.saved": "Settings saved.",
+    "adminPlatform.saving": "Saving…",
+    "adminPlatform.error": "Could not save settings.",
+    "adminPlatform.loading": "Loading settings…",
+  },
+  nb: {
+    "nav.adminPlatform": "Plattforminnstillinger",
+    "adminPlatform.title": "Plattforminnstillinger",
+    "adminPlatform.subtitle": "Systemkonfigurasjon. Kun synlig for administratorer.",
+    "adminPlatform.section.general": "Generelt",
+    "adminPlatform.field.platformName": "Plattformnavn",
+    "adminPlatform.field.platformName.hint": "Vises i tittelen på samtykke-dialogen.",
+    "adminPlatform.section.dpo": "Personvernombud",
+    "adminPlatform.field.dpoName": "Navn",
+    "adminPlatform.field.dpoEmail": "E-post",
+    "adminPlatform.section.consent": "Personverntekst",
+    "adminPlatform.consent.hint": "Overstyr standard personverntekst per språk. La stå tomt for å bruke innebygd standard.",
+    "adminPlatform.consent.tab.nb": "Norsk (bokmål)",
+    "adminPlatform.consent.tab.nn": "Norsk (nynorsk)",
+    "adminPlatform.consent.tab.enGB": "Engelsk",
+    "adminPlatform.save": "Lagre innstillinger",
+    "adminPlatform.saved": "Innstillinger lagret.",
+    "adminPlatform.saving": "Lagrer…",
+    "adminPlatform.error": "Kunne ikke lagre innstillinger.",
+    "adminPlatform.loading": "Laster innstillinger…",
+  },
+  nn: {
+    "nav.adminPlatform": "Plattforminnstillingar",
+    "adminPlatform.title": "Plattforminnstillingar",
+    "adminPlatform.subtitle": "Systemkonfigurasjon. Berre synleg for administratorar.",
+    "adminPlatform.section.general": "Generelt",
+    "adminPlatform.field.platformName": "Plattformnamn",
+    "adminPlatform.field.platformName.hint": "Vert vist i tittelen på samtykke-dialogen.",
+    "adminPlatform.section.dpo": "Personvernombod",
+    "adminPlatform.field.dpoName": "Namn",
+    "adminPlatform.field.dpoEmail": "E-post",
+    "adminPlatform.section.consent": "Personverntekst",
+    "adminPlatform.consent.hint": "Overstyr standard personverntekst per språk. La stå tomt for å bruka innebygd standard.",
+    "adminPlatform.consent.tab.nb": "Norsk (bokmål)",
+    "adminPlatform.consent.tab.nn": "Norsk (nynorsk)",
+    "adminPlatform.consent.tab.enGB": "Engelsk",
+    "adminPlatform.save": "Lagre innstillingar",
+    "adminPlatform.saved": "Innstillingar lagra.",
+    "adminPlatform.saving": "Lagrar…",
+    "adminPlatform.error": "Kunne ikkje lagre innstillingar.",
+    "adminPlatform.loading": "Lastar innstillingar…",
+  },
+};
+
+export const translations = Object.fromEntries(
+  Object.entries(participantTranslations).map(([locale, base]) => [
+    locale,
+    { ...base, ...(extraTranslations[locale] ?? {}) },
+  ]),
+);
