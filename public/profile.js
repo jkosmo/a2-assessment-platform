@@ -353,7 +353,8 @@ function renderSection(titleKey, data) {
 
   const pre = document.createElement("pre");
   pre.style.cssText =
-    "font-size:12px;background:var(--color-surface);border:1px solid var(--color-border-soft);" +
+    "font-size:12px;background:var(--color-surface);color:var(--color-text);" +
+    "border:1px solid var(--color-border-soft);" +
     "border-radius:var(--radius-card);padding:var(--space-1);overflow-x:auto;white-space:pre-wrap;word-break:break-all";
   pre.textContent = JSON.stringify(data, null, 2);
   section.appendChild(pre);

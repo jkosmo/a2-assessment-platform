@@ -21,6 +21,7 @@ import { apiFetch } from "/static/api-client.js";
 
 const CONSENT_TRANSLATIONS = {
   "en-GB": {
+    "locale.label": "Language",
     "consent.title": "Your personal data in {platformName}",
     "consent.newVersion": "We have updated the privacy notice — here is what changed:",
     "consent.dpo.label": "Data protection officer:",
@@ -33,6 +34,7 @@ const CONSENT_TRANSLATIONS = {
     "deletion.banner.cancelled": "Pseudonymisation request cancelled.",
   },
   nb: {
+    "locale.label": "Språk",
     "consent.title": "Dine personopplysninger i {platformName}",
     "consent.newVersion": "Vi har oppdatert personvernerklæringen — her er hva som har endret seg:",
     "consent.dpo.label": "Personvernombud:",
@@ -45,6 +47,7 @@ const CONSENT_TRANSLATIONS = {
     "deletion.banner.cancelled": "Pseudonymiseringsforespørsel avbrutt.",
   },
   nn: {
+    "locale.label": "Språk",
     "consent.title": "Personopplysningane dine i {platformName}",
     "consent.newVersion": "Vi har oppdatert personvernerklæringa — her er kva som har endra seg:",
     "consent.dpo.label": "Personvernombod:",
@@ -57,6 +60,14 @@ const CONSENT_TRANSLATIONS = {
     "deletion.banner.cancelled": "Pseudonymiseringsførespurnad avbroten.",
   },
 };
+
+const LOCALE_LABELS = {
+  "en-GB": "English (UK)",
+  nb: "Norsk bokmål",
+  nn: "Norsk nynorsk",
+};
+
+const LOCALE_STORAGE_KEY = "participant.locale";
 
 function tg(locale, key) {
   return CONSENT_TRANSLATIONS[locale]?.[key] ?? CONSENT_TRANSLATIONS["en-GB"]?.[key] ?? key;
@@ -86,10 +97,22 @@ function renderConsentModal(config, locale, onAccept, onLogout) {
       ? `<p class="consent-dpo"><strong>${tg(locale, "consent.dpo.label")}</strong> ${escHtml(config.dpoName)}${config.dpoEmail ? ` &mdash; <strong>${tg(locale, "consent.dpo.contact")}</strong> <a href="mailto:${escHtml(config.dpoEmail)}">${escHtml(config.dpoEmail)}</a>` : ""}</p>`
       : "";
 
+  const localeOptions = Object.keys(CONSENT_TRANSLATIONS)
+    .map((l) => `<option value="${escHtml(l)}"${l === locale ? " selected" : ""}>${escHtml(LOCALE_LABELS[l] ?? l)}</option>`)
+    .join("");
+
   overlay.innerHTML = `
     <div class="consent-modal card" role="dialog" aria-modal="true" aria-labelledby="consent-modal-title"
          style="max-width:560px;width:100%;max-height:90vh;overflow-y:auto;display:grid;gap:var(--space-2);">
-      <h2 id="consent-modal-title" style="margin:0">${escHtml(title)}</h2>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <h2 id="consent-modal-title" style="margin:0;flex:1">${escHtml(title)}</h2>
+        <label style="font-size:12px;color:var(--color-meta);white-space:nowrap;display:flex;align-items:center;gap:4px">
+          ${escHtml(tg(locale, "locale.label"))}
+          <select id="consent-locale-select" style="font-size:12px;padding:2px 6px;border-radius:4px;border:1px solid var(--color-border-soft)">
+            ${localeOptions}
+          </select>
+        </label>
+      </div>
       ${changelogHtml}
       <div class="consent-body" style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:var(--color-text)">
         ${escHtml(config.body)}
@@ -104,6 +127,10 @@ function renderConsentModal(config, locale, onAccept, onLogout) {
 
   document.body.appendChild(overlay);
 
+  document.getElementById("consent-locale-select").addEventListener("change", (e) => {
+    try { localStorage.setItem(LOCALE_STORAGE_KEY, e.target.value); } catch { /* ignore */ }
+    window.location.reload();
+  });
   document.getElementById("consent-accept-btn").addEventListener("click", onAccept);
   document.getElementById("consent-logout-btn").addEventListener("click", onLogout);
 }

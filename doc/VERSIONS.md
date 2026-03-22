@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.98 - 2026-03-22
+### Summary
+fix: UX-forbedringer samtykke og profil etter manuell testing (v0.8.98)
+
+### Included
+- **`src/config/consent.ts`**: Presisert advarselstekst — "personopplysninger" → "særlige eller sensitive personopplysninger" (alle tre lokaler).
+- **`public/consent-guard.js`**: Lagt til språkvelger i samtykke-dialogen. Bruker kan velge norsk bokmål / nynorsk / English direkte i dialogen. Valg lagres i localStorage og siden lastes på nytt med riktig lokale.
+- **`public/i18n/profile-translations.js`**: Fikset inkonsistent navngivning: "Vurderinger"/"Vurderingar" → "Deltaker"/"Deltakar". Datavisning-seksjonen "Profil" → "Mine data". Lagt til korte knappeoverskrifter (`profile.rights.*.btn`).
+- **`public/profile.html`**: Rettighetskortet bruker nå kortere knappeoverskrifter og `align-items: center` for bedre layout. Knapper har `flex-shrink: 0; white-space: nowrap` for smalere knappekolonne.
+- **`public/profile.js`**: Fikset fontfarge i datautdrag (eksplisitt `color: var(--color-text)` på `<pre>`).
+
 ## 0.8.97 - 2026-03-22
 ### Summary
 fix: samtykke-dialog blokkert av consent-middleware, Profil-lenke flyttes til toppmenyen (v0.8.97)

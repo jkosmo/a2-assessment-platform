@@ -59,8 +59,11 @@ export const translations = {
     // GDPR rights
     "profile.section.rights": "Your rights",
     "profile.rights.view": "View my data",
+    "profile.rights.view.btn": "View",
     "profile.rights.download": "Download my data",
+    "profile.rights.download.btn": "Download",
     "profile.rights.delete": "Request pseudonymisation",
+    "profile.rights.delete.btn": "Request",
     "profile.rights.view.description": "Shows all data we hold about you, including who has accessed it and when.",
     "profile.rights.download.description": "Exports your data in machine-readable format (JSON).",
     "profile.rights.delete.description": "Pseudonymises your data permanently. Your name and email are decoupled from all records.",
@@ -77,7 +80,7 @@ export const translations = {
     // Data view page
     "dataview.title": "Your data",
     "dataview.back": "← Back to profile",
-    "dataview.section.profile": "Profile",
+    "dataview.section.profile": "My data",
     "dataview.section.submissions": "Submissions",
     "dataview.section.appeals": "Appeals",
     "dataview.section.consent": "Consent history",
@@ -88,7 +91,7 @@ export const translations = {
   },
   nb: {
     "nav.skipToContent": "Hopp til innhold",
-    "nav.participant": "Vurderinger",
+    "nav.participant": "Deltaker",
     "nav.completedModules": "Fullførte moduler",
     "nav.manualReview": "Manuell gjennomgang",
     "nav.appealHandler": "Ankebehandling",
@@ -133,8 +136,11 @@ export const translations = {
 
     "profile.section.rights": "Dine rettigheter",
     "profile.rights.view": "Se mine data",
+    "profile.rights.view.btn": "Vis",
     "profile.rights.download": "Last ned mine data",
+    "profile.rights.download.btn": "Last ned",
     "profile.rights.delete": "Be om pseudonymisering",
+    "profile.rights.delete.btn": "Be om",
     "profile.rights.view.description": "Viser alle data vi har om deg, inkludert hvem som har hatt tilgang til dem og når.",
     "profile.rights.download.description": "Eksporterer dine data i maskinlesbart format (JSON).",
     "profile.rights.delete.description": "Pseudonymiserer dine data permanent. Navn og e-post kobles fra alle oppføringer.",
@@ -149,7 +155,7 @@ export const translations = {
 
     "dataview.title": "Dine data",
     "dataview.back": "← Tilbake til profil",
-    "dataview.section.profile": "Profil",
+    "dataview.section.profile": "Mine data",
     "dataview.section.submissions": "Besvarelser",
     "dataview.section.appeals": "Anker",
     "dataview.section.consent": "Samtykkehistorikk",
@@ -160,7 +166,7 @@ export const translations = {
   },
   nn: {
     "nav.skipToContent": "Hopp til innhald",
-    "nav.participant": "Vurderingar",
+    "nav.participant": "Deltakar",
     "nav.completedModules": "Fullførte modular",
     "nav.manualReview": "Manuell gjennomgang",
     "nav.appealHandler": "Ankebehandling",
@@ -205,8 +211,11 @@ export const translations = {
 
     "profile.section.rights": "Rettane dine",
     "profile.rights.view": "Sjå dataa mine",
+    "profile.rights.view.btn": "Sjå",
     "profile.rights.download": "Last ned dataa mine",
+    "profile.rights.download.btn": "Last ned",
     "profile.rights.delete": "Be om pseudonymisering",
+    "profile.rights.delete.btn": "Be om",
     "profile.rights.view.description": "Viser alle data vi har om deg, inkludert kven som har hatt tilgang til dei og når.",
     "profile.rights.download.description": "Eksporterer dataa dine i maskinlesbart format (JSON).",
     "profile.rights.delete.description": "Pseudonymiserer dataa dine permanent. Namn og e-post vert kopla frå alle oppføringane.",
@@ -221,7 +230,7 @@ export const translations = {
 
     "dataview.title": "Dataa dine",
     "dataview.back": "← Tilbake til profil",
-    "dataview.section.profile": "Profil",
+    "dataview.section.profile": "Mine data",
     "dataview.section.submissions": "Besvaringar",
     "dataview.section.appeals": "Klagar",
     "dataview.section.consent": "Samtykkehistorikk",

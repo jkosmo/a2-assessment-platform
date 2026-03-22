@@ -47,7 +47,7 @@ Vurderinger settes automatisk av AI. Dersom du ikke består, har du alltid rett 
 
 Dine besvarelser sendes til en AI-tjeneste for evaluering. Svarene sendes uten personidentifiserende opplysninger som navn eller e-post. Tjenesten er hostet i Norge (Azure OpenAI).
 
-Advarsel: Skriv ikke inn personopplysninger om deg selv eller andre i besvarelsene dine.
+Advarsel: Skriv ikke inn særlige eller sensitive personopplysninger om deg selv eller andre i besvarelsene dine.
 
 Dine rettigheter:
 Du kan når som helst be om innsyn i, eksport av, eller pseudonymisering av dine data via profilsiden. Pseudonymisering betyr at navn og e-post kobles fra alle oppføringer. Statistiske aggregater beholdes uten personkobling.
@@ -71,7 +71,7 @@ Assessments are scored automatically by AI. If you do not pass, you always have 
 
 Your submissions are sent to an AI service for evaluation. Submissions are sent without personally identifying information such as name or email. The service is hosted in Norway (Azure OpenAI).
 
-Warning: Do not include personal information about yourself or others in your submission responses.
+Warning: Do not include special category or sensitive personal information about yourself or others in your submission responses.
 
 Your rights:
 You can at any time request access to, export of, or pseudonymisation of your data via your profile page. Pseudonymisation means your name and email are decoupled from all records. Statistical aggregates are retained without personal linkage.
@@ -95,7 +95,7 @@ Vurderingar vert sette automatisk av KI. Dersom du ikkje består, har du alltid 
 
 Besvaringane dine vert sende til ein KI-teneste for evaluering. Svara vert sende utan personidentifiserande opplysningar som namn eller e-post. Tenesta er drifta i Noreg (Azure OpenAI).
 
-Åtvaring: Skriv ikkje inn personopplysningar om deg sjølv eller andre i besvaringane dine.
+Åtvaring: Skriv ikkje inn særlege eller sensitive personopplysningar om deg sjølv eller andre i besvaringane dine.
 
 Rettane dine:
 Du kan når som helst be om innsyn i, eksport av, eller pseudonymisering av dataa dine via profilsida. Pseudonymisering tyder at namn og e-post vert kopla frå alle oppføringane. Statistiske aggregat vert bevarte utan personkopling.
