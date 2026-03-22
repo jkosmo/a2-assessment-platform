@@ -8,7 +8,7 @@ export {
   createBenchmarkExampleVersion,
   publishModuleVersion,
   publishModuleVersionWithThresholds,
-} from "./adminContentService.js";
+} from "./adminContentCommands.js";
 
 export { listAdminModules, getModuleContentBundle } from "./adminContentQueries.js";
 

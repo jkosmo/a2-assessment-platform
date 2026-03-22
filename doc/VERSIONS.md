@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.12 - 2026-03-22
+### Summary
+refactor: splitt adminContent-service i commands, queries og projections (#239)
+
+### Included
+- **`src/modules/adminContent/adminContentCommands.ts`** (ny): Alle skrive-kommandoer fra `adminContentService.ts` flyttet hit.
+- **`src/modules/adminContent/adminContentProjections.ts`** (ny): Projection-hjelperne `decodeLocalizedText`, `safeParseJson`, `decodeMcqOption`, `mapMcqSetVersion` ekstrahert fra `adminContentQueries.ts`.
+- **`src/modules/adminContent/adminContentQueries.ts`**: Importerer nå hjelperne fra `adminContentProjections.js` i stedet for å definere dem lokalt.
+- **`src/modules/adminContent/index.ts`**: Peker nå til `adminContentCommands.js` i stedet for `adminContentService.js`.
+- **Slettet**: `src/modules/adminContent/adminContentService.ts`.
+
 ## 0.9.11 - 2026-03-22
 ### Summary
 refactor: slett gamle manual-review/appeal-handler-sider, skjul detalj når kø er tom (v0.9.11)
