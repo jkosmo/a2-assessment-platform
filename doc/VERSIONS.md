@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.25 - 2026-03-22
+### Summary
+fix: slett feil benchmark-resultater og prøv nyere API-versjon (v0.9.25)
+
+### Included
+- **`doc/benchmarks/`**: Sletter feilaktig committede resultater fra tidligere kjøringer med feil endpoint.
+- **`.github/workflows/benchmark-models.yml`**: API-versjon satt til `2025-01-01-preview` for kompatibilitet med Azure AI Foundry-ressurser.
+
 ## 0.9.24 - 2026-03-22
 ### Summary
 fix: legg tilbake environment: staging i benchmark-workflow (v0.9.24)
