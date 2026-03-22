@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.23 - 2026-03-22
+### Summary
+fix: benchmark-workflow bruker nå dedikerte repo-variabler og korrekte deployment-navn (v0.9.23)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: Bytter til `BENCHMARK_AZURE_OPENAI_ENDPOINT`/`BENCHMARK_AZURE_OPENAI_API_KEY` (repo-nivå, ikke staging-miljø). Fjerner `environment: staging`. Oppdaterer default deployment-navn til faktiske navn på Foundry-ressursen.
+
 ## 0.9.22 - 2026-03-22
 ### Summary
 fix: gi benchmark-workflow skrivetilgang for å committe rapport (v0.9.22)

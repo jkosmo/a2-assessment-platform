@@ -10,7 +10,7 @@ on:
       models:
         description: "Models (label:deployment,...)"
         required: true
-        default: "full:gpt-5.4,mini:gpt-5.4-mini,nano:gpt-5.4-nano"
+        default: "chat:a2-assessment-stage-gpt-5.3-chat,mini:a2-assessment-stage-gpt-5.4-mini,nano:a-2-assessment-stage-gpt-5.4-nano"
       cases:
         description: "Cases to run (comma-separated, leave blank for default)"
         required: false
@@ -19,7 +19,6 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    environment: staging
     permissions:
       contents: write
     steps:
@@ -54,9 +53,9 @@ jobs:
         env:
           LLM_MODE: azure_openai
           AZURE_OPENAI_DEPLOYMENT: benchmark-override
-          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}
+          AZURE_OPENAI_ENDPOINT: ${{ vars.BENCHMARK_AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.BENCHMARK_AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_API_VERSION: "2024-10-21"
           AZURE_OPENAI_TIMEOUT_MS: "120000"
           AZURE_OPENAI_TEMPERATURE: "0"
           AZURE_OPENAI_MAX_TOKENS: "1200"
