@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.11 - 2026-03-22
+### Summary
+refactor: slett gamle manual-review/appeal-handler-sider, skjul detalj når kø er tom (v0.9.11)
+
+### Included
+- **`public/review.js`**: Detalj-seksjonen skjules automatisk når tilhørende kø er tom. Begge køer bruker nå `showEmpty()` for konsistent visuell tom-tilstand (midtstilt, lyseblå bakgrunn).
+- **Slettet**: `public/manual-review.html`, `public/manual-review.js`, `public/appeal-handler.html`, `public/appeal-handler.js`.
+- **`src/app.ts`**: Rutene `GET /manual-review` og `GET /appeal-handler` er fjernet.
+- **`test/participant-console-config.test.ts`**: Oppdatert til å teste `/review` i stedet for de gamle sidene.
+
 ## 0.9.10 - 2026-03-22
 ### Summary
 feat: samtykkeversjonering via admin-panel — admin kan kreve nytt samtykke uten redeploy (v0.9.10)

@@ -145,20 +145,6 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain("review.js");
   });
 
-  it("serves dedicated appeal-handler workspace page", async () => {
-    const response = await request(app).get("/appeal-handler");
-
-    expect(response.status).toBe(200);
-    expect(response.text).toContain("appeal-handler.js");
-  });
-
-  it("serves dedicated manual-review workspace page", async () => {
-    const response = await request(app).get("/manual-review");
-
-    expect(response.status).toBe(200);
-    expect(response.text).toContain("manual-review.js");
-  });
-
   it("serves dedicated calibration workspace page", async () => {
     const response = await request(app).get("/calibration");
 
@@ -196,9 +182,8 @@ describe("participant console runtime config", () => {
     const workspacePages = [
       "/participant",
       "/participant/completed",
-      "/manual-review",
+      "/review",
       "/admin-content",
-      "/appeal-handler",
       "/calibration",
     ];
 
@@ -210,11 +195,11 @@ describe("participant console runtime config", () => {
       expect(response.text).toContain('class="card mock-identity-card"');
       expect(response.text).toContain('class="mock-identity-panel"');
 
-      if (["/participant", "/appeal-handler", "/calibration"].includes(pagePath)) {
+      if (["/participant", "/review", "/calibration"].includes(pagePath)) {
         expect(response.text).toContain('href="/static/loading.css"');
       }
 
-      if (["/participant", "/appeal-handler"].includes(pagePath)) {
+      if (["/participant", "/review"].includes(pagePath)) {
         expect(response.text).toContain('href="/static/toast.css"');
         expect(response.text).toContain('id="debugOutputSection" hidden');
       }
@@ -243,18 +228,10 @@ describe("participant console runtime config", () => {
         expect(response.text).not.toContain('data-step="5"');
       }
 
-      if (pagePath === "/appeal-handler") {
+      if (pagePath === "/review") {
         expect(response.text).toContain('id="appealHandlerStatusFilter"');
-        expect(response.text).toContain('class="pill-group"');
-        expect(response.text).not.toContain('<select id="appealHandlerStatusFilter"');
-        expect(response.text).not.toContain('id="loadAppealQueue"');
-        expect(response.text).toContain('id="outputStatus"');
-      }
-
-      if (pagePath === "/manual-review") {
         expect(response.text).toContain('id="manualReviewStatusFilter"');
         expect(response.text).toContain('class="pill-group"');
-        expect(response.text).not.toContain('id="loadReviewQueue"');
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('id="reviewActionSequenceHint"');
       }

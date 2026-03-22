@@ -467,18 +467,15 @@ function renderReviewQueue() {
   manualReviewQueueBody.innerHTML = "";
   if (!Array.isArray(latestReviewQueue) || latestReviewQueue.length === 0) {
     mrQueueCountLabel.textContent = "0";
+    manualReviewDetailsSection.hidden = true;
     setSelectedReview("", true);
     selectedReviewDetails = null;
     renderManualReviewDetails(null);
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 8;
-    cell.textContent = t("manualReview.noQueue");
-    row.appendChild(cell);
-    manualReviewQueueBody.appendChild(row);
+    showEmpty(manualReviewQueueBody, t("manualReview.noQueue"), { columns: 8 });
     return;
   }
 
+  manualReviewDetailsSection.hidden = false;
   const filtered = filterReviewsBySearch(latestReviewQueue);
   mrQueueCountLabel.textContent = `${filtered.length} / ${latestReviewQueue.length}`;
 
@@ -486,12 +483,7 @@ function renderReviewQueue() {
     setSelectedReview("", true);
     selectedReviewDetails = null;
     renderManualReviewDetails(null);
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 8;
-    cell.textContent = t("manualReview.noRows");
-    row.appendChild(cell);
-    manualReviewQueueBody.appendChild(row);
+    showEmpty(manualReviewQueueBody, t("manualReview.noRows"), { columns: 8 });
     return;
   }
 
@@ -883,6 +875,7 @@ function renderAppealQueue() {
 
   if (!Array.isArray(latestAppealQueue) || latestAppealQueue.length === 0) {
     appealQueueCountLabel.textContent = "0";
+    appealDetailsSection.hidden = true;
     setSelectedAppeal("", true);
     selectedAppealDetails = null;
     renderAppealHandlerDetails(null);
@@ -890,6 +883,7 @@ function renderAppealQueue() {
     return;
   }
 
+  appealDetailsSection.hidden = false;
   const filtered = filterAppealsBySearch(latestAppealQueue);
   appealQueueCountLabel.textContent = `${filtered.length} / ${latestAppealQueue.length}`;
 
