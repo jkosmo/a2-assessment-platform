@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.7 - 2026-03-22
+### Summary
+fix: øk avstand under gult varsel-banner i innholdsforvaltning (v0.9.7)
+
+### Included
+- **`public/admin-content.html`**: Lagt til `margin-bottom: var(--space-2)` på varsel-banner for særlige kategorier — gir samme avstand ned til neste seksjon som mellom andre seksjoner.
+
 ## 0.9.6 - 2026-03-22
 ### Summary
 refactor: flytt Fullførte moduler til Profil og skjul nav for ren deltaker (v0.9.6)
