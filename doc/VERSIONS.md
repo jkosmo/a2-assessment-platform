@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.3 - 2026-03-22
+### Summary
+fix: rettighetskortet i profil bruker nå vertikal layout (v0.9.3)
+
+### Included
+- **`public/profile.html`**: Fjernet flex-rad-layout på rettighetskortet. Knappene vises nå under beskrivelsesteksten. Unngår at teksten presses til ett ord per linje.
+
 ## 0.9.2 - 2026-03-22
 ### Summary
 fix: legg til admin-platform i navigasjonskonfig (v0.9.2)

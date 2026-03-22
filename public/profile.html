@@ -14,11 +14,10 @@
       .profile-dl dt { color: var(--color-meta); font-weight: 600; white-space: nowrap; }
       .profile-dl dd { margin: 0; color: var(--color-text); word-break: break-word; }
       .rights-grid { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
-      .rights-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1) var(--space-2); display: flex; align-items: center; gap: var(--space-2); }
-      .rights-card-body { flex: 1; min-width: 0; }
-      .rights-card .btn { flex-shrink: 0; white-space: nowrap; }
+      .rights-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1) var(--space-2); }
       .rights-card-title { font-weight: 600; font-size: 14px; }
       .rights-card-desc { font-size: 12px; color: var(--color-meta); margin-top: 4px; }
+      .rights-card .btn { margin-top: 10px; }
       .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: var(--space-1); }
       table { width: 100%; border-collapse: collapse; min-width: 520px; }
       th, td { border-bottom: 1px solid var(--color-table-border); padding: 8px var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
@@ -114,24 +113,18 @@
           <h2 class="profile-section-title" data-i18n="profile.section.rights">Your rights</h2>
           <div class="rights-grid">
             <div class="rights-card">
-              <div class="rights-card-body">
-                <div class="rights-card-title" data-i18n="profile.rights.view">View my data</div>
-                <div class="rights-card-desc" data-i18n="profile.rights.view.description">Shows all data we hold about you.</div>
-              </div>
+              <div class="rights-card-title" data-i18n="profile.rights.view">View my data</div>
+              <div class="rights-card-desc" data-i18n="profile.rights.view.description">Shows all data we hold about you.</div>
               <button id="viewDataBtn" class="btn btn-secondary" data-i18n="profile.rights.view.btn">View</button>
             </div>
             <div class="rights-card">
-              <div class="rights-card-body">
-                <div class="rights-card-title" data-i18n="profile.rights.download">Download my data</div>
-                <div class="rights-card-desc" data-i18n="profile.rights.download.description">Exports your data in JSON.</div>
-              </div>
+              <div class="rights-card-title" data-i18n="profile.rights.download">Download my data</div>
+              <div class="rights-card-desc" data-i18n="profile.rights.download.description">Exports your data in JSON.</div>
               <button id="downloadDataBtn" class="btn btn-secondary" data-i18n="profile.rights.download.btn">Download</button>
             </div>
             <div class="rights-card">
-              <div class="rights-card-body">
-                <div class="rights-card-title" data-i18n="profile.rights.delete">Request pseudonymisation</div>
-                <div class="rights-card-desc" data-i18n="profile.rights.delete.description">Decouples your name and email from all records.</div>
-              </div>
+              <div class="rights-card-title" data-i18n="profile.rights.delete">Request pseudonymisation</div>
+              <div class="rights-card-desc" data-i18n="profile.rights.delete.description">Decouples your name and email from all records.</div>
               <button id="requestDeletionBtn" class="btn btn-danger" data-i18n="profile.rights.delete.btn">Request</button>
             </div>
           </div>
