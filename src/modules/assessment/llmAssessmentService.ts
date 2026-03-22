@@ -67,43 +67,50 @@ export async function evaluatePracticalWithAzureOpenAi(
   try {
     for (let index = 0; index < tokenParameterSequence.length; index += 1) {
       const tokenParameter = tokenParameterSequence[index];
-      const response = await fetch(buildAzureOpenAiCompletionsUrl(config), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "api-key": config.apiKey,
-        },
-        body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter)),
-        signal: timeoutController.signal,
-      });
 
-      const rawBody = await response.text();
-      const responseBody = parseJsonBody(rawBody);
+      for (const includeTemperature of [true, false]) {
+        const response = await fetch(buildAzureOpenAiCompletionsUrl(config), {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "api-key": config.apiKey,
+          },
+          body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature)),
+          signal: timeoutController.signal,
+        });
 
-      if (!response.ok) {
-        if (
-          config.tokenLimitParameter === "auto" &&
-          index < tokenParameterSequence.length - 1 &&
-          isUnsupportedTokenParameterError(responseBody, tokenParameter)
-        ) {
-          continue;
+        const rawBody = await response.text();
+        const responseBody = parseJsonBody(rawBody);
+
+        if (!response.ok) {
+          if (
+            config.tokenLimitParameter === "auto" &&
+            index < tokenParameterSequence.length - 1 &&
+            isUnsupportedTokenParameterError(responseBody, tokenParameter)
+          ) {
+            break;
+          }
+
+          if (includeTemperature && isUnsupportedTemperatureError(responseBody)) {
+            continue;
+          }
+
+          const providerMessage = extractProviderErrorMessage(responseBody);
+          lastProviderError = new Error(
+            `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
+          );
+          throw lastProviderError;
         }
 
-        const providerMessage = extractProviderErrorMessage(responseBody);
-        lastProviderError = new Error(
-          `Azure OpenAI request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
-        );
-        throw lastProviderError;
+        const assistantContent = extractAssistantContent(responseBody);
+        const parsedStructuredPayload = parseStructuredPayload(assistantContent);
+        const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
+
+        return {
+          ...parsedAssessment,
+          red_flags: normalizeRedFlags(parsedAssessment.red_flags),
+        };
       }
-
-      const assistantContent = extractAssistantContent(responseBody);
-      const parsedStructuredPayload = parseStructuredPayload(assistantContent);
-      const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
-
-      return {
-        ...parsedAssessment,
-        red_flags: normalizeRedFlags(parsedAssessment.red_flags),
-      };
     }
 
     throw (
@@ -232,15 +239,28 @@ function buildAzureOpenAiRequestBody(
   input: AssessmentContext,
   config: AzureOpenAiRuntimeConfig,
   tokenParameter: "max_tokens" | "max_completion_tokens",
+  includeTemperature: boolean,
 ): Record<string, unknown> {
   return {
     messages: buildAzureOpenAiMessages(input),
-    temperature: config.temperature,
+    ...(includeTemperature && { temperature: config.temperature }),
     [tokenParameter]: config.maxTokens,
     response_format: {
       type: "json_object",
     },
   };
+}
+
+function isUnsupportedTemperatureError(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+  const candidate = payload as { error?: { code?: unknown; param?: unknown; message?: unknown } };
+  const code = typeof candidate.error?.code === "string" ? candidate.error.code : "";
+  const param = typeof candidate.error?.param === "string" ? candidate.error.param : "";
+  const message = typeof candidate.error?.message === "string" ? candidate.error.message : "";
+  if (code !== "unsupported_parameter") return false;
+  return param === "temperature" || message.toLowerCase().includes("temperature");
 }
 
 function resolveTokenParameterSequence(

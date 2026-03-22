@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.26 - 2026-03-22
+### Summary
+feat: temperature auto-retry, responslogging og realistisk benchmark-case (v0.9.26)
+
+### Included
+- **`src/modules/assessment/llmAssessmentService.ts`**: Auto-retry uten `temperature` når modellen ikke støtter parameteren (samme mønster som `max_tokens`-retry). Fikser feil med gpt-5.3-chat.
+- **`src/scripts/runModelComparisonBenchmark.ts`**: Logger nå `rubricScores`, `criterionRationales` og `redFlags` per kall i JSONL. Bruker `responseLocale` fra casen.
+- **`src/scripts/assessmentBatchCases.ts`**: Legger til `responseLocale`-felt og ny case `snasa_nb_pass` — ekte nb-innlevering som fikk automatisk PASS i staging (totalScore 89.71). Mer realistisk test enn den generiske green_clear_pass-casen.
+
 ## 0.9.25 - 2026-03-22
 ### Summary
 fix: slett feil benchmark-resultater og prøv nyere API-versjon (v0.9.25)

@@ -72,6 +72,9 @@ type RunRecord = {
   latencyMs: number;
   error: string | null;
   timestamp: string;
+  rubricScores?: Record<string, number>;
+  criterionRationales?: Record<string, string>;
+  redFlags?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -108,7 +111,7 @@ async function runSingle(
       {
         moduleId: assessmentCase.moduleId,
         responseJson: assessmentCase.responseJson,
-        responseLocale: "en-GB",
+        responseLocale: assessmentCase.responseLocale,
         moduleTaskText: assessmentCase.moduleTaskText,
         moduleGuidanceText: assessmentCase.moduleGuidanceText,
         assessmentPass: "primary",
@@ -151,6 +154,9 @@ async function runSingle(
       latencyMs,
       error: null,
       timestamp: new Date().toISOString(),
+      rubricScores: result.rubric_scores,
+      criterionRationales: result.criterion_rationales,
+      redFlags: result.red_flags?.map((f) => `${f.code}:${f.severity}`),
     };
   } catch (error) {
     return {
