@@ -255,11 +255,9 @@ function isUnsupportedTemperatureError(payload: unknown): boolean {
   if (!payload || typeof payload !== "object") {
     return false;
   }
-  const candidate = payload as { error?: { code?: unknown; param?: unknown; message?: unknown } };
-  const code = typeof candidate.error?.code === "string" ? candidate.error.code : "";
+  const candidate = payload as { error?: { param?: unknown; message?: unknown } };
   const param = typeof candidate.error?.param === "string" ? candidate.error.param : "";
   const message = typeof candidate.error?.message === "string" ? candidate.error.message : "";
-  if (code !== "unsupported_parameter") return false;
   return param === "temperature" || message.toLowerCase().includes("temperature");
 }
 

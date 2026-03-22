@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.27 - 2026-03-22
+### Summary
+fix: temperature-retry sjekker nå param/message i stedet for error-kode (v0.9.27)
+
+### Included
+- **`src/modules/assessment/llmAssessmentService.ts`**: `isUnsupportedTemperatureError` fjerner sjekk på `code === "unsupported_parameter"` — gpt-5.3-chat returnerer "Unsupported value" (ikke "Unsupported parameter"), med ulik error-kode.
+
 ## 0.9.26 - 2026-03-22
 ### Summary
 feat: temperature auto-retry, responslogging og realistisk benchmark-case (v0.9.26)
