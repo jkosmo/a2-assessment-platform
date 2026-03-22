@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.9 - 2026-03-22
+### Summary
+feat: slå sammen manuell vurdering og ankebehandling til én /review-side (v0.9.9)
+
+### Included
+- **`public/review.html`**: Ny kombinert side med seksjon for fagvurdering (REVIEWER) og ankebehandling (APPEAL_HANDLER), rollebasert synlighet.
+- **`public/review.js`**: Kombinert JS-logikk — laster begge køer parallelt, bruker separate formattere og feltnavn for MR og anke.
+- **`public/i18n/review-translations.js`**: Samler oversettelser fra `manual-review-translations.js` og `appeal-handler-translations.js` med sidenivå-nøkler (`reviewPage.*`, `review.section.*`).
+- **`config/participant-console.json`**: Navigasjonselement `manual-review` og `appeal-handler` erstattet med `review` (roller: REVIEWER, APPEAL_HANDLER, ADMINISTRATOR).
+- **`public/i18n/participant-translations.js`**: Lagt til `nav.review` — nb: «Manuell behandling», nn: «Manuell handsaming», en-GB: «Manual review».
+- **`src/app.ts`**: Lagt til rute `GET /review` → `review.html`.
+- Alle side-JS-filer (`participant`, `calibration`, `admin-content`, `results`, `admin-platform`, `profile`, `manual-review`, `appeal-handler`, `participant-completed`): `defaultWorkspaceNavigationItems` oppdatert — `manual-review`, `appeal-handler` og `participant-completed` erstattet med `review`.
+- **`test/participant-console-config.test.ts`**: Oppdatert forventede navigasjonselementer og lagt til test for `/review`-ruten. Fjernet `participant-completed` fra forventet nav (ble fjernet i v0.9.6).
+
 ## 0.9.8 - 2026-03-22
 ### Summary
 fix: fjern gjentakelse i sidetittel/seksjonsoverskrift, redesign admin-platform (v0.9.8)

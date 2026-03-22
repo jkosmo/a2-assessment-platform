@@ -65,6 +65,10 @@ app.get("/appeal-handler", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "appeal-handler.html"));
 });
 
+app.get("/review", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "review.html"));
+});
+
 app.get("/calibration", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "calibration.html"));
 });

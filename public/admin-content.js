@@ -346,22 +346,10 @@ const defaultWorkspaceNavigationItems = [
     requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
   },
   {
-    id: "participant-completed",
-    path: "/participant/completed",
-    labelKey: "nav.completedModules",
-    requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
-  },
-  {
-    id: "manual-review",
-    path: "/manual-review",
-    labelKey: "nav.manualReview",
-    requiredRoles: ["REVIEWER", "ADMINISTRATOR"],
-  },
-  {
-    id: "appeal-handler",
-    path: "/appeal-handler",
-    labelKey: "nav.appealHandler",
-    requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
+    id: "review",
+    path: "/review",
+    labelKey: "nav.review",
+    requiredRoles: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"],
   },
   {
     id: "calibration",

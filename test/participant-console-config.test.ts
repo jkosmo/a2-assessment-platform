@@ -26,22 +26,10 @@ describe("participant console runtime config", () => {
           requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
         },
         {
-          id: "participant-completed",
-          path: "/participant/completed",
-          labelKey: "nav.completedModules",
-          requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
-        },
-        {
-          id: "manual-review",
-          path: "/manual-review",
-          labelKey: "nav.manualReview",
-          requiredRoles: ["REVIEWER", "ADMINISTRATOR"],
-        },
-        {
-          id: "appeal-handler",
-          path: "/appeal-handler",
-          labelKey: "nav.appealHandler",
-          requiredRoles: ["APPEAL_HANDLER", "ADMINISTRATOR"],
+          id: "review",
+          path: "/review",
+          labelKey: "nav.review",
+          requiredRoles: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"],
         },
         {
           id: "calibration",
@@ -148,6 +136,13 @@ describe("participant console runtime config", () => {
     } else {
       expect(response.body.entra).toBeUndefined();
     }
+  });
+
+  it("serves combined review workspace page", async () => {
+    const response = await request(app).get("/review");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("review.js");
   });
 
   it("serves dedicated appeal-handler workspace page", async () => {
