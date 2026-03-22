@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { SUPPORTED_LOCALES } from "../i18n/locale.js";
-import { CURRENT_CONSENT_VERSION } from "../config/consent.js";
 import { USER_DELETION_GRACE_PERIOD_DAYS } from "../config/retention.js";
 import { prisma } from "../db/prisma.js";
-import { getConsentConfig } from "../modules/platformConfig/consentConfigService.js";
+import { getConsentConfig, getActiveConsentVersion } from "../modules/platformConfig/consentConfigService.js";
 import {
   requestPseudonymization,
   cancelPseudonymizationRequest,
@@ -25,16 +24,18 @@ meRouter.get("/", async (request, response, next) => {
   }
 
   try {
-    const [consent, pendingDeletion] = await Promise.all([
-      prisma.userConsent.findUnique({
-        where: { userId_consentVersion: { userId, consentVersion: CURRENT_CONSENT_VERSION } },
-        select: { acceptedAt: true },
-      }),
+    const [consentVersion, pendingDeletion] = await Promise.all([
+      getActiveConsentVersion(),
       prisma.deletionRequest.findFirst({
         where: { userId, status: "PENDING" },
         select: { effectiveAt: true, trigger: true },
       }),
     ]);
+
+    const consent = await prisma.userConsent.findUnique({
+      where: { userId_consentVersion: { userId, consentVersion } },
+      select: { acceptedAt: true },
+    });
 
     response.json({
       user: {
@@ -46,7 +47,7 @@ meRouter.get("/", async (request, response, next) => {
         locale: request.context?.locale ?? "en-GB",
       },
       consent: {
-        currentVersion: CURRENT_CONSENT_VERSION,
+        currentVersion: consentVersion,
         accepted: !!consent,
         acceptedAt: consent?.acceptedAt ?? null,
       },
@@ -90,21 +91,22 @@ meRouter.post("/consent", async (request, response, next) => {
     return;
   }
 
-  if (parsed.data.consentVersion !== CURRENT_CONSENT_VERSION) {
-    response.status(409).json({
-      error: "consent_version_mismatch",
-      message: `Expected version ${CURRENT_CONSENT_VERSION}.`,
-    });
-    return;
-  }
-
   try {
+    const consentVersion = await getActiveConsentVersion();
+    if (parsed.data.consentVersion !== consentVersion) {
+      response.status(409).json({
+        error: "consent_version_mismatch",
+        message: `Expected version ${consentVersion}.`,
+      });
+      return;
+    }
+
     await prisma.userConsent.upsert({
-      where: { userId_consentVersion: { userId, consentVersion: CURRENT_CONSENT_VERSION } },
-      create: { userId, consentVersion: CURRENT_CONSENT_VERSION },
+      where: { userId_consentVersion: { userId, consentVersion } },
+      create: { userId, consentVersion },
       update: {},
     });
-    response.json({ accepted: true, consentVersion: CURRENT_CONSENT_VERSION });
+    response.json({ accepted: true, consentVersion });
   } catch (error) {
     next(error);
   }

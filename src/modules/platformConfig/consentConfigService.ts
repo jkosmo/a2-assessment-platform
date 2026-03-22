@@ -11,6 +11,51 @@ export type ConsentConfig = {
   platformName: string;
 };
 
+// ── Consent version cache ─────────────────────────────────────────────────────
+// Reading the active version from DB on every API request would add unnecessary
+// latency. The version changes at most a few times per year, so a 60-second
+// in-process cache is a safe trade-off.
+
+let versionCache: { version: string; fetchedAt: number } | null = null;
+const CACHE_TTL_MS = 60_000;
+
+/**
+ * Returns the active consent version — the DB value (consent.version) takes
+ * precedence over the hard-coded fallback so admins can bump it without a
+ * redeploy.
+ */
+export async function getActiveConsentVersion(): Promise<string> {
+  if (versionCache && Date.now() - versionCache.fetchedAt < CACHE_TTL_MS) {
+    return versionCache.version;
+  }
+  const stored = await platformConfigRepository.get("consent.version");
+  const version = stored ?? CURRENT_CONSENT_VERSION;
+  versionCache = { version, fetchedAt: Date.now() };
+  return version;
+}
+
+export function invalidateConsentVersionCache(): void {
+  versionCache = null;
+}
+
+function incrementMinorVersion(version: string): string {
+  const [major, minor] = version.split(".");
+  return `${major}.${parseInt(minor ?? "0", 10) + 1}`;
+}
+
+/**
+ * Auto-increments the consent version and persists it to PlatformConfig.
+ * All existing UserConsent records become stale — users will be prompted to
+ * re-accept on their next API request.
+ */
+export async function bumpConsentVersion(updatedBy: string): Promise<string> {
+  const current = await getActiveConsentVersion();
+  const next = incrementMinorVersion(current);
+  await platformConfigRepository.set("consent.version", next, updatedBy);
+  invalidateConsentVersionCache();
+  return next;
+}
+
 export async function getConsentConfig(locale: SupportedLocale): Promise<ConsentConfig> {
   const keys = [
     `consent.body.${locale}`,
@@ -18,13 +63,16 @@ export async function getConsentConfig(locale: SupportedLocale): Promise<Consent
     "dpo.email",
     "platform.name",
   ];
-  const config = await platformConfigRepository.getMany(keys);
+  const [config, version] = await Promise.all([
+    platformConfigRepository.getMany(keys),
+    getActiveConsentVersion(),
+  ]);
 
   const body = config[`consent.body.${locale}`] ?? DEFAULT_CONSENT_BODY[locale] ?? DEFAULT_CONSENT_BODY["en-GB"];
-  const changelog = CONSENT_CHANGELOG[CURRENT_CONSENT_VERSION] ?? "";
+  const changelog = CONSENT_CHANGELOG[version] ?? CONSENT_CHANGELOG[CURRENT_CONSENT_VERSION] ?? "";
 
   return {
-    version: CURRENT_CONSENT_VERSION,
+    version,
     changelog,
     body,
     dpoName: config["dpo.name"] ?? null,

@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import { getConsentConfig, upsertConsentConfig } from "../modules/platformConfig/consentConfigService.js";
+import {
+  getActiveConsentVersion,
+  bumpConsentVersion,
+  upsertConsentConfig,
+} from "../modules/platformConfig/consentConfigService.js";
 import { platformConfigRepository } from "../modules/platformConfig/platformConfigRepository.js";
 import { DEFAULT_CONSENT_BODY } from "../config/consent.js";
 
@@ -10,13 +14,17 @@ const adminPlatformRouter = Router();
 // Returns current platform configuration for the admin settings page.
 adminPlatformRouter.get("/", async (_request, response, next) => {
   try {
-    const keys = ["platform.name", "dpo.name", "dpo.email"];
-    const config = await platformConfigRepository.getMany(keys);
+    const keys = ["platform.name", "dpo.name", "dpo.email", "consent.body.en-GB", "consent.body.nb", "consent.body.nn"];
+    const [config, consentVersion] = await Promise.all([
+      platformConfigRepository.getMany(keys),
+      getActiveConsentVersion(),
+    ]);
 
     response.json({
       platformName: config["platform.name"] ?? "",
       dpoName: config["dpo.name"] ?? "",
       dpoEmail: config["dpo.email"] ?? "",
+      consentVersion,
       consentBody: {
         "en-GB": config["consent.body.en-GB"] ?? DEFAULT_CONSENT_BODY["en-GB"] ?? "",
         nb: config["consent.body.nb"] ?? DEFAULT_CONSENT_BODY["nb"] ?? "",
@@ -44,6 +52,7 @@ adminPlatformRouter.put("/", async (request, response, next) => {
         nn: z.string().optional(),
       })
       .optional(),
+    bumpVersion: z.boolean().optional(),
   });
 
   const parsed = bodySchema.safeParse(request.body);
@@ -52,7 +61,7 @@ adminPlatformRouter.put("/", async (request, response, next) => {
     return;
   }
 
-  const { platformName, dpoName, dpoEmail, consentBody } = parsed.data;
+  const { platformName, dpoName, dpoEmail, consentBody, bumpVersion } = parsed.data;
 
   try {
     await upsertConsentConfig(
@@ -67,7 +76,12 @@ adminPlatformRouter.put("/", async (request, response, next) => {
       userId ?? "system",
     );
 
-    response.json({ saved: true });
+    let newConsentVersion: string | undefined;
+    if (bumpVersion) {
+      newConsentVersion = await bumpConsentVersion(userId ?? "system");
+    }
+
+    response.json({ saved: true, ...(newConsentVersion !== undefined ? { consentVersion: newConsentVersion } : {}) });
   } catch (error) {
     next(error);
   }

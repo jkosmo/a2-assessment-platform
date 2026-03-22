@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.10 - 2026-03-22
+### Summary
+feat: samtykkeversjonering via admin-panel — admin kan kreve nytt samtykke uten redeploy (v0.9.10)
+
+### Included
+- **`src/modules/platformConfig/consentConfigService.ts`**: Ny `getActiveConsentVersion()` — leser aktiv samtykkeversjon fra `PlatformConfig` (nøkkel `consent.version`) med 60-sekunders cache, faller tilbake til hardkodet `CURRENT_CONSENT_VERSION`. Ny `bumpConsentVersion()` — auto-inkrementerer minor-versjon og lagrer til DB. Ny `invalidateConsentVersionCache()`.
+- **`src/middleware/consentMiddleware.ts`**: Bruker nå `getActiveConsentVersion()` i stedet for hardkodet konstant — middleware plukker automatisk opp versjonsbump uten redeploy.
+- **`src/routes/me.ts`**: Alle tre bruk av `CURRENT_CONSENT_VERSION` erstattet med `getActiveConsentVersion()` (GET /api/me, POST /api/me/consent).
+- **`src/routes/adminPlatform.ts`**: GET returnerer nå `consentVersion`-feltet. PUT aksepterer nytt `bumpVersion: boolean`-felt — kaller `bumpConsentVersion()` hvis sant.
+- **`public/admin-platform.html`**: Lagt til versjonvisning (`#consentVersion`) og «Krev nytt samtykke»-avkrysningsboks (`#bumpVersion`) i lagrelinjen.
+- **`public/admin-platform.js`**: Kobler til nye DOM-elementer, sender `bumpVersion` i PUT, nullstiller avkrysning og laster innstillinger på nytt etter lagring.
+- **`public/i18n/admin-platform-translations.js`**: Lagt til `adminPlatform.consent.currentVersion` og `adminPlatform.consent.bumpVersion` for alle tre lokaler.
+- **`test/unit/consent-middleware.test.ts`**: Mock oppdatert til å mocke `getActiveConsentVersion` fra consentConfigService i stedet for `CURRENT_CONSENT_VERSION`.
+
 ## 0.9.9 - 2026-03-22
 ### Summary
 feat: slå sammen manuell vurdering og ankebehandling til én /review-side (v0.9.9)

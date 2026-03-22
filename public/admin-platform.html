@@ -111,6 +111,14 @@
 
         <div class="save-bar">
           <button id="saveBtn" class="btn-primary" data-i18n="adminPlatform.save">Save settings</button>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+            <input type="checkbox" id="bumpVersion" />
+            <span data-i18n="adminPlatform.consent.bumpVersion">Require re-consent from all users on next login</span>
+          </label>
+          <span class="small" style="color:var(--color-meta)">
+            <span data-i18n="adminPlatform.consent.currentVersion">Active version:</span>
+            <strong id="consentVersion">…</strong>
+          </span>
           <span id="saveFeedback" class="small" style="display:none"></span>
         </div>
 

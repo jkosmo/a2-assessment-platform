@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 const findUnique = vi.fn();
+const getActiveConsentVersion = vi.fn().mockResolvedValue("1.0");
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: {
@@ -10,8 +11,8 @@ vi.mock("../../src/db/prisma.js", () => ({
   },
 }));
 
-vi.mock("../../src/config/consent.js", () => ({
-  CURRENT_CONSENT_VERSION: "1.0",
+vi.mock("../../src/modules/platformConfig/consentConfigService.js", () => ({
+  getActiveConsentVersion,
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ describe("consent middleware", () => {
   beforeEach(() => {
     vi.stubEnv("NODE_ENV", "production");
     findUnique.mockReset();
+    getActiveConsentVersion.mockResolvedValue("1.0");
   });
 
   it("calls next() immediately when NODE_ENV is test", async () => {

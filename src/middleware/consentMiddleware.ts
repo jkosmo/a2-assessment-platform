@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { prisma } from "../db/prisma.js";
-import { CURRENT_CONSENT_VERSION } from "../config/consent.js";
+import { getActiveConsentVersion } from "../modules/platformConfig/consentConfigService.js";
 
 /**
  * Routes that are always accessible without consent.
@@ -47,15 +47,16 @@ export async function requireConsent(request: Request, response: Response, next:
   }
 
   try {
+    const consentVersion = await getActiveConsentVersion();
     const consent = await prisma.userConsent.findUnique({
-      where: { userId_consentVersion: { userId, consentVersion: CURRENT_CONSENT_VERSION } },
+      where: { userId_consentVersion: { userId, consentVersion } },
       select: { acceptedAt: true },
     });
 
     if (!consent) {
       response.status(403).json({
         error: "consent_required",
-        consentVersion: CURRENT_CONSENT_VERSION,
+        consentVersion,
         message: "You must accept the current privacy notice before continuing.",
       });
       return;

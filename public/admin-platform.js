@@ -26,6 +26,8 @@ const consentBodyNn = document.getElementById("consentBodyNn");
 const consentBodyEnGb = document.getElementById("consentBodyEnGb");
 const saveBtn = document.getElementById("saveBtn");
 const saveFeedback = document.getElementById("saveFeedback");
+const bumpVersionCheckbox = document.getElementById("bumpVersion");
+const consentVersionBadge = document.getElementById("consentVersion");
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -211,6 +213,7 @@ async function loadSettings() {
     consentBodyNb.value = data.consentBody?.nb ?? "";
     consentBodyNn.value = data.consentBody?.nn ?? "";
     consentBodyEnGb.value = data.consentBody?.["en-GB"] ?? "";
+    if (data.consentVersion) consentVersionBadge.textContent = data.consentVersion;
     settingsContent.style.display = "";
   } catch (err) {
     if (settingsContent) {
@@ -224,6 +227,7 @@ async function saveSettings() {
   saveBtn.disabled = true;
   saveFeedback.style.display = "none";
   saveBtn.textContent = t("adminPlatform.saving");
+  const bumpVersion = bumpVersionCheckbox.checked;
 
   try {
     await apiFetch("/api/admin/platform", headers, {
@@ -237,9 +241,12 @@ async function saveSettings() {
           nn: consentBodyNn.value,
           "en-GB": consentBodyEnGb.value,
         },
+        bumpVersion,
       }),
       headers: { "Content-Type": "application/json" },
     });
+    bumpVersionCheckbox.checked = false;
+    await loadSettings();
     saveFeedback.textContent = t("adminPlatform.saved");
     saveFeedback.style.cssText = "color:var(--color-success);display:inline";
     showToast(t("adminPlatform.saved"), "success");
