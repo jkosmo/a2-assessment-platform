@@ -8,6 +8,7 @@ export const supportedLocales = baseSupportedLocales;
 export const localeLabels = baseLocaleLabels;
 
 const adminContentBase = {
+  "nav.profile": "Profile",
   "adminContentPage.title": "Content Setup Workspace",
   "adminContentPage.subtitle": "Define module content and scoring rules in a guided sequence.",
   "adminContentPage.versionLabel": "Version:",
@@ -266,6 +267,7 @@ const adminContentBase = {
     "Do not ask participants to describe personal health, family, or protected characteristics.",
 };
 const nbOverrides = {
+  "nav.profile": "Profil",
   "adminContentPage.title": "Arbeidsflate for innholdsoppsett",
   "adminContentPage.subtitle": "Definer modulinnhold og vurderingsregler i en tydelig rekkefølge.",
   "adminContentPage.versionLabel": "Versjon:",
@@ -517,6 +519,7 @@ const nbOverrides = {
     "Ikke spør deltakerne om personlig helse, familie eller beskyttede karakteristika.",
 };
 const nnOverrides = {
+  "nav.profile": "Profil",
   "adminContentPage.title": "Arbeidsflate for innhaldsoppsett",
   "adminContentPage.subtitle": "Definer modulinnhald og vurderingsreglar i ei tydeleg rekkjefølgje.",
   "adminContentPage.versionLabel": "Versjon:",

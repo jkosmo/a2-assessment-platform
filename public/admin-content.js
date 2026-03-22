@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-content-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { initConsentGuard } from "/static/consent-guard.js";
 import { showToast } from "/static/toast.js";
 import {
   findMatchingPreset,
@@ -373,6 +374,12 @@ const defaultWorkspaceNavigationItems = [
     path: "/admin-content",
     labelKey: "nav.adminContent",
     requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+  },
+  {
+    id: "profile",
+    path: "/profile",
+    labelKey: "nav.profile",
+    requiredRoles: [],
   },
 ];
 
@@ -1508,6 +1515,7 @@ async function loadParticipantConsoleConfig() {
   }
 
   renderWorkspaceNavigation();
+  await initConsentGuard(headers, currentLocale);
 }
 
 async function loadModules(options = {}) {

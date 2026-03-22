@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
 import {
@@ -129,6 +130,12 @@ let participantRuntimeConfig = {
         path: "/admin-content",
         labelKey: "nav.adminContent",
         requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+      },
+      {
+        id: "profile",
+        path: "/profile",
+        labelKey: "nav.profile",
+        requiredRoles: [],
       },
     ],
   },
@@ -1453,6 +1460,7 @@ async function loadParticipantConsoleConfig() {
   }
 
   renderWorkspaceNavigation();
+  await initConsentGuard(headers, currentLocale);
 }
 
 function applyIdentityDefaults() {

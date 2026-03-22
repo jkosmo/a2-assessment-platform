@@ -464,7 +464,7 @@ async function loadConsoleConfig() {
 async function loadProfileData() {
   // initConsentGuard calls /api/me and shows the consent modal if needed.
   // It returns the /api/me response body.
-  cachedMeData = await initConsentGuard(headers, t, currentLocale);
+  cachedMeData = await initConsentGuard(headers, currentLocale);
 
   renderProfile(cachedMeData);
 

@@ -9,6 +9,7 @@ export const localeLabels = baseLocaleLabels;
 
 const extraTranslations = {
   "en-GB": {
+    "nav.profile": "Profile",
     "resultsPage.title": "Results Workspace",
     "resultsPage.subtitle": "Overview of module pass rates and completion status for HR and subject matter owners.",
     "resultsPage.versionLabel": "Version:",
@@ -48,6 +49,7 @@ const extraTranslations = {
     "results.participants.empty": "No participant data loaded.",
   },
   nb: {
+    "nav.profile": "Profil",
     "resultsPage.title": "Resultatarbeidsflate",
     "resultsPage.subtitle": "Oversikt over bestått-rate og fullføringsstatus per modul for HR og fagansvarlige.",
     "resultsPage.versionLabel": "Versjon:",
@@ -87,6 +89,7 @@ const extraTranslations = {
     "results.participants.empty": "Ingen deltakerdata lastet.",
   },
   nn: {
+    "nav.profile": "Profil",
     "resultsPage.title": "Resultatarbeidsflate",
     "resultsPage.subtitle": "Oversikt over bestått-rate og fullføringsstatus per modul for HR og fagleg ansvarlege.",
     "resultsPage.versionLabel": "Versjon:",

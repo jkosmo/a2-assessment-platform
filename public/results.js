@@ -1,5 +1,6 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken } from "/static/api-client.js";
+import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showLoading } from "/static/loading.js";
 import {
   findMatchingPreset,
@@ -38,6 +39,7 @@ const defaultWorkspaceNavigationItems = [
   { id: "calibration", path: "/calibration", labelKey: "nav.calibration", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
   { id: "admin-content", path: "/admin-content", labelKey: "nav.adminContent", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
   { id: "results", path: "/results", labelKey: "nav.results", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"] },
+  { id: "profile", path: "/profile", labelKey: "nav.profile", requiredRoles: [] },
 ];
 
 let currentLocale = resolveInitialLocale();
@@ -385,6 +387,7 @@ async function loadParticipantConsoleConfig() {
   }
 
   renderWorkspaceNavigation();
+  await initConsentGuard(headers, currentLocale);
 }
 
 // Event listeners

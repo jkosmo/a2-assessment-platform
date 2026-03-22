@@ -4,7 +4,7 @@
  * Usage in every page's init sequence:
  *
  *   import { initConsentGuard } from "/static/consent-guard.js";
- *   const meData = await initConsentGuard(getHeaders, t, locale);
+ *   const meData = await initConsentGuard(getHeaders, locale);
  *   // meData is the /api/me response; consent is guaranteed to be accepted
  *
  * The guard:
@@ -17,9 +17,54 @@
 
 import { apiFetch } from "/static/api-client.js";
 
+// ── Built-in translations ─────────────────────────────────────────────────────
+
+const CONSENT_TRANSLATIONS = {
+  "en-GB": {
+    "consent.title": "Your personal data in {platformName}",
+    "consent.newVersion": "We have updated the privacy notice — here is what changed:",
+    "consent.dpo.label": "Data protection officer:",
+    "consent.dpo.contact": "Contact:",
+    "consent.version": "Version {version}",
+    "consent.accept": "I understand — continue",
+    "consent.logout": "Log out",
+    "deletion.banner": "Pseudonymisation scheduled for {date}.",
+    "deletion.banner.cancel": "Cancel",
+    "deletion.banner.cancelled": "Pseudonymisation request cancelled.",
+  },
+  nb: {
+    "consent.title": "Dine personopplysninger i {platformName}",
+    "consent.newVersion": "Vi har oppdatert personvernerklæringen — her er hva som har endret seg:",
+    "consent.dpo.label": "Personvernombud:",
+    "consent.dpo.contact": "Kontakt:",
+    "consent.version": "Versjon {version}",
+    "consent.accept": "Jeg forstår — fortsett",
+    "consent.logout": "Logg ut",
+    "deletion.banner": "Pseudonymisering planlagt {date}.",
+    "deletion.banner.cancel": "Avbryt",
+    "deletion.banner.cancelled": "Pseudonymiseringsforespørsel avbrutt.",
+  },
+  nn: {
+    "consent.title": "Personopplysningane dine i {platformName}",
+    "consent.newVersion": "Vi har oppdatert personvernerklæringa — her er kva som har endra seg:",
+    "consent.dpo.label": "Personvernombod:",
+    "consent.dpo.contact": "Kontakt:",
+    "consent.version": "Versjon {version}",
+    "consent.accept": "Eg forstår — fortsett",
+    "consent.logout": "Logg ut",
+    "deletion.banner": "Pseudonymisering planlagt {date}.",
+    "deletion.banner.cancel": "Avbryt",
+    "deletion.banner.cancelled": "Pseudonymiseringsførespurnad avbroten.",
+  },
+};
+
+function tg(locale, key) {
+  return CONSENT_TRANSLATIONS[locale]?.[key] ?? CONSENT_TRANSLATIONS["en-GB"]?.[key] ?? key;
+}
+
 // ── Consent modal ────────────────────────────────────────────────────────────
 
-function renderConsentModal(config, t, locale, onAccept, onLogout) {
+function renderConsentModal(config, locale, onAccept, onLogout) {
   const existing = document.getElementById("consent-modal-overlay");
   if (existing) existing.remove();
 
@@ -32,13 +77,13 @@ function renderConsentModal(config, t, locale, onAccept, onLogout) {
     "padding:16px;",
   ].join("");
 
-  const title = t("consent.title").replace("{platformName}", config.platformName ?? "Assessment Platform");
+  const title = tg(locale, "consent.title").replace("{platformName}", config.platformName ?? "Assessment Platform");
   const changelogHtml = config.changelog
-    ? `<p class="consent-changelog"><strong>${t("consent.newVersion")}</strong><br>${escHtml(config.changelog)}</p>`
+    ? `<p class="consent-changelog"><strong>${tg(locale, "consent.newVersion")}</strong><br>${escHtml(config.changelog)}</p>`
     : "";
   const dpoHtml =
     config.dpoName
-      ? `<p class="consent-dpo"><strong>${t("consent.dpo.label")}</strong> ${escHtml(config.dpoName)}${config.dpoEmail ? ` &mdash; <strong>${t("consent.dpo.contact")}</strong> <a href="mailto:${escHtml(config.dpoEmail)}">${escHtml(config.dpoEmail)}</a>` : ""}</p>`
+      ? `<p class="consent-dpo"><strong>${tg(locale, "consent.dpo.label")}</strong> ${escHtml(config.dpoName)}${config.dpoEmail ? ` &mdash; <strong>${tg(locale, "consent.dpo.contact")}</strong> <a href="mailto:${escHtml(config.dpoEmail)}">${escHtml(config.dpoEmail)}</a>` : ""}</p>`
       : "";
 
   overlay.innerHTML = `
@@ -50,10 +95,10 @@ function renderConsentModal(config, t, locale, onAccept, onLogout) {
         ${escHtml(config.body)}
       </div>
       ${dpoHtml}
-      <p class="small" style="color:var(--color-meta)">${t("consent.version").replace("{version}", escHtml(config.version))}</p>
+      <p class="small" style="color:var(--color-meta)">${tg(locale, "consent.version").replace("{version}", escHtml(config.version))}</p>
       <div style="display:flex;gap:var(--space-1);justify-content:flex-end;flex-wrap:wrap">
-        <button id="consent-logout-btn" class="btn btn-ghost">${escHtml(t("consent.logout"))}</button>
-        <button id="consent-accept-btn" class="btn btn-primary">${escHtml(t("consent.accept"))}</button>
+        <button id="consent-logout-btn" class="btn btn-ghost">${escHtml(tg(locale, "consent.logout"))}</button>
+        <button id="consent-accept-btn" class="btn btn-primary">${escHtml(tg(locale, "consent.accept"))}</button>
       </div>
     </div>`;
 
@@ -69,7 +114,7 @@ function removeConsentModal() {
 
 // ── Pending-deletion banner ──────────────────────────────────────────────────
 
-function renderDeletionBanner(effectiveAt, getHeaders, t, locale) {
+function renderDeletionBanner(effectiveAt, getHeaders, locale) {
   const existing = document.getElementById("deletion-banner");
   if (existing) return;
 
@@ -87,12 +132,12 @@ function renderDeletionBanner(effectiveAt, getHeaders, t, locale) {
     ? new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(new Date(effectiveAt))
     : "";
 
-  const msg = t("deletion.banner").replace("{date}", dateStr);
+  const msg = tg(locale, "deletion.banner").replace("{date}", dateStr);
 
   banner.innerHTML = `
     <span>${escHtml(msg)}</span>
     <button id="cancel-deletion-btn" class="btn btn-ghost" style="font-size:12px;padding:4px 10px">
-      ${escHtml(t("deletion.banner.cancel"))}
+      ${escHtml(tg(locale, "deletion.banner.cancel"))}
     </button>`;
 
   document.body.prepend(banner);
@@ -101,7 +146,7 @@ function renderDeletionBanner(effectiveAt, getHeaders, t, locale) {
     try {
       await apiFetch("/api/me/deletion", getHeaders, { method: "DELETE" });
       banner.remove();
-      showToastIfAvailable(t("deletion.banner.cancelled"), "success");
+      showToastIfAvailable(tg(locale, "deletion.banner.cancelled"), "success");
     } catch {
       showToastIfAvailable("Could not cancel. Please try again.", "error");
     }
@@ -118,11 +163,10 @@ function showToastIfAvailable(message, type) {
 
 /**
  * @param {() => object} getHeaders - returns request headers (mock identity or token)
- * @param {(key: string) => string} t - translation function for the current locale
- * @param {string} locale - current locale string
+ * @param {string} locale - current locale string (e.g. "en-GB", "nb", "nn")
  * @returns {Promise<object>} - the /api/me response body
  */
-export async function initConsentGuard(getHeaders, t, locale) {
+export async function initConsentGuard(getHeaders, locale) {
   const meData = await apiFetch("/api/me", getHeaders);
 
   if (!meData.consent.accepted) {
@@ -132,7 +176,6 @@ export async function initConsentGuard(getHeaders, t, locale) {
     await new Promise((resolve) => {
       renderConsentModal(
         consentConfig,
-        t,
         locale,
         async () => {
           await apiFetch("/api/me/consent", getHeaders, {
@@ -152,7 +195,7 @@ export async function initConsentGuard(getHeaders, t, locale) {
 
   // Show pending deletion banner if applicable
   if (meData.pendingDeletion?.effectiveAt) {
-    renderDeletionBanner(meData.pendingDeletion.effectiveAt, getHeaders, t, locale);
+    renderDeletionBanner(meData.pendingDeletion.effectiveAt, getHeaders, locale);
   }
 
   return meData;

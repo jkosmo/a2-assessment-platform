@@ -9,6 +9,7 @@ export const localeLabels = baseLocaleLabels;
 
 const extraTranslations = {
   "en-GB": {
+    "nav.profile": "Profile",
     "reviewPage.title": "Manual Review Workspace",
     "reviewPage.subtitle": "Handle submissions routed to human review before the final result is confirmed.",
     "reviewPage.scopeNote": "This queue shows submissions waiting for reviewer action. Appeals are handled separately in Appeals.",
@@ -100,6 +101,7 @@ const extraTranslations = {
     "manualReview.statusValue.UNKNOWN": "Unknown",
   },
   nb: {
+    "nav.profile": "Profil",
     "reviewPage.title": "Manuell vurdering",
     "reviewPage.subtitle": "Behandle innleveringer som er sendt til menneskelig vurdering f\u00f8r endelig resultat bekreftes.",
     "reviewPage.scopeNote": "Denne k\u00f8en viser innleveringer som venter p\u00e5 vurderer. Anker behandles separat i Ankebehandling.",
@@ -191,6 +193,7 @@ const extraTranslations = {
     "manualReview.statusValue.UNKNOWN": "Ukjent",
   },
   nn: {
+    "nav.profile": "Profil",
     "reviewPage.title": "Manuell vurdering",
     "reviewPage.subtitle": "Behandle innleveringar som er sende til menneskeleg vurdering for endeleg resultat blir stadfesta.",
     "reviewPage.scopeNote": "Denne koen viser innleveringar som ventar pa vurderar. Ankar blir behandla separat i Ankebehandling.",

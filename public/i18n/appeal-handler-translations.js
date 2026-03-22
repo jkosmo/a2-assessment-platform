@@ -9,6 +9,7 @@ export const localeLabels = baseLocaleLabels;
 
 const extraTranslations = {
   "en-GB": {
+    "nav.profile": "Profile",
     "appealPage.title": "Appeals Workspace",
     "appealPage.subtitle": "Review participant appeals: filter the list, open a case, then assign and resolve it.",
     "appealPage.scopeNote": "This workspace only handles appeals. Submissions waiting for human review belong in Manual Review.",
@@ -101,6 +102,7 @@ const extraTranslations = {
     "manualReview.statusValue.UNKNOWN": "Unknown",
   },
   nb: {
+    "nav.profile": "Profil",
     "appealPage.title": "Ankebehandling",
     "appealPage.subtitle": "Behandle anker: filtrer listen, åpne en sak, og tildel og avgjør den.",
     "appealPage.scopeNote": "Denne arbeidsflaten er bare for anker. Innleveringer som venter på manuell vurdering hører hjemme i Manuell vurdering.",
@@ -129,6 +131,7 @@ const extraTranslations = {
     "appealHandler.details.noManualReviewHistory": "Det finnes ingen historikk for manuell vurdering på denne innleveringen.",
   },
   nn: {
+    "nav.profile": "Profil",
     "appealPage.title": "Ankebehandling",
     "appealPage.subtitle": "Behandle ankar: filtrer lista, opne ei sak, og tildel og avgjer ho.",
     "appealPage.scopeNote": "Denne arbeidsflata er berre for ankar. Innleveringar som ventar på manuell vurdering høyrer heime i Manuell vurdering.",

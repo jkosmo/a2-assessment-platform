@@ -9,6 +9,7 @@ export const localeLabels = baseLocaleLabels;
 
 const extraTranslations = {
   "en-GB": {
+    "nav.profile": "Profile",
     "completedPage.title": "Completed Modules",
     "completedPage.subtitle": "See what you have finished and your latest score per module.",
     "completedPage.versionLabel": "Version:",
@@ -35,6 +36,7 @@ const extraTranslations = {
     "completed.appeal.error": "Could not submit appeal.",
   },
   nb: {
+    "nav.profile": "Profil",
     "completedPage.title": "Fullførte moduler",
     "completedPage.subtitle": "Se hva du har fullført og siste poengsum per modul.",
     "completedPage.versionLabel": "Versjon:",
@@ -61,6 +63,7 @@ const extraTranslations = {
     "completed.appeal.error": "Kunne ikke sende inn anke.",
   },
   nn: {
+    "nav.profile": "Profil",
     "completedPage.title": "Fullførte modular",
     "completedPage.subtitle": "Sjå kva du har fullført og siste poengsum per modul.",
     "completedPage.versionLabel": "Versjon:",

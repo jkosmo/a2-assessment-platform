@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.96 - 2026-03-22
+### Summary
+fix: samtykke-dialog og Profil-lenke mangler på alle sider unntatt profil (v0.8.96)
+
+### Included
+- **`public/consent-guard.js`**: Gjort selvforsynt med innebygde oversettelser (en-GB/nb/nn) — fjerner avhengigheten av sideens `t()`-funksjon. Ny signatur: `initConsentGuard(getHeaders, locale)` (uten `t`-parameter).
+- **`public/profile.js`**: Oppdatert kall til ny signatur.
+- **`public/participant.js`**, **`participant-completed.js`**, **`manual-review.js`**, **`results.js`**, **`appeal-handler.js`**, **`calibration.js`**, **`admin-content.js`**: Lagt til `import { initConsentGuard }`, lagt til Profil-lenke i nav, og kalt `await initConsentGuard(headers, currentLocale)` etter `renderWorkspaceNavigation()` i `loadParticipantConsoleConfig()`.
+- **`public/i18n/participant-translations.js`** og øvrige 6 i18n-filer: Lagt til `"nav.profile"` i alle tre lokaler (en-GB/nb/nn).
+
 ## 0.8.95 - 2026-03-22
 ### Summary
 fix: legg til manglende Prisma-migrasjon for GDPR-schema (v0.8.95)

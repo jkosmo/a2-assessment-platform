@@ -9,6 +9,7 @@ export const localeLabels = baseLocaleLabels;
 
 const extraTranslations = {
   "en-GB": {
+    "nav.profile": "Profile",
     "calibrationPage.title": "Calibration Workspace",
     "calibrationPage.subtitle":
       "Analyze historical module outcomes and benchmark anchors to tune quality consistency.",
@@ -81,6 +82,7 @@ const extraTranslations = {
     "calibration.thresholds.source.module": "Using module-level overrides",
   },
   nb: {
+    "nav.profile": "Profil",
     "calibrationPage.title": "Kalibreringsarbeidsflate",
     "calibrationPage.subtitle":
       "Analyser historiske modulutfall og benchmark-ankere for å forbedre kvalitet og konsistens.",
@@ -153,6 +155,7 @@ const extraTranslations = {
     "calibration.thresholds.source.module": "Bruker modulnivåoverstyringer",
   },
   nn: {
+    "nav.profile": "Profil",
     "calibrationPage.title": "Kalibreringsarbeidsflate",
     "calibrationPage.subtitle":
       "Analyser historiske modulutfall og benchmark-anker for å forbetre kvalitet og konsistens.",
