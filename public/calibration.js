@@ -742,7 +742,7 @@ async function loadParticipantConsoleConfig() {
 
 async function loadModuleOptions() {
   try {
-    const body = await apiFetch("/api/modules?adminFacing=true", headers);
+    const body = await apiFetch("/api/admin/content/modules", headers);
     const modules = body.modules ?? [];
 
     while (moduleIdSelect.options.length > 1) {

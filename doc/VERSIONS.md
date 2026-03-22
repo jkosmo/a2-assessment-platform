@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.13 - 2026-03-22
+### Summary
+fix: kalibreringssiden bruker nå admin-content-endepunktet for modullisten (v0.9.13)
+
+### Included
+- **`public/calibration.js`**: `loadModuleOptions()` bruker nå `/api/admin/content/modules` i stedet for `/api/modules?adminFacing=true`. Det nye endepunktet er alltid gatet bak ADMINISTRATOR/SUBJECT_MATTER_OWNER og returnerer alle moduler uten betinget rollelogikk.
+
 ## 0.9.12 - 2026-03-22
 ### Summary
 refactor: splitt adminContent-service i commands, queries og projections (#239)
