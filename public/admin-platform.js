@@ -311,5 +311,12 @@ initTabs();
 (async () => {
   await loadConsoleConfig();
   await initConsentGuard(headers, currentLocale);
+  try {
+    const versionData = await apiFetch("/version", { headers: {} });
+    const appVersionEl = document.getElementById("appVersion");
+    if (appVersionEl) appVersionEl.textContent = `v${versionData.version ?? "unknown"}`;
+  } catch {
+    // non-critical
+  }
   await loadSettings();
 })();

@@ -57,25 +57,21 @@
       .flow-step.is-completed .flow-step-number { background: var(--color-success); color: var(--color-surface); }
       .flow-step.is-pending { opacity: 0.8; }
       @media (max-width: 900px) { .flow-progress-steps { grid-template-columns: 1fr; } }
-      .page-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-1); }
-      .locale-picker { flex-shrink: 0; padding-top: 6px; }
-      .locale-select-compact { width: auto; min-width: 70px; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: var(--color-surface); color: var(--color-meta); }
-      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     </style>
   </head>
   <body>
     <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
     <main id="main-content" class="layout-container">
-    <div class="page-header-row">
-      <h1 data-i18n="page.title">Participant Test Console</h1>
+    <div class="page-top-bar">
+      <nav id="workspaceNav" class="workspace-nav"></nav>
       <div class="locale-picker">
+        <span id="appVersion" class="version-badge">…</span>
         <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
         <select id="localeSelect" class="locale-select-compact"></select>
       </div>
     </div>
+    <h1 data-i18n="page.title">Participant Test Console</h1>
     <p class="small" data-i18n="page.subtitle">Manual flow: modules -&gt; submission -&gt; MCQ -&gt; assessment/result.</p>
-    <p class="small"><span data-i18n="page.versionLabel">Version:</span> <strong id="appVersion">loading...</strong></p>
-    <nav id="workspaceNav" class="workspace-nav"></nav>
     <section id="previewModeBanner" class="card hidden">
       <h2 data-i18n="preview.title">Draft preview</h2>
       <div id="previewModeMessage" class="small" data-i18n="preview.description">This page shows the current admin draft only. Nothing is saved, submitted, or scored.</div>

@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.5 - 2026-03-22
+### Summary
+refactor: flytt workspace-nav øverst og versjonsnummer til høyre hjørne (v0.9.5)
+
+### Included
+- **`public/static/shared.css`**: Nye delte klasser: `.page-top-bar` (flex-rad med nav + locale-picker), `.page-top-bar > .workspace-nav` (fyller tilgjengelig bredde), `.locale-picker`, `.locale-select-compact`, `.version-badge`, `.sr-only` — fjernet fra alle individuelle sider.
+- **Alle 9 HTML-sider** (`participant`, `manual-review`, `calibration`, `appeal-handler`, `results`, `participant-completed`, `admin-content`, `admin-platform`, `profile`): Workspace-navigasjon er nå øverst i en `page-top-bar`, versjonsnummer (`v0.x.x`) vises som liten tekst i locale-picker-hjørnet, og `<h1>` er plassert direkte over innholdet for tettere visuell kobling.
+- **`public/admin-platform.js`**: Lagt til versjonshenting (`/version`) i boot-IIFE — vises nå konsistent med alle andre sider.
+
 ## 0.9.4 - 2026-03-22
 ### Summary
 fix: versjonsnummer på profilsiden og CI-test for navigasjon (v0.9.4)
