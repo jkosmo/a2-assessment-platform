@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.17 - 2026-03-22
+### Summary
+ci: GitHub Actions workflow for model comparison benchmark (v0.9.17)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`** (ny): `workflow_dispatch`-workflow som kjører `runModelComparisonBenchmark.ts` med Azure OpenAI-credentials fra repository vars/secrets. Støtter inputs `repeat`, `models` og `cases`. Laster opp resultater som artifact (90 dagers oppbevaring) og committer markdown-rapport tilbake til repo med `[skip ci]`.
+
 ## 0.9.16 - 2026-03-22
 ### Summary
 feat: interleaved kjøreorden, progressiv JSONL-logging og markdown-rapport i benchmark-script (v0.9.16)
