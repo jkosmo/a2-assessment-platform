@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.95 - 2026-03-22
+### Summary
+fix: legg til manglende Prisma-migrasjon for GDPR-schema (v0.8.95)
+
+### Included
+- **`prisma/migrations/20260322000001_add_gdpr_consent_and_deletion/migration.sql`** (ny): DDL for `DeletionRequestStatus`- og `DeletionTrigger`-enums, nye kolonner på `User` (`lastLoginAt`, `isAnonymized`, `anonymizedAt`), og nye tabeller `UserConsent`, `DeletionRequest`, `PlatformConfig` med indekser og fremmednøkler.
+
 ## 0.8.94 - 2026-03-22
 ### Summary
 test: automatiserte tester for GDPR-samtykke og pseudonymisering
