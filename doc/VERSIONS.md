@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.97 - 2026-03-22
+### Summary
+fix: samtykke-dialog blokkert av consent-middleware, Profil-lenke flyttes til toppmenyen (v0.8.97)
+
+### Included
+- **`src/middleware/consentMiddleware.ts`**: Fikset feil i `CONSENT_EXEMPT_PATHS` — stiene må være relative til `/api`-mount-punktet (`/me`, `/me/consent`), ikke absolutte (`/api/me`). Denne feilen blokkerte samtykke-dialogen på alle sider og profil-innholdet.
+- **`public/participant.js`**, **`manual-review.js`**, **`calibration.js`**, **`admin-content.js`**, **`appeal-handler.js`**, **`results.js`**, **`participant-completed.js`**: `renderWorkspaceNavigation()` skiller nå ut Profil-lenken og plasserer den ved siden av språkvelgeren (`.locale-picker`), ikke i workspace-navigasjonen.
+- **`public/profile.js`**: Profil-lenken filtreres ut av workspace-nav (vises ikke på profil-siden). Lagt til try/catch rundt `loadProfileData()` i boot-IIFE for å vise feilmelding ved feil i stedet for tomt innhold.
+
 ## 0.8.96 - 2026-03-22
 ### Summary
 fix: samtykke-dialog og Profil-lenke mangler på alle sider unntatt profil (v0.8.96)

@@ -187,7 +187,7 @@ function renderWorkspaceNavigation() {
     rolesInput.value,
     window.location.pathname,
     defaultWorkspaceNavigationItems,
-  ).filter((item) => item.visible);
+  ).filter((item) => item.visible && item.id !== "profile");
 
   workspaceNav.innerHTML = "";
   workspaceNav.hidden = items.length === 0;
@@ -587,5 +587,12 @@ setLocale(currentLocale);
 
 (async () => {
   await loadConsoleConfig();
-  await loadProfileData();
+  try {
+    await loadProfileData();
+  } catch (err) {
+    if (profileContent) {
+      profileContent.style.display = "";
+      profileContent.innerHTML = `<p style="color:var(--color-error,red);padding:16px">${String(err)}</p>`;
+    }
+  }
 })();

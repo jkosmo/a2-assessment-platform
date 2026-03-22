@@ -8,10 +8,13 @@ import { CURRENT_CONSENT_VERSION } from "../config/consent.js";
  * GET /api/me — needed by every page on load to determine whether consent is
  * required. Blocking it would prevent the frontend from ever showing the dialog.
  * POST /api/me/consent — the consent submission itself.
+ *
+ * NOTE: this middleware is mounted at app.use("/api", ...) so Express strips
+ * the "/api" prefix before calling it. The paths here are relative to "/api".
  */
 const CONSENT_EXEMPT_PATHS = new Set([
-  "/api/me",
-  "/api/me/consent",
+  "/me",
+  "/me/consent",
 ]);
 
 /**
