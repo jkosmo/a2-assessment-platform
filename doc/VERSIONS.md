@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.1 - 2026-03-22
+### Summary
+fix: oppdater consent-middleware-tester etter path-endring (v0.9.1)
+
+### Included
+- **`test/unit/consent-middleware.test.ts`**: Exempt-path-tester brukte `/api/me` og `/api/me/consent`, men middleware sjekker relative stier etter Express-mount (`/me`, `/me/consent`). Testtitler oppdatert med forklaring.
+
 ## 0.9.0 - 2026-03-22
 ### Summary
 fix: versjonsnummer på profilsiden (v0.9.0)

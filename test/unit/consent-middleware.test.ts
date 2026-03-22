@@ -69,9 +69,9 @@ describe("consent middleware", () => {
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it("calls next() for GET /api/me (exempt path)", async () => {
+  it("calls next() for GET /me (exempt path, Express strips /api prefix at mount point)", async () => {
     const { requireConsent } = await import("../../src/middleware/consentMiddleware.js");
-    const request = buildRequest({ userId: "user-1", path: "/api/me" });
+    const request = buildRequest({ userId: "user-1", path: "/me" });
     const response = buildResponse();
     const next = vi.fn();
 
@@ -81,9 +81,9 @@ describe("consent middleware", () => {
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it("calls next() for POST /api/me/consent (exempt path)", async () => {
+  it("calls next() for POST /me/consent (exempt path, Express strips /api prefix at mount point)", async () => {
     const { requireConsent } = await import("../../src/middleware/consentMiddleware.js");
-    const request = buildRequest({ userId: "user-1", path: "/api/me/consent" });
+    const request = buildRequest({ userId: "user-1", path: "/me/consent" });
     const response = buildResponse();
     const next = vi.fn();
 
