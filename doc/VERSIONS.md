@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.8 - 2026-03-22
+### Summary
+fix: fjern gjentakelse i sidetittel/seksjonsoverskrift, redesign admin-platform (v0.9.8)
+
+### Included
+- **`public/i18n/calibration-translations.js`**: Omdøpt første seksjon h2 fra «Kalibreringsfilter» til «Filter» (alle lokaler) — fjerner gjentakelse med sidetittel «Kalibreringsarbeidsflate».
+- **`public/i18n/participant-completed-translations.js`**: Omdøpt «Mine fullførte moduler» til «Mine moduler» — fjerner gjentakelse med sidetittel «Fullførte moduler».
+- **`public/admin-platform.html`**: Seksjonsoverskrifter bruker nå standard `<h2>` (ikke liten versalisert stil). Fane-knapper for personverntekst følger nå understrek-mønsteret fra admin-content-dialoger. Knappeklasser normalisert til `btn-primary`/`btn-secondary`.
+
 ## 0.9.7 - 2026-03-22
 ### Summary
 fix: øk avstand under gult varsel-banner i innholdsforvaltning (v0.9.7)

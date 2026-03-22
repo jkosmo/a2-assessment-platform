@@ -7,14 +7,13 @@
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
-      .settings-section { margin-top: var(--space-2); }
-      .settings-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-link-active); margin-bottom: var(--space-1); }
       .field-group { display: grid; gap: 6px; margin-bottom: var(--space-1); }
       .field-group label { font-size: 13px; font-weight: 600; color: var(--color-text); }
       .field-hint { font-size: 12px; color: var(--color-meta); margin-top: 2px; }
-      .tab-bar { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
-      .tab-btn { padding: 5px 12px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); color: var(--color-navy); font-size: 12px; cursor: pointer; }
-      .tab-btn.active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); font-weight: 600; }
+      .locale-tab-bar { display: flex; gap: 2px; margin: var(--space-1) 0 var(--space-2); border-bottom: 1px solid var(--color-border-soft); }
+      .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--color-meta); cursor: pointer; margin-bottom: -1px; }
+      .tab-btn.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+      .tab-btn:hover:not(.active) { color: var(--color-text); }
       .tab-panel { display: none; }
       .tab-panel.active { display: block; }
       textarea { width: 100%; min-height: 260px; font-size: 12px; font-family: monospace; padding: 8px; box-sizing: border-box; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); resize: vertical; }
@@ -58,7 +57,7 @@
               <select id="mockRolePreset"></select>
               <p id="mockRolePresetHint" class="small"></p>
             </div>
-            <button id="loadMe" class="btn btn-primary" data-i18n="identity.loadMe">Show my user details</button>
+            <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
           </div>
         </details>
       </section>
@@ -66,8 +65,8 @@
       <div id="settingsContent" style="display:none">
 
         <!-- General section -->
-        <section class="card settings-section">
-          <h2 class="settings-section-title" data-i18n="adminPlatform.section.general">General</h2>
+        <section class="card">
+          <h2 data-i18n="adminPlatform.section.general">General</h2>
           <div class="field-group">
             <label for="platformName" data-i18n="adminPlatform.field.platformName">Platform name</label>
             <input id="platformName" type="text" />
@@ -76,8 +75,8 @@
         </section>
 
         <!-- DPO section -->
-        <section class="card settings-section">
-          <h2 class="settings-section-title" data-i18n="adminPlatform.section.dpo">Data protection officer</h2>
+        <section class="card">
+          <h2 data-i18n="adminPlatform.section.dpo">Data protection officer</h2>
           <div class="row">
             <div class="field-group">
               <label for="dpoName" data-i18n="adminPlatform.field.dpoName">Name</label>
@@ -91,10 +90,10 @@
         </section>
 
         <!-- Consent body section -->
-        <section class="card settings-section">
-          <h2 class="settings-section-title" data-i18n="adminPlatform.section.consent">Privacy notice text</h2>
-          <p class="small field-hint" data-i18n="adminPlatform.consent.hint">Override the default text per language. Leave empty to use the built-in default.</p>
-          <div class="tab-bar" style="margin-top: var(--space-1)">
+        <section class="card">
+          <h2 data-i18n="adminPlatform.section.consent">Privacy notice text</h2>
+          <p class="small" data-i18n="adminPlatform.consent.hint">Override the default text per language. Leave empty to use the built-in default.</p>
+          <div class="locale-tab-bar">
             <button class="tab-btn active" data-tab="nb" data-i18n="adminPlatform.consent.tab.nb">Norwegian (bokmål)</button>
             <button class="tab-btn" data-tab="nn" data-i18n="adminPlatform.consent.tab.nn">Norwegian (nynorsk)</button>
             <button class="tab-btn" data-tab="en-GB" data-i18n="adminPlatform.consent.tab.enGB">English (UK)</button>
@@ -111,7 +110,7 @@
         </section>
 
         <div class="save-bar">
-          <button id="saveBtn" class="btn btn-primary" data-i18n="adminPlatform.save">Save settings</button>
+          <button id="saveBtn" class="btn-primary" data-i18n="adminPlatform.save">Save settings</button>
           <span id="saveFeedback" class="small" style="display:none"></span>
         </div>
 

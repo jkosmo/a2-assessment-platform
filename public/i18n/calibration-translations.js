@@ -14,7 +14,7 @@ const extraTranslations = {
     "calibrationPage.subtitle":
       "Analyze historical module outcomes and benchmark anchors to tune quality consistency.",
     "calibrationPage.versionLabel": "Version:",
-    "calibration.filters.title": "Calibration filters",
+    "calibration.filters.title": "Filters",
     "calibration.filters.moduleId": "Module ID",
     "calibration.filters.moduleVersionId": "Module version ID",
     "calibration.filters.statuses": "Submission statuses",
@@ -87,7 +87,7 @@ const extraTranslations = {
     "calibrationPage.subtitle":
       "Analyser historiske modulutfall og benchmark-ankere for å forbedre kvalitet og konsistens.",
     "calibrationPage.versionLabel": "Versjon:",
-    "calibration.filters.title": "Kalibreringsfilter",
+    "calibration.filters.title": "Filter",
     "calibration.filters.moduleId": "Modul-ID",
     "calibration.filters.moduleVersionId": "Modulversjon-ID",
     "calibration.filters.statuses": "Innleveringsstatus",
@@ -160,7 +160,7 @@ const extraTranslations = {
     "calibrationPage.subtitle":
       "Analyser historiske modulutfall og benchmark-anker for å forbetre kvalitet og konsistens.",
     "calibrationPage.versionLabel": "Versjon:",
-    "calibration.filters.title": "Kalibreringsfilter",
+    "calibration.filters.title": "Filter",
     "calibration.filters.moduleId": "Modul-ID",
     "calibration.filters.moduleVersionId": "Modulversjon-ID",
     "calibration.filters.statuses": "Innleveringsstatus",
