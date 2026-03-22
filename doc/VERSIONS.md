@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.94 - 2026-03-22
+### Summary
+test: automatiserte tester for GDPR-samtykke og pseudonymisering
+
+### Included
+- **`test/unit/consent-middleware.test.ts`** (ny): 7 unit-tester for `requireConsent` — bypass i test-env, unntak for uautentiserte brukere og exempt paths, 403 ved manglende samtykke, videresendt DB-feil.
+- **`test/unit/pseudonymization-service.test.ts`** (ny): 11 unit-tester for `pseudonymizeUser`, `requestPseudonymization` og `cancelPseudonymizationRequest` — no-op ved allerede pseudonymisert, feil ved manglende bruker, transaksjonsflyten med korrekte felter, deterministisk pseudo-e-post, grace-period vs. umiddelbar pseudonymisering.
+- **`test/unit/pseudonymization-scanner.test.ts`** (ny): 9 unit-tester for `runPseudonymizationScan` — nulltellinger når ingenting er forfalt, fase 1 grace-period, fase 2 offboarding, fase 3 inaktivitet, feilmotstandsdyktighet, betinget loggføring.
+- **`test/m3-gdpr-consent.test.ts`** (ny): Integrasjonstest for hele GDPR-flyten med dedikert testbruker — `GET /api/me`, `GET|POST /api/me/consent`, `GET /api/me/data`, grace-period-slettingsflyt og umiddelbar pseudonymisering.
+- **`src/middleware/consentMiddleware.ts`**: `NODE_ENV=test`-bypass slik at eksisterende integrasjonstester ikke brytes av manglende samtykkerecord.
+
 ## 0.8.93 - 2026-03-22
 ### Summary
 feat: GDPR consent, profil-side og pseudonymisering (#36)
