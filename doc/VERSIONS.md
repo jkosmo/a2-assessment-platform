@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.20 - 2026-03-22
+### Summary
+fix: bruk staging-miljø i benchmark-workflow for tilgang til vars/secrets (v0.9.20)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: Legger til `environment: staging` — Azure OpenAI-variabler og secrets er scopet til staging-miljøet, ikke repo-nivå.
+
 ## 0.9.19 - 2026-03-22
 ### Summary
 fix: bruk npx tsx i benchmark-workflow (v0.9.19)
