@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.29 - 2026-03-22
+### Summary
+chore: slett gamle benchmark-resultater for ny fullstendig kjøring (v0.9.29)
+
+### Included
+- **`doc/benchmarks/`**: Sletter ufullstendige resultater (chat hadde alle feil, rationale-logging manglet for runde 1-6).
+
 ## 0.9.28 - 2026-03-22
 ### Summary
 fix: git pull --rebase før push i benchmark-workflow (v0.9.28)
