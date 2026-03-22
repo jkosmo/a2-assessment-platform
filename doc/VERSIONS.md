@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.16 - 2026-03-22
+### Summary
+feat: interleaved kjøreorden, progressiv JSONL-logging og markdown-rapport i benchmark-script (v0.9.16)
+
+### Included
+- **`src/scripts/runModelComparisonBenchmark.ts`**: Tre forbedringer:
+  1. **Interleaved rekkefølge**: for hver runde kjøres full → mini → nano, slik at systematisk trafikk-bias unngås.
+  2. **Progressiv JSONL-logging** (`--output=<sti>`): hvert resultat skrives til `.jsonl`-fil umiddelbart — crash-safe. Avbrutt kjøring kan gjenopptas automatisk.
+  3. **Markdown-rapport**: skrives til `.md`-fil ved kjøringens slutt med tabeller for utfall, score-statistikk og latency per modell × case, pluss tomme seksjoner for funn og anbefaling.
+
 ## 0.9.15 - 2026-03-22
 ### Summary
 feat: modell-sammenlignings-benchmark for scoring-konsistens (#144)
