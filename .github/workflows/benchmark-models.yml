@@ -43,7 +43,7 @@ jobs:
           if [ -n "${{ inputs.cases }}" ]; then
             CASES_ARG="--cases=${{ inputs.cases }}"
           fi
-          tsx src/scripts/runModelComparisonBenchmark.ts \
+          npx tsx src/scripts/runModelComparisonBenchmark.ts \
             --repeat=${{ inputs.repeat }} \
             --models=${{ inputs.models }} \
             --output=doc/benchmarks/model-comparison-$(date +%Y-%m-%d) \
