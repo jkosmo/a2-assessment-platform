@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.19 - 2026-03-22
+### Summary
+fix: bruk npx tsx i benchmark-workflow (v0.9.19)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: `tsx` → `npx tsx` — tsx er ikke globalt installert på GitHub Actions runner.
+
 ## 0.9.18 - 2026-03-22
 ### Summary
 fix: oppdater kontraktstester etter sletting av appeal-handler/manual-review-sider (v0.9.18)
