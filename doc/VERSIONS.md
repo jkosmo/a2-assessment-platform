@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.18 - 2026-03-22
+### Summary
+fix: oppdater kontraktstester etter sletting av appeal-handler/manual-review-sider (v0.9.18)
+
+### Included
+- **`test/workspace-html-fallbacks.test.js`**: Erstatter `appeal-handler.html` og `manual-review.html` med `review.html` (begge ble konsolidert i v0.9.11).
+- **`test/workspace-validation-accessibility.test.js`**: Peker nå til `review.html`/`review.js` for aria- og JS-kontrakter som tidligere lå i de slettede sidene.
+
 ## 0.9.17 - 2026-03-22
 ### Summary
 ci: GitHub Actions workflow for model comparison benchmark (v0.9.17)

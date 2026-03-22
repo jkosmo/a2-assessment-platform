@@ -5,9 +5,8 @@ import { describe, expect, it } from "vitest";
 const workspacePages = [
   "public/participant.html",
   "public/admin-content.html",
-  "public/appeal-handler.html",
+  "public/review.html",
   "public/calibration.html",
-  "public/manual-review.html",
   "public/participant-completed.html",
 ];
 

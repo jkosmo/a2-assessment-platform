@@ -27,12 +27,10 @@ describe("workspace validation accessibility", () => {
     expect(participantHtml).toContain('aria-describedby="moduleSelectionHint"');
     expect(participantHtml).toContain('id="submissionValidationHint"');
 
-    const appealHandlerHtml = readFile("public/appeal-handler.html");
-    expect(appealHandlerHtml).toContain('aria-describedby="resolveValidationMessage"');
-
-    const manualReviewHtml = readFile("public/manual-review.html");
-    expect(manualReviewHtml).toContain('aria-describedby="overrideValidationMessage"');
-    expect(manualReviewHtml).toContain('id="reviewActionSequenceHint"');
+    const reviewHtml = readFile("public/review.html");
+    expect(reviewHtml).toContain('aria-describedby="resolveValidationMessage"');
+    expect(reviewHtml).toContain('aria-describedby="overrideValidationMessage"');
+    expect(reviewHtml).toContain('id="reviewActionSequenceHint"');
   });
 
   it("keeps runtime alert and invalid-field hooks for validation errors", () => {
@@ -43,17 +41,12 @@ describe("workspace validation accessibility", () => {
     expect(participantJs).toContain("is-invalid");
     expect(participantJs).toContain("alert");
 
-    const appealHandlerJs = readFile("public/appeal-handler.js");
-    expect(appealHandlerJs).toContain("field-error");
-    expect(appealHandlerJs).toContain("is-invalid");
-    expect(appealHandlerJs).toContain("alert");
-
-    const manualReviewJs = readFile("public/manual-review.js");
-    expect(manualReviewJs).toContain("field-error");
-    expect(manualReviewJs).toContain("is-invalid");
-    expect(manualReviewJs).toContain("alert");
+    const reviewJs = readFile("public/review.js");
+    expect(reviewJs).toContain("field-error");
+    expect(reviewJs).toContain("is-invalid");
+    expect(reviewJs).toContain("alert");
     // Contract: reviewer identity functions exist (owns the claim-check logic)
-    expect(manualReviewJs).toContain("isSelectedReviewClaimedByCurrentUser");
-    expect(manualReviewJs).toContain("getCurrentReviewerEmail");
+    expect(reviewJs).toContain("isSelectedReviewClaimedByCurrentUser");
+    expect(reviewJs).toContain("getCurrentReviewerEmail");
   });
 });
