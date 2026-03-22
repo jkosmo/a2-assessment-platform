@@ -1,7 +1,5 @@
 export {
   createModule,
-  listAdminModules,
-  getModuleContentBundle,
   deleteModule,
   createRubricVersion,
   createPromptTemplateVersion,
@@ -11,5 +9,7 @@ export {
   publishModuleVersion,
   publishModuleVersionWithThresholds,
 } from "./adminContentService.js";
+
+export { listAdminModules, getModuleContentBundle } from "./adminContentQueries.js";
 
 export { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";

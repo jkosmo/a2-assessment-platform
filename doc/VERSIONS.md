@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.92 - 2026-03-22
+### Summary
+refactor: splitt adminContentService i kommando- og spørringsfiler (#239)
+
+### Included
+- **`src/modules/adminContent/adminContentQueries.ts`** (ny): Inneholder `listAdminModules` og `getModuleContentBundle` med alle projection-hjelpere (`decodeLocalizedText`, `safeParseJson`, `decodeMcqOption`, `mapMcqSetVersion`). Les-modell-assemblering er nå atskilt fra kommandoorkestrering.
+- **`src/modules/adminContent/adminContentService.ts`**: Fjernet query-funksjoner og projection-hjelpere. Nå rent kommandofil: `createModule`, `deleteModule`, `createRubricVersion`, `createPromptTemplateVersion`, `createMcqSetVersion`, `createModuleVersion`, `createBenchmarkExampleVersion`, `publishModuleVersion`, `publishModuleVersionWithThresholds`.
+- **`src/modules/adminContent/index.ts`**: Eksporterer kommandoer fra service, spørringer fra queries.
+
 ## 0.8.91 - 2026-03-22
 ### Summary
 fix: retake supersede-flyt er nå fullt atomisk og eksplisitt (#238)
