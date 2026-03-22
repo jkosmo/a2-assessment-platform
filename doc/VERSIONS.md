@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.2 - 2026-03-22
+### Summary
+fix: legg til admin-platform i navigasjonskonfig (v0.9.2)
+
+### Included
+- **`config/participant-console.json`**: `admin-platform`-elementet manglet i navigasjonslisten. Server-config overstyrer JS-fallback, så lenken ble aldri synlig selv med ADMINISTRATOR-rollen.
+
 ## 0.9.1 - 2026-03-22
 ### Summary
 fix: oppdater consent-middleware-tester etter path-endring (v0.9.1)
