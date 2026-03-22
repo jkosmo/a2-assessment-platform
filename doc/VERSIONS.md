@@ -7,6 +7,35 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.8.93 - 2026-03-22
+### Summary
+feat: GDPR consent, profil-side og pseudonymisering (#36)
+
+### Included
+- **`prisma/schema.prisma`**: Nye modeller `UserConsent`, `DeletionRequest`, `PlatformConfig`; `lastLoginAt`, `isAnonymized`, `anonymizedAt` på `User`; enums `DeletionRequestStatus`, `DeletionTrigger`.
+- **`src/config/consent.ts`** (ny): `CURRENT_CONSENT_VERSION`, standard personverntekst (nb/en-GB/nn) med GDPR Art. 13-påkrevd informasjon inkl. Azure OpenAI-note.
+- **`src/config/retention.ts`** (ny): Retensjonskonstanter — operasjonslogg 7 dager, grace period 30 dager, offboarding 90 dager, inaktivitet 2 år.
+- **`src/middleware/consentMiddleware.ts`** (ny): Blokkerer alle `/api/*`-ruter uten gyldig samtykke; unntar `/api/me` og `/api/me/consent`.
+- **`src/modules/user/pseudonymizationService.ts`** (ny): `pseudonymizeUser`, `requestPseudonymization`, `cancelPseudonymizationRequest`; SHA-256-hash som pseudonymisert e-post.
+- **`src/modules/user/pseudonymizationScanner.ts`** (ny): Scanner for grace-period-utløp, Entra-offboarding (90 dager), og inaktivitetsbackstop (2 år).
+- **`src/modules/user/PseudonymizationMonitor.ts`** (ny): 6-timers intervallmonitor.
+- **`src/modules/retention/auditRetentionService.ts`** (ny): Sletter operasjonelle audit-events (org-sync, job-enqueue) eldre enn 7 dager.
+- **`src/modules/retention/AuditRetentionMonitor.ts`** (ny): 24-timers intervallmonitor.
+- **`src/modules/platformConfig/platformConfigRepository.ts`** (ny): CRUD for `PlatformConfig`.
+- **`src/modules/platformConfig/consentConfigService.ts`** (ny): `getConsentConfig`, `upsertConsentConfig` per locale.
+- **`src/routes/me.ts`** (ny): `GET /api/me`, `GET /api/me/consent`, `POST /api/me/consent`, `GET /api/me/data`, `POST /api/me/deletion`, `DELETE /api/me/deletion`.
+- **`src/repositories/userRepository.ts`**: `lastLoginAt` satt ved alle upsert-stier i `upsertUserFromPrincipal`.
+- **`src/db/prismaRuntime.ts`**: Eksporterer `DeletionRequestStatus` og `DeletionTrigger`.
+- **`src/app.ts`**: `/profile`-rute, `requireConsent`-middleware, `meRouter`.
+- **`src/index.ts`**: `PseudonymizationMonitor` og `AuditRetentionMonitor` startes med arbeidsprosessen.
+- **`src/modules/certification/participantNotificationService.ts`**: Fjernet `recipientEmail` fra audit-metadata i varslingseventer.
+- **`public/profile.html`** (ny): Profil-side med kontoseksjon, fullførte moduler, GDPR-rettigheter og slettingsdialog.
+- **`public/profile.js`** (ny): JavaScript-logikk for profil-siden — laster brukerdata, moduler, innsyn, nedlasting og pseudonymiseringsflyt.
+- **`public/consent-guard.js`** (ny): Delt modul for alle sider — sjekker samtykke ved sideinnlasting og viser blokkerende modal ved behov.
+- **`public/i18n/profile-translations.js`** (ny): Oversettelser for profil, samtykke, sletting og datavisning (en-GB / nb / nn).
+- **`public/admin-content.html`**: Advarsel om GDPR Art. 9 særkategoririsiko i fritekstbesvarelser.
+- **`public/i18n/admin-content-translations.js`**: Oversettelsesnøkler for personvernadvarselen (en-GB / nb / nn).
+
 ## 0.8.92 - 2026-03-22
 ### Summary
 refactor: splitt adminContentService i kommando- og spørringsfiler (#239)

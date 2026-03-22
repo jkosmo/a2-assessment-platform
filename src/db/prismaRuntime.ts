@@ -10,6 +10,8 @@ const {
   DecisionType,
   ReviewStatus,
   AppealStatus,
+  DeletionRequestStatus,
+  DeletionTrigger,
 } =
   prismaClient;
 
@@ -21,4 +23,6 @@ export {
   DecisionType,
   ReviewStatus,
   AppealStatus,
+  DeletionRequestStatus,
+  DeletionTrigger,
 };

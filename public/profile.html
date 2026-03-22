@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profile</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      .profile-section { margin-top: var(--space-2); }
+      .profile-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-link-active); margin-bottom: var(--space-1); }
+      .profile-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+      .profile-dl dt { color: var(--color-meta); font-weight: 600; white-space: nowrap; }
+      .profile-dl dd { margin: 0; color: var(--color-text); word-break: break-word; }
+      .rights-grid { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+      .rights-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1) var(--space-2); display: flex; align-items: flex-start; gap: var(--space-1); }
+      .rights-card-body { flex: 1; }
+      .rights-card-title { font-weight: 600; font-size: 14px; }
+      .rights-card-desc { font-size: 12px; color: var(--color-meta); margin-top: 4px; }
+      .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: var(--space-1); }
+      table { width: 100%; border-collapse: collapse; min-width: 520px; }
+      th, td { border-bottom: 1px solid var(--color-table-border); padding: 8px var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
+      tr:last-child td { border-bottom: none; }
+      tr:hover td { background: var(--color-row-hover); }
+      .deletion-dialog-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; padding: 16px; }
+      .deletion-dialog-overlay.open { display: flex; }
+      .page-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-1); flex-wrap: wrap; }
+      .locale-picker { flex-shrink: 0; padding-top: 6px; }
+      .locale-select-compact { width: auto; min-width: 70px; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: var(--color-surface); color: var(--color-meta); }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+
+    <main id="main-content" class="layout-container">
+      <div class="page-header-row">
+        <h1 data-i18n="profile.title">Profile</h1>
+        <div class="locale-picker">
+          <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+
+      <nav id="workspaceNav" class="workspace-nav"></nav>
+
+      <!-- Mock identity (dev only) -->
+      <section class="card mock-identity-card">
+        <details class="mock-identity-panel">
+          <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
+          <div class="mock-identity-panel-body">
+            <div class="row">
+              <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="participant-1" autocomplete="off" /></div>
+              <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="participant@company.com" autocomplete="email" /></div>
+            </div>
+            <div class="row">
+              <div><label for="name" data-i18n="identity.name">Name</label><input id="name" value="Platform Participant" autocomplete="name" /></div>
+              <div><label for="department" data-i18n="identity.department">Department</label><input id="department" value="Consulting" autocomplete="organization" /></div>
+            </div>
+            <div>
+              <label for="roles" data-i18n="identity.roles">Roles (comma-separated)</label>
+              <input id="roles" value="PARTICIPANT" autocomplete="off" />
+            </div>
+            <div id="mockRolePresetContainer">
+              <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
+              <select id="mockRolePreset"></select>
+              <p id="mockRolePresetHint" class="small"></p>
+            </div>
+            <button id="loadMe" class="btn btn-primary" data-i18n="identity.load">Load</button>
+          </div>
+        </details>
+      </section>
+
+      <div id="profileContent" style="display:none">
+
+        <!-- Account section -->
+        <section class="card profile-section">
+          <h2 class="profile-section-title" data-i18n="profile.section.account">Your account</h2>
+          <dl class="profile-dl">
+            <dt data-i18n="profile.field.name">Name</dt><dd id="profileName">—</dd>
+            <dt data-i18n="profile.field.email">Email</dt><dd id="profileEmail">—</dd>
+            <dt data-i18n="profile.field.department">Department</dt><dd id="profileDepartment">—</dd>
+            <dt data-i18n="profile.field.role">Role</dt><dd id="profileRoles">—</dd>
+            <dt data-i18n="profile.field.consent">Privacy notice accepted</dt>
+            <dd id="profileConsent">—</dd>
+          </dl>
+        </section>
+
+        <!-- Completed modules -->
+        <section class="card profile-section">
+          <h2 class="profile-section-title" data-i18n="profile.section.modules">Completed modules</h2>
+          <div id="modulesWrap">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="profile.modules.table.module">Module</th>
+                    <th data-i18n="profile.modules.table.completedAt">Completed</th>
+                    <th data-i18n="profile.modules.table.score">Score</th>
+                    <th data-i18n="profile.modules.table.passFail">Pass / fail</th>
+                  </tr>
+                </thead>
+                <tbody id="modulesBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- GDPR rights -->
+        <section class="card profile-section">
+          <h2 class="profile-section-title" data-i18n="profile.section.rights">Your rights</h2>
+          <div class="rights-grid">
+            <div class="rights-card">
+              <div class="rights-card-body">
+                <div class="rights-card-title" data-i18n="profile.rights.view">View my data</div>
+                <div class="rights-card-desc" data-i18n="profile.rights.view.description">Shows all data we hold about you.</div>
+              </div>
+              <button id="viewDataBtn" class="btn btn-secondary" data-i18n="profile.rights.view">View</button>
+            </div>
+            <div class="rights-card">
+              <div class="rights-card-body">
+                <div class="rights-card-title" data-i18n="profile.rights.download">Download my data</div>
+                <div class="rights-card-desc" data-i18n="profile.rights.download.description">Exports your data in JSON.</div>
+              </div>
+              <button id="downloadDataBtn" class="btn btn-secondary" data-i18n="profile.rights.download">Download</button>
+            </div>
+            <div class="rights-card">
+              <div class="rights-card-body">
+                <div class="rights-card-title" data-i18n="profile.rights.delete">Request pseudonymisation</div>
+                <div class="rights-card-desc" data-i18n="profile.rights.delete.description">Decouples your name and email from all records.</div>
+              </div>
+              <button id="requestDeletionBtn" class="btn btn-danger" data-i18n="profile.rights.delete">Request</button>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /profileContent -->
+
+      <!-- Data view (innsyn) -->
+      <section id="dataViewSection" style="display:none" class="card profile-section">
+        <button id="backToProfileBtn" class="btn btn-ghost" data-i18n="dataview.back">← Back to profile</button>
+        <h2 class="profile-section-title" data-i18n="dataview.title">Your data</h2>
+        <button id="downloadFullBtn" class="btn btn-secondary" data-i18n="dataview.download">Download all as JSON</button>
+        <div id="dataViewBody"></div>
+      </section>
+
+    </main>
+
+    <!-- Deletion confirmation dialog -->
+    <div id="deletionDialog" class="deletion-dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="deletion-dialog-title">
+      <div class="card" style="max-width:480px;width:100%;display:grid;gap:var(--space-2)">
+        <h2 id="deletion-dialog-title" style="margin:0" data-i18n="deletion.title">Pseudonymisation of your data</h2>
+        <p id="deletionDialogBody" style="white-space:pre-wrap;font-size:14px;line-height:1.6" data-i18n="deletion.body"></p>
+        <div style="display:grid;gap:8px">
+          <button id="deletionGraceBtn" class="btn btn-secondary" data-i18n="deletion.option.grace">30-day grace period</button>
+          <button id="deletionImmediateBtn" class="btn btn-danger" data-i18n="deletion.option.immediate">Pseudonymise now</button>
+          <button id="deletionCancelBtn" class="btn btn-ghost" data-i18n="deletion.cancel">Cancel</button>
+        </div>
+        <p id="deletionFeedback" class="small" style="color:var(--color-success);display:none"></p>
+      </div>
+    </div>
+
+    <script type="module" src="/static/profile.js"></script>
+  </body>
+</html>

@@ -6,6 +6,8 @@ import path from "node:path";
 import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js";
 import { AssessmentWorker } from "./modules/assessment/index.js";
 import { AppealSlaMonitor } from "./modules/appeal/index.js";
+import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.js";
+import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 
 const role = env.PROCESS_ROLE;
 const startWeb = role === "web" || role === "all";
@@ -15,6 +17,8 @@ let server: ReturnType<typeof app.listen> | null = null;
 let shuttingDown = false;
 const assessmentWorker = startWorkers ? new AssessmentWorker(env.ASSESSMENT_JOB_POLL_INTERVAL_MS) : null;
 const appealSlaMonitor = startWorkers ? new AppealSlaMonitor(env.APPEAL_SLA_MONITOR_INTERVAL_MS) : null;
+const pseudonymizationMonitor = startWorkers ? new PseudonymizationMonitor() : null;
+const auditRetentionMonitor = startWorkers ? new AuditRetentionMonitor() : null;
 
 const gracefulShutdown = (exitCode = 0) => {
   if (shuttingDown) {
@@ -24,6 +28,8 @@ const gracefulShutdown = (exitCode = 0) => {
   shuttingDown = true;
   appealSlaMonitor?.stop();
   assessmentWorker?.stop();
+  pseudonymizationMonitor?.stop();
+  auditRetentionMonitor?.stop();
 
   if (!server) {
     process.exit(exitCode);
@@ -62,6 +68,8 @@ async function startServer() {
   if (startWorkers) {
     assessmentWorker!.start();
     appealSlaMonitor!.start();
+    pseudonymizationMonitor!.start();
+    auditRetentionMonitor!.start();
   }
 }
 

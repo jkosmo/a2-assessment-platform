@@ -53,6 +53,18 @@ enum AssessmentJobStatus {
   FAILED
 }
 
+enum DeletionRequestStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum DeletionTrigger {
+  USER_REQUEST
+  OFFBOARDING
+  INACTIVITY
+}
+
 model User {
   id                    String                @id @default(cuid())
   externalId            String                @unique
@@ -61,6 +73,9 @@ model User {
   department            String?
   manager               String?
   activeStatus          Boolean               @default(true)
+  lastLoginAt           DateTime?
+  isAnonymized          Boolean               @default(false)
+  anonymizedAt          DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
   roleAssignments       RoleAssignment[]
@@ -71,6 +86,41 @@ model User {
   decisionsFinalised    AssessmentDecision[]  @relation("FinalisedBy")
   auditEventsAsActor    AuditEvent[]          @relation("AuditActor")
   certifications        CertificationStatus[]
+  consents              UserConsent[]
+  deletionRequests      DeletionRequest[]
+}
+
+model UserConsent {
+  id             String   @id @default(cuid())
+  userId         String
+  consentVersion String
+  acceptedAt     DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, consentVersion])
+  @@index([userId])
+}
+
+model DeletionRequest {
+  id           String                @id @default(cuid())
+  userId       String
+  requestedAt  DateTime              @default(now())
+  effectiveAt  DateTime?
+  status       DeletionRequestStatus @default(PENDING)
+  trigger      DeletionTrigger       @default(USER_REQUEST)
+  anonymizedAt DateTime?
+  cancelledAt  DateTime?
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status, effectiveAt])
+  @@index([userId, status])
+}
+
+model PlatformConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }
 
 model RoleAssignment {

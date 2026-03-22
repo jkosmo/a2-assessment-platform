@@ -8,6 +8,7 @@ import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
 import { generalApiLimiter } from "./middleware/rateLimiting.js";
 import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
+import { requireConsent } from "./middleware/consentMiddleware.js";
 import { meRouter } from "./routes/me.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
@@ -75,7 +76,11 @@ app.get("/participant/config", (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });
 
-app.use("/api", authenticate, generalApiLimiter);
+app.get("/profile", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "profile.html"));
+});
+
+app.use("/api", authenticate, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
 app.use(

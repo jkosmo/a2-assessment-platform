@@ -26,6 +26,8 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
     select: { id: true },
   });
 
+  const now = new Date();
+
   if (existingByExternalId) {
     const emailTakenByDifferentUser =
       existingByEmail && existingByEmail.id !== existingByExternalId.id;
@@ -37,6 +39,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         name: principal.name,
         department: principal.department,
         activeStatus: true,
+        lastLoginAt: now,
       },
     });
   }
@@ -49,6 +52,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         name: principal.name,
         department: principal.department,
         activeStatus: true,
+        lastLoginAt: now,
       },
     });
   }
@@ -61,6 +65,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         name: principal.name,
         department: principal.department,
         activeStatus: true,
+        lastLoginAt: now,
       },
     });
   } catch (error) {

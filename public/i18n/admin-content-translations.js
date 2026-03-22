@@ -256,6 +256,14 @@ const adminContentBase = {
   "adminContent.dialog.submissionSchema.fieldDefaultValue": "Default value (opt.)",
   "adminContent.dialog.submissionSchema.fieldPlaceholder": "Placeholder / guidance text (opt.)",
   "adminContent.dialog.submissionSchema.errorIdRequired": "All fields must have an ID.",
+
+  // Privacy by Design warning (GDPR Art. 9 — special category data risk)
+  "adminContent.privacy.warning.title": "Special category data risk",
+  "adminContent.privacy.warning.body":
+    "Participants may include health information, political views, religious beliefs, or other special category data (GDPR Art. 9) in their free-text submissions. " +
+    "These answers are stored and sent to the AI evaluator. " +
+    "Design submission prompts to minimise the need for such disclosures. " +
+    "Do not ask participants to describe personal health, family, or protected characteristics.",
 };
 const nbOverrides = {
   "adminContentPage.title": "Arbeidsflate for innholdsoppsett",
@@ -500,6 +508,13 @@ const nbOverrides = {
   "adminContent.dialog.submissionSchema.fieldDefaultValue": "Standardverdi (valgfri)",
   "adminContent.dialog.submissionSchema.fieldPlaceholder": "Plassholdertekst / veiledning (valgfri)",
   "adminContent.dialog.submissionSchema.errorIdRequired": "Alle felt må ha en ID.",
+
+  "adminContent.privacy.warning.title": "Risiko for særlige kategorier av personopplysninger",
+  "adminContent.privacy.warning.body":
+    "Deltakere kan inkludere helseopplysninger, politiske meninger, religiøse overbevisninger eller andre særlige kategorier av personopplysninger (GDPR artikkel 9) i sine fritekstbesvarelser. " +
+    "Disse svarene lagres og sendes til KI-evaluatoren. " +
+    "Design oppgavetekster slik at behovet for slike opplysninger minimeres. " +
+    "Ikke spør deltakerne om personlig helse, familie eller beskyttede karakteristika.",
 };
 const nnOverrides = {
   "adminContentPage.title": "Arbeidsflate for innhaldsoppsett",
@@ -742,6 +757,13 @@ const nnOverrides = {
   "adminContent.dialog.submissionSchema.fieldDefaultValue": "Standardverdi (valfri)",
   "adminContent.dialog.submissionSchema.fieldPlaceholder": "Plassholdertekst / rettleiing (valfri)",
   "adminContent.dialog.submissionSchema.errorIdRequired": "Alle felt må ha ein ID.",
+
+  "adminContent.privacy.warning.title": "Risiko for særlege kategoriar av personopplysningar",
+  "adminContent.privacy.warning.body":
+    "Deltakarar kan inkludere helseopplysningar, politiske meiningar, religiøse overtydingar eller andre særlege kategoriar av personopplysningar (GDPR artikkel 9) i fritekstsvara sine. " +
+    "Desse svara vert lagra og sende til KI-evaluatoren. " +
+    "Utform oppgåvetekstar slik at behovet for slike opplysningar vert minimert. " +
+    "Ikkje spør deltakarane om personleg helse, familie eller verna kjenneteikn.",
 };
 
 const adminContentLateOverrides = {
