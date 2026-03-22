@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.28 - 2026-03-22
+### Summary
+fix: git pull --rebase før push i benchmark-workflow (v0.9.28)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: Unngår push-konflikt når andre commits er pushet mens benchmark kjører.
+
 ## 0.9.27 - 2026-03-22
 ### Summary
 fix: temperature-retry sjekker nå param/message i stedet for error-kode (v0.9.27)

@@ -79,4 +79,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add doc/benchmarks/
           git diff --staged --quiet || git commit -m "benchmark: model comparison results $(date +%Y-%m-%d) [skip ci]"
+          git pull --rebase origin main
           git push
