@@ -18,6 +18,7 @@ import { reviewsRouter } from "./routes/reviews.js";
 import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
 import { adminContentRouter } from "./routes/adminContent.js";
+import { adminModulesRouter } from "./routes/adminModules.js";
 import { adminPlatformRouter } from "./routes/adminPlatform.js";
 import { orgSyncRouter } from "./routes/orgSync.js";
 import { calibrationRouter } from "./routes/calibration.js";
@@ -135,6 +136,7 @@ app.use(
   requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]),
   adminContentRouter,
 );
+app.use("/api/admin/modules", requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]), adminModulesRouter);
 app.use("/api/admin/platform", requireAnyRole([AppRole.ADMINISTRATOR]), adminPlatformRouter);
 app.use("/api/admin/sync/org", requireAnyRole([AppRole.ADMINISTRATOR]), orgSyncRouter);
 

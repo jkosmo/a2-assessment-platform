@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.14 - 2026-03-22
+### Summary
+refactor: dedikert GET /api/admin/modules for kalibreringssiden (v0.9.14)
+
+### Included
+- **`src/routes/adminModules.ts`** (ny): `GET /` returnerer alle moduler uten publiseringsfilter, gjenbruker `listModules` fra modules-domenet.
+- **`src/app.ts`**: Monterer ny rute på `/api/admin/modules` med `requireAnyRole([ADMINISTRATOR, SUBJECT_MATTER_OWNER])`.
+- **`public/calibration.js`**: `loadModuleOptions()` bruker nå `/api/admin/modules` — eget endepunkt i modules-domenet, ingen kryssavhengighet til adminContent.
+- Rydder opp v0.9.13 som brukte feil domene-endepunkt.
+
 ## 0.9.13 - 2026-03-22
 ### Summary
 fix: kalibreringssiden bruker nå admin-content-endepunktet for modullisten (v0.9.13)
