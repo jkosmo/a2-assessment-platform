@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.9.14",
+  "version": "0.9.15",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -42,6 +42,7 @@
     "test:integration:admin": "dotenv -e .env.test -- vitest run --config vitest.integration.config.ts test/m2-admin-content-publication.test.ts test/m2-calibration-workspace.test.ts",
     "test:integration:contracts": "dotenv -e .env.test -- vitest run test/participant-console-config.test.ts test/workspace-html-fallbacks.test.js test/workspace-validation-accessibility.test.js test/admin-content-translations.test.js test/participant-translations.test.js test/calibration-translations.test.js test/participant-completed-translations.test.js",
     "test:assessment:batch": "tsx src/scripts/runAssessmentBatchRegression.ts",
+    "benchmark:models": "tsx src/scripts/runModelComparisonBenchmark.ts",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
   },

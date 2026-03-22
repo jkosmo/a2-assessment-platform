@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.15 - 2026-03-22
+### Summary
+feat: modell-sammenlignings-benchmark for scoring-konsistens (#144)
+
+### Included
+- **`src/scripts/runModelComparisonBenchmark.ts`** (ny): Kjører samme case(r) X ganger mot flere navngitte Azure OpenAI-deployments. Måler per modell × case: utfallsfordeling (PASS/FAIL/UNDER_REVIEW), score-statistikk (snitt, std.avvik, min, maks), og latency (snitt, std.avvik, min, maks).
+- **`package.json`**: Ny `benchmark:models`-script. Bruk: `npm run benchmark:models -- --repeat=10 --models=label1:deployment1,label2:deployment2 --cases=yellow_sensitive_data,green_clear_pass`
+- Caseutvalg: bruker eksisterende `assessmentBatchCases` — defaulter til alle ikke-FAIL-cases (gul og grønn) hvis `--cases` utelates.
+
 ## 0.9.14 - 2026-03-22
 ### Summary
 refactor: dedikert GET /api/admin/modules for kalibreringssiden (v0.9.14)
