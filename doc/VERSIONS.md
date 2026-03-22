@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.21 - 2026-03-22
+### Summary
+fix: sett AZURE_OPENAI_DEPLOYMENT i benchmark-workflow (v0.9.21)
+
+### Included
+- **`.github/workflows/benchmark-models.yml`**: Legger til `AZURE_OPENAI_DEPLOYMENT: benchmark-override` — env.ts krever variabelen når `LLM_MODE=azure_openai`. Benchmarken sender faktisk deployment per kall via CLI-argumenter.
+
 ## 0.9.20 - 2026-03-22
 ### Summary
 fix: bruk staging-miljø i benchmark-workflow for tilgang til vars/secrets (v0.9.20)

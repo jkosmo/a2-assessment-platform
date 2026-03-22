@@ -51,6 +51,7 @@ jobs:
             $CASES_ARG
         env:
           LLM_MODE: azure_openai
+          AZURE_OPENAI_DEPLOYMENT: benchmark-override
           AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}
