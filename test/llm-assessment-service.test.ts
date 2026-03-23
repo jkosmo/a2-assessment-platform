@@ -97,7 +97,7 @@ describe("llmAssessmentService azure_openai adapter", () => {
     expect(messages[1].content).toContain("evidence_sufficiency");
     expect(messages[1].content).toContain("recommended_outcome");
     expect(messages[1].content).toContain("manual_review_reason_code");
-    expect(messages[1].content).toContain("allowed red_flags.code values");
+    expect(messages[1].content).toContain("Allowed red_flags.code values with usage criteria");
     expect(messages[1].content).toContain("insufficient_submission");
     expect(messages[1].content).toContain("potential_sensitive_data");
     expect(messages[1].content).toContain("Write all natural-language response fields in English (UK)");

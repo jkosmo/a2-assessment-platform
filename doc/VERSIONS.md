@@ -7,6 +7,10 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.32 - 2026-03-23
+
+fix: oppdater llm-assessment-service-test etter prompt-ordlyd-endring (v0.9.30)
+
 ## 0.9.31 - 2026-03-23
 
 Benchmark: legg til reelle Bourdieu-caser fra staging (#144).
