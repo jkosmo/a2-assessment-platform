@@ -4,6 +4,8 @@ import { env } from "../../config/env.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { getAppealNotificationMessage, getAssessmentResultNotificationMessage } from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 
 type NotificationChannel = "disabled" | "log" | "webhook" | "acs_email";
@@ -66,7 +68,7 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
   }
 
   if (channel === "log") {
-    logOperationalEvent("participant_notification_sent", {
+    logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
       channel,
       ...payload,
     });
@@ -91,7 +93,7 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
   const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
   if (!webhookUrl) {
     logOperationalEvent(
-      "participant_notification_failed",
+      operationalEvents.certification.participantNotificationFailed,
       {
         channel,
         ...payload,
@@ -121,7 +123,7 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
     if (!response.ok) {
       const failureReason = `webhook_non_2xx_${response.status}`;
       logOperationalEvent(
-        "participant_notification_failed",
+        operationalEvents.certification.participantNotificationFailed,
         {
           channel,
           ...payload,
@@ -138,7 +140,7 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
       };
     }
 
-    logOperationalEvent("participant_notification_sent", {
+    logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
       channel,
       ...payload,
     });
@@ -151,7 +153,7 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
     logOperationalEvent(
-      "participant_notification_failed",
+      operationalEvents.certification.participantNotificationFailed,
       {
         channel,
         ...payload,
@@ -176,7 +178,7 @@ export async function sendViaAcs(input: {
   recipientName?: string;
   subject: string;
   body: string;
-  logPayload: Record<string, unknown>;
+  logPayload: { channel?: string } & Record<string, unknown>;
 }): Promise<NotificationResult> {
   const connectionString = env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING!;
   // ACS senderAddress must be a plain email address — display name is set at domain level in Azure.
@@ -196,16 +198,27 @@ export async function sendViaAcs(input: {
     const result = await poller.pollUntilDone();
 
     if (result.status === "Succeeded") {
-      logOperationalEvent("participant_notification_sent", { channel: "acs_email", ...input.logPayload });
+      logOperationalEvent(operationalEvents.certification.participantNotificationSent, {
+        channel: "acs_email",
+        ...input.logPayload,
+      });
       return { delivered: true, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body };
     }
 
     const failureReason = `acs_send_status_${result.status}`;
-    logOperationalEvent("participant_notification_failed", { channel: "acs_email", ...input.logPayload, failureReason }, "error");
+    logOperationalEvent(
+      operationalEvents.certification.participantNotificationFailed,
+      { channel: "acs_email", ...input.logPayload, failureReason },
+      "error",
+    );
     return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "acs_send_failed";
-    logOperationalEvent("participant_notification_failed", { channel: "acs_email", ...input.logPayload, failureReason }, "error");
+    logOperationalEvent(
+      operationalEvents.certification.participantNotificationFailed,
+      { channel: "acs_email", ...input.logPayload, failureReason },
+      "error",
+    );
     return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
   }
 }
@@ -243,7 +256,7 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
   if (channel === "disabled") return;
 
   if (channel === "log") {
-    logOperationalEvent("participant_notification_sent", { channel, ...logPayload });
+    logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
     return;
   }
 
@@ -260,7 +273,11 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
   } else {
     const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
     if (!webhookUrl) {
-      logOperationalEvent("participant_notification_failed", { channel, ...logPayload, failureReason: "missing_webhook_url" }, "error");
+      logOperationalEvent(
+        operationalEvents.certification.participantNotificationFailed,
+        { channel, ...logPayload, failureReason: "missing_webhook_url" },
+        "error",
+      );
       result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason: "missing_webhook_url" };
     } else {
       const controller = new AbortController();
@@ -274,15 +291,23 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
         });
         if (!response.ok) {
           const failureReason = `webhook_non_2xx_${response.status}`;
-          logOperationalEvent("participant_notification_failed", { channel, ...logPayload, failureReason }, "error");
+          logOperationalEvent(
+            operationalEvents.certification.participantNotificationFailed,
+            { channel, ...logPayload, failureReason },
+            "error",
+          );
           result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason };
         } else {
-          logOperationalEvent("participant_notification_sent", { channel, ...logPayload });
+          logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
           result = { delivered: true, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance };
         }
       } catch (error) {
         const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
-        logOperationalEvent("participant_notification_failed", { channel, ...logPayload, failureReason }, "error");
+        logOperationalEvent(
+          operationalEvents.certification.participantNotificationFailed,
+          { channel, ...logPayload, failureReason },
+          "error",
+        );
         result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason };
       } finally {
         clearTimeout(timeout);
@@ -291,9 +316,11 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
   }
 
   await recordAuditEvent({
-    entityType: "submission",
+    entityType: auditEntityTypes.submission,
     entityId: input.submissionId,
-    action: result.delivered ? "participant_notification_sent" : "participant_notification_failed",
+    action: result.delivered
+      ? auditActions.certification.participantNotificationSent
+      : auditActions.certification.participantNotificationFailed,
     metadata: {
       notificationType: "assessment_result",
       moduleId: input.moduleId,
@@ -310,9 +337,11 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
   const result = await sendAppealStatusNotification(input);
 
   await recordAuditEvent({
-    entityType: "appeal",
+    entityType: auditEntityTypes.appeal,
     entityId: input.appealId,
-    action: result.delivered ? "participant_notification_sent" : "participant_notification_failed",
+    action: result.delivered
+      ? auditActions.certification.participantNotificationSent
+      : auditActions.certification.participantNotificationFailed,
     metadata: {
       submissionId: input.submissionId,
       recipientUserId: input.recipientUserId,

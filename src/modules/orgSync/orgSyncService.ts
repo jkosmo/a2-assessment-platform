@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { getOrgSyncConfig } from "../../config/orgSync.js";
 import { ConflictError } from "../../errors/AppError.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import {
   createUserForOrgSync,
   findUserForOrgSyncByEmail,
@@ -36,7 +38,7 @@ export async function applyOrgDeltaSync(input: ApplyOrgDeltaSyncInput) {
   let failedCount = 0;
   const errors: Array<{ externalId: string; email: string; reason: string }> = [];
 
-  logOperationalEvent("org_sync_delta_started", {
+  logOperationalEvent(operationalEvents.orgSync.deltaStarted, {
     runId,
     source: input.source,
     userCount: input.users.length,
@@ -62,7 +64,7 @@ export async function applyOrgDeltaSync(input: ApplyOrgDeltaSyncInput) {
         reason,
       });
       logOperationalEvent(
-        "org_sync_delta_failed_record",
+        operationalEvents.orgSync.failedRecord,
         {
           runId,
           source: input.source,
@@ -73,9 +75,9 @@ export async function applyOrgDeltaSync(input: ApplyOrgDeltaSyncInput) {
         "error",
       );
       await recordAuditEvent({
-        entityType: "org_sync",
+        entityType: auditEntityTypes.orgSync,
         entityId: runId,
-        action: "org_sync_record_failed",
+        action: auditActions.orgSync.recordFailed,
         actorId: input.actorId,
         metadata: {
           source: input.source,
@@ -103,16 +105,20 @@ export async function applyOrgDeltaSync(input: ApplyOrgDeltaSyncInput) {
   };
 
   await recordAuditEvent({
-    entityType: "org_sync",
+    entityType: auditEntityTypes.orgSync,
     entityId: runId,
-    action: "org_sync_completed",
+    action: auditActions.orgSync.completed,
     actorId: input.actorId,
     metadata: {
       ...summary,
     },
   });
 
-  logOperationalEvent("org_sync_delta_completed", summary, failedCount > 0 ? "error" : "info");
+  logOperationalEvent(
+    operationalEvents.orgSync.deltaCompleted,
+    summary,
+    failedCount > 0 ? "error" : "info",
+  );
 
   return summary;
 }

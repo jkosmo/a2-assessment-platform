@@ -1,10 +1,11 @@
 import { logOperationalEvent } from "../observability/operationalLog.js";
+import { operationalEvents } from "../observability/operationalEvents.js";
 
 export type GracefulShutdown = (exitCode?: number) => void;
 
 export function logUnhandledRejection(reason: unknown) {
   logOperationalEvent(
-    "unhandled_rejection",
+    operationalEvents.process.unhandledRejection,
     {
       reason: reason instanceof Error ? reason.message : String(reason),
       stack: reason instanceof Error ? reason.stack : undefined,
@@ -15,7 +16,7 @@ export function logUnhandledRejection(reason: unknown) {
 
 export function logUncaughtException(error: unknown, gracefulShutdown: GracefulShutdown) {
   logOperationalEvent(
-    "uncaught_exception",
+    operationalEvents.process.uncaughtException,
     {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,

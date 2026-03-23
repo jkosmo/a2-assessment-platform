@@ -1,5 +1,7 @@
 import { OPERATIONAL_LOG_RETENTION_DAYS } from "../../config/retention.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditRetentionRepository } from "./auditRetentionRepository.js";
 
 /**
@@ -12,10 +14,10 @@ import { auditRetentionRepository } from "./auditRetentionRepository.js";
  * retained indefinitely.
  */
 const OPERATIONAL_ACTION_TYPES = new Set([
-  "org_sync_completed",
-  "org_sync_record_failed",
-  "assessment_job_enqueued",
-  "recertification_status_upserted",
+  auditActions.orgSync.completed,
+  auditActions.orgSync.recordFailed,
+  auditActions.assessment.assessmentJobEnqueued,
+  auditActions.certification.recertificationStatusUpserted,
 ]);
 
 export type AuditRetentionResult = {
@@ -37,7 +39,7 @@ export async function runAuditRetentionScan(): Promise<AuditRetentionResult> {
     cutoffDate,
   );
 
-  logOperationalEvent("audit_retention_scan_completed", {
+  logOperationalEvent(operationalEvents.retention.auditScanCompleted, {
     deletedCount: result.count,
     cutoffDate: cutoffDate.toISOString(),
     retentionDays: OPERATIONAL_LOG_RETENTION_DAYS,

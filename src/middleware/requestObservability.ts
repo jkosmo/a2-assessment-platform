@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { logOperationalEvent, resolveCorrelationId } from "../observability/operationalLog.js";
+import { operationalEvents } from "../observability/operationalEvents.js";
 
 const CORRELATION_ID_HEADER = "x-correlation-id";
 
@@ -16,7 +17,7 @@ export function attachCorrelationId(request: Request, response: Response, next: 
 export function requestLoggingMiddleware(request: Request, response: Response, next: NextFunction) {
   const start = Date.now();
   response.on("finish", () => {
-    logOperationalEvent("http_request", {
+    logOperationalEvent(operationalEvents.http.request, {
       correlationId: request.context?.correlationId ?? null,
       method: request.method,
       path: request.originalUrl,

@@ -5,6 +5,8 @@ import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { sha256 } from "../../utils/hash.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
@@ -79,9 +81,9 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
     });
 
     await recordAuditEvent({
-      entityType: "llm_evaluation",
+      entityType: auditEntityTypes.llmEvaluation,
       entityId: llmEvaluation.id,
-      action: "llm_evaluation_created",
+      action: auditActions.assessment.llmEvaluationCreated,
       actorId: userId,
       metadata: {
         submissionId,
@@ -114,7 +116,7 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
     });
   } catch (error) {
     logOperationalEvent(
-      "llm_evaluation_failed",
+      operationalEvents.assessment.llmEvaluationFailed,
       {
         jobId,
         submissionId,
@@ -139,9 +141,9 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
 
   if (secondaryTrigger.shouldRun) {
     await recordAuditEvent({
-      entityType: "assessment_job",
+      entityType: auditEntityTypes.assessmentJob,
       entityId: jobId,
-      action: "secondary_assessment_triggered",
+      action: auditActions.assessment.secondaryAssessmentTriggered,
       actorId: userId,
       metadata: {
         submissionId,
@@ -166,7 +168,7 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
       });
     } catch (error) {
       logOperationalEvent(
-        "llm_evaluation_failed",
+        operationalEvents.assessment.llmEvaluationFailed,
         {
           jobId,
           submissionId,
@@ -184,9 +186,9 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
 
     const disagreement = evaluateSecondaryAssessmentDisagreement(primaryLlmResult, secondaryLlmResult);
     await recordAuditEvent({
-      entityType: "assessment_job",
+      entityType: auditEntityTypes.assessmentJob,
       entityId: jobId,
-      action: "secondary_assessment_completed",
+      action: auditActions.assessment.secondaryAssessmentCompleted,
       actorId: userId,
       metadata: {
         submissionId,

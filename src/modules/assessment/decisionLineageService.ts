@@ -4,6 +4,7 @@ import { createDecisionRepository } from "../../repositories/decisionRepository.
 import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
+import { auditEntityTypes, type AuditAction, type AuditMetadataByAction } from "../../observability/auditEvents.js";
 
 type LineageTxClient = Pick<
   DbTransactionClient,
@@ -41,8 +42,8 @@ export async function appendDecisionWithLineage(
     finalisedAt: Date;
     finalisedById: string;
     actorId: string;
-    auditAction: string;
-    auditMetadata: Record<string, unknown>;
+    auditAction: AuditAction;
+    auditMetadata: AuditMetadataByAction[AuditAction];
   },
   tx: LineageTxClient,
 ) {
@@ -74,7 +75,7 @@ export async function appendDecisionWithLineage(
 
   await recordAuditEvent(
     {
-      entityType: "assessment_decision",
+      entityType: auditEntityTypes.assessmentDecision,
       entityId: decision.id,
       action: input.auditAction,
       actorId: input.actorId,

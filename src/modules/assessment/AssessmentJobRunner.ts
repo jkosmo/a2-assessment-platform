@@ -3,6 +3,8 @@ import { env } from "../../config/env.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { alertOnStuckJobs, scanAndResetStaleJobs } from "./staleLockScanner.js";
 
 export type AssessmentRunFn = (jobId: string) => Promise<void>;
@@ -24,9 +26,9 @@ export async function enqueueAssessmentJob(submissionId: string) {
   });
 
   await recordAuditEvent({
-    entityType: "assessment_job",
+    entityType: auditEntityTypes.assessmentJob,
     entityId: job.id,
-    action: "assessment_job_enqueued",
+    action: auditActions.assessment.assessmentJobEnqueued,
     metadata: { submissionId },
   });
   await logQueueBacklog("enqueue", submissionId);
@@ -106,9 +108,11 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
     });
 
     await recordAuditEvent({
-      entityType: "assessment_job",
+      entityType: auditEntityTypes.assessmentJob,
       entityId: candidate.id,
-      action: willRetry ? "assessment_job_retry_scheduled" : "assessment_job_failed",
+      action: willRetry
+        ? auditActions.assessment.assessmentJobRetryScheduled
+        : auditActions.assessment.assessmentJobFailed,
       metadata: {
         submissionId: candidate.submissionId,
         attempts: job.attempts,
@@ -126,7 +130,7 @@ async function logQueueBacklog(trigger: string, submissionId: string) {
   const pendingJobs = await assessmentJobRepository.countJobsByStatus(AssessmentJobStatus.PENDING);
   const runningJobs = await assessmentJobRepository.countJobsByStatus(AssessmentJobStatus.RUNNING);
 
-  logOperationalEvent("assessment_queue_backlog", {
+  logOperationalEvent(operationalEvents.assessment.queueBacklog, {
     trigger,
     submissionId,
     pendingJobs,

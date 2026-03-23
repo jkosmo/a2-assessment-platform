@@ -1,6 +1,7 @@
 import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 
@@ -85,9 +86,9 @@ export async function createModule(input: CreateModuleInput) {
   });
 
   await recordAuditEvent({
-    entityType: "module",
+    entityType: auditEntityTypes.module,
     entityId: module.id,
-    action: "module_created",
+    action: auditActions.adminContent.moduleCreated,
     actorId: input.actorId,
     metadata: {
       moduleId: module.id,
@@ -130,9 +131,9 @@ export async function deleteModule(moduleId: string, actorId: string) {
   const deletedModule = await adminContentRepository.deleteModule(moduleId);
 
   await recordAuditEvent({
-    entityType: "module",
+    entityType: auditEntityTypes.module,
     entityId: moduleId,
-    action: "module_deleted",
+    action: auditActions.adminContent.moduleDeleted,
     actorId,
     metadata: {
       moduleId,
@@ -307,9 +308,9 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
   });
 
   await recordAuditEvent({
-    entityType: "prompt_template_version",
+    entityType: auditEntityTypes.promptTemplateVersion,
     entityId: promptTemplateVersion.id,
-    action: "benchmark_example_version_created",
+    action: auditActions.adminContent.benchmarkExampleVersionCreated,
     actorId: input.actorId,
     metadata: {
       moduleId: input.moduleId,
@@ -329,6 +330,25 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
   };
 }
 
+export async function unpublishModule(moduleId: string, actorId: string) {
+  await ensureModuleExists(moduleId);
+
+  const result = await adminContentRepository.unpublishModule(moduleId);
+
+  await recordAuditEvent({
+    entityType: auditEntityTypes.module,
+    entityId: moduleId,
+    action: auditActions.adminContent.moduleUnpublished,
+    actorId,
+    metadata: {
+      moduleId,
+      previousActiveVersionId: result.previousActiveVersionId,
+    },
+  });
+
+  return result;
+}
+
 export async function publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string) {
   const module = await ensureModuleExists(moduleId);
   const now = new Date();
@@ -338,9 +358,9 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
   );
 
   await recordAuditEvent({
-    entityType: "module_version",
+    entityType: auditEntityTypes.moduleVersion,
     entityId: moduleVersionId,
-    action: "module_version_published",
+    action: auditActions.adminContent.moduleVersionPublished,
     actorId,
     metadata: {
       moduleId,
@@ -404,9 +424,9 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
   });
 
   await recordAuditEvent({
-    entityType: "module_version",
+    entityType: auditEntityTypes.moduleVersion,
     entityId: newVersion.id,
-    action: "calibration_thresholds_published",
+    action: auditActions.adminContent.calibrationThresholdsPublished,
     actorId: input.actorId,
     metadata: {
       moduleId: input.moduleId,

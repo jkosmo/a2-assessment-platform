@@ -1,6 +1,7 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
 import { runLlmEvaluationPipeline } from "./AssessmentEvaluator.js";
@@ -41,9 +42,9 @@ async function runAssessment(jobId: string) {
   const inputContext = buildAssessmentInputContext(submission, submissionLocale);
 
   await recordAuditEvent({
-    entityType: "submission",
+    entityType: auditEntityTypes.submission,
     entityId: submission.id,
-    action: "sensitive_data_preprocessed",
+    action: auditActions.assessment.sensitiveDataPreprocessed,
     actorId: submission.userId,
     metadata: {
       moduleId: submission.moduleId,

@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import { DeletionTrigger as DeletionTriggerEnum } from "../../db/prismaRuntime.js";
 import { pseudonymizeUser } from "./pseudonymizationService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import {
   OFFBOARDING_GRACE_PERIOD_DAYS,
   INACTIVITY_RETENTION_DAYS,
@@ -46,7 +47,7 @@ export async function runPseudonymizationScan(): Promise<PseudonymizationScanRes
     } catch (error) {
       result.errors++;
       logOperationalEvent(
-        "pseudonymization_scan_error",
+        operationalEvents.pseudonymization.scanError,
         { phase: "grace_period", userId: request.userId, requestId: request.id, error: String(error) },
         "error",
       );
@@ -79,7 +80,7 @@ export async function runPseudonymizationScan(): Promise<PseudonymizationScanRes
     } catch (error) {
       result.errors++;
       logOperationalEvent(
-        "pseudonymization_scan_error",
+        operationalEvents.pseudonymization.scanError,
         { phase: "offboarding", userId: user.id, error: String(error) },
         "error",
       );
@@ -109,7 +110,7 @@ export async function runPseudonymizationScan(): Promise<PseudonymizationScanRes
     } catch (error) {
       result.errors++;
       logOperationalEvent(
-        "pseudonymization_scan_error",
+        operationalEvents.pseudonymization.scanError,
         { phase: "inactivity", userId: user.id, error: String(error) },
         "error",
       );
@@ -117,7 +118,10 @@ export async function runPseudonymizationScan(): Promise<PseudonymizationScanRes
   }
 
   if (result.gracePeriodExecuted + result.offboardingExecuted + result.inactivityExecuted > 0 || result.errors > 0) {
-    logOperationalEvent("pseudonymization_scan_completed", { ...result, ranAt: now.toISOString() });
+    logOperationalEvent(operationalEvents.pseudonymization.scanCompleted, {
+      ...result,
+      ranAt: now.toISOString(),
+    });
   }
 
   return result;

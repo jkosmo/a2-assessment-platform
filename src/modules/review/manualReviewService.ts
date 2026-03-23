@@ -6,6 +6,8 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { notifyAssessmentResult } from "../certification/index.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toManualReviewWorkspaceView } from "./manualReviewReadModels.js";
@@ -65,9 +67,9 @@ export async function claimManualReview(reviewId: string, reviewerId: string) {
   const claimed = await manualReviewRepository.markManualReviewClaimed(reviewId, reviewerId, ReviewStatus.IN_REVIEW);
 
   await recordAuditEvent({
-    entityType: "manual_review",
+    entityType: auditEntityTypes.manualReview,
     entityId: claimed.id,
-    action: "manual_review_claimed",
+    action: auditActions.manualReview.claimed,
     actorId: reviewerId,
     metadata: {
       submissionId: review.submissionId,
@@ -115,7 +117,7 @@ export async function finalizeManualReviewOverride(input: {
         finalisedAt,
         finalisedById: input.reviewerId,
         actorId: input.reviewerId,
-        auditAction: "manual_override_decision_created",
+        auditAction: auditActions.manualReview.overrideDecisionCreated,
         auditMetadata: {
           submissionId: latestDecision.submissionId,
           reviewId: review.id,
@@ -136,9 +138,9 @@ export async function finalizeManualReviewOverride(input: {
     });
 
     await recordAuditEvent({
-      entityType: "manual_review",
+      entityType: auditEntityTypes.manualReview,
       entityId: resolvedReview.id,
-      action: "manual_review_resolved",
+      action: auditActions.manualReview.resolved,
       actorId: input.reviewerId,
       metadata: {
         submissionId: latestDecision.submissionId,
@@ -163,7 +165,7 @@ export async function finalizeManualReviewOverride(input: {
     locale: submissionLocale,
   }).catch((error: unknown) => {
     logOperationalEvent(
-      "participant_notification_failed",
+      operationalEvents.certification.participantNotificationPipelineFailed,
       {
         submissionId: review.submission.id,
         errorMessage: error instanceof Error ? error.message : "Unknown error",
@@ -193,9 +195,9 @@ export async function supersedeEligibleReviewsForRetake(
   for (const review of reviews) {
     await repo.updateSubmissionStatus(review.submissionId, SubmissionStatus.COMPLETED);
     await recordAuditEvent({
-      entityType: "manual_review",
+      entityType: auditEntityTypes.manualReview,
       entityId: review.id,
-      action: "review_superseded",
+      action: auditActions.manualReview.superseded,
       actorId: undefined,
       metadata: { newSubmissionId, supersededAt: now.toISOString() },
     }, tx);

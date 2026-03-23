@@ -6,6 +6,8 @@ import { submissionRepository, createSubmissionRepository } from "./submissionRe
 import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { resolveSubmissionResponseJson } from "../assessment/documentParsingService.js";
 import { supersedeEligibleReviewsForRetake } from "../review/index.js";
 import { supersedeEligibleAppealsForRetake } from "../appeal/index.js";
@@ -50,9 +52,9 @@ export async function createSubmission(input: CreateSubmissionInput) {
     });
 
     await recordAuditEvent({
-      entityType: "submission",
+      entityType: auditEntityTypes.submission,
       entityId: submission.id,
-      action: "submission_created",
+      action: auditActions.submission.created,
       actorId: input.userId,
       metadata: {
         submissionId: submission.id,
@@ -67,9 +69,9 @@ export async function createSubmission(input: CreateSubmissionInput) {
 
     if (supersededReviewCount + supersededAppealCount > 0) {
       await recordAuditEvent({
-        entityType: "submission",
+        entityType: auditEntityTypes.submission,
         entityId: submission.id,
-        action: "retake_supersede_completed",
+        action: auditActions.submission.retakeSupersedeCompleted,
         actorId: input.userId,
         metadata: { supersededReviewCount, supersededAppealCount },
       }, tx);
@@ -78,7 +80,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     return submission;
   });
 
-  logOperationalEvent("submission_document_parse", {
+  logOperationalEvent(operationalEvents.submission.documentParse, {
     submissionId: submission.id,
     moduleId: submission.moduleId,
     deliveryType: submission.deliveryType,

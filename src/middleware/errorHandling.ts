@@ -1,6 +1,7 @@
 import type express from "express";
 import { AppError } from "../errors/AppError.js";
 import { logOperationalEvent } from "../observability/operationalLog.js";
+import { operationalEvents } from "../observability/operationalEvents.js";
 
 export function errorHandlingMiddleware(
   error: unknown,
@@ -23,7 +24,7 @@ export function errorHandlingMiddleware(
   }
 
   logOperationalEvent(
-    "unhandled_error",
+    operationalEvents.process.unhandledError,
     {
       correlationId: request.context?.correlationId ?? null,
       error: error instanceof Error ? error.message : String(error),

@@ -4,6 +4,7 @@ import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { mcqRepository } from "./mcqRepository.js";
 import { enqueueAssessmentJob } from "./assessmentJobService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import {
   localizeContentArray,
@@ -118,9 +119,9 @@ export async function submitMcqAttempt(input: {
   await enqueueAssessmentJob(submission.id);
 
   await recordAuditEvent({
-    entityType: "mcq_attempt",
+    entityType: auditEntityTypes.mcqAttempt,
     entityId: attempt.id,
-    action: "mcq_submitted",
+    action: auditActions.assessment.mcqSubmitted,
     actorId: input.userId,
     metadata: {
       submissionId: submission.id,

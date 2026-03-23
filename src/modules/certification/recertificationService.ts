@@ -2,6 +2,8 @@ import { env } from "../../config/env.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { NotFoundError } from "../../errors/AppError.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditRepository } from "../../repositories/auditRepository.js";
 import { certificationRepository, createCertificationRepository } from "./certificationRepository.js";
 import { decisionRepository, createDecisionRepository } from "../../repositories/decisionRepository.js";
@@ -55,7 +57,7 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
     // a certification that was earned by submission M > N.
     const existing = await certRepo.findByUserAndModule(userId, moduleId);
     if (existing?.passedAt && existing.passedAt > decision.submission.submittedAt) {
-      logOperationalEvent("recertification_downgrade_skipped", {
+      logOperationalEvent(operationalEvents.certification.recertificationDowngradeSkipped, {
         userId,
         moduleId,
         decisionId: decision.id,
@@ -78,9 +80,9 @@ export async function upsertRecertificationStatusFromDecision(input: UpsertFromD
   });
 
   await recordAuditEvent({
-    entityType: "certification_status",
+    entityType: auditEntityTypes.certificationStatus,
     entityId: certification.id,
-    action: "recertification_status_upserted",
+    action: auditActions.certification.recertificationStatusUpserted,
     actorId: input.actorId ?? undefined,
     metadata: {
       userId,
@@ -185,9 +187,11 @@ export async function runRecertificationReminderSchedule(input?: { asOf?: Date }
     });
 
     await recordAuditEvent({
-      entityType: "certification_status",
+      entityType: auditEntityTypes.certificationStatus,
       entityId: certification.id,
-      action: result.delivered ? "recertification_reminder_sent" : "recertification_reminder_failed",
+      action: result.delivered
+        ? auditActions.certification.recertificationReminderSent
+        : auditActions.certification.recertificationReminderFailed,
       actorId: undefined,
       metadata: {
         certificationId: certification.id,
@@ -253,7 +257,7 @@ async function sendRecertificationReminder(input: {
   }
 
   if (channel === "log") {
-    logOperationalEvent("recertification_reminder_sent", {
+    logOperationalEvent(operationalEvents.certification.recertificationReminderSent, {
       channel,
       ...payload,
     });
@@ -277,7 +281,7 @@ async function sendRecertificationReminder(input: {
   const webhookUrl = env.PARTICIPANT_NOTIFICATION_WEBHOOK_URL;
   if (!webhookUrl) {
     logOperationalEvent(
-      "recertification_reminder_failed",
+      operationalEvents.certification.recertificationReminderFailed,
       {
         channel,
         ...payload,
@@ -305,7 +309,7 @@ async function sendRecertificationReminder(input: {
     if (!response.ok) {
       const failureReason = `webhook_non_2xx_${response.status}`;
       logOperationalEvent(
-        "recertification_reminder_failed",
+        operationalEvents.certification.recertificationReminderFailed,
         {
           channel,
           ...payload,
@@ -320,7 +324,7 @@ async function sendRecertificationReminder(input: {
       };
     }
 
-    logOperationalEvent("recertification_reminder_sent", {
+    logOperationalEvent(operationalEvents.certification.recertificationReminderSent, {
       channel,
       ...payload,
     });
@@ -331,7 +335,7 @@ async function sendRecertificationReminder(input: {
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "webhook_send_failed";
     logOperationalEvent(
-      "recertification_reminder_failed",
+      operationalEvents.certification.recertificationReminderFailed,
       {
         channel,
         ...payload,
@@ -351,9 +355,9 @@ async function sendRecertificationReminder(input: {
 
 async function hasReminderAuditEventForDay(certificationId: string, reminderDaysBefore: number, asOfDate: string) {
   const existing = await auditRepository.findAuditEventMetadataByEntityAndAction(
-    "certification_status",
+    auditEntityTypes.certificationStatus,
     certificationId,
-    "recertification_reminder_sent",
+    auditActions.certification.recertificationReminderSent,
   );
   return existing.some(
     (event) =>

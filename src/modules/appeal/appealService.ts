@@ -7,6 +7,8 @@ import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "../certification/index.js";
 import { env } from "../../config/env.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
@@ -51,9 +53,9 @@ export async function createSubmissionAppeal(input: {
     await txRepo.updateSubmissionStatus(submission.id, SubmissionStatus.UNDER_REVIEW);
 
     await recordAuditEvent({
-      entityType: "appeal",
+      entityType: auditEntityTypes.appeal,
       entityId: createdAppeal.id,
-      action: "appeal_created",
+      action: auditActions.appeal.created,
       actorId: input.appealedById,
       metadata: {
         submissionId: submission.id,
@@ -153,9 +155,9 @@ export async function claimAppeal(appealId: string, handlerId: string) {
   const claimed = await appealRepository.markAppealInReview(appealId, handlerId, appeal.claimedAt);
 
   await recordAuditEvent({
-    entityType: "appeal",
+    entityType: auditEntityTypes.appeal,
     entityId: claimed.id,
-    action: "appeal_claimed",
+    action: auditActions.appeal.claimed,
     actorId: handlerId,
     metadata: {
       submissionId: appeal.submissionId,
@@ -232,7 +234,7 @@ export async function resolveAppeal(input: {
         finalisedAt,
         finalisedById: input.handlerId,
         actorId: input.handlerId,
-        auditAction: "appeal_resolution_decision_created",
+        auditAction: auditActions.appeal.resolutionDecisionCreated,
         auditMetadata: {
           submissionId: latestDecision.submissionId,
           appealId: appeal.id,
@@ -251,9 +253,9 @@ export async function resolveAppeal(input: {
     );
 
     await recordAuditEvent({
-      entityType: "appeal",
+      entityType: auditEntityTypes.appeal,
       entityId: resolvedAppeal.id,
-      action: "appeal_resolved",
+      action: auditActions.appeal.resolved,
       actorId: input.handlerId,
       metadata: {
         submissionId: latestDecision.submissionId,
@@ -301,9 +303,9 @@ export async function supersedeEligibleAppealsForRetake(
 
   for (const appeal of appeals) {
     await recordAuditEvent({
-      entityType: "appeal",
+      entityType: auditEntityTypes.appeal,
       entityId: appeal.id,
-      action: "appeal_superseded",
+      action: auditActions.appeal.superseded,
       actorId: undefined,
       metadata: { newSubmissionId, supersededAt: now.toISOString() },
     }, tx);
@@ -319,7 +321,7 @@ async function safeNotifyAppealStatusTransition(
     await notifyAppealStatusTransition(input);
   } catch (error) {
     logOperationalEvent(
-      "participant_notification_pipeline_failed",
+      operationalEvents.certification.participantNotificationPipelineFailed,
       {
         appealId: input.appealId,
         submissionId: input.submissionId,

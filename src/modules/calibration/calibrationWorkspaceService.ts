@@ -5,6 +5,7 @@ import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { redFlagsCodec } from "../../codecs/redFlagsCodec.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 
@@ -242,9 +243,9 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
   };
 
   await recordAuditEvent({
-    entityType: "calibration_workspace",
+    entityType: auditEntityTypes.calibrationWorkspace,
     entityId: module.id,
-    action: "calibration_workspace_session_started",
+    action: auditActions.calibration.workspaceSessionStarted,
     actorId: input.actorId,
     metadata: {
       moduleId: module.id,

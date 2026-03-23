@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { OperationalEventMetadataByName, OperationalEventName } from "./operationalEvents.js";
 
 type LogLevel = "info" | "error";
 
@@ -7,9 +8,9 @@ export function resolveCorrelationId(headerValue: string | undefined) {
   return trimmed && trimmed.length > 0 ? trimmed : crypto.randomUUID();
 }
 
-export function logOperationalEvent(
-  event: string,
-  metadata: Record<string, unknown> = {},
+export function logOperationalEvent<TEvent extends OperationalEventName>(
+  event: TEvent,
+  metadata: OperationalEventMetadataByName[TEvent],
   level: LogLevel = "info",
 ) {
   if (process.env.NODE_ENV === "test") {

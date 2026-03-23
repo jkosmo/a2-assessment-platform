@@ -4,18 +4,14 @@ import { sha256 } from "../utils/hash.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import type { AuditAction, AuditEventInput } from "../observability/auditEvents.js";
 
 type AuditTxClient = Pick<typeof prisma, "auditEvent" | "submission">;
 
-type AuditInput = {
-  entityType: string;
-  entityId: string;
-  action: string;
-  actorId?: string;
-  metadata?: Record<string, unknown>;
-};
-
-export async function recordAuditEvent(input: AuditInput, tx?: AuditTxClient) {
+export async function recordAuditEvent<TAction extends AuditAction>(
+  input: AuditEventInput<TAction>,
+  tx?: AuditTxClient,
+) {
   const metadataJson = JSON.stringify(input.metadata ?? {});
   const repo = tx ? createAuditRepository(tx) : auditRepository;
 

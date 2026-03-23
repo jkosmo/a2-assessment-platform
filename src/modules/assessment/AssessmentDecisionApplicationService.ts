@@ -1,6 +1,8 @@
 import { createAssessmentDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { notifyAssessmentResult } from "../certification/index.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
@@ -67,7 +69,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
       locale: input.submissionLocale,
     }).catch((error: unknown) => {
       logOperationalEvent(
-        "participant_notification_failed",
+        operationalEvents.certification.participantNotificationPipelineFailed,
         {
           submissionId: input.submissionId,
           errorMessage: error instanceof Error ? error.message : "Unknown error",
@@ -78,9 +80,9 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
   }
 
   await recordAuditEvent({
-    entityType: "assessment_job",
+    entityType: auditEntityTypes.assessmentJob,
     entityId: input.jobId,
-    action: "assessment_job_completed",
+    action: auditActions.assessment.assessmentJobCompleted,
     actorId: input.userId,
     metadata: { submissionId: input.submissionId },
   });

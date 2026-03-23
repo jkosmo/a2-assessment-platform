@@ -4,6 +4,7 @@ import { createDecisionRepository } from "../../repositories/decisionRepository.
 import { runInTransaction } from "../../db/transaction.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
 import {
   hasForcingRedFlag,
@@ -130,9 +131,9 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       });
 
       await recordAuditEvent({
-        entityType: "manual_review",
+        entityType: auditEntityTypes.manualReview,
         entityId: review.id,
-        action: "manual_review_opened",
+        action: auditActions.manualReview.opened,
         actorId: input.userId,
         metadata: {
           submissionId: input.submissionId,
@@ -155,9 +156,9 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     }
 
     await recordAuditEvent({
-      entityType: "assessment_decision",
+      entityType: auditEntityTypes.assessmentDecision,
       entityId: decision.id,
-      action: "decision_created",
+      action: auditActions.assessment.decisionCreated,
       actorId: input.userId,
       metadata: {
         submissionId: input.submissionId,

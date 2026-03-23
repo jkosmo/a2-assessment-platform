@@ -3,6 +3,8 @@ import type { DeletionTrigger, DeletionRequestStatus } from "@prisma/client";
 import { DeletionTrigger as DeletionTriggerEnum } from "../../db/prismaRuntime.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { runInTransaction } from "../../db/transaction.js";
 import {
   createPseudonymizationRepository,
@@ -53,7 +55,11 @@ export async function pseudonymizeUser(
   }
 
   if (user.isAnonymized) {
-    logOperationalEvent("pseudonymization_skipped", { userId, reason: "already_pseudonymized", trigger });
+    logOperationalEvent(operationalEvents.pseudonymization.skipped, {
+      userId,
+      reason: "already_pseudonymized",
+      trigger,
+    });
     return { userId, trigger, cancelledJobCount: 0 };
   }
 
@@ -78,9 +84,9 @@ export async function pseudonymizeUser(
     // 4. Audit event
     await recordAuditEvent(
       {
-        entityType: "user",
+        entityType: auditEntityTypes.user,
         entityId: userId,
-        action: "user_pseudonymized",
+        action: auditActions.user.pseudonymized,
         actorId: undefined,
         metadata: { trigger, cancelledJobCount: cancelledJobs.count, pseudonymizedAt: now.toISOString() },
       },
@@ -90,7 +96,11 @@ export async function pseudonymizeUser(
     return { cancelledJobCount: cancelledJobs.count };
   });
 
-  logOperationalEvent("user_pseudonymized", { userId, trigger, cancelledJobCount: result.cancelledJobCount });
+  logOperationalEvent(operationalEvents.pseudonymization.userPseudonymized, {
+    userId,
+    trigger,
+    cancelledJobCount: result.cancelledJobCount,
+  });
 
   return { userId, trigger, cancelledJobCount: result.cancelledJobCount };
 }

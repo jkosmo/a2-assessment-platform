@@ -3,6 +3,7 @@ import { env } from "../../config/env.js";
 import { appealRepository } from "./appealRepository.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 
 type SlaState = "ON_TRACK" | "AT_RISK" | "OVERDUE" | "RESOLVED";
 
@@ -75,11 +76,11 @@ export async function collectAppealSlaMonitorSnapshot(now = new Date()): Promise
 
 export async function runAppealSlaMonitorNow(now = new Date()) {
   const snapshot = await collectAppealSlaMonitorSnapshot(now);
-  logOperationalEvent("appeal_sla_backlog", snapshot);
+  logOperationalEvent(operationalEvents.appeal.slaBacklog, snapshot);
 
   if (snapshot.thresholdBreached) {
     logOperationalEvent(
-      "appeal_overdue_detected",
+      operationalEvents.appeal.overdueDetected,
       {
         overdueAppeals: snapshot.overdueAppeals,
         overdueThreshold: snapshot.overdueThreshold,

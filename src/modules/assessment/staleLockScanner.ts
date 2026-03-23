@@ -2,6 +2,8 @@ import { env } from "../../config/env.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 
 export type StaleLockScanResult = {
   scannedAt: string;
@@ -27,9 +29,11 @@ export async function scanAndResetStaleJobs(): Promise<StaleLockScanResult> {
     });
 
     await recordAuditEvent({
-      entityType: "assessment_job",
+      entityType: auditEntityTypes.assessmentJob,
       entityId: job.id,
-      action: willFail ? "assessment_job_stale_lock_failed" : "assessment_job_stale_lock_reset",
+      action: willFail
+        ? auditActions.assessment.assessmentJobStaleLockFailed
+        : auditActions.assessment.assessmentJobStaleLockReset,
       metadata: {
         submissionId: job.submissionId,
         attempts: job.attempts,
@@ -38,7 +42,7 @@ export async function scanAndResetStaleJobs(): Promise<StaleLockScanResult> {
       },
     });
 
-    logOperationalEvent("assessment_job_stale_lock_detected", {
+    logOperationalEvent(operationalEvents.assessment.jobStaleLockDetected, {
       jobId: job.id,
       submissionId: job.submissionId,
       attempts: job.attempts,
@@ -63,7 +67,7 @@ export async function alertOnStuckJobs(): Promise<void> {
 
   for (const job of stuckJobs) {
     logOperationalEvent(
-      "assessment_job_stuck_alert",
+      operationalEvents.assessment.jobStuckAlert,
       {
         correlationId: job.id,
         jobId: job.id,
