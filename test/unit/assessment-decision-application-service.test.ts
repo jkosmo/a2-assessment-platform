@@ -154,7 +154,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(logOperationalEvent).toHaveBeenCalledWith(
-      "participant_notification_failed",
+      "participant_notification_pipeline_failed",
       expect.objectContaining({ submissionId: "sub-1" }),
       "error",
     );

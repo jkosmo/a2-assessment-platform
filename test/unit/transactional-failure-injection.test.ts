@@ -410,7 +410,7 @@ describe("transactional failure injection", () => {
         overrideDecision: { id: "decision-2" },
       });
       expect(logOperationalEvent).toHaveBeenCalledWith(
-        "participant_notification_failed",
+        "participant_notification_pipeline_failed",
         expect.objectContaining({ submissionId: "submission-1" }),
         "error",
       );
