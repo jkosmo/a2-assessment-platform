@@ -660,6 +660,15 @@
       <form method="dialog">
         <h2 id="authoringPromptDialogTitle" data-i18n="adminContent.promptDialog.title">Authoring prompt options</h2>
         <div>
+          <label for="promptCertificationLevel" data-i18n="adminContent.promptDialog.certificationLevel">Certification level</label>
+          <select id="promptCertificationLevel">
+            <option value="" data-i18n="adminContent.promptDialog.certificationLevelBlank">— not specified —</option>
+            <option value="basic" data-i18n="adminContent.promptDialog.certificationLevelBasic">Basic</option>
+            <option value="intermediate" data-i18n="adminContent.promptDialog.certificationLevelIntermediate">Intermediate</option>
+            <option value="advanced" data-i18n="adminContent.promptDialog.certificationLevelAdvanced">Advanced</option>
+          </select>
+        </div>
+        <div>
           <label for="promptMcqCount" data-i18n="adminContent.promptDialog.mcqCount">Number of MCQ questions</label>
           <input id="promptMcqCount" type="number" value="10" min="1" max="50" autocomplete="off" />
         </div>

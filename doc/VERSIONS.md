@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.34 - 2026-03-23
+
+Admin-UI: sertifiseringsnivå-valg i forfatterprompt-dialogboksen.
+- Ny `<select>` for certificationLevel (blank / grunnleggende / videregående / avansert)
+- Nivået forhåndsutfyller `module.certificationLevel` i JSON-malen og legger til kalibreringsinstruks i prompten
+- Oversettelser for alle tre lokaler (en-GB, nb, nn)
+
 ## 0.9.33 - 2026-03-23
 
 LLM innholdsgenerering: modul-draft og MCQ (#245, #246).

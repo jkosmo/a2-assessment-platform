@@ -49,6 +49,7 @@ const importDraftJsonInput = document.getElementById("importDraftJson");
 const applyImportDraftButton = document.getElementById("applyImportDraft");
 const copyAuthoringPromptButton = document.getElementById("copyAuthoringPrompt");
 const authoringPromptDialog = document.getElementById("authoringPromptDialog");
+const promptCertificationLevelSelect = document.getElementById("promptCertificationLevel");
 const promptMcqCountInput = document.getElementById("promptMcqCount");
 const promptFieldResponse = document.getElementById("promptFieldResponse");
 const promptFieldReflection = document.getElementById("promptFieldReflection");
@@ -81,7 +82,7 @@ const publishModuleVersionIdInput = document.getElementById("publishModuleVersio
 const publishModuleVersionButton = document.getElementById("publishModuleVersion");
 
 const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
-function buildAuthoringPrompt(mcqCount, fields) {
+function buildAuthoringPrompt(mcqCount, fields, certificationLevel = null) {
   const questionStub = `{
         "stem": {"en-GB": "", "nb": "", "nn": ""},
         "options": [
@@ -100,6 +101,12 @@ function buildAuthoringPrompt(mcqCount, fields) {
   const schemaShape = fields.length > 0
     ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields: fieldsWithPlaceholder }, null, 4).split("\n").join("\n    ")}`
     : "";
+  const levelNote = certificationLevel
+    ? `\n- module.certificationLevel is fixed to "${certificationLevel}". Use this verbatim for all locales unless a locale-specific translation is clearly appropriate. Calibrate task complexity, MCQ distractor difficulty, and guidanceText depth to match a ${certificationLevel} certification level.`
+    : "";
+  const certificationLevelValue = certificationLevel
+    ? `{"en-GB": "${certificationLevel}", "nb": "${certificationLevel}", "nn": "${certificationLevel}"}`
+    : `{"en-GB": "", "nb": "", "nn": ""}`;
   return `You are producing a module draft JSON for an assessment platform.
 
 Return one JSON object only.
@@ -140,7 +147,7 @@ Requirements:
 - moduleVersion.taskText must ask the participant to explain, compare, or interpret concepts from the source text itself. Do not require application to a fictional or external example unless the source explicitly supports that framing.
 - moduleVersion.guidanceText must describe what a good submission should include, based only on what the source actually covers.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
-- Generate exactly ${mcqCount} MCQ question${mcqCount !== 1 ? "s" : ""} in mcqSet.questions.${schemaNote}
+- Generate exactly ${mcqCount} MCQ question${mcqCount !== 1 ? "s" : ""} in mcqSet.questions.${schemaNote}${levelNote}
 
 First, identify the core concepts explicitly supported by the source material.
 Then build the module using only those concepts.
@@ -168,11 +175,7 @@ Return JSON in this exact shape:
       "nb": "",
       "nn": ""
     },
-    "certificationLevel": {
-      "en-GB": "",
-      "nb": "",
-      "nn": ""
-    },
+    "certificationLevel": ${certificationLevelValue},
     "validFrom": "",
     "validTo": ""
   },
@@ -2994,6 +2997,7 @@ previewCurrentDraftButton.addEventListener("click", async () => {
 });
 
 copyAuthoringPromptButton.addEventListener("click", () => {
+  promptCertificationLevelSelect.value = "";
   promptMcqCountInput.value = "10";
   promptCustomFieldsInput.value = "";
   promptFieldResponse.checked = true;
@@ -3016,12 +3020,13 @@ authoringPromptDialog.addEventListener("submit", async (e) => {
     setMessage(t("adminContent.errors.invalidJsonPrefix") + " custom fields", "error");
     return;
   }
+  const certificationLevel = promptCertificationLevelSelect.value || null;
   authoringPromptDialog.close();
   try {
-    const prompt = buildAuthoringPrompt(mcqCount, fields);
+    const prompt = buildAuthoringPrompt(mcqCount, fields, certificationLevel);
     await copyTextToClipboard(prompt);
     setMessage(t("adminContent.message.authoringPromptCopied"));
-    log({ authoringPromptCopied: true, mcqCount, fieldCount: fields.length });
+    log({ authoringPromptCopied: true, mcqCount, fieldCount: fields.length, certificationLevel });
   } catch (error) {
     const message = parseActionableErrorMessage(error);
     setMessage(message, "error");
