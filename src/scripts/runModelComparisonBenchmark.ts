@@ -114,6 +114,7 @@ async function runSingle(
         responseLocale: assessmentCase.responseLocale,
         moduleTaskText: assessmentCase.moduleTaskText,
         moduleGuidanceText: assessmentCase.moduleGuidanceText,
+        rubricCriteriaIds: assessmentCase.rubricCriteriaIds,
         assessmentPass: "primary",
       },
       {

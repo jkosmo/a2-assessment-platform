@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.31 - 2026-03-23
+
+Benchmark: legg til reelle Bourdieu-caser fra staging (#144).
+- `bourdieu_nb_pass` — tydelig PASS (totalScore 91.43), perfekt MCQ
+- `bourdieu_nb_borderline_fail` — grenseland FAIL (totalScore 79.43), perfekt MCQ, svakt på praktisk
+- `rubricCriteriaIds` valgfritt felt på `AssessmentBatchCase` — Bourdieu-casene bruker domenespesifikke kriterier
+- `runModelComparisonBenchmark` sender `rubricCriteriaIds` til assessment-tjenesten
+
 ## 0.9.30 - 2026-03-23
 
 Røde flagg: legg til semantiske beskrivelser i prompt-kontrakten (#243).
