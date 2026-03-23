@@ -1,8 +1,8 @@
 import express from "express";
 import path from "node:path";
-import { AppRole } from "./db/prismaRuntime.js";
 import { appName, appVersion } from "./config/appMetadata.js";
 import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.js";
+import { rolesFor } from "./config/capabilities.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
@@ -85,60 +85,22 @@ app.get("/admin-platform", (_request, response) => {
 app.use("/api", authenticate, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
-app.use(
-  "/api/modules",
-  requireAnyRole([
-    AppRole.PARTICIPANT,
-    AppRole.SUBJECT_MATTER_OWNER,
-    AppRole.ADMINISTRATOR,
-    AppRole.APPEAL_HANDLER,
-    AppRole.REPORT_READER,
-    AppRole.REVIEWER,
-  ]),
-  modulesRouter,
-);
-app.use(
-  "/api/submissions",
-  requireAnyRole([AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER]),
-  submissionsRouter,
-);
-app.use(
-  "/api/assessments",
-  requireAnyRole([AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER]),
-  assessmentsRouter,
-);
-app.use(
-  "/api/audit",
-  requireAnyRole([
-    AppRole.PARTICIPANT,
-    AppRole.SUBJECT_MATTER_OWNER,
-    AppRole.ADMINISTRATOR,
-    AppRole.APPEAL_HANDLER,
-    AppRole.REPORT_READER,
-    AppRole.REVIEWER,
-  ]),
-  auditRouter,
-);
-app.use("/api/reviews", requireAnyRole([AppRole.ADMINISTRATOR, AppRole.REVIEWER]), reviewsRouter);
-app.use("/api/appeals", requireAnyRole([AppRole.ADMINISTRATOR, AppRole.APPEAL_HANDLER]), appealsRouter);
-app.use(
-  "/api/reports",
-  requireAnyRole([AppRole.ADMINISTRATOR, AppRole.REPORT_READER, AppRole.SUBJECT_MATTER_OWNER]),
-  reportsRouter,
-);
+app.use("/api/modules", requireAnyRole(rolesFor("modules")), modulesRouter);
+app.use("/api/submissions", requireAnyRole(rolesFor("submissions")), submissionsRouter);
+app.use("/api/assessments", requireAnyRole(rolesFor("assessments")), assessmentsRouter);
+app.use("/api/audit", requireAnyRole(rolesFor("audit")), auditRouter);
+app.use("/api/reviews", requireAnyRole(rolesFor("reviews")), reviewsRouter);
+app.use("/api/appeals", requireAnyRole(rolesFor("appeals")), appealsRouter);
+app.use("/api/reports", requireAnyRole(rolesFor("reports")), reportsRouter);
 app.use(
   "/api/calibration",
   requireAnyRole(participantConsoleRuntimeConfig.calibrationWorkspace.accessRoles),
   calibrationRouter,
 );
-app.use(
-  "/api/admin/content",
-  requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]),
-  adminContentRouter,
-);
-app.use("/api/admin/modules", requireAnyRole([AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER]), adminModulesRouter);
-app.use("/api/admin/platform", requireAnyRole([AppRole.ADMINISTRATOR]), adminPlatformRouter);
-app.use("/api/admin/sync/org", requireAnyRole([AppRole.ADMINISTRATOR]), orgSyncRouter);
+app.use("/api/admin/content", requireAnyRole(rolesFor("admin_content")), adminContentRouter);
+app.use("/api/admin/modules", requireAnyRole(rolesFor("admin_modules")), adminModulesRouter);
+app.use("/api/admin/platform", requireAnyRole(rolesFor("admin_platform")), adminPlatformRouter);
+app.use("/api/admin/sync/org", requireAnyRole(rolesFor("admin_sync_org")), orgSyncRouter);
 
 app.use(errorHandlingMiddleware);
 

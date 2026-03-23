@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.38 - 2026-03-23
+
+Refaktor: samlet capability-katalog for API-ruter (#251).
+- Ny `src/config/capabilities.ts` med `API_ROUTE_CAPABILITIES`-array og `rolesFor(id)` hjelpefunksjon
+- `src/app.ts` bruker nå katalogen i stedet for inline rolle-arrays — eliminerer tredobbel duplisering
+- `AppRole`-import fjernet fra `app.ts` (ikke lenger nødvendig der)
+- `/api/calibration` beholder runtime-konfigurerbare roller fra `participant-console.json`
+
 ## 0.9.37 - 2026-03-23
 
 Docs sync: workspace-ruter, monitorer og env-defaults (#254).
