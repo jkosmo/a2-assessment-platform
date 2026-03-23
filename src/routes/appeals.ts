@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { claimAppeal, getAppealWorkspace, listAppealQueue, resolveAppeal, buildAppealSlaSnapshot } from "../modules/appeal/index.js";
+import { claimAppeal, getAppealWorkspaceView, listAppealQueue, resolveAppeal } from "../modules/appeal/index.js";
 
 const appealsRouter = Router();
 
@@ -47,21 +47,12 @@ appealsRouter.get("/", async (request, response) => {
 });
 
 appealsRouter.get("/:appealId", async (request, response) => {
-  const workspace = await getAppealWorkspace(request.params.appealId);
-  if (!workspace) {
+  const appeal = await getAppealWorkspaceView(request.params.appealId, request.context?.locale ?? "nb");
+  if (!appeal) {
     response.status(404).json({ error: "not_found", message: "Appeal not found." });
     return;
   }
-
-  response.json({
-    appeal: workspace,
-    sla: buildAppealSlaSnapshot({
-      createdAt: workspace.createdAt,
-      claimedAt: workspace.claimedAt,
-      resolvedAt: workspace.resolvedAt,
-      appealStatus: workspace.appealStatus,
-    }),
-  });
+  response.json(appeal);
 });
 
 appealsRouter.post("/:appealId/claim", async (request, response, next) => {

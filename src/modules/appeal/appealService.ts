@@ -10,6 +10,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
+import { toAppealWorkspaceView } from "./appealReadModels.js";
 
 export async function createSubmissionAppeal(input: {
   submissionId: string;
@@ -118,6 +119,12 @@ export async function listAppealQueue(input: {
 
 export async function getAppealWorkspace(appealId: string) {
   return appealRepository.findAppealWorkspace(appealId);
+}
+
+export async function getAppealWorkspaceView(appealId: string, locale: string) {
+  const workspace = await getAppealWorkspace(appealId);
+
+  return workspace ? toAppealWorkspaceView(workspace, locale) : null;
 }
 
 export async function claimAppeal(appealId: string, handlerId: string) {

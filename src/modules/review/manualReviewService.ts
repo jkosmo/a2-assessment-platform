@@ -8,6 +8,7 @@ import { notifyAssessmentResult } from "../certification/index.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
+import { toManualReviewWorkspaceView } from "./manualReviewReadModels.js";
 
 export async function listManualReviewQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "SUPERSEDED">;
@@ -41,6 +42,12 @@ export async function listManualReviewQueue(input: {
 
 export async function getManualReviewWorkspace(reviewId: string) {
   return manualReviewRepository.findManualReviewWorkspace(reviewId);
+}
+
+export async function getManualReviewWorkspaceView(reviewId: string, locale: string) {
+  const workspace = await getManualReviewWorkspace(reviewId);
+
+  return workspace ? toManualReviewWorkspaceView(workspace, locale) : null;
 }
 
 export async function claimManualReview(reviewId: string, reviewerId: string) {

@@ -9,6 +9,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { resolveSubmissionResponseJson } from "../assessment/documentParsingService.js";
 import { supersedeEligibleReviewsForRetake } from "../review/index.js";
 import { supersedeEligibleAppealsForRetake } from "../appeal/index.js";
+import { toSubmissionHistoryResponseView, toSubmissionResultView } from "./submissionReadModels.js";
 
 export type CreateSubmissionInput = {
   userId: string;
@@ -100,4 +101,23 @@ export async function getOwnedSubmissionHistory(input: {
   limit: number;
 }) {
   return submissionRepository.findOwnedSubmissionHistory(input.userId, input.limit);
+}
+
+export async function getOwnedSubmissionHistoryView(input: {
+  userId: string;
+  limit: number;
+  locale: string;
+}) {
+  const submissions = await getOwnedSubmissionHistory({
+    userId: input.userId,
+    limit: input.limit,
+  });
+
+  return toSubmissionHistoryResponseView(submissions, input.locale);
+}
+
+export async function getOwnedSubmissionResultView(submissionId: string, userId: string) {
+  const submission = await getOwnedSubmission(submissionId, userId);
+
+  return submission ? toSubmissionResultView(submission) : null;
 }

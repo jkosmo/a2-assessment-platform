@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { localizeContentText } from "../i18n/content.js";
 import {
   claimManualReview,
   finalizeManualReviewOverride,
-  getManualReviewWorkspace,
+  getManualReviewWorkspaceView,
   listManualReviewQueue,
 } from "../modules/review/index.js";
 
@@ -53,43 +52,12 @@ reviewsRouter.get("/", async (request, response) => {
 });
 
 reviewsRouter.get("/:reviewId", async (request, response) => {
-  const workspace = await getManualReviewWorkspace(request.params.reviewId);
-  if (!workspace) {
+  const review = await getManualReviewWorkspaceView(request.params.reviewId, request.context?.locale ?? "nb");
+  if (!review) {
     response.status(404).json({ error: "not_found", message: "Manual review not found." });
     return;
   }
-
-  const locale = request.context?.locale ?? "nb";
-  const parsedResponse = (() => {
-    try {
-      return JSON.parse(workspace.submission.responseJson) as Record<string, unknown>;
-    } catch {
-      return {} as Record<string, unknown>;
-    }
-  })();
-
-  response.json({
-    review: {
-      ...workspace,
-      submission: {
-        ...workspace.submission,
-        module: {
-          ...workspace.submission.module,
-          title:
-            localizeContentText(locale, workspace.submission.module.title) ??
-            workspace.submission.module.title,
-          description:
-            localizeContentText(locale, workspace.submission.module.description ?? null) ??
-            workspace.submission.module.description,
-        },
-        rawText: typeof parsedResponse.response === "string" ? parsedResponse.response : null,
-        reflectionText:
-          typeof parsedResponse.reflection === "string" ? parsedResponse.reflection : null,
-        promptExcerpt:
-          typeof parsedResponse.promptExcerpt === "string" ? parsedResponse.promptExcerpt : null,
-      },
-    },
-  });
+  response.json(review);
 });
 
 reviewsRouter.post("/:reviewId/claim", async (request, response, next) => {
