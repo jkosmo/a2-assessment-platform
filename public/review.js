@@ -82,22 +82,12 @@ let selectedAppealId = "";
 let selectedAppealDetails = null;
 let activeAppealQueueLoad = null;
 
-const defaultWorkspaceNavigationItems = [
-  { id: "participant", path: "/participant", labelKey: "nav.participant", requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"] },
-  { id: "review", path: "/review", labelKey: "nav.review", requiredRoles: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"] },
-  { id: "calibration", path: "/calibration", labelKey: "nav.calibration", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
-  { id: "admin-content", path: "/admin-content", labelKey: "nav.adminContent", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
-  { id: "admin-platform", path: "/admin-platform", labelKey: "nav.adminPlatform", requiredRoles: ["ADMINISTRATOR"] },
-  { id: "results", path: "/results", labelKey: "nav.results", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"] },
-  { id: "profile", path: "/profile", labelKey: "nav.profile", requiredRoles: [] },
-];
-
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: rawDebugEnabled,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
-  navigation: { items: defaultWorkspaceNavigationItems },
+  navigation: { items: [] },
   manualReviewWorkspace: {
     availableStatuses: ["OPEN", "IN_REVIEW", "RESOLVED"],
     defaultStatuses: ["OPEN", "IN_REVIEW"],
@@ -362,7 +352,6 @@ function renderWorkspaceNavigation() {
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-    defaultWorkspaceNavigationItems,
   ).filter((item) => item.visible);
 
   const profileItem = allItems.find((item) => item.id === "profile");

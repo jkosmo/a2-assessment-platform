@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { env } from "./env.js";
+import { buildWorkspaceNavigationItems, type WorkspaceNavigationItem } from "./capabilities.js";
 
 const mockRoleSchema = z.enum([
   "PARTICIPANT",
@@ -28,18 +29,8 @@ const consoleIdentitySchema = z.object({
   roles: z.array(mockRoleSchema).min(1),
 });
 
-const workspaceNavigationItemSchema = z.object({
-  id: z.string().trim().min(1),
-  path: z.string().trim().min(1).regex(/^\//, "Navigation path must start with '/'."),
-  labelKey: z.string().trim().min(1),
-  requiredRoles: z.array(mockRoleSchema).default([]),
-});
-
 const participantConsoleConfigSchema = z.object({
   mockRolePresets: z.array(mockRoleSchema).min(1),
-  navigation: z.object({
-    items: z.array(workspaceNavigationItemSchema).min(1),
-  }),
   drafts: z.object({
     storageKey: z.string().trim().min(1),
     ttlMinutes: z.number().int().positive(),
@@ -95,7 +86,7 @@ export type ParticipantConsoleRuntimeConfig = {
   debugMode: boolean;
   mockRoleSwitchEnabled: boolean;
   mockRolePresets: ParticipantConsoleConfig["mockRolePresets"];
-  navigation: ParticipantConsoleConfig["navigation"];
+  navigation: { items: WorkspaceNavigationItem[] };
   drafts: ParticipantConsoleConfig["drafts"];
   appealWorkspace: ParticipantConsoleConfig["appealWorkspace"];
   manualReviewWorkspace: ParticipantConsoleConfig["manualReviewWorkspace"];
@@ -139,7 +130,9 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     debugMode: resolveParticipantConsoleDebugMode(),
     mockRoleSwitchEnabled: env.AUTH_MODE === "mock",
     mockRolePresets: config.mockRolePresets,
-    navigation: config.navigation,
+    navigation: {
+      items: buildWorkspaceNavigationItems(config.calibrationWorkspace.accessRoles),
+    },
     drafts: config.drafts,
     appealWorkspace: config.appealWorkspace,
     manualReviewWorkspace: config.manualReviewWorkspace,

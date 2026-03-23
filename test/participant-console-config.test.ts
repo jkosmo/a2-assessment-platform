@@ -1,5 +1,6 @@
 import request from "supertest";
 import { app } from "../src/app.js";
+import { buildWorkspaceNavigationItems } from "../src/config/capabilities.js";
 
 describe("participant console runtime config", () => {
   it("returns runtime config with role presets and auth metadata", async () => {
@@ -17,46 +18,6 @@ describe("participant console runtime config", () => {
       "REPORT_READER",
       "SUBJECT_MATTER_OWNER",
     ]);
-    expect(response.body.navigation).toEqual({
-      items: [
-        {
-          id: "participant",
-          path: "/participant",
-          labelKey: "nav.participant",
-          requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
-        },
-        {
-          id: "review",
-          path: "/review",
-          labelKey: "nav.review",
-          requiredRoles: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"],
-        },
-        {
-          id: "calibration",
-          path: "/calibration",
-          labelKey: "nav.calibration",
-          requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
-        },
-        {
-          id: "admin-content",
-          path: "/admin-content",
-          labelKey: "nav.adminContent",
-          requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
-        },
-        {
-          id: "results",
-          path: "/results",
-          labelKey: "nav.results",
-          requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"],
-        },
-        {
-          id: "admin-platform",
-          path: "/admin-platform",
-          labelKey: "nav.adminPlatform",
-          requiredRoles: ["ADMINISTRATOR"],
-        },
-      ],
-    });
     expect(response.body.drafts).toEqual({
       storageKey: "participant.moduleDrafts.v1",
       ttlMinutes: 240,
@@ -89,6 +50,9 @@ describe("participant console runtime config", () => {
         manualReviewRateMaximum: 0.35,
         benchmarkCoverageMinimum: 0.5,
       },
+    });
+    expect(response.body.navigation).toEqual({
+      items: buildWorkspaceNavigationItems(response.body.calibrationWorkspace.accessRoles),
     });
     expect(response.body.identityDefaults).toEqual({
       participant: {

@@ -348,45 +348,6 @@ Return JSON in this exact shape:
 Source material follows:
 [PASTE SOURCE MATERIAL HERE]`;
 
-const defaultWorkspaceNavigationItems = [
-  {
-    id: "participant",
-    path: "/participant",
-    labelKey: "nav.participant",
-    requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"],
-  },
-  {
-    id: "review",
-    path: "/review",
-    labelKey: "nav.review",
-    requiredRoles: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"],
-  },
-  {
-    id: "calibration",
-    path: "/calibration",
-    labelKey: "nav.calibration",
-    requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
-  },
-  {
-    id: "admin-content",
-    path: "/admin-content",
-    labelKey: "nav.adminContent",
-    requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
-  },
-  {
-    id: "admin-platform",
-    path: "/admin-platform",
-    labelKey: "nav.adminPlatform",
-    requiredRoles: ["ADMINISTRATOR"],
-  },
-  {
-    id: "profile",
-    path: "/profile",
-    labelKey: "nav.profile",
-    requiredRoles: [],
-  },
-];
-
 let currentLocale = resolveInitialLocale();
 let modules = [];
 let selectedModuleId = "";
@@ -397,9 +358,7 @@ let participantRuntimeConfig = {
   debugMode: true,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
-  navigation: {
-    items: defaultWorkspaceNavigationItems,
-  },
+  navigation: { items: [] },
   identityDefaults: {
     contentAdmin: {
       userId: "content-owner-1",
@@ -1248,7 +1207,6 @@ function renderWorkspaceNavigation() {
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-    defaultWorkspaceNavigationItems,
   ).filter((item) => item.visible);
 
   const profileItem = allItems.find((item) => item.id === "profile");

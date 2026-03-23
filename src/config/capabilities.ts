@@ -2,20 +2,17 @@ import { AppRole } from "../db/prismaRuntime.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 
 /**
- * Single source of truth for API route role requirements.
+ * Single source of truth for route and workspace role requirements.
  *
- * Each entry maps a route prefix (as mounted in app.ts) to the roles that may
- * access it.  app.ts consumes this catalog instead of repeating role arrays
- * inline, eliminating the previous three-way duplication between app.ts,
- * participant-console.json, and the RBAC matrix test.
+ * app.ts consumes the API route catalog and participantConsole.ts derives
+ * workspace navigation from the same module, eliminating duplicated role
+ * contracts between app.ts, participant-console.json, frontend fallback
+ * navigation arrays, and targeted tests.
  *
  * Note: /api/calibration roles are intentionally kept in participant-console.json
  * (calibrationWorkspace.accessRoles) because they are runtime-configurable.
- * app.ts reads those at startup and continues to use them directly.
- *
- * Note: workspace page role enforcement is handled by the client-side navigation
- * guard (participant-console.json requiredRoles) and is not duplicated here.
- * A future pass can consolidate those too once the JSON config is replaced.
+ * Workspace navigation for the calibration page therefore resolves those roles
+ * at runtime instead of hardcoding them here.
  */
 export const API_ROUTE_CAPABILITIES = [
   {
@@ -90,6 +87,12 @@ export const API_ROUTE_CAPABILITIES = [
 ] as const;
 
 export type ApiRouteCapability = (typeof API_ROUTE_CAPABILITIES)[number];
+export type WorkspaceNavigationItem = {
+  id: string;
+  path: string;
+  labelKey: string;
+  requiredRoles: AppRoleType[];
+};
 
 /**
  * Look up the roles for a given route id.  Throws if not found so that
@@ -102,4 +105,51 @@ export function rolesFor(id: ApiRouteCapability["id"]): AppRoleType[] {
     throw new Error(`No capability entry found for route id "${id}"`);
   }
   return [...entry.roles];
+}
+
+export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleType[]): WorkspaceNavigationItem[] {
+  return [
+    {
+      id: "participant",
+      path: "/participant",
+      labelKey: "nav.participant",
+      requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
+    },
+    {
+      id: "review",
+      path: "/review",
+      labelKey: "nav.review",
+      requiredRoles: [AppRole.REVIEWER, AppRole.APPEAL_HANDLER, AppRole.ADMINISTRATOR],
+    },
+    {
+      id: "calibration",
+      path: "/calibration",
+      labelKey: "nav.calibration",
+      requiredRoles: [...calibrationAccessRoles],
+    },
+    {
+      id: "admin-content",
+      path: "/admin-content",
+      labelKey: "nav.adminContent",
+      requiredRoles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR],
+    },
+    {
+      id: "results",
+      path: "/results",
+      labelKey: "nav.results",
+      requiredRoles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR, AppRole.REPORT_READER],
+    },
+    {
+      id: "admin-platform",
+      path: "/admin-platform",
+      labelKey: "nav.adminPlatform",
+      requiredRoles: [AppRole.ADMINISTRATOR],
+    },
+    {
+      id: "profile",
+      path: "/profile",
+      labelKey: "nav.profile",
+      requiredRoles: [],
+    },
+  ];
 }

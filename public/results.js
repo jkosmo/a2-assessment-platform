@@ -31,21 +31,11 @@ const exportPassRatesButton = document.getElementById("exportPassRates");
 const exportRecertificationButton = document.getElementById("exportRecertification");
 const participantBody = document.getElementById("participantBody");
 
-const defaultWorkspaceNavigationItems = [
-  { id: "participant", path: "/participant", labelKey: "nav.participant", requiredRoles: ["PARTICIPANT", "ADMINISTRATOR", "REVIEWER"] },
-  { id: "review", path: "/review", labelKey: "nav.review", requiredRoles: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"] },
-  { id: "calibration", path: "/calibration", labelKey: "nav.calibration", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
-  { id: "admin-content", path: "/admin-content", labelKey: "nav.adminContent", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"] },
-  { id: "admin-platform", path: "/admin-platform", labelKey: "nav.adminPlatform", requiredRoles: ["ADMINISTRATOR"] },
-  { id: "results", path: "/results", labelKey: "nav.results", requiredRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"] },
-  { id: "profile", path: "/profile", labelKey: "nav.profile", requiredRoles: [] },
-];
-
 let currentLocale = resolveInitialLocale();
 let participantRuntimeConfig = {
   authMode: "mock",
   mockRolePresets: [],
-  navigation: { items: defaultWorkspaceNavigationItems },
+  navigation: { items: [] },
   identityDefaults: {
     reportReader: {
       userId: "content-owner-1",
@@ -296,16 +286,18 @@ function renderRolePresetControl() {
   }
   mockRolePresetContainer.hidden = false;
   mockRolePresetSelect.innerHTML = "";
+  const manual = document.createElement("option");
+  manual.value = "";
+  manual.textContent = t("identity.rolePresetManual");
+  mockRolePresetSelect.appendChild(manual);
   for (const preset of roleSwitchState.presets) {
     const option = document.createElement("option");
-    option.value = preset.roles.join(",");
-    option.textContent = preset.label;
+    option.value = preset;
+    option.textContent = preset;
     mockRolePresetSelect.appendChild(option);
   }
-  const matching = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
-  if (matching) mockRolePresetSelect.value = matching;
-  const hint = roleSwitchState.presets.find((p) => p.roles.join(",") === mockRolePresetSelect.value)?.hint ?? "";
-  mockRolePresetHint.textContent = hint;
+  mockRolePresetSelect.value = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
+  mockRolePresetHint.textContent = t("identity.rolePresetHint");
 }
 
 function renderWorkspaceNavigation() {
@@ -314,7 +306,6 @@ function renderWorkspaceNavigation() {
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-    defaultWorkspaceNavigationItems,
   ).filter((item) => item.visible);
 
   const profileItem = allItems.find((item) => item.id === "profile");
@@ -349,9 +340,7 @@ function renderWorkspaceNavigation() {
 }
 
 function applyIdentityDefaults() {
-  const preset = roleSwitchState.identityDefaultPreset;
-  if (!preset) return;
-  const defaults = participantRuntimeConfig?.identityDefaults?.[preset];
+  const defaults = participantRuntimeConfig?.identityDefaults?.reportReader;
   if (!defaults) return;
   const userId = document.getElementById("userId");
   const email = document.getElementById("email");
