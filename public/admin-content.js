@@ -143,6 +143,7 @@ Requirements:
   - correctAnswer
   - rationale
 - correctAnswer must match one of the options exactly.
+- All 4 options in each question must be comparable in length and level of detail. A candidate must not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others. If the correct answer contains a qualifier or clause, all distractors must too. Never pad distractors with vague filler — write substantively comparable but wrong alternatives.
 - rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
 - moduleVersion.taskText must ask the participant to explain, compare, or interpret concepts from the source text itself. Do not require application to a fictional or external example unless the source explicitly supports that framing.
 - moduleVersion.guidanceText must describe what a good submission should include, based only on what the source actually covers.

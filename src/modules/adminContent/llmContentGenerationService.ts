@@ -87,6 +87,119 @@ function buildUrl(): string {
   return `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
 }
 
+export function buildModuleDraftPrompts(input: ModuleDraftInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a module content author for a professional certification platform. Return strict JSON only - no markdown, no commentary.";
+
+  const userPrompt = `Generate task text and guidance text for a certification module using the source material below as hidden author background only.
+
+Certification level: ${input.certificationLevel}
+Language: ${LOCALE_DISPLAY[input.locale]}
+
+## Authoring constraints
+
+- The source material is for you only. The candidate will NOT see it.
+- Write taskText and guidanceText so they are fully self-contained and usable on their own.
+- Do not mention "source material", "the text above", "the material", "the document", "the attachment", or equivalent wording.
+- Do not tell the candidate to read, review, use, cite, or refer to any unseen material.
+- Any facts, context, terminology, or scenario details needed by the candidate must be embedded directly in the generated task itself.
+
+## Scenario decision
+
+A scenario is a short, realistic situation (4-8 sentences) that grounds the task in a concrete context.
+
+Include a scenario in taskText when:
+- The module assesses situational analysis, ethical reasoning, professional judgement, or practical application of concepts
+- A concrete situation would let candidates demonstrate understanding beyond pure recall
+- The source material describes theory, frameworks, or principles that naturally apply to real situations
+
+Do NOT include a scenario when:
+- The task is primarily factual recall or text summarisation
+- The source material is itself the object of the task
+- A scenario would feel artificial or forced given the content
+
+If including a scenario:
+- Place it at the very top of taskText, clearly labelled "Scenario:" followed by a blank line
+- Keep it realistic, concise (4-8 sentences), and grounded in the facts from the source material without referring to that material
+- The task instruction below the scenario must direct the candidate to use the scenario as the basis for their response
+
+## Source material (hidden author background)
+
+${input.sourceMaterial}
+
+## Return format
+
+Return a single JSON object:
+{
+  "taskText": "full task text in ${LOCALE_DISPLAY[input.locale]}, including scenario at top if appropriate",
+  "guidanceText": "guidance for what a strong response contains, in ${LOCALE_DISPLAY[input.locale]}",
+  "includesScenario": true or false
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+export function buildMcqGenerationPrompts(input: McqGenerationInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are an MCQ question author for a professional certification platform. Return strict JSON only - no markdown, no commentary.";
+
+  const userPrompt = `Generate ${input.questionCount} multiple-choice questions using the source material below as hidden author background only.
+
+Certification level: ${input.certificationLevel}
+Language: ${LOCALE_DISPLAY[input.locale]}
+
+## Authoring constraints
+
+- The source material is for you only. The candidate will NOT see it.
+- Each question must be self-contained and understandable without any external text.
+- Do not mention "source material", "text above", "document", "attachment", or any unseen reference material.
+- Do not write stems, options, or rationales that assume the candidate can inspect the hidden source material.
+- If background facts are needed, incorporate them directly into the question stem.
+
+## Distractor quality
+
+${DISTRACTOR_GUIDELINES[input.certificationLevel]}
+
+## Option parity
+
+All 4 options in a question must be comparable in length and level of detail. This is critical: a candidate should not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others.
+
+Rules:
+- Write all options at the same level of specificity — if the correct answer contains a qualifier or clause, the distractors must too.
+- If the correct answer is a short phrase, keep all options short. If it is a full sentence, make all options full sentences of similar length.
+- Never pad distractors with vague filler words just to match length; instead, write distractors that are substantively comparable but wrong.
+- Review each set of 4 options before finalising: if any single option stands out in length or detail, rewrite it.
+
+Each question must have exactly 4 answer options. The correctAnswer must be one of the options verbatim.
+Write all text in ${LOCALE_DISPLAY[input.locale]}.
+
+## Source material (hidden author background)
+
+${input.sourceMaterial}
+
+## Return format
+
+Return a single JSON object:
+{
+  "questions": [
+    {
+      "stem": "question text",
+      "options": ["option A", "option B", "option C", "option D"],
+      "correctAnswer": "option A",
+      "rationale": "brief explanation of why the correct answer is right and why the distractors are wrong"
+    }
+  ]
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
 async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
@@ -137,45 +250,7 @@ async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknow
 // ---------------------------------------------------------------------------
 
 export async function generateModuleDraft(input: ModuleDraftInput): Promise<ModuleDraftResult> {
-  const systemPrompt =
-    "You are a module content author for a professional certification platform. Return strict JSON only — no markdown, no commentary.";
-
-  const userPrompt = `Generate task text and guidance text for a certification module based on the source material below.
-
-Certification level: ${input.certificationLevel}
-Language: ${LOCALE_DISPLAY[input.locale]}
-
-## Scenario decision
-
-A scenario is a short, realistic situation (4–8 sentences) that grounds the task in a concrete context.
-
-Include a scenario in taskText when:
-- The module assesses situational analysis, ethical reasoning, professional judgement, or practical application of concepts
-- A concrete situation would let candidates demonstrate understanding beyond pure recall
-- The source material describes theory, frameworks, or principles that naturally apply to real situations
-
-Do NOT include a scenario when:
-- The task is primarily factual recall or text summarisation
-- The source material is itself the object of the task (e.g. "summarise this text")
-- A scenario would feel artificial or forced given the content
-
-If including a scenario:
-- Place it at the very top of taskText, clearly labelled "Scenario:" followed by a blank line
-- Keep it realistic, concise (4–8 sentences), and directly grounded in the source material
-- The task instruction below the scenario must explicitly tell the candidate to use it as the basis for their response
-
-## Source material
-
-${input.sourceMaterial}
-
-## Return format
-
-Return a single JSON object:
-{
-  "taskText": "full task text in ${LOCALE_DISPLAY[input.locale]}, including scenario at top if appropriate",
-  "guidanceText": "guidance for what a strong response contains, in ${LOCALE_DISPLAY[input.locale]}",
-  "includesScenario": true or false
-}`;
+  const { systemPrompt, userPrompt } = buildModuleDraftPrompts(input);
 
   const raw = await callLlm(systemPrompt, userPrompt);
   const parsed = moduleDraftResponseCodec.safeParse(raw);
@@ -190,38 +265,7 @@ Return a single JSON object:
 // ---------------------------------------------------------------------------
 
 export async function generateMcqQuestions(input: McqGenerationInput): Promise<McqGenerationResult> {
-  const systemPrompt =
-    "You are an MCQ question author for a professional certification platform. Return strict JSON only — no markdown, no commentary.";
-
-  const userPrompt = `Generate ${input.questionCount} multiple-choice questions based on the source material below.
-
-Certification level: ${input.certificationLevel}
-Language: ${LOCALE_DISPLAY[input.locale]}
-
-## Distractor quality
-
-${DISTRACTOR_GUIDELINES[input.certificationLevel]}
-
-Each question must have exactly 4 answer options. The correctAnswer must be one of the options verbatim.
-Write all text in ${LOCALE_DISPLAY[input.locale]}.
-
-## Source material
-
-${input.sourceMaterial}
-
-## Return format
-
-Return a single JSON object:
-{
-  "questions": [
-    {
-      "stem": "question text",
-      "options": ["option A", "option B", "option C", "option D"],
-      "correctAnswer": "option A",
-      "rationale": "brief explanation of why the correct answer is right and why the distractors are wrong"
-    }
-  ]
-}`;
+  const { systemPrompt, userPrompt } = buildMcqGenerationPrompts(input);
 
   const raw = await callLlm(systemPrompt, userPrompt);
   const parsed = mcqGenerationResponseCodec.safeParse(raw);

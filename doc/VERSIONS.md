@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.35 - 2026-03-23
+
+MCQ-generering: krav om lengde- og detaljparitet mellom alternativer.
+- Ny «Option parity»-seksjon i MCQ-prompten: alle 4 alternativer skal ha sammenlignbar lengde og spesifisitet
+- Kandidaten skal ikke kunne gjette riktig svar basert på at ett alternativ er lengre eller mer detaljert
+- Samme regel lagt til i clipboard-prompten (`buildAuthoringPrompt`)
+
 ## 0.9.34 - 2026-03-23
 
 Admin-UI: sertifiseringsnivå-valg i forfatterprompt-dialogboksen.
