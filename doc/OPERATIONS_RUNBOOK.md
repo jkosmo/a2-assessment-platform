@@ -19,11 +19,11 @@ The current runtime no longer assumes a single all-in-one production process.
 
 Application code supports three roles through `PROCESS_ROLE`:
 
-| Role | Starts HTTP app | Starts AssessmentWorker | Starts AppealSlaMonitor |
-|---|---|---|---|
-| `web` | yes | no | no |
-| `worker` | minimal listener only | yes | yes |
-| `all` | yes | yes | yes |
+| Role | Starts HTTP app | Starts AssessmentWorker | Starts AppealSlaMonitor | Starts PseudonymizationMonitor | Starts AuditRetentionMonitor |
+|---|---|---|---|---|---|
+| `web` | yes | no | no | no | no |
+| `worker` | minimal listener only | yes | yes | yes | yes |
+| `all` | yes | yes | yes | yes | yes |
 
 Current Azure shape:
 - one App Service for web traffic with `PROCESS_ROLE=web`
@@ -68,6 +68,8 @@ Worker startup differs intentionally:
 4. `src/index.ts` starts a minimal HTTP listener and starts:
    - `AssessmentWorker`
    - `AppealSlaMonitor`
+   - `PseudonymizationMonitor`
+   - `AuditRetentionMonitor`
 
 The worker listener is only there so App Service keeps the process alive. It is not a full application surface.
 
@@ -174,9 +176,9 @@ tsx prisma/seed.ts
 ## Assessment Job Processing
 
 Core files:
-- `src/services/AssessmentWorker.ts`
-- `src/services/AssessmentJobRunner.ts`
-- `src/services/staleLockScanner.ts`
+- `src/modules/assessment/AssessmentWorker.ts`
+- `src/modules/assessment/AssessmentJobRunner.ts`
+- `src/modules/assessment/staleLockScanner.ts`
 
 Assessment job statuses:
 - `PENDING`
@@ -272,8 +274,8 @@ Interpretation:
 ## Appeal SLA Monitor
 
 Core files:
-- `src/services/AppealSlaMonitor.ts`
-- `src/services/appealSlaMonitorService.ts`
+- `src/modules/appeal/AppealSlaMonitor.ts`
+- `src/modules/appeal/appealSlaMonitorService.ts`
 
 What it does:
 - runs on the worker role

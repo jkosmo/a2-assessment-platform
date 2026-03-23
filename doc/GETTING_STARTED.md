@@ -136,7 +136,7 @@ AZURE_OPENAI_ENDPOINT
 AZURE_OPENAI_API_KEY
 AZURE_OPENAI_DEPLOYMENT
 AZURE_OPENAI_API_VERSION        (default: 2024-10-21)
-AZURE_OPENAI_TIMEOUT_MS         (default: 30000)
+AZURE_OPENAI_TIMEOUT_MS         (default: 120000)
 AZURE_OPENAI_TEMPERATURE        (default: 0)
 AZURE_OPENAI_MAX_TOKENS         (default: 1200)
 AZURE_OPENAI_TOKEN_LIMIT_PARAMETER   (max_tokens | max_completion_tokens | auto; default: auto)
@@ -172,7 +172,7 @@ http://localhost:3000/participant/completed
 ### Reviewer (`REVIEWER` / `ADMINISTRATOR` role)
 
 ```
-http://localhost:3000/manual-review
+http://localhost:3000/review
 ```
 
 - Queue shows `OPEN` / `IN_REVIEW` reviews by default; expand to `RESOLVED` via status pills
@@ -182,7 +182,7 @@ http://localhost:3000/manual-review
 ### Appeal Handler (`APPEAL_HANDLER` / `ADMINISTRATOR` role)
 
 ```
-http://localhost:3000/appeal-handler
+http://localhost:3000/review
 ```
 
 - Queue shows `OPEN` / `IN_REVIEW` appeals by default

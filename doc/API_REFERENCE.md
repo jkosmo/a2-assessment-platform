@@ -99,6 +99,27 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 | `POST` | `/api/admin/content/modules/:moduleId/mcq-set-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `GET` | `/api/admin/content/modules/:moduleId/export` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `DELETE` | `/api/admin/content/modules/:moduleId` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `POST` | `/api/admin/content/generate/module-draft` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `POST` | `/api/admin/content/generate/mcq` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+
+---
+
+## Admin — Modules
+
+| Method | Route | Role(s) |
+|---|---|---|
+| `GET` | `/api/admin/modules` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+
+---
+
+## Admin — Platform
+
+| Method | Route | Role(s) |
+|---|---|---|
+| `GET` | `/api/admin/platform` | ADMINISTRATOR |
+| `PUT` | `/api/admin/platform` | ADMINISTRATOR |
 
 ---
 
@@ -119,8 +140,9 @@ Static workspace pages served from `public/`:
 |---|---|
 | `/participant` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `/participant/completed` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `/manual-review` | REVIEWER, ADMINISTRATOR |
-| `/appeal-handler` | APPEAL_HANDLER, ADMINISTRATOR |
+| `/review` | REVIEWER, APPEAL_HANDLER, ADMINISTRATOR |
 | `/calibration` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
 | `/admin-content` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
 | `/results` | SUBJECT_MATTER_OWNER, ADMINISTRATOR, REPORT_READER |
+| `/profile` | any authenticated |
+| `/admin-platform` | ADMINISTRATOR |

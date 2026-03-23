@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.37 - 2026-03-23
+
+Docs sync: workspace-ruter, monitorer og env-defaults (#254).
+- `/manual-review` og `/appeal-handler` erstattet med `/review` i API_REFERENCE og GETTING_STARTED
+- `/profile` og `/admin-platform` lagt til i workspace-tabellen
+- Manglende API-ruter dokumentert: `/api/admin/modules`, `/api/admin/platform`, generate-endepunkter
+- `PseudonymizationMonitor` og `AuditRetentionMonitor` lagt til i topology-tabell og worker-oppstartsbeskrivelse
+- Stale `src/services/*`-stier rettet til `src/modules/*` i OPERATIONS_RUNBOOK
+- `AZURE_OPENAI_TIMEOUT_MS` default rettet fra 30000 til 120000 i `.env.example` og GETTING_STARTED
+
 ## 0.9.36 - 2026-03-23
 
 Codex: enhetstester og designdokumenter for LLM-innholdsgenerering.
