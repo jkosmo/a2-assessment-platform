@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.36 - 2026-03-23
+
+Codex: enhetstester og designdokumenter for LLM-innholdsgenerering.
+- `test/unit/llm-content-generation-service.test.ts` — tester at prompts er selvstendige og ikke refererer til skjult kildemateriale
+- `buildModuleDraftPrompts` og `buildMcqGenerationPrompts` eksportert for testbarhet
+- Arkitektur- og refaktoreringsdokumenter lagt til i `doc/design/`
+
 ## 0.9.35 - 2026-03-23
 
 MCQ-generering: krav om lengde- og detaljparitet mellom alternativer.
