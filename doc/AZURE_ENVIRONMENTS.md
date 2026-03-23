@@ -34,6 +34,7 @@ Current baseline note:
 - Non-production environments may temporarily allow a `prisma db push` compatibility fallback while already-provisioned databases are converged onto the new PostgreSQL migration baseline.
 - Microsoft Entra database authentication is still a follow-up hardening step, not part of the current automated baseline.
 - Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
+- `PROCESS_ROLE`, `PORT`, and `DATABASE_URL` are platform-managed at deploy/runtime and are not expected as user-managed GitHub Environment variables.
 
 ## Environment separation
 - Staging resource group example: `rg-a2-assessment-staging`
@@ -82,8 +83,14 @@ For each environment, define variables/secrets used by workflow:
 - `AZURE_OPENAI_TEMPERATURE` (optional, default `0`)
 - `AZURE_OPENAI_MAX_TOKENS` (optional, default `1200`)
 - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (optional, `max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
+- `DEFAULT_LOCALE` (optional, default `en-GB`)
 - `ASSESSMENT_JOB_POLL_INTERVAL_MS`
 - `ASSESSMENT_JOB_MAX_ATTEMPTS`
+- `ASSESSMENT_JOB_LEASE_DURATION_MS` (optional, default `300000`)
+- `ASSESSMENT_JOB_STUCK_THRESHOLD_MS` (optional, default `600000`)
+- `APPEAL_FIRST_RESPONSE_SLA_HOURS` (optional, default `24`)
+- `APPEAL_RESOLUTION_SLA_HOURS` (optional, default `72`)
+- `APPEAL_AT_RISK_RATIO` (optional, default `0.75`)
 - `OBSERVABILITY_ALERT_EMAIL` (optional)
 - `QUEUE_BACKLOG_ALERT_THRESHOLD` (optional, default `5`)
 - `LATENCY_ALERT_THRESHOLD_SECONDS` (optional, default `3`)
@@ -92,8 +99,16 @@ For each environment, define variables/secrets used by workflow:
 - `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, `disabled` | `log` | `webhook` | `acs_email`, default `log`)
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS` (optional, default `5000`)
 - `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A2 Assessment Platform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
+- `PARTICIPANT_CONSOLE_CONFIG_FILE` (optional, default `config/participant-console.json`)
+- `PARTICIPANT_CONSOLE_DEBUG_MODE` (optional, `auto` | `true` | `false`, default `auto`)
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
+
+Do not set these manually in GitHub Environment variables:
+- `PROCESS_ROLE` - injected separately for web and worker apps
+- `PORT` - provided by App Service
+- `DATABASE_URL` - composed and injected by the deployment
+- `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING` / `ACS_EMAIL_SENDER` - provisioned and injected automatically when ACS email notifications are enabled
 
 ## Deployment flow
 1. Push to `main`:
