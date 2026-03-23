@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.39 - 2026-03-23
+
+fix: krav om kildereferanse-forbud i forfatterprompt
+- taskText-krav omskrevet: innebygd innhold, ikke "fra kildeteksten"
+- guidanceText-krav: skriv som om deltaker kun har sett taskText
+- Ny "Self-containment rule"-seksjon forbyr fraser som "as described in the text" i alle deltakervendte felter
+- MCQ rationales tillates å referere kilde (interne forfatternotater)
+
 ## 0.9.38 - 2026-03-23
 
 Refaktor: samlet capability-katalog for API-ruter (#251).

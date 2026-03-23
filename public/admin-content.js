@@ -145,8 +145,8 @@ Requirements:
 - correctAnswer must match one of the options exactly.
 - All 4 options in each question must be comparable in length and level of detail. A candidate must not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others. If the correct answer contains a qualifier or clause, all distractors must too. Never pad distractors with vague filler — write substantively comparable but wrong alternatives.
 - rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
-- moduleVersion.taskText must ask the participant to explain, compare, or interpret concepts from the source text itself. Do not require application to a fictional or external example unless the source explicitly supports that framing.
-- moduleVersion.guidanceText must describe what a good submission should include, based only on what the source actually covers.
+- moduleVersion.taskText must ask the participant to explain, compare, or interpret specific concepts. All concepts, definitions, terminology, and context the participant needs must be embedded directly in taskText — the participant has no access to the source material or any external document. Do not require application to a fictional or external example unless the source explicitly supports that framing.
+- moduleVersion.guidanceText must describe what a strong response contains. Write as if the participant has only seen taskText — never reference the source material in guidanceText.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
 - Generate exactly ${mcqCount} MCQ question${mcqCount !== 1 ? "s" : ""} in mcqSet.questions.${schemaNote}${levelNote}
 
@@ -154,14 +154,20 @@ First, identify the core concepts explicitly supported by the source material.
 Then build the module using only those concepts.
 Exclude any term, framing device, or task pattern not grounded in the source.
 
-Grounding constraints:
-- Use the source material as the sole content authority.
+Grounding constraints (for you as author — the source material is never shared with participants):
+- Use the source material as the sole content authority for what concepts to test.
 - Use only concepts, distinctions, and claims that are explicitly present in or directly inferable from the source material.
 - Do not import external theory, pedagogical formats, or generic assessment patterns unless explicitly supported by the source.
 - Do not introduce scenario-based, case-based, or role-based tasks unless the source itself supports that framing.
 - Do not introduce nouns such as "scenario", "case", "situation", or "applied example" unless they appear in the source.
 - Every substantive concept in taskText, guidanceText, promptTemplate, and MCQ rationales must be traceable to the source material.
 - If a useful assessment device is not source-grounded, leave it out rather than inventing supporting context.
+
+Self-containment rule (applies to all participant-facing output fields — taskText, guidanceText, MCQ stems, options, rationales):
+- The participant has no access to the source material. Every field must stand alone.
+- Never use phrases such as "as described in the text", "according to the source", "from the reading", "as outlined above", "based on the material", "as stated in", "the text argues", "the author claims", or any wording that implies the participant can consult an unseen document.
+- If a term or concept needs context for the participant, define or explain it inline within the relevant field.
+- MCQ rationales are internal author notes — they may reference the source material for traceability, but stems and options must not.
 
 Return JSON in this exact shape:
 {
