@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
-import { prisma } from "../../db/prisma.js";
 import type { DeletionTrigger, DeletionRequestStatus } from "@prisma/client";
 import { DeletionTrigger as DeletionTriggerEnum } from "../../db/prismaRuntime.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { runInTransaction } from "../../db/transaction.js";
+import {
+  createPseudonymizationRepository,
+  pseudonymizationRepository,
+} from "./pseudonymizationRepository.js";
 
 /**
  * Produces a stable, non-reversible token used as the pseudonymised email
@@ -42,10 +46,7 @@ export async function pseudonymizeUser(
   trigger: DeletionTrigger,
   deletionRequestId?: string,
 ): Promise<PseudonymizationResult> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAnonymized: true },
-  });
+  const user = await pseudonymizationRepository.findUserAnonymizationState(userId);
 
   if (!user) {
     throw new Error(`User ${userId} not found.`);
@@ -58,39 +59,20 @@ export async function pseudonymizeUser(
 
   const now = new Date();
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await runInTransaction(async (tx) => {
+    const txRepo = createPseudonymizationRepository(tx);
     // 1. Cancel pending / running assessment jobs
-    const cancelledJobs = await tx.assessmentJob.updateMany({
-      where: { submission: { userId }, status: { in: ["PENDING", "RUNNING"] } },
-      data: { status: "FAILED", errorMessage: "Cancelled: user pseudonymisation." },
-    });
+    const cancelledJobs = await txRepo.cancelAssessmentJobsForUser(userId);
 
     // 2. Pseudonymise the user record
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        name: "Pseudonymisert bruker",
-        email: pseudoEmail(userId),
-        department: null,
-        manager: null,
-        isAnonymized: true,
-        anonymizedAt: now,
-        activeStatus: false,
-      },
-    });
+    await txRepo.pseudonymizeUser(userId, pseudoEmail(userId), now);
 
     // 3. Complete the DeletionRequest if provided
     if (deletionRequestId) {
-      await tx.deletionRequest.update({
-        where: { id: deletionRequestId },
-        data: { status: "COMPLETED", anonymizedAt: now },
-      });
+      await txRepo.completeDeletionRequest(deletionRequestId, now);
     } else {
       // Mark any pending request for this user as completed
-      await tx.deletionRequest.updateMany({
-        where: { userId, status: "PENDING" },
-        data: { status: "COMPLETED", anonymizedAt: now },
-      });
+      await txRepo.completePendingDeletionRequestsForUser(userId, now);
     }
 
     // 4. Audit event
@@ -123,23 +105,19 @@ export async function requestPseudonymization(
   options: { gracePeriodDays: number; immediate: boolean },
 ): Promise<{ requestId: string; effectiveAt: Date | null; status: DeletionRequestStatus }> {
   // Block if the user is already pseudonymised
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAnonymized: true },
-  });
+  const user = await pseudonymizationRepository.findUserAnonymizationState(userId);
   if (!user) throw new Error("User not found.");
   if (user.isAnonymized) throw new Error("User is already pseudonymised.");
 
   // Block if a pending request already exists
-  const existing = await prisma.deletionRequest.findFirst({
-    where: { userId, status: "PENDING" },
-    select: { id: true },
-  });
+  const existing = await pseudonymizationRepository.findPendingDeletionRequestForUser(userId);
   if (existing) throw new Error("A pending deletion request already exists for this user.");
 
   if (options.immediate) {
-    const request = await prisma.deletionRequest.create({
-      data: { userId, trigger: DeletionTriggerEnum.USER_REQUEST, effectiveAt: null },
+    const request = await pseudonymizationRepository.createDeletionRequest({
+      userId,
+      trigger: DeletionTriggerEnum.USER_REQUEST,
+      effectiveAt: null,
     });
     await pseudonymizeUser(userId, DeletionTriggerEnum.USER_REQUEST, request.id);
     return { requestId: request.id, effectiveAt: null, status: "COMPLETED" };
@@ -148,8 +126,10 @@ export async function requestPseudonymization(
   const effectiveAt = new Date();
   effectiveAt.setDate(effectiveAt.getDate() + options.gracePeriodDays);
 
-  const request = await prisma.deletionRequest.create({
-    data: { userId, trigger: DeletionTriggerEnum.USER_REQUEST, effectiveAt },
+  const request = await pseudonymizationRepository.createDeletionRequest({
+    userId,
+    trigger: DeletionTriggerEnum.USER_REQUEST,
+    effectiveAt,
   });
 
   return { requestId: request.id, effectiveAt, status: "PENDING" };
@@ -159,14 +139,11 @@ export async function requestPseudonymization(
  * Cancels a pending grace-period deletion request.
  */
 export async function cancelPseudonymizationRequest(userId: string): Promise<void> {
-  const request = await prisma.deletionRequest.findFirst({
-    where: { userId, status: "PENDING", trigger: DeletionTriggerEnum.USER_REQUEST },
-    select: { id: true },
-  });
+  const request = await pseudonymizationRepository.findCancellableUserDeletionRequest(
+    userId,
+    DeletionTriggerEnum.USER_REQUEST,
+  );
   if (!request) throw new Error("No cancellable deletion request found.");
 
-  await prisma.deletionRequest.update({
-    where: { id: request.id },
-    data: { status: "CANCELLED", cancelledAt: new Date() },
-  });
+  await pseudonymizationRepository.cancelDeletionRequest(request.id, new Date());
 }

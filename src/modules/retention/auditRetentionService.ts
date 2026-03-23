@@ -1,6 +1,6 @@
-import { prisma } from "../../db/prisma.js";
 import { OPERATIONAL_LOG_RETENTION_DAYS } from "../../config/retention.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { auditRetentionRepository } from "./auditRetentionRepository.js";
 
 /**
  * Audit event action types that are purely operational and carry no compliance
@@ -32,12 +32,10 @@ export async function runAuditRetentionScan(): Promise<AuditRetentionResult> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - OPERATIONAL_LOG_RETENTION_DAYS);
 
-  const result = await prisma.auditEvent.deleteMany({
-    where: {
-      action: { in: Array.from(OPERATIONAL_ACTION_TYPES) },
-      timestamp: { lt: cutoffDate },
-    },
-  });
+  const result = await auditRetentionRepository.deleteOperationalAuditEventsOlderThan(
+    Array.from(OPERATIONAL_ACTION_TYPES),
+    cutoffDate,
+  );
 
   logOperationalEvent("audit_retention_scan_completed", {
     deletedCount: result.count,

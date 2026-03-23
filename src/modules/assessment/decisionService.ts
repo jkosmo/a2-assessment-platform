@@ -1,7 +1,7 @@
 import { DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
-import { prisma } from "../../db/prisma.js";
+import { runInTransaction } from "../../db/transaction.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
@@ -125,7 +125,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const resolved = resolveAssessmentDecision(input);
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const repo = createDecisionRepository(tx);
 
     const decision = await repo.createAssessmentDecision({

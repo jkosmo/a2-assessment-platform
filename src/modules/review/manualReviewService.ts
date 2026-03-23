@@ -1,7 +1,7 @@
 import { DecisionType, ReviewStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { manualReviewRepository, createManualReviewRepository } from "./manualReviewRepository.js";
-import { prisma } from "../../db/prisma.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { notifyAssessmentResult } from "../certification/index.js";
@@ -96,7 +96,7 @@ export async function finalizeManualReviewOverride(input: {
 
   const finalisedAt = new Date();
 
-  const { overrideDecision, resolvedReview } = await prisma.$transaction(async (tx) => {
+  const { overrideDecision, resolvedReview } = await runInTransaction(async (tx) => {
     const repo = createManualReviewRepository(tx);
 
     const overrideDecision = await appendDecisionWithLineage(
@@ -168,7 +168,7 @@ export async function finalizeManualReviewOverride(input: {
   return { review: resolvedReview, overrideDecision };
 }
 
-type SupersedeTxClient = Pick<typeof prisma, "manualReview" | "assessmentDecision" | "submission" | "auditEvent">;
+type SupersedeTxClient = Pick<DbTransactionClient, "manualReview" | "assessmentDecision" | "submission" | "auditEvent">;
 
 export async function supersedeEligibleReviewsForRetake(
   userId: string,

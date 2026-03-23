@@ -1,7 +1,7 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { appealRepository, createAppealRepository } from "./appealRepository.js";
-import { prisma } from "../../db/prisma.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { notifyAppealStatusTransition } from "../certification/index.js";
@@ -37,7 +37,7 @@ export async function createSubmissionAppeal(input: {
     throw new ConflictError("appeal_already_open", "Submission already has an open or in-review appeal.");
   }
 
-  const appeal = await prisma.$transaction(async (tx) => {
+  const appeal = await runInTransaction(async (tx) => {
     const txRepo = createAppealRepository(tx);
 
     const createdAppeal = await txRepo.createAppeal({
@@ -213,7 +213,7 @@ export async function resolveAppeal(input: {
 
   const finalisedAt = new Date();
 
-  const { resolutionDecision, resolvedAppeal } = await prisma.$transaction(async (tx) => {
+  const { resolutionDecision, resolvedAppeal } = await runInTransaction(async (tx) => {
     const repo = createAppealRepository(tx);
 
     const resolutionDecision = await appendDecisionWithLineage(
@@ -277,7 +277,7 @@ export async function resolveAppeal(input: {
   return { appeal: resolvedAppeal, resolutionDecision };
 }
 
-type SupersedeTxClient = Pick<typeof prisma, "appeal" | "submission" | "user" | "assessmentDecision" | "auditEvent">;
+type SupersedeTxClient = Pick<DbTransactionClient, "appeal" | "submission" | "user" | "assessmentDecision" | "auditEvent">;
 
 export async function supersedeEligibleAppealsForRetake(
   userId: string,

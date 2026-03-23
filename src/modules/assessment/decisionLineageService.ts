@@ -1,12 +1,12 @@
 import type { DecisionType as DecisionTypeType } from "@prisma/client";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
-import { prisma } from "../../db/prisma.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
 
 type LineageTxClient = Pick<
-  typeof prisma,
+  DbTransactionClient,
   "assessmentDecision" | "manualReview" | "submission" | "certificationStatus" | "auditEvent"
 >;
 

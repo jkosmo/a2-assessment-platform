@@ -7,9 +7,9 @@ import { certificationRepository, createCertificationRepository } from "./certif
 import { decisionRepository, createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { sendViaAcs } from "./participantNotificationService.js";
-import { prisma } from "../../db/prisma.js";
+import type { DbTransactionClient } from "../../db/transaction.js";
 
-type RecertTxClient = Pick<typeof prisma, "assessmentDecision" | "manualReview" | "submission" | "certificationStatus" | "auditEvent">;
+type RecertTxClient = Pick<DbTransactionClient, "assessmentDecision" | "manualReview" | "submission" | "certificationStatus" | "auditEvent">;
 
 export type RecertificationLifecycleStatus = "ACTIVE" | "DUE_SOON" | "DUE" | "EXPIRED" | "NOT_CERTIFIED";
 

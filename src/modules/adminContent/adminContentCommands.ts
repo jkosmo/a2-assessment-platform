@@ -1,5 +1,5 @@
 import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
-import { prisma } from "../../db/prisma.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
@@ -333,7 +333,7 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
   const module = await ensureModuleExists(moduleId);
   const now = new Date();
 
-  const published = await prisma.$transaction((tx) =>
+  const published = await runInTransaction((tx) =>
     createAdminContentRepository(tx).publishModuleVersion(moduleId, moduleVersionId, actorId, now),
   );
 
@@ -396,7 +396,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
   const versionNo = await getNextVersionNo("module", input.moduleId);
   const now = new Date();
 
-  const { newVersion, published } = await prisma.$transaction(async (tx) => {
+  const { newVersion, published } = await runInTransaction(async (tx) => {
     const repo = createAdminContentRepository(tx);
     const newVersion = await repo.createModuleVersion({
       moduleId: input.moduleId,
