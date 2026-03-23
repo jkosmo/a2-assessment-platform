@@ -368,6 +368,30 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    async unpublishModule(moduleId: string) {
+      const module = await client.module.findUnique({
+        where: { id: moduleId },
+        select: { id: true, activeVersionId: true },
+      });
+
+      if (!module) {
+        throw new Error("Module not found.");
+      }
+
+      if (!module.activeVersionId) {
+        throw new Error("Module has no active version to unpublish.");
+      }
+
+      const previousActiveVersionId = module.activeVersionId;
+
+      await client.module.update({
+        where: { id: moduleId },
+        data: { activeVersionId: null },
+      });
+
+      return { moduleId, previousActiveVersionId };
+    },
+
     async publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string, now: Date) {
       const moduleVersion = await client.moduleVersion.findUnique({
         where: { id: moduleVersionId },

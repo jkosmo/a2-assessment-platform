@@ -10,6 +10,7 @@ import {
   createPromptTemplateVersion,
   createRubricVersion,
   publishModuleVersion,
+  unpublishModule,
 } from "../modules/adminContent/index.js";
 import {
   moduleCreateBodySchema,
@@ -208,6 +209,22 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     response.json({ moduleVersion });
   } catch (error) {
     response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
+  }
+});
+
+adminContentRouter.post("/modules/:moduleId/unpublish", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const result = await unpublishModule(request.params.moduleId, actorId);
+    response.json({ moduleId: result.moduleId, previousActiveVersionId: result.previousActiveVersionId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not unpublish module.";
+    response.status(400).json({ error: "unpublish_module_failed", message });
   }
 });
 

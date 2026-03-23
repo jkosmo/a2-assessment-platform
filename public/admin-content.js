@@ -43,6 +43,7 @@ const moduleStatusDraft = document.getElementById("moduleStatusDraft");
 const moduleStatusPublishedAt = document.getElementById("moduleStatusPublishedAt");
 const moduleStatusCounts = document.getElementById("moduleStatusCounts");
 const moduleStatusDetails = document.getElementById("moduleStatusDetails");
+const unpublishModuleBtn = document.getElementById("unpublishModuleBtn");
 
 const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
@@ -1348,6 +1349,7 @@ function renderModuleStatus() {
     moduleStatusLive.textContent = t("adminContent.status.noPublishedVersion");
     moduleStatusDraft.textContent = t("adminContent.status.noDraftVersion");
     moduleStatusPublishedAt.textContent = "-";
+    unpublishModuleBtn.hidden = true;
     if (module?.activeVersionNo) {
       renderStatusChain(moduleStatusCounts, [{ label: "Module", versionNo: module.activeVersionNo }]);
     } else {
@@ -1379,6 +1381,8 @@ function renderModuleStatus() {
       : null,
   ].filter(Boolean);
   moduleStatusDescription.textContent = descriptionParts.join(" | ");
+
+  unpublishModuleBtn.hidden = view.liveChain.length === 0;
 
   if (view.liveChain.length > 0) {
     renderStatusChain(moduleStatusLive, view.liveChain);
@@ -1812,6 +1816,27 @@ async function handlePublishModuleVersion() {
     { method: "POST", body: JSON.stringify({}) },
   );
   setMessage(t("adminContent.message.moduleVersionPublished"), "success");
+  log(body);
+  await refreshSelectedModuleStatus();
+}
+
+async function handleUnpublishModule() {
+  const moduleId = resolveModuleIdOrThrow();
+  const module = modules.find((item) => item.id === moduleId) ?? null;
+  const moduleLabel = module?.title ?? moduleId;
+  const confirmed = window.confirm(
+    t("adminContent.confirm.unpublishModule").replace("{module}", moduleLabel),
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const body = await apiFetch(
+    `/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`,
+    headers,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+  setMessage(t("adminContent.message.moduleUnpublished"), "success");
   log(body);
   await refreshSelectedModuleStatus();
 }
@@ -3003,6 +3028,18 @@ publishModuleVersionButton.addEventListener("click", async () => {
   await runWithBusyButton(publishModuleVersionButton, async () => {
     try {
       await handlePublishModuleVersion();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message, "error");
+      log(message);
+    }
+  });
+});
+
+unpublishModuleBtn.addEventListener("click", async () => {
+  await runWithBusyButton(unpublishModuleBtn, async () => {
+    try {
+      await handleUnpublishModule();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
       setMessage(message, "error");

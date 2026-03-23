@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.42 - 2026-03-23
+
+Manuell avpublisering av modul (#258).
+- Nytt API-endepunkt: `POST /api/admin/content/modules/:moduleId/unpublish` — nullstiller `activeVersionId`
+- Knapp «Avpubliser modul» i admin-grensesnitt — vises kun når en aktiv versjon finnes
+- Bekreftelsesdialog med modulnavn før handlingen utføres
+- Revisjonslogg (`module_unpublished`) med `previousActiveVersionId`
+- i18n-støtte for en-GB, nb og nn
+
 ## 0.9.41 - 2026-03-23
 
 Forenkling av vurderingsmodell — én enkelt terskel (#257).

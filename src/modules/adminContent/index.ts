@@ -7,6 +7,7 @@ export {
   createModuleVersion,
   createBenchmarkExampleVersion,
   publishModuleVersion,
+  unpublishModule,
   publishModuleVersionWithThresholds,
 } from "./adminContentCommands.js";
 
