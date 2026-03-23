@@ -330,25 +330,6 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
   };
 }
 
-export async function unpublishModule(moduleId: string, actorId: string) {
-  await ensureModuleExists(moduleId);
-
-  const result = await adminContentRepository.unpublishModule(moduleId);
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: moduleId,
-    action: auditActions.adminContent.moduleUnpublished,
-    actorId,
-    metadata: {
-      moduleId,
-      previousActiveVersionId: result.previousActiveVersionId,
-    },
-  });
-
-  return result;
-}
-
 export async function publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string) {
   const module = await ensureModuleExists(moduleId);
   const now = new Date();
