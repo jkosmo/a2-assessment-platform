@@ -42,7 +42,6 @@ export function evaluateSecondaryAssessmentTrigger(
   if (
     (input.primaryResult.red_flags.length === 0 ||
       hasOnlyInsufficientEvidenceRedFlags(input.primaryResult)) &&
-    !input.primaryResult.pass_fail_practical &&
     hasInsufficientEvidenceSignal(input.primaryResult)
   ) {
     return {
@@ -96,10 +95,6 @@ export function evaluateSecondaryAssessmentDisagreement(
   const rubricDelta = Math.abs(primaryResult.rubric_total - secondaryResult.rubric_total);
   if (rubricDelta >= policy.disagreementRules.rubricTotalDeltaMin) {
     reasons.push("rubric_total_delta_exceeded");
-  }
-
-  if (policy.disagreementRules.passFailMismatch && primaryResult.pass_fail_practical !== secondaryResult.pass_fail_practical) {
-    reasons.push("pass_fail_mismatch");
   }
 
   if (

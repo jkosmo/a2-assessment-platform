@@ -357,10 +357,6 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
 type PublishThresholdsInput = {
   moduleId: string;
   totalMin: number;
-  practicalMinPercent: number;
-  mcqMinPercent: number;
-  borderlineMin: number;
-  borderlineMax: number;
   actorId: string;
 };
 
@@ -384,12 +380,6 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
     passRules: {
       ...(existingPolicy.passRules ?? {}),
       totalMin: input.totalMin,
-      practicalMinPercent: input.practicalMinPercent,
-      mcqMinPercent: input.mcqMinPercent,
-      borderlineWindow: {
-        min: input.borderlineMin,
-        max: input.borderlineMax,
-      },
     },
   };
 
@@ -424,10 +414,6 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       versionNo: newVersion.versionNo,
       sourceVersionId: sourceVersion.id,
       totalMin: input.totalMin,
-      practicalMinPercent: input.practicalMinPercent,
-      mcqMinPercent: input.mcqMinPercent,
-      borderlineMin: input.borderlineMin,
-      borderlineMax: input.borderlineMax,
       publishedAt: published.publishedAt?.toISOString() ?? null,
     },
   });

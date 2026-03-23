@@ -102,7 +102,7 @@ export async function submitMcqAttempt(input: {
   const percentScore = (rawScore / totalQuestions) * 100;
   const rules = getAssessmentRules();
   const scaledScore = (rawScore / totalQuestions) * rules.weights.mcqMaxScore;
-  const passFailMcq = percentScore >= rules.thresholds.mcqMinPercent;
+  const passFailMcq = percentScore >= 50;
 
   const completedAttempt = await mcqRepository.completeAttempt({
     attemptId: attempt.id,

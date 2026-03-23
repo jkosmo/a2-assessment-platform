@@ -83,23 +83,10 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
   }
 });
 
-const publishThresholdsBodySchema = z
-  .object({
-    moduleId: z.string().trim().min(1),
-    totalMin: z.number().min(0).max(100),
-    practicalMinPercent: z.number().min(0).max(100),
-    mcqMinPercent: z.number().min(0).max(100),
-    borderlineMin: z.number().min(0).max(100),
-    borderlineMax: z.number().min(0).max(100),
-  })
-  .refine((d) => d.borderlineMin <= d.borderlineMax, {
-    message: "borderlineMin must be \u2264 borderlineMax",
-    path: ["borderlineMin"],
-  })
-  .refine((d) => d.borderlineMax <= d.totalMin, {
-    message: "borderlineMax must be \u2264 totalMin",
-    path: ["borderlineMax"],
-  });
+const publishThresholdsBodySchema = z.object({
+  moduleId: z.string().trim().min(1),
+  totalMin: z.number().min(0).max(100),
+});
 
 calibrationRouter.post("/workspace/publish-thresholds", async (request, response, next) => {
   const roles: string[] = (request.context?.roles as string[] | undefined) ?? [];
@@ -127,10 +114,6 @@ calibrationRouter.post("/workspace/publish-thresholds", async (request, response
     const published = await publishModuleVersionWithThresholds({
       moduleId: parsed.data.moduleId,
       totalMin: parsed.data.totalMin,
-      practicalMinPercent: parsed.data.practicalMinPercent,
-      mcqMinPercent: parsed.data.mcqMinPercent,
-      borderlineMin: parsed.data.borderlineMin,
-      borderlineMax: parsed.data.borderlineMax,
       actorId,
     });
     response.status(201).json({ moduleVersion: published });

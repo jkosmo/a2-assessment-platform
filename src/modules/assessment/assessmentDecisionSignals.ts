@@ -93,8 +93,6 @@ export function shouldSuppressManualReviewForInsufficientEvidenceDisagreement(
   return (
     (primaryResult.red_flags.length === 0 || hasOnlyInsufficientEvidenceRedFlags(primaryResult)) &&
     (secondaryResult.red_flags.length === 0 || hasOnlyInsufficientEvidenceRedFlags(secondaryResult)) &&
-    !primaryResult.pass_fail_practical &&
-    !secondaryResult.pass_fail_practical &&
     hasInsufficientEvidenceSignal(primaryResult) &&
     hasInsufficientEvidenceSignal(secondaryResult)
   );

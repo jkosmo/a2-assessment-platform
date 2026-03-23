@@ -84,14 +84,6 @@ export const assessmentPolicyBodySchema = z.object({
   passRules: z
     .object({
       totalMin: z.number().min(0).max(100),
-      practicalMinPercent: z.number().min(0).max(100).optional(),
-      mcqMinPercent: z.number().min(0).max(100).optional(),
-      borderlineWindow: z
-        .object({
-          min: z.number().min(0).max(100),
-          max: z.number().min(0).max(100),
-        })
-        .optional(),
     })
     .optional(),
 });

@@ -6,18 +6,12 @@ import { env } from "./env.js";
 export const rulesSchema = z.object({
   thresholds: z.object({
     totalMin: z.number().min(0).max(100),
-    practicalMinPercent: z.number().min(0).max(100),
-    mcqMinPercent: z.number().min(0).max(100),
   }),
   weights: z.object({
     practicalMaxScore: z.number().min(1),
     mcqMaxScore: z.number().min(1),
   }),
   manualReview: z.object({
-    borderlineWindow: z.object({
-      min: z.number(),
-      max: z.number(),
-    }),
     redFlagSeverities: z.array(z.string().min(1)),
     redFlagCodes: z.array(z.string().min(1)).default([]),
   }),
@@ -91,13 +85,11 @@ export const rulesSchema = z.object({
         .object({
           practicalScoreDeltaMin: z.number().min(0).default(8),
           rubricTotalDeltaMin: z.number().min(0).default(3),
-          passFailMismatch: z.boolean().default(true),
           manualReviewRecommendationMismatch: z.boolean().default(true),
         })
         .default({
           practicalScoreDeltaMin: 8,
           rubricTotalDeltaMin: 3,
-          passFailMismatch: true,
           manualReviewRecommendationMismatch: true,
         }),
     })
@@ -113,7 +105,6 @@ export const rulesSchema = z.object({
       disagreementRules: {
         practicalScoreDeltaMin: 8,
         rubricTotalDeltaMin: 3,
-        passFailMismatch: true,
         manualReviewRecommendationMismatch: true,
       },
     }),

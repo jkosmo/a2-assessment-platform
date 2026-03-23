@@ -14,10 +14,9 @@ import { rulesSchema } from "../../src/config/assessmentRules.js";
 // ---------------------------------------------------------------------------
 
 const valid = {
-  thresholds: { totalMin: 70, practicalMinPercent: 50, mcqMinPercent: 60 },
+  thresholds: { totalMin: 70 },
   weights: { practicalMaxScore: 70, mcqMaxScore: 30 },
   manualReview: {
-    borderlineWindow: { min: 67, max: 73 },
     redFlagSeverities: ["high"],
     redFlagCodes: ["policy_violation"],
   },
@@ -67,7 +66,7 @@ describe("rulesSchema — baseline validity", () => {
         enabledByDefault: true,
         moduleOverrides: {},
         triggerRules: { manualReviewRecommended: true, confidenceNotePatterns: [], redFlagCodes: [], redFlagSeverities: ["high"] },
-        disagreementRules: { practicalScoreDeltaMin: 8, rubricTotalDeltaMin: 3, passFailMismatch: true, manualReviewRecommendationMismatch: true },
+        disagreementRules: { practicalScoreDeltaMin: 8, rubricTotalDeltaMin: 3, manualReviewRecommendationMismatch: true },
       },
       recertification: { validityDays: 365, dueOffsetDays: 30, dueSoonDays: 14, reminderDaysBefore: [30, 7, 1] },
     };
@@ -86,22 +85,6 @@ describe("rulesSchema — thresholds out of range", () => {
 
   it("rejects totalMin < 0", () => {
     expect(rulesSchema.safeParse(withThresholds({ totalMin: -1 })).success).toBe(false);
-  });
-
-  it("rejects practicalMinPercent > 100", () => {
-    expect(rulesSchema.safeParse(withThresholds({ practicalMinPercent: 105 })).success).toBe(false);
-  });
-
-  it("rejects practicalMinPercent < 0", () => {
-    expect(rulesSchema.safeParse(withThresholds({ practicalMinPercent: -10 })).success).toBe(false);
-  });
-
-  it("rejects mcqMinPercent > 100", () => {
-    expect(rulesSchema.safeParse(withThresholds({ mcqMinPercent: 200 })).success).toBe(false);
-  });
-
-  it("rejects mcqMinPercent < 0", () => {
-    expect(rulesSchema.safeParse(withThresholds({ mcqMinPercent: -1 })).success).toBe(false);
   });
 
   it("rejects non-numeric totalMin", () => {
@@ -152,14 +135,6 @@ describe("rulesSchema — manualReview structure", () => {
     // Document: the schema accepts [] — callers must handle the empty case themselves.
     expect(
       rulesSchema.safeParse(withManualReview({ redFlagSeverities: [] })).success,
-    ).toBe(true);
-  });
-
-  it("accepts borderlineWindow where min > max (no cross-field validation in schema)", () => {
-    // Document: the schema does NOT enforce min <= max.
-    // The decision service is responsible for handling this gracefully.
-    expect(
-      rulesSchema.safeParse(withManualReview({ borderlineWindow: { min: 80, max: 60 } })).success,
     ).toBe(true);
   });
 });

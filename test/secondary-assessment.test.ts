@@ -18,7 +18,6 @@ const basePolicy: SecondaryAssessmentPolicy = {
   disagreementRules: {
     practicalScoreDeltaMin: 8,
     rubricTotalDeltaMin: 3,
-    passFailMismatch: true,
     manualReviewRecommendationMismatch: true,
   },
 };
@@ -82,7 +81,6 @@ describe("Secondary assessment policy", () => {
         primaryResult: buildAssessment({
           rubric_total: 0,
           practical_score_scaled: 0,
-          pass_fail_practical: false,
           evidence_sufficiency: "insufficient",
           recommended_outcome: "fail",
           manual_review_reason_code: "insufficient_evidence",
@@ -105,7 +103,6 @@ describe("Secondary assessment policy", () => {
         primaryResult: buildAssessment({
           rubric_total: 0,
           practical_score_scaled: 0,
-          pass_fail_practical: false,
           evidence_sufficiency: "insufficient",
           recommended_outcome: "manual_review",
           manual_review_reason_code: "red_flag",
@@ -161,13 +158,11 @@ describe("Secondary assessment policy", () => {
       buildAssessment({
         rubric_total: 16,
         practical_score_scaled: 56,
-        pass_fail_practical: true,
         manual_review_recommended: false,
       }),
       buildAssessment({
         rubric_total: 10,
         practical_score_scaled: 35,
-        pass_fail_practical: false,
         manual_review_recommended: true,
       }),
       basePolicy,
@@ -176,7 +171,6 @@ describe("Secondary assessment policy", () => {
     expect(disagreement.hasDisagreement).toBe(true);
     expect(disagreement.reasons).toContain("practical_score_delta_exceeded");
     expect(disagreement.reasons).toContain("rubric_total_delta_exceeded");
-    expect(disagreement.reasons).toContain("pass_fail_mismatch");
     expect(disagreement.reasons).toContain("manual_review_recommendation_mismatch");
   });
 });

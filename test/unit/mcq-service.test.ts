@@ -132,7 +132,7 @@ describe("mcq service — submitMcqAttempt", () => {
     expect(result.rawScore).toBe(1);
     expect(result.percentScore).toBe(50);
     expect(result.scaledScore).toBe(15);
-    expect(result.passFailMcq).toBe(false);
+    expect(result.passFailMcq).toBe(true);
   });
 
   it("ignores responses for unknown question IDs and does not count them", async () => {

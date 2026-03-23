@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.41 - 2026-03-23
+
+Forenkling av vurderingsmodell — én enkelt terskel (#257).
+- Fjernet `practicalMinPercent`, `mcqMinPercent`, `borderlineWindow` fra alle skjemaer, konfig og beslutningslogikk
+- Fjernet `passFailMismatch` fra disagreement-regler i sekundær-vurdering
+- Beslutningen er nå: `totalScore >= totalMin` (pluss rød-flagg-gate) — ingen per-komponent-porter
+- Grensesonesporing (`inBorderlineWindow`) fjernet fra `ResolvedAssessmentDecision`-type
+- MCQ-passering hardkodet til ≥ 50 % (kun lagret som informasjon, ikke brukt i beslutning)
+- Kalibreringsendepunkt forenklet: publiserer kun `totalMin`
+- Alle berørte tester oppdatert (decision-service, secondary-assessment, mcq-service, assessment-rules-config)
+
 ## 0.9.40 - 2026-03-23
 
 Vurdering: grounding-instruks — evaluer kun mot oppgave og guidance, ikke domenekunnskap.

@@ -1,18 +1,12 @@
 {
   "thresholds": {
-    "totalMin": 70,
-    "practicalMinPercent": 50,
-    "mcqMinPercent": 60
+    "totalMin": 70
   },
   "weights": {
     "practicalMaxScore": 70,
     "mcqMaxScore": 30
   },
   "manualReview": {
-    "borderlineWindow": {
-      "min": 67,
-      "max": 73
-    },
     "redFlagSeverities": [
       "high"
     ],
@@ -118,7 +112,6 @@
     "disagreementRules": {
       "practicalScoreDeltaMin": 8,
       "rubricTotalDeltaMin": 3,
-      "passFailMismatch": true,
       "manualReviewRecommendationMismatch": true
     }
   },

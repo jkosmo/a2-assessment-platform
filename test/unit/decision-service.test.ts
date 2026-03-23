@@ -638,150 +638,6 @@ describe("decision service", () => {
     });
   });
 
-  describe("resolveAssessmentDecision — borderline window", () => {
-    // Global borderline: { min: 67, max: 73 }, global totalMin: 70
-
-    it("routes to manual review when totalScore is inside the borderline window", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 45 + 25 = 70 — passes totalMin but is inside [67, 73]
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 25,
-        mcqPercentScore: 83,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
-        assessmentPolicy: null,
-      });
-      expect(result.totalScore).toBe(70);
-      expect(result.inBorderlineWindow).toBe(true);
-      expect(result.needsManualReview).toBe(true);
-    });
-
-    it("returns inBorderlineWindow=true at the lower window boundary (67)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 45 + 22 = 67 = window min
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 22,
-        mcqPercentScore: 73,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
-        assessmentPolicy: null,
-      });
-      expect(result.totalScore).toBe(67);
-      expect(result.inBorderlineWindow).toBe(true);
-    });
-
-    it("returns inBorderlineWindow=true at the upper window boundary (73)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 45 + 28 = 73 = window max
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 28,
-        mcqPercentScore: 93,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
-        assessmentPolicy: null,
-      });
-      expect(result.totalScore).toBe(73);
-      expect(result.inBorderlineWindow).toBe(true);
-    });
-
-    it("does not trigger borderline when score is one point above the window (74)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 45 + 29 = 74 > window max (73)
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 29,
-        mcqPercentScore: 97,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
-        assessmentPolicy: null,
-      });
-      expect(result.totalScore).toBe(74);
-      expect(result.inBorderlineWindow).toBe(false);
-      expect(result.needsManualReview).toBe(false);
-    });
-
-    it("does not trigger borderline when score is one point below the window (66)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 45 + 21 = 66 < window min (67)
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 21,
-        mcqPercentScore: 70,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
-        assessmentPolicy: null,
-      });
-      expect(result.totalScore).toBe(66);
-      expect(result.inBorderlineWindow).toBe(false);
-    });
-
-    it("respects policy-level borderline window override", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // Score 80 is outside global window [67,73] but inside policy window [78,82]
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 30,
-        mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 50 }),
-        assessmentPolicy: { passRules: { borderlineWindow: { min: 78, max: 82 } } },
-      });
-      expect(result.totalScore).toBe(80);
-      expect(result.inBorderlineWindow).toBe(true);
-      expect(result.needsManualReview).toBe(true);
-    });
-  });
-
-  describe("resolveAssessmentDecision — practicalMinPercent and mcqMinPercent thresholds", () => {
-    // Global: practicalMinPercent=50, mcqMinPercent=60
-
-    it("fails passesThresholds when practicalPercent is below global practicalMinPercent (50%)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // rubric_total=9, rubricMaxTotal=20 → practicalPercent=45% < 50%
-      // totalScore=80 is above totalMin=70, but practical gate fails
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 30,
-        mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 50, rubric_total: 9 }),
-        assessmentPolicy: null,
-        rubricMaxTotal: 20,
-      });
-      expect(result.practicalPercent).toBe(45);
-      expect(result.totalScore).toBe(80);
-      expect(result.passesThresholds).toBe(false);
-    });
-
-    it("passes when practicalPercent is below global but above module-level practicalMinPercent override", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // rubric_total=9, rubricMaxTotal=20 → practicalPercent=45%; global gate=50 fails, policy gate=40 passes
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 30,
-        mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 50, rubric_total: 9 }),
-        assessmentPolicy: { passRules: { practicalMinPercent: 40 } },
-        rubricMaxTotal: 20,
-      });
-      expect(result.practicalPercent).toBe(45);
-      expect(result.passesThresholds).toBe(true);
-    });
-
-    it("fails passesThresholds when mcqPercentScore is below global mcqMinPercent (60%)", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // totalScore=65, above totalMin=70? No — 45+20=65<70 anyway. Let's use high practical.
-      // total = 55 + 20 = 75 ≥ 70, but mcqPercentScore=50 < 60%
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 20,
-        mcqPercentScore: 50,
-        llmResult: buildLlmResult({ practical_score_scaled: 55 }),
-        assessmentPolicy: null,
-      });
-      expect(result.passesThresholds).toBe(false);
-    });
-
-    it("passes when mcqPercentScore is below global but above module-level mcqMinPercent override", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 55 + 20 = 75 ≥ 70, mcqPercentScore=50 < global 60% but above policy 40%
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 20,
-        mcqPercentScore: 50,
-        llmResult: buildLlmResult({ practical_score_scaled: 55 }),
-        assessmentPolicy: { passRules: { mcqMinPercent: 40 } },
-      });
-      expect(result.passesThresholds).toBe(true);
-    });
-  });
-
   describe("resolveAssessmentDecision — red flag routing", () => {
     it("sets hasOpenRedFlag=true and passesThresholds=false even when total score is above threshold", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
@@ -803,7 +659,7 @@ describe("decision service", () => {
       expect(result.needsManualReview).toBe(true);
     });
 
-    it("routes to manual review when LLM recommends it with no red flags and no borderline", async () => {
+    it("routes to manual review when LLM recommends it with no red flags", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       // Score 80 passes all gates; LLM says manual_review due to low_confidence
       const result = resolveAssessmentDecision({
@@ -818,7 +674,6 @@ describe("decision service", () => {
         assessmentPolicy: null,
       });
       expect(result.totalScore).toBe(80);
-      expect(result.inBorderlineWindow).toBe(false);
       expect(result.hasOpenRedFlag).toBe(false);
       expect(result.needsManualReview).toBe(true);
     });
@@ -839,7 +694,7 @@ describe("decision service", () => {
 
     it("returns 'Automatic fail by threshold rules.' for a score below threshold with no insufficient signal", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 40 + 20 = 60 < 70; score below borderline[67,73]; confidence_note has no patterns
+      // total = 40 + 20 = 60 < 70; confidence_note has no patterns
       const result = resolveAssessmentDecision({
         mcqScaledScore: 20,
         mcqPercentScore: 67,
@@ -854,7 +709,6 @@ describe("decision service", () => {
         assessmentPolicy: null,
       });
       expect(result.totalScore).toBe(60);
-      expect(result.inBorderlineWindow).toBe(false);
       expect(result.autoFailForInsufficientEvidence).toBe(false);
       expect(result.needsManualReview).toBe(false);
       expect(result.decisionReason).toBe("Automatic fail by threshold rules.");
@@ -882,20 +736,6 @@ describe("decision service", () => {
       expect(result.decisionReason).toBe("Automatic fail due to insufficient submission evidence.");
     });
 
-    it("returns the manual review reason for borderline scores", async () => {
-      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 45 + 25 = 70 — inside window [67, 73]
-      const result = resolveAssessmentDecision({
-        mcqScaledScore: 25,
-        mcqPercentScore: 83,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
-        assessmentPolicy: null,
-      });
-      expect(result.inBorderlineWindow).toBe(true);
-      expect(result.decisionReason).toBe(
-        "Automatically routed to manual review due to red flag / confidence / borderline rule.",
-      );
-    });
   });
 
   it("fails automatically for the exact staging phrase 'additional material required for a reliable assessment'", async () => {
