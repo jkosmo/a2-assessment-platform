@@ -440,9 +440,9 @@ ${criteriaList}
 - criterion_rationales: object with one concise string rationale per rubric criterion key (same keys as rubric_scores)
 - improvement_advice: array of up to 10 concise strings
 - red_flags: array of objects with fields: code (string), severity (string), description (string)
-- allowed red_flags.code values:
+- Use red_flags only when the stated criteria below are clearly met. If uncertain, do not flag. Return an empty array if no flag applies.
+- Allowed red_flags.code values with usage criteria:
   - ${buildAllowedRedFlagCodesForPrompt().join("\n  - ")}
-- if no allowed red flag applies, return an empty red_flags array
 - manual_review_recommended: boolean
 - confidence_note: string
 - evidence_sufficiency: one of sufficient, insufficient, uncertain

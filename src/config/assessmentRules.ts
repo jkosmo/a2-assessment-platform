@@ -25,11 +25,16 @@ export const rulesSchema = z.object({
     .object({
       unknownRedFlagHandling: z.enum(["downgrade_to_unclassified", "keep_as_is"]).default("downgrade_to_unclassified"),
       unknownRedFlagCanonicalCode: z.string().min(1).default("unclassified_model_warning"),
+      redFlagDescriptions: z
+        .record(z.string().min(1), z.string().min(1))
+        .optional()
+        .default({}),
       canonicalRedFlags: z.record(z.string().min(1), z.array(z.string().min(1))).default({}),
     })
     .default({
       unknownRedFlagHandling: "downgrade_to_unclassified",
       unknownRedFlagCanonicalCode: "unclassified_model_warning",
+      redFlagDescriptions: {},
       canonicalRedFlags: {},
     }),
   mcqQuality: z

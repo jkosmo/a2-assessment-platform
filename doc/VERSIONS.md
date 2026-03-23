@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.30 - 2026-03-23
+
+Røde flagg: legg til semantiske beskrivelser i prompt-kontrakten (#243).
+- `redFlagDescriptions` i `assessment-rules.json` — kriterier for hvert flagg (ikke bare kodenavn)
+- `rulesSchema` oppdatert med valgfritt `redFlagDescriptions`-felt
+- `buildAllowedRedFlagCodesForPrompt()` returnerer nå `"code — beskrivelse"`-strenger
+- Prompt-instruksen presiserer: bruk kun flagg der kriteriene er tydelig oppfylt
+- Adresserer nano-sensitive-data-gap og GenAI-spesifisitet i `responsible_use_violation`
+
 ## 0.9.29 - 2026-03-22
 ### Summary
 chore: slett gamle benchmark-resultater for ny fullstendig kjøring (v0.9.29)

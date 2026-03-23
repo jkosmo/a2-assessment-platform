@@ -85,7 +85,13 @@ export function isConfiguredSecondaryTriggerRedFlag(flag: AssessmentRedFlag): bo
 }
 
 export function buildAllowedRedFlagCodesForPrompt(): string[] {
-  return Object.keys(getAssessmentRules().llmDecisionReliability.canonicalRedFlags)
+  const rules = getAssessmentRules();
+  const descriptions = rules.llmDecisionReliability.redFlagDescriptions ?? {};
+  return Object.keys(rules.llmDecisionReliability.canonicalRedFlags)
     .map((code) => slugifyCode(code))
-    .sort();
+    .sort()
+    .map((code) => {
+      const description = descriptions[code];
+      return description ? `${code} — ${description}` : code;
+    });
 }

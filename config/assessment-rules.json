@@ -25,6 +25,12 @@
   "llmDecisionReliability": {
     "unknownRedFlagHandling": "downgrade_to_unclassified",
     "unknownRedFlagCanonicalCode": "unclassified_model_warning",
+    "redFlagDescriptions": {
+      "insufficient_submission": "Use when the submission is too short, incoherent, garbled, or entirely unrelated to the assignment to allow meaningful scoring against any rubric criterion. Applies to all module types and domains. Severity: always high.",
+      "potential_sensitive_data": "Use when the submission appears to contain personal data about real, identifiable individuals — such as names combined with contact details, national ID numbers, health records, or financial data — in a context suggesting unintended or inappropriate disclosure. Do NOT use for: public figures named in their professional role, historical persons, clearly fictional examples, or data the submitter explicitly states was anonymised or pseudonymised. Severity: high if identifiers appear real and unprotected; medium if the context is ambiguous.",
+      "responsible_use_violation": "Use when the submission describes or demonstrates a clear breach of professional, ethical, or regulatory conduct in the relevant domain. Apply only when the submitter appears to have actually carried out an inappropriate action — not when they analyse, discuss, or critically reflect on such behaviour. Not limited to AI or technology: applies to any professional, safety, or regulatory context. Severity: high if the violation is explicit and unambiguous; medium if intent or context is unclear.",
+      "policy_violation": "Use when the submission contains content that violates platform usage policies regardless of academic context: explicit instructions for harmful or illegal activities, hate speech, or content clearly designed to manipulate or deceive the assessment system. Distinct from responsible_use_violation, which concerns domain-specific professional conduct. Severity: always high."
+    },
     "canonicalRedFlags": {
       "insufficient_submission": [
         "insufficient_submission",

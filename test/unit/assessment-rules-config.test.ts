@@ -51,6 +51,10 @@ describe("rulesSchema — baseline validity", () => {
       llmDecisionReliability: {
         unknownRedFlagHandling: "downgrade_to_unclassified",
         unknownRedFlagCanonicalCode: "unclassified_model_warning",
+        redFlagDescriptions: {
+          insufficient_submission: "Use when the submission is too short or incoherent to be scored.",
+          potential_sensitive_data: "Use when personal data appears unintentionally disclosed.",
+        },
         canonicalRedFlags: { insufficient_submission: ["insufficient_submission"] },
       },
       mcqQuality: { minAttemptCount: 5, difficultyMin: 0.2, difficultyMax: 0.9, discriminationMin: 0.1 },
