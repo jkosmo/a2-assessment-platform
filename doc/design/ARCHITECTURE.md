@@ -34,28 +34,34 @@ The important architectural rule is that decisions are append-only. Later stages
 ### HTTP application
 - Express application in `src/app.ts`
 - route modules under `src/routes/`
-- middleware for auth, error handling, rate limiting, and request context
+- middleware for auth, error handling, rate limiting, consent, and request context
 
-### Service layer
-- business workflows under `src/services/`
-- owns assessment orchestration, manual review, appeals, reporting, calibration, admin content, and notifications
+### Domain and application modules
+- business workflows primarily live under `src/modules/*`
+- the codebase is a modular monolith in transition, with module-owned services for assessment, submission, review, appeal, reporting, calibration, admin content, and related domains
+- small cross-cutting helpers also exist outside the module tree, for example audit and runtime wiring
 - routes should delegate here rather than contain business logic
 
 ### Data access
 - Prisma client in `src/db/prisma.ts`
-- repository boundary in `src/repositories/` for service-layer data access
-- services use repositories instead of importing Prisma directly
+- repository boundaries exist both in `src/repositories/` and within module-owned code
+- some persistence concerns still sit close to module services, which is part of the current hardening backlog
 
 ### Background processing
-- assessment worker processes queued assessment jobs
-- SLA monitoring watches appeal aging and emits operational events
-- background-process lifecycle is owned by injectable classes rather than module-level singletons
-- process-level failure handling and graceful shutdown are wired in `src/index.ts`
+- `src/index.ts` starts either the web app, the worker runtime, or both based on `PROCESS_ROLE=web|worker|all`
+- background processing currently includes:
+  - `AssessmentWorker`
+  - `AppealSlaMonitor`
+  - `PseudonymizationMonitor`
+  - `AuditRetentionMonitor`
+- graceful shutdown and process-level failure handling are wired in `src/index.ts`
 
 ### Frontend workspaces
 - static workspace UIs in `public/`
 - each workspace is a task-specific operator console over the same backend API
 - shared browser API client lives in `public/api-client.js`
+- canonical workspace identity, paths, and role contracts live in `src/config/capabilities.ts`
+- `/participant/config` exposes the runtime config used by the browser, including navigation derived from the canonical capability contract
 
 ## Technologies, Products, and Standards
 
@@ -71,7 +77,7 @@ This section summarizes what is used for which area of the solution.
 ### Data access and persistence
 - ORM/data access: Prisma
 - local/test database: PostgreSQL
-- production-oriented target database: PostgreSQL-compatible platform on Azure
+- Azure runtime database: Azure Database for PostgreSQL
 - purpose: relational storage for submissions, decisions, reviews, appeals, audit data, and versioned content
 
 ### Authentication and authorization
@@ -97,6 +103,7 @@ This section summarizes what is used for which area of the solution.
 
 ### Cloud and operations
 - hosting product: Azure App Service
+- runtime topology: separate web and worker app roles, driven by `PROCESS_ROLE`
 - infrastructure as code: Azure Bicep
 - CI/CD platform: GitHub Actions
 - observability products: Azure Monitor, alerting, and runbook-based operational response
@@ -110,44 +117,54 @@ This section summarizes what is used for which area of the solution.
 ### Standards and conventions used across the solution
 - REST-style HTTP endpoint design for workspace/backend communication
 - JSON as the main application payload format
-- RBAC for authorization boundaries between participant, reviewer, appeal handler, calibrator, and administrator
+- RBAC for authorization boundaries between participant, reviewer, appeal handler, subject matter owner, report reader, and administrator
 - i18n/l10n conventions using supported locales `en-GB`, `nb`, and `nn`
 - immutable decision lineage as a domain-level auditability rule
 - semantic versioning for releases, documented in `doc/VERSIONS.md`
 
 ## Workspaces and Roles
 
-The platform separates human tasks by workspace and role.
+The platform separates human tasks by workspace and role. Workspace pages are static routes; effective access is enforced by authenticated API calls and the canonical capability contract that drives navigation.
 
 ### Participant workspace
 - route: `/participant`
-- role: `PARTICIPANT`
+- primary capability roles: `PARTICIPANT`, `REVIEWER`, `ADMINISTRATOR`
 - purpose: browse modules, submit work, monitor progress, view results, create appeals
 
 ### Completed modules workspace
 - route: `/participant/completed`
-- role: `PARTICIPANT`
+- primary capability roles: `PARTICIPANT`, `REVIEWER`, `ADMINISTRATOR`
 - purpose: review historical completion and result state across modules
 
-### Manual review workspace
-- route: `/manual-review`
-- roles: `REVIEWER`, `ADMINISTRATOR`
-- purpose: handle submissions that require human review before finalisation
-
-### Appeal handler workspace
-- route: `/appeal-handler`
-- roles: `APPEAL_HANDLER`, `ADMINISTRATOR`
-- purpose: triage, claim, and resolve participant appeals
+### Review workspace
+- route: `/review`
+- primary capability roles: `REVIEWER`, `APPEAL_HANDLER`, `ADMINISTRATOR`
+- purpose: combine manual review and appeal handling into one operator surface with separate queue modes
 
 ### Calibration workspace
 - route: `/calibration`
-- roles: `CALIBRATOR`, `ADMINISTRATOR`
+- primary capability roles: runtime-configurable via `calibrationWorkspace.accessRoles` (default `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR`)
 - purpose: inspect calibration cases and compare assessment behaviour
 
 ### Admin content workspace
 - route: `/admin-content`
-- roles: `ADMINISTRATOR`
+- primary capability roles: `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR`
 - purpose: create and publish versioned modules, prompts, rubrics, benchmark examples, and MCQ sets
+
+### Results workspace
+- route: `/results`
+- primary capability roles: `REPORT_READER`, `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR`
+- purpose: operational and governance reporting, analytics views, and exports
+
+### Profile workspace
+- route: `/profile`
+- primary capability roles: any authenticated user
+- purpose: show current identity, active roles, and environment/runtime context
+
+### Admin platform workspace
+- route: `/admin-platform`
+- primary capability roles: `ADMINISTRATOR`
+- purpose: platform-level administration surfaces outside content authoring
 
 ## Key Architectural Boundaries
 
@@ -156,8 +173,8 @@ The platform separates human tasks by workspace and role.
 - because of that, assessment outcomes must be reliable enough to preserve trust in the certification process
 - some variation in free-text scoring from the LLM is expected and tolerated, especially across model versions
 - that variation is **not** acceptable at the traffic-light level:
-  - clearly weak/incomplete submissions should consistently land in `red`
-  - clearly risky/borderline submissions should consistently land in `yellow`
+  - clearly weak or incomplete submissions should consistently land in `red`
+  - clearly risky or borderline submissions should consistently land in `yellow`
   - clearly strong submissions should consistently land in `green`
 - the architecture must therefore constrain the LLM to structured, policy-governed signals rather than letting arbitrary wording decide routing
 - tuning of these levels must remain understandable and configurable for administrators through documented policy/configuration, not hidden prompt behavior
@@ -165,56 +182,55 @@ The platform separates human tasks by workspace and role.
 ### Manual review and appeals are different workflows
 - manual review happens before or around finalisation of an assessment outcome when the system needs human intervention
 - appeals happen after a participant disputes an outcome
-- the UI and operating model should keep these queues separate even when they relate to the same submission
+- the combined `/review` workspace keeps these queues separate in behavior even though they share one operator surface
 
 ### Decisions are immutable
 - assessments, review overrides, and appeal resolutions create distinct decision records
 - this preserves auditability and makes decision lineage inspectable
 
 ### Configuration drives runtime behaviour
-- environment variables and participant-console config control polling, debug visibility, seeded identities, and workspace behaviour
+- environment variables and `participant-console` runtime config control polling, debug visibility, seeded identities, and calibration/review workspace behavior
+- canonical route and workspace role contracts are code-owned in `src/config/capabilities.ts`
 - production-only and staging-only behaviour should be controlled server-side, not by client toggles
 
 ### Audit and observability are first-class concerns
 - audit events, operational logs, and reporting endpoints are part of the system design, not afterthoughts
-- background workers and SLA monitors must produce structured runtime evidence
+- background workers and monitors must produce structured runtime evidence
 - runtime lifecycles should remain instantiable and testable without `NODE_ENV`-specific production code branches
 
 ## Deployment Shape
 
 Current deployment model:
 - Node.js application deployed to Azure App Service
-- Prisma-backed relational database
+- separate web and worker app roles in Azure App Service, driven by `PROCESS_ROLE`
+- Prisma-backed PostgreSQL database
 - staging deploy on push to `main`
 - production deploy behind manual approval
-- Azure Monitor / runbook support for operations
-
-Local, test, CI, and Azure repo provisioning now target PostgreSQL by default. The remaining `#91` gap is operational rollout: staging/production environments still need to be redeployed and verified against the new Azure Database for PostgreSQL contract.
+- Azure Monitor and runbook support for operations
 
 ## Known Architectural Debt
 
 The most important currently known gaps are:
-- deployed staging/production Azure environments still need PostgreSQL rollout verification after the repo-level cutover
+- module boundaries are clearer than before, but some persistence and DTO concerns are still being tightened
 - some broader unit-test coverage still depends too much on integration setup
-- several architecture decisions live across design notes and release notes rather than one permanent reference
-
-Current posture on database engine mismatch:
-- local/test/CI and Azure deployment wiring are now in place on PostgreSQL
-- staging/production Azure redeploy and smoke verification are still pending
-- see `doc/POSTGRES_MIGRATION_PLAN.md` for symptom list and migration sequence
+- several architecture decisions still live across design notes and release notes rather than one permanent reference
 
 ## ModuleVersion Fields
 
 ### submissionSchemaJson
-`ModuleVersion.submissionSchemaJson` is an optional JSON field defining the participant submission form. If present, `participant.js` renders the schema's `fields` array as form inputs instead of the default 3-field form. If absent, the default 3-field form is used. Schema format: `{"fields":[{"id":"...", "label":"...", "type":"textarea", "required":true}]}`. The `label` field supports both plain strings and locale objects of the form `{"en-GB":"...","nb":"...","nn":"..."}` — `participant.js` resolves the label to the participant's current locale at render time, and re-renders on locale change.
+
+`ModuleVersion.submissionSchemaJson` is an optional JSON field defining the participant submission form. If present, `participant.js` renders the schema's `fields` array as form inputs instead of the default 3-field form. If absent, the default 3-field form is used. Schema format: `{"fields":[{"id":"...", "label":"...", "type":"textarea", "required":true}]}`. The `label` field supports both plain strings and locale objects of the form `{"en-GB":"...","nb":"...","nn":"..."}` - `participant.js` resolves the label to the participant's current locale at render time, and re-renders on locale change.
 
 ### assessmentPolicyJson
+
 `ModuleVersion.assessmentPolicyJson` is an optional JSON field that overrides global assessment rules for a specific module. Supported overrides: `scoring.practicalWeight`, `scoring.mcqWeight`, and `passRules.totalMin`. The policy is parsed at submission time and passed to `decisionService.resolveAssessmentDecision`, which applies any present overrides and falls back to global config for absent fields.
 
 ### Module-level locale fields
+
 The `Module` record fields `title`, `description`, and `certificationLevel` all support locale objects (`{"en-GB":"...","nb":"...","nn":"..."}`) in addition to plain strings. The backend serialises these via `serializeLocalizedText` and decodes via `decodeLocalizedText`. The admin authoring prompt generates locale objects for all three fields.
 
 ### MCQ locale objects
+
 MCQ question fields (`stem`, `options` array elements, `correctAnswer`, `rationale`) support both plain strings and locale objects of the form `{"en-GB":"...","nb":"...","nn":"..."}`. Plain strings are returned as-is for all locales. Locale objects are resolved at serve time via `localizeContentText` (for scalar fields) or `localizeContentArray` (for the options list). The admin authoring prompt generates locale objects for all MCQ fields so participants see their UI language reflected in quiz content.
 
 ## Related Documents

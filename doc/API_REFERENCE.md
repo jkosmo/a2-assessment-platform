@@ -1,8 +1,8 @@
 # API Reference
 
-All API routes require authentication. In `AUTH_MODE=mock`, use the `x-user-roles` header to set roles. In `AUTH_MODE=entra`, a valid JWT is required.
+All `/api/*` routes require authentication. In `AUTH_MODE=mock`, use the `x-user-roles` header to set roles. In `AUTH_MODE=entra`, a valid JWT is required.
 
-Role requirements per route group are enforced by the RBAC middleware. See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full RBAC ownership model.
+Role requirements per route group are enforced by the RBAC middleware and the canonical capability contract in `src/config/capabilities.ts`. See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 
 ---
 
@@ -10,23 +10,23 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 
 | Method | Route | Description |
 |---|---|---|
-| `GET` | `/healthz` | Health check — returns 200 when server is up |
+| `GET` | `/healthz` | Health check - returns 200 when the server process is up |
 | `GET` | `/version` | Returns the current application version |
+| `GET` | `/participant/config` | Public runtime config for workspace navigation, auth mode, debug flags, and workspace tuning |
 
 ---
 
-## Participant
+## Participant And Shared User Flows
 
 | Method | Route | Role(s) |
 |---|---|---|
-| `GET` | `/participant/config` | any authenticated |
 | `GET` | `/api/me` | any authenticated |
-| `GET` | `/api/modules` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `GET` | `/api/modules/completed?limit=<n>` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `GET` | `/api/modules/:moduleId` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `GET` | `/api/modules/:moduleId/active-version` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `GET` | `/api/modules/:moduleId/mcq/start?submissionId=<id>` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `POST` | `/api/modules/:moduleId/mcq/submit` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
+| `GET` | `/api/modules` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
+| `GET` | `/api/modules/completed?limit=<n>` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
+| `GET` | `/api/modules/:moduleId` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
+| `GET` | `/api/modules/:moduleId/active-version` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
+| `GET` | `/api/modules/:moduleId/mcq/start?submissionId=<id>` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
+| `POST` | `/api/modules/:moduleId/mcq/submit` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 | `POST` | `/api/submissions` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `GET` | `/api/submissions/history?limit=<n>` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `GET` | `/api/submissions/:submissionId` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
@@ -34,7 +34,7 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 | `POST` | `/api/submissions/:submissionId/appeals` | PARTICIPANT, ADMINISTRATOR |
 | `GET` | `/api/assessments/:submissionId` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `POST` | `/api/assessments/:submissionId/run` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `GET` | `/api/audit/submissions/:submissionId` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
+| `GET` | `/api/audit/submissions/:submissionId` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 
 ---
 
@@ -64,7 +64,8 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 
 | Method | Route | Role(s) |
 |---|---|---|
-| `GET` | `/api/calibration/workspace?moduleId=<id>&status=<csv>&moduleVersionId=<id>&dateFrom=<ISO>&dateTo=<ISO>&limit=<n>` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
+| `GET` | `/api/calibration/workspace?moduleId=<id>&status=<csv>&moduleVersionId=<id>&dateFrom=<ISO>&dateTo=<ISO>&limit=<n>` | Runtime-configurable via `calibrationWorkspace.accessRoles` in `/participant/config` (default SUBJECT_MATTER_OWNER, ADMINISTRATOR) |
+| `POST` | `/api/calibration/workspace/publish-thresholds` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
 
 ---
 
@@ -106,7 +107,7 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 
 ---
 
-## Admin — Modules
+## Admin - Modules
 
 | Method | Route | Role(s) |
 |---|---|---|
@@ -114,7 +115,7 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 
 ---
 
-## Admin — Platform
+## Admin - Platform
 
 | Method | Route | Role(s) |
 |---|---|---|
@@ -123,7 +124,7 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 
 ---
 
-## Admin — Org Sync
+## Admin - Org Sync
 
 | Method | Route | Role(s) |
 |---|---|---|
@@ -134,14 +135,15 @@ Role requirements per route group are enforced by the RBAC middleware. See [DOMA
 
 ## Workspace UIs
 
-Static workspace pages served from `public/`:
+Static workspace pages are served from `public/`.
+These URLs are not role-gated by Express itself; access is enforced by the authenticated API calls each page makes, and navigation visibility comes from the canonical capability contract exposed through `/participant/config`.
 
-| URL | Role(s) |
+| URL | Primary capability roles |
 |---|---|
 | `/participant` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `/participant/completed` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `/review` | REVIEWER, APPEAL_HANDLER, ADMINISTRATOR |
-| `/calibration` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
+| `/calibration` | Runtime-configurable via `calibrationWorkspace.accessRoles` (default SUBJECT_MATTER_OWNER, ADMINISTRATOR) |
 | `/admin-content` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
 | `/results` | SUBJECT_MATTER_OWNER, ADMINISTRATOR, REPORT_READER |
 | `/profile` | any authenticated |

@@ -14,22 +14,22 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 
 ### Sections
 
-**`thresholds`** — Minimum scores for a passing outcome.
+**`thresholds`** - Minimum scores for a passing outcome.
 
 | Field | Type | Description |
 |---|---|---|
-| `totalMin` | `number (0–100)` | Minimum combined score (practical + MCQ) to pass |
-| `practicalMinPercent` | `number (0–100)` | Minimum practical component percentage |
-| `mcqMinPercent` | `number (0–100)` | Minimum MCQ percentage score |
+| `totalMin` | `number (0-100)` | Minimum combined score (practical + MCQ) to pass |
+| `practicalMinPercent` | `number (0-100)` | Minimum practical component percentage |
+| `mcqMinPercent` | `number (0-100)` | Minimum MCQ percentage score |
 
-**`weights`** — Maximum raw scores for each component.
+**`weights`** - Maximum raw scores for each component.
 
 | Field | Type | Description |
 |---|---|---|
-| `practicalMaxScore` | `number (≥1)` | Max possible practical score (used to compute scaled totals) |
-| `mcqMaxScore` | `number (≥1)` | Max possible MCQ score |
+| `practicalMaxScore` | `number (>=1)` | Max possible practical score (used to compute scaled totals) |
+| `mcqMaxScore` | `number (>=1)` | Max possible MCQ score |
 
-**`manualReview`** — Rules for routing to human review.
+**`manualReview`** - Rules for routing to human review.
 
 | Field | Type | Description |
 |---|---|---|
@@ -38,15 +38,15 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 | `redFlagSeverities` | `string[]` | LLM red flag severities that trigger manual review |
 | `redFlagCodes` | `string[]` | Specific LLM red flag codes that trigger manual review |
 
-**`llmDecisionReliability`** — Canonicalisation of LLM-produced red flag codes.
+**`llmDecisionReliability`** - Canonicalisation of LLM-produced red flag codes.
 
 | Field | Type | Description |
 |---|---|---|
 | `unknownRedFlagHandling` | `"downgrade_to_unclassified" \| "keep_as_is"` | How to handle red flag codes not in `canonicalRedFlags` |
 | `unknownRedFlagCanonicalCode` | `string` | Canonical code to use when downgrading unknown flags |
-| `canonicalRedFlags` | `Record<string, string[]>` | Map from canonical code → accepted LLM synonyms |
+| `canonicalRedFlags` | `Record<string, string[]>` | Map from canonical code to accepted LLM synonyms |
 
-**`mcqQuality`** *(optional, has defaults)* — Quality thresholds for MCQ item analysis.
+**`mcqQuality`** *(optional, has defaults)* - Quality thresholds for MCQ item analysis.
 
 | Field | Default | Description |
 |---|---|---|
@@ -55,18 +55,18 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 | `difficultyMax` | `0.9` | Maximum acceptable item difficulty index |
 | `discriminationMin` | `0.1` | Minimum acceptable discrimination index |
 
-**`sensitiveData`** *(optional, has defaults)* — Regex-based masking rules applied before LLM evaluation.
+**`sensitiveData`** *(optional, has defaults)* - Regex-based masking rules applied before LLM evaluation.
 
 | Field | Default | Description |
 |---|---|---|
 | `enabledByDefault` | `false` | Whether masking is active for modules not in `moduleOverrides` |
 | `moduleOverrides` | `{}` | Per-module enable/disable overrides (`{ "module-id": true }`) |
-| `rules[].id` | — | Rule identifier |
-| `rules[].pattern` | — | Regex pattern (JavaScript syntax) |
-| `rules[].flags` | — | Regex flags (e.g. `"gi"`) |
-| `rules[].replacement` | — | Replacement string (e.g. `"[MASKED_EMAIL]"`) |
+| `rules[].id` | - | Rule identifier |
+| `rules[].pattern` | - | Regex pattern (JavaScript syntax) |
+| `rules[].flags` | - | Regex flags (for example `"gi"`) |
+| `rules[].replacement` | - | Replacement string (for example `"[MASKED_EMAIL]"`) |
 
-**`secondaryAssessment`** *(optional, has defaults)* — Triggers and disagreement thresholds for secondary LLM evaluation.
+**`secondaryAssessment`** *(optional, has defaults)* - Triggers and disagreement thresholds for secondary LLM evaluation.
 
 | Field | Default | Description |
 |---|---|---|
@@ -81,7 +81,7 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 | `disagreementRules.passFailMismatch` | `true` | Flag when primary and secondary disagree on pass/fail |
 | `disagreementRules.manualReviewRecommendationMismatch` | `true` | Flag when primary and secondary disagree on manual review |
 
-**`recertification`** *(optional, has defaults)* — Validity and reminder schedule for completed certifications.
+**`recertification`** *(optional, has defaults)* - Validity and reminder schedule for completed certifications.
 
 | Field | Default | Description |
 |---|---|---|
@@ -116,16 +116,16 @@ Validation constraints for benchmark example entries uploaded via the admin cont
 
 Maps Azure Entra group object IDs to platform roles. Used to derive a user's roles from their Entra group memberships during authentication.
 
-`entra-group-role-map.example.json` is a committed template with placeholder GUIDs — copy and populate it for each environment.
+`entra-group-role-map.example.json` is a committed template with placeholder GUIDs - copy and populate it for each environment.
 
 `entra-group-role-map.generated.json` is generated from the actual tenant and **must not be committed** to source control (contains real group GUIDs).
 
 **Format:**
+
 ```json
 {
   "<entra-group-object-id>": "PARTICIPANT",
-  "<entra-group-object-id>": "ADMINISTRATOR",
-  ...
+  "<entra-group-object-id>": "ADMINISTRATOR"
 }
 ```
 
@@ -169,19 +169,17 @@ Controls how user records are reconciled when the org sync job runs (triggered v
 
 ## participant-console.json
 
-**Loaded by:** `src/routes/submissions.ts`, `src/routes/calibration.ts`
+**Loaded by:** `src/config/participantConsole.ts`
 **Env override:** `PARTICIPANT_CONSOLE_CONFIG_FILE` (default: `config/participant-console.json`)
-**Used by:** frontend workspaces (served as a config endpoint)
+**Used by:** `/participant/config` runtime config endpoint and frontend workspaces
 
-Large composite config that drives the browser-side console. Covers navigation visibility, workspace behaviour, and development identity presets.
+Large composite config that drives browser-side runtime behavior. It no longer owns the canonical workspace navigation contract; navigation is derived from `src/config/capabilities.ts` and merged with runtime-tunable settings here.
 
 ### Sections
 
-**`mockRolePresets`** — Roles available in the mock-mode role switcher (dev/test only).
+**`mockRolePresets`** - Roles available in the mock-mode role switcher (dev/test only).
 
-**`navigation.items`** — Navigation entries shown to authenticated users. Each item has `id`, `path`, `labelKey` (i18n), and `requiredRoles`. A user must have at least one of the listed roles to see the link.
-
-**`drafts`** — Local storage draft settings for the participant workspace.
+**`drafts`** - Local storage draft settings for the participant workspace.
 
 | Field | Description |
 |---|---|
@@ -189,7 +187,7 @@ Large composite config that drives the browser-side console. Covers navigation v
 | `ttlMinutes` | Draft time-to-live in minutes |
 | `maxModules` | Maximum number of modules with saved draft state |
 
-**`flow`** — Assessment polling behaviour in the participant workspace.
+**`flow`** - Assessment polling behaviour in the participant workspace.
 
 | Field | Description |
 |---|---|
@@ -197,11 +195,11 @@ Large composite config that drives the browser-side console. Covers navigation v
 | `pollIntervalSeconds` | How often the frontend polls for assessment status |
 | `maxWaitSeconds` | Maximum time to wait before showing a timeout message |
 
-**`manualReviewWorkspace` / `appealWorkspace`** — Queue filter defaults and page sizes for the reviewer and appeal handler workspaces.
+**`manualReviewWorkspace` / `appealWorkspace`** - Queue filter defaults and page sizes used inside the combined `/review` workspace.
 
-**`calibrationWorkspace`** — Calibration access roles, default filters, and signal quality thresholds (pass rate, manual review rate, benchmark coverage).
+**`calibrationWorkspace`** - Calibration access roles, default filters, and signal quality thresholds (pass rate, manual review rate, benchmark coverage). `accessRoles` is the explicit runtime-configurable exception that influences both `/api/calibration` protection and `/calibration` navigation visibility.
 
-**`identityDefaults`** — Default mock identities for each role used in development and integration testing.
+**`identityDefaults`** - Default mock identities for each role used in development and integration testing.
 
 ---
 
@@ -213,13 +211,13 @@ Large composite config that drives the browser-side console. Covers navigation v
 
 Defines KPI calculations, trend granularities, and data quality thresholds for the reporting endpoints.
 
-**`kpiDefinitions`** — Named metrics surfaced in the reporting API. Each entry has `id`, `label`, and a `formula` string describing the calculation.
+**`kpiDefinitions`** - Named metrics surfaced in the reporting API. Each entry has `id`, `label`, and a `formula` string describing the calculation.
 
-**`trends`** — Allowed time granularities for trend data (`day`, `week`, `month`) and the default.
+**`trends`** - Allowed time granularities for trend data (`day`, `week`, `month`) and the default.
 
-**`cohorts`** — Allowed grouping dimensions for cohort analysis (`month`, `department`) and the default.
+**`cohorts`** - Allowed grouping dimensions for cohort analysis (`month`, `department`) and the default.
 
-**`dataQuality`** — Thresholds that flag data quality warnings in reports.
+**`dataQuality`** - Thresholds that flag data quality warnings in reports.
 
 | Field | Description |
 |---|---|

@@ -5,7 +5,7 @@ Internal platform for delivering assessment modules, evaluating participant subm
 ## What it does
 
 - Module-based assessment with automated LLM evaluation and human review fallback
-- Role-separated workspaces: participant, reviewer, appeal handler, calibrator, administrator
+- Role-separated workspaces: participant, combined review, calibration, results, admin content, profile, and admin platform
 - Immutable decision lineage with audit events throughout the assessment lifecycle
 - Configuration-driven behaviour; deployable to Azure App Service + PostgreSQL
 

@@ -52,7 +52,7 @@ The dev server watches for TypeScript changes and restarts automatically. Static
 
 ## PostgreSQL Automation
 
-One-command setup (steps 2–4 above):
+One-command setup (steps 2-4 above):
 
 ```bash
 npm run postgres:setup
@@ -92,10 +92,10 @@ Key files:
 ## Running Tests
 
 ```bash
-npm run lint          # TypeScript type-check
-npm test              # full test suite (unit + integration)
-npm run test:unit     # unit tests only (no DB required)
-npm run test:integration   # integration tests (requires running postgres)
+npm run lint                 # TypeScript type-check
+npm test                     # full test suite (unit + integration)
+npm run test:unit            # unit tests only (no DB required)
+npm run test:integration     # integration tests (requires running postgres)
 ```
 
 CI runs on PR + push to `main` via `.github/workflows/ci.yml`.
@@ -111,7 +111,7 @@ CI runs on PR + push to `main` via `.github/workflows/ci.yml`.
 
 In mock mode, identity headers override the default test user:
 
-```
+```text
 x-user-id
 x-user-email
 x-user-name
@@ -126,12 +126,12 @@ x-user-groups     (comma-separated Entra group object IDs)
 
 | Mode | Use |
 |---|---|
-| `LLM_MODE=stub` | Local/test (default) — deterministic responses, no API calls |
+| `LLM_MODE=stub` | Local/test (default) - deterministic responses, no API calls |
 | `LLM_MODE=azure_openai` | Production |
 
 Azure OpenAI env vars:
 
-```
+```text
 AZURE_OPENAI_ENDPOINT
 AZURE_OPENAI_API_KEY
 AZURE_OPENAI_DEPLOYMENT
@@ -146,52 +146,57 @@ AZURE_OPENAI_TOKEN_LIMIT_PARAMETER   (max_tokens | max_completion_tokens | auto;
 
 ---
 
-## Manual Testing — Workspace Walkthroughs
+## Manual Testing - Workspace Walkthroughs
 
 Start the dev server and open the relevant workspace URL.
 
+Note:
+- the canonical route/workspace contract now lives in `src/config/capabilities.ts`
+- `config/participant-console.json` still owns runtime-tunable behavior such as calibration access roles, queue defaults, draft settings, and mock identity defaults
+
 ### Participant (`PARTICIPANT` role)
 
-```
+```text
 http://localhost:3000/participant
 ```
 
 Flow:
-1. Load modules → select one
+1. Load modules -> select one
 2. Create submission (MCQ starts automatically after submit)
 3. Submit MCQ
-4. Assessment runs async — poll or wait for result
+4. Assessment runs async - poll or wait for result
 5. View result
 6. Optionally file an appeal once status is `COMPLETED`
 
 Completed modules history:
-```
+
+```text
 http://localhost:3000/participant/completed
 ```
 
 ### Reviewer (`REVIEWER` / `ADMINISTRATOR` role)
 
-```
+```text
 http://localhost:3000/review
 ```
 
 - Queue shows `OPEN` / `IN_REVIEW` reviews by default; expand to `RESOLVED` via status pills
-- Select a row → Claim review
+- Select a row -> Claim review
 - Finalize with decision reason + override note + pass/fail
 
 ### Appeal Handler (`APPEAL_HANDLER` / `ADMINISTRATOR` role)
 
-```
+```text
 http://localhost:3000/review
 ```
 
 - Queue shows `OPEN` / `IN_REVIEW` appeals by default
 - Use search to filter by participant/module/appeal
-- Select a row → Claim Appeal → Resolve with outcome + resolution note
+- Select a row -> Claim appeal -> Resolve with outcome + resolution note
 
 ### Calibration (`SUBJECT_MATTER_OWNER` / `ADMINISTRATOR` role)
 
-```
+```text
 http://localhost:3000/calibration
 ```
 
@@ -201,7 +206,7 @@ http://localhost:3000/calibration
 
 ### Admin Content (`SUBJECT_MATTER_OWNER` / `ADMINISTRATOR` role)
 
-```
+```text
 http://localhost:3000/admin-content
 ```
 
@@ -210,6 +215,31 @@ http://localhost:3000/admin-content
 3. Save and publish a module version
 
 Text fields accept plain text or locale JSON: `{"en-GB":"...","nb":"...","nn":"..."}`.
+
+### Results (`REPORT_READER` / `SUBJECT_MATTER_OWNER` / `ADMINISTRATOR` role)
+
+```text
+http://localhost:3000/results
+```
+
+- Load reporting snapshots and exports
+- Verify pass-rate, completion, review, appeal, and analytics surfaces for the current environment
+
+### Profile (any authenticated role)
+
+```text
+http://localhost:3000/profile
+```
+
+- Confirm user identity, active roles, and environment/auth details render correctly
+
+### Admin Platform (`ADMINISTRATOR` role)
+
+```text
+http://localhost:3000/admin-platform
+```
+
+- Verify platform-level settings load and save as expected
 
 ---
 
@@ -242,6 +272,6 @@ Key overrides:
 | `config/entra-group-role-map.*` | `ENTRA_GROUP_ROLE_MAP_JSON` or `ENTRA_GROUP_ROLE_MAP_FILE` |
 
 `PARTICIPANT_CONSOLE_DEBUG_MODE` controls raw debug panels in workspace UIs:
-- `auto` — enabled unless `NODE_ENV=production`
-- `true` — force enabled
-- `false` — force disabled (recommended in production)
+- `auto` - enabled unless `NODE_ENV=production`
+- `true` - force enabled
+- `false` - force disabled (recommended in production)
