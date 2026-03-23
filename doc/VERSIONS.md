@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.40 - 2026-03-23
+
+Vurdering: grounding-instruks — evaluer kun mot oppgave og guidance, ikke domenekunnskap.
+- Ny «Scoring constraint» i assessorprompt: modellen skal ikke importere krav fra egen domenekunnskap
+- Fraværet av noe oppgaven ikke ber om skal ikke straffes
+- `improvement_advice` skal kun adressere hva oppgaveteksten faktisk ber om
+- Test oppdatert for å verifisere constraintet er med i prompten
+
 ## 0.9.39 - 2026-03-23
 
 fix: krav om kildereferanse-forbud i forfatterprompt

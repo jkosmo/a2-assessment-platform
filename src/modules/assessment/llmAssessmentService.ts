@@ -297,6 +297,7 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
     responseContract,
     input.moduleTaskText ? `Participant assignment context:\n${input.moduleTaskText}` : null,
     input.moduleGuidanceText ? `Expected submission content context:\n${input.moduleGuidanceText}` : null,
+    "Scoring constraint: evaluate the submission strictly against the Participant assignment context and Expected submission content context above. Do not import requirements, criteria, or expectations from your own domain knowledge. If the task does not ask for something, do not penalise its absence. improvement_advice must only suggest ways to better address what the task and guidance text actually ask for.",
     submissionFieldsSection,
     userPromptTemplate ? `Prompt template context:\n${userPromptTemplate}` : null,
     examplesJson ? `Prompt examples context (JSON):\n${examplesJson}` : null,
