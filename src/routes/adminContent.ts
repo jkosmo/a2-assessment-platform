@@ -18,9 +18,15 @@ import {
   mcqSetBodySchema,
   moduleVersionBodySchema,
   benchmarkExampleVersionBodySchema,
+  moduleDraftGenerationBodySchema,
+  mcqGenerationBodySchema,
   parseRequest,
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
+import {
+  generateModuleDraft,
+  generateMcqQuestions,
+} from "../modules/adminContent/llmContentGenerationService.js";
 import {
   toCreateModuleInput,
   toCreatePromptTemplateVersionInput,
@@ -202,6 +208,42 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     response.json({ moduleVersion });
   } catch (error) {
     response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// LLM content generation
+// ---------------------------------------------------------------------------
+
+adminContentRouter.post("/generate/module-draft", async (request, response) => {
+  const { data, error } = parseRequest(moduleDraftGenerationBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const draft = await generateModuleDraft(data);
+    response.json({ draft });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
+  }
+});
+
+adminContentRouter.post("/generate/mcq", async (request, response) => {
+  const { data, error } = parseRequest(mcqGenerationBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const result = await generateMcqQuestions({ ...data, questionCount: data.questionCount ?? 10 });
+    response.json({ questions: result.questions });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
   }
 });
 

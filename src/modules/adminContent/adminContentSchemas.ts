@@ -113,6 +113,22 @@ export const benchmarkExampleVersionBodySchema = z.object({
   active: z.boolean().default(true),
 });
 
+export const generationLocaleSchema = z.enum(["en-GB", "nb", "nn"]);
+export const certificationLevelSchema = z.enum(["basic", "intermediate", "advanced"]);
+
+export const moduleDraftGenerationBodySchema = z.object({
+  sourceMaterial: z.string().trim().min(1),
+  certificationLevel: certificationLevelSchema,
+  locale: generationLocaleSchema,
+});
+
+export const mcqGenerationBodySchema = z.object({
+  sourceMaterial: z.string().trim().min(1),
+  certificationLevel: certificationLevelSchema,
+  locale: generationLocaleSchema,
+  questionCount: z.number().int().min(1).max(20).default(10),
+});
+
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

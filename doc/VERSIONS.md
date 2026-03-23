@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.33 - 2026-03-23
+
+LLM innholdsgenerering: modul-draft og MCQ (#245, #246).
+- `POST /api/admin/content/generate/module-draft` — genererer `taskText`, `guidanceText` og `includesScenario` fra kildemateriale
+- `POST /api/admin/content/generate/mcq` — genererer MCQ-spørsmål med distraktorkvalitet kalibrert til `certificationLevel`
+- Scenario-avgjørelse delegert til LLM: inkluderes kun ved situasjonsanalyse/etikk/praktisk anvendelse
+- Scenario plasseres øverst i `taskText` merket «Scenario:» dersom inkludert
+- Distractor-retningslinjer: basic (tematisk relatert), intermediate (plausible misoppfatninger), advanced (ekspertnivå-forvirringer)
+- Bruker `temperature: 0.4`, `max_completion_tokens: 4000`
+- Zod-validering av LLM-respons
+
 ## 0.9.32 - 2026-03-23
 
 fix: oppdater llm-assessment-service-test etter prompt-ordlyd-endring (v0.9.30)
