@@ -36,8 +36,8 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     description:
       "Sterk nb-besvarelse om Bourdieu (totalScore 91.43 i staging). Detaljert definisjon av habitus, felt, doxa, kapital og symbolsk vold med konkret anvendelse på utdanningssystemet.",
     expectedOutcome: "PASS",
-    mcqScaledScore: 0,
-    mcqPercentScore: 0,
+    mcqScaledScore: 30,
+    mcqPercentScore: 100,
     moduleId: "cmn45hjjc000kmbfg7kw3iqo5",
     responseLocale: "nb",
     moduleTaskText: MODULE_TASK_TEXT,
@@ -59,8 +59,8 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     description:
       "Middels sterk nb-besvarelse om Bourdieu (totalScore 80.29 i staging). Korrekt om hoveddelen, men forklarer ikke begrepene veldig grundig og mangler presis skille mellom kapitalformer.",
     expectedOutcome: "PASS",
-    mcqScaledScore: 0,
-    mcqPercentScore: 0,
+    mcqScaledScore: 30,
+    mcqPercentScore: 100,
     moduleId: "cmn45hjjc000kmbfg7kw3iqo5",
     responseLocale: "nb",
     moduleTaskText: MODULE_TASK_TEXT,
@@ -82,8 +82,8 @@ export const assessmentBatchCases: AssessmentBatchCase[] = [
     description:
       "Svak nb-besvarelse om Bourdieu (totalScore 65 i staging, rutet til manuell gjennomgang). Overflatisk — nevner begrepene men forklarer dem ikke nøye.",
     expectedOutcome: "UNDER_REVIEW",
-    mcqScaledScore: 0,
-    mcqPercentScore: 0,
+    mcqScaledScore: 30,
+    mcqPercentScore: 100,
     moduleId: "cmn45hjjc000kmbfg7kw3iqo5",
     responseLocale: "nb",
     moduleTaskText: MODULE_TASK_TEXT,

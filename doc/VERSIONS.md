@@ -7,6 +7,11 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.44 - 2026-03-24
+
+Fix: bruk mcqScaledScore 30 (full MCQ) i benchmark-cases (#144).
+- totalScore = practical_score_scaled + 30, slik at sterke svar (~67/70 praktisk) gir totalScore ~97 og passerer totalMin=70
+
 ## 0.9.43 - 2026-03-24
 
 Oppdater benchmark-cases til ny Bourdieu-modul (#144).
