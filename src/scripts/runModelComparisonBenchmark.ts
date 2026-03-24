@@ -115,6 +115,8 @@ async function runSingle(
         moduleTaskText: assessmentCase.moduleTaskText,
         moduleGuidanceText: assessmentCase.moduleGuidanceText,
         rubricCriteriaIds: assessmentCase.rubricCriteriaIds,
+        promptTemplateSystem: assessmentCase.promptTemplateSystem,
+        promptTemplateUserTemplate: assessmentCase.promptTemplateUserTemplate,
         assessmentPass: "primary",
       },
       {

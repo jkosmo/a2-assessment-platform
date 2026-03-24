@@ -13,113 +13,89 @@ export type AssessmentBatchCase = {
   moduleGuidanceText: string;
   /** Module-specific rubric criterion IDs. If omitted, DEFAULT_CRITERIA_IDS are used. */
   rubricCriteriaIds?: string[];
+  /** LLM assessor system prompt. If omitted, DEFAULT_SYSTEM_PROMPT is used. */
+  promptTemplateSystem?: string;
+  /** LLM assessor user prompt template appended as "Prompt template context:". */
+  promptTemplateUserTemplate?: string;
 };
+
+// Module: "Ny_Bourdieu: habitus, felt og kapital" (cmn45hjjc000kmbfg7kw3iqo5)
+// Version: cmn45hotw000ymbfglgq2xmjb (v1)
+const MODULE_SYSTEM_PROMPT =
+  "Vurder svaret for nøyaktighet, begrepsskille og analytisk dybde. Belønn presis forklaring av habitus, felt, kapital, doxa og symbolsk vold.";
+const MODULE_USER_PROMPT_TEMPLATE = "Forklar begrepene direkte, sammenlign dem nøye og bruk termene konsekvent.";
+const MODULE_TASK_TEXT =
+  "Forklar og sammenlign fem begreper knyttet til Pierre Bourdieu: habitus, felt, doxa, kapital og symbolsk vold. I svaret ditt skal du definere habitus som et varig system av tilegnede disposisjoner som former persepsjon, tenkning og handling på en praktisk og ofte før-refleksiv måte; definere et felt som en sosial arena der aktører har posisjoner og kjemper om verdsatte ressurser under bestemte regler; definere doxa som dype, lærte, tatt-for-gitte forestillinger og verdier innenfor et felt; forklare kapital som ressurser som former sosial posisjon, inkludert kulturell kapital, sosial kapital og symbolsk kapital; og forklare symbolsk vold som påtvinging av kategorier for tenkning og persepsjon som får dominerte aktører til å akseptere en ulik orden som naturlig eller legitim. Sammenlign hvordan habitus og felt henger sammen, og tolk hvorfor smaksdommer kan fungere som handlinger av sosial posisjonering.";
+const MODULE_GUIDANCE_TEXT =
+  "Et sterkt svar definerer hvert begrep tydelig og holder skillene presise. Det forklarer at habitus består av tilegnede disposisjoner, at et felt er en strukturert arena av posisjoner og kamper, og at doxa viser til forestillinger som behandles som selvinnlysende innenfor et felt. Det skiller mellom kulturell kapital, sosial kapital og symbolsk kapital uten å slå dem sammen. Det forklarer også at symbolsk vold virker når påtvungne klassifikasjoner aksepteres som legitime, og det knytter smaksdommer til sosial posisjonering i stedet for å behandle smak som rent individuell preferanse. De sterkeste svarene viser hvordan habitus, felt og kapital virker sammen i reproduksjonen av sosial orden.";
 
 export const assessmentBatchCases: AssessmentBatchCase[] = [
   {
-    id: "red_insufficient_content",
-    responseLocale: "en-GB",
-    description: "Minimal, clearly incomplete submission should fail automatically.",
-    expectedOutcome: "FAIL",
+    // Submission cmn45n2t40012mbfgjlfsjk0a — totalScore 91.43, automatic PASS
+    id: "new_bourdieu_nb_strong",
+    description:
+      "Sterk nb-besvarelse om Bourdieu (totalScore 91.43 i staging). Detaljert definisjon av habitus, felt, doxa, kapital og symbolsk vold med konkret anvendelse på utdanningssystemet.",
+    expectedOutcome: "PASS",
     mcqScaledScore: 0,
     mcqPercentScore: 0,
-    moduleId: "seed_module_genai_foundations",
+    moduleId: "cmn45hjjc000kmbfg7kw3iqo5",
+    responseLocale: "nb",
+    moduleTaskText: MODULE_TASK_TEXT,
+    moduleGuidanceText: MODULE_GUIDANCE_TEXT,
+    promptTemplateSystem: MODULE_SYSTEM_PROMPT,
+    promptTemplateUserTemplate: MODULE_USER_PROMPT_TEMPLATE,
     responseJson: {
-      response: "Hepp Hepp Hepp som det. Hvorfor er alt rødt nå",
+      response:
+        "Habitus er hos Bourdieu et varig system av tilegnede disposisjoner som former hvordan mennesker oppfatter, tenker og handler på en praktisk og ofte før-refleksiv måte, mens et felt er en strukturert sosial arena der aktører inntar posisjoner og kjemper om verdsatte ressurser etter bestemte regler.\nDoxa viser til de dype, lærte og tatt-for-gitte forestillingene som innenfor et felt framstår som selvinnlysende, og nettopp derfor sjelden blir utfordret av dem som deltar i det.\nKapital betegner ressursene som gir sosial posisjon og makt, der kulturell kapital handler om kunnskaper, dannelse og kompetanser, sosial kapital om nettverk og relasjoner, og symbolsk kapital om anerkjennelse, prestisje og legitimitet.\nSymbolsk vold oppstår når dominerende kategorier for tenkning og persepsjon blir påtvunget slik at de dominerte selv oppfatter en ulik sosial orden som naturlig, rimelig eller legitim, som om verden bare tilfeldigvis var rigget for de samme menneskene hver gang.\nHabitus og felt henger sammen ved at habitus formes gjennom erfaringer i bestemte felt og samtidig gjør aktører i stand til å orientere seg i dem, og derfor fungerer smaksdommer ikke bare som personlige preferanser, men som handlinger av sosial posisjonering som markerer forskjeller og bidrar til å reprodusere sosial orden.",
+      reflection:
+        "Svaret mitt kan knyttes konkret til utdanningssystemet, der elevers språk, smak, væremåte og kulturelle referanser ofte blir vurdert som tegn på evner, selv om de også speiler sosial bakgrunn. I en norsk skolekontekst kan for eksempel elever fra hjem med mye boklig kultur lettere framstå som «flinke» fordi habitus deres passer bedre med skolens felt og dets doxa om hva som teller som riktig kunnskap og riktig måte å uttrykke seg på. Da ser vi også hvordan kulturell kapital kan omsettes til symbolsk kapital i form av anerkjennelse, mens symbolsk vold oppstår når denne ulikheten framstår som naturlig og fortjent heller enn sosialt produsert. Dermed blir poenget i svaret mitt mer konkret: smaksdommer og vurderinger virker ikke bare beskrivende, men bidrar aktivt til sosial posisjonering og reproduksjon av forskjeller i den faktiske verden, fordi mennesker tydeligvis elsker å late som om privilegier er personlige kvaliteter.",
+      promptExcerpt:
+        "Habitus, felt, doxa, kapital, kulturell kapital, sosial kapital, symbolsk kapital, symbolsk vold, sosial posisjonering, sosial reproduksjon.",
     },
-    moduleTaskText: "Complete the assignment and submit your response.",
-    moduleGuidanceText: "Include concrete examples and reasoning that support your answer.",
   },
   {
-    id: "yellow_sensitive_data",
-    responseLocale: "en-GB",
-    description: "Sensitive-data handling case should go to manual review.",
+    // Submission cmn45toe2001gmbfgkxzapxga — totalScore 80.29, automatic PASS
+    id: "new_bourdieu_nb_decent",
+    description:
+      "Middels sterk nb-besvarelse om Bourdieu (totalScore 80.29 i staging). Korrekt om hoveddelen, men forklarer ikke begrepene veldig grundig og mangler presis skille mellom kapitalformer.",
+    expectedOutcome: "PASS",
+    mcqScaledScore: 0,
+    mcqPercentScore: 0,
+    moduleId: "cmn45hjjc000kmbfg7kw3iqo5",
+    responseLocale: "nb",
+    moduleTaskText: MODULE_TASK_TEXT,
+    moduleGuidanceText: MODULE_GUIDANCE_TEXT,
+    promptTemplateSystem: MODULE_SYSTEM_PROMPT,
+    promptTemplateUserTemplate: MODULE_USER_PROMPT_TEMPLATE,
+    responseJson: {
+      response:
+        "Habitus er måten mennesker tenker og handler på ut fra erfaringene sine, mens felt er et område i samfunnet der folk prøver å få makt og anerkjennelse. Doxa er det som blir sett på som normalt og selvfølgelig i et felt. Kapital er ressurser som gir fordeler, for eksempel kunnskap, nettverk og status, og symbolsk vold er når slike forskjeller blir godtatt som naturlige. Habitus og felt henger sammen fordi mennesker formes av omgivelsene sine, og smaksdommer kan vise hvilken sosial gruppe noen hører til.",
+      reflection:
+        "Svaret mitt får fram hovedideen i Bourdieus teori, men det er ganske enkelt og forklarer ikke begrepene veldig grundig. For eksempel sier det noe riktig om smak og sosial plass, men uten å gå så mye inn i hvordan dette faktisk virker i praksis. Det kunne også vært tydeligere forskjell mellom de ulike typene kapital. Derfor fungerer svaret greit som en oversikt, men ikke som en veldig sterk faglig forklaring.",
+      promptExcerpt:
+        "Habitus, felt, doxa, kapital, kulturell kapital, sosial kapital, symbolsk kapital, symbolsk vold, smak, sosial forskjell.",
+    },
+  },
+  {
+    // Submission cmn45xsb2001umbfgqmc54f3d — totalScore 65, routed to manual review
+    id: "new_bourdieu_nb_weak",
+    description:
+      "Svak nb-besvarelse om Bourdieu (totalScore 65 i staging, rutet til manuell gjennomgang). Overflatisk — nevner begrepene men forklarer dem ikke nøye.",
     expectedOutcome: "UNDER_REVIEW",
-    mcqScaledScore: 18,
-    mcqPercentScore: 60,
-    moduleId: "seed_module_genai_foundations",
-    responseJson: {
-      response:
-        "I copied a customer list containing full names, email addresses, and personal identification numbers into a shared public document to prepare a summary for a project handoff. I then distributed the output to the full project team without masking any identifiable details or obtaining approval for the data handling.",
-    },
-    moduleTaskText: "Complete the assignment and submit your response.",
-    moduleGuidanceText:
-      "Responsible-use and data-handling concerns should be surfaced clearly when content includes sensitive or non-compliant handling.",
-  },
-  {
-    id: "green_clear_pass",
-    responseLocale: "en-GB",
-    description: "Substantive, well-structured submission should pass.",
-    expectedOutcome: "PASS",
-    mcqScaledScore: 30,
-    mcqPercentScore: 100,
-    moduleId: "seed_module_genai_foundations",
-    responseJson: {
-      response:
-        "I completed the task by first reviewing the brief and identifying the core objective, then structured my approach into three stages: initial draft, quality review, and final output. In the first stage I produced a draft addressing each required element. In the second stage I compared the draft against the original requirements, corrected two factual gaps, and tightened the action items. In the third stage I confirmed the output met the acceptance criteria and removed content that was not grounded in the source material. The final result was a clear, evidence-based response that directly addressed the task with concrete examples and a documented review step.",
-    },
-    moduleTaskText: "Complete the assignment and submit your response.",
-    moduleGuidanceText: "Include concrete examples and reasoning that support your answer.",
-  },
-  {
-    id: "bourdieu_nb_pass",
-    description: "Real nb Bourdieu submission that received automatic PASS in staging (totalScore 91.43). Strong analytical response with habitus, capital, field and distinction correctly applied.",
-    expectedOutcome: "PASS",
-    mcqScaledScore: 30,
-    mcqPercentScore: 100,
-    moduleId: "cmn0qyxjp0000pcfhx0tim603",
+    mcqScaledScore: 0,
+    mcqPercentScore: 0,
+    moduleId: "cmn45hjjc000kmbfg7kw3iqo5",
     responseLocale: "nb",
-    rubricCriteriaIds: ["conceptAccuracy", "applicationToScenario", "reflectionOnPower"],
+    moduleTaskText: MODULE_TASK_TEXT,
+    moduleGuidanceText: MODULE_GUIDANCE_TEXT,
+    promptTemplateSystem: MODULE_SYSTEM_PROMPT,
+    promptTemplateUserTemplate: MODULE_USER_PROMPT_TEMPLATE,
     responseJson: {
       response:
-        "Hos Bourdieu avgjøres plassering i det sosiale rommet av hvor mye og hvilken type kapital en person har, særlig økonomisk, kulturell, sosial og symbolsk kapital. Hvilken kapital som teller mest, bestemmes av feltet, altså den sosiale arenaen der aktørene konkurrerer etter feltets egne regler og verdier. Habitus gjør at mennesker handler, vurderer og orienterer seg på måter som passer deres bakgrunn, mens distinksjon brukes til å markere smak og status forskjellig fra andre. Slik kan privilegier reproduseres, fordi de som allerede behersker kodene i feltet lettere får anerkjennelse og omsetter kapitalen sin til nye fordeler.",
+        "Habitus er hvordan folk blir preget av oppvekst og miljø, og felt er ulike deler av samfunnet der folk møter hverandre. Doxa er det man tar for gitt, og kapital er ting som gjør at noen får fordeler. Symbolsk vold betyr at ulikheter kan virke normale selv om de ikke er det. Habitus og felt henger sammen fordi folk formes av samfunnet, og smak kan vise sosial plass.",
       reflection:
-        "Makt og ulikhet reproduseres fordi det som framstår som «naturlig» talent, god smak eller riktige valg, ofte egentlig bygger på kapital og vaner man har fått gjennom oppvekst og miljø. Når feltet gir høy verdi til bestemte former for språk, utdanning, nettverk eller væremåter, blir fordelene til de privilegerte også oppfattet som legitime i stedet for som sosialt skapte. Dermed skjules makten bak forestillinger om kvalitet og fortjeneste, og forskjeller videreføres uten at de alltid oppleves som urettferdige. Hos Bourdieu er dette nettopp poenget: dominans virker sterkest når den blir anerkjent som legitim.",
-      promptExcerpt:
-        "Bourdieu, Pierre. 1984. Distinction: A Social Critique of the Judgement of Taste. Cambridge, MA: Harvard University Press.\n\nBourdieu, Pierre. 1986. «The Forms of Capital». I Handbook of Theory and Research for the Sociology of Education, redigert av John G. Richardson, 241-258. New York: Greenwood.",
+        "Svaret mitt sier noe om de viktigste begrepene, men det er ganske overflatisk. Jeg forklarer ikke så nøye forskjellen mellom begrepene, og det blir litt enkelt. Det gjør at svaret virker mer som en kort oppsummering enn en faglig drøfting. Derfor er det ikke et veldig sterkt svar.",
+      promptExcerpt: "Habitus, felt, doxa, kapital, symbolsk vold, smak, sosial plass.",
     },
-    moduleTaskText:
-      "Les scenarioet og skriv en kort analyse med minst tre av Bourdieus begreper. Forklar hvordan former for kapital påvirker plassering i det sosiale rommet, hvordan det relevante feltet setter reglene, og hvordan habitus eller distinksjon kan bidra til å reprodusere fordel.",
-    moduleGuidanceText:
-      "Et godt svar definerer begrepene riktig, knytter dem til konkrete detaljer i scenarioet og viser hvordan skjult makt eller legitimitet virker. Sterke svar er klare, selektive og analytiske heller enn beskrivende.",
-  },
-  {
-    id: "bourdieu_nb_borderline_fail",
-    description: "Real nb Bourdieu submission that narrowly failed on practical score (totalScore 79.43, perfect MCQ). Written content is correct but too general and lacks concrete application. Run with --cases=bourdieu_nb_borderline_fail.",
-    expectedOutcome: "FAIL",
-    mcqScaledScore: 30,
-    mcqPercentScore: 100,
-    moduleId: "cmn0qyxjp0000pcfhx0tim603",
-    responseLocale: "nb",
-    rubricCriteriaIds: ["conceptAccuracy", "applicationToScenario", "reflectionOnPower"],
-    responseJson: {
-      response:
-        "Bourdieu mener at plasseringen i samfunnet henger sammen med hvilken kapital en person har. Det kan være økonomisk kapital, kulturell kapital eller sosial kapital. Feltet setter reglene for hva som gir status, så det varierer fra område til område. Habitus og distinksjon kan bidra til at folk holder seg innenfor bestemte mønstre og at forskjeller mellom grupper fortsetter.",
-      reflection:
-        "Ulikhet reproduseres når samfunnet godtar noen egenskaper og vaner som mer riktige enn andre. Da får personer fra sterkere grupper lettere makt og anerkjennelse. Samtidig kan dette virke legitimt fordi det framstår som normalt. På den måten blir maktforhold videreført.",
-      promptExcerpt:
-        "Bourdieu, Pierre. 1984. Distinction.\nBourdieu, Pierre. 1986. \"The Forms of Capital\".",
-    },
-    moduleTaskText:
-      "Les scenarioet og skriv en kort analyse med minst tre av Bourdieus begreper. Forklar hvordan former for kapital påvirker plassering i det sosiale rommet, hvordan det relevante feltet setter reglene, og hvordan habitus eller distinksjon kan bidra til å reprodusere fordel.",
-    moduleGuidanceText:
-      "Et godt svar definerer begrepene riktig, knytter dem til konkrete detaljer i scenarioet og viser hvordan skjult makt eller legitimitet virker. Sterke svar er klare, selektive og analytiske heller enn beskrivende.",
-  },
-  {
-    id: "snasa_nb_pass",
-    description: "Real nb submission about Snåsa that received automatic PASS in staging (totalScore 89.71).",
-    expectedOutcome: "PASS",
-    mcqScaledScore: 30, // TODO: verify actual MCQ score from staging
-    mcqPercentScore: 100, // TODO: verify actual MCQ percent from staging
-    moduleId: "cmmx9hm6n0000o0fh2xg1t5ja",
-    responseLocale: "nb",
-    responseJson: {
-      response:
-        "Snåsa ligger i Trøndelag mot svenskegrensen, og mellom Steinkjer, Grong og Lierne. Snåsa er et viktig Sørsamisk kultur-senter, med bla. Samien Siltje og Sørsamisk skole. Sørsamisk språk er et truet språk med få som kan det. Snåsa har mye fjell, og ligger også langs et stort og langt vann Snåsavannet.",
-    },
-    moduleTaskText:
-      "Read the source text about Snåsa and write a short factual summary for a general audience. Include where Snåsa is, one notable cultural or linguistic feature, and one geographic or natural characteristic.",
-    moduleGuidanceText:
-      "A good submission is accurate, concise, and based only on the source text. It should mention Snåsa's location in Trøndelag, its significance for the South Sami language, and at least one relevant fact about nature, geography, or local identity.",
   },
 ];

@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.43 - 2026-03-24
+
+Oppdater benchmark-cases til ny Bourdieu-modul (#144).
+- Erstatter 6 gamle cases med 3 reelle nb-besvarelser fra modul `cmn45hjjc000kmbfg7kw3iqo5` (sterk/middels/svak)
+- Legger til `promptTemplateSystem` og `promptTemplateUserTemplate` i `AssessmentBatchCase`-typen
+- Passer prompt-feltene gjennom til `evaluatePracticalWithAzureOpenAi` i benchmark-scriptet
+
 ## 0.9.42 - 2026-03-23
 
 Manuell avpublisering av modul (#258).
