@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.45 - 2026-03-24
+
+Legg til `off_topic_submission` rødt flagg (#243).
+- Nytt kanonisk rødt flagg for besvarelser som er faglig korrekte men ikke svarer på oppgaven
+- Beskrivelse skiller tydelig fra `insufficient_submission` (kvalitet/lengde) vs. emne-mismatch
+- Ruter til manuell gjennomgang via `manualReview.redFlagCodes` og sekundær vurdering
+
 ## 0.9.44 - 2026-03-24
 
 Fix: bruk mcqScaledScore 30 (full MCQ) i benchmark-cases (#144).
