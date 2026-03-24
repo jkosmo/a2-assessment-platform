@@ -111,8 +111,24 @@
 
 ## Findings
 
-_To be filled in after reviewing results._
+**Strong case — alle modeller korrekte og stabile**
+Alle tre modeller gir PASS 10/10 med `practical_score_scaled` ≈ 66–68/70 (totalScore ~96–98). Mini og nano er fullstendig deterministiske (std dev = 0 på rubrikk-score), chat har marginal variasjon (std dev 0.5). Ingen kvalitetsforskjell mellom modellene på klare, sterke besvarelser.
+
+**Decent case — FAIL på generisk rubrikk, men kalibreringsproblem ikke modellproblem**
+Alle modeller scorer decent til `practical_score_scaled` ≈ 36–38.5/70 (totalScore ~66–68.5), rett under `totalMin = 70`. Årsaken er at benchmarken bruker DEFAULT rubrikk-kriterier i stedet for modulens faktiske kriterier. I staging fikk samme besvarelse totalScore 80.29 med riktig rubrikk. Funnene sier ingenting negativt om modellene — de er konsistente og enige om scoring.
+
+**Weak case — korrekt differensiert, ingen manuell gjennomgang trigget**
+Alle modeller gir FAIL (praktisk ~21–28/70, totalScore ~51–58). Nano scorer svake besvarelser noe høyere enn mini (28 vs 21) — litt mer sjenerøs i nedre sjikt. LLM anbefalte ikke manuell gjennomgang, trolig fordi svaret ikke inneholder røde flagg, kun svak faglig dybde.
+
+**Latenstid**
+Mini og nano er ~7–8× raskere enn chat (3–4s vs 24–33s). Ingen merkbar forskjell mellom mini og nano på latens.
 
 ## Recommendation
 
-_Go/no-go decision on switching deployment, with rationale._
+**Anbefaling: bytt til `gpt-5.4-nano` for staging-vurdering.**
+
+Nano matcher chat fullt ut på sterke besvarelser, er fullstendig deterministisk ved temperature=0, og er dramatisk raskere. Ingen observert kvalitetsforskjell som taler for å beholde chat.
+
+**Overgang fra gpt-5-nano til gpt-5.4-nano** er uproblematisk basert på disse dataene. 5.4-nano viser ingen regresjoner: scoring er stabil (std dev = 0), korrekt på tydelige tilfeller, og den differensierer godt mellom sterk (96), middels (66) og svak (58) besvarelse. Den scorer svake svar marginalt høyere enn mini, men ikke på en måte som endrer utfall på klare PASS/FAIL-grenser. 5.4-versjonen er en inkrementell oppgradering i samme modellfamilie — lavere risiko enn et større modellbytte.
+
+**Åpen sak:** decent-casen feiler fordi benchmarken mangler `rubricCriteriaIds` for modulen. Dette bør løses i neste benchmark-kjøring ved å hente faktiske kriterier fra modulversjonen `cmn45hotw000ymbfglgq2xmjb`.
