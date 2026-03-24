@@ -12,6 +12,7 @@ import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor
 const role = env.PROCESS_ROLE;
 const startWeb = role === "web" || role === "all";
 const startWorkers = role === "worker" || role === "all";
+const startedAt = new Date();
 
 let server: ReturnType<typeof app.listen> | null = null;
 let shuttingDown = false;
@@ -55,10 +56,15 @@ async function startServer() {
       console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${role}]`);
     });
   } else {
-    // Worker-only mode: bind minimal health endpoint so Azure App Service keeps the process alive
+    // Worker-only mode: bind health endpoint so Azure App Service keeps the process alive
     server = http.createServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", role }));
+      res.end(JSON.stringify({
+        status: "ok",
+        role,
+        startedAt: startedAt.toISOString(),
+        worker: assessmentWorker?.getStatus() ?? null,
+      }));
     }).listen(env.PORT, () => {
       // eslint-disable-next-line no-console
       console.log(`a2-assessment-platform workers started [role=${role}]`);

@@ -1,5 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { AssessmentJobStatus } from "../../db/prismaRuntime.js";
 import { env } from "../../config/env.js";
+
+/**
+ * Stable identity for this process instance.  Generated once at module load so
+ * all lock acquisitions from this process share the same owner string.  Unique
+ * per container restart, which makes it safe in a multi-instance deployment.
+ */
+const WORKER_INSTANCE_ID = randomUUID();
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
@@ -89,7 +97,7 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
   }
 
   const leaseExpiresAt = new Date(now.getTime() + env.ASSESSMENT_JOB_LEASE_DURATION_MS);
-  const lockResult = await assessmentJobRepository.tryLockPendingJob(candidate.id, now, "default-worker", leaseExpiresAt);
+  const lockResult = await assessmentJobRepository.tryLockPendingJob(candidate.id, now, WORKER_INSTANCE_ID, leaseExpiresAt);
 
   if (lockResult.count === 0) {
     return false;

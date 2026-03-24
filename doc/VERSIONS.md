@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.46 - 2026-03-24
+
+Worker runtime hardening (#255).
+- `AssessmentWorker` prosesserer jobb umiddelbart ved oppstart (ikke etter første interval)
+- `lockedBy` bruker en prosess-unik UUID i stedet for `"default-worker"` — trygt i multi-instans-oppsett
+- Worker-only health endpoint eksponerer `role`, `startedAt`, og worker `instanceId`/`lastCycleAt`
+- `tick()` swallower feil slik at `void`-kalt tick ikke lager unhandled rejections
+- 6 nye tester for immediate start, `getStatus()`, og feilhåndtering
+
 ## 0.9.45 - 2026-03-24
 
 Legg til `off_topic_submission` rødt flagg (#243).
