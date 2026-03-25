@@ -3,9 +3,9 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 
 const adminHeaders = {
-  "x-user-id": "admin-archive-1",
-  "x-user-email": "admin.archive@company.com",
-  "x-user-name": "Archive Admin",
+  "x-user-id": "admin-1",
+  "x-user-email": "admin@company.com",
+  "x-user-name": "Platform Admin",
 };
 
 describe("Module archive and restore (#258)", () => {
