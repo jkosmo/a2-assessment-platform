@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.63 - 2026-03-25
+
+feat: Prisma-skjema og kursmodul for #277 (Course/CourseModule/CourseCompletion).
+- prisma/schema.prisma: legg til Course, CourseModule, CourseCompletion; relasjon til Module og User
+- prisma/migrations/20260325000002_add_course_models: SQL-migrasjon
+- src/modules/course/: nytt modul med courseRepository, courseCommands, courseQueries, courseReadModels, courseCompletionService, index
+- checkAndIssueCourseCompletions hookes inn i applyAssessmentDecision, manualReviewService og appealService
+- auditEvents: course entity + created/published/archived/completionIssued actions
+- operationalEvents: course.completionCheckFailed
+
 ## 0.9.62 - 2026-03-25
 
 Refactor: harden runtime bootstrap og worker operability (#272, #273, #274).

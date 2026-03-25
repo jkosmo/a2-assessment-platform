@@ -88,6 +88,7 @@ model User {
   certifications        CertificationStatus[]
   consents              UserConsent[]
   deletionRequests      DeletionRequest[]
+  courseCompletions     CourseCompletion[]
 }
 
 model UserConsent {
@@ -155,6 +156,7 @@ model Module {
   certificationStatuses  CertificationStatus[]
   rubricVersions         RubricVersion[]
   promptTemplateVersions PromptTemplateVersion[]
+  courseModules          CourseModule[]
 }
 
 model ModuleVersion {
@@ -442,4 +444,41 @@ model AssessmentJob {
   @@index([status, availableAt])
   @@index([status, leaseExpiresAt])
   @@index([submissionId, createdAt])
+}
+
+model Course {
+  id                 String             @id @default(cuid())
+  title              String             // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
+  description        String?            // lokalisert JSON
+  certificationLevel String?
+  publishedAt        DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  modules            CourseModule[]
+  completions        CourseCompletion[]
+}
+
+model CourseModule {
+  courseId   String
+  moduleId   String
+  sortOrder  Int
+  course     Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module     Module  @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+
+  @@id([courseId, moduleId])
+  @@index([moduleId])
+}
+
+model CourseCompletion {
+  id                 String   @id @default(cuid())
+  userId             String
+  courseId           String
+  completedAt        DateTime @default(now())
+  certificateId      String   @unique @default(cuid())
+  moduleSnapshotJson String   // JSON-array av moduleIds som inngikk ved fullføring
+  user               User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, courseId])
 }

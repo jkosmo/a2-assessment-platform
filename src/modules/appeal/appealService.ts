@@ -10,6 +10,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
+import { checkAndIssueCourseCompletions } from "../course/index.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toAppealWorkspaceView } from "./appealReadModels.js";
@@ -238,6 +239,21 @@ export async function resolveAppeal(input: {
     locale: resolveLocale,
     passFailTotal: input.passFailTotal,
     resolutionNote: input.resolutionNote,
+  });
+
+  checkAndIssueCourseCompletions({
+    userId: appeal.submission.userId,
+    moduleId: appeal.submission.moduleId,
+  }).catch((error: unknown) => {
+    logOperationalEvent(
+      operationalEvents.course.completionCheckFailed,
+      {
+        userId: appeal.submission.userId,
+        moduleId: appeal.submission.moduleId,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      },
+      "error",
+    );
   });
 
   return { appeal: resolvedAppeal, resolutionDecision };

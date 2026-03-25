@@ -7,6 +7,9 @@ export const operationalEvents = {
     slaBacklog: "appeal_sla_backlog",
     overdueDetected: "appeal_overdue_detected",
   },
+  course: {
+    completionCheckFailed: "course_completion_check_failed",
+  },
   assessment: {
     queueBacklog: "assessment_queue_backlog",
     jobStaleLockDetected: "assessment_job_stale_lock_detected",
@@ -51,6 +54,11 @@ export const operationalEvents = {
 export type OperationalEventName = NestedValue<typeof operationalEvents>;
 
 export type OperationalEventMetadataByName = {
+  [operationalEvents.course.completionCheckFailed]: EventMetadata<{
+    userId: string;
+    moduleId: string;
+    errorMessage: string;
+  }>;
   [operationalEvents.appeal.slaBacklog]: EventMetadata<{
     openAppeals: number;
     inReviewAppeals: number;

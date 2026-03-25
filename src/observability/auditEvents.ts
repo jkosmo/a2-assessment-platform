@@ -8,6 +8,7 @@ export const auditEntityTypes = {
   assessmentJob: "assessment_job",
   calibrationWorkspace: "calibration_workspace",
   certificationStatus: "certification_status",
+  course: "course",
   llmEvaluation: "llm_evaluation",
   manualReview: "manual_review",
   mcqAttempt: "mcq_attempt",
@@ -55,6 +56,12 @@ export const auditActions = {
   },
   calibration: {
     workspaceSessionStarted: "calibration_workspace_session_started",
+  },
+  course: {
+    created: "course_created",
+    published: "course_published",
+    archived: "course_archived",
+    completionIssued: "course_completion_issued",
   },
   certification: {
     recertificationStatusUpserted: "recertification_status_upserted",
@@ -200,6 +207,14 @@ export type AuditMetadataByAction = {
   }>;
   [auditActions.certification.participantNotificationFailed]: EventMetadata<{
     channel: string;
+  }>;
+  [auditActions.course.created]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.published]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.completionIssued]: EventMetadata<{
+    userId: string;
+    courseId: string;
+    certificateId: string;
   }>;
   [auditActions.manualReview.opened]: EventMetadata<{
     submissionId: string;

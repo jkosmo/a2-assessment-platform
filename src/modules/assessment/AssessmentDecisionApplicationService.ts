@@ -4,6 +4,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { notifyAssessmentResult } from "../certification/index.js";
+import { checkAndIssueCourseCompletions } from "../course/index.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -77,6 +78,20 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
         "error",
       );
     });
+
+    checkAndIssueCourseCompletions({ userId: input.userId, moduleId: input.moduleId }).catch(
+      (error: unknown) => {
+        logOperationalEvent(
+          operationalEvents.course.completionCheckFailed,
+          {
+            userId: input.userId,
+            moduleId: input.moduleId,
+            errorMessage: error instanceof Error ? error.message : "Unknown error",
+          },
+          "error",
+        );
+      },
+    );
   }
 
   await recordAuditEvent({

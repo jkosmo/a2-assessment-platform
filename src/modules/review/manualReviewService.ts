@@ -5,6 +5,7 @@ import { runInTransaction, type DbTransactionClient } from "../../db/transaction
 import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { notifyAssessmentResult } from "../certification/index.js";
+import { checkAndIssueCourseCompletions } from "../course/index.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
@@ -128,6 +129,21 @@ export async function finalizeManualReviewOverride(input: {
       operationalEvents.certification.participantNotificationPipelineFailed,
       {
         submissionId: review.submission.id,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      },
+      "error",
+    );
+  });
+
+  checkAndIssueCourseCompletions({
+    userId: review.submission.userId,
+    moduleId: review.submission.moduleId,
+  }).catch((error: unknown) => {
+    logOperationalEvent(
+      operationalEvents.course.completionCheckFailed,
+      {
+        userId: review.submission.userId,
+        moduleId: review.submission.moduleId,
         errorMessage: error instanceof Error ? error.message : "Unknown error",
       },
       "error",
