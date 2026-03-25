@@ -607,7 +607,20 @@ function isLocalizedContentObject(value) {
 
 function localizeContentValue(value) {
   if (typeof value === "string") {
-    return value;
+    if (value.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          value = parsed;
+        } else {
+          return value;
+        }
+      } catch {
+        return value;
+      }
+    } else {
+      return value;
+    }
   }
 
   if (!isLocalizedContentObject(value)) {

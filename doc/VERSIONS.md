@@ -7,6 +7,10 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.68 - 2026-03-25
+
+fix: localizeContentValue håndterer JSON-kodet locale-streng i kurstittel
+
 ## 0.9.67 - 2026-03-25
 
 feat: Deltaker UI for kursfremdrift (#281)
