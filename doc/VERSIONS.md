@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.66 - 2026-03-25
+
+feat: Admin UI for kursadministrasjon (#279)
+- admin-content.html: Moduler/Kurs-fane, #coursesTab med kursliste og opprett-knapp, #dialogCourse med lokaliserte inputfelt og modulrekkefølge
+- admin-content.js: aktiverTab(), loadCourses(), renderCourseList(), openCourseDialog(), saveCourseDialog(), modulrekkefølge-logikk
+- admin-content-translations.js: adminContent.courses.* og adminContent.tab.* for en-GB/nb/nn
+- adminCourses.ts: bruk localizedTextSchema + localizedTextCodec.serialize for title/description/certificationLevel
+
 ## 0.9.65 - 2026-03-25
 
 feat: Kursbevis og kursrapportering (#282, #283)

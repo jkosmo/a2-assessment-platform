@@ -82,6 +82,27 @@
       .prompt-example-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.05em; }
       .ss-field-row { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
       .ss-field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+      /* Content tabs (Moduler / Kurs) */
+      .content-tab-nav { display: flex; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-top: var(--space-2); margin-bottom: var(--space-2); }
+      .content-tab { background: none; border: none; border-bottom: 3px solid transparent; padding: 10px 24px; font-size: 15px; font-weight: 600; color: var(--color-meta); cursor: pointer; margin-bottom: -2px; }
+      .content-tab.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+      .content-tab:hover:not(.active) { color: var(--color-text); }
+      /* Course list */
+      .course-list { display: grid; gap: var(--space-2); }
+      .course-card { border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-2); background: var(--color-surface); display: grid; gap: var(--space-1); }
+      .course-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); }
+      .course-card-title { font-size: 16px; font-weight: 700; color: var(--color-text); }
+      .course-card-meta { font-size: 12px; color: var(--color-meta); }
+      .course-module-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+      .course-module-chip { background: var(--color-blue-light); color: var(--color-link-active); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+      /* Course dialog module ordering */
+      .course-module-order-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-surface); margin-bottom: 4px; }
+      .course-module-order-label { flex: 1; font-size: 14px; color: var(--color-text); }
+      .course-module-order-btn { background: none; border: 1px solid var(--color-border-soft); border-radius: 4px; padding: 1px 7px; cursor: pointer; color: var(--color-meta); font-size: 13px; line-height: 1.6; }
+      .course-module-order-btn:hover:not(:disabled) { color: var(--color-text); border-color: var(--color-text); }
+      .course-module-order-btn:disabled { opacity: 0.4; cursor: default; }
+      .course-module-order-remove { background: none; border: none; color: var(--color-error); cursor: pointer; padding: 2px 8px; font-size: 16px; opacity: 0.7; line-height: 1; }
+      .course-module-order-remove:hover { opacity: 1; }
     </style>
   </head>
   <body>
@@ -130,6 +151,12 @@
         Participants may include health information, political views, or other special category data in free-text submissions.
       </p>
     </div>
+
+    <div class="content-tab-nav" role="tablist">
+      <button type="button" id="tabModuler" role="tab" class="content-tab active" aria-selected="true" data-i18n="adminContent.tab.modules">Moduler</button>
+      <button type="button" id="tabKurs" role="tab" class="content-tab" aria-selected="false" data-i18n="adminContent.tab.courses">Kurs</button>
+    </div>
+    <div id="modulesTab">
 
     <section class="card import-panel">
       <h2 data-i18n="adminContent.import.title">1) Start from draft JSON (optional)</h2>
@@ -440,7 +467,63 @@
       </details>
     </section>
 
+    </div><!-- /modulesTab -->
+
+    <div id="coursesTab" hidden>
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-1);flex-wrap:wrap">
+          <div>
+            <h2 data-i18n="adminContent.courses.title">Kurs</h2>
+            <p class="small" data-i18n="adminContent.courses.hint">Organiser moduler i kurs for å utstede kurssertifikat.</p>
+          </div>
+          <button id="createCourseBtn" class="btn-primary" style="width:auto;flex-shrink:0" data-i18n="adminContent.courses.createBtn">Opprett kurs</button>
+        </div>
+        <div id="courseList" class="course-list" style="margin-top:var(--space-2)"></div>
+      </section>
+    </div>
+
     </main>
+
+    <dialog id="dialogCourse" aria-labelledby="dialogCourseTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dialogCourseTitle" class="field-dialog-title" data-i18n="adminContent.courses.dialog.createTitle">Opprett kurs</h2>
+      </div>
+      <div class="dialog-locale-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" class="dialog-locale-tab active" data-locale-tab="en-GB">EN-GB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nb">NB</button>
+        <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn">NN</button>
+      </div>
+      <div class="dialog-locale-pane active" data-locale-pane="en-GB">
+        <div><label for="dlgCourse_title_enGB" data-i18n="adminContent.courses.dialog.titleField">Title</label><input id="dlgCourse_title_enGB" autocomplete="off" /></div>
+        <div><label for="dlgCourse_desc_enGB" data-i18n="adminContent.courses.dialog.descField">Description</label><textarea id="dlgCourse_desc_enGB" rows="2"></textarea></div>
+      </div>
+      <div class="dialog-locale-pane" data-locale-pane="nb">
+        <div><label for="dlgCourse_title_nb" data-i18n="adminContent.courses.dialog.titleField">Title</label><input id="dlgCourse_title_nb" autocomplete="off" /></div>
+        <div><label for="dlgCourse_desc_nb" data-i18n="adminContent.courses.dialog.descField">Description</label><textarea id="dlgCourse_desc_nb" rows="2"></textarea></div>
+      </div>
+      <div class="dialog-locale-pane" data-locale-pane="nn">
+        <div><label for="dlgCourse_title_nn" data-i18n="adminContent.courses.dialog.titleField">Title</label><input id="dlgCourse_title_nn" autocomplete="off" /></div>
+        <div><label for="dlgCourse_desc_nn" data-i18n="adminContent.courses.dialog.descField">Description</label><textarea id="dlgCourse_desc_nn" rows="2"></textarea></div>
+      </div>
+      <div style="margin-top:var(--space-1)">
+        <label for="dlgCourse_certLevel" data-i18n="adminContent.courses.dialog.certLevel">Certification level</label>
+        <input id="dlgCourse_certLevel" autocomplete="off" />
+        <div class="small" data-i18n="adminContent.courses.dialog.certLevelHint">Plain text, e.g. foundation.</div>
+      </div>
+      <div class="dialog-section-label" data-i18n="adminContent.courses.dialog.modulesSection">Modules</div>
+      <div id="dlgCourse_moduleList"></div>
+      <div style="display:flex;gap:var(--space-1);align-items:flex-end;margin-top:var(--space-1)">
+        <div style="flex:1">
+          <label for="dlgCourse_moduleDropdown" data-i18n="adminContent.courses.dialog.addModule">Add module</label>
+          <select id="dlgCourse_moduleDropdown"></select>
+        </div>
+        <button type="button" id="dlgCourse_addModuleBtn" class="btn-secondary" style="width:auto" data-i18n="adminContent.courses.dialog.addModuleBtn">Legg til</button>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" id="dialogCourseCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Avbryt</button>
+        <button type="button" id="dialogCourseSave" class="btn-primary" data-i18n="adminContent.courses.dialog.save">Lagre</button>
+      </div>
+    </dialog>
 
     <dialog id="dialogModuleDetails" aria-labelledby="dialogModuleDetailsTitle" class="field-dialog">
       <div class="field-dialog-header">

@@ -8,15 +8,17 @@ import {
   setCourseModules,
   courseRepository,
 } from "../modules/course/index.js";
+import { localizedTextSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 
 const adminCoursesRouter = Router();
 
 const courseBodySchema = z.object({
-  title: z.string().min(1),
-  description: z.string().nullable().optional(),
-  certificationLevel: z.string().nullable().optional(),
+  title: localizedTextSchema,
+  description: localizedTextSchema.optional(),
+  certificationLevel: localizedTextSchema.optional(),
 });
 
 const setCourseModulesBodySchema = z.object({
@@ -37,9 +39,9 @@ adminCoursesRouter.post("/", async (request, response, next) => {
 
   try {
     const course = await createCourse({
-      title: parsed.data.title,
-      description: parsed.data.description ?? null,
-      certificationLevel: parsed.data.certificationLevel ?? null,
+      title: localizedTextCodec.serialize(parsed.data.title),
+      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : null,
+      certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : null,
       actorId: request.context?.userId,
     });
     response.status(201).json({ course });
@@ -100,7 +102,11 @@ adminCoursesRouter.put("/:courseId", async (request, response, next) => {
   }
 
   try {
-    const course = await updateCourse(request.params.courseId, parsed.data);
+    const course = await updateCourse(request.params.courseId, {
+      title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
+      description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
+      certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
+    });
     response.json({ course });
   } catch (error) {
     next(error);

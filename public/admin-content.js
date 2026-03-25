@@ -3461,3 +3461,369 @@ renderModuleMeta();
 renderModuleStatus();
 renderContentCards();
 syncAllTextareaHeights();
+
+// ============================================================
+// Courses tab
+// ============================================================
+
+let courses = [];
+let courseDialogModules = []; // [{ moduleId, sortOrder, title }]
+let editingCourseId = null;
+let coursesLoaded = false;
+
+function activateContentTab(tab) {
+  const modulesTab = document.getElementById("modulesTab");
+  const coursesTab = document.getElementById("coursesTab");
+  const tabModuler = document.getElementById("tabModuler");
+  const tabKurs = document.getElementById("tabKurs");
+  if (tab === "courses") {
+    modulesTab.hidden = true;
+    coursesTab.hidden = false;
+    tabModuler.classList.remove("active");
+    tabModuler.setAttribute("aria-selected", "false");
+    tabKurs.classList.add("active");
+    tabKurs.setAttribute("aria-selected", "true");
+    if (!coursesLoaded) {
+      loadCourses().catch((err) => setMessage(parseActionableErrorMessage(err), "error"));
+    }
+  } else {
+    coursesTab.hidden = true;
+    modulesTab.hidden = false;
+    tabKurs.classList.remove("active");
+    tabKurs.setAttribute("aria-selected", "false");
+    tabModuler.classList.add("active");
+    tabModuler.setAttribute("aria-selected", "true");
+  }
+}
+
+document.getElementById("tabModuler")?.addEventListener("click", () => activateContentTab("modules"));
+document.getElementById("tabKurs")?.addEventListener("click", () => activateContentTab("courses"));
+
+async function loadCourses() {
+  const body = await apiFetch("/api/admin/content/courses", headers);
+  courses = Array.isArray(body.courses) ? body.courses : [];
+  coursesLoaded = true;
+  renderCourseList();
+}
+
+function renderCourseList() {
+  const list = document.getElementById("courseList");
+  if (!list) return;
+  if (courses.length === 0) {
+    list.innerHTML = `<p class="small" style="color:var(--color-meta)">${escapeHtml(t("adminContent.courses.empty"))}</p>`;
+    return;
+  }
+  list.innerHTML = "";
+  for (const course of courses) {
+    list.appendChild(buildCourseCard(course));
+  }
+}
+
+function escapeHtml(str) {
+  return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildCourseCard(course) {
+  const card = document.createElement("div");
+  card.className = "course-card";
+  const isArchived = Boolean(course.archivedAt);
+  const isPublished = Boolean(course.publishedAt) && !isArchived;
+  const badgeClass = isArchived ? "shell" : isPublished ? "live" : "draft";
+  const badgeText = isArchived
+    ? t("adminContent.courses.badge.archived")
+    : isPublished
+    ? t("adminContent.courses.badge.live")
+    : t("adminContent.courses.badge.draft");
+  const titleText = escapeHtml(localizeContentValue(course.title) || "—");
+  const descText = escapeHtml(localizeContentValue(course.description) || "");
+  const moduleCount = typeof course.moduleCount === "number" ? course.moduleCount : 0;
+  const countLabel = `${moduleCount} ${t("adminContent.courses.moduleCount")}`;
+
+  card.innerHTML = `
+    <div class="course-card-header">
+      <div>
+        <div class="course-card-title">${titleText}</div>
+        ${descText ? `<div class="course-card-meta">${descText}</div>` : ""}
+        <div class="course-card-meta">${escapeHtml(countLabel)}</div>
+      </div>
+      <span class="module-status-badge ${badgeClass}">${escapeHtml(badgeText)}</span>
+    </div>
+    <div class="button-row">
+      <button class="btn-secondary" style="width:auto;font-size:13px" data-action="edit-course" data-course-id="${escapeHtml(course.id)}">${escapeHtml(t("adminContent.cards.editBtn"))}</button>
+      ${!isPublished && !isArchived ? `<button class="btn-primary" style="width:auto;font-size:13px" data-action="publish-course" data-course-id="${escapeHtml(course.id)}">${escapeHtml(t("adminContent.courses.publishBtn"))}</button>` : ""}
+      ${isPublished ? `<button class="btn-danger" style="width:auto;font-size:13px" data-action="archive-course" data-course-id="${escapeHtml(course.id)}">${escapeHtml(t("adminContent.courses.archiveBtn"))}</button>` : ""}
+    </div>
+  `;
+  return card;
+}
+
+document.getElementById("courseList")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const courseId = btn.dataset.courseId;
+  if (action === "edit-course") {
+    await openCourseDialog(courseId);
+  } else if (action === "publish-course") {
+    await runWithBusyButton(btn, async () => {
+      try {
+        await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, headers, { method: "POST" });
+        setMessage(t("adminContent.courses.message.published"), "success");
+        coursesLoaded = false;
+        await loadCourses();
+      } catch (error) {
+        setMessage(parseActionableErrorMessage(error), "error");
+      }
+    });
+  } else if (action === "archive-course") {
+    const courseTitle = localizeContentValue(courses.find((c) => c.id === courseId)?.title) || courseId;
+    if (!confirm(t("adminContent.courses.confirm.archive").replace("{course}", courseTitle))) return;
+    await runWithBusyButton(btn, async () => {
+      try {
+        await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/archive`, headers, { method: "POST" });
+        setMessage(t("adminContent.courses.message.archived"), "success");
+        coursesLoaded = false;
+        await loadCourses();
+      } catch (error) {
+        setMessage(parseActionableErrorMessage(error), "error");
+      }
+    });
+  }
+});
+
+document.getElementById("createCourseBtn")?.addEventListener("click", () => openCourseDialog(null));
+
+async function openCourseDialog(courseId) {
+  editingCourseId = courseId ?? null;
+  const dialog = document.getElementById("dialogCourse");
+  if (!dialog) return;
+
+  // Reset inputs
+  for (const suffix of ["enGB", "nb", "nn"]) {
+    const titleEl = document.getElementById(`dlgCourse_title_${suffix}`);
+    const descEl = document.getElementById(`dlgCourse_desc_${suffix}`);
+    if (titleEl) titleEl.value = "";
+    if (descEl) descEl.value = "";
+  }
+  const certEl = document.getElementById("dlgCourse_certLevel");
+  if (certEl) certEl.value = "";
+  courseDialogModules = [];
+
+  if (courseId) {
+    try {
+      const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, headers);
+      const course = body.course;
+      if (course) {
+        fillLocaleInputs("dlgCourse_title", course.title);
+        fillLocaleInputs("dlgCourse_desc", course.description);
+        if (certEl && course.certificationLevel) {
+          const cv = course.certificationLevel;
+          certEl.value = typeof cv === "object" ? (cv["en-GB"] ?? Object.values(cv)[0] ?? "") : (cv ?? "");
+        }
+        courseDialogModules = Array.isArray(course.modules)
+          ? course.modules
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((m) => ({
+                moduleId: m.moduleId,
+                sortOrder: m.sortOrder,
+                title: localizeContentValue(m.moduleTitle) || m.moduleId,
+              }))
+          : [];
+      }
+    } catch (error) {
+      setMessage(parseActionableErrorMessage(error), "error");
+      return;
+    }
+  }
+
+  const titleEl2 = document.getElementById("dialogCourseTitle");
+  if (titleEl2) {
+    titleEl2.textContent = courseId
+      ? t("adminContent.courses.dialog.editTitle")
+      : t("adminContent.courses.dialog.createTitle");
+  }
+
+  populateCourseModuleDropdown();
+  renderCourseDialogModuleList();
+  setActiveDialogLocaleTab(dialog, "en-GB");
+  dialog.showModal();
+}
+
+function fillLocaleInputs(idPrefix, value) {
+  const val = value ?? "";
+  let enGB = "", nb = "", nn = "";
+  if (typeof val === "object" && val !== null) {
+    enGB = val["en-GB"] ?? "";
+    nb = val["nb"] ?? "";
+    nn = val["nn"] ?? "";
+  } else {
+    try {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === "object") {
+        enGB = parsed["en-GB"] ?? "";
+        nb = parsed["nb"] ?? "";
+        nn = parsed["nn"] ?? "";
+      } else {
+        enGB = val;
+      }
+    } catch {
+      enGB = val;
+    }
+  }
+  const elEnGB = document.getElementById(`${idPrefix}_enGB`);
+  const elNb = document.getElementById(`${idPrefix}_nb`);
+  const elNn = document.getElementById(`${idPrefix}_nn`);
+  if (elEnGB) elEnGB.value = enGB;
+  if (elNb) elNb.value = nb;
+  if (elNn) elNn.value = nn;
+}
+
+function populateCourseModuleDropdown() {
+  const select = document.getElementById("dlgCourse_moduleDropdown");
+  if (!select) return;
+  const selectedIds = new Set(courseDialogModules.map((m) => m.moduleId));
+  select.innerHTML = `<option value="">— ${escapeHtml(t("adminContent.courses.dialog.selectModule"))} —</option>`;
+  for (const m of modules) {
+    if (!selectedIds.has(m.id)) {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.title || m.id;
+      select.appendChild(opt);
+    }
+  }
+}
+
+function renderCourseDialogModuleList() {
+  const list = document.getElementById("dlgCourse_moduleList");
+  if (!list) return;
+  if (courseDialogModules.length === 0) {
+    list.innerHTML = `<p class="small" style="color:var(--color-meta);margin-bottom:4px">${escapeHtml(t("adminContent.courses.dialog.noModules"))}</p>`;
+    return;
+  }
+  list.innerHTML = "";
+  courseDialogModules.forEach((m, idx) => {
+    const row = document.createElement("div");
+    row.className = "course-module-order-row";
+    row.innerHTML = `
+      <span class="course-module-order-label">${escapeHtml(m.title || m.moduleId)}</span>
+      <div class="course-module-order-btns">
+        <button type="button" class="course-module-order-btn" data-move="up" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
+        <button type="button" class="course-module-order-btn" data-move="down" data-idx="${idx}" ${idx === courseDialogModules.length - 1 ? "disabled" : ""}>▼</button>
+        <button type="button" class="course-module-order-remove" data-remove="${idx}">×</button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+document.getElementById("dlgCourse_moduleList")?.addEventListener("click", (e) => {
+  const moveBtn = e.target.closest("[data-move]");
+  if (moveBtn) {
+    const idx = parseInt(moveBtn.dataset.idx, 10);
+    const dir = moveBtn.dataset.move;
+    if (dir === "up" && idx > 0) {
+      [courseDialogModules[idx - 1], courseDialogModules[idx]] = [courseDialogModules[idx], courseDialogModules[idx - 1]];
+    } else if (dir === "down" && idx < courseDialogModules.length - 1) {
+      [courseDialogModules[idx + 1], courseDialogModules[idx]] = [courseDialogModules[idx], courseDialogModules[idx + 1]];
+    }
+    renderCourseDialogModuleList();
+    populateCourseModuleDropdown();
+    return;
+  }
+  const removeBtn = e.target.closest("[data-remove]");
+  if (removeBtn) {
+    const idx = parseInt(removeBtn.dataset.remove, 10);
+    courseDialogModules.splice(idx, 1);
+    renderCourseDialogModuleList();
+    populateCourseModuleDropdown();
+  }
+});
+
+document.getElementById("dlgCourse_addModuleBtn")?.addEventListener("click", () => {
+  const select = document.getElementById("dlgCourse_moduleDropdown");
+  const moduleId = select?.value;
+  if (!moduleId) return;
+  const moduleObj = modules.find((m) => m.id === moduleId);
+  courseDialogModules.push({
+    moduleId,
+    sortOrder: courseDialogModules.length + 1,
+    title: moduleObj?.title || moduleId,
+  });
+  renderCourseDialogModuleList();
+  populateCourseModuleDropdown();
+});
+
+document.getElementById("dialogCourseCancel")?.addEventListener("click", () => {
+  document.getElementById("dialogCourse")?.close();
+});
+document.getElementById("dialogCourse")?.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  document.getElementById("dialogCourse")?.close();
+});
+document.getElementById("dialogCourse")?.addEventListener("click", (e) => {
+  const tab = e.target.closest(".dialog-locale-tab");
+  if (!tab) return;
+  const locale = tab.dataset.localeTab;
+  if (locale) setActiveDialogLocaleTab(document.getElementById("dialogCourse"), locale);
+});
+
+document.getElementById("dialogCourseSave")?.addEventListener("click", async () => {
+  const btn = document.getElementById("dialogCourseSave");
+  await runWithBusyButton(btn, async () => {
+    try {
+      await saveCourseDialog();
+    } catch (error) {
+      setMessage(parseActionableErrorMessage(error), "error");
+    }
+  });
+});
+
+async function saveCourseDialog() {
+  const titleEnGB = document.getElementById("dlgCourse_title_enGB")?.value.trim() ?? "";
+  const titleNb = document.getElementById("dlgCourse_title_nb")?.value.trim() ?? "";
+  const titleNn = document.getElementById("dlgCourse_title_nn")?.value.trim() ?? "";
+  if (!titleEnGB) {
+    throw new Error(t("adminContent.courses.errors.titleRequired"));
+  }
+  const title = { "en-GB": titleEnGB, nb: titleNb || titleEnGB, nn: titleNn || titleEnGB };
+
+  const descEnGB = document.getElementById("dlgCourse_desc_enGB")?.value.trim() ?? "";
+  const descNb = document.getElementById("dlgCourse_desc_nb")?.value.trim() ?? "";
+  const descNn = document.getElementById("dlgCourse_desc_nn")?.value.trim() ?? "";
+  const description = descEnGB ? { "en-GB": descEnGB, nb: descNb || descEnGB, nn: descNn || descEnGB } : undefined;
+
+  const certLevel = document.getElementById("dlgCourse_certLevel")?.value.trim() || undefined;
+  const payload = { title, description, certificationLevel: certLevel };
+
+  let courseId = editingCourseId;
+  if (courseId) {
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, headers, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  } else {
+    const body = await apiFetch("/api/admin/content/courses", headers, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    courseId = body.course?.id;
+  }
+
+  if (courseId) {
+    const modulePayload = {
+      modules: courseDialogModules.map((m, idx) => ({ moduleId: m.moduleId, sortOrder: idx + 1 })),
+    };
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/modules`, headers, {
+      method: "PUT",
+      body: JSON.stringify(modulePayload),
+    });
+  }
+
+  setMessage(
+    editingCourseId ? t("adminContent.courses.message.updated") : t("adminContent.courses.message.created"),
+    "success",
+  );
+  document.getElementById("dialogCourse")?.close();
+  coursesLoaded = false;
+  await loadCourses();
+}
