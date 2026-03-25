@@ -222,7 +222,37 @@ export async function resolveAppeal(input: {
 
   const finalisedAt = new Date();
 
-  const { resolutionDecision, resolvedAppeal } = await runInTransaction(async (tx) => {
+  const { resolutionDecision, resolvedAppeal } = await resolveAppealCommand(appeal, input, latestDecision, finalisedAt);
+
+  const resolveLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
+  const resolveModuleTitle = localizeContentText(resolveLocale, appeal.submission.module.title) ?? latestDecision.submissionId;
+  await safeNotifyAppealStatusTransition({
+    appealId: resolvedAppeal.id,
+    submissionId: latestDecision.submissionId,
+    previousStatus: appeal.appealStatus,
+    currentStatus: resolvedAppeal.appealStatus,
+    recipientUserId: appeal.appealedBy.id,
+    recipientEmail: appeal.appealedBy.email,
+    recipientName: appeal.appealedBy.name,
+    moduleTitle: resolveModuleTitle,
+    locale: resolveLocale,
+    passFailTotal: input.passFailTotal,
+    resolutionNote: input.resolutionNote,
+  });
+
+  return { appeal: resolvedAppeal, resolutionDecision };
+}
+
+type ResolutionAppeal = NonNullable<Awaited<ReturnType<typeof appealRepository.findAppealForResolution>>>;
+type ResolutionDecision = NonNullable<ResolutionAppeal["submission"]["decisions"][number]>;
+
+async function resolveAppealCommand(
+  appeal: ResolutionAppeal,
+  input: { handlerId: string; passFailTotal: boolean; decisionReason: string; resolutionNote: string },
+  latestDecision: ResolutionDecision,
+  finalisedAt: Date,
+) {
+  return runInTransaction(async (tx) => {
     const repo = createAppealRepository(tx);
 
     const resolutionDecision = await appendDecisionWithLineage(
@@ -266,24 +296,6 @@ export async function resolveAppeal(input: {
 
     return { resolutionDecision, resolvedAppeal };
   });
-
-  const resolveLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
-  const resolveModuleTitle = localizeContentText(resolveLocale, appeal.submission.module.title) ?? latestDecision.submissionId;
-  await safeNotifyAppealStatusTransition({
-    appealId: resolvedAppeal.id,
-    submissionId: latestDecision.submissionId,
-    previousStatus: appeal.appealStatus,
-    currentStatus: resolvedAppeal.appealStatus,
-    recipientUserId: appeal.appealedBy.id,
-    recipientEmail: appeal.appealedBy.email,
-    recipientName: appeal.appealedBy.name,
-    moduleTitle: resolveModuleTitle,
-    locale: resolveLocale,
-    passFailTotal: input.passFailTotal,
-    resolutionNote: input.resolutionNote,
-  });
-
-  return { appeal: resolvedAppeal, resolutionDecision };
 }
 
 type SupersedeTxClient = Pick<DbTransactionClient, "appeal" | "submission" | "user" | "assessmentDecision" | "auditEvent">;

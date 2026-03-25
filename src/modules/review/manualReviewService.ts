@@ -105,7 +105,48 @@ export async function finalizeManualReviewOverride(input: {
 
   const finalisedAt = new Date();
 
-  const { overrideDecision, resolvedReview } = await runInTransaction(async (tx) => {
+  const { overrideDecision, resolvedReview } = await finalizeManualReviewOverrideCommand(
+    review,
+    input,
+    latestDecision,
+    finalisedAt,
+  );
+
+  const submissionLocale = normalizeLocale(review.submission.locale) ?? "en-GB";
+  const moduleTitle = localizeContentText(submissionLocale, review.submission.module.title) ?? review.submission.moduleId;
+  notifyAssessmentResult({
+    submissionId: review.submission.id,
+    submittedAt: review.submission.submittedAt,
+    recipientEmail: review.submission.user.email,
+    recipientName: review.submission.user.name,
+    moduleTitle,
+    moduleId: review.submission.moduleId,
+    passFailTotal: input.passFailTotal,
+    locale: submissionLocale,
+  }).catch((error: unknown) => {
+    logOperationalEvent(
+      operationalEvents.certification.participantNotificationPipelineFailed,
+      {
+        submissionId: review.submission.id,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      },
+      "error",
+    );
+  });
+
+  return { review: resolvedReview, overrideDecision };
+}
+
+type OverrideReview = NonNullable<Awaited<ReturnType<typeof manualReviewRepository.findManualReviewForOverride>>>;
+type LatestDecision = NonNullable<OverrideReview["submission"]["decisions"][number]>;
+
+async function finalizeManualReviewOverrideCommand(
+  review: OverrideReview,
+  input: { reviewerId: string; passFailTotal: boolean; decisionReason: string; overrideReason: string },
+  latestDecision: LatestDecision,
+  finalisedAt: Date,
+) {
+  return runInTransaction(async (tx) => {
     const repo = createManualReviewRepository(tx);
 
     const overrideDecision = await appendDecisionWithLineage(
@@ -151,30 +192,6 @@ export async function finalizeManualReviewOverride(input: {
 
     return { overrideDecision, resolvedReview };
   });
-
-  const submissionLocale = normalizeLocale(review.submission.locale) ?? "en-GB";
-  const moduleTitle = localizeContentText(submissionLocale, review.submission.module.title) ?? review.submission.moduleId;
-  notifyAssessmentResult({
-    submissionId: review.submission.id,
-    submittedAt: review.submission.submittedAt,
-    recipientEmail: review.submission.user.email,
-    recipientName: review.submission.user.name,
-    moduleTitle,
-    moduleId: review.submission.moduleId,
-    passFailTotal: input.passFailTotal,
-    locale: submissionLocale,
-  }).catch((error: unknown) => {
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationPipelineFailed,
-      {
-        submissionId: review.submission.id,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      },
-      "error",
-    );
-  });
-
-  return { review: resolvedReview, overrideDecision };
 }
 
 type SupersedeTxClient = Pick<DbTransactionClient, "manualReview" | "assessmentDecision" | "submission" | "auditEvent">;

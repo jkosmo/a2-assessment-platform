@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.56 - 2026-03-25
+
+Refactor: eksplisitte kommandogrenser i review og appeal resolution (#264, #265).
+- finalizeManualReviewOverrideCommand trekket ut i manualReviewService
+- resolveAppealCommand trekket ut i appealService
+- Begge er rene transaksjonskommandoer; notifikasjon og logging forblir utenfor
+
 ## 0.9.55 - 2026-03-25
 
 Refactor: eksplisitt kommandogrense i createSubmission (#263).
