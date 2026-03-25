@@ -199,6 +199,21 @@
       <div class="small" id="selectedModuleMeta"></div>
     </section>
 
+    <section class="card" id="archiveLibrarySection">
+      <h2 data-i18n="adminContent.archive.title">Module archive library</h2>
+      <div class="small" data-i18n="adminContent.archive.hint">Archived modules are hidden from the main list. Search here to restore or inspect them.</div>
+      <div class="row" style="margin-top:var(--space-1)">
+        <div>
+          <label for="archiveSearchInput" data-i18n="adminContent.archive.searchLabel">Search by title</label>
+          <input id="archiveSearchInput" data-i18n-placeholder="adminContent.archive.searchPlaceholder" placeholder="Filter archived modules..." />
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button id="archiveSearchBtn" class="btn-secondary" data-i18n="adminContent.archive.searchBtn">Search</button>
+        </div>
+      </div>
+      <div id="archiveLibraryList" style="margin-top:var(--space-1)"></div>
+    </section>
+
     <section class="card">
       <h2 data-i18n="adminContent.status.title">4) Module status</h2>
       <div id="moduleStatusCard" class="module-status-card">

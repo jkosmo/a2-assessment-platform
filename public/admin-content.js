@@ -45,6 +45,9 @@ const moduleStatusCounts = document.getElementById("moduleStatusCounts");
 const moduleStatusDetails = document.getElementById("moduleStatusDetails");
 const unpublishModuleBtn = document.getElementById("unpublishModuleBtn");
 const archiveModuleBtn = document.getElementById("archiveModuleBtn");
+const archiveSearchInput = document.getElementById("archiveSearchInput");
+const archiveSearchBtn = document.getElementById("archiveSearchBtn");
+const archiveLibraryList = document.getElementById("archiveLibraryList");
 
 const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
@@ -1845,6 +1848,55 @@ async function handleUnpublishModule() {
   await refreshSelectedModuleStatus();
 }
 
+async function loadArchiveLibrary(search) {
+  archiveLibraryList.textContent = t("adminContent.archive.loading");
+  try {
+    const url = `/api/admin/content/modules/archive${search ? `?search=${encodeURIComponent(search)}` : ""}`;
+    const body = await apiFetch(url, headers);
+    const items = body.modules ?? [];
+    if (items.length === 0) {
+      archiveLibraryList.textContent = t("adminContent.archive.empty");
+      return;
+    }
+    archiveLibraryList.innerHTML = "";
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:var(--space-1);padding:var(--space-1);border:1px solid var(--color-border-soft);border-radius:var(--radius-card);background:var(--color-surface);margin-bottom:calc(var(--space-1)*0.5)";
+
+      const info = document.createElement("div");
+      const archivedDate = item.archivedAt ? new Date(item.archivedAt).toLocaleDateString() : "-";
+      info.innerHTML = `<span style="font-weight:600">${item.title ?? item.id}</span> <span style="color:var(--color-meta);font-size:13px">${item.certificationLevel ?? ""} — ${t("adminContent.archive.archivedOn")} ${archivedDate}</span>`;
+
+      const restoreBtn = document.createElement("button");
+      restoreBtn.className = "btn-secondary";
+      restoreBtn.style.cssText = "width:auto;padding:4px 12px;font-size:13px;flex-shrink:0";
+      restoreBtn.textContent = t("adminContent.archive.restoreBtn");
+      restoreBtn.addEventListener("click", async () => {
+        await runWithBusyButton(restoreBtn, async () => {
+          try {
+            await apiFetch(
+              `/api/admin/content/modules/${encodeURIComponent(item.id)}/restore`,
+              headers,
+              { method: "POST", body: JSON.stringify({}) },
+            );
+            setMessage(t("adminContent.archive.restored").replace("{module}", item.title ?? item.id), "success");
+            await loadModules();
+            await loadArchiveLibrary(archiveSearchInput.value.trim());
+          } catch (error) {
+            setMessage(parseActionableErrorMessage(error), "error");
+          }
+        });
+      });
+
+      row.appendChild(info);
+      row.appendChild(restoreBtn);
+      archiveLibraryList.appendChild(row);
+    }
+  } catch (error) {
+    archiveLibraryList.textContent = parseActionableErrorMessage(error);
+  }
+}
+
 async function handleArchiveModule() {
   const moduleId = resolveModuleIdOrThrow();
   const module = modules.find((item) => item.id === moduleId) ?? null;
@@ -3071,6 +3123,16 @@ unpublishModuleBtn.addEventListener("click", async () => {
       log(message);
     }
   });
+});
+
+archiveSearchBtn.addEventListener("click", async () => {
+  await runWithBusyButton(archiveSearchBtn, async () => {
+    await loadArchiveLibrary(archiveSearchInput.value.trim());
+  });
+});
+
+archiveSearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") archiveSearchBtn.click();
 });
 
 archiveModuleBtn.addEventListener("click", async () => {

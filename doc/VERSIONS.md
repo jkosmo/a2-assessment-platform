@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.53 - 2026-03-25
+
+Arkivbibliotek i Admin Content (#258).
+- Ny seksjon «Modularkiv» mellom «Åpne eksisterende modul» og «4) Modulstatus»
+- Fritekstsøk på tittel, liste over arkiverte moduler med arkiveringsdato og nivå
+- «Gjenopprett»-knapp per rad — oppdaterer modul-dropdown og arkivlisten automatisk
+- Oversettelser for en-GB, nb, nn
+
 ## 0.9.52 - 2026-03-25
 
 Frontend: arkiver-knapp i Admin Content (#258).
