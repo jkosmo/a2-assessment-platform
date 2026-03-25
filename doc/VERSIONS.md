@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.67 - 2026-03-25
+
+feat: Deltaker UI for kursfremdrift (#281)
+- participant.html: course accordion-seksjon over modulerlisten, CSS for accordion/progress/sertifikat
+- participant.js: loadParticipantCourses(), renderParticipantCourseAccordion(), buildCourseAccordionItem(), lazy-load av kursdetaljer on expand, deep link via ?courseId=
+- participant-translations.js: courses.* nøkler for en-GB/nb/nn
+
 ## 0.9.66 - 2026-03-25
 
 feat: Admin UI for kursadministrasjon (#279)

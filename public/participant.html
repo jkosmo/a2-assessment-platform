@@ -57,6 +57,24 @@
       .flow-step.is-completed .flow-step-number { background: var(--color-success); color: var(--color-surface); }
       .flow-step.is-pending { opacity: 0.8; }
       @media (max-width: 900px) { .flow-progress-steps { grid-template-columns: 1fr; } }
+      /* Course accordion */
+      .course-accordion { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+      .course-accordion-item { border: 1px solid var(--color-module-border); border-radius: var(--radius-card); overflow: hidden; }
+      .course-accordion-header { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); background: var(--color-module-surface); cursor: pointer; width: 100%; border: none; text-align: left; font-size: 14px; color: var(--color-text); }
+      .course-accordion-header:hover { background: var(--color-blue-light); }
+      .course-accordion-title { font-weight: 600; }
+      .course-accordion-progress { font-size: 12px; color: var(--color-meta); margin-left: 6px; }
+      .course-accordion-chevron { margin-left: auto; font-size: 12px; color: var(--color-meta); transition: transform 0.15s; flex-shrink: 0; }
+      .course-accordion-item.open .course-accordion-chevron { transform: rotate(180deg); }
+      .course-accordion-body { display: none; padding: var(--space-2); border-top: 1px solid var(--color-border-soft); }
+      .course-accordion-item.open .course-accordion-body { display: grid; gap: var(--space-1); }
+      .course-progress-bar { height: 6px; background: var(--color-border-soft); border-radius: 999px; overflow: hidden; }
+      .course-progress-fill { height: 100%; background: var(--color-blue); border-radius: 999px; transition: width 0.3s; }
+      .course-progress-fill.completed { background: var(--color-success, #1f7a4d); }
+      .course-module-row { display: flex; align-items: center; gap: var(--space-1); padding: 4px 0; border-bottom: 1px solid var(--color-border-soft); }
+      .course-module-row:last-child { border-bottom: none; }
+      .course-module-row-title { flex: 1; font-size: 14px; color: var(--color-text); }
+      .course-certificate-banner { padding: 8px 12px; background: #f4fbf7; border: 1px solid #b8d9c6; border-radius: var(--radius-card); font-size: 13px; color: #1f7a4d; font-weight: 600; }
     </style>
   </head>
   <body>
@@ -121,6 +139,13 @@
           <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
         </div>
       </details>
+    </section>
+
+    <section class="card" id="courseSection">
+      <h2 data-i18n="courses.title">Mine kurs</h2>
+      <div class="small" data-i18n="courses.hint">Følg fremdriften din på tvers av kurs.</div>
+      <button id="loadCoursesBtn" class="btn-secondary" style="margin-top:var(--space-1)" data-i18n="courses.load">Last kurs</button>
+      <div id="courseAccordion" class="course-accordion"></div>
     </section>
 
     <section class="card">

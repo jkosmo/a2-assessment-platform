@@ -2527,3 +2527,144 @@ loadParticipantConsoleConfig();
 if (previewModeEnabled) {
   loadPreviewModules({ notify: false });
 }
+
+// ============================================================
+// Participant courses
+// ============================================================
+
+let participantCourses = [];
+let participantCompletions = {};   // courseId -> completion
+let courseDetailCache = {};        // courseId -> CourseDetail
+
+function escapeHtmlP(str) {
+  return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+document.getElementById("loadCoursesBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("loadCoursesBtn");
+  await runWithBusyButton(btn, async () => {
+    try {
+      await loadParticipantCourses();
+    } catch (error) {
+      log(error instanceof Error ? error.message : t("courses.loadError"));
+    }
+  });
+});
+
+async function loadParticipantCourses() {
+  const [coursesBody, completionsBody] = await Promise.all([
+    apiFetch("/api/courses", headers()),
+    apiFetch("/api/courses/completions", headers()),
+  ]);
+  participantCourses = Array.isArray(coursesBody.courses) ? coursesBody.courses : [];
+  participantCompletions = {};
+  if (Array.isArray(completionsBody.completions)) {
+    for (const c of completionsBody.completions) {
+      participantCompletions[c.courseId] = c;
+    }
+  }
+  renderParticipantCourseAccordion();
+}
+
+function renderParticipantCourseAccordion() {
+  const container = document.getElementById("courseAccordion");
+  if (!container) return;
+  if (participantCourses.length === 0) {
+    container.innerHTML = `<p class="small" style="color:var(--color-meta);margin-top:4px">${escapeHtmlP(t("courses.empty"))}</p>`;
+    return;
+  }
+  container.innerHTML = "";
+  for (const course of participantCourses) {
+    container.appendChild(buildCourseAccordionItem(course));
+  }
+  // Deep link: ?courseId=xxx opens that course
+  const linkedCourseId = new URLSearchParams(window.location.search).get("courseId");
+  if (linkedCourseId) {
+    const header = container.querySelector(`[data-course-id="${linkedCourseId}"] .course-accordion-header`);
+    if (header) {
+      header.click();
+      setTimeout(() => header.closest(".course-accordion-item").scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+    }
+  }
+}
+
+function buildCourseAccordionItem(course) {
+  const completed = course.progress?.courseStatus === "COMPLETED";
+  const passedCount = course.progress?.completed ?? 0;
+  const totalCount = course.progress?.total ?? course.moduleCount ?? 0;
+  const pct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
+  const completion = participantCompletions[course.id];
+
+  const item = document.createElement("div");
+  item.className = "course-accordion-item";
+  item.dataset.courseId = course.id;
+
+  const statusText = completed
+    ? t("courses.status.completed")
+    : passedCount > 0
+    ? t("courses.status.inProgress")
+    : t("courses.status.notStarted");
+  const badgeClass = completed ? "completed" : passedCount > 0 ? "retake" : "";
+
+  item.innerHTML = `
+    <button type="button" class="course-accordion-header" aria-expanded="false">
+      <span>
+        <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
+        <span class="course-accordion-progress">${passedCount}/${totalCount} ${escapeHtmlP(t("courses.modulesOf"))}</span>
+      </span>
+      <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
+      <span class="course-accordion-chevron">▼</span>
+    </button>
+    <div class="course-accordion-body">
+      <div class="course-progress-bar"><div class="course-progress-fill${completed ? " completed" : ""}" style="width:${pct}%"></div></div>
+      ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} — <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span></div>` : ""}
+      <div id="courseDetail_${course.id}"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
+    </div>
+  `;
+
+  item.querySelector(".course-accordion-header").addEventListener("click", async () => {
+    const isOpen = item.classList.toggle("open");
+    item.querySelector(".course-accordion-header").setAttribute("aria-expanded", String(isOpen));
+    if (isOpen && !courseDetailCache[course.id]) {
+      await loadCourseDetail(course.id);
+    }
+  });
+
+  return item;
+}
+
+async function loadCourseDetail(courseId) {
+  const container = document.getElementById(`courseDetail_${courseId}`);
+  try {
+    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}`, headers());
+    courseDetailCache[courseId] = body.course;
+    renderCourseDetailModules(courseId, body.course);
+  } catch (error) {
+    if (container) {
+      container.innerHTML = `<p class="small" style="color:var(--color-error)">${escapeHtmlP(error instanceof Error ? error.message : t("courses.loadError"))}</p>`;
+    }
+  }
+}
+
+function renderCourseDetailModules(courseId, course) {
+  const container = document.getElementById(`courseDetail_${courseId}`);
+  if (!container || !Array.isArray(course?.modules)) return;
+  container.innerHTML = "";
+  if (course.modules.length === 0) {
+    container.innerHTML = `<p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.noModules"))}</p>`;
+    return;
+  }
+  for (const m of course.modules) {
+    const passed = m.moduleStatus === "PASSED";
+    const inProgress = m.moduleStatus === "IN_PROGRESS";
+    const badgeText = passed ? t("courses.module.passed") : inProgress ? t("courses.module.inProgress") : t("courses.module.notStarted");
+    const badgeClass = passed ? "completed" : inProgress ? "retake" : "";
+    const row = document.createElement("div");
+    row.className = "course-module-row";
+    row.innerHTML = `
+      <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
+      <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(badgeText)}</span>
+    `;
+    container.appendChild(row);
+  }
+}
