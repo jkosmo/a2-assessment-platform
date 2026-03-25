@@ -7,6 +7,12 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.51 - 2026-03-25
+
+Fiks CI: oppdater assessment-worker-process-error test etter tick()-endring.
+- `tick()` svelger nå feil eksplisitt (innført i v0.9.46) — `unhandledRejection` trigges ikke lenger
+- Test oppdatert til å verifisere ny atferd: ingen `unhandled_rejection`-event når tick kaster
+
 ## 0.9.50 - 2026-03-25
 
 Modularkivering (#258).

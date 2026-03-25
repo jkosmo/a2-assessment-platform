@@ -31,7 +31,11 @@ describe("assessment worker process error handling", () => {
     process.env.NODE_ENV = originalNodeEnv;
   });
 
-  it("records an unhandled rejection when the worker interval tick rejects", async () => {
+  it("swallows errors from tick so void-fired ticks do not become unhandled rejections", async () => {
+    // tick() catches all errors internally — processErrorHandlers should NOT be triggered.
+    // Previously this test verified the unhandledRejection path, but tick() now has an
+    // explicit catch block so the error is swallowed silently. The job runner handles
+    // logging and retry logic itself before the error reaches tick().
     const error = new Error("worker tick failed");
     findNextRunnableJob.mockRejectedValue(error);
 
@@ -44,16 +48,15 @@ describe("assessment worker process error handling", () => {
     try {
       worker.start();
 
-      await vi.waitFor(() => {
-        expect(logOperationalEvent).toHaveBeenCalledWith(
-          "unhandled_rejection",
-          expect.objectContaining({
-            reason: "worker tick failed",
-            stack: expect.any(String),
-          }),
-          "error",
-        );
-      });
+      // Wait long enough for at least one tick to fire and complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // unhandled_rejection must NOT have been logged — tick() suppresses it
+      expect(logOperationalEvent).not.toHaveBeenCalledWith(
+        "unhandled_rejection",
+        expect.anything(),
+        expect.anything(),
+      );
     } finally {
       worker.stop();
       detachHandlers();
