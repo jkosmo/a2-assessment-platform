@@ -33,6 +33,16 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
+    findUserCertificationStatusesForModules(userId: string, moduleIds: string[]) {
+      return client.certificationStatus.findMany({
+        where: {
+          userId,
+          moduleId: { in: moduleIds },
+        },
+        select: { moduleId: true, status: true },
+      });
+    },
+
     findCourseCompletion(userId: string, courseId: string) {
       return client.courseCompletion.findUnique({
         where: { userId_courseId: { userId, courseId } },

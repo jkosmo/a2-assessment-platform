@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.64 - 2026-03-25
+
+feat: Admin-API og deltaker-API for kurs (#278, #280)
+- src/routes/adminCourses.ts: POST/GET/PUT/archive/publish-endepunkter under /api/admin/content/courses
+- src/routes/courses.ts: GET /api/courses og GET /api/courses/:courseId med fremdrift per bruker
+- src/config/capabilities.ts: legg til courses-capability (alle roller)
+- src/app.ts: mount coursesRouter
+- src/routes/adminContent.ts: mount adminCoursesRouter under /courses
+- courseRepository: legg til findUserCertificationStatusesForModules
+
 ## 0.9.63 - 2026-03-25
 
 feat: Prisma-skjema og kursmodul for #277 (Course/CourseModule/CourseCompletion).

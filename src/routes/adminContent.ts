@@ -37,8 +37,11 @@ import {
   toCreateMcqSetVersionInput,
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
+import { adminCoursesRouter } from "./adminCourses.js";
 
 const adminContentRouter = Router();
+
+adminContentRouter.use("/courses", adminCoursesRouter);
 
 adminContentRouter.post("/modules", async (request, response) => {
   const { data, error } = parseRequest(moduleCreateBodySchema, request.body);

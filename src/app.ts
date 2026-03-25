@@ -10,6 +10,7 @@ import { generalApiLimiter } from "./middleware/rateLimiting.js";
 import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
 import { meRouter } from "./routes/me.js";
+import { coursesRouter } from "./routes/courses.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
 import { assessmentsRouter } from "./routes/assessments.js";
@@ -85,6 +86,7 @@ app.get("/admin-platform", (_request, response) => {
 app.use("/api", authenticate, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
+app.use("/api/courses", requireAnyRole(rolesFor("courses")), coursesRouter);
 app.use("/api/modules", requireAnyRole(rolesFor("modules")), modulesRouter);
 app.use("/api/submissions", requireAnyRole(rolesFor("submissions")), submissionsRouter);
 app.use("/api/assessments", requireAnyRole(rolesFor("assessments")), assessmentsRouter);

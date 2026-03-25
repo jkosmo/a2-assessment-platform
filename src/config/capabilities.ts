@@ -34,6 +34,18 @@ export const API_ROUTE_CAPABILITIES = [
     ],
   },
   {
+    id: "courses",
+    prefix: "/api/courses",
+    roles: [
+      AppRole.PARTICIPANT,
+      AppRole.SUBJECT_MATTER_OWNER,
+      AppRole.ADMINISTRATOR,
+      AppRole.APPEAL_HANDLER,
+      AppRole.REPORT_READER,
+      AppRole.REVIEWER,
+    ],
+  },
+  {
     id: "submissions",
     prefix: "/api/submissions",
     roles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
