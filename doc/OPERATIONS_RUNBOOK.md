@@ -9,9 +9,9 @@ This runbook covers day-to-day runtime operations for the A2 Assessment Platform
 - first-response failure diagnosis
 
 Related documents:
-- [OBSERVABILITY_RUNBOOK.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/OBSERVABILITY_RUNBOOK.md)
-- [AZURE_ENVIRONMENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/AZURE_ENVIRONMENTS.md)
-- [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md)
+- [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md)
+- [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md)
+- [INCIDENTS.md](INCIDENTS.md)
 
 ## Runtime Topology
 
@@ -49,13 +49,13 @@ Normal web startup sequence:
 2. unless `SKIP_MIGRATE=true`, it runs:
    - `prisma migrate deploy`
    - optional compatibility fallback to `prisma db push --skip-generate` only when `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true`
-3. it imports `dist/src/index.js`
-4. `src/index.ts` starts the Express server
-5. `src/index.ts` runs `scripts/runtime/bootstrapSeed.mjs` before binding the web listener
+3. `startup.mjs` imports and runs `scripts/runtime/bootstrapSeed.mjs` (gated by `BOOTSTRAP_SEED=true`)
+4. `startup.mjs` imports `dist/src/index.js`
+5. `src/index.ts` starts the Express server and binds the web listener
 
 Important notes:
-- bootstrap seed only runs when the runtime role starts the web application
-- `bootstrapSeed.mjs` also checks `BOOTSTRAP_SEED=true`
+- bootstrap seed runs as part of `startup.mjs` before the app is imported, regardless of role
+- `bootstrapSeed.mjs` gates itself on `BOOTSTRAP_SEED=true` — safe to always invoke
 - production Azure config sets `BOOTSTRAP_SEED=false`
 
 ### Worker role startup
@@ -386,7 +386,7 @@ Use the correlation ID to reconstruct a request path in logs before jumping to d
    - affected submission IDs
    - queue status
    - whether decisions were written
-7. Add or update the incident entry in [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md).
+7. Add or update the incident entry in [INCIDENTS.md](INCIDENTS.md).
 
 ## Manual Verification Checklist
 

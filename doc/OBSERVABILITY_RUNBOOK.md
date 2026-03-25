@@ -10,9 +10,9 @@ This runbook covers the currently implemented observability model for:
 - unhandled runtime failures
 
 Related documents:
-- [OPERATIONS_RUNBOOK.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/OPERATIONS_RUNBOOK.md)
-- [AZURE_ENVIRONMENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/AZURE_ENVIRONMENTS.md)
-- [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md)
+- [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)
+- [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md)
+- [INCIDENTS.md](INCIDENTS.md)
 
 ## Current Signal Model
 
@@ -134,7 +134,7 @@ They should still be queried during incident response.
    - `appeal_sla_backlog`
    - `appeal_overdue_detected`
 7. Query notification events if users are missing status updates.
-8. Record findings in [INCIDENTS.md](/c:/Users/JoakimKosmo/a2-assessment-platform/doc/INCIDENTS.md).
+8. Record findings in [INCIDENTS.md](INCIDENTS.md).
 
 ## Core KQL Queries
 

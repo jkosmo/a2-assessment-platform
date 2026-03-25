@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.59 - 2026-03-25
+
+Docs: fjern maskinspesifikke lenker og rett startup-beskrivelse i runbooks (#270).
+- Alle Windows-absolutte stier i OPERATIONS_RUNBOOK.md og OBSERVABILITY_RUNBOOK.md erstattet med repo-relative lenker
+- Korrigert startup-sekvens: bootstrapSeed.mjs kjøres av startup.mjs (ikke src/index.ts) før appen importeres
+- Oppdatert bootstrapSeed-note: seed kjøres uavhengig av rolle, gated av BOOTSTRAP_SEED=true
+
 ## 0.9.58 - 2026-03-25
 
 Refactor: flytt feature-spesifikke spørringer ut av delt moduleRepository (#268).
