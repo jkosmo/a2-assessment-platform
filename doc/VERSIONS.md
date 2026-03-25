@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.48 - 2026-03-25
+
+Flytt bootstrap seed ut av web-oppstart (#256).
+- `runBootstrapSeed()` er fjernet fra `index.ts` — ingen seed-sideeffekter ved normal prosessoppstart
+- `startup.mjs` importerer `bootstrapSeed.mjs` som deploy-time steg (etter migrasjoner, før appstart)
+- `resolveProcessRoleFlags` er eksportert fra `index.ts` og dekket av fokuserte unit-tester
+
 ## 0.9.47 - 2026-03-25
 
 Innfør eksplisitte DTO-grenser for review og appeal workspace (#253).

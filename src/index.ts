@@ -1,17 +1,20 @@
 import { env } from "./config/env.js";
 import { app } from "./app.js";
 import http from "node:http";
-import { spawn } from "node:child_process";
-import path from "node:path";
 import { registerProcessErrorHandlers } from "./process/processErrorHandlers.js";
 import { AssessmentWorker } from "./modules/assessment/index.js";
 import { AppealSlaMonitor } from "./modules/appeal/index.js";
 import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.js";
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 
-const role = env.PROCESS_ROLE;
-const startWeb = role === "web" || role === "all";
-const startWorkers = role === "worker" || role === "all";
+export function resolveProcessRoleFlags(role: string) {
+  return {
+    startWeb: role === "web" || role === "all",
+    startWorkers: role === "worker" || role === "all",
+  };
+}
+
+const { startWeb, startWorkers } = resolveProcessRoleFlags(env.PROCESS_ROLE);
 const startedAt = new Date();
 
 let server: ReturnType<typeof app.listen> | null = null;
@@ -50,10 +53,9 @@ void startServer().catch((error) => {
 
 async function startServer() {
   if (startWeb) {
-    await runBootstrapSeed();
     server = app.listen(env.PORT, () => {
       // eslint-disable-next-line no-console
-      console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${role}]`);
+      console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${env.PROCESS_ROLE}]`);
     });
   } else {
     // Worker-only mode: bind health endpoint so Azure App Service keeps the process alive
@@ -61,13 +63,13 @@ async function startServer() {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({
         status: "ok",
-        role,
+        role: env.PROCESS_ROLE,
         startedAt: startedAt.toISOString(),
         worker: assessmentWorker?.getStatus() ?? null,
       }));
     }).listen(env.PORT, () => {
       // eslint-disable-next-line no-console
-      console.log(`a2-assessment-platform workers started [role=${role}]`);
+      console.log(`a2-assessment-platform workers started [role=${env.PROCESS_ROLE}]`);
     });
   }
 
@@ -77,31 +79,6 @@ async function startServer() {
     pseudonymizationMonitor!.start();
     auditRetentionMonitor!.start();
   }
-}
-
-function runBootstrapSeed() {
-  const scriptPath = path.resolve(process.cwd(), "scripts", "runtime", "bootstrapSeed.mjs");
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [scriptPath], {
-      cwd: process.cwd(),
-      env: process.env,
-      stdio: "inherit",
-    });
-
-    child.on("error", (error) => {
-      // eslint-disable-next-line no-console
-      console.error("Bootstrap seed process failed to start.", error);
-      reject(error);
-    });
-
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`Bootstrap seed process exited with code ${code ?? "unknown"}.`));
-    });
-  });
 }
 
 process.on("SIGINT", () => gracefulShutdown(0));

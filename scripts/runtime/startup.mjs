@@ -28,5 +28,11 @@ if (skipMigrate) {
   }
 }
 
+const bootstrapSeedScript = path.resolve(process.cwd(), "scripts", "runtime", "bootstrapSeed.mjs");
+if (fs.existsSync(bootstrapSeedScript)) {
+  // bootstrapSeed.mjs gates itself on BOOTSTRAP_SEED=true — safe to always import
+  await import(pathToFileURL(bootstrapSeedScript).href);
+}
+
 console.log("Starting application runtime...");
 await import(pathToFileURL(appEntrypoint).href);
