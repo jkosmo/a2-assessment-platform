@@ -34,6 +34,12 @@ const extraTranslations = {
     "completed.appeal.cancel": "Cancel",
     "completed.appeal.success": "Appeal submitted successfully.",
     "completed.appeal.error": "Could not submit appeal.",
+    "courseCert.title": "My course certificates",
+    "courseCert.empty": "No course certificates yet. Complete all modules in a course to earn a certificate.",
+    "courseCert.load": "Load course certificates",
+    "courseCert.completedAt": "Completed",
+    "courseCert.certificateId": "Certificate ID",
+    "courseCert.certLevel": "Level",
   },
   nb: {
     "nav.profile": "Profil",
@@ -61,6 +67,12 @@ const extraTranslations = {
     "completed.appeal.cancel": "Avbryt",
     "completed.appeal.success": "Anke sendt inn.",
     "completed.appeal.error": "Kunne ikke sende inn anke.",
+    "courseCert.title": "Mine kursbevis",
+    "courseCert.empty": "Ingen kursbevis ennå. Fullfør alle moduler i et kurs for å få bevis.",
+    "courseCert.load": "Last kursbevis",
+    "courseCert.completedAt": "Fullført",
+    "courseCert.certificateId": "Bevis-ID",
+    "courseCert.certLevel": "Nivå",
   },
   nn: {
     "nav.profile": "Profil",
@@ -88,6 +100,12 @@ const extraTranslations = {
     "completed.appeal.cancel": "Avbryt",
     "completed.appeal.success": "Anke sendt inn.",
     "completed.appeal.error": "Kunne ikkje sende inn anke.",
+    "courseCert.title": "Mine kursbevis",
+    "courseCert.empty": "Ingen kursbevis enno. Fullfør alle modular i eit kurs for å få bevis.",
+    "courseCert.load": "Last kursbevis",
+    "courseCert.completedAt": "Fullført",
+    "courseCert.certificateId": "Bevis-ID",
+    "courseCert.certLevel": "Nivå",
   },
 };
 

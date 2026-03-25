@@ -135,6 +135,24 @@
         </div>
       </section>
 
+      <section class="card">
+        <h2 data-i18n="results.courses.title">Course completion report</h2>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Course completion report">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col" data-i18n="results.courses.course">Course</th>
+                <th scope="col" data-i18n="results.courses.enrolled">Enrolled</th>
+                <th scope="col" data-i18n="results.courses.completed">Completed</th>
+                <th scope="col" data-i18n="results.courses.completionRate">Completion rate</th>
+                <th scope="col" data-i18n="results.courses.modules">Modules</th>
+              </tr>
+            </thead>
+            <tbody id="courseReportBody"></tbody>
+          </table>
+        </div>
+      </section>
+
       <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true" style="margin: var(--space-1) 0;"></div>
 
       <section id="debugOutputSection" class="card" hidden>

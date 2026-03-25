@@ -504,6 +504,54 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
+// --- Course certificates ---
+
+const courseCertList = document.getElementById("courseCertList");
+
+function escapeHtmlC(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderCourseCertificates(completions) {
+  courseCertList.innerHTML = "";
+  if (!Array.isArray(completions) || completions.length === 0) {
+    courseCertList.innerHTML = `<p class="small">${escapeHtmlC(t("courseCert.empty"))}</p>`;
+    return;
+  }
+  for (const cc of completions) {
+    const card = document.createElement("div");
+    card.style.cssText = "border:1px solid var(--color-border);border-radius:var(--space-1);padding:var(--space-1);margin-bottom:var(--space-1);background:var(--color-bg-subtle,var(--color-bg))";
+    card.innerHTML = `
+      <div style="font-weight:600;font-size:14px">${escapeHtmlC(cc.courseTitle ?? cc.courseId)}</div>
+      ${cc.certificationLevel ? `<div class="small" style="margin-top:2px">${escapeHtmlC(t("courseCert.certLevel"))}: ${escapeHtmlC(cc.certificationLevel)}</div>` : ""}
+      <div class="small" style="margin-top:4px">${escapeHtmlC(t("courseCert.completedAt"))}: ${formatDateTime(cc.completedAt)}</div>
+      <div class="small" style="color:var(--color-text-soft)">${escapeHtmlC(t("courseCert.certificateId"))}: <code>${escapeHtmlC(cc.certificateId)}</code></div>
+    `;
+    courseCertList.appendChild(card);
+  }
+}
+
+async function loadCourseCertificates() {
+  try {
+    const body = await apiFetch("/api/courses/completions", headers);
+    renderCourseCertificates(body?.completions ?? []);
+  } catch {
+    renderCourseCertificates([]);
+  }
+}
+
+// Also load course certs when the completed button is clicked
+loadCompletedButton.addEventListener("click", () => {
+  loadCourseCertificates();
+});
+
+// Auto-render empty state on page load
+renderCourseCertificates([]);
+
 populateLocaleSelect();
 setLocale(currentLocale);
 loadVersion();

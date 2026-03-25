@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.69 - 2026-03-25
+
+feat: Kursbevis i deltaker-fullført-side og kursrapport i resultater (#282, #283)
+- participant-completed.html: ny #courseCertSection for kursbevis
+- participant-completed.js: renderCourseCertificates(), loadCourseCertificates() kalt automatisk ved lasting av fullførte moduler; henter fra GET /api/courses/completions
+- participant-completed-translations.js: courseCert.* nøkler for en-GB/nb/nn
+- results.html: ny seksjon "Kursgjennomføringsrapport" med tabell (#courseReportBody)
+- results.js: renderCourseReport(), loadCourseReport() kalt automatisk via Last resultater-knappen; henter fra GET /api/reports/courses
+- results-translations.js: results.courses.* nøkler for en-GB/nb/nn
+- Backend for begge issues var allerede implementert: checkAndIssueCourseCompletions (review/appeal/assessment), getCourseReport, GET /api/courses/completions, GET /api/reports/courses
+
 ## 0.9.68 - 2026-03-25
 
 fix: localizeContentValue håndterer JSON-kodet locale-streng i kurstittel

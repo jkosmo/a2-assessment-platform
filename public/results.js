@@ -426,6 +426,61 @@ loadMeButton?.addEventListener("click", async () => {
   }
 });
 
+// --- Course report ---
+
+const courseReportBody = document.getElementById("courseReportBody");
+
+function escapeHtmlR(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderCourseReport(rows) {
+  courseReportBody.innerHTML = "";
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="5" class="small">${escapeHtmlR(t("results.courses.empty"))}</td>`;
+    courseReportBody.appendChild(tr);
+    return;
+  }
+  for (const row of rows) {
+    const rate = typeof row.completionRate === "number"
+      ? `${Math.round(row.completionRate * 100)}%`
+      : "-";
+    const moduleList = Array.isArray(row.moduleBreakdown) && row.moduleBreakdown.length > 0
+      ? row.moduleBreakdown.map((m) => {
+          const mr = typeof m.passRate === "number" ? ` (${Math.round(m.passRate * 100)}%)` : "";
+          return escapeHtmlR(m.moduleTitle) + mr;
+        }).join("<br>")
+      : `<span class="small" style="color:var(--color-text-soft)">${escapeHtmlR(t("results.courses.noModules"))}</span>`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtmlR(row.courseTitle)}</td>
+      <td>${escapeHtmlR(row.enrolledParticipants)}</td>
+      <td>${escapeHtmlR(row.completedParticipants)}</td>
+      <td>${escapeHtmlR(rate)}</td>
+      <td style="font-size:11px">${moduleList}</td>
+    `;
+    courseReportBody.appendChild(tr);
+  }
+}
+
+async function loadCourseReport() {
+  try {
+    const data = await apiFetch("/api/reports/courses", headers);
+    renderCourseReport(data.rows ?? []);
+  } catch {
+    renderCourseReport([]);
+  }
+}
+
+loadResultsButton.addEventListener("click", () => loadCourseReport());
+
+renderCourseReport([]);
+
 // Init
 if (debugOutputSection) debugOutputSection.hidden = new URLSearchParams(location.search).get("debug") !== "1";
 populateLocaleSelect();
