@@ -9,10 +9,16 @@ import type { AppRole as AppRoleType } from "@prisma/client";
  * contracts between app.ts, participant-console.json, frontend fallback
  * navigation arrays, and targeted tests.
  *
- * Note: /api/calibration roles are intentionally kept in participant-console.json
- * (calibrationWorkspace.accessRoles) because they are runtime-configurable.
- * Workspace navigation for the calibration page therefore resolves those roles
- * at runtime instead of hardcoding them here.
+ * ## Calibration access override (documented exception)
+ *
+ * /api/calibration is the only API route whose access roles are NOT defined
+ * here. This is an intentional runtime-configurable override:
+ * - Roles are read from `calibrationWorkspace.accessRoles` in participant-console.json
+ * - Route protection in app.ts uses `participantConsoleRuntimeConfig.calibrationWorkspace.accessRoles`
+ * - Workspace navigation uses `buildWorkspaceNavigationItems(calibrationAccessRoles)`
+ *
+ * This exception exists so calibration access can be tuned per environment
+ * without a code deploy. All other routes must have a capability entry below.
  */
 export const API_ROUTE_CAPABILITIES = [
   {

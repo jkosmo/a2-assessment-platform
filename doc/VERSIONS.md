@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.60 - 2026-03-25
+
+Refactor: gjør kalibrerings-tilgangen eksplisitt som contract override (#271).
+- capabilities.ts: utvidet blokkkommentar beskriver calibration som eneste runtime-konfigurerbare unntak
+- app.ts: kommentar ved /api/calibration-registrering forklarer at rolesFor() ikke brukes her
+- participantConsole.ts: kommentar ved buildWorkspaceNavigationItems refererer til capabilities.ts
+- Ingen atferdsendring; tsc --noEmit ren
+
 ## 0.9.59 - 2026-03-25
 
 Docs: fjern maskinspesifikke lenker og rett startup-beskrivelse i runbooks (#270).

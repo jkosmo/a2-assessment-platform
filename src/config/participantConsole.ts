@@ -131,6 +131,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     mockRoleSwitchEnabled: env.AUTH_MODE === "mock",
     mockRolePresets: config.mockRolePresets,
     navigation: {
+      // calibrationWorkspace.accessRoles is the runtime override for calibration access — see capabilities.ts
       items: buildWorkspaceNavigationItems(config.calibrationWorkspace.accessRoles),
     },
     drafts: config.drafts,

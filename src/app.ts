@@ -92,6 +92,8 @@ app.use("/api/audit", requireAnyRole(rolesFor("audit")), auditRouter);
 app.use("/api/reviews", requireAnyRole(rolesFor("reviews")), reviewsRouter);
 app.use("/api/appeals", requireAnyRole(rolesFor("appeals")), appealsRouter);
 app.use("/api/reports", requireAnyRole(rolesFor("reports")), reportsRouter);
+// Calibration access is a runtime-configurable override — see CALIBRATION_ACCESS_OVERRIDE note in capabilities.ts.
+// Roles come from calibrationWorkspace.accessRoles in participant-console.json, not from API_ROUTE_CAPABILITIES.
 app.use(
   "/api/calibration",
   requireAnyRole(participantConsoleRuntimeConfig.calibrationWorkspace.accessRoles),
