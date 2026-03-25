@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.52 - 2026-03-25
+
+Frontend: arkiver-knapp i Admin Content (#258).
+- «Arkiver modul»-knapp vises når modulen er avpublisert (ingen aktiv versjon)
+- Bekreftelsdialog med forklaring — modulen kan gjenopprettes fra arkivbiblioteket
+- Etter arkivering fjernes modulen fra dropdown og status nullstilles
+- Oversettelser for en-GB, nb, og nn
+
 ## 0.9.51 - 2026-03-25
 
 Fiks CI: oppdater assessment-worker-process-error test etter tick()-endring.
