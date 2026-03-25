@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.58 - 2026-03-25
+
+Refactor: flytt feature-spesifikke spørringer ut av delt moduleRepository (#268).
+- queryLatestSubmissionsForModules og queryCompletedSubmissionsForUser flyttet til submissionRepository (de spør submission-tabellen)
+- getModuleWithActiveVersion flyttet til submissionRepository (eneste bruker er submissionService)
+- moduleRepository inneholder nå kun rene modul/moduleVersion-spørringer
+- Ingen endring i ekstern API; tsc --noEmit ren
+
 ## 0.9.57 - 2026-03-25
 
 Refactor: modul-eide DTO-typer i read-models (#267).

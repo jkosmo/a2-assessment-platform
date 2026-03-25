@@ -110,3 +110,62 @@ export function createSubmissionRepository(client: SubmissionRepositoryClient = 
 }
 
 export const submissionRepository = createSubmissionRepository();
+
+export async function queryLatestSubmissionsForModules(userId: string, moduleIds: string[]) {
+  return prisma.submission.findMany({
+    where: { userId, moduleId: { in: moduleIds } },
+    orderBy: [{ moduleId: "asc" }, { submittedAt: "desc" }],
+    select: {
+      id: true,
+      moduleId: true,
+      submittedAt: true,
+      submissionStatus: true,
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: {
+          totalScore: true,
+          passFailTotal: true,
+          decisionType: true,
+          finalisedAt: true,
+        },
+      },
+    },
+  });
+}
+
+export async function queryCompletedSubmissionsForUser(
+  userId: string,
+  statuses: SubmissionStatusType[],
+  limit: number,
+) {
+  return prisma.submission.findMany({
+    where: { userId, submissionStatus: { in: statuses } },
+    orderBy: { submittedAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      moduleId: true,
+      submittedAt: true,
+      submissionStatus: true,
+      module: { select: { id: true, title: true } },
+      decisions: {
+        orderBy: { finalisedAt: "desc" },
+        take: 1,
+        select: {
+          totalScore: true,
+          passFailTotal: true,
+          decisionType: true,
+          finalisedAt: true,
+        },
+      },
+    },
+  });
+}
+
+export async function getModuleWithActiveVersion(moduleId: string) {
+  return prisma.module.findUnique({
+    where: { id: moduleId },
+    include: { activeVersion: true },
+  });
+}

@@ -1,8 +1,7 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { ValidationError } from "../../errors/AppError.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { getModuleWithActiveVersion } from "../../repositories/moduleRepository.js";
-import { submissionRepository, createSubmissionRepository } from "./submissionRepository.js";
+import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion } from "./submissionRepository.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";

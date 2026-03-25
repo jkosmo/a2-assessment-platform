@@ -1,8 +1,4 @@
-import type {
-  AppRole as AppRoleType,
-  Prisma,
-  SubmissionStatus as SubmissionStatusType,
-} from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 
 export const moduleSummarySelect = {
@@ -46,58 +42,6 @@ export async function queryModules(adminRead: boolean, now: Date) {
   });
 }
 
-export async function queryLatestSubmissionsForModules(userId: string, moduleIds: string[]) {
-  return prisma.submission.findMany({
-    where: { userId, moduleId: { in: moduleIds } },
-    orderBy: [{ moduleId: "asc" }, { submittedAt: "desc" }],
-    select: {
-      id: true,
-      moduleId: true,
-      submittedAt: true,
-      submissionStatus: true,
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          totalScore: true,
-          passFailTotal: true,
-          decisionType: true,
-          finalisedAt: true,
-        },
-      },
-    },
-  });
-}
-
-export async function queryCompletedSubmissionsForUser(
-  userId: string,
-  statuses: SubmissionStatusType[],
-  limit: number,
-) {
-  return prisma.submission.findMany({
-    where: { userId, submissionStatus: { in: statuses } },
-    orderBy: { submittedAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      moduleId: true,
-      submittedAt: true,
-      submissionStatus: true,
-      module: { select: { id: true, title: true } },
-      decisions: {
-        orderBy: { finalisedAt: "desc" },
-        take: 1,
-        select: {
-          totalScore: true,
-          passFailTotal: true,
-          decisionType: true,
-          finalisedAt: true,
-        },
-      },
-    },
-  });
-}
-
 export async function queryModuleById(moduleId: string, adminRead: boolean, now: Date) {
   return prisma.module.findFirst({
     where: {
@@ -128,9 +72,3 @@ export async function queryModuleVersion(versionId: string) {
   });
 }
 
-export async function getModuleWithActiveVersion(moduleId: string) {
-  return prisma.module.findUnique({
-    where: { id: moduleId },
-    include: { activeVersion: true },
-  });
-}

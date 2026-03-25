@@ -6,11 +6,13 @@ import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
 import {
   queryModules,
-  queryLatestSubmissionsForModules,
-  queryCompletedSubmissionsForUser,
   queryModuleById,
   queryModuleVersion,
 } from "../../repositories/moduleRepository.js";
+import {
+  queryLatestSubmissionsForModules,
+  queryCompletedSubmissionsForUser,
+} from "../submission/submissionRepository.js";
 import {
   getCompletedSubmissionStatuses,
   isSubmissionStatusCompleted,
