@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.49 - 2026-03-25
+
+LLM-innholdsgenerering: scenario-instruksjon og distraktor-kalibrering (#245, #246).
+- Modulgenereringsprompt instruerer LLM til selv å vurdere om kildematerialet egner seg for et scenario — genererer scenario øverst i `taskText` når egnet, utelater det ellers
+- `includesScenario` boolean returneres i module draft-responsen
+- MCQ-genereringsprompt sender `certificationLevel` eksplisitt og bruker nivåspesifikke distraktor-retningslinjer (basic/intermediate/advanced)
+- Beslutning: separat MCQ-vanskelighets-input er ikke nødvendig — `certificationLevel` er tilstrekkelig for nå
+- 9 nye unit-tester dekker scenario-instruksjon og per-nivå distraktor-retningslinjer
+
 ## 0.9.48 - 2026-03-25
 
 Flytt bootstrap seed ut av web-oppstart (#256).
