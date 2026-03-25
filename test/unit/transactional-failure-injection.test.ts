@@ -44,8 +44,8 @@ vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
 }));
 
-vi.mock("../../src/repositories/moduleRepository.js", () => ({ getModuleWithActiveVersion }));
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
+  getModuleWithActiveVersion,
   submissionRepository: { create: submissionCreate },
   createSubmissionRepository: () => ({ create: submissionCreate }),
 }));

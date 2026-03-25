@@ -6,9 +6,14 @@ type ScanRunner = () => Promise<AuditRetentionResult>;
  * Periodic monitor that purges old operational-category audit events.
  * Runs once every 24 hours — daily pruning is sufficient for a 7-day window.
  */
+export type AuditRetentionMonitorStatus = {
+  lastCycleAt: string | null;
+};
+
 export class AuditRetentionMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private lastCycleAt: Date | null = null;
 
   constructor(
     private readonly pollIntervalMs = 24 * 60 * 60 * 1_000,
@@ -33,11 +38,16 @@ export class AuditRetentionMonitor {
     return this.runScan();
   }
 
+  getStatus(): AuditRetentionMonitorStatus {
+    return { lastCycleAt: this.lastCycleAt?.toISOString() ?? null };
+  }
+
   private async tick() {
     if (this.running) return;
     this.running = true;
     try {
       await this.runScan();
+      this.lastCycleAt = new Date();
     } finally {
       this.running = false;
     }

@@ -65,7 +65,12 @@ async function startServer() {
         status: "ok",
         role: env.PROCESS_ROLE,
         startedAt: startedAt.toISOString(),
-        worker: assessmentWorker?.getStatus() ?? null,
+        workers: {
+          assessmentWorker: assessmentWorker?.getStatus() ?? null,
+          appealSlaMonitor: appealSlaMonitor?.getStatus() ?? null,
+          pseudonymizationMonitor: pseudonymizationMonitor?.getStatus() ?? null,
+          auditRetentionMonitor: auditRetentionMonitor?.getStatus() ?? null,
+        },
       }));
     }).listen(env.PORT, () => {
       // eslint-disable-next-line no-console

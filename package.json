@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "0.9.61",
+  "version": "0.9.62",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -30,6 +30,7 @@
     "prisma:generate": "node scripts/runtime/prismaCommand.mjs generate",
     "prisma:migrate": "npm run db:migrate",
     "prisma:deploy": "npm run db:migrate",
+    "bootstrap:seed": "node scripts/runtime/bootstrapSeed.mjs",
     "prisma:seed": "tsx prisma/seed.ts",
     "pretest": "npm run postgres:start && dotenv -e .env.test -- npm run db:reset && dotenv -e .env.test -- tsx prisma/seed.ts",
     "test": "dotenv -e .env.test -- vitest run",

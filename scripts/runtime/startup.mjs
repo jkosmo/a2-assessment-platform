@@ -28,11 +28,9 @@ if (skipMigrate) {
   }
 }
 
-const bootstrapSeedScript = path.resolve(process.cwd(), "scripts", "runtime", "bootstrapSeed.mjs");
-if (fs.existsSync(bootstrapSeedScript)) {
-  // bootstrapSeed.mjs gates itself on BOOTSTRAP_SEED=true — safe to always import
-  await import(pathToFileURL(bootstrapSeedScript).href);
-}
+// Bootstrap seeding is NOT part of the normal startup path.
+// Run explicitly with: node scripts/runtime/bootstrapSeed.mjs (requires BOOTSTRAP_SEED=true)
+// or via the npm script: npm run bootstrap:seed
 
 console.log("Starting application runtime...");
 await import(pathToFileURL(appEntrypoint).href);

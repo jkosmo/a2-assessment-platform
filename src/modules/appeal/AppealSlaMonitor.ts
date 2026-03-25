@@ -3,9 +3,14 @@ import { runAppealSlaMonitorNow, type AppealSlaMonitorSnapshot } from "./appealS
 
 type AppealSlaMonitorRunner = () => Promise<AppealSlaMonitorSnapshot>;
 
+export type AppealSlaMonitorStatus = {
+  lastCycleAt: string | null;
+};
+
 export class AppealSlaMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private lastCycleAt: Date | null = null;
 
   constructor(
     private readonly pollIntervalMs = env.APPEAL_SLA_MONITOR_INTERVAL_MS,
@@ -36,6 +41,10 @@ export class AppealSlaMonitor {
     return this.runMonitor();
   }
 
+  getStatus(): AppealSlaMonitorStatus {
+    return { lastCycleAt: this.lastCycleAt?.toISOString() ?? null };
+  }
+
   private async tick() {
     if (this.running) {
       return;
@@ -44,6 +53,7 @@ export class AppealSlaMonitor {
     this.running = true;
     try {
       await this.runMonitor();
+      this.lastCycleAt = new Date();
     } finally {
       this.running = false;
     }

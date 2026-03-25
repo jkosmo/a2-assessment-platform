@@ -72,4 +72,28 @@ describe("AppealSlaMonitor", () => {
     expect(runMonitor).toHaveBeenCalledTimes(2);
     monitor.stop();
   });
+
+  it("getStatus returns null lastCycleAt before first tick completes", () => {
+    const monitor = new AppealSlaMonitor(1_000, vi.fn());
+    expect(monitor.getStatus().lastCycleAt).toBeNull();
+  });
+
+  it("getStatus updates lastCycleAt after a successful tick", async () => {
+    const runMonitor = vi.fn().mockResolvedValue({
+      checkedAt: new Date().toISOString(),
+      openAppeals: 0,
+      inReviewAppeals: 0,
+      onTrackAppeals: 0,
+      atRiskAppeals: 0,
+      overdueAppeals: 0,
+      overdueThreshold: 1,
+      thresholdBreached: false,
+      oldestOverdueHours: null,
+    });
+    const monitor = new AppealSlaMonitor(10_000, runMonitor);
+    monitor.start();
+    await Promise.resolve();
+    monitor.stop();
+    expect(monitor.getStatus().lastCycleAt).not.toBeNull();
+  });
 });

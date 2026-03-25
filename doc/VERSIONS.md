@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.62 - 2026-03-25
+
+Refactor: harden runtime bootstrap og worker operability (#272, #273, #274).
+- startup.mjs: fjern bootstrapSeed fra normal oppstartsbane; legg til npm run bootstrap:seed
+- AppealSlaMonitor, PseudonymizationMonitor, AuditRetentionMonitor: legg til getStatus()
+- src/index.ts: worker-heartbeat inkluderer now structured status for alle aktive loops
+- OPERATIONS_RUNBOOK: oppdater startup-sekvens og dokumenter faktisk worker health-format
+- Nye/oppdaterte enhetstester: appeal-sla-monitor.test.ts, worker-health.test.ts
+
 ## 0.9.61 - 2026-03-25
 
 Docs: avled API/workspace-dokumentasjon fra capability contract (#269).

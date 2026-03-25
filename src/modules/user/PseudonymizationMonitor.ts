@@ -9,9 +9,14 @@ type ScanRunner = () => Promise<PseudonymizationScanResult>;
  * Default interval: 6 hours. Pseudonymisation is not time-critical to the
  * minute, so a long interval keeps database load low.
  */
+export type PseudonymizationMonitorStatus = {
+  lastCycleAt: string | null;
+};
+
 export class PseudonymizationMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private lastCycleAt: Date | null = null;
 
   constructor(
     private readonly pollIntervalMs = 6 * 60 * 60 * 1_000,
@@ -42,6 +47,10 @@ export class PseudonymizationMonitor {
     return this.runScan();
   }
 
+  getStatus(): PseudonymizationMonitorStatus {
+    return { lastCycleAt: this.lastCycleAt?.toISOString() ?? null };
+  }
+
   private async tick() {
     if (this.running) {
       return;
@@ -50,6 +59,7 @@ export class PseudonymizationMonitor {
     this.running = true;
     try {
       await this.runScan();
+      this.lastCycleAt = new Date();
     } finally {
       this.running = false;
     }

@@ -49,14 +49,12 @@ Normal web startup sequence:
 2. unless `SKIP_MIGRATE=true`, it runs:
    - `prisma migrate deploy`
    - optional compatibility fallback to `prisma db push --skip-generate` only when `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true`
-3. `startup.mjs` imports and runs `scripts/runtime/bootstrapSeed.mjs` (gated by `BOOTSTRAP_SEED=true`)
-4. `startup.mjs` imports `dist/src/index.js`
-5. `src/index.ts` starts the Express server and binds the web listener
+3. `startup.mjs` imports `dist/src/index.js`
+4. `src/index.ts` starts the Express server and binds the web listener
 
 Important notes:
-- bootstrap seed runs as part of `startup.mjs` before the app is imported, regardless of role
-- `bootstrapSeed.mjs` gates itself on `BOOTSTRAP_SEED=true` — safe to always invoke
-- production Azure config sets `BOOTSTRAP_SEED=false`
+- bootstrap seeding is NOT part of the normal startup path
+- to seed a non-production environment, run explicitly: `npm run bootstrap:seed` (requires `BOOTSTRAP_SEED=true`)
 
 ### Worker role startup
 
@@ -64,8 +62,8 @@ Worker startup differs intentionally:
 
 1. `startup.mjs` runs
 2. Azure worker app sets `SKIP_MIGRATE=true`, so migrations are skipped
-3. `dist/src/index.js` is imported
-4. `src/index.ts` starts a minimal HTTP listener and starts:
+3. `startup.mjs` imports `dist/src/index.js`
+4. `src/index.ts` starts a minimal HTTP listener and starts all background loops:
    - `AssessmentWorker`
    - `AppealSlaMonitor`
    - `PseudonymizationMonitor`
@@ -89,18 +87,31 @@ It does not prove:
 
 ### Worker app
 
-In worker-only mode, `src/index.ts` starts a minimal HTTP server that returns:
+In worker-only mode, `src/index.ts` starts a minimal HTTP server.
+The process heartbeat includes last-cycle status for all active background loops:
 
 ```json
-{"status":"ok","role":"worker"}
+{
+  "status": "ok",
+  "role": "worker",
+  "startedAt": "<ISO timestamp>",
+  "workers": {
+    "assessmentWorker": { "instanceId": "<uuid>", "lastCycleAt": "<ISO timestamp or null>" },
+    "appealSlaMonitor": { "lastCycleAt": "<ISO timestamp or null>" },
+    "pseudonymizationMonitor": { "lastCycleAt": "<ISO timestamp or null>" },
+    "auditRetentionMonitor": { "lastCycleAt": "<ISO timestamp or null>" }
+  }
+}
 ```
 
-for incoming requests. This is only a process heartbeat. It does not prove that:
-- jobs are being picked up
-- stale locks are being reset
-- LLM calls are succeeding
+`lastCycleAt: null` means the loop has not yet completed a successful cycle since startup.
 
-Use logs and queue signals for worker health.
+This is still a process heartbeat and does not prove that:
+- jobs are being picked up
+- LLM calls are succeeding
+- stale locks are being reset
+
+Use logs and queue signals for deeper worker health assessment.
 
 ## Migrations and Schema Changes
 
@@ -153,9 +164,22 @@ This seed is:
 - idempotent
 - intended for non-production environments
 - gated by `BOOTSTRAP_SEED=true`
+- **not invoked by normal startup** — must be run explicitly
+
+Explicit invocation:
+
+```bash
+BOOTSTRAP_SEED=true node scripts/runtime/bootstrapSeed.mjs
+```
+
+or via npm script:
+
+```bash
+BOOTSTRAP_SEED=true npm run bootstrap:seed
+```
 
 Current Azure expectation:
-- staging may use bootstrap seed
+- staging may run bootstrap seed as an explicit deploy/init step
 - production should not
 
 ### Full local/test seed
