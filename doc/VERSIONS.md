@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.57 - 2026-03-25
+
+Refactor: modul-eide DTO-typer i read-models (#267).
+- Fjernet `import type { ...repository }` fra submissionReadModels, manualReviewReadModels, appealReadModels
+- Erstattet persistence-deriverte inputtyper med eksplisitte module-owned typer
+- Oppdatert tester: fjernet alle `as never`-caster, lagt til manglende obligatoriske felt
+- TypeScript-kompilering ren (tsc --noEmit)
+
 ## 0.9.56 - 2026-03-25
 
 Refactor: eksplisitte kommandogrenser i review og appeal resolution (#264, #265).

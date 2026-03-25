@@ -46,7 +46,7 @@ describe("module-owned read models", () => {
               createdAt: new Date("2026-03-23T10:03:00.000Z"),
             },
           ],
-        } as never,
+        },
       ],
       "nb",
     );
@@ -106,7 +106,7 @@ describe("module-owned read models", () => {
           }),
         },
       ],
-    } as never);
+    });
 
     expect(result.status).toBe("UNDER_REVIEW");
     expect(result.statusExplanation).toContain("manual review");
@@ -122,13 +122,19 @@ describe("module-owned read models", () => {
   it("builds a localized manual review workspace view with parsed response excerpts", () => {
     const review = toManualReviewWorkspaceView({
       id: "review-1",
+      submissionId: "submission-1",
       reviewStatus: "OPEN",
       triggerReason: "manual_review",
-      createdAt: new Date("2026-03-23T10:00:00.000Z"),
+      reviewerId: null,
       reviewedAt: null,
+      overrideDecision: null,
+      overrideReason: null,
+      createdAt: new Date("2026-03-23T10:00:00.000Z"),
       reviewer: null,
       submission: {
         id: "submission-1",
+        submittedAt: new Date("2026-03-23T10:00:00.000Z"),
+        deliveryType: "text",
         responseJson: JSON.stringify({
           response: "Raw text",
           reflection: "Reflection text",
@@ -151,7 +157,7 @@ describe("module-owned read models", () => {
         decisions: [],
         appeals: [],
       },
-    } as never, "nb");
+    }, "nb");
 
     expect(review.review.submission.module.title).toBe("Norsk tittel");
     expect(review.review.submission.module.description).toBe("Norsk beskrivelse");
@@ -163,7 +169,11 @@ describe("module-owned read models", () => {
   it("builds an appeal workspace view with localized module text and SLA", () => {
     const view = toAppealWorkspaceView({
       id: "appeal-1",
-      appealStatus: "RESOLVED",
+      submissionId: "submission-1",
+      appealStatus: "RESOLVED" as const,
+      appealReason: "I disagree with the assessment.",
+      resolutionNote: "Reviewed and upheld.",
+      resolvedById: "handler-1",
       createdAt: new Date("2026-03-23T10:00:00.000Z"),
       claimedAt: new Date("2026-03-23T10:15:00.000Z"),
       resolvedAt: new Date("2026-03-23T11:00:00.000Z"),
@@ -180,6 +190,7 @@ describe("module-owned read models", () => {
       },
       submission: {
         id: "submission-1",
+        submittedAt: new Date("2026-03-23T10:00:00.000Z"),
         user: {
           id: "user-1",
           name: "User",
@@ -197,7 +208,7 @@ describe("module-owned read models", () => {
         decisions: [],
         manualReviews: [],
       },
-    } as never, "nb");
+    }, "nb");
 
     expect(view.appeal.submission.module.title).toBe("Norsk tittel");
     expect(view.appeal.submission.module.description).toBe("Norsk beskrivelse");

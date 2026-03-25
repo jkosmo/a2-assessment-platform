@@ -1,10 +1,31 @@
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
-import type { manualReviewRepository } from "./manualReviewRepository.js";
 
-type ManualReviewWorkspaceRecord = NonNullable<
-  Awaited<ReturnType<typeof manualReviewRepository.findManualReviewWorkspace>>
->;
+export type ManualReviewWorkspaceRecord = {
+  id: string;
+  submissionId: string;
+  reviewStatus: string;
+  triggerReason: string;
+  reviewerId: string | null;
+  reviewedAt: Date | null;
+  overrideDecision: string | null;
+  overrideReason: string | null;
+  createdAt: Date;
+  reviewer: { id: string; name: string; email: string } | null;
+  submission: {
+    id: string;
+    submittedAt: Date;
+    deliveryType: string;
+    responseJson: string;
+    user: { id: string; name: string; email: string; department: string | null };
+    module: { id: string; title: string; description: string | null };
+    moduleVersion: { id: string };
+    mcqAttempts: unknown[];
+    llmEvaluations: unknown[];
+    decisions: unknown[];
+    appeals: unknown[];
+  };
+};
 
 function parseSubmissionResponse(responseJson: string) {
   try {

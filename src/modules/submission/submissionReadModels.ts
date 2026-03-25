@@ -1,10 +1,64 @@
 import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
-import type { submissionRepository } from "./submissionRepository.js";
 
-type OwnedSubmissionRecord = NonNullable<Awaited<ReturnType<typeof submissionRepository.findOwnedSubmission>>>;
-type SubmissionHistoryRecord = Awaited<ReturnType<typeof submissionRepository.findOwnedSubmissionHistory>>[number];
+export type SubmissionHistoryItem = {
+  id: string;
+  submittedAt: Date;
+  submissionStatus: string;
+  module: { id: string; title: string };
+  decisions: Array<{
+    id: string;
+    decisionType: string;
+    passFailTotal: boolean;
+    totalScore: number;
+    decisionReason: string;
+    finalisedAt: Date | null;
+  }>;
+  mcqAttempts: Array<{
+    id: string;
+    scaledScore: number | null;
+    percentScore: number | null;
+    passFailMcq: boolean | null;
+    completedAt: Date | null;
+  }>;
+  llmEvaluations: Array<{
+    id: string;
+    practicalScoreScaled: number;
+    passFailPractical: boolean;
+    manualReviewRecommended: boolean;
+    createdAt: Date;
+  }>;
+};
+
+export type OwnedSubmission = {
+  id: string;
+  submissionStatus: string;
+  decisions: Array<{
+    id: string;
+    decisionReason: string;
+    mcqScaledScore: number;
+    practicalScaledScore: number;
+    totalScore: number;
+  }>;
+  appeals: Array<{
+    id: string;
+    appealStatus: string;
+    createdAt: Date;
+    resolvedAt: Date | null;
+  }>;
+  mcqAttempts: Array<{
+    id: string;
+    scaledScore: number | null;
+    completedAt: Date | null;
+  }>;
+  llmEvaluations: Array<{
+    id: string;
+    practicalScoreScaled: number;
+    confidenceNote: string | null;
+    responseJson: string;
+  }>;
+};
 
 function parseStructuredLlmResponse(responseJson: string | null | undefined) {
   if (!responseJson) {
@@ -28,7 +82,7 @@ function getSubmissionStatusExplanation(status: string) {
   return "Assessment is still processing.";
 }
 
-export function toSubmissionHistoryItemView(submission: SubmissionHistoryRecord, locale: string) {
+export function toSubmissionHistoryItemView(submission: SubmissionHistoryItem, locale: string) {
   const normalizedLocale = normalizeLocale(locale) ?? "en-GB";
 
   return {
@@ -45,13 +99,13 @@ export function toSubmissionHistoryItemView(submission: SubmissionHistoryRecord,
   };
 }
 
-export function toSubmissionHistoryResponseView(submissions: SubmissionHistoryRecord[], locale: string) {
+export function toSubmissionHistoryResponseView(submissions: SubmissionHistoryItem[], locale: string) {
   return {
     history: submissions.map((submission) => toSubmissionHistoryItemView(submission, locale)),
   };
 }
 
-export function toSubmissionResultView(submission: OwnedSubmissionRecord) {
+export function toSubmissionResultView(submission: OwnedSubmission) {
   const decision = submission.decisions[0] ?? null;
   const latestAppeal = submission.appeals[0] ?? null;
   const llmEvaluation = submission.llmEvaluations[0] ?? null;

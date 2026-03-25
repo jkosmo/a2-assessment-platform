@@ -1,9 +1,32 @@
 import { buildAppealSlaSnapshot } from "./appealSla.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
-import type { appealRepository } from "./appealRepository.js";
+import type { AppealStatus } from "@prisma/client";
 
-type AppealWorkspaceRecord = NonNullable<Awaited<ReturnType<typeof appealRepository.findAppealWorkspace>>>;
+export type AppealWorkspaceRecord = {
+  id: string;
+  submissionId: string;
+  appealStatus: AppealStatus;
+  appealReason: string;
+  resolutionNote: string | null;
+  resolvedById: string | null;
+  createdAt: Date;
+  claimedAt: Date | null;
+  resolvedAt: Date | null;
+  appealedBy: { id: string; name: string; email: string; department: string | null };
+  resolvedBy: { id: string; name: string; email: string } | null;
+  submission: {
+    id: string;
+    submittedAt: Date;
+    user: { id: string; name: string; email: string; department: string | null };
+    module: { id: string; title: string; description: string | null };
+    moduleVersion: { id: string };
+    mcqAttempts: unknown[];
+    llmEvaluations: unknown[];
+    decisions: unknown[];
+    manualReviews: unknown[];
+  };
+};
 
 export function toAppealWorkspaceView(workspace: AppealWorkspaceRecord, locale: string) {
   const normalizedLocale = normalizeLocale(locale) ?? "en-GB";
