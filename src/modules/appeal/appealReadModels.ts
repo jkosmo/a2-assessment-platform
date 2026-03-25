@@ -7,21 +7,37 @@ type AppealWorkspaceRecord = NonNullable<Awaited<ReturnType<typeof appealReposit
 
 export function toAppealWorkspaceView(workspace: AppealWorkspaceRecord, locale: string) {
   const normalizedLocale = normalizeLocale(locale) ?? "en-GB";
+  const sub = workspace.submission;
 
   return {
     appeal: {
-      ...workspace,
+      id: workspace.id,
+      submissionId: workspace.submissionId,
+      appealStatus: workspace.appealStatus,
+      appealReason: workspace.appealReason,
+      resolutionNote: workspace.resolutionNote,
+      resolvedById: workspace.resolvedById,
+      createdAt: workspace.createdAt,
+      claimedAt: workspace.claimedAt,
+      resolvedAt: workspace.resolvedAt,
+      appealedBy: workspace.appealedBy,
+      resolvedBy: workspace.resolvedBy,
       submission: {
-        ...workspace.submission,
+        id: sub.id,
+        submittedAt: sub.submittedAt,
+        user: sub.user,
         module: {
-          ...workspace.submission.module,
-          title:
-            localizeContentText(normalizedLocale, workspace.submission.module.title) ??
-            workspace.submission.module.title,
+          id: sub.module.id,
+          title: localizeContentText(normalizedLocale, sub.module.title) ?? sub.module.title,
           description:
-            localizeContentText(normalizedLocale, workspace.submission.module.description ?? null) ??
-            workspace.submission.module.description,
+            localizeContentText(normalizedLocale, sub.module.description ?? null) ??
+            sub.module.description,
         },
+        moduleVersion: sub.moduleVersion,
+        mcqAttempts: sub.mcqAttempts,
+        llmEvaluations: sub.llmEvaluations,
+        decisions: sub.decisions,
+        manualReviews: sub.manualReviews,
       },
     },
     sla: buildAppealSlaSnapshot({

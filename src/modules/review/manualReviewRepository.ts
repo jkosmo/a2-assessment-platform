@@ -103,7 +103,9 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
                   description: true,
                 },
               },
-              moduleVersion: true,
+              moduleVersion: {
+                select: { id: true },
+              },
               mcqAttempts: {
                 orderBy: { completedAt: "desc" },
                 include: {
@@ -119,7 +121,20 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
                   },
                 },
               },
-              llmEvaluations: { orderBy: { createdAt: "desc" } },
+              llmEvaluations: {
+                orderBy: { createdAt: "desc" },
+                select: {
+                  id: true,
+                  responseJson: true,
+                  rubricTotal: true,
+                  practicalScoreScaled: true,
+                  passFailPractical: true,
+                  manualReviewRecommended: true,
+                  confidenceNote: true,
+                  evaluatedAt: true,
+                  createdAt: true,
+                },
+              },
               decisions: { orderBy: { finalisedAt: "desc" } },
               appeals: { orderBy: { createdAt: "desc" } },
             },

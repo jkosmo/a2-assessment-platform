@@ -16,27 +16,44 @@ function parseSubmissionResponse(responseJson: string) {
 
 export function toManualReviewWorkspaceView(workspace: ManualReviewWorkspaceRecord, locale: string) {
   const normalizedLocale = normalizeLocale(locale) ?? "en-GB";
-  const parsedResponse = parseSubmissionResponse(workspace.submission.responseJson);
+  const sub = workspace.submission;
+  const parsedResponse = parseSubmissionResponse(sub.responseJson);
 
   return {
     review: {
-      ...workspace,
+      id: workspace.id,
+      submissionId: workspace.submissionId,
+      reviewStatus: workspace.reviewStatus,
+      triggerReason: workspace.triggerReason,
+      reviewerId: workspace.reviewerId,
+      reviewedAt: workspace.reviewedAt,
+      overrideDecision: workspace.overrideDecision,
+      overrideReason: workspace.overrideReason,
+      createdAt: workspace.createdAt,
+      reviewer: workspace.reviewer,
       submission: {
-        ...workspace.submission,
+        id: sub.id,
+        submittedAt: sub.submittedAt,
+        deliveryType: sub.deliveryType,
+        responseJson: sub.responseJson,
+        user: sub.user,
         module: {
-          ...workspace.submission.module,
-          title:
-            localizeContentText(normalizedLocale, workspace.submission.module.title) ??
-            workspace.submission.module.title,
+          id: sub.module.id,
+          title: localizeContentText(normalizedLocale, sub.module.title) ?? sub.module.title,
           description:
-            localizeContentText(normalizedLocale, workspace.submission.module.description ?? null) ??
-            workspace.submission.module.description,
+            localizeContentText(normalizedLocale, sub.module.description ?? null) ??
+            sub.module.description,
         },
+        moduleVersion: sub.moduleVersion,
         rawText: typeof parsedResponse.response === "string" ? parsedResponse.response : null,
         reflectionText:
           typeof parsedResponse.reflection === "string" ? parsedResponse.reflection : null,
         promptExcerpt:
           typeof parsedResponse.promptExcerpt === "string" ? parsedResponse.promptExcerpt : null,
+        mcqAttempts: sub.mcqAttempts,
+        llmEvaluations: sub.llmEvaluations,
+        decisions: sub.decisions,
+        appeals: sub.appeals,
       },
     },
   };

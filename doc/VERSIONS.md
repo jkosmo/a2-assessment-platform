@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.47 - 2026-03-25
+
+Innfør eksplisitte DTO-grenser for review og appeal workspace (#253).
+- `toAppealWorkspaceView` og `toManualReviewWorkspaceView` bruker nå eksplisitt feltmapping i stedet for `...spread` — Prisma-formen lekker ikke lenger ukontrollert til API-kontrakten
+- `moduleVersion: true` erstattet med `select: { id: true }` — fjerner store ubrukte blobbfelter (taskText, guidanceText, assessmentPolicyJson) fra workspace-responsen
+- `llmEvaluations` får eksplisitt `select` i begge repositories — eliminerer `requestPayloadHash` og andre interne felter fra workspace-responsen
+
 ## 0.9.46 - 2026-03-24
 
 Worker runtime hardening (#255).

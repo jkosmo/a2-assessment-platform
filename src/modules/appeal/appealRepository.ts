@@ -186,7 +186,9 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
                   description: true,
                 },
               },
-              moduleVersion: true,
+              moduleVersion: {
+                select: { id: true },
+              },
               mcqAttempts: {
                 orderBy: { completedAt: "desc" },
                 include: {
@@ -202,7 +204,20 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
                   },
                 },
               },
-              llmEvaluations: { orderBy: { createdAt: "desc" } },
+              llmEvaluations: {
+                orderBy: { createdAt: "desc" },
+                select: {
+                  id: true,
+                  responseJson: true,
+                  rubricTotal: true,
+                  practicalScoreScaled: true,
+                  passFailPractical: true,
+                  manualReviewRecommended: true,
+                  confidenceNote: true,
+                  evaluatedAt: true,
+                  createdAt: true,
+                },
+              },
               decisions: { orderBy: { finalisedAt: "desc" } },
               manualReviews: { orderBy: { createdAt: "desc" } },
             },
