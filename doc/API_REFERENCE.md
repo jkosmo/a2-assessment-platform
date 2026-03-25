@@ -2,7 +2,18 @@
 
 All `/api/*` routes require authentication. In `AUTH_MODE=mock`, use the `x-user-roles` header to set roles. In `AUTH_MODE=entra`, a valid JWT is required.
 
-Role requirements per route group are enforced by the RBAC middleware and the canonical capability contract in `src/config/capabilities.ts`. See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
+## Source of truth
+
+Route-group role requirements are defined in `API_ROUTE_CAPABILITIES` in `src/config/capabilities.ts`.
+`app.ts` enforces them via `rolesFor(id)`. The per-route-group role columns in this document are derived
+from that catalog — if the code and this doc disagree, the code wins.
+
+**Exception:** `/api/calibration` is the only route whose access roles are not in `API_ROUTE_CAPABILITIES`.
+They are runtime-configurable via `calibrationWorkspace.accessRoles` in `config/participant-console.json`.
+See the calibration section below and the documented exception in `src/config/capabilities.ts`.
+
+Workspace navigation follows the same contract; roles are exposed to the frontend through `/participant/config`.
+See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 
 ---
 

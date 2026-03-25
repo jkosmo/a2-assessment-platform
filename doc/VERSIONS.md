@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.61 - 2026-03-25
+
+Docs: avled API/workspace-dokumentasjon fra capability contract (#269).
+- API_REFERENCE.md: ny "Source of truth"-seksjon peker til API_ROUTE_CAPABILITIES; kalibrerings-unntaket er eksplisitt dokumentert
+- GETTING_STARTED.md: workspace-notis oppdatert med eksplisitt referanse til capabilities.ts og kalibrerings-unntaket
+- Ingen atferdsendring
+
 ## 0.9.60 - 2026-03-25
 
 Refactor: gjør kalibrerings-tilgangen eksplisitt som contract override (#271).

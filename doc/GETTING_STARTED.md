@@ -151,8 +151,9 @@ AZURE_OPENAI_TOKEN_LIMIT_PARAMETER   (max_tokens | max_completion_tokens | auto;
 Start the dev server and open the relevant workspace URL.
 
 Note:
-- the canonical route/workspace contract now lives in `src/config/capabilities.ts`
-- `config/participant-console.json` still owns runtime-tunable behavior such as calibration access roles, queue defaults, draft settings, and mock identity defaults
+- the canonical route/workspace contract lives in `src/config/capabilities.ts` (`API_ROUTE_CAPABILITIES`)
+- `/api/calibration` is the only route not in that catalog — its access roles are runtime-configurable via `calibrationWorkspace.accessRoles` in `config/participant-console.json` (documented exception in `capabilities.ts`)
+- `config/participant-console.json` also owns queue defaults, draft settings, and mock identity defaults
 
 ### Participant (`PARTICIPANT` role)
 
