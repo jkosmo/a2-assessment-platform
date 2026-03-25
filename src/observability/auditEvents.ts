@@ -26,6 +26,8 @@ export const auditActions = {
     moduleCreated: "module_created",
     moduleDeleted: "module_deleted",
     moduleUnpublished: "module_unpublished",
+    moduleArchived: "module_archived",
+    moduleRestored: "module_restored",
     benchmarkExampleVersionCreated: "benchmark_example_version_created",
     moduleVersionPublished: "module_version_published",
     calibrationThresholdsPublished: "calibration_thresholds_published",
@@ -93,6 +95,12 @@ export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleUnpublished]: EventMetadata<{
     moduleId: string;
     previousActiveVersionId: string;
+  }>;
+  [auditActions.adminContent.moduleArchived]: EventMetadata<{
+    moduleId: string;
+  }>;
+  [auditActions.adminContent.moduleRestored]: EventMetadata<{
+    moduleId: string;
   }>;
   [auditActions.adminContent.benchmarkExampleVersionCreated]: EventMetadata<{
     moduleId: string;

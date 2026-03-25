@@ -7,10 +7,13 @@ import {
   deleteModule,
   getModuleContentBundle,
   listAdminModules,
+  listArchivedModules,
   createPromptTemplateVersion,
   createRubricVersion,
   publishModuleVersion,
   unpublishModule,
+  archiveModule,
+  restoreModule,
 } from "../modules/adminContent/index.js";
 import {
   moduleCreateBodySchema,
@@ -225,6 +228,54 @@ adminContentRouter.post("/modules/:moduleId/unpublish", async (request, response
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not unpublish module.";
     response.status(400).json({ error: "unpublish_module_failed", message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Module archive / restore
+// ---------------------------------------------------------------------------
+
+adminContentRouter.get("/modules/archive", async (request, response) => {
+  const locale = (request.query.locale as string) || "en-GB";
+  const search = request.query.search as string | undefined;
+
+  try {
+    const modules = await listArchivedModules(locale as Parameters<typeof listArchivedModules>[0], search);
+    response.json({ modules });
+  } catch {
+    response.status(500).json({ error: "list_archive_failed" });
+  }
+});
+
+adminContentRouter.post("/modules/:moduleId/archive", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const result = await archiveModule(request.params.moduleId, actorId);
+    response.json({ moduleId: result.id, archivedAt: result.archivedAt });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not archive module.";
+    response.status(400).json({ error: "archive_module_failed", message });
+  }
+});
+
+adminContentRouter.post("/modules/:moduleId/restore", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    const result = await restoreModule(request.params.moduleId, actorId);
+    response.json({ moduleId: result.id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not restore module.";
+    response.status(400).json({ error: "restore_module_failed", message });
   }
 });
 

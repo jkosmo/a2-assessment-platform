@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.50 - 2026-03-25
+
+Modularkivering (#258).
+- `archivedAt` felt på Module-modellen — arkiverte moduler er ikke slettet, kun skjult
+- Arkiverte moduler filtreres ut av hoved-listen i Admin Content automatisk
+- `POST /modules/:id/archive` — krever at modulen er avpublisert (`activeVersionId === null`)
+- `POST /modules/:id/restore` — gjenoppretter arkivert modul til hoved-listen
+- `GET /modules/archive?search=...` — arkiv-bibliotek med fritekstsøk på tittel
+- Audit events `module_archived` og `module_restored`
+- 6 integrasjonstester (arkiver, gjenopprett, blokkering ved aktiv versjon, dobbeltarkivering, søk, audit)
+
 ## 0.9.49 - 2026-03-25
 
 LLM-innholdsgenerering: scenario-instruksjon og distraktor-kalibrering (#245, #246).

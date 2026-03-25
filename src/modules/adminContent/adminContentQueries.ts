@@ -3,6 +3,18 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 
+export async function listArchivedModules(locale: SupportedLocale = "en-GB", search?: string) {
+  const modules = await adminContentRepository.listArchivedModuleSummaries(search);
+
+  return modules.map((module) => ({
+    id: module.id,
+    title: localizeContentText(locale, module.title) ?? module.title,
+    description: localizeContentText(locale, module.description),
+    certificationLevel: module.certificationLevel,
+    archivedAt: module.archivedAt,
+  }));
+}
+
 export async function listAdminModules(locale: SupportedLocale = "en-GB") {
   const modules = await adminContentRepository.listModuleSummaries();
 

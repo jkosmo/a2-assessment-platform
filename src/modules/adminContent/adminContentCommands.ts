@@ -330,6 +330,58 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
   };
 }
 
+export async function archiveModule(moduleId: string, actorId: string) {
+  const module = await adminContentRepository.findModuleSummary(moduleId);
+
+  if (!module) {
+    throw new Error("Module not found.");
+  }
+
+  if (module.activeVersionId) {
+    throw new Error("Module must be unpublished before it can be archived.");
+  }
+
+  if (module.archivedAt) {
+    throw new Error("Module is already archived.");
+  }
+
+  const result = await adminContentRepository.archiveModule(moduleId, new Date());
+
+  await recordAuditEvent({
+    entityType: auditEntityTypes.module,
+    entityId: moduleId,
+    action: auditActions.adminContent.moduleArchived,
+    actorId,
+    metadata: { moduleId },
+  });
+
+  return result;
+}
+
+export async function restoreModule(moduleId: string, actorId: string) {
+  const module = await adminContentRepository.findModuleSummary(moduleId);
+
+  if (!module) {
+    throw new Error("Module not found.");
+  }
+
+  if (!module.archivedAt) {
+    throw new Error("Module is not archived.");
+  }
+
+  const result = await adminContentRepository.restoreModule(moduleId);
+
+  await recordAuditEvent({
+    entityType: auditEntityTypes.module,
+    entityId: moduleId,
+    action: auditActions.adminContent.moduleRestored,
+    actorId,
+    metadata: { moduleId },
+  });
+
+  return result;
+}
+
 export async function unpublishModule(moduleId: string, actorId: string) {
   await ensureModuleExists(moduleId);
   const result = await adminContentRepository.unpublishModule(moduleId);

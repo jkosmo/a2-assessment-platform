@@ -6,6 +6,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
   return {
     listModuleSummaries() {
       return client.module.findMany({
+        where: { archivedAt: null },
         orderBy: { title: "asc" },
         select: {
           id: true,
@@ -21,10 +22,43 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    listArchivedModuleSummaries(search?: string) {
+      return client.module.findMany({
+        where: {
+          archivedAt: { not: null },
+          ...(search ? { title: { contains: search, mode: "insensitive" as const } } : {}),
+        },
+        orderBy: { archivedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          certificationLevel: true,
+          archivedAt: true,
+        },
+      });
+    },
+
     findModuleSummary(moduleId: string) {
       return client.module.findUnique({
         where: { id: moduleId },
-        select: { id: true, activeVersionId: true },
+        select: { id: true, activeVersionId: true, archivedAt: true },
+      });
+    },
+
+    archiveModule(moduleId: string, now: Date) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: now },
+        select: { id: true, title: true, archivedAt: true },
+      });
+    },
+
+    restoreModule(moduleId: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { archivedAt: null },
+        select: { id: true, title: true },
       });
     },
 
