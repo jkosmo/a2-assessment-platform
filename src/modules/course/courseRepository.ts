@@ -2,7 +2,7 @@ import { prisma } from "../../db/prisma.js";
 
 type CourseRepositoryClient = Pick<
   typeof prisma,
-  "course" | "courseModule" | "courseCompletion" | "certificationStatus"
+  "course" | "courseModule" | "courseCompletion" | "certificationStatus" | "submission"
 >;
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {
@@ -89,6 +89,58 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           },
         },
       });
+    },
+
+    findPublishedCoursesWithModuleDetails() {
+      return client.course.findMany({
+        where: { publishedAt: { not: null }, archivedAt: null },
+        orderBy: { publishedAt: "asc" },
+        include: {
+          modules: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              module: { select: { id: true, title: true } },
+            },
+          },
+        },
+      });
+    },
+
+    findUserCourseCompletions(userId: string) {
+      return client.courseCompletion.findMany({
+        where: { userId },
+        include: {
+          course: {
+            select: { id: true, title: true, certificationLevel: true },
+          },
+        },
+        orderBy: { completedAt: "desc" },
+      });
+    },
+
+    countCourseCompletions(courseId: string) {
+      return client.courseCompletion.count({ where: { courseId } });
+    },
+
+    countDistinctEnrolledUsersForModules(moduleIds: string[]) {
+      if (moduleIds.length === 0) return Promise.resolve(0);
+      return client.submission.groupBy({
+        by: ["userId"],
+        where: { moduleId: { in: moduleIds } },
+      }).then((rows) => rows.length);
+    },
+
+    countPassedUsersForModule(moduleId: string) {
+      return client.certificationStatus.count({
+        where: { moduleId, status: { not: "NOT_CERTIFIED" } },
+      });
+    },
+
+    countUsersWithSubmissionsForModule(moduleId: string) {
+      return client.submission.groupBy({
+        by: ["userId"],
+        where: { moduleId },
+      }).then((rows) => rows.length);
     },
   };
 }

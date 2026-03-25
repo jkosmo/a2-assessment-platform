@@ -16,6 +16,7 @@ import {
   type ReportFilters,
 } from "../modules/reporting/index.js";
 import { runRecertificationReminderSchedule } from "../modules/certification/index.js";
+import { getCourseReport } from "../modules/course/index.js";
 
 const reportsRouter = Router();
 
@@ -49,6 +50,15 @@ const trendQuerySchema = z.object({
 });
 const cohortQuerySchema = z.object({
   cohortBy: z.enum(["month", "department"]).optional(),
+});
+
+reportsRouter.get("/courses", async (_request, response, next) => {
+  try {
+    const report = await getCourseReport();
+    response.json(report);
+  } catch (error) {
+    next(error);
+  }
 });
 
 reportsRouter.get("/completion", async (request, response) => {

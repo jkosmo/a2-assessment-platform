@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.65 - 2026-03-25
+
+feat: Kursbevis og kursrapportering (#282, #283)
+- GET /api/courses/completions: deltakersiden henter sine CourseCompletion-poster
+- GET /api/reports/courses: bestått-rate per kurs med moduldrilldown
+- courseRepository: findUserCourseCompletions, countCourseCompletions, countDistinctEnrolledUsersForModules, countPassedUsersForModule, findPublishedCoursesWithModuleDetails
+- src/modules/course/courseReport.ts: getCourseReport()
+
 ## 0.9.64 - 2026-03-25
 
 feat: Admin-API og deltaker-API for kurs (#278, #280)

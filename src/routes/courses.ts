@@ -47,6 +47,30 @@ coursesRouter.get("/", async (request, response, next) => {
   }
 });
 
+coursesRouter.get("/completions", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+
+  try {
+    const completions = await courseRepository.findUserCourseCompletions(userId);
+    const items = completions.map((cc) => ({
+      courseId: cc.courseId,
+      certificateId: cc.certificateId,
+      completedAt: cc.completedAt.toISOString(),
+      courseTitle: localizeContentText(locale, cc.course.title) ?? cc.course.title,
+      certificationLevel: cc.course.certificationLevel,
+    }));
+    response.json({ completions: items });
+  } catch (error) {
+    next(error);
+  }
+});
+
 coursesRouter.get("/:courseId", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {
