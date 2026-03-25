@@ -23,7 +23,7 @@ describe("Module archive and restore (#258)", () => {
           nb: `Arkivtestmodul ${titleSuffix}`,
           nn: `Arkivtestmodul ${titleSuffix}`,
         },
-        description: { "en-GB": "For archive flow testing." },
+        description: "For archive flow testing.",
       });
     expect(res.status).toBe(201);
     return res.body.module.id as string;

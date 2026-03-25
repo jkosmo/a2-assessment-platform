@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.54 - 2026-03-25
+
+Fiks CI: beskrivelsesfelt i arkivtest er nå en plain string (#258).
+- `description` i `createBareModule`-hjelper var et ufullstendig lokalisert objekt (kun en-GB)
+- Zod-skjema krever alle tre locale-nøkler for lokaliserte objekter — plain string brukes i stedet
+- Alle 7 arkivtester forventet 201 men fikk 400 validation_error
+
 ## 0.9.53 - 2026-03-25
 
 Arkivbibliotek i Admin Content (#258).
