@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.55 - 2026-03-25
+
+Refactor: eksplisitt kommandogrense i createSubmission (#263).
+- Trekker ut createSubmissionCommand (privat) som eier runInTransaction-blokken
+- createSubmission blir ren orkestrator: validate → parse → command → side-effects
+- Ingen endring i ekstern API eller testdekning
+
 ## 0.9.54 - 2026-03-25
 
 Fiks CI: beskrivelsesfelt i arkivtest er nå en plain string (#258).

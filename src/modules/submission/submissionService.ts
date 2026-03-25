@@ -25,25 +25,19 @@ export type CreateSubmissionInput = {
   attachmentMimeType?: string;
 };
 
-export async function createSubmission(input: CreateSubmissionInput) {
-  const module = await getModuleWithActiveVersion(input.moduleId);
+type ParseOutcome = Awaited<ReturnType<typeof resolveSubmissionResponseJson>>;
 
-  if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
-    throw new ValidationError("Module active version is not available.");
-  }
-
-  const parseOutcome = await resolveSubmissionResponseJson({
-    responseJson: input.responseJson,
-    attachmentBase64: input.attachmentBase64,
-    attachmentFilename: input.attachmentFilename,
-    attachmentMimeType: input.attachmentMimeType,
-  });
-
-  const submission = await runInTransaction(async (tx) => {
+async function createSubmissionCommand(
+  input: CreateSubmissionInput,
+  moduleId: string,
+  moduleVersionId: string,
+  parseOutcome: ParseOutcome,
+) {
+  return runInTransaction(async (tx) => {
     const submission = await createSubmissionRepository(tx).create({
       userId: input.userId,
-      moduleId: module.id,
-      moduleVersionId: module.activeVersion!.id,
+      moduleId,
+      moduleVersionId,
       locale: input.locale,
       deliveryType: input.deliveryType,
       responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
@@ -64,8 +58,8 @@ export async function createSubmission(input: CreateSubmissionInput) {
       },
     }, tx);
 
-    const supersededReviewCount = await supersedeEligibleReviewsForRetake(input.userId, input.moduleId, submission.id, tx);
-    const supersededAppealCount = await supersedeEligibleAppealsForRetake(input.userId, input.moduleId, submission.id, tx);
+    const supersededReviewCount = await supersedeEligibleReviewsForRetake(input.userId, moduleId, submission.id, tx);
+    const supersededAppealCount = await supersedeEligibleAppealsForRetake(input.userId, moduleId, submission.id, tx);
 
     if (supersededReviewCount + supersededAppealCount > 0) {
       await recordAuditEvent({
@@ -79,6 +73,23 @@ export async function createSubmission(input: CreateSubmissionInput) {
 
     return submission;
   });
+}
+
+export async function createSubmission(input: CreateSubmissionInput) {
+  const module = await getModuleWithActiveVersion(input.moduleId);
+
+  if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
+    throw new ValidationError("Module active version is not available.");
+  }
+
+  const parseOutcome = await resolveSubmissionResponseJson({
+    responseJson: input.responseJson,
+    attachmentBase64: input.attachmentBase64,
+    attachmentFilename: input.attachmentFilename,
+    attachmentMimeType: input.attachmentMimeType,
+  });
+
+  const submission = await createSubmissionCommand(input, module.id, module.activeVersion.id, parseOutcome);
 
   logOperationalEvent(operationalEvents.submission.documentParse, {
     submissionId: submission.id,
