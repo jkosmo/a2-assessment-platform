@@ -74,6 +74,13 @@
       .course-module-row { display: flex; align-items: center; gap: var(--space-1); padding: 4px 0; border-bottom: 1px solid var(--color-border-soft); }
       .course-module-row:last-child { border-bottom: none; }
       .course-module-row-title { flex: 1; font-size: 14px; color: var(--color-text); }
+      .course-module-row-copy { display: grid; gap: 2px; flex: 1; min-width: 0; }
+      .course-module-row-action { font-size: 12px; color: var(--color-meta); }
+      .course-module-button { width: 100%; border: none; background: transparent; text-align: left; color: inherit; cursor: pointer; border-radius: 8px; padding: 8px 0; }
+      .course-module-button:hover { background: var(--color-blue-light); }
+      .course-module-button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+      .course-module-button.selected { background: var(--color-blue-light); }
+      .course-module-button[disabled] { cursor: wait; opacity: 0.8; }
       .course-certificate-banner { padding: 8px 12px; background: #f4fbf7; border: 1px solid #b8d9c6; border-radius: var(--radius-card); font-size: 13px; color: #1f7a4d; font-weight: 600; }
     </style>
   </head>

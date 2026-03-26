@@ -165,6 +165,16 @@ describe("RBAC - /api/reports", () => {
   });
 });
 
+describe("RBAC - /api/courses", () => {
+  it.each(deniedHeadersFor(rolesFor("courses")))("403 - %s", async (_, headers) => {
+    expect403(await supertest(app).get("/api/courses").set(headers));
+  });
+
+  it("403 - no role", async () => {
+    expect403(await supertest(app).get("/api/courses").set(NO_ROLE));
+  });
+});
+
 describe("RBAC - /api/calibration", () => {
   const calibrationRoles = getParticipantConsoleRuntimeConfig().calibrationWorkspace.accessRoles;
 

@@ -4,6 +4,7 @@ import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { NotFoundError } from "../errors/AppError.js";
 import type { CourseListItem, CourseDetail } from "../modules/course/index.js";
+import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
 
 const coursesRouter = Router();
 
@@ -22,10 +23,16 @@ coursesRouter.get("/", async (request, response, next) => {
     const items: CourseListItem[] = await Promise.all(
       courses.map(async (course) => {
         const moduleIds = course.modules.map((m) => m.moduleId);
+        const [completed, latestSubmissions] = await Promise.all([
+          moduleIds.length > 0
+            ? courseRepository.countPassedModulesForUser(userId, moduleIds)
+            : Promise.resolve(0),
+          moduleIds.length > 0
+            ? queryLatestSubmissionsForModules(userId, moduleIds)
+            : Promise.resolve([]),
+        ]);
         const total = moduleIds.length;
-        const completed = total > 0
-          ? await courseRepository.countPassedModulesForUser(userId, moduleIds)
-          : 0;
+        const hasStarted = latestSubmissions.length > 0;
 
         return {
           id: course.id,
@@ -35,7 +42,7 @@ coursesRouter.get("/", async (request, response, next) => {
           progress: {
             completed,
             total,
-            courseStatus: computeCourseStatus(completed, total),
+            courseStatus: computeCourseStatus(completed, total, hasStarted),
           },
         };
       }),
@@ -87,12 +94,21 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     }
 
     const moduleIds = course.modules.map((cm) => cm.moduleId);
-    const [certStatuses, passedCount] = await Promise.all([
+    const [certStatuses, passedCount, latestSubmissions] = await Promise.all([
       courseRepository.findUserCertificationStatusesForModules(userId, moduleIds),
       courseRepository.countPassedModulesForUser(userId, moduleIds),
+      moduleIds.length > 0
+        ? queryLatestSubmissionsForModules(userId, moduleIds)
+        : Promise.resolve([]),
     ]);
 
     const certStatusByModuleId = new Map(certStatuses.map((cs) => [cs.moduleId, cs.status]));
+    const latestSubmissionByModuleId = new Map<string, (typeof latestSubmissions)[number]>();
+    for (const submission of latestSubmissions) {
+      if (!latestSubmissionByModuleId.has(submission.moduleId)) {
+        latestSubmissionByModuleId.set(submission.moduleId, submission);
+      }
+    }
 
     const detail: CourseDetail = {
       id: course.id,
@@ -104,16 +120,17 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       progress: {
         completed: passedCount,
         total: moduleIds.length,
-        courseStatus: computeCourseStatus(passedCount, moduleIds.length),
+        courseStatus: computeCourseStatus(passedCount, moduleIds.length, latestSubmissions.length > 0),
       },
       modules: course.modules.map((cm) => {
         const certStatus = certStatusByModuleId.get(cm.moduleId);
         const passed = certStatus !== undefined && certStatus !== "NOT_CERTIFIED";
+        const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
         return {
           moduleId: cm.moduleId,
           sortOrder: cm.sortOrder,
           title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-          moduleStatus: passed ? "PASSED" : "NOT_STARTED",
+          moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
         };
       }),
     };

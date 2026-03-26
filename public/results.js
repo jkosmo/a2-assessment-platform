@@ -20,6 +20,7 @@ const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
 const filterModuleId = document.getElementById("filterModuleId");
+const filterCourseId = document.getElementById("filterCourseId");
 const filterDateFrom = document.getElementById("filterDateFrom");
 const filterDateTo = document.getElementById("filterDateTo");
 const loadResultsButton = document.getElementById("loadResults");
@@ -84,9 +85,11 @@ function headers() {
 function buildFilterParams() {
   const params = new URLSearchParams();
   const moduleId = filterModuleId.value.trim();
+  const courseId = filterCourseId.value.trim();
   const dateFrom = filterDateFrom.value;
   const dateTo = filterDateTo.value;
   if (moduleId) params.set("moduleId", moduleId);
+  if (courseId) params.set("courseId", courseId);
   if (dateFrom) params.set("dateFrom", dateFrom);
   if (dateTo) params.set("dateTo", dateTo);
   return params;
@@ -470,7 +473,8 @@ function renderCourseReport(rows) {
 
 async function loadCourseReport() {
   try {
-    const data = await apiFetch("/api/reports/courses", headers);
+    const params = buildFilterParams();
+    const data = await apiFetch(`/api/reports/courses?${params}`, headers);
     renderCourseReport(data.rows ?? []);
   } catch {
     renderCourseReport([]);

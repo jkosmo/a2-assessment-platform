@@ -138,6 +138,7 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain('id="passRateGrid"');
     expect(response.text).toContain('id="completionBody"');
     expect(response.text).toContain('id="participantBody"');
+    expect(response.text).toContain('id="filterCourseId"');
     expect(response.text).toContain('id="debugOutputSection"');
     expect(response.text).toContain('id="exportRecertification"');
   });
@@ -292,6 +293,13 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('wrapper.className = "mcq-question-card"');
     expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
     expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
+    expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId)');
+    expect(participantJsResponse.text).toContain('course-module-button');
+
+    const resultsJsResponse = await request(app).get("/static/results.js");
+    expect(resultsJsResponse.status).toBe(200);
+    expect(resultsJsResponse.text).toContain('const filterCourseId = document.getElementById("filterCourseId")');
+    expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses?${params}`, headers)');
 
     const adminContentJsResponse = await request(app).get("/static/admin-content.js");
     expect(adminContentJsResponse.status).toBe(200);

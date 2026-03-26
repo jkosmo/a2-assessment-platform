@@ -34,6 +34,7 @@ function escapeCsvValue(value: unknown) {
 export function normalizeFilters(filters: ReportFilters) {
   return {
     moduleId: filters.moduleId ?? null,
+    courseId: filters.courseId ?? null,
     statuses: filters.statuses ?? [],
     dateFrom: filters.dateFrom?.toISOString() ?? null,
     dateTo: filters.dateTo?.toISOString() ?? null,

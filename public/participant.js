@@ -791,17 +791,7 @@ function renderModules() {
     button.classList.toggle("completed", module.completed === true);
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
-      const previousModuleId = selectedModuleId;
-      const savedDraft = persistCurrentModuleDraft(false);
-      selectedModuleId = module.id;
-      resetFlowStateForModuleContext();
-      renderModules();
-      renderSelectedModuleSummary();
-      restoreDraftForSelectedModule(true);
-      if (savedDraft.saved && savedDraft.meaningful && previousModuleId && previousModuleId !== module.id) {
-        showToast(t("draft.savedSwitchToast").replace("{module}", savedDraft.title), "info");
-      }
-      log({ selectedModule: { id: module.id, title: module.title } }, { notify: false });
+      activateParticipantModule(module.id);
     });
 
     const title = document.createElement("div");
@@ -873,6 +863,86 @@ function renderModules() {
     }
 
     moduleList.appendChild(button);
+  }
+}
+
+function syncParticipantModuleWorkspace(options = {}) {
+  const { restoreDraft = false } = options;
+
+  if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
+    selectedModuleId = "";
+    resetFlowStateForModuleContext();
+  }
+
+  renderModules();
+  renderSelectedModuleSummary();
+
+  if (restoreDraft && selectedModuleId) {
+    restoreDraftForSelectedModule(false);
+  }
+
+  updateCreateSubmissionAvailability();
+}
+
+function activateParticipantModule(moduleId, options = {}) {
+  const { scrollIntoView = false, logSelection = true } = options;
+  const nextModule = loadedModules.find((module) => module?.id === moduleId) ?? null;
+  if (!nextModule) {
+    return false;
+  }
+
+  const previousModuleId = selectedModuleId;
+  const savedDraft = persistCurrentModuleDraft(false);
+  selectedModuleId = moduleId;
+  resetFlowStateForModuleContext();
+  renderModules();
+  renderSelectedModuleSummary();
+  restoreDraftForSelectedModule(true);
+  updateCreateSubmissionAvailability();
+
+  if (savedDraft.saved && savedDraft.meaningful && previousModuleId && previousModuleId !== moduleId) {
+    showToast(t("draft.savedSwitchToast").replace("{module}", savedDraft.title), "info");
+  }
+
+  if (scrollIntoView) {
+    selectedModuleDisplay?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (logSelection) {
+    log({ selectedModule: { id: nextModule.id, title: nextModule.title } }, { notify: false });
+  }
+
+  return true;
+}
+
+async function ensureParticipantModuleAvailable(moduleId) {
+  if (loadedModules.some((module) => module?.id === moduleId)) {
+    return true;
+  }
+
+  if (previewModeEnabled) {
+    loadPreviewModules({ notify: false });
+    return loadedModules.some((module) => module?.id === moduleId);
+  }
+
+  const body = await apiFetch("/api/modules?includeCompleted=true", headers());
+  loadedModules = Array.isArray(body.modules) ? body.modules : [];
+  hasLoadedModules = true;
+  syncParticipantModuleWorkspace();
+
+  return loadedModules.some((module) => module?.id === moduleId);
+}
+
+async function openCourseModule(courseId, moduleId) {
+  const available = await ensureParticipantModuleAvailable(moduleId);
+  if (!available) {
+    throw new Error(t("courses.module.unavailable"));
+  }
+
+  activateParticipantModule(moduleId, { scrollIntoView: true });
+
+  if (courseDetailCache[courseId]) {
+    renderCourseDetailModules(courseId, courseDetailCache[courseId]);
   }
 }
 
@@ -2129,16 +2199,7 @@ loadModulesButton.addEventListener("click", async () => {
       const body = await apiFetch("/api/modules?includeCompleted=true", headers);
       loadedModules = Array.isArray(body.modules) ? body.modules : [];
       hasLoadedModules = true;
-      if (selectedModuleId && !resolveSelectedModule(loadedModules, selectedModuleId)) {
-        selectedModuleId = "";
-        resetFlowStateForModuleContext();
-      }
-      renderModules();
-      renderSelectedModuleSummary();
-      if (selectedModuleId) {
-        restoreDraftForSelectedModule(false);
-      }
-      updateCreateSubmissionAvailability();
+      syncParticipantModuleWorkspace({ restoreDraft: true });
       log(body);
     } catch (error) {
       showEmpty(moduleList, error.message);
@@ -2589,7 +2650,9 @@ function renderParticipantCourseAccordion() {
 }
 
 function buildCourseAccordionItem(course) {
-  const completed = course.progress?.courseStatus === "COMPLETED";
+  const courseStatus = course.progress?.courseStatus ?? "NOT_STARTED";
+  const completed = courseStatus === "COMPLETED";
+  const inProgress = courseStatus === "IN_PROGRESS";
   const passedCount = course.progress?.completed ?? 0;
   const totalCount = course.progress?.total ?? course.moduleCount ?? 0;
   const pct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
@@ -2601,10 +2664,10 @@ function buildCourseAccordionItem(course) {
 
   const statusText = completed
     ? t("courses.status.completed")
-    : passedCount > 0
+    : inProgress
     ? t("courses.status.inProgress")
     : t("courses.status.notStarted");
-  const badgeClass = completed ? "completed" : passedCount > 0 ? "retake" : "";
+  const badgeClass = completed ? "completed" : inProgress ? "retake" : "";
 
   item.innerHTML = `
     <button type="button" class="course-accordion-header" aria-expanded="false">
@@ -2613,11 +2676,11 @@ function buildCourseAccordionItem(course) {
         <span class="course-accordion-progress">${passedCount}/${totalCount} ${escapeHtmlP(t("courses.modulesOf"))}</span>
       </span>
       <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
-      <span class="course-accordion-chevron">▼</span>
+      <span class="course-accordion-chevron">&#9662;</span>
     </button>
     <div class="course-accordion-body">
       <div class="course-progress-bar"><div class="course-progress-fill${completed ? " completed" : ""}" style="width:${pct}%"></div></div>
-      ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} — <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span></div>` : ""}
+      ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} - <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span></div>` : ""}
       <div id="courseDetail_${course.id}"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
     </div>
   `;
@@ -2659,10 +2722,27 @@ function renderCourseDetailModules(courseId, course) {
     const inProgress = m.moduleStatus === "IN_PROGRESS";
     const badgeText = passed ? t("courses.module.passed") : inProgress ? t("courses.module.inProgress") : t("courses.module.notStarted");
     const badgeClass = passed ? "completed" : inProgress ? "retake" : "";
-    const row = document.createElement("div");
-    row.className = "course-module-row";
+    const selected = selectedModuleId === m.moduleId;
+    const actionText = selected ? t("submission.selectedModule") : t("progress.selectModule");
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
+    row.setAttribute("aria-pressed", selected ? "true" : "false");
+    row.addEventListener("click", async () => {
+      row.disabled = true;
+      try {
+        await openCourseModule(courseId, m.moduleId);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+      } finally {
+        row.disabled = false;
+      }
+    });
     row.innerHTML = `
-      <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
+      <span class="course-module-row-copy">
+        <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
+        <span class="course-module-row-action">${escapeHtmlP(actionText)}</span>
+      </span>
       <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(badgeText)}</span>
     `;
     container.appendChild(row);

@@ -22,6 +22,7 @@ const reportsRouter = Router();
 
 const reportQuerySchema = z.object({
   moduleId: z.string().trim().min(1).optional(),
+  courseId: z.string().trim().min(1).optional(),
   status: z.string().trim().optional(),
   dateFrom: z.string().trim().optional(),
   dateTo: z.string().trim().optional(),
@@ -52,9 +53,15 @@ const cohortQuerySchema = z.object({
   cohortBy: z.enum(["month", "department"]).optional(),
 });
 
-reportsRouter.get("/courses", async (_request, response, next) => {
+reportsRouter.get("/courses", async (request, response, next) => {
+  const filters = parseReportFilters(request.query);
+  if (!filters) {
+    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    return;
+  }
+
   try {
-    const report = await getCourseReport();
+    const report = await getCourseReport(filters, request.context?.locale ?? "nb");
     response.json(report);
   } catch (error) {
     next(error);
@@ -264,6 +271,7 @@ function parseReportFilters(input: unknown): ReportFilters | null {
 
   return {
     moduleId: parsed.data.moduleId,
+    courseId: parsed.data.courseId,
     statuses: parseStatuses(parsed.data.status),
     dateFrom: dateFrom ?? undefined,
     dateTo: dateTo ?? undefined,

@@ -284,6 +284,7 @@ export const translations = {
     "courses.module.passed": "Passed",
     "courses.module.inProgress": "In progress",
     "courses.module.notStarted": "Not started",
+    "courses.module.unavailable": "Module is not available in the participant workspace.",
     "courses.certificate.earned": "Certificate issued",
   },
   nb: {
@@ -565,6 +566,7 @@ export const translations = {
     "courses.module.passed": "Bestått",
     "courses.module.inProgress": "Påbegynt",
     "courses.module.notStarted": "Ikke startet",
+    "courses.module.unavailable": "Modulen er ikke tilgjengelig i deltakerflaten.",
     "courses.certificate.earned": "Sertifikat utstedt",
   },
   nn: {
@@ -846,6 +848,7 @@ export const translations = {
     "courses.module.passed": "Bestått",
     "courses.module.inProgress": "Påbegynt",
     "courses.module.notStarted": "Ikkje starta",
+    "courses.module.unavailable": "Modulen er ikkje tilgjengeleg i deltakarflata.",
     "courses.certificate.earned": "Sertifikat utstedt",
   },
 };

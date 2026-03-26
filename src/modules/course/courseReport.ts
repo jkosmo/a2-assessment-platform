@@ -1,5 +1,7 @@
 import { courseRepository } from "./courseRepository.js";
 import { localizeContentText } from "../../i18n/content.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import type { ReportFilters } from "../reporting/types.js";
 
 type CourseReportRow = {
   courseId: string;
@@ -17,27 +19,30 @@ type CourseReportRow = {
   }>;
 };
 
-export async function getCourseReport(): Promise<{ rows: CourseReportRow[] }> {
-  const courses = await courseRepository.findPublishedCoursesWithModuleDetails();
+export async function getCourseReport(
+  filters: Pick<ReportFilters, "courseId" | "dateFrom" | "dateTo" | "orgUnit"> = {},
+  locale: SupportedLocale = "en-GB",
+): Promise<{ rows: CourseReportRow[] }> {
+  const courses = await courseRepository.findPublishedCoursesWithModuleDetails(filters);
 
   const rows: CourseReportRow[] = await Promise.all(
     courses.map(async (course) => {
       const moduleIds = course.modules.map((cm) => cm.moduleId);
 
       const [enrolled, completed] = await Promise.all([
-        courseRepository.countDistinctEnrolledUsersForModules(moduleIds),
-        courseRepository.countCourseCompletions(course.id),
+        courseRepository.countDistinctEnrolledUsersForModules(moduleIds, filters),
+        courseRepository.countCourseCompletions(course.id, filters),
       ]);
 
       const moduleBreakdown = await Promise.all(
         course.modules.map(async (cm) => {
           const [passedUsers, enrolledUsers] = await Promise.all([
-            courseRepository.countPassedUsersForModule(cm.moduleId),
-            courseRepository.countUsersWithSubmissionsForModule(cm.moduleId),
+            courseRepository.countPassedUsersForModule(cm.moduleId, filters),
+            courseRepository.countUsersWithSubmissionsForModule(cm.moduleId, filters),
           ]);
           return {
             moduleId: cm.moduleId,
-            moduleTitle: localizeContentText("en-GB", cm.module.title) ?? cm.module.title,
+            moduleTitle: localizeContentText(locale, cm.module.title) ?? cm.module.title,
             sortOrder: cm.sortOrder,
             passedUsers,
             enrolledUsers,
@@ -50,7 +55,7 @@ export async function getCourseReport(): Promise<{ rows: CourseReportRow[] }> {
 
       return {
         courseId: course.id,
-        courseTitle: localizeContentText("en-GB", course.title) ?? course.title,
+        courseTitle: localizeContentText(locale, course.title) ?? course.title,
         enrolledParticipants: enrolled,
         completedParticipants: completed,
         completionRate: enrolled > 0

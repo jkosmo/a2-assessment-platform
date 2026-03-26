@@ -1,4 +1,47 @@
 import { prisma } from "../../db/prisma.js";
+import type { ReportFilters } from "../reporting/types.js";
+
+function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
+  return {
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+  };
+}
+
+function buildCompletionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
+  return {
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          completedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+  };
+}
+
+function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
+  return {
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          passedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+  };
+}
 
 type CourseRepositoryClient = Pick<
   typeof prisma,
@@ -91,9 +134,13 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    findPublishedCoursesWithModuleDetails() {
+    findPublishedCoursesWithModuleDetails(filters: Pick<ReportFilters, "courseId"> = {}) {
       return client.course.findMany({
-        where: { publishedAt: { not: null }, archivedAt: null },
+        where: {
+          publishedAt: { not: null },
+          archivedAt: null,
+          ...(filters.courseId ? { id: filters.courseId } : {}),
+        },
         orderBy: { publishedAt: "asc" },
         include: {
           modules: {
@@ -118,28 +165,49 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    countCourseCompletions(courseId: string) {
-      return client.courseCompletion.count({ where: { courseId } });
-    },
-
-    countDistinctEnrolledUsersForModules(moduleIds: string[]) {
-      if (moduleIds.length === 0) return Promise.resolve(0);
-      return client.submission.groupBy({
-        by: ["userId"],
-        where: { moduleId: { in: moduleIds } },
-      }).then((rows) => rows.length);
-    },
-
-    countPassedUsersForModule(moduleId: string) {
-      return client.certificationStatus.count({
-        where: { moduleId, status: { not: "NOT_CERTIFIED" } },
+    countCourseCompletions(courseId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
+      return client.courseCompletion.count({
+        where: {
+          courseId,
+          ...buildCompletionWhere(filters),
+        },
       });
     },
 
-    countUsersWithSubmissionsForModule(moduleId: string) {
+    countDistinctEnrolledUsersForModules(
+      moduleIds: string[],
+      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
+    ) {
+      if (moduleIds.length === 0) return Promise.resolve(0);
       return client.submission.groupBy({
         by: ["userId"],
-        where: { moduleId },
+        where: {
+          moduleId: { in: moduleIds },
+          ...buildSubmissionWhere(filters),
+        },
+      }).then((rows) => rows.length);
+    },
+
+    countPassedUsersForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
+      return client.certificationStatus.count({
+        where: {
+          moduleId,
+          status: { not: "NOT_CERTIFIED" },
+          ...buildCertificationWhere(filters),
+        },
+      });
+    },
+
+    countUsersWithSubmissionsForModule(
+      moduleId: string,
+      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
+    ) {
+      return client.submission.groupBy({
+        by: ["userId"],
+        where: {
+          moduleId,
+          ...buildSubmissionWhere(filters),
+        },
       }).then((rows) => rows.length);
     },
   };

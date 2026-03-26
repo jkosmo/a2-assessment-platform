@@ -1,152 +1,275 @@
-# Designdokument: Organisere moduler i kurs
+# Designdokument: Organisere moduler i kurs (#133)
+
+## Status
+
+Beslutninger tatt, teknisk design klart, implementasjon ikke påbegynt.
+
+Child issues: #277 (skjema) → #278 + #280 → #279 + #281 → #282 + #283
+
+---
 
 ## Bakgrunn
 
-Dagens løsning er modul-sentrisk i både datamodell, adminflyt, deltakerflyt og rapportering. Moduler vises flatt uten overordnet kursstruktur. Dette gjør det vanskelig å støtte læringsløp som består av flere relaterte moduler.
+Dagens løsning er modul-sentrisk. Moduler vises flatt uten overordnet kursstruktur. Dette gjør det vanskelig å støtte læringsløp med flere relaterte moduler, og umuliggjør kursbevis og kursrapportering.
 
-Issue: `#133 EPIC: Organisere moduler i kurs`
+---
 
-## Mål
+## Beslutninger
 
-- Gjøre det mulig å gruppere moduler i kurs
-- Gi administratorer kontroll over kurssammensetning og rekkefølge
-- Gi deltakere bedre navigasjon og forståelse av sammenheng mellom moduler
-- Gi rapportlesere beståttprosent og oppfølging på kursnivå
+| Spørsmål | Beslutning | Begrunnelse |
+|---|---|---|
+| Kan modul tilhøre flere kurs? | Ja (N:M) | Gjenbruk av innhold på tvers av kurs |
+| Vises moduler i begge lister? | Ja — kursvisning og flat liste | Ikke bryte eksisterende flyt |
+| Versjonspinning per kurs? | Nei — alltid aktiv versjon | Enkel modell, ingen versjonskompleksitet |
+| Bestått-status ved moduloppdatering | Beholdes — tilknyttet modul, ikke versjon | Konsistent med CertificationStatus-modellen |
+| Kursbevis? | Ja, separat fra modulbevis | Automatisk ved alle moduler bestått |
+| Enrolment-modell? | Nei i MVP | Nevner i kursrapport = alle som har forsøkt minst én modul |
+
+---
 
 ## Omfang
 
 ### Inkludert i MVP
-- Ny `Course`-entitet
-- Ny `CourseModule`-relasjon med rekkefølge
-- Opprette, redigere, publisere og slette kurs
-- Knytte moduler til kurs
-- Vise moduler gruppert under kurs for deltakere
-- Rapportering av beståttprosent per kurs
-- Tilgjengelighetskrav for nye interaksjonsmønstre
+- `Course`- og `CourseModule`-entiteter (N:M)
+- Admin: opprette, redigere, publisere, arkivere kurs; knytte moduler med rekkefølge
+- Deltaker: kurs som accordion i modullisten; permalink for kursvisning
+- Kursbevis: automatisk generering og visning i `/participant/completed`
+- Rapportering: beståttprosent per kurs med moduldrilldown
 
 ### Utenfor MVP
-- Flere kurs per modul
-- Historisk versjonering av kursmedlemskap for rapportering
-- Egen enrolment-modell
-- Avanserte anbefalinger som "neste anbefalte kurs"
+- Forutsetningslås (modul 2 krever bestått modul 1)
+- Enrolment-modell
+- Historisk versjonering av kursmedlemskap
+- Neste anbefalte kurs
 
-## Roller
+---
 
-### Administrator / fagansvarlig
-Vedlikeholder kurs og moduler i innholdsarbeidsflaten.
+## Prisma-skjema
 
-### Deltaker
-Ser kurs, velger modul, gjennomfører innsending og vurdering, følger egen progresjon.
+```prisma
+model Course {
+  id                 String             @id @default(cuid())
+  title              String             // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
+  description        String?            // lokalisert JSON
+  certificationLevel String?
+  publishedAt        DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  modules            CourseModule[]
+  completions        CourseCompletion[]
+}
 
-### Rapportleser / oppfølgingsbruker
-Leser rapporter på kursnivå og bryter ned til modulnivå.
+model CourseModule {
+  courseId   String
+  moduleId   String
+  sortOrder  Int
+  course     Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module     Module  @relation(fields: [moduleId], references: [id], onDelete: Restrict)
 
-## Flyter
+  @@id([courseId, moduleId])
+  @@index([moduleId])
+}
 
-### Opprette kurs
-1. Åpne kursoversikt
-2. Velg `Opprett kurs`
-3. Fyll inn kursnavn og beskrivelse
-4. Lagre som kladd
-5. Legg til moduler
-6. Sett rekkefølge
-7. Publiser kurs
+model CourseCompletion {
+  id                 String   @id @default(cuid())
+  userId             String
+  courseId           String
+  completedAt        DateTime @default(now())
+  certificateId      String   @unique @default(cuid())
+  moduleSnapshotJson String   // JSON-array av moduleIds som inngikk ved fullføring
+  user               User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
-### Redigere kurs
-1. Åpne kurs
-2. Endre metadata
-3. Legg til/fjern moduler
-4. Endre rekkefølge
-5. Lagre
+  @@unique([userId, courseId])
+}
+```
 
-### Slette kurs
-1. Åpne kurs
-2. Velg `Slett kurs`
-3. Bekreft
-4. Kurs slettes, moduler beholdes
+`Module` får tilleggsrelasjon:
+```prisma
+courseModules CourseModule[]
+```
 
-### Deltakerflyt
-1. Åpne deltakerkonsoll
-2. Se kursgruppert moduloversikt
-3. Velg modul i kurs
-4. Gjennomfør innsending, MCQ og vurdering
-5. Se oppdatert kursprogresjon
+---
 
-### Rapportflyt
-1. Åpne resultatarbeidsflate
-2. Filtrer på kurs og dato
-3. Se beståttprosent per kurs
-4. Utvid kurs for å se modulnivå
+## Modulstruktur
 
-## Skjermpåvirkning
+Ny modul: `src/modules/course/`
 
-### Innholdsarbeidsflate - Moduler
-- vis kurstilhørighet
-- legg til kobling til kurs
+```
+courseRepository.ts        — Prisma-queries (les): kurs, CourseModule, CourseCompletion
+courseCommands.ts          — Skriveoperasjoner: opprett/publiser kurs, sett moduler, utsted bevis
+courseQueries.ts           — Forretningslogikk for les: progress-beregning, courseStatus
+courseReadModels.ts        — Eksplisitte DTO-typer for API-svar (ikke Prisma-avledet)
+courseCompletionService.ts — checkAndIssueCourseCompletions (trigger fra decision-layer)
+index.ts                   — Eksporter
+```
 
-### Innholdsarbeidsflate - Kursoversikt
-- ny visning for liste over kurs
+Følger samme konvensjoner som `src/modules/adminContent/` og `src/modules/certification/`.
 
-### Innholdsarbeidsflate - Kursredigering
-- ny visning for kursmetadata, medlemskap og rekkefølge
+---
 
-### Deltakerkonsoll - Kurs og modulvalg
-- erstatt flat modulliste med kursgruppert visning
-- behold frittstående moduler
+## Integrasjonspunkter
 
-### Deltakerkonsoll - Innsending / MCQ / vurdering
-- vis kurskontekst og progresjon
+### Kursbevis-trigger
 
-### Resultatarbeidsflate - Kursrapport
-- nytt filter og nytt rapportnivå for kurs
-- drilldown til moduler
+`checkAndIssueCourseCompletions` kalles etter `upsertRecertificationStatusFromDecision`
+i alle tre steder der en submission settes til COMPLETED:
+
+- `src/modules/assessment/decisionService.ts` — linje ~152 (etter certification-kall)
+- `src/modules/review/manualReviewService.ts` — tilsvarende punkt i override-kommando
+- `src/modules/appeal/appealService.ts` — tilsvarende punkt i resolve-kommando
+
+```typescript
+// Inne i transaksjonsblokk, etter upsertRecertificationStatusFromDecision:
+await checkAndIssueCourseCompletions({ userId, moduleId }, tx);
+```
+
+**Logikk:**
+1. Finn alle publiserte kurs som inneholder `moduleId` (via `CourseModule`)
+2. For hvert kurs: hent alle `moduleId`-er med `sortOrder`
+3. Sjekk om bruker har `CertificationStatus.status = 'PASSED'` for samtlige moduler
+4. Hvis ja og `CourseCompletion` ikke finnes → opprett (idempotent via `@@unique([userId, courseId])`)
+
+**Feilhåndtering:** Trigger bør ikke blokkere beslutning ved feil.
+Vurder `.catch()`-guard utenfor transaksjonen hvis streng isolering ønskes.
+
+### Fremdriftsberegning (read-path)
+
+Beregnes fra `CertificationStatus`, ikke fra `Submission`:
+
+```
+COMPLETED   — CertificationStatus.status = 'PASSED' for alle moduler i kurset
+IN_PROGRESS — minst én bestått, ikke alle
+NOT_STARTED — ingen bestått
+```
+
+Gjenbruker eksisterende certifikattabell. Ingen ny aggregering mot submissions.
+
+---
+
+## API-kontrakter
+
+### Nye capabilities
+
+```typescript
+// src/config/capabilities.ts
+{ id: "courses", prefix: "/api/courses",
+  roles: [PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR,
+          APPEAL_HANDLER, REPORT_READER, REVIEWER] },
+```
+
+Admin-endepunkter legges under eksisterende `admin_content`-prefix — ingen ny capability.
+
+### Deltaker-API
+
+```
+GET /api/courses
+  → CourseListItem[] med courseStatus og progress per bruker
+
+GET /api/courses/:courseId
+  → CourseDetail med moduler i sortOrder, status per modul, courseStatus
+```
+
+**CourseListItem:**
+```typescript
+{
+  id: string;
+  title: string;           // lokalisert
+  description: string | null;
+  moduleCount: number;
+  progress: {
+    completed: number;
+    total: number;
+    courseStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+  };
+}
+```
+
+### Admin-API (`/api/admin/content/courses`)
+
+```
+POST   /api/admin/content/courses                    — opprett kurs
+GET    /api/admin/content/courses                    — list alle kurs
+GET    /api/admin/content/courses/:courseId          — hent kurs med moduler
+PUT    /api/admin/content/courses/:courseId          — oppdater metadata
+PUT    /api/admin/content/courses/:courseId/modules  — erstatt hele modullisten (courseId+moduleId+sortOrder[])
+POST   /api/admin/content/courses/:courseId/publish  — publiser
+POST   /api/admin/content/courses/:courseId/archive  — arkiver
+```
+
+Roller: `ADMINISTRATOR`, `SUBJECT_MATTER_OWNER` (arver fra `admin_content`).
+
+### Rapport-API
+
+```
+GET /api/reports/courses
+```
+
+Returnerer per kurs: `enrolledParticipants`, `completedParticipants`, `completionRate`,
+`moduleBreakdown[]` med `passRate` per modul.
+
+Nevner (`enrolledParticipants`): alle brukere med minst én submission på minst én modul i kurset.
+
+---
 
 ## UX-spesifikasjon
 
-### Admin
-- toppfane `Moduler | Kurs`
-- kursoversikt med listevisning
-- kursredigering på egen side/panel
-- eksplisitte rekkefølgeknapper (`Flytt opp` / `Flytt ned`)
-- publisering blokkeres hvis kurset er tomt
+### Admin — Admin Content
 
-### Deltaker
-- kurs som accordion/gruppevisning
-- moduler vises i definert rekkefølge
-- progresjon uttrykkes med tekst
-- modul er fortsatt den konkrete handlingsenheten
+- Ny **«Kurs»-fane** ved siden av «Moduler». Ingen ny side.
+- Oppretting og redigering via modal/panel — ikke hel side.
+- Modulvelger: søkefelt med chip-liste over valgte moduler.
+- Rekkefølge: opp/ned-piler (ikke drag-and-drop i MVP).
+- Publisering blokkert hvis kurs er tomt.
+- Arkivering skjuler kurs for deltakere; moduler beholdes.
 
-### Rapportering
-- kurs som nytt toppnivå
-- vis beståttprosent, antall deltakere i beregningsgrunnlag og antall pågår
-- moduldrilldown under hvert kurs
+### Deltaker — `/participant`
+
+Kurs vises som ekspanderbare seksjoner øverst, enkeltmoduler under:
+
+```
+▶  Kurs A  ·  2 av 4 bestått
+   Modul 1 — Bestått ✓
+   Modul 2 — Bestått ✓
+   Modul 3 — Klar til å starte  →
+   Modul 4 — (ikke påbegynt)
+
+Enkeltmodul X  →
+```
+
+- Modulkort inni kurs er **identiske** med standalone-modulkort — ingen ny komponent.
+- Klikk på modul → eksisterende modulflyt, uendret.
+- Permalink `/participant/course/:courseId` eksisterer for deling, men er ikke primærflyt.
+
+### Kursbevis
+
+Vises automatisk i `/participant/completed` etter at siste modul er bestått.
+Ingen ny navigasjonsflate — deltakeren oppdager det naturlig.
+
+---
 
 ## Tilgjengelighetskrav
 
-- kursaccordion må være tastaturstyrbar
-- expand/collapse må bruke korrekt semantikk
-- rekkefølgeendring må kunne gjøres uten drag-and-drop
-- alle felt må ha etiketter og hjelpetekster
-- feil må vises ved riktig felt
-- statusmeldinger må annonseres i live regions
-- status og progresjon kan ikke uttrykkes kun med farge
-- rapporttabeller må ha korrekt tabellsemantikk
-- fokusrekkefølge må testes manuelt i alle nye flyter
+- Kursaccordion: tastaturstyrbar med korrekt ARIA-semantikk (`aria-expanded`, `aria-controls`)
+- Rekkefølgeendring: opp/ned-piler (ikke drag-and-drop) — tilgjengelig uten pekeutstyr
+- Alle skjemafelt: etiketter og hjelpetekster
+- Status og progresjon: ikke kun farge
+- Statustekster: annonsert via live regions
+- Rapporttabeller: korrekt tabellesemantikk
+- Fokusrekkefølge: manuell test i alle nye flyter før merge
 
-## Åpne spørsmål
+---
 
-1. Skal en modul kunne ligge i flere kurs?
-2. Hva er endelig definisjon på "bestått kurs"?
-3. Hva er nevneren i kursbeståttprosent uten enrolment-modell?
-4. Skal kurs kunne publiseres separat fra modulene?
-5. Skal rapportering følge dagens kursstruktur eller historisk struktur?
+## Implementasjonsrekkefølge
 
-## Anbefalte neste steg
-
-1. Avklar åpne spørsmål om medlemskap og rapporteringsdefinisjon
-2. Lag datamodellforslag for `Course` og `CourseModule`
-3. Spesifiser API-endepunkter for kursadministrasjon
-4. Implementer adminvisning for kursoversikt og kursredigering
-5. Implementer kursgruppert deltakeroversikt
-6. Utvid rapportering med kursnivå
-7. Kjør manuell tilgjengelighetstest før merge
+```
+#277 Skjema (Prisma + migrasjon)
+  ↓
+#278 Admin API          #280 Deltaker API
+  ↓                       ↓
+#279 Admin UI          #281 Deltaker UI
+  ↓                       ↓
+       #282 Kursbevis
+       #283 Rapportering
+```

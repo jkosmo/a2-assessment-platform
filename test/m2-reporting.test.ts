@@ -108,6 +108,38 @@ describe("MVP reporting endpoints", () => {
       });
     expect(resolveAppealResponse.status).toBe(200);
 
+    const participantAUser = await prisma.user.findUnique({
+      where: { externalId: participantAHeaders["x-user-id"] },
+      select: { id: true },
+    });
+    expect(participantAUser).toBeTruthy();
+
+    const reportingCourse = await prisma.course.create({
+      data: {
+        title: `Reporting Course ${Date.now()}`,
+        description: "Course used for reporting filter verification.",
+        publishedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await prisma.courseModule.create({
+      data: {
+        courseId: reportingCourse.id,
+        moduleId,
+        sortOrder: 1,
+      },
+    });
+
+    await prisma.courseCompletion.create({
+      data: {
+        userId: participantAUser!.id,
+        courseId: reportingCourse.id,
+        completedAt: new Date(),
+        moduleSnapshotJson: JSON.stringify([moduleId]),
+      },
+    });
+
     const completionResponse = await request(app)
       .get(`/api/reports/completion?moduleId=${encodeURIComponent(moduleId)}&orgUnit=Engineering`)
       .set(reportReaderHeaders);
@@ -201,6 +233,35 @@ describe("MVP reporting endpoints", () => {
     expect(dataQualityResponse.status).toBe(200);
     expect(dataQualityResponse.body.reportType).toBe("analytics-data-quality");
     expect(dataQualityResponse.body.checks.length).toBeGreaterThan(0);
+
+    const courseReportResponse = await request(app)
+      .get(`/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}`)
+      .set(reportReaderHeaders);
+    expect(courseReportResponse.status).toBe(200);
+    expect(courseReportResponse.body.rows).toEqual([
+      expect.objectContaining({
+        courseId: reportingCourse.id,
+        enrolledParticipants: 2,
+        completedParticipants: 1,
+      }),
+    ]);
+    expect(courseReportResponse.body.rows[0].moduleBreakdown).toEqual([
+      expect.objectContaining({
+        moduleId,
+      }),
+    ]);
+
+    const emptyWindowCourseReportResponse = await request(app)
+      .get(`/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}&dateTo=2000-01-01`)
+      .set(reportReaderHeaders);
+    expect(emptyWindowCourseReportResponse.status).toBe(200);
+    expect(emptyWindowCourseReportResponse.body.rows).toEqual([
+      expect.objectContaining({
+        courseId: reportingCourse.id,
+        enrolledParticipants: 0,
+        completedParticipants: 0,
+      }),
+    ]);
 
     const completionCsvResponse = await request(app)
       .get("/api/reports/export?type=completion&format=csv")
