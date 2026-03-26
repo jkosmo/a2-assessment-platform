@@ -38,6 +38,8 @@ describe("MVP reporting endpoints", () => {
   });
 
   it("provides completion/pass-rate/manual-review/appeals reports with filter support and csv export", async () => {
+    const reportWindowStart = new Date();
+
     const modulesResponse = await request(app).get("/api/modules").set(participantAHeaders);
     expect(modulesResponse.status).toBe(200);
     const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
@@ -235,7 +237,9 @@ describe("MVP reporting endpoints", () => {
     expect(dataQualityResponse.body.checks.length).toBeGreaterThan(0);
 
     const courseReportResponse = await request(app)
-      .get(`/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}`)
+      .get(
+        `/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}&dateFrom=${encodeURIComponent(reportWindowStart.toISOString())}`,
+      )
       .set(reportReaderHeaders);
     expect(courseReportResponse.status).toBe(200);
     expect(courseReportResponse.body.rows).toEqual([
