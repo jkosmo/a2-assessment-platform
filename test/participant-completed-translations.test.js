@@ -19,6 +19,10 @@ describe("participant completed translation resources", () => {
       "completed.table.module",
       "completed.table.score",
       "completed.load",
+      "courseCert.title",
+      "courseCert.empty",
+      "courseCert.load",
+      "courseCert.certificateId",
     ];
 
     for (const locale of supportedLocales) {

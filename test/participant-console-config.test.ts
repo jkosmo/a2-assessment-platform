@@ -121,6 +121,7 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("participant-completed.js");
+    expect(response.text).toContain('id="courseCertSection"');
   });
 
   it("serves dedicated admin content workspace page", async () => {
@@ -218,6 +219,7 @@ describe("participant console runtime config", () => {
       if (pagePath === "/participant/completed") {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).not.toContain('id="flowProgress"');
+        expect(response.text).toContain('id="courseCertSection"');
       }
 
       if (pagePath === "/admin-content") {
@@ -237,6 +239,9 @@ describe("participant console runtime config", () => {
         expect(response.text).not.toContain('id="flowProgress"');
         expect(response.text.indexOf('id="importDraftFile"')).toBeLessThan(response.text.indexOf('id="moduleTitle"'));
         expect(response.text).toContain("A published version must still be active");
+        expect(response.text).toContain('id="coursesTab"');
+        expect(response.text).toContain('id="tabKurs"');
+        expect(response.text).toContain('id="dialogCourse"');
       }
     }
 
@@ -304,7 +309,14 @@ describe("participant console runtime config", () => {
     const adminContentJsResponse = await request(app).get("/static/admin-content.js");
     expect(adminContentJsResponse.status).toBe(200);
     expect(adminContentJsResponse.text).toContain('/api/admin/content/modules');
+    expect(adminContentJsResponse.text).toContain('/api/admin/content/courses');
     expect(adminContentJsResponse.text).toContain('window.confirm(t("adminContent.confirm.importOverwrite"))');
     expect(adminContentJsResponse.text).toContain("function shouldConfirmImportOverwrite(draft)");
+
+    const participantCompletedJsResponse = await request(app).get("/static/participant-completed.js");
+    expect(participantCompletedJsResponse.status).toBe(200);
+    expect(participantCompletedJsResponse.text).toContain('/api/courses/completions');
+    expect(participantCompletedJsResponse.text).toContain('courseCertList');
+    expect(participantCompletedJsResponse.text).toContain('renderCourseCertificates');
   });
 });

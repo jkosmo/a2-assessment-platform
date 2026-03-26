@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.71 - 2026-03-26
+
+test/docs: sluttfør kursdekning og manuell verifikasjonspakke for #133
+- la til integrasjonstest for admin-kursflyt: opprett, oppdater, modulrekkefølge, publisering og arkivering
+- la til integrasjonstest for kursbevis-utstedelse og idempotens rundt `checkAndIssueCourseCompletions`
+- utvidet workspace-/kontrakttester for kursflater i Admin Content og `/participant/completed`
+- utvidet oversettelsestest for kursbevisnøkler
+- la til manuell verifikasjonspakke i `doc/design/COURSE_133_MANUAL_VERIFICATION_2026-03-26.md`
+- bumpet appversjon til `0.9.71` for ny deploy-kandidat
+
 ## 0.9.70 - 2026-03-26
 
 feat: Kursoppfølging, dokumentasjon og CI-stabilisering for delt deploy-kandidat
