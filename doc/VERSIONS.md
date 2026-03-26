@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.70 - 2026-03-26
+
+feat: Kursoppfølging, dokumentasjon og CI-stabilisering for delt deploy-kandidat
+- fullførte kursoppfølging i deltaker- og rapportflyt, inkludert bedre kursstatus og filtrering i resultater
+- la til backlogg- og ferdigstillingsdokumentasjon for løsningsdesign og kurs-epic #133
+- la til rolle-/workspace-dokumentasjon under `doc/roles/`
+- stabiliserte `test/m2-reporting.test.ts` ved å isolere rapporttesten fra seed-data og delede MCQ-spørsmål
+- bumpet appversjon til `0.9.70` slik at riktig deploy kan bekreftes i UI via `/version`
+
 ## 0.9.69 - 2026-03-25
 
 feat: Kursbevis i deltaker-fullført-side og kursrapport i resultater (#282, #283)
