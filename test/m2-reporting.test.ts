@@ -38,17 +38,8 @@ describe("MVP reporting endpoints", () => {
   });
 
   it("provides completion/pass-rate/manual-review/appeals reports with filter support and csv export", async () => {
-    const reportWindowStart = new Date();
-
-    const modulesResponse = await request(app).get("/api/modules").set(participantAHeaders);
-    expect(modulesResponse.status).toBe(200);
-    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
-      (module) => module.title === "Generative AI Foundations",
-    );
-    if (!seedModule) {
-      throw new Error("Seed module not found.");
-    }
-    const moduleId = seedModule.id;
+    const isolatedModule = await createPublishedModule(`Reporting Module ${Date.now()}`);
+    const moduleId = isolatedModule.module.id;
 
     const completedSubmissionId = await createSubmissionAndAssessment({
       moduleId,
@@ -237,9 +228,7 @@ describe("MVP reporting endpoints", () => {
     expect(dataQualityResponse.body.checks.length).toBeGreaterThan(0);
 
     const courseReportResponse = await request(app)
-      .get(
-        `/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}&dateFrom=${encodeURIComponent(reportWindowStart.toISOString())}`,
-      )
+      .get(`/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}`)
       .set(reportReaderHeaders);
     expect(courseReportResponse.status).toBe(200);
     expect(courseReportResponse.body.rows).toEqual([
@@ -293,6 +282,48 @@ describe("MVP reporting endpoints", () => {
     expect(forbiddenResponse.status).toBe(403);
   }, 30000);
 });
+
+async function createPublishedModule(title: string) {
+  const sourceModuleVersion = await prisma.moduleVersion.findFirst({
+    where: {
+      module: { activeVersionId: { not: null } },
+    },
+    select: {
+      rubricVersionId: true,
+      promptTemplateVersionId: true,
+      mcqSetVersionId: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  expect(sourceModuleVersion).toBeTruthy();
+
+  const module = await prisma.module.create({
+    data: { title },
+    select: { id: true },
+  });
+
+  const moduleVersion = await prisma.moduleVersion.create({
+    data: {
+      moduleId: module.id,
+      versionNo: 1,
+      taskText: `${title} task text`,
+      guidanceText: `${title} guidance text`,
+      rubricVersionId: sourceModuleVersion!.rubricVersionId,
+      promptTemplateVersionId: sourceModuleVersion!.promptTemplateVersionId,
+      mcqSetVersionId: sourceModuleVersion!.mcqSetVersionId,
+      publishedAt: new Date(),
+    },
+    select: { id: true },
+  });
+
+  await prisma.module.update({
+    where: { id: module.id },
+    data: { activeVersionId: moduleVersion.id },
+  });
+
+  return { module, moduleVersion };
+}
 
 async function createSubmissionAndAssessment(input: {
   moduleId: string;
