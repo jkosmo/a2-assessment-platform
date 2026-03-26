@@ -291,7 +291,20 @@ async function createPublishedModule(title: string) {
     select: {
       rubricVersionId: true,
       promptTemplateVersionId: true,
-      mcqSetVersionId: true,
+      mcqSetVersion: {
+        select: {
+          title: true,
+          questions: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              stem: true,
+              optionsJson: true,
+              correctAnswer: true,
+              rationale: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -303,6 +316,26 @@ async function createPublishedModule(title: string) {
     select: { id: true },
   });
 
+  const mcqSetVersion = await prisma.mCQSetVersion.create({
+    data: {
+      moduleId: module.id,
+      versionNo: 1,
+      title: sourceModuleVersion!.mcqSetVersion.title,
+    },
+    select: { id: true },
+  });
+
+  await prisma.mCQQuestion.createMany({
+    data: sourceModuleVersion!.mcqSetVersion.questions.map((question) => ({
+      mcqSetVersionId: mcqSetVersion.id,
+      moduleId: module.id,
+      stem: question.stem,
+      optionsJson: question.optionsJson,
+      correctAnswer: question.correctAnswer,
+      rationale: question.rationale,
+    })),
+  });
+
   const moduleVersion = await prisma.moduleVersion.create({
     data: {
       moduleId: module.id,
@@ -311,7 +344,7 @@ async function createPublishedModule(title: string) {
       guidanceText: `${title} guidance text`,
       rubricVersionId: sourceModuleVersion!.rubricVersionId,
       promptTemplateVersionId: sourceModuleVersion!.promptTemplateVersionId,
-      mcqSetVersionId: sourceModuleVersion!.mcqSetVersionId,
+      mcqSetVersionId: mcqSetVersion.id,
       publishedAt: new Date(),
     },
     select: { id: true },
