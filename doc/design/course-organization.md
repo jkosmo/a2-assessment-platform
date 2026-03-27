@@ -1,6 +1,23 @@
 # Designdokument: Organisere moduler i kurs (#133)
 
+> Historisk designnotat. Dette dokumentet beskriver opprinnelig MVP-design for kurs, men er ikke lenger fasit for implementasjonsstatus.
+> Aktiv status, UX-beslutninger og restarbeid ligger i `doc/design/COURSE_133_FINISH_PLAN_2026-03-26.md`.
+
 ## Status
+
+Current status note:
+- This file is historical design context, not the active implementation tracker.
+- The course capability is largely implemented across data model, admin flow, participant flow, course completion, and reporting.
+- `#133` stays open until human verification and final closeout are recorded.
+- Use `doc/design/COURSE_133_FINISH_PLAN_2026-03-26.md` as the active source of truth.
+- The stale status text below is preserved only as historical context.
+
+Aktiv status per 2026-03-27:
+- Kurskapabiliteten er i hovedsak implementert i datamodell, adminflyt, deltakerflyt, kursbevis og rapportering.
+- `#133` er fortsatt Ã¥pen fordi endelig menneskelig verifikasjon og closeout-gjennomgang gjenstÃ¥r.
+- Aktiv sannhetskilde for status og avgrensning er `doc/design/COURSE_133_FINISH_PLAN_2026-03-26.md`.
+- Historiske child issues: `#277` â†’ `#283`
+- Aktive follow-up issues for ferdigstilling: `#284` â†’ `#287`
 
 Beslutninger tatt, teknisk design klart, implementasjon ikke påbegynt.
 

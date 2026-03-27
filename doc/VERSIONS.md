@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.73 - 2026-03-27
+
+test/docs: close the remaining non-UI course finish work for #286 and #287
+- added explicit unit coverage for `computeCourseStatus` in `test/unit/course-queries.test.ts`
+- clarified that `doc/design/course-organization.md` is historical design context and points to the active finish plan for `#133`
+- kept the remaining course closeout focused on human verification and final issue hygiene
+- bumped app version to `0.9.73` for the next shared deploy candidate
+
 ## 0.9.72 - 2026-03-27
 
 feat: UX-forenkling i Participant, Review og Admin Content
