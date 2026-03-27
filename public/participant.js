@@ -20,9 +20,6 @@ const outputStatus = document.getElementById("outputStatus");
 const debugOutputSection = document.getElementById("debugOutputSection");
 const previewModeBanner = document.getElementById("previewModeBanner");
 const previewModeMessage = document.getElementById("previewModeMessage");
-const flowProgress = document.getElementById("flowProgress");
-const flowProgressSummary = document.getElementById("flowProgressSummary");
-const flowProgressSteps = document.getElementById("flowProgressSteps");
 const moduleList = document.getElementById("moduleList");
 const mcqQuestions = document.getElementById("mcqQuestions");
 const localeSelect = document.getElementById("localeSelect");
@@ -334,8 +331,6 @@ function applyTranslations() {
   renderSelectedModuleSummary();
   renderRolePresetControl();
   renderWorkspaceNavigation();
-  renderFlowProgress();
-
   const selectedTitle = resolveSelectedModule(loadedModules, selectedModuleId)?.title ?? "";
   setDraftStatus(draftStatus.dataset.state ?? "none", selectedTitle);
   renderAssessmentProgress();
@@ -578,48 +573,6 @@ function renderSelectedModuleSummary() {
   );
   renderSubmissionFields(getSubmissionFields(selectedModule));
   updateModuleSelectionVisibility(Boolean(selectedModule));
-}
-
-function getActiveFlowStep() {
-  if (flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus)) {
-    return 4;
-  }
-  if (flowState.hasSubmission) {
-    return 3;
-  }
-  if (resolveSelectedModule(loadedModules, selectedModuleId)) {
-    return 2;
-  }
-  return 1;
-}
-
-function renderFlowProgress() {
-  if (!flowProgress || !flowProgressSummary || !flowProgressSteps) {
-    return;
-  }
-
-  const activeStep = getActiveFlowStep();
-  const totalSteps = 4;
-  const summary = `${t("progress.stepPrefix")} ${activeStep} ${t("progress.of")} ${totalSteps}`;
-
-  flowProgressSummary.textContent = summary;
-  flowProgress.setAttribute("aria-label", `${t("progress.ariaLabel")}: ${summary}`);
-
-  for (const stepElement of flowProgressSteps.querySelectorAll("[data-step]")) {
-    const stepNumber = Number(stepElement.getAttribute("data-step"));
-    const isCompleted = stepNumber < activeStep;
-    const isActive = stepNumber === activeStep;
-
-    stepElement.classList.toggle("is-completed", isCompleted);
-    stepElement.classList.toggle("is-active", isActive);
-    stepElement.classList.toggle("is-pending", !isCompleted && !isActive);
-
-    if (isActive) {
-      stepElement.setAttribute("aria-current", "step");
-    } else {
-      stepElement.removeAttribute("aria-current");
-    }
-  }
 }
 
 function setSectionLocked(section, locked) {
@@ -1023,7 +976,6 @@ function renderFlowGating() {
       : t("preview.completeMcqFirst");
     checkAssessmentHint.textContent = "";
     appealGateHint.textContent = "";
-    renderFlowProgress();
     return;
   }
 
@@ -1046,7 +998,6 @@ function renderFlowGating() {
   assessmentGateHint.textContent = t(gate.assessmentHintKey);
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
   appealGateHint.textContent = t(gate.appealHintKey);
-  renderFlowProgress();
   renderAppealState();
 }
 

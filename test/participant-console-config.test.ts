@@ -179,8 +179,6 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="selectedModuleTitle"');
         expect(response.text).toContain('id="selectedModuleDescription"');
         expect(response.text).toContain('id="selectedModuleStatus"');
-        expect(response.text).toContain('id="flowProgress"');
-        expect(response.text).toContain('id="flowProgressSteps"');
         expect(response.text).toContain('id="selectedModuleBrief"');
         expect(response.text).toContain('id="selectedModuleTaskText"');
         expect(response.text).toContain('id="selectedModuleGuidanceText"');
@@ -190,13 +188,16 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="historySummary" class="history-list"');
         expect(response.text).not.toContain('<pre id="resultSummary"');
         expect(response.text).not.toContain('<pre id="historySummary"');
-        expect(response.text).toContain('data-step="4"');
-        expect(response.text).not.toContain('data-step="5"');
+        expect(response.text).not.toContain('id="flowProgress"');
+        expect(response.text).not.toContain('data-step="4"');
       }
 
       if (pagePath === "/review") {
         expect(response.text).toContain('id="appealHandlerStatusFilter"');
         expect(response.text).toContain('id="manualReviewStatusFilter"');
+        expect(response.text).toContain('id="reviewWorkspaceTabs"');
+        expect(response.text).toContain('id="reviewTabManual"');
+        expect(response.text).toContain('id="reviewTabAppeal"');
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('id="reviewActionSequenceHint"');
@@ -226,8 +227,13 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('<details id="outputDetails">');
         expect(response.text).toContain("<summary>View raw response</summary>");
+        expect(response.text).toContain('id="moduleStartModeTabs"');
+        expect(response.text).toContain('id="startModeImportTab"');
+        expect(response.text).toContain('id="startModeManualTab"');
+        expect(response.text).toContain('id="startModeExistingTab"');
         expect(response.text).toContain('id="loadModuleContent"');
         expect(response.text).toContain('id="exportModule"');
+        expect(response.text).toContain('id="duplicateModule"');
         expect(response.text).toContain('id="moduleStatusCard"');
         expect(response.text).toContain('id="importDraftFile"');
         expect(response.text).toContain('id="importDraftJson"');

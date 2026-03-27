@@ -15,6 +15,13 @@
       tr.selected { background: var(--color-row-selected); }
       tr:hover { background: var(--color-row-hover); }
       .queue-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--space-2); align-items: end; }
+      .workspace-section-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
+      .workspace-section-tab { display: inline-flex; align-items: center; gap: 8px; width: auto; padding: 10px 16px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); color: var(--color-navy); cursor: pointer; font-size: 14px; font-weight: 600; }
+      .workspace-section-tab.active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); }
+      .workspace-section-tab:hover:not(.active) { border-color: var(--color-link-hover-border); background: var(--color-blue-light); }
+      .workspace-section-tab:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+      .workspace-section-tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; padding: 2px 8px; border-radius: 999px; background: rgba(19, 78, 201, 0.12); color: var(--color-link-active); font-size: 12px; font-weight: 700; }
+      .workspace-section-tab.active .workspace-section-tab-badge { background: var(--color-blue); color: var(--color-surface); }
     </style>
   </head>
   <body>
@@ -30,6 +37,16 @@
       </div>
       <h1 data-i18n="reviewPage.title">Manual Review</h1>
       <p class="small" data-i18n="reviewPage.subtitle">Handle manual assessments and appeals in one place.</p>
+      <div id="reviewWorkspaceTabs" class="workspace-section-tabs" role="tablist" aria-label="Review workspace sections">
+        <button type="button" id="reviewTabManual" class="workspace-section-tab active" role="tab" aria-selected="true" aria-controls="manualReviewTabPanel">
+          <span data-i18n="review.tab.manualReview">Manual assessment</span>
+          <span id="reviewTabManualCount" class="workspace-section-tab-badge" hidden>0</span>
+        </button>
+        <button type="button" id="reviewTabAppeal" class="workspace-section-tab" role="tab" aria-selected="false" aria-controls="appealTabPanel">
+          <span data-i18n="review.tab.appeal">Appeals</span>
+          <span id="reviewTabAppealCount" class="workspace-section-tab-badge" hidden>0</span>
+        </button>
+      </div>
 
       <!-- Identity card (shared) -->
       <section class="card mock-identity-card">
@@ -59,6 +76,7 @@
       </section>
 
       <!-- ── Manual Review Queue ── -->
+      <div id="manualReviewTabPanel" role="tabpanel" aria-labelledby="reviewTabManual">
       <section id="manualReviewSection" class="card" hidden>
         <h2 data-i18n="review.section.manualReview">Manual Assessment</h2>
         <div class="queue-toolbar">
@@ -119,8 +137,10 @@
           <div><button id="overrideReview" class="btn-primary" data-i18n="manualReview.override">Finalize override</button></div>
         </div>
       </section>
+      </div>
 
       <!-- ── Appeal Queue ── -->
+      <div id="appealTabPanel" role="tabpanel" aria-labelledby="reviewTabAppeal" hidden>
       <section id="appealSection" class="card" hidden>
         <h2 data-i18n="review.section.appeal">Appeals</h2>
         <div class="queue-toolbar">
@@ -181,6 +201,7 @@
           <div><button id="resolveAppeal" class="btn-primary" data-i18n="appealHandler.resolve">Resolve appeal</button></div>
         </div>
       </section>
+      </div>
 
       <!-- Debug output (shared) -->
       <section class="card" id="debugOutputSection" hidden>

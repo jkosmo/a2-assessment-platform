@@ -45,18 +45,6 @@
       .module-brief-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--color-link-active); }
       .module-brief-text { white-space: pre-wrap; line-height: 1.5; color: var(--color-text); }
       .section-locked { background: var(--color-bg); border-color: var(--color-border-soft); }
-      .flow-progress { margin: 0 0 var(--space-2); }
-      .flow-progress-summary { font-size: 13px; font-weight: 600; color: var(--color-navy); margin-bottom: var(--space-1); }
-      .flow-progress-steps { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); padding: 0; margin: 0; }
-      .flow-step { display: grid; gap: calc(var(--space-1) * 0.5); padding: var(--space-1); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-surface); color: var(--color-meta); }
-      .flow-step-number { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; background: #e6ebf5; color: var(--color-navy); font-size: 12px; font-weight: 700; }
-      .flow-step-label { font-size: 12px; font-weight: 600; line-height: 1.4; }
-      .flow-step.is-active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); }
-      .flow-step.is-active .flow-step-number { background: var(--color-blue); color: var(--color-surface); }
-      .flow-step.is-completed { border-color: var(--color-success); background: #f4fbf7; color: #1f7a4d; }
-      .flow-step.is-completed .flow-step-number { background: var(--color-success); color: var(--color-surface); }
-      .flow-step.is-pending { opacity: 0.8; }
-      @media (max-width: 900px) { .flow-progress-steps { grid-template-columns: 1fr; } }
       /* Course accordion */
       .course-accordion { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
       .course-accordion-item { border: 1px solid var(--color-module-border); border-radius: var(--radius-card); overflow: hidden; }
@@ -100,27 +88,6 @@
     <section id="previewModeBanner" class="card hidden">
       <h2 data-i18n="preview.title">Draft preview</h2>
       <div id="previewModeMessage" class="small" data-i18n="preview.description">This page shows the current admin draft only. Nothing is saved, submitted, or scored.</div>
-    </section>
-    <section id="flowProgress" class="card flow-progress" aria-label="Assessment flow progress: Step 1 of 4">
-      <div id="flowProgressSummary" class="flow-progress-summary">Step 1 of 4</div>
-      <ol id="flowProgressSteps" class="flow-progress-steps">
-        <li class="flow-step" data-step="1">
-          <span class="flow-step-number">1</span>
-          <span class="flow-step-label" data-i18n="progress.selectModule">Select Module</span>
-        </li>
-        <li class="flow-step" data-step="2">
-          <span class="flow-step-number">2</span>
-          <span class="flow-step-label" data-i18n="progress.submitWork">Submit Work</span>
-        </li>
-        <li class="flow-step" data-step="3">
-          <span class="flow-step-number">3</span>
-          <span class="flow-step-label" data-i18n="progress.completeMcq">Complete MCQ</span>
-        </li>
-        <li class="flow-step" data-step="4">
-          <span class="flow-step-number">4</span>
-          <span class="flow-step-label" data-i18n="progress.assessment">Assessment</span>
-        </li>
-      </ol>
     </section>
     <section class="card mock-identity-card">
       <details class="mock-identity-panel">

@@ -34,9 +34,11 @@
       .import-controls { display: grid; gap: var(--space-1); }
       .import-file { display: grid; gap: calc(var(--space-1) * 0.5); }
       textarea { overflow-y: hidden; resize: vertical; }
-      .start-path-divider { display: flex; align-items: center; gap: var(--space-2); margin: calc(var(--space-2) * -0.5) 0; }
-      .start-path-divider::before, .start-path-divider::after { content: ""; flex: 1; border-top: 1px solid var(--color-border-soft); }
-      .start-path-divider span { font-size: 11px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.08em; }
+      .start-mode-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
+      .start-mode-tab { display: inline-flex; align-items: center; width: auto; padding: 10px 16px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); color: var(--color-navy); cursor: pointer; font-size: 14px; font-weight: 600; }
+      .start-mode-tab.active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); }
+      .start-mode-tab:hover:not(.active) { border-color: var(--color-link-hover-border); background: var(--color-blue-light); }
+      .start-mode-tab:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       @media (max-width: 900px) {
         .module-status-header { flex-direction: column; }
         .module-status-grid { grid-template-columns: 1fr; }
@@ -157,8 +159,13 @@
       <button type="button" id="tabKurs" role="tab" class="content-tab" aria-selected="false" data-i18n="adminContent.tab.courses">Kurs</button>
     </div>
     <div id="modulesTab">
+    <div id="moduleStartModeTabs" class="start-mode-nav" role="tablist" aria-label="Module start paths">
+      <button type="button" id="startModeImportTab" class="start-mode-tab" role="tab" aria-selected="false" aria-controls="startModeImportPanel" data-i18n="adminContent.startMode.import">LLM draft</button>
+      <button type="button" id="startModeManualTab" class="start-mode-tab" role="tab" aria-selected="false" aria-controls="startModeManualPanel" data-i18n="adminContent.startMode.manual">Manual</button>
+      <button type="button" id="startModeExistingTab" class="start-mode-tab active" role="tab" aria-selected="true" aria-controls="startModeExistingPanel" data-i18n="adminContent.startMode.existing">Existing module</button>
+    </div>
 
-    <section class="card import-panel">
+    <section class="card import-panel" id="startModeImportPanel" role="tabpanel" aria-labelledby="startModeImportTab" hidden>
       <h2 data-i18n="adminContent.import.title">1) Start from draft JSON (optional)</h2>
       <div class="small" data-i18n="adminContent.help.importOverview">Use this when your draft already includes both module shell fields and version content. Import only fills the editor. Review, save, and publish separately.</div>
       <div class="row">
@@ -176,11 +183,7 @@
       <div class="small" data-i18n="adminContent.help.copyPrompt">The copied prompt ends with a placeholder/source section. Replace the source material references before sending it to an LLM.</div>
     </section>
 
-    <div class="start-path-divider" role="separator">
-      <span data-i18n="adminContent.startPath.or">or</span>
-    </div>
-
-    <section class="card">
+    <section class="card" id="startModeManualPanel" role="tabpanel" aria-labelledby="startModeManualTab" hidden>
       <h2 data-i18n="adminContent.module.title">2) Create module shell manually</h2>
       <div class="small" data-i18n="adminContent.help.moduleOverview">Use this path when you want to create the module shell manually before adding scoring, evaluation instruction, and test.</div>
       <div class="row">
@@ -198,7 +201,7 @@
       <button id="createModule" class="btn-primary" data-i18n="adminContent.module.create">Create module</button>
     </section>
 
-    <section class="card">
+    <section class="card" id="startModeExistingPanel" role="tabpanel" aria-labelledby="startModeExistingTab">
       <h2 data-i18n="adminContent.select.title">3) Open existing module</h2>
       <div class="small" data-i18n="adminContent.help.selectOverview">Load an existing module, inspect what is live, and decide whether you are preparing a new draft.</div>
       <div class="row">
@@ -218,6 +221,7 @@
         </div>
         <div class="button-row">
           <button id="exportModule" class="btn-secondary" data-i18n="adminContent.select.exportModule">Export selected module</button>
+          <button id="duplicateModule" class="btn-secondary" data-i18n="adminContent.select.duplicateModule">Duplicate module</button>
           <button id="deleteModule" class="btn-danger" data-i18n="adminContent.select.deleteModule">Delete selected module</button>
         </div>
       </div>

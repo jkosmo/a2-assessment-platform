@@ -19,6 +19,13 @@ const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
 const workspaceNav = document.getElementById("workspaceNav");
+const reviewWorkspaceTabs = document.getElementById("reviewWorkspaceTabs");
+const reviewTabManualButton = document.getElementById("reviewTabManual");
+const reviewTabAppealButton = document.getElementById("reviewTabAppeal");
+const reviewTabManualCount = document.getElementById("reviewTabManualCount");
+const reviewTabAppealCount = document.getElementById("reviewTabAppealCount");
+const manualReviewTabPanel = document.getElementById("manualReviewTabPanel");
+const appealTabPanel = document.getElementById("appealTabPanel");
 const mockRolePresetContainer = document.getElementById("mockRolePresetContainer");
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
@@ -67,8 +74,10 @@ const rawDebugEnabled = new URLSearchParams(window.location.search).get("debug")
 const defaultOverridePassFailValue = "true";
 const defaultResolutionPassFailValue = "true";
 const reviewStatusOptions = ["OPEN", "IN_REVIEW", "RESOLVED"];
+const actionableQueueStatuses = new Set(["OPEN", "IN_REVIEW"]);
 
 let currentLocale = resolveInitialLocale();
+let activeReviewTab = "manualReview";
 
 // MR state
 let latestReviewQueue = [];
@@ -153,6 +162,8 @@ function applyTranslations() {
   populateAppealStatusFilters();
   renderRolePresetControl();
   renderWorkspaceNavigation();
+  renderReviewWorkspaceTabs();
+  updateReviewTabCounts();
   renderReviewQueue();
   renderManualReviewDetails(selectedReviewDetails);
   renderReviewActionState();
@@ -312,6 +323,36 @@ function applyRoleBasedVisibility() {
   manualReviewDetailsSection.hidden = !showMr;
   appealSection.hidden = !showAppeal;
   appealDetailsSection.hidden = !showAppeal;
+  renderReviewWorkspaceTabs();
+}
+
+async function refreshVisibleReviewQueues() {
+  const roles = getUserRoles();
+  const promises = [];
+
+  if (canReview(roles)) {
+    promises.push(loadReviewQueue());
+  } else {
+    latestReviewQueue = [];
+    setSelectedReview("", true);
+    selectedReviewDetails = null;
+    renderManualReviewDetails(null);
+    renderReviewQueue();
+  }
+
+  if (canHandleAppeals(roles)) {
+    promises.push(loadAppealQueue());
+  } else {
+    latestAppealQueue = [];
+    setSelectedAppeal("", true);
+    selectedAppealDetails = null;
+    renderAppealHandlerDetails(null);
+    renderAppealQueue();
+  }
+
+  if (promises.length > 0) {
+    await Promise.all(promises);
+  }
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
@@ -385,6 +426,87 @@ function renderWorkspaceNavigation() {
   }
 }
 
+function countActionableItems(items, statusKey) {
+  if (!Array.isArray(items)) {
+    return 0;
+  }
+
+  return items.filter((item) => actionableQueueStatuses.has(String(item?.[statusKey] ?? "").toUpperCase())).length;
+}
+
+function renderTabBadge(element, count) {
+  if (!element) {
+    return;
+  }
+
+  element.hidden = count <= 0;
+  element.textContent = String(count);
+}
+
+function getVisibleReviewTabs(roles = getUserRoles()) {
+  const visibleTabs = [];
+  if (canReview(roles)) {
+    visibleTabs.push("manualReview");
+  }
+  if (canHandleAppeals(roles)) {
+    visibleTabs.push("appeal");
+  }
+  return visibleTabs;
+}
+
+function setActiveReviewTab(tabId) {
+  const visibleTabs = getVisibleReviewTabs();
+  if (visibleTabs.length === 0) {
+    activeReviewTab = "manualReview";
+    return;
+  }
+
+  activeReviewTab = visibleTabs.includes(tabId) ? tabId : visibleTabs[0];
+  renderReviewWorkspaceTabs();
+}
+
+function renderReviewWorkspaceTabs() {
+  if (!reviewWorkspaceTabs || !reviewTabManualButton || !reviewTabAppealButton || !manualReviewTabPanel || !appealTabPanel) {
+    return;
+  }
+
+  const visibleTabs = getVisibleReviewTabs();
+  if (visibleTabs.length === 0) {
+    reviewWorkspaceTabs.hidden = true;
+    manualReviewTabPanel.hidden = true;
+    appealTabPanel.hidden = true;
+    return;
+  }
+
+  if (!visibleTabs.includes(activeReviewTab)) {
+    activeReviewTab = visibleTabs[0];
+  }
+
+  const showTabs = visibleTabs.length > 1;
+  reviewWorkspaceTabs.hidden = !showTabs;
+
+  const manualActive = activeReviewTab === "manualReview" && visibleTabs.includes("manualReview");
+  const appealActive = activeReviewTab === "appeal" && visibleTabs.includes("appeal");
+
+  reviewTabManualButton.hidden = !visibleTabs.includes("manualReview");
+  reviewTabManualButton.classList.toggle("active", manualActive);
+  reviewTabManualButton.setAttribute("aria-selected", manualActive ? "true" : "false");
+  reviewTabManualButton.tabIndex = manualActive ? 0 : -1;
+
+  reviewTabAppealButton.hidden = !visibleTabs.includes("appeal");
+  reviewTabAppealButton.classList.toggle("active", appealActive);
+  reviewTabAppealButton.setAttribute("aria-selected", appealActive ? "true" : "false");
+  reviewTabAppealButton.tabIndex = appealActive ? 0 : -1;
+
+  manualReviewTabPanel.hidden = !manualActive;
+  appealTabPanel.hidden = !appealActive;
+}
+
+function updateReviewTabCounts() {
+  renderTabBadge(reviewTabManualCount, countActionableItems(latestReviewQueue, "reviewStatus"));
+  renderTabBadge(reviewTabAppealCount, countActionableItems(latestAppealQueue, "appealStatus"));
+}
+
 // ── Manual Review: workspace settings ─────────────────────────────────────────
 
 function getMrWorkspaceSettings() {
@@ -454,6 +576,7 @@ function filterReviewsBySearch(reviews) {
 
 function renderReviewQueue() {
   manualReviewQueueBody.innerHTML = "";
+  updateReviewTabCounts();
   if (!Array.isArray(latestReviewQueue) || latestReviewQueue.length === 0) {
     mrQueueCountLabel.textContent = "0";
     manualReviewDetailsSection.hidden = true;
@@ -766,6 +889,8 @@ async function loadReviewQueue() {
       }
       logDebug(body);
     } catch (error) {
+      latestReviewQueue = [];
+      renderReviewQueue();
       showToast(toActionableErrorMessage(error), "error");
       logDebug(error.message);
     } finally {
@@ -861,6 +986,7 @@ function resolveModuleTitle(title) {
 function renderAppealQueue() {
   hideLoading(appealQueueBody);
   appealQueueBody.innerHTML = "";
+  updateReviewTabCounts();
 
   if (!Array.isArray(latestAppealQueue) || latestAppealQueue.length === 0) {
     appealQueueCountLabel.textContent = "0";
@@ -1138,9 +1264,11 @@ async function loadAppealQueue(options = {}) {
       }
       logDebug(body);
     } catch (error) {
+      latestAppealQueue = [];
       appealQueueCountLabel.textContent = "0";
       selectedAppealDetails = null;
       renderAppealHandlerDetails(null);
+      updateReviewTabCounts();
       showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
       showToast(toActionableErrorMessage(error), "error");
       logDebug(error.message);
@@ -1226,12 +1354,15 @@ async function loadParticipantConsoleConfig() {
 // ── Event wiring ───────────────────────────────────────────────────────────────
 
 localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+reviewTabManualButton?.addEventListener("click", () => setActiveReviewTab("manualReview"));
+reviewTabAppealButton?.addEventListener("click", () => setActiveReviewTab("appeal"));
 
 rolesInput.addEventListener("input", () => {
   const matching = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
   mockRolePresetSelect.value = matching;
   applyRoleBasedVisibility();
   renderWorkspaceNavigation();
+  void refreshVisibleReviewQueues();
 });
 
 mockRolePresetSelect.addEventListener("change", () => {
@@ -1239,6 +1370,7 @@ mockRolePresetSelect.addEventListener("change", () => {
   rolesInput.value = mockRolePresetSelect.value;
   applyRoleBasedVisibility();
   renderWorkspaceNavigation();
+  void refreshVisibleReviewQueues();
 });
 
 loadMeButton.addEventListener("click", async () => {
@@ -1400,6 +1532,7 @@ setLocale(currentLocale);
 enablePillArrowNavigation(mrStatusFilter);
 enablePillArrowNavigation(appealStatusFilter);
 applyRoleBasedVisibility();
+updateReviewTabCounts();
 renderReviewQueue();
 renderManualReviewDetails(null);
 resetOverrideInputs();

@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.72 - 2026-03-27
+
+feat: UX-forenkling i Participant, Review og Admin Content
+- fjernet prosessillustrasjonen i `/participant` for å redusere visuell kompleksitet og stole på lokal veiledning i flyten
+- gjorde `/review` om til en tabbet arbeidsflate med separate faner for manuell vurdering og anke, inkludert badges per tab for saker på vent
+- gjorde de tre startmåtene i Admin Content til underfaner og la til `Dupliser modul` i eksisterende-modul-flyten
+- oppdaterte tilhørende oversettelser og HTML-/kontrakttester for workspace-skjermbildene
+
 ## 0.9.71 - 2026-03-26
 
 test/docs: sluttfør kursdekning og manuell verifikasjonspakke for #133

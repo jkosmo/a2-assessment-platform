@@ -19,6 +19,13 @@ const mockRolePresetContainer = document.getElementById("mockRolePresetContainer
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
+const moduleStartModeTabs = document.getElementById("moduleStartModeTabs");
+const startModeImportTab = document.getElementById("startModeImportTab");
+const startModeManualTab = document.getElementById("startModeManualTab");
+const startModeExistingTab = document.getElementById("startModeExistingTab");
+const startModeImportPanel = document.getElementById("startModeImportPanel");
+const startModeManualPanel = document.getElementById("startModeManualPanel");
+const startModeExistingPanel = document.getElementById("startModeExistingPanel");
 
 
 const moduleTitleInput = document.getElementById("moduleTitle");
@@ -31,6 +38,7 @@ const selectedModuleIdInput = document.getElementById("selectedModuleId");
 const loadModulesButton = document.getElementById("loadModules");
 const loadModuleContentButton = document.getElementById("loadModuleContent");
 const exportModuleButton = document.getElementById("exportModule");
+const duplicateModuleButton = document.getElementById("duplicateModule");
 const deleteModuleButton = document.getElementById("deleteModule");
 const moduleDropdown = document.getElementById("moduleDropdown");
 const selectedModuleMeta = document.getElementById("selectedModuleMeta");
@@ -356,6 +364,7 @@ Source material follows:
 let currentLocale = resolveInitialLocale();
 let modules = [];
 let selectedModuleId = "";
+let activeModuleStartMode = "existing";
 let selectedModuleStatus = null;
 let editorBaselineSnapshot = null;
 let participantRuntimeConfig = {
@@ -1264,6 +1273,33 @@ function renderWorkspaceNavigation() {
   }
 }
 
+function activateModuleStartMode(mode) {
+  if (!moduleStartModeTabs || !startModeImportTab || !startModeManualTab || !startModeExistingTab) {
+    return;
+  }
+
+  const normalizedMode = mode === "import" || mode === "manual" || mode === "existing" ? mode : "existing";
+  activeModuleStartMode = normalizedMode;
+
+  const tabConfig = [
+    { id: "import", button: startModeImportTab, panel: startModeImportPanel },
+    { id: "manual", button: startModeManualTab, panel: startModeManualPanel },
+    { id: "existing", button: startModeExistingTab, panel: startModeExistingPanel },
+  ];
+
+  for (const tab of tabConfig) {
+    const active = tab.id === activeModuleStartMode;
+    tab.button?.classList.toggle("active", active);
+    tab.button?.setAttribute("aria-selected", active ? "true" : "false");
+    if (tab.button) {
+      tab.button.tabIndex = active ? 0 : -1;
+    }
+    if (tab.panel) {
+      tab.panel.hidden = !active;
+    }
+  }
+}
+
 function applyIdentityDefaults() {
   const identityDefaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;
   if (!identityDefaults) {
@@ -1690,6 +1726,34 @@ async function handleExportSelectedModule() {
   downloadJsonFile(filename, moduleExport);
   setMessage(t("adminContent.message.moduleExported"));
   log({ moduleExport });
+}
+
+async function handleDuplicateSelectedModule() {
+  const moduleExport = await refreshSelectedModuleStatus();
+  if (!moduleExport) {
+    throw new Error("Module export payload was empty.");
+  }
+
+  const sourceModuleId = moduleExport.module?.id ?? selectedModuleId;
+  const sourceModuleLabel =
+    modules.find((item) => item.id === sourceModuleId)?.title ??
+    sourceModuleId ??
+    t("adminContent.meta.noneSelected");
+  const draft = normalizeImportDraftPayload(moduleExport);
+
+  setSelectedModule("", false);
+  applyImportDraftToForm(draft);
+  importDraftJsonInput.value = JSON.stringify(moduleExport, null, 2);
+  dirtyCards.clear();
+  renderContentCards();
+  activateModuleStartMode("existing");
+
+  const body = await handleCreateModule({ silent: true });
+  setMessage(t("adminContent.message.moduleDuplicated").replace("{module}", sourceModuleLabel), "success");
+  log({
+    duplicatedFromModuleId: sourceModuleId,
+    duplicatedToModuleId: body?.module?.id ?? null,
+  });
 }
 
 async function handleCreateRubricVersion(options = { silent: false }) {
@@ -2997,6 +3061,7 @@ loadMeButton.addEventListener("click", async () => {
 createModuleButton.addEventListener("click", async () => {
   await runWithBusyButton(createModuleButton, async () => {
     try {
+      activateModuleStartMode("manual");
       await handleCreateModule();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
@@ -3009,6 +3074,7 @@ createModuleButton.addEventListener("click", async () => {
 loadModulesButton.addEventListener("click", async () => {
   await runWithBusyButton(loadModulesButton, async () => {
     try {
+      activateModuleStartMode("existing");
       await loadModules();
     } catch (error) {
       const message = parseActionableErrorMessage(error);
@@ -3021,6 +3087,7 @@ loadModulesButton.addEventListener("click", async () => {
 loadModuleContentButton.addEventListener("click", async () => {
   await runWithBusyButton(loadModuleContentButton, async () => {
     try {
+      activateModuleStartMode("existing");
       await handleLoadSelectedModuleContent();
     } catch (error) {
       setMessage(parseActionableErrorMessage(error));
@@ -3032,10 +3099,24 @@ loadModuleContentButton.addEventListener("click", async () => {
 exportModuleButton.addEventListener("click", async () => {
   await runWithBusyButton(exportModuleButton, async () => {
     try {
+      activateModuleStartMode("existing");
       await handleExportSelectedModule();
     } catch (error) {
       setMessage(parseActionableErrorMessage(error));
       throw error;
+    }
+  });
+});
+
+duplicateModuleButton?.addEventListener("click", async () => {
+  await runWithBusyButton(duplicateModuleButton, async () => {
+    try {
+      activateModuleStartMode("existing");
+      await handleDuplicateSelectedModule();
+    } catch (error) {
+      const message = parseActionableErrorMessage(error);
+      setMessage(message, "error");
+      log(message);
     }
   });
 });
@@ -3077,6 +3158,7 @@ previewCurrentDraftButton.addEventListener("click", async () => {
 });
 
 copyAuthoringPromptButton.addEventListener("click", () => {
+  activateModuleStartMode("import");
   promptCertificationLevelSelect.value = "";
   promptMcqCountInput.value = "10";
   promptCustomFieldsInput.value = "";
@@ -3161,10 +3243,12 @@ archiveModuleBtn.addEventListener("click", async () => {
 });
 
 selectedModuleIdInput.addEventListener("input", () => {
+  activateModuleStartMode("existing");
   setSelectedModule(selectedModuleIdInput.value.trim(), false);
 });
 
 moduleDropdown.addEventListener("change", () => {
+  activateModuleStartMode("existing");
   setSelectedModule(moduleDropdown.value, true);
   void refreshSelectedModuleStatus().catch(() => {
     selectedModuleStatus = null;
@@ -3175,6 +3259,7 @@ moduleDropdown.addEventListener("change", () => {
 applyImportDraftButton.addEventListener("click", async () => {
   await runWithBusyButton(applyImportDraftButton, async () => {
     try {
+      activateModuleStartMode("import");
       await handleApplyImportDraft(importDraftJsonInput.value);
     } catch (error) {
       const message = parseActionableErrorMessage(error);
@@ -3186,6 +3271,7 @@ applyImportDraftButton.addEventListener("click", async () => {
 
 importDraftFileInput.addEventListener("change", async () => {
   try {
+    activateModuleStartMode("import");
     const rawValue = await readImportFileContents();
     importDraftJsonInput.value = rawValue;
     await handleApplyImportDraft(rawValue);
@@ -3198,6 +3284,18 @@ importDraftFileInput.addEventListener("change", async () => {
 
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
+});
+
+startModeImportTab?.addEventListener("click", () => {
+  activateModuleStartMode("import");
+});
+
+startModeManualTab?.addEventListener("click", () => {
+  activateModuleStartMode("manual");
+});
+
+startModeExistingTab?.addEventListener("click", () => {
+  activateModuleStartMode("existing");
 });
 
 mockRolePresetSelect.addEventListener("change", () => {
@@ -3466,6 +3564,7 @@ document.getElementById("previewCardsBtn")?.addEventListener("click", async () =
 
 populateLocaleSelect();
 setLocale(currentLocale);
+activateModuleStartMode(activeModuleStartMode);
 setDefaultFormValues();
 loadVersion();
 loadParticipantConsoleConfig();
