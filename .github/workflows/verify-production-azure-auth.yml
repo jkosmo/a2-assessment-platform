@@ -1,0 +1,28 @@
+name: Verify Production Azure Auth
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  verify-production-auth:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Show active account
+        run: az account show --output table
+
+      - name: Verify target resource group exists
+        shell: bash
+        run: |
+          az group show --name "${{ vars.AZURE_RESOURCE_GROUP }}" --output table
