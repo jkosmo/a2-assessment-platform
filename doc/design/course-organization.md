@@ -12,12 +12,12 @@ Current status note:
 - Use `doc/design/COURSE_133_FINISH_PLAN_2026-03-26.md` as the active source of truth.
 - The stale status text below is preserved only as historical context.
 
-Aktiv status per 2026-03-27:
+Aktiv status per 2026-04-14:
 - Kurskapabiliteten er i hovedsak implementert i datamodell, adminflyt, deltakerflyt, kursbevis og rapportering.
-- `#133` er fortsatt Ã¥pen fordi endelig menneskelig verifikasjon og closeout-gjennomgang gjenstÃ¥r.
+- `#133` er fortsatt åpen fordi endelig menneskelig verifikasjon og closeout-gjennomgang gjenstår.
 - Aktiv sannhetskilde for status og avgrensning er `doc/design/COURSE_133_FINISH_PLAN_2026-03-26.md`.
-- Historiske child issues: `#277` â†’ `#283`
-- Aktive follow-up issues for ferdigstilling: `#284` â†’ `#287`
+- Historiske child issues: `#277` → `#283`
+- Follow-up issues: `#284` (lukket 2026-04-14), `#285` (lukket 2026-04-14), `#286` (åpen), `#287` (lukket 2026-04-14)
 
 Beslutninger tatt, teknisk design klart, implementasjon ikke påbegynt.
 

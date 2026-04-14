@@ -59,6 +59,28 @@ describe("M0 foundation APIs", () => {
     expect(response.status).toBe(403);
   });
 
+  it("blocks /api/courses access when no role is present", async () => {
+    const response = await request(app)
+      .get("/api/courses")
+      .set("x-user-id", "no-role-user")
+      .set("x-user-email", "no.role@company.com")
+      .set("x-user-name", "No Role User");
+
+    expect(response.status).toBe(403);
+  });
+
+  it("allows PARTICIPANT role to access /api/courses", async () => {
+    const response = await request(app)
+      .get("/api/courses")
+      .set("x-user-id", "participant-1")
+      .set("x-user-email", "participant@company.com")
+      .set("x-user-name", "Platform Participant")
+      .set("x-user-roles", "PARTICIPANT");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty("courses");
+  });
+
   it("keeps participant module list limited to published participant-visible modules even with broader mock role hints", async () => {
     const adminOwnedModule = await prisma.module.create({
       data: {

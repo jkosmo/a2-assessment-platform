@@ -33,6 +33,21 @@ describe("workspace validation accessibility", () => {
     expect(reviewHtml).toContain('id="reviewActionSequenceHint"');
   });
 
+  it("exposes course surfaces in participant, admin-content, and results workspaces", () => {
+    const participantHtml = readFile("public/participant.html");
+    // Course accordion mount point must exist for the participant course flow
+    expect(participantHtml).toContain('id="courseAccordion"');
+
+    const adminContentHtml = readFile("public/admin-content.html");
+    // Course tab must exist in the admin content tab shell
+    expect(adminContentHtml).toContain('id="tabKurs"');
+    expect(adminContentHtml).toContain('id="coursesTab"');
+
+    const resultsHtml = readFile("public/results.html");
+    // Course report body must be present in the results workspace
+    expect(resultsHtml).toContain('id="courseReportBody"');
+  });
+
   it("keeps runtime alert and invalid-field hooks for validation errors", () => {
     const participantJs = readFile("public/participant.js");
     // Smoke: CSS class names are referenced — not tied to exact classList API call pattern
