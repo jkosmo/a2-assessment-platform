@@ -171,47 +171,61 @@ function buildDatabaseUrl(databaseName) {
 }
 
 function verifyDatabasesExist() {
-  const result = spawnSync(
-    "docker",
-    [
-      "compose",
-      "-f",
-      composeFile,
-      "exec",
-      "-T",
-      serviceName,
-      "psql",
-      "-U",
-      postgresConfig.user,
-      "-d",
-      "postgres",
-      "-At",
-      "-c",
-      "SELECT datname FROM pg_database WHERE datname IN ('a2_assessment_dev', 'a2_assessment_test') ORDER BY datname;",
-    ],
-    {
-      cwd: repoRoot,
-      stdio: "pipe",
-      encoding: "utf8",
-      shell: process.platform === "win32",
-    },
-  );
+  // pg_isready returning 0 does not guarantee that PostgreSQL has finished
+  // WAL recovery and can serve queries. Retry with a short back-off so that
+  // a "database system is shutting down" race during container startup does
+  // not cause a spurious CI failure.
+  const attempts = 10;
 
-  if (result.error || result.status !== 0) {
-    throw new Error(`Could not verify PostgreSQL databases. ${result.stderr?.trim() ?? ""}`.trim());
-  }
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = spawnSync(
+      "docker",
+      [
+        "compose",
+        "-f",
+        composeFile,
+        "exec",
+        "-T",
+        serviceName,
+        "psql",
+        "-U",
+        postgresConfig.user,
+        "-d",
+        "postgres",
+        "-At",
+        "-c",
+        "SELECT datname FROM pg_database WHERE datname IN ('a2_assessment_dev', 'a2_assessment_test') ORDER BY datname;",
+      ],
+      {
+        cwd: repoRoot,
+        stdio: "pipe",
+        encoding: "utf8",
+        shell: process.platform === "win32",
+      },
+    );
 
-  const databases = new Set(
-    result.stdout
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .filter(Boolean),
-  );
-
-  for (const databaseName of [postgresConfig.devDatabase, postgresConfig.testDatabase]) {
-    if (!databases.has(databaseName)) {
-      throw new Error(`Expected PostgreSQL database \`${databaseName}\` was not found.`);
+    if (result.error || result.status !== 0) {
+      if (attempt < attempts) {
+        sleep(1000);
+        continue;
+      }
+      throw new Error(`Could not verify PostgreSQL databases. ${result.stderr?.trim() ?? ""}`.trim());
     }
+
+    const databases = new Set(
+      result.stdout
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    );
+
+    for (const databaseName of [postgresConfig.devDatabase, postgresConfig.testDatabase]) {
+      if (!databases.has(databaseName)) {
+        throw new Error(`Expected PostgreSQL database \`${databaseName}\` was not found.`);
+      }
+    }
+
+    return;
   }
 }
 
