@@ -69,6 +69,8 @@ jobs:
             -PostgresSkuTier "${{ vars.POSTGRES_SKU_TIER || 'Burstable' }}" `
             -PostgresStorageSizeGB "${{ vars.POSTGRES_STORAGE_SIZE_GB || '32' }}" `
             -PostgresBackupRetentionDays "${{ vars.POSTGRES_BACKUP_RETENTION_DAYS || '7' }}" `
+            -PostgresGeoRedundantBackup "${{ vars.POSTGRES_GEO_REDUNDANT_BACKUP || 'Disabled' }}" `
+            -PostgresHighAvailabilityMode "${{ vars.POSTGRES_HIGH_AVAILABILITY_MODE || 'Disabled' }}" `
             -AuthMode "${{ vars.AUTH_MODE }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
             -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
@@ -146,6 +148,8 @@ jobs:
             -PostgresSkuTier "${{ vars.POSTGRES_SKU_TIER || 'Burstable' }}" `
             -PostgresStorageSizeGB "${{ vars.POSTGRES_STORAGE_SIZE_GB || '32' }}" `
             -PostgresBackupRetentionDays "${{ vars.POSTGRES_BACKUP_RETENTION_DAYS || '7' }}" `
+            -PostgresGeoRedundantBackup "${{ vars.POSTGRES_GEO_REDUNDANT_BACKUP || 'Disabled' }}" `
+            -PostgresHighAvailabilityMode "${{ vars.POSTGRES_HIGH_AVAILABILITY_MODE || 'Disabled' }}" `
             -AuthMode "${{ vars.AUTH_MODE }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
             -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `

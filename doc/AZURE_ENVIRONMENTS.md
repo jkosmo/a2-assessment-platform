@@ -34,6 +34,8 @@ Current baseline note:
 - Non-production environments may temporarily allow a `prisma db push` compatibility fallback while already-provisioned databases are converged onto the new PostgreSQL migration baseline.
 - Microsoft Entra database authentication is still a follow-up hardening step, not part of the current automated baseline.
 - Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
+- Current production decision: prioritize backup/recovery hardening ahead of PostgreSQL HA; HA is intentionally deferred while the service remains a non-critical internal application.
+- Current production PostgreSQL profile should be represented explicitly in environment variables/IaC rather than portal-only drift.
 - `PROCESS_ROLE`, `PORT`, and `DATABASE_URL` are platform-managed at deploy/runtime and are not expected as user-managed GitHub Environment variables.
 
 ## Environment separation
@@ -68,6 +70,8 @@ For each environment, define variables/secrets used by workflow:
 - `POSTGRES_SKU_TIER` (optional, `Burstable` | `GeneralPurpose` | `MemoryOptimized`, default `Burstable`)
 - `POSTGRES_STORAGE_SIZE_GB` (optional, default `32`)
 - `POSTGRES_BACKUP_RETENTION_DAYS` (optional, default `7`)
+- `POSTGRES_GEO_REDUNDANT_BACKUP` (optional, `Disabled` | `Enabled`, default `Disabled`)
+- `POSTGRES_HIGH_AVAILABILITY_MODE` (optional, `Disabled` | `SameZone` | `ZoneRedundant`, default `Disabled`)
 - `AUTH_MODE`
 - `ENTRA_TENANT_ID`
 - `ENTRA_CLIENT_ID`

@@ -36,6 +36,24 @@ This is acceptable for low-cost staging validation, but not for production where
 - cross-cloud disaster recovery
 - table-level CDC or a full event-sourced persistence redesign
 
+## Current Production Decision
+Current decision updated: `2026-04-14`
+
+The current production hardening track should prioritize backup and recovery posture over always-on availability.
+
+Accepted decision for the current phase:
+- production remains a non-critical internal application
+- backup retention, restore readiness, and recovery documentation should be improved now
+- high availability is intentionally deferred
+
+Reasoning:
+- the current service does not yet justify the extra cost and operational complexity of HA
+- data recovery posture is the more immediate production need than automatic failover
+- HA can be revisited later if usage expands, external users are introduced, or uptime expectations change
+
+Follow-up:
+- future HA enablement is tracked separately in `#307`
+
 ## Recovery Scenarios
 The target strategy must cover these scenarios:
 
@@ -152,23 +170,23 @@ Assessment:
 ## Chosen Target Architecture
 The production target should combine multiple layers because no single Azure feature covers all failure modes.
 
-### Layer 1: Production runtime resilience
-- Azure Database for PostgreSQL Flexible Server on General Purpose SKU
-- high availability enabled
+### Layer 1: Production runtime baseline
+- Azure Database for PostgreSQL Flexible Server on a production-appropriate SKU
 - storage autoscale enabled
+- high availability disabled for the current internal-service phase
 
 Purpose:
-- reduce downtime from host/zone failures
-- avoid treating backup as the first response to ordinary infrastructure issues
+- provide a more deliberate production baseline than the staging-style profile
+- avoid taking on HA cost/complexity before the service actually needs it
 
 ### Layer 2: Native operational recovery
 - native PostgreSQL backup retention set to 35 days
 - point-in-time restore enabled by default through the service
-- geo-redundant backup enabled for production
+- geo-redundant backup evaluated explicitly as a production cost/recovery trade-off, not left to portal drift
 
 Purpose:
 - recover quickly from recent bad writes, bad deploys, and accidental deletes
-- support paired-region restore for major regional incidents
+- preserve a longer operational recovery window than the staging baseline
 
 ### Layer 3: Independent long-term backup
 - Azure Backup vaulted backup enabled for the production database
@@ -197,7 +215,7 @@ The exact numbers should be accepted explicitly during production onboarding, bu
 
 - recent operational recovery: use native PITR first
 - severe logical corruption or late discovery: use vaulted backup or logical export
-- infrastructure failure without data corruption: prefer HA/failover over restore
+- infrastructure failure without data corruption: recover using the simplest supported operational path for the current non-HA posture
 
 Suggested starting expectations:
 - RPO: measured in minutes for PITR-backed incidents
@@ -206,10 +224,10 @@ Suggested starting expectations:
 These are targets for planning, not guarantees, until restore drills have been executed.
 
 ### Restore priority order
-1. Use HA/failover for infrastructure-only incidents.
-2. Use PITR restore for recent corruption/operator mistakes.
-3. Use vaulted backup restore for late-discovered corruption or severe compromise.
-4. Use logical export for targeted/manual reconstruction if other paths are insufficient.
+1. Use PITR restore for recent corruption/operator mistakes.
+2. Use vaulted backup restore for late-discovered corruption or severe compromise.
+3. Use logical export for targeted/manual reconstruction if other paths are insufficient.
+4. Treat HA/failover as a future operational enhancement, not the current primary recovery path.
 
 ### Restore validation
 Every restore path must be validated by drill, not assumed.
@@ -233,8 +251,8 @@ The production profile should move toward:
 - `POSTGRES_SKU_TIER=GeneralPurpose`
 - higher production-appropriate SKU than `Standard_B1ms`
 - `POSTGRES_BACKUP_RETENTION_DAYS=35`
-- geo-redundant backup enabled
-- HA enabled
+- explicit geo-backup decision represented in configuration
+- HA remains disabled in the current phase and is tracked separately
 
 These should be represented as explicit production environment values, not manual portal drift.
 
@@ -252,7 +270,9 @@ Before production go-live, we should have:
 ## Decision Summary
 Chosen strategy:
 - do not rely on a single mechanism
-- combine HA, native PITR, geo-redundant backup, and vaulted backup
+- improve native PITR posture first
+- evaluate geo-redundant backup explicitly rather than leaving it implicit
+- treat HA as a later availability upgrade if service criticality increases
 - add pre-change logical export for high-risk operations
 - require restore drills as part of operational readiness
 

@@ -51,6 +51,21 @@ param postgresStorageSizeGB int = 32
 @description('PostgreSQL backup retention in days.')
 param postgresBackupRetentionDays int = 7
 
+@description('PostgreSQL geo-redundant backup mode.')
+@allowed([
+  'Disabled'
+  'Enabled'
+])
+param postgresGeoRedundantBackup string = 'Disabled'
+
+@description('PostgreSQL high availability mode.')
+@allowed([
+  'Disabled'
+  'SameZone'
+  'ZoneRedundant'
+])
+param postgresHighAvailabilityMode string = 'Disabled'
+
 @description('Auth mode for runtime.')
 @allowed([
   'mock'
@@ -307,11 +322,11 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' =
     availabilityZone: '1'
     backup: {
       backupRetentionDays: postgresBackupRetentionDays
-      geoRedundantBackup: 'Disabled'
+      geoRedundantBackup: postgresGeoRedundantBackup
     }
     createMode: 'Create'
     highAvailability: {
-      mode: 'Disabled'
+      mode: postgresHighAvailabilityMode
     }
     network: {
       publicNetworkAccess: 'Enabled'

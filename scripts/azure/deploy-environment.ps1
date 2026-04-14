@@ -19,6 +19,8 @@ param(
   [string]$PostgresSkuTier = "Burstable",
   [int]$PostgresStorageSizeGB = 32,
   [int]$PostgresBackupRetentionDays = 7,
+  [string]$PostgresGeoRedundantBackup = "Disabled",
+  [string]$PostgresHighAvailabilityMode = "Disabled",
   [string]$AuthMode = "mock",
   [string]$EntraTenantId = "",
   [string]$EntraClientId = "",
@@ -196,6 +198,8 @@ $deployment = az deployment group create `
               postgresSkuTier=$PostgresSkuTier `
               postgresStorageSizeGB=$PostgresStorageSizeGB `
               postgresBackupRetentionDays=$PostgresBackupRetentionDays `
+              postgresGeoRedundantBackup=$PostgresGeoRedundantBackup `
+              postgresHighAvailabilityMode=$PostgresHighAvailabilityMode `
               authMode=$AuthMode `
               entraTenantId=$EntraTenantId `
               entraClientId=$EntraClientId `
