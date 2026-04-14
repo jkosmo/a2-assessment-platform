@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/review-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
@@ -503,8 +503,11 @@ function renderReviewWorkspaceTabs() {
 }
 
 function updateReviewTabCounts() {
-  renderTabBadge(reviewTabManualCount, countActionableItems(latestReviewQueue, "reviewStatus"));
-  renderTabBadge(reviewTabAppealCount, countActionableItems(latestAppealQueue, "appealStatus"));
+  const reviewCount = countActionableItems(latestReviewQueue, "reviewStatus");
+  const appealCount = countActionableItems(latestAppealQueue, "appealStatus");
+  renderTabBadge(reviewTabManualCount, reviewCount);
+  renderTabBadge(reviewTabAppealCount, appealCount);
+  applyNavReviewBadge(workspaceNav, { reviews: reviewCount, appeals: appealCount });
 }
 
 // ── Manual Review: workspace settings ─────────────────────────────────────────

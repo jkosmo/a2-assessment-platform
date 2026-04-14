@@ -102,6 +102,11 @@ export const API_ROUTE_CAPABILITIES = [
     prefix: "/api/admin/sync/org",
     roles: [AppRole.ADMINISTRATOR],
   },
+  {
+    id: "queue_counts",
+    prefix: "/api/queue-counts",
+    roles: [AppRole.ADMINISTRATOR, AppRole.REVIEWER, AppRole.APPEAL_HANDLER],
+  },
 ] as const;
 
 export type ApiRouteCapability = (typeof API_ROUTE_CAPABILITIES)[number];

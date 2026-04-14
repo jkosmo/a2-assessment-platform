@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showLoading } from "/static/loading.js";
 import {
@@ -398,6 +398,7 @@ async function loadParticipantConsoleConfig() {
 
   renderWorkspaceNavigation();
   await initConsentGuard(headers, currentLocale);
+  fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
 }
 
 // Event listeners

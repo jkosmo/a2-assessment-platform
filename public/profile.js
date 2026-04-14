@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -420,6 +420,7 @@ async function loadProfileData() {
   // initConsentGuard calls /api/me and shows the consent modal if needed.
   // It returns the /api/me response body.
   cachedMeData = await initConsentGuard(headers, currentLocale);
+  fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
 
   renderProfile(cachedMeData);
 

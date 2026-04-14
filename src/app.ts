@@ -23,6 +23,7 @@ import { adminModulesRouter } from "./routes/adminModules.js";
 import { adminPlatformRouter } from "./routes/adminPlatform.js";
 import { orgSyncRouter } from "./routes/orgSync.js";
 import { calibrationRouter } from "./routes/calibration.js";
+import { queueCountsRouter } from "./routes/queueCounts.js";
 
 const app = express();
 const participantConsoleRuntimeConfig = getParticipantConsoleRuntimeConfig();
@@ -93,6 +94,7 @@ app.use("/api/assessments", requireAnyRole(rolesFor("assessments")), assessments
 app.use("/api/audit", requireAnyRole(rolesFor("audit")), auditRouter);
 app.use("/api/reviews", requireAnyRole(rolesFor("reviews")), reviewsRouter);
 app.use("/api/appeals", requireAnyRole(rolesFor("appeals")), appealsRouter);
+app.use("/api/queue-counts", requireAnyRole(rolesFor("queue_counts")), queueCountsRouter);
 app.use("/api/reports", requireAnyRole(rolesFor("reports")), reportsRouter);
 // Calibration access is a runtime-configurable override — see CALIBRATION_ACCESS_OVERRIDE note in capabilities.ts.
 // Roles come from calibrationWorkspace.accessRoles in participant-console.json, not from API_ROUTE_CAPABILITIES.

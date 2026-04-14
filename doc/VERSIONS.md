@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.74 - 2026-04-14
+
+ux: close #291, #300, and nav-badge half of #290
+
+- #291: reduce `importDraftJson` from rows 12 → 6; align `moduleTitle` and `moduleCertificationLevel` to rows 2
+- #300: remove "Første versjon av personvernerklæringen" from `CONSENT_CHANGELOG` so the update heading is not shown for the initial version
+- #290 (nav badge): add `GET /api/queue-counts` returning role-scoped review+appeal unresolved counts; add `fetchQueueCounts` / `applyNavReviewBadge` to api-client.js; wire badge into all 8 workspace pages; review.js derives count from already-loaded queues after each claim/resolve/override
+
 ## 0.9.73 - 2026-03-27
 
 test/docs: close the remaining non-UI course finish work for #286 and #287

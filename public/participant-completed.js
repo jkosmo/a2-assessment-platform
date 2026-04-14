@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-completed-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import {
   findMatchingPreset,
@@ -430,6 +430,7 @@ async function loadParticipantConsoleConfig() {
 
   renderWorkspaceNavigation();
   await initConsentGuard(headers, currentLocale);
+  fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
 }
 
 loadMeButton.addEventListener("click", async () => {

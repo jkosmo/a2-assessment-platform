@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { showToast } from "/static/toast.js";
 import {
@@ -306,6 +306,7 @@ initTabs();
 (async () => {
   await loadConsoleConfig();
   await initConsentGuard(headers, currentLocale);
+  fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
   try {
     const versionData = await apiFetch("/version", { headers: {} });
     const appVersionEl = document.getElementById("appVersion");

@@ -120,6 +120,37 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
   return body;
 }
 
+// ---------------------------------------------------------------------------
+// Queue counts — nav badge helper
+// ---------------------------------------------------------------------------
+
+export async function fetchQueueCounts(headers) {
+  try {
+    return await apiFetch("/api/queue-counts", headers);
+  } catch {
+    return { reviews: 0, appeals: 0 };
+  }
+}
+
+export function applyNavReviewBadge(navEl, counts) {
+  if (!navEl) return;
+  const total = (counts?.reviews ?? 0) + (counts?.appeals ?? 0);
+  const link = navEl.querySelector('a[href="/review"]');
+  if (!link) return;
+
+  let badge = link.querySelector(".nav-queue-badge");
+  if (!badge) {
+    badge = document.createElement("span");
+    badge.className = "nav-queue-badge";
+    badge.setAttribute("aria-label", `${total} ubehandlet`);
+    link.appendChild(badge);
+  }
+
+  badge.hidden = total <= 0;
+  badge.textContent = String(total);
+  badge.setAttribute("aria-label", `${total} ubehandlet`);
+}
+
 let consoleConfigPromise = null;
 
 export async function getConsoleConfig() {

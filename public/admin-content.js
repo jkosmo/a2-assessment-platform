@@ -1,12 +1,28 @@
-import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-content-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import {
+  localeLabels,
+  supportedLocales,
+  translations as adminContentTranslations,
+} from "/static/i18n/admin-content-translations.js";
+import { translations as calibrationTranslations } from "/static/i18n/calibration-translations.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
+
+const translations = Object.fromEntries(
+  supportedLocales.map((locale) => [
+    locale,
+    {
+      ...(calibrationTranslations[locale] ?? calibrationTranslations["en-GB"] ?? {}),
+      ...(adminContentTranslations[locale] ?? adminContentTranslations["en-GB"] ?? {}),
+    },
+  ]),
+);
 
 const output = document.getElementById("output");
 const outputDetails = document.getElementById("outputDetails");
@@ -19,6 +35,12 @@ const mockRolePresetContainer = document.getElementById("mockRolePresetContainer
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
+const tabModuler = document.getElementById("tabModuler");
+const tabKurs = document.getElementById("tabKurs");
+const tabKalibrering = document.getElementById("tabKalibrering");
+const modulesTab = document.getElementById("modulesTab");
+const coursesTab = document.getElementById("coursesTab");
+const calibrationTab = document.getElementById("calibrationTab");
 const moduleStartModeTabs = document.getElementById("moduleStartModeTabs");
 const startModeImportTab = document.getElementById("startModeImportTab");
 const startModeManualTab = document.getElementById("startModeManualTab");
@@ -93,8 +115,30 @@ const previewCurrentDraftButton = document.getElementById("previewCurrentDraft")
 
 const publishModuleVersionIdInput = document.getElementById("publishModuleVersionId");
 const publishModuleVersionButton = document.getElementById("publishModuleVersion");
+const calibrationModuleIdSelect = document.getElementById("calibrationModuleId");
+const calibrationModuleVersionIdInput = document.getElementById("calibrationModuleVersionId");
+const calibrationStatuses = document.getElementById("calibrationStatuses");
+const calibrationLimitInput = document.getElementById("calibrationLimit");
+const calibrationDateFromInput = document.getElementById("calibrationDateFrom");
+const calibrationDateToInput = document.getElementById("calibrationDateTo");
+const loadCalibrationButton = document.getElementById("loadCalibration");
+const calibrationMeta = document.getElementById("calibrationMeta");
+const calibrationSignals = document.getElementById("calibrationSignals");
+const calibrationOutcomesBody = document.getElementById("calibrationOutcomesBody");
+const calibrationAnchorsBody = document.getElementById("calibrationAnchorsBody");
+const thresholdEditorSection = document.getElementById("thresholdEditorSection");
+const thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
+const thresholdPracticalMinPercentInput = document.getElementById("thresholdPracticalMinPercent");
+const thresholdMcqMinPercentInput = document.getElementById("thresholdMcqMinPercent");
+const thresholdBorderlineMinInput = document.getElementById("thresholdBorderlineMin");
+const thresholdBorderlineMaxInput = document.getElementById("thresholdBorderlineMax");
+const thresholdBandPreview = document.getElementById("thresholdBandPreview");
+const thresholdValidationError = document.getElementById("thresholdValidationError");
+const publishThresholdsButton = document.getElementById("publishThresholds");
+const thresholdPublishResult = document.getElementById("thresholdPublishResult");
 
 const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
+const allSubmissionStatuses = ["SUBMITTED", "PROCESSING", "SCORED", "UNDER_REVIEW", "COMPLETED", "REJECTED"];
 function buildAuthoringPrompt(mcqCount, fields, certificationLevel = null) {
   const questionStub = `{
         "stem": {"en-GB": "", "nb": "", "nn": ""},
@@ -364,15 +408,30 @@ Source material follows:
 let currentLocale = resolveInitialLocale();
 let modules = [];
 let selectedModuleId = "";
+let activeContentTab = "modules";
 let activeModuleStartMode = "existing";
 let selectedModuleStatus = null;
 let editorBaselineSnapshot = null;
+let latestCalibrationWorkspaceBody = null;
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
   mockRoleSwitchEnabled: true,
   mockRolePresets: [],
   navigation: { items: [] },
+  calibrationWorkspace: {
+    accessRoles: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+    defaults: {
+      statuses: ["COMPLETED", "UNDER_REVIEW"],
+      lookbackDays: 90,
+      maxRows: 120,
+    },
+    signalThresholds: {
+      passRateMinimum: 0.6,
+      manualReviewRateMaximum: 0.35,
+      benchmarkCoverageMinimum: 0.5,
+    },
+  },
   identityDefaults: {
     contentAdmin: {
       userId: "content-owner-1",
@@ -453,8 +512,12 @@ function applyTranslations() {
 
   renderRolePresetControl();
   renderWorkspaceNavigation();
+  renderCalibrationTabVisibility();
   renderModuleMeta();
   renderModuleStatus();
+  renderCalibrationModuleOptions();
+  populateCalibrationStatusOptions();
+  renderCalibrationWorkspace(latestCalibrationWorkspaceBody);
   renderContentCards();
 }
 
@@ -1273,6 +1336,35 @@ function renderWorkspaceNavigation() {
   }
 }
 
+function getCurrentRoles() {
+  return rolesInput.value
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function canAccessCalibrationTab() {
+  const requiredRoles = participantRuntimeConfig?.calibrationWorkspace?.accessRoles ?? [];
+  const currentRoles = new Set(getCurrentRoles());
+  return requiredRoles.length === 0 || requiredRoles.some((role) => currentRoles.has(role));
+}
+
+function renderCalibrationTabVisibility() {
+  if (!tabKalibrering) {
+    return;
+  }
+
+  const visible = canAccessCalibrationTab();
+  tabKalibrering.hidden = !visible;
+  if (calibrationTab) {
+    calibrationTab.hidden = !visible || activeContentTab !== "calibration";
+  }
+
+  if (!visible && activeContentTab === "calibration") {
+    activateContentTab("modules");
+  }
+}
+
 function activateModuleStartMode(mode) {
   if (!moduleStartModeTabs || !startModeImportTab || !startModeManualTab || !startModeExistingTab) {
     return;
@@ -1493,6 +1585,7 @@ function setSelectedModule(nextModuleId, syncInput = true) {
     clearVersionFields();
   }
   renderModuleDropdown();
+  renderCalibrationModuleOptions();
   renderModuleMeta();
   renderModuleStatus();
 }
@@ -1529,6 +1622,10 @@ async function loadParticipantConsoleConfig() {
         ...participantRuntimeConfig.navigation,
         ...(body?.navigation ?? {}),
       },
+      calibrationWorkspace: {
+        ...participantRuntimeConfig.calibrationWorkspace,
+        ...(body?.calibrationWorkspace ?? {}),
+      },
       identityDefaults: {
         ...participantRuntimeConfig.identityDefaults,
         ...(body?.identityDefaults ?? {}),
@@ -1542,6 +1639,9 @@ async function loadParticipantConsoleConfig() {
   document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
   applyOutputVisibility();
   applyIdentityDefaults();
+  if (calibrationLimitInput) {
+    calibrationLimitInput.value = String(participantRuntimeConfig?.calibrationWorkspace?.defaults?.maxRows ?? 120);
+  }
   renderRolePresetControl();
 
   if (roleSwitchState.authMode === "entra") {
@@ -1556,7 +1656,9 @@ async function loadParticipantConsoleConfig() {
   }
 
   renderWorkspaceNavigation();
+  renderCalibrationTabVisibility();
   await initConsentGuard(headers, currentLocale);
+  fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
 }
 
 async function loadModules(options = {}) {
@@ -1578,6 +1680,8 @@ async function loadModules(options = {}) {
   } else {
     setSelectedModule("");
   }
+
+  renderCalibrationModuleOptions();
 
   if (!preserveMessage) {
     setMessage(`${t("adminContent.meta.loadedCountPrefix")}: ${modules.length}`);
@@ -3572,7 +3676,358 @@ renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
 renderContentCards();
+renderCalibrationModuleOptions();
+populateCalibrationStatusOptions();
+renderCalibrationWorkspace(null);
+enablePillArrowNavigation(calibrationStatuses);
 syncAllTextareaHeights();
+
+function renderCalibrationModuleOptions() {
+  if (!calibrationModuleIdSelect) {
+    return;
+  }
+
+  const previousValue = calibrationModuleIdSelect.value;
+  calibrationModuleIdSelect.innerHTML = "";
+
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = t("calibration.filters.moduleSelectPlaceholder");
+  calibrationModuleIdSelect.appendChild(placeholderOption);
+
+  for (const module of modules) {
+    const option = document.createElement("option");
+    option.value = module.id;
+    option.textContent = `${module.title} (${module.id})`;
+    calibrationModuleIdSelect.appendChild(option);
+  }
+
+  const preferredValue =
+    (previousValue && modules.some((module) => module.id === previousValue) && previousValue) ||
+    (selectedModuleId && modules.some((module) => module.id === selectedModuleId) && selectedModuleId) ||
+    "";
+  calibrationModuleIdSelect.value = preferredValue;
+}
+
+function getCheckedPillValues(container) {
+  if (!container) {
+    return [];
+  }
+
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+}
+
+function enablePillArrowNavigation(container) {
+  if (!container) {
+    return;
+  }
+
+  container.addEventListener("keydown", (event) => {
+    const isPrevious = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
+    if (!isPrevious && !isNext) {
+      return;
+    }
+
+    const checkboxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
+    if (checkboxes.length === 0) {
+      return;
+    }
+
+    const currentIndex = checkboxes.indexOf(document.activeElement);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    event.preventDefault();
+    const direction = isPrevious ? -1 : 1;
+    const nextIndex = (currentIndex + direction + checkboxes.length) % checkboxes.length;
+    checkboxes[nextIndex].focus();
+  });
+}
+
+function formatNumber(value, maxFractionDigits = 2) {
+  if (typeof value !== "number") {
+    return "-";
+  }
+
+  return new Intl.NumberFormat(currentLocale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(value);
+}
+
+function localizeSubmissionStatus(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "";
+  return t(`result.statusValue.${normalized || "UNKNOWN"}`);
+}
+
+function getSelectedCalibrationStatuses() {
+  const selected = getCheckedPillValues(calibrationStatuses);
+  if (selected.length > 0) {
+    return selected;
+  }
+  return participantRuntimeConfig?.calibrationWorkspace?.defaults?.statuses ?? ["COMPLETED", "UNDER_REVIEW"];
+}
+
+function populateCalibrationStatusOptions() {
+  if (!calibrationStatuses) {
+    return;
+  }
+
+  const selected = new Set(getSelectedCalibrationStatuses());
+  calibrationStatuses.innerHTML = "";
+
+  for (const status of allSubmissionStatuses) {
+    const optionLabel = document.createElement("label");
+    optionLabel.className = "pill-option";
+
+    const optionInput = document.createElement("input");
+    optionInput.type = "checkbox";
+    optionInput.value = status;
+    optionInput.checked = selected.has(status);
+    optionInput.setAttribute("aria-label", localizeSubmissionStatus(status));
+
+    const optionText = document.createElement("span");
+    optionText.textContent = localizeSubmissionStatus(status);
+
+    optionLabel.appendChild(optionInput);
+    optionLabel.appendChild(optionText);
+    calibrationStatuses.appendChild(optionLabel);
+  }
+}
+
+function validateThresholds(values) {
+  const { totalMin, borderlineMin, borderlineMax } = values;
+  if (borderlineMin > borderlineMax) {
+    return t("calibration.thresholds.error.borderlineMinGtMax");
+  }
+  if (borderlineMax > totalMin) {
+    return t("calibration.thresholds.error.borderlineMaxGtTotalMin");
+  }
+  return null;
+}
+
+function getThresholdInputValues() {
+  return {
+    totalMin: Number(thresholdTotalMinInput?.value ?? 0),
+    practicalMinPercent: Number(thresholdPracticalMinPercentInput?.value ?? 0),
+    mcqMinPercent: Number(thresholdMcqMinPercentInput?.value ?? 0),
+    borderlineMin: Number(thresholdBorderlineMinInput?.value ?? 0),
+    borderlineMax: Number(thresholdBorderlineMaxInput?.value ?? 0),
+  };
+}
+
+function updateThresholdPreview() {
+  if (
+    !thresholdValidationError ||
+    !publishThresholdsButton ||
+    !thresholdBandPreview ||
+    !thresholdEditorSection ||
+    thresholdEditorSection.style.display === "none"
+  ) {
+    return;
+  }
+
+  const values = getThresholdInputValues();
+  const error = validateThresholds(values);
+
+  thresholdValidationError.textContent = error ?? "";
+  publishThresholdsButton.disabled = Boolean(error);
+
+  if (error) {
+    thresholdBandPreview.textContent = "";
+    return;
+  }
+
+  const preview = t("calibration.thresholds.preview.bands")
+    .replace("{redMax}", String(values.borderlineMin - 1))
+    .replace("{yellowMin}", String(values.borderlineMin))
+    .replace("{yellowMax}", String(values.borderlineMax))
+    .replace("{greenMin}", String(values.totalMin));
+  thresholdBandPreview.textContent = preview;
+}
+
+function renderThresholds(effectiveThresholds) {
+  if (
+    !thresholdEditorSection ||
+    !thresholdTotalMinInput ||
+    !thresholdPracticalMinPercentInput ||
+    !thresholdMcqMinPercentInput ||
+    !thresholdBorderlineMinInput ||
+    !thresholdBorderlineMaxInput ||
+    !thresholdPublishResult
+  ) {
+    return;
+  }
+
+  thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
+  thresholdPracticalMinPercentInput.value = String(effectiveThresholds.practicalMinPercent);
+  thresholdMcqMinPercentInput.value = String(effectiveThresholds.mcqMinPercent);
+  thresholdBorderlineMinInput.value = String(effectiveThresholds.borderlineMin);
+  thresholdBorderlineMaxInput.value = String(effectiveThresholds.borderlineMax);
+  thresholdPublishResult.textContent = t(
+    effectiveThresholds.source === "module_policy"
+      ? "calibration.thresholds.source.module"
+      : "calibration.thresholds.source.global",
+  );
+  thresholdEditorSection.style.display = "";
+  updateThresholdPreview();
+}
+
+function renderCalibrationWorkspace(body) {
+  if (!calibrationSignals || !calibrationOutcomesBody || !calibrationAnchorsBody || !thresholdEditorSection) {
+    return;
+  }
+
+  hideLoading(calibrationSignals);
+  hideLoading(calibrationOutcomesBody);
+  hideLoading(calibrationAnchorsBody);
+  latestCalibrationWorkspaceBody = body;
+
+  if (!body) {
+    showEmpty(calibrationSignals, t("calibration.signals.none"));
+    calibrationMeta.textContent = "";
+    showEmpty(calibrationOutcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
+    showEmpty(calibrationAnchorsBody, t("calibration.anchors.empty"), { columns: 5 });
+    thresholdEditorSection.style.display = "none";
+    if (thresholdPublishResult) {
+      thresholdPublishResult.textContent = "";
+    }
+    return;
+  }
+
+  const signals = body.signals ?? {};
+  const flags = Array.isArray(signals.flags) ? signals.flags : [];
+  const flagLines = flags.length > 0
+    ? flags.map((flag) => `- ${flag.code}: ${flag.message} (${formatNumber(flag.actual)} / ${formatNumber(flag.threshold)})`)
+    : [t("calibration.flags.none")];
+  calibrationSignals.textContent = [
+    `${t("calibration.outcomes.title")}: ${signals.outcomeCount ?? 0}`,
+    `${t("calibration.signals.passRate")}: ${formatNumber(signals.passRate)}`,
+    `${t("calibration.signals.manualReviewRate")}: ${formatNumber(signals.manualReviewRate)}`,
+    `${t("calibration.signals.averageTotalScore")}: ${formatNumber(signals.averageTotalScore)}`,
+    `${t("calibration.signals.benchmarkPromptTemplates")}: ${signals.benchmarkPromptTemplateCount ?? 0}`,
+    `${t("calibration.signals.coveredPromptTemplates")}: ${signals.coveredPromptTemplateCount ?? 0}`,
+    `${t("calibration.signals.benchmarkCoverageRate")}: ${formatNumber(signals.benchmarkCoverageRate)}`,
+    `${t("calibration.signals.flags")}:`,
+    ...flagLines,
+  ].join("\n");
+
+  calibrationMeta.textContent = `${t("calibration.meta.loadedPrefix")}: ${body.module?.title ?? "-"} (${body.module?.id ?? "-"})`;
+
+  const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [];
+  calibrationOutcomesBody.innerHTML = "";
+  if (outcomes.length === 0) {
+    showEmpty(calibrationOutcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
+  } else {
+    for (const outcome of outcomes) {
+      const row = document.createElement("tr");
+      const values = [
+        outcome.submissionId ?? "-",
+        formatDateTimeValue(outcome.submittedAt),
+        localizeSubmissionStatus(outcome.submissionStatus),
+        `${outcome.moduleVersionNo ?? "-"} (${outcome.moduleVersionId ?? "-"})`,
+        formatNumber(outcome?.decision?.totalScore),
+        outcome?.decision?.passFailTotal === true
+          ? t("calibration.value.pass")
+          : outcome?.decision?.passFailTotal === false
+            ? t("calibration.value.fail")
+            : "-",
+        outcome?.llm?.manualReviewRecommended === true ? t("calibration.value.yes") : t("calibration.value.no"),
+      ];
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = String(value);
+        row.appendChild(cell);
+      }
+      calibrationOutcomesBody.appendChild(row);
+    }
+  }
+
+  const anchors = Array.isArray(body.benchmarkAnchors) ? body.benchmarkAnchors : [];
+  calibrationAnchorsBody.innerHTML = "";
+  if (anchors.length === 0) {
+    showEmpty(calibrationAnchorsBody, t("calibration.anchors.empty"), { columns: 5 });
+  } else {
+    for (const anchor of anchors) {
+      const row = document.createElement("tr");
+      const values = [
+        `${anchor.promptTemplateVersionNo ?? "-"} (${anchor.promptTemplateVersionId ?? "-"})`,
+        String(anchor.benchmarkExampleCount ?? "-"),
+        anchor.sourcePromptTemplateVersionId ?? "-",
+        anchor.sourceModuleVersionId ?? "-",
+        formatDateTimeValue(anchor.createdAt),
+      ];
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = String(value);
+        row.appendChild(cell);
+      }
+      calibrationAnchorsBody.appendChild(row);
+    }
+  }
+
+  if (body.effectiveThresholds) {
+    renderThresholds(body.effectiveThresholds);
+  }
+}
+
+async function loadCalibrationWorkspace() {
+  if (!loadCalibrationButton || !calibrationModuleIdSelect) {
+    return;
+  }
+
+  await runWithBusyButton(loadCalibrationButton, async () => {
+    try {
+      calibrationMeta.textContent = "";
+      showLoading(calibrationSignals, { rows: 6 });
+      showLoading(calibrationOutcomesBody, { rows: 4, columns: 7 });
+      showLoading(calibrationAnchorsBody, { rows: 3, columns: 5 });
+
+      const moduleId = calibrationModuleIdSelect.value || selectedModuleId;
+      if (!moduleId) {
+        throw new Error(t("calibration.errors.moduleRequired"));
+      }
+
+      const params = new URLSearchParams();
+      params.set("moduleId", moduleId);
+
+      const moduleVersionId = calibrationModuleVersionIdInput?.value.trim();
+      if (moduleVersionId) {
+        params.set("moduleVersionId", moduleVersionId);
+      }
+
+      const statuses = getSelectedCalibrationStatuses();
+      if (statuses.length > 0) {
+        params.set("status", statuses.join(","));
+      }
+
+      const limit = Number(calibrationLimitInput?.value);
+      if (Number.isFinite(limit) && limit > 0) {
+        params.set("limit", String(limit));
+      }
+
+      if (calibrationDateFromInput?.value) {
+        params.set("dateFrom", calibrationDateFromInput.value);
+      }
+      if (calibrationDateToInput?.value) {
+        params.set("dateTo", calibrationDateToInput.value);
+      }
+
+      const body = await apiFetch(`/api/calibration/workspace?${params.toString()}`, headers);
+      renderCalibrationWorkspace(body);
+      log(body);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      calibrationMeta.textContent = "";
+      showEmpty(calibrationSignals, message);
+      showEmpty(calibrationOutcomesBody, message, { columns: 7 });
+      showEmpty(calibrationAnchorsBody, message, { columns: 5 });
+      log(message);
+    }
+  });
+}
 
 // ============================================================
 // Courses tab
@@ -3584,32 +4039,44 @@ let editingCourseId = null;
 let coursesLoaded = false;
 
 function activateContentTab(tab) {
-  const modulesTab = document.getElementById("modulesTab");
-  const coursesTab = document.getElementById("coursesTab");
-  const tabModuler = document.getElementById("tabModuler");
-  const tabKurs = document.getElementById("tabKurs");
-  if (tab === "courses") {
-    modulesTab.hidden = true;
-    coursesTab.hidden = false;
-    tabModuler.classList.remove("active");
-    tabModuler.setAttribute("aria-selected", "false");
-    tabKurs.classList.add("active");
-    tabKurs.setAttribute("aria-selected", "true");
-    if (!coursesLoaded) {
-      loadCourses().catch((err) => setMessage(parseActionableErrorMessage(err), "error"));
-    }
-  } else {
-    coursesTab.hidden = true;
-    modulesTab.hidden = false;
-    tabKurs.classList.remove("active");
-    tabKurs.setAttribute("aria-selected", "false");
-    tabModuler.classList.add("active");
-    tabModuler.setAttribute("aria-selected", "true");
+  const requestedTab = tab === "courses" || tab === "calibration" ? tab : "modules";
+  const nextTab = requestedTab === "calibration" && !canAccessCalibrationTab() ? "modules" : requestedTab;
+  activeContentTab = nextTab;
+
+  if (modulesTab) {
+    modulesTab.hidden = nextTab !== "modules";
+  }
+  if (coursesTab) {
+    coursesTab.hidden = nextTab !== "courses";
+  }
+  if (calibrationTab) {
+    calibrationTab.hidden = nextTab !== "calibration";
+  }
+
+  const tabConfig = [
+    { id: "modules", button: tabModuler },
+    { id: "courses", button: tabKurs },
+    { id: "calibration", button: tabKalibrering },
+  ];
+  for (const entry of tabConfig) {
+    const active = entry.id === nextTab;
+    entry.button?.classList.toggle("active", active);
+    entry.button?.setAttribute("aria-selected", active ? "true" : "false");
+  }
+
+  if (nextTab === "courses" && !coursesLoaded) {
+    loadCourses().catch((err) => setMessage(parseActionableErrorMessage(err), "error"));
+  }
+
+  if (nextTab === "calibration") {
+    renderCalibrationModuleOptions();
+    renderCalibrationTabVisibility();
   }
 }
 
 document.getElementById("tabModuler")?.addEventListener("click", () => activateContentTab("modules"));
 document.getElementById("tabKurs")?.addEventListener("click", () => activateContentTab("courses"));
+document.getElementById("tabKalibrering")?.addEventListener("click", () => activateContentTab("calibration"));
 
 async function loadCourses() {
   const body = await apiFetch("/api/admin/content/courses", headers);

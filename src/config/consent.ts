@@ -12,7 +12,8 @@
 export const CURRENT_CONSENT_VERSION = "1.0";
 
 export const CONSENT_CHANGELOG: Record<string, string> = {
-  "1.0": "Første versjon av personvernerklæringen.",
+  // Add entries here when the substance of the privacy notice changes.
+  // Version 1.0 has no changelog — it is the initial version.
 };
 
 /**

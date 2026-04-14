@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2 Content Setup Workspace</title>
     <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
       .selected-module-summary { border: 1px solid var(--color-module-summary-border); background: var(--color-module-summary-bg); border-radius: var(--space-1); padding: var(--space-1); min-height: calc(var(--space-1) * 4.625); }
@@ -34,6 +35,7 @@
       .import-controls { display: grid; gap: var(--space-1); }
       .import-file { display: grid; gap: calc(var(--space-1) * 0.5); }
       textarea { overflow-y: hidden; resize: vertical; }
+      .manual-shell-row textarea { min-height: 88px; }
       .start-mode-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
       .start-mode-tab { display: inline-flex; align-items: center; width: auto; padding: 10px 16px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); color: var(--color-navy); cursor: pointer; font-size: 14px; font-weight: 600; }
       .start-mode-tab.active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); }
@@ -105,6 +107,10 @@
       .course-module-order-btn:disabled { opacity: 0.4; cursor: default; }
       .course-module-order-remove { background: none; border: none; color: var(--color-error); cursor: pointer; padding: 2px 8px; font-size: 16px; opacity: 0.7; line-height: 1; }
       .course-module-order-remove:hover { opacity: 1; }
+      .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 360px; overflow-y: auto; }
+      table { width: 100%; border-collapse: collapse; min-width: 920px; }
+      th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
+      tr:hover { background: var(--color-row-hover); }
     </style>
   </head>
   <body>
@@ -157,6 +163,7 @@
     <div class="content-tab-nav" role="tablist">
       <button type="button" id="tabModuler" role="tab" class="content-tab active" aria-selected="true" data-i18n="adminContent.tab.modules">Moduler</button>
       <button type="button" id="tabKurs" role="tab" class="content-tab" aria-selected="false" data-i18n="adminContent.tab.courses">Kurs</button>
+      <button type="button" id="tabKalibrering" role="tab" class="content-tab" aria-selected="false" data-i18n="nav.calibration">Kalibrering</button>
     </div>
     <div id="modulesTab">
     <div id="moduleStartModeTabs" class="start-mode-nav" role="tablist" aria-label="Module start paths">
@@ -174,7 +181,7 @@
           <input id="importDraftFile" type="file" accept=".json,application/json" />
         </div>
       </div>
-      <div><label for="importDraftJson" data-i18n="adminContent.import.json">Draft JSON</label><textarea id="importDraftJson" rows="12"></textarea></div>
+      <div><label for="importDraftJson" data-i18n="adminContent.import.json">Draft JSON</label><textarea id="importDraftJson" rows="6"></textarea></div>
       <div class="small" data-i18n="adminContent.help.importShape">Supports either exported module JSON or a simpler authoring draft with module, rubric, promptTemplate, mcqSet, and moduleVersion.</div>
       <div class="button-row">
         <button id="copyAuthoringPrompt" class="btn-secondary" data-i18n="adminContent.import.copyPrompt">Copy authoring prompt</button>
@@ -186,8 +193,8 @@
     <section class="card" id="startModeManualPanel" role="tabpanel" aria-labelledby="startModeManualTab" hidden>
       <h2 data-i18n="adminContent.module.title">2) Create module shell manually</h2>
       <div class="small" data-i18n="adminContent.help.moduleOverview">Use this path when you want to create the module shell manually before adding scoring, evaluation instruction, and test.</div>
-      <div class="row">
-        <div><label for="moduleTitle" data-i18n="adminContent.module.name">Module name shown to participants</label><textarea id="moduleTitle" rows="3"></textarea></div>
+      <div class="row manual-shell-row">
+        <div><label for="moduleTitle" data-i18n="adminContent.module.name">Module name shown to participants</label><textarea id="moduleTitle" rows="2"></textarea></div>
         <div><label for="moduleCertificationLevel" data-i18n="adminContent.module.certificationLevel">Level (for example foundation)</label><textarea id="moduleCertificationLevel" rows="2"></textarea></div>
       </div>
       <div class="small" data-i18n="adminContent.help.moduleName">Use plain text or locale JSON: {&quot;en-GB&quot;:&quot;...&quot;,&quot;nb&quot;:&quot;...&quot;,&quot;nn&quot;:&quot;...&quot;}.</div>
@@ -461,16 +468,6 @@
       <button id="publishModuleVersion" class="btn-primary" data-i18n="adminContent.publish.publish">Publish version</button>
     </section>
 
-    <section class="card">
-      <h2 data-i18n="output.title">System response</h2>
-
-      <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
-      <details id="outputDetails">
-        <summary>View raw response</summary>
-        <pre id="output" class="pre-content"></pre>
-      </details>
-    </section>
-
     </div><!-- /modulesTab -->
 
     <div id="coursesTab" hidden>
@@ -485,6 +482,158 @@
         <div id="courseList" class="course-list" style="margin-top:var(--space-2)"></div>
       </section>
     </div>
+
+    <div id="calibrationTab" hidden>
+      <section class="card">
+        <h2 data-i18n="calibration.filters.title">Calibration filters</h2>
+        <div class="row">
+          <div>
+            <label for="calibrationModuleId" data-i18n="calibration.filters.moduleId">Module ID</label>
+            <select id="calibrationModuleId"></select>
+          </div>
+          <div>
+            <label for="calibrationModuleVersionId" data-i18n="calibration.filters.moduleVersionId">Module version ID</label>
+            <input id="calibrationModuleVersionId" data-i18n-placeholder="calibration.filters.moduleVersionPlaceholder" placeholder="Optional module version ID" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <fieldset class="pill-group-fieldset">
+              <legend id="calibrationStatusesLegend" data-i18n="calibration.filters.statuses">Submission statuses</legend>
+              <div id="calibrationStatuses" class="pill-group" role="group" aria-labelledby="calibrationStatusesLegend"></div>
+            </fieldset>
+          </div>
+          <div>
+            <label for="calibrationLimit" data-i18n="calibration.filters.limit">Max outcomes</label>
+            <input id="calibrationLimit" type="number" min="1" max="500" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="calibrationDateFrom" data-i18n="calibration.filters.dateFrom">Date from</label>
+            <input id="calibrationDateFrom" type="date" />
+          </div>
+          <div>
+            <label for="calibrationDateTo" data-i18n="calibration.filters.dateTo">Date to</label>
+            <input id="calibrationDateTo" type="date" />
+          </div>
+        </div>
+        <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
+          <div><button id="loadCalibration" class="btn-secondary" data-i18n="calibration.filters.load">Load calibration snapshot</button></div>
+          <div class="small" id="calibrationMeta"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="calibration.signals.title">Quality signals</h2>
+        <pre id="calibrationSignals"></pre>
+      </section>
+
+      <section id="thresholdEditorSection" class="card" style="display:none">
+        <h2 data-i18n="calibration.thresholds.title">Calibration thresholds</h2>
+        <p class="small" data-i18n="calibration.thresholds.subtitle">Effective thresholds for this module. These control how scores are routed to pass, manual review (yellow), or fail.</p>
+
+        <h3 data-i18n="calibration.thresholds.section.total">Total</h3>
+        <div class="row">
+          <div>
+            <label for="thresholdTotalMin" data-i18n="calibration.thresholds.totalMin">Pass score (min out of 100)</label>
+            <input id="thresholdTotalMin" type="number" min="0" max="100" step="1" />
+            <div class="small" data-i18n="calibration.thresholds.totalMinHelp">Minimum total score to pass.</div>
+          </div>
+        </div>
+
+        <h3 data-i18n="calibration.thresholds.section.manualReview">Manual review zone</h3>
+        <div class="row">
+          <div>
+            <label for="thresholdBorderlineMin" data-i18n="calibration.thresholds.borderlineMin">Yellow zone start</label>
+            <input id="thresholdBorderlineMin" type="number" min="0" max="100" step="1" />
+            <div class="small" data-i18n="calibration.thresholds.borderlineMinHelp">Scores at or above this value enter the yellow/manual-review zone.</div>
+          </div>
+          <div>
+            <label for="thresholdBorderlineMax" data-i18n="calibration.thresholds.borderlineMax">Yellow zone end</label>
+            <input id="thresholdBorderlineMax" type="number" min="0" max="100" step="1" />
+            <div class="small" data-i18n="calibration.thresholds.borderlineMaxHelp">Scores at or below this value stay in the yellow zone.</div>
+          </div>
+        </div>
+
+        <h3 data-i18n="calibration.thresholds.section.practical">Practical submission</h3>
+        <div class="row">
+          <div>
+            <label for="thresholdPracticalMinPercent" data-i18n="calibration.thresholds.practicalMinPercent">Submission min %</label>
+            <input id="thresholdPracticalMinPercent" type="number" min="0" max="100" step="1" />
+            <div class="small" data-i18n="calibration.thresholds.practicalMinPercentHelp">Minimum percentage of the submission maximum that the practical component must reach.</div>
+          </div>
+        </div>
+
+        <h3 data-i18n="calibration.thresholds.section.mcq">Multiple choice questions</h3>
+        <div class="row">
+          <div>
+            <label for="thresholdMcqMinPercent" data-i18n="calibration.thresholds.mcqMinPercent">MCQ min % correct</label>
+            <input id="thresholdMcqMinPercent" type="number" min="0" max="100" step="1" />
+            <div class="small" data-i18n="calibration.thresholds.mcqMinPercentHelp">Minimum percentage correct on the multiple choice questions.</div>
+          </div>
+        </div>
+
+        <div id="thresholdBandPreview" class="small" style="margin-top: var(--space-1)"></div>
+        <div id="thresholdValidationError" class="small" style="color:var(--color-error,red)"></div>
+
+        <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
+          <div>
+            <button id="publishThresholds" class="btn-secondary" data-i18n="calibration.thresholds.publish" disabled>Publish thresholds</button>
+          </div>
+        </div>
+
+        <div id="thresholdPublishResult" class="small"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="calibration.outcomes.title">Historical outcomes</h2>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Historical outcomes">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col" data-i18n="calibration.outcomes.submissionId">Submission</th>
+                <th scope="col" data-i18n="calibration.outcomes.submittedAt">Submitted</th>
+                <th scope="col" data-i18n="calibration.outcomes.status">Status</th>
+                <th scope="col" data-i18n="calibration.outcomes.moduleVersion">Module version</th>
+                <th scope="col" data-i18n="calibration.outcomes.totalScore">Total score</th>
+                <th scope="col" data-i18n="calibration.outcomes.passFail">Pass/fail</th>
+                <th scope="col" data-i18n="calibration.outcomes.manualReview">Manual review signal</th>
+              </tr>
+            </thead>
+            <tbody id="calibrationOutcomesBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="calibration.anchors.title">Benchmark anchors</h2>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Benchmark anchors">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col" data-i18n="calibration.anchors.promptVersion">Prompt version</th>
+                <th scope="col" data-i18n="calibration.anchors.benchmarkCount">Benchmark examples</th>
+                <th scope="col" data-i18n="calibration.anchors.sourcePromptVersion">Source prompt version</th>
+                <th scope="col" data-i18n="calibration.anchors.sourceModuleVersion">Source module version</th>
+                <th scope="col" data-i18n="calibration.anchors.createdAt">Created</th>
+              </tr>
+            </thead>
+            <tbody id="calibrationAnchorsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2 data-i18n="output.title">System response</h2>
+
+      <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
+      <details id="outputDetails">
+        <summary>View raw response</summary>
+        <pre id="output" class="pre-content"></pre>
+      </details>
+    </section>
 
     </main>
 
