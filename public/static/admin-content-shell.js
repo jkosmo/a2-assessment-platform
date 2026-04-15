@@ -931,6 +931,13 @@ function populateUiLocaleSelect() {
     opt.selected = loc === currentLocale;
     uiLocaleSelect.appendChild(opt);
   }
+  uiLocaleSelect.addEventListener("change", () => {
+    const chosen = uiLocaleSelect.value;
+    if (!supportedLocales.includes(chosen)) return;
+    localStorage.setItem("participant.locale", chosen);
+    // Reload so currentLocale, t(), and all rendered text pick up the new locale
+    location.reload();
+  });
 }
 
 async function loadConsoleConfig() {
