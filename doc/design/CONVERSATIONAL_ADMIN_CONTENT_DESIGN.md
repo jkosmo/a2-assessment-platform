@@ -219,6 +219,109 @@ field values.
 
 ---
 
+## LLM Latency Strategy
+
+### Why this needs explicit design
+
+LLM calls in this workspace take measurably longer than users expect from a UI interaction.
+The current `callLlm` implementation is fully blocking (`await response.json()`,
+`max_completion_tokens: 4000`, no streaming). Realistic round-trip times on Azure OpenAI:
+
+| Call type | Typical latency | Worst case |
+|-----------|----------------|------------|
+| `generate_draft` (module task + guidance) | 5–12 s | 20 s |
+| `generate_mcq` (10 questions) | 8–18 s | 30 s |
+| Translation (all three locales) | 4–10 s | 15 s |
+| Intent classifier (Slice 3, short prompt) | 0.5–2 s | 4 s |
+
+A blocking spinner that freezes the workspace for 10–20 seconds will feel broken.
+The design must ensure the user can work continuously regardless of generation state.
+
+### Core rule
+
+> A generation call in flight must never prevent the user from reading, navigating,
+> or manually editing the current draft.
+
+### Per call-type strategy
+
+#### Content generation (`generate_draft`, `generate_mcq`)
+
+These are the slowest calls and the most common in the authoring workflow.
+
+**Approach: non-blocking background generation.**
+
+1. User triggers generation (source material submitted, certificationLevel selected).
+2. Chat pane immediately shows a progress card:
+   ```
+   Genererer modulutkast…
+   ████████░░░░░░░░░░  dette kan ta 10–20 sekunder
+   [Avbryt]
+   ```
+3. The rest of the UI remains fully interactive: user can switch preview locale,
+   read existing draft, or manually edit any content card via the existing dialogs.
+4. When generation completes, the preview pane highlights the new fields and the chat
+   pane shows a summary: "Utkast klart – taskText og guidanceText er oppdatert."
+5. The user must explicitly accept ("Bruk dette utkastet") before draft state is updated.
+   This prevents partial overwrites if the user has manually edited fields while waiting.
+
+**Abort:** The Avbryt button calls `AbortController.abort()` on the in-flight fetch.
+The backend route forwards the `AbortSignal` to the Azure OpenAI call if Node 18+ supports it;
+otherwise the request completes server-side but the result is discarded on the frontend.
+
+#### MCQ generation
+
+Same non-blocking pattern as above. The progress card shows question count:
+"Genererer 10 flervalgsspørsmål…"
+
+After completion, the chat pane shows a preview of the first two questions before the user
+accepts. This lets the user quickly assess quality before committing.
+
+#### Translation (Slice 3)
+
+Translation operates on fields that are already written. Non-blocking is critical here
+because the user may be working in another locale while translation runs.
+
+Translation runs per field or per locale, not as a single monolithic call. This allows:
+- Showing partial results as each field completes.
+- Letting the user abort mid-translation without losing partial output.
+
+Each translated field is shown in the preview immediately as it arrives, marked
+"Oversatt – ikke lagret" until the user accepts.
+
+#### Intent classification (Slice 3, fast path)
+
+The intent classifier has a short, constrained prompt and small output.
+Expected latency: 0.5–2 s. This is fast enough to stay in the synchronous user flow.
+
+Strategy:
+- Show a brief "Tolker kommando…" indicator in the chat pane (not a full spinner).
+- If the response takes more than 2 s, upgrade to a visible progress state.
+- If classification returns `{ type: "unknown" }`, the chatbot asks the user to rephrase
+  immediately — no retry loop.
+
+### Streaming (future enhancement, not in Slice 1–2)
+
+The current `callLlm` function returns a parsed JSON object. Azure OpenAI supports
+`stream: true`, which returns token-by-token via Server-Sent Events.
+
+Streaming is not implemented in the current backend. Adding it requires:
+1. New SSE-capable route (or upgrade of `/generate/module-draft`).
+2. Frontend `EventSource` or `fetch` with `ReadableStream` consumer.
+3. Partial JSON buffering until a complete object is available for validation.
+
+Streaming would improve perceived responsiveness for generation (visible typing effect)
+but adds implementation complexity. It is deferred to a post-Slice-2 enhancement.
+The non-blocking async pattern above covers the latency problem sufficiently for MVP.
+
+### What does NOT change because of this
+
+- All mutations (save draft, publish) remain synchronous in the user flow.
+  These are fast API calls (< 1 s) and confirmation gates already handle the pause naturally.
+- The intent classifier result is always validated before any mutation executes.
+  Optimistic execution of mutations (apply before classification confirms) is not permitted.
+
+---
+
 ## Multilingual Content Strategy
 
 ### Source locale
@@ -364,6 +467,11 @@ The split-pane layout should be CSS Grid:
    and version chain. Should it also render the full MCQ question set and task text in MVP,
    or is the status summary sufficient? Recommendation: task text + status chain in Slice 1,
    full MCQ in Slice 3 when the edit loop is live.
+
+5. **Streaming priority.** The non-blocking async pattern is the MVP plan. If SMO
+   feedback shows that the progress card is not reassuring enough during 10–20 s waits,
+   streaming should be prioritised before Slice 3. This requires a new SSE endpoint and
+   frontend stream consumer. Decision point: after first SMO usability test on Slice 2.
 
 ---
 
