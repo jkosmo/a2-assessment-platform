@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.77 - 2026-04-15
+
+ux: locale switch translates chat in-place instead of resetting dialog
+
+- currentLocale changed from const to let so it can be updated without reload
+- reRenderCurrentState() clears chat and re-renders from current session state
+  (idle / picking-module / module-loaded / draft-pending / generating)
+- translatePageStaticText() sets h1 and "Advanced editor" link on load and on switch
+- Removes location.reload() from locale change handler — module context preserved
+
 ## 0.9.76 - 2026-04-15
 
 feat: i18n all shell chat strings (#296 follow-up) — locale switch now affects full UI

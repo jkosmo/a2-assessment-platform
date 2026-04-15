@@ -328,6 +328,8 @@ const adminContentBase = {
   "adminContent.courses.dialog.save": "Save",
 
   // ── Conversational shell (admin-content-shell.js) ─────────────────────────
+  "shell.page.title": "Content Workspace",
+  "shell.page.advancedLink": "Advanced editor \u2197",
   "shell.idle.prompt": "What would you like to do?",
   "shell.idle.openExisting": "Open existing module",
   "shell.idle.createNew": "Create new module",
@@ -1047,6 +1049,8 @@ const adminContentLateOverrides = {
     "adminContent.help.moduleVersionIds": "ID-er fylles automatisk n\u00e5r du lagrer steg 5-8.",
 
     // ── Conversational shell ─────────────────────────────────────────────────
+    "shell.page.title": "Innholdsarbeidsrom",
+    "shell.page.advancedLink": "Avansert redigering \u2197",
     "shell.idle.prompt": "Hva vil du gj\u00f8re?",
     "shell.idle.openExisting": "\u00c5pne eksisterende modul",
     "shell.idle.createNew": "Opprett ny modul",
@@ -1140,6 +1144,8 @@ const adminContentLateOverrides = {
     "adminContent.help.moduleVersionIds": "ID-ar blir fylte automatisk n\u00e5r du lagrar steg 5-8.",
 
     // ── Conversational shell ─────────────────────────────────────────────────
+    "shell.page.title": "Innhaldsarbeidsrom",
+    "shell.page.advancedLink": "Avansert redigering \u2197",
     "shell.idle.prompt": "Kva vil du gj\u00f8re?",
     "shell.idle.openExisting": "Opne eksisterande modul",
     "shell.idle.createNew": "Opprett ny modul",

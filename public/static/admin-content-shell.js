@@ -20,7 +20,7 @@ import { showToast } from "/static/toast.js";
 // i18n
 // ---------------------------------------------------------------------------
 
-const currentLocale = (() => {
+let currentLocale = (() => {
   const stored = localStorage.getItem("participant.locale");
   if (stored && supportedLocales.includes(stored)) return stored;
   const b = navigator.language?.toLowerCase() ?? "";
@@ -927,6 +927,76 @@ function renderWorkspaceNavigation() {
   }
 }
 
+// Translates static text that lives in the HTML source (not rendered by chat flow).
+function translatePageStaticText() {
+  const h1 = document.querySelector(".shell-header h1");
+  if (h1) h1.textContent = t("shell.page.title");
+  const advLink = document.querySelector(".advanced-link");
+  if (advLink) advLink.textContent = t("shell.page.advancedLink");
+}
+
+// Clears the chat and re-renders from the current session state using the
+// active currentLocale.  Called when the user switches locale without reloading.
+function reRenderCurrentState() {
+  chatMessages.innerHTML = "";
+  renderPreviewLocaleBar();
+  renderPreview();
+  renderWorkspaceNavigation();
+  translatePageStaticText();
+
+  switch (sessionState) {
+    case "picking-module":
+      startModulePicker();
+      break;
+
+    case "module-loaded": {
+      const title = localizeValue(bundle?.module?.title) || selectedModuleId;
+      const isLive = !!bundle?.module?.activeVersionId;
+      const vno = bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
+      const statusNote = isLive
+        ? tf("shell.module.liveStatus", { versionNo: vno })
+        : t("shell.module.noPublishedVersion");
+      pushBotMessage(
+        `<strong>${escapeHtml(title)}</strong><br><span style="color:var(--color-meta);font-size:13px">${escapeHtml(statusNote)}</span>`,
+      );
+      showModuleActions();
+      break;
+    }
+
+    case "draft-pending":
+    case "awaiting-confirmation": {
+      const draftTitle = bundle
+        ? localizeValue(bundle.module.title)
+        : (sessionDraft?.title ?? selectedModuleId ?? t("shell.newModule.defaultTitle"));
+      pushBotMessage(`<strong>${escapeHtml(draftTitle)}</strong>`);
+      showDraftReadyActions();
+      break;
+    }
+
+    case "generating":
+      // Cannot restore in-flight generation; show module actions if we still have a module.
+      if (selectedModuleId && bundle) {
+        const title = localizeValue(bundle.module.title) || selectedModuleId;
+        pushBotMessage(`<strong>${escapeHtml(title)}</strong>`);
+        showModuleActions();
+      } else {
+        sessionState = "idle";
+        pushBotMessage(t("shell.idle.prompt"), [
+          { label: t("shell.idle.openExisting"), action: startModulePicker },
+          { label: t("shell.idle.createNew"), action: startNewModuleFlow },
+        ]);
+      }
+      break;
+
+    default: // idle or unknown
+      sessionState = "idle";
+      pushBotMessage(t("shell.idle.prompt"), [
+        { label: t("shell.idle.openExisting"), action: startModulePicker },
+        { label: t("shell.idle.createNew"), action: startNewModuleFlow },
+      ]);
+  }
+}
+
 function populateUiLocaleSelect() {
   if (!uiLocaleSelect) return;
   uiLocaleSelect.innerHTML = "";
@@ -941,8 +1011,11 @@ function populateUiLocaleSelect() {
     const chosen = uiLocaleSelect.value;
     if (!supportedLocales.includes(chosen)) return;
     localStorage.setItem("participant.locale", chosen);
-    // Reload so currentLocale, t(), and all rendered text pick up the new locale
-    location.reload();
+    const prev = currentLocale;
+    currentLocale = chosen;
+    // Keep preview locale in sync if it wasn't manually overridden
+    if (previewLocale === prev) previewLocale = chosen;
+    reRenderCurrentState();
   });
 }
 
@@ -971,6 +1044,7 @@ async function loadConsoleConfig() {
 // ---------------------------------------------------------------------------
 
 populateUiLocaleSelect();
+translatePageStaticText();
 renderPreviewLocaleBar();
 renderPreview();
 loadVersion();
