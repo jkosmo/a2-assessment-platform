@@ -7,6 +7,22 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.80 - 2026-04-15
+
+ux: chatLog — robust generic re-translation of entire dialog on locale switch
+
+- Replace ad-hoc in-place DOM patching with a chatLog[] spec array
+- Every message (bot, user, form, module-choices) is stored as a re-renderable
+  spec with a lazy htmlFn so t() is called fresh on each replay
+- retranslateChat() clears the DOM and replays chatLog in full with current locale
+- Locale-switch handler calls retranslateChat() — no special-casing per message type
+- Progress messages use a slot pattern: logProgress() creates a pending entry,
+  logResolveSlot() fills it with the final content when async work completes
+- Forms: submitted forms are frozen (prompt + disabled), unsubmitted re-render live
+- Module-choices: module titles are verbatim data; Cancel button re-translates
+- Remove reRenderCurrentState() — superseded by retranslateChat()
+- Add shell.module.loaded i18n key (fixes hardcoded "er lastet" in nb/nn)
+
 ## 0.9.79 - 2026-04-15
 
 ux: re-translate bot message bubbles on locale switch
