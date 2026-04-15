@@ -13,6 +13,7 @@ Each environment must use a dedicated resource group and be deployable via CI/CD
 - Cost guardrails script: `scripts/azure/configure-cost-guardrails.ps1`
 - CI/CD workflow: `.github/workflows/deploy-azure.yml`
 - Observability runbook: `doc/OBSERVABILITY_RUNBOOK.md`
+- Restore runbook: `doc/PRODUCTION_RESTORE_RUNBOOK.md`
 - Environment variable templates:
 - `.azure/environments/staging.env.example`
 - `.azure/environments/production.env.example`

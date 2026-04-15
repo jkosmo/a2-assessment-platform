@@ -267,6 +267,10 @@ Before production go-live, we should have:
 - post-restore verification checklist documented
 - explicit verification steps for restored participant results and certification history
 
+Current repo status:
+- concrete restore operator guidance now lives in `doc/PRODUCTION_RESTORE_RUNBOOK.md`
+- vaulted backup and logical-export paths still require follow-up implementation before they can be treated as operationally available
+
 ## Decision Summary
 Chosen strategy:
 - do not rely on a single mechanism
