@@ -256,7 +256,7 @@ The production profile should move toward:
 
 These should be represented as explicit production environment values, not manual portal drift.
 
-Azure Backup vault resources and protection configuration are expected follow-up infrastructure work and should be tracked separately from the initial production cutover issue.
+Azure Backup vault resources and protection configuration are now in place and should be maintained as part of the ongoing production recovery baseline.
 
 ## Runbook Expectations
 Before production go-live, we should have:
@@ -269,7 +269,8 @@ Before production go-live, we should have:
 
 Current repo status:
 - concrete restore operator guidance now lives in `doc/PRODUCTION_RESTORE_RUNBOOK.md`
-- vaulted backup and logical-export paths still require follow-up implementation before they can be treated as operationally available
+- vaulted backup is operationally available and evidenced through `doc/design/PRODUCTION_RESTORE_DRILL_2026-04-15.md`
+- logical-export path still requires follow-up implementation before it can be treated as operationally available
 
 ## Decision Summary
 Chosen strategy:

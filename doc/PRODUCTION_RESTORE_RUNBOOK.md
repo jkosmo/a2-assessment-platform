@@ -31,12 +31,12 @@ Current production PostgreSQL runtime:
 Current recovery-path availability:
 - app/config rollback by redeploy: available now
 - native PostgreSQL PITR restore: available now
-- Azure Backup vaulted backup restore: not yet configured, tracked in `#220`
+- Azure Backup vaulted backup restore: available now
 - logical export safety copy: not yet configured, tracked in `#223`
 
 Important consequence:
-- today, the only production database restore path that is actually available is native PostgreSQL PITR
-- do not assume vaulted backup or logical-export recovery exists until those issues are completed
+- today, production has two usable database restore paths: native PostgreSQL PITR and Azure Backup vaulted restore
+- do not assume logical-export recovery exists until `#223` is completed
 
 ## Ownership and Approval Model
 
@@ -88,13 +88,12 @@ Typical examples:
 
 ### Path 2: Vaulted backup restore
 Use vaulted backup restore when all of the following become true:
-- `#220` has been completed
 - restore points actually exist in Azure Backup
 - the incident was discovered too late for native PITR to be the safest option
 - or the source runtime resource should not be trusted
 
 Current status:
-- not available yet in this environment
+- available in this environment
 
 ### Path 3: Logical export / manual reconstruction
 Use logical export only when all of the following become true:
@@ -323,22 +322,20 @@ Any cutover decision must record:
 
 This path is planned but not yet available in production.
 
-Status gate:
-- do not select this path until `#220` is complete and restore points are visible in Azure Backup
-
 When available, this path should be preferred over PITR when:
 - corruption is discovered too late for PITR confidence
 - the source runtime resource should not be trusted
 - a longer-retained recovery point is required
 
-Expected operator steps once `#220` is complete:
+Expected operator steps:
 1. locate the protected PostgreSQL instance in Azure Backup
 2. choose the restore point
 3. restore to isolated target storage/files as supported by Azure Backup
 4. reconstruct a PostgreSQL server from the restored output using native PostgreSQL tooling
 5. run the same post-restore verification checklist as PITR
 
-Until `#220` is complete, treat this as unavailable.
+Current validation status:
+- configured and evidenced through [design/PRODUCTION_RESTORE_DRILL_2026-04-15.md](design/PRODUCTION_RESTORE_DRILL_2026-04-15.md)
 
 ## Logical Export Recovery Runbook
 
@@ -380,7 +377,6 @@ Add the final record to [INCIDENTS.md](INCIDENTS.md).
 
 For the current production phase:
 - use normal redeploy for app/config-only regressions
-- use native PITR for actual database recovery
-- finish `#220` before claiming an independent long-term restore path exists
+- choose between native PITR and vaulted backup based on incident window and trust in the source runtime
 - finish `#223` before claiming pre-change logical safety copies exist
-- execute `#222` to convert this runbook from planned procedure to rehearsed evidence
+- treat `#222` evidence as the current baseline for restore rehearsals
