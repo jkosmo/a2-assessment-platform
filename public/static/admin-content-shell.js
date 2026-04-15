@@ -729,25 +729,24 @@ function askForSourceMaterial(moduleTitle, existingModuleId) {
   );
 }
 
-function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
-  pushBotMessage("Velg sertifiseringsnivå:", [
-    { label: "Grunnleggende", action: () => askForLocale(moduleTitle, existingModuleId, sourceMaterial, "basic") },
-    { label: "Middels", action: () => askForLocale(moduleTitle, existingModuleId, sourceMaterial, "intermediate") },
-    { label: "Avansert", action: () => askForLocale(moduleTitle, existingModuleId, sourceMaterial, "advanced") },
-  ]);
-}
-
 const CERT_LEVEL_LABELS = { basic: "Grunnleggende", intermediate: "Middels", advanced: "Avansert" };
 const LOCALE_LABELS_GEN = { nb: "Norsk bokmål", nn: "Norsk nynorsk", "en-GB": "English (UK)" };
 
-function askForLocale(moduleTitle, existingModuleId, sourceMaterial, certLevel) {
-  pushBotMessage(
-    `Nivå: <strong>${escapeHtml(CERT_LEVEL_LABELS[certLevel] ?? certLevel)}</strong><br>Velg språk for generering:`,
-    supportedLocales.map((loc) => ({
-      label: LOCALE_LABELS_GEN[loc] ?? loc,
-      action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, loc),
-    })),
-  );
+function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
+  pushBotMessage("Velg sertifiseringsnivå:", [
+    {
+      label: "Grunnleggende",
+      action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale),
+    },
+    {
+      label: "Middels",
+      action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale),
+    },
+    {
+      label: "Avansert",
+      action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale),
+    },
+  ]);
 }
 
 async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale) {
@@ -843,19 +842,18 @@ function startGenerateMcqFlow() {
 
 function askForCertLevelMcqOnly(sourceMaterial) {
   pushBotMessage("Velg sertifiseringsnivå for spørsmålene:", [
-    { label: "Grunnleggende", action: () => askForLocaleMcqOnly(sourceMaterial, "basic") },
-    { label: "Middels", action: () => askForLocaleMcqOnly(sourceMaterial, "intermediate") },
-    { label: "Avansert", action: () => askForLocaleMcqOnly(sourceMaterial, "advanced") },
-  ]);
-}
-
-function askForLocaleMcqOnly(sourceMaterial, certLevel) {
-  pushBotMessage("Velg språk for spørsmålene:", [
-    ...supportedLocales.map((loc) => ({
-      label: LOCALE_LABELS_GEN[loc] ?? loc,
-      action: () =>
-        generateMcqInBackground(sourceMaterial, certLevel, loc, () => showModuleActions()),
-    })),
+    {
+      label: "Grunnleggende",
+      action: () => generateMcqInBackground(sourceMaterial, "basic", currentLocale, () => showModuleActions()),
+    },
+    {
+      label: "Middels",
+      action: () => generateMcqInBackground(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()),
+    },
+    {
+      label: "Avansert",
+      action: () => generateMcqInBackground(sourceMaterial, "advanced", currentLocale, () => showModuleActions()),
+    },
   ]);
 }
 
