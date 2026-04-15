@@ -121,6 +121,11 @@ Deploy-cadence rule:
   - what can be verified locally already
   - what still requires staging or real LLM/runtime verification
 
+Epic-scale features:
+- When a feature epic is too large or risky for incremental main-branch deploys, a dedicated long-lived epic branch and stage-only deploy policy may be adopted.
+- Active epic branch strategies are documented in separate design files and take precedence over the default batched-main-branch cadence for their scope.
+- See [ADMIN_CONTENT_EPIC_BRANCH_STRATEGY.md](ADMIN_CONTENT_EPIC_BRANCH_STRATEGY.md) for the current active example.
+
 ### 8. Post-implementation review
 For every issue, explicitly evaluate:
 - Is new or updated unit testing needed?
@@ -284,6 +289,14 @@ Update relevant docs when behavior changes:
 - If only partially complete, remaining scope is documented and the issue stays open.
 - If human-verified complete, verification result is recorded and the issue is closed.
 - Version number bumped for deploy-candidate pushes and `doc/VERSIONS.md` updated.
+
+## Related Documents
+
+| Document | Purpose |
+|----------|---------|
+| [ADMIN_CONTENT_EPIC_BRANCH_STRATEGY.md](ADMIN_CONTENT_EPIC_BRANCH_STRATEGY.md) | Branching and deploy strategy for the Admin Content epic (#135, #94, #95, #232, #237) |
+
+---
 
 ## Pull Request Checklist
 - Linked issue and scope are clear.
