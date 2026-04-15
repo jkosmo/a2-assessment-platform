@@ -310,7 +310,11 @@ adminContentRouter.post("/generate/mcq", async (request, response) => {
   }
 
   try {
-    const result = await generateMcqQuestions({ ...data, questionCount: data.questionCount ?? 10 });
+    const result = await generateMcqQuestions({
+      ...data,
+      questionCount: data.questionCount ?? 10,
+      optionCount: data.optionCount ?? 4,
+    });
     response.json({ questions: result.questions });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -25,6 +25,7 @@ export type McqGenerationInput = {
   certificationLevel: CertificationLevel;
   locale: GenerationLocale;
   questionCount: number;
+  optionCount: number;
 };
 
 export type GeneratedMcqQuestion = {
@@ -176,7 +177,7 @@ Rules:
 - Never pad distractors with vague filler words just to match length; instead, write distractors that are substantively comparable but wrong.
 - Review each set of 4 options before finalising: if any single option stands out in length or detail, rewrite it.
 
-Each question must have exactly 4 answer options. The correctAnswer must be one of the options verbatim.
+Each question must have exactly ${input.optionCount} answer options. The correctAnswer must be one of the options verbatim.
 Write all text in ${LOCALE_DISPLAY[input.locale]}.
 
 ## Source material (hidden author background)
@@ -190,8 +191,8 @@ Return a single JSON object:
   "questions": [
     {
       "stem": "question text",
-      "options": ["option A", "option B", "option C", "option D"],
-      "correctAnswer": "option A",
+      "options": ["option 1", "option 2", "option 3"],
+      "correctAnswer": "option 1",
       "rationale": "brief explanation of why the correct answer is right and why the distractors are wrong"
     }
   ]

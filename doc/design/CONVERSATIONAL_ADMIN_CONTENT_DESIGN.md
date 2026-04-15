@@ -1,12 +1,15 @@
 # Design: Conversational Admin Content Workspace
 
 **Issue:** #294 (design prereq for #293 epic)
-**Status:** Draft – awaiting approval before implementation starts
+**Status:** Approved – implementation in progress
 **Date:** 2026-04-15
 
 ---
 
 ## Problem Statement
+
+Implementation progress is tracked separately in
+[CONVERSATIONAL_ADMIN_CONTENT_IMPLEMENTATION_STATUS.md](./CONVERSATIONAL_ADMIN_CONTENT_IMPLEMENTATION_STATUS.md).
 
 The current `admin-content` workspace is functionally complete but cognitively demanding for
 Subject Matter Owners (SMOs). The core issues:

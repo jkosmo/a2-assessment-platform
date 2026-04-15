@@ -62,6 +62,64 @@ function localizeValue(value) {
   return String(value);
 }
 
+function localizeOptionList(options) {
+  if (!Array.isArray(options)) return [];
+  return options.map((option) => localizeValue(option)).filter(Boolean);
+}
+
+function renderPreviewMcqQuestions(questions) {
+  if (!Array.isArray(questions) || questions.length === 0) return "";
+
+  const questionItems = questions
+    .map((question, index) => {
+      const stem = localizeValue(question?.stem ?? "");
+      const rationale = localizeValue(question?.rationale ?? "");
+      const correctAnswer = localizeValue(question?.correctAnswer ?? "");
+      const options = localizeOptionList(question?.options);
+      const optionItems = options
+        .map((option) => {
+          const isCorrect = correctAnswer && option === correctAnswer;
+          return `<li class="preview-mcq-option${isCorrect ? " correct" : ""}">${escapeHtml(option)}</li>`;
+        })
+        .join("");
+
+      const rationaleHtml = rationale
+        ? `
+          <div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
+            <span>${escapeHtml(rationale)}</span>
+          </div>`
+        : "";
+
+      return `
+        <article class="preview-mcq-item">
+          <div class="preview-mcq-question-header">${escapeHtml(tf("shell.preview.questionNumber", { number: index + 1 }))}</div>
+          <div class="preview-mcq-stem">${escapeHtml(stem)}</div>
+          <ol class="preview-mcq-options" type="A">
+            ${optionItems}
+          </ol>
+          <div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.correctAnswer"))}</span>
+            <span>${escapeHtml(correctAnswer)}</span>
+          </div>
+          ${rationaleHtml}
+        </article>`;
+    })
+    .join("");
+
+  return `
+    <div class="preview-section-label">${escapeHtml(t("shell.preview.mcqSection"))}</div>
+    <div class="preview-mcq-list">
+      ${questionItems}
+    </div>`;
+}
+
+function parsePositiveIntInRange(rawValue, min, max) {
+  const value = Number.parseInt(String(rawValue).trim(), 10);
+  if (!Number.isInteger(value) || value < min || value > max) return null;
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -440,6 +498,7 @@ function renderPreview() {
   let taskTextHtml = "";
   let guidanceTextHtml = "";
   let mcqCountHtml = "";
+  let mcqQuestionsHtml = "";
 
   if (bundle) {
     const mod = bundle.module;
@@ -477,21 +536,23 @@ function renderPreview() {
     const guidanceText = hasDraft
       ? sessionDraft.guidanceText
       : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.guidanceText) : "";
-    const mcqCount = hasDraft
-      ? (sessionDraft.mcqQuestions?.length ?? 0)
-      : (cfg.mcqSetVersion?.questions?.length ?? 0);
+    const mcqQuestions = hasDraft
+      ? (sessionDraft.mcqQuestions ?? [])
+      : (cfg.mcqSetVersion?.questions ?? []);
+    const mcqCount = mcqQuestions.length;
 
     if (taskText) {
       taskTextHtml = `
         <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.taskText"))}</div>
-        <div class="preview-text-block">${escapeHtml(taskText.slice(0, 400))}${taskText.length > 400 ? "…" : ""}</div>`;
+        <div class="preview-text-block">${escapeHtml(taskText)}</div>`;
     }
     if (guidanceText) {
       guidanceTextHtml = `
         <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
-        <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText.slice(0, 300))}${guidanceText.length > 300 ? "…" : ""}</div>`;
+        <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText)}</div>`;
     }
     if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`;
+    mcqQuestionsHtml = renderPreviewMcqQuestions(mcqQuestions);
   } else if (hasDraft) {
     // New module shell not yet saved — show draft content only
     badgeClass = "draft";
@@ -499,19 +560,21 @@ function renderPreview() {
     titleHtml = `<div class="preview-module-title">${escapeHtml(sessionDraft.title || t("shell.newModule.defaultTitle"))}</div>`;
     const taskText = sessionDraft.taskText ?? "";
     const guidanceText = sessionDraft.guidanceText ?? "";
-    const mcqCount = sessionDraft.mcqQuestions?.length ?? 0;
+    const mcqQuestions = sessionDraft.mcqQuestions ?? [];
+    const mcqCount = mcqQuestions.length;
 
     if (taskText) {
       taskTextHtml = `
         <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.taskText"))}</div>
-        <div class="preview-text-block">${escapeHtml(taskText.slice(0, 400))}${taskText.length > 400 ? "…" : ""}</div>`;
+        <div class="preview-text-block">${escapeHtml(taskText)}</div>`;
     }
     if (guidanceText) {
       guidanceTextHtml = `
         <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
-        <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText.slice(0, 300))}${guidanceText.length > 300 ? "…" : ""}</div>`;
+        <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText)}</div>`;
     }
     if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`;
+    mcqQuestionsHtml = renderPreviewMcqQuestions(mcqQuestions);
   }
 
   previewContent.innerHTML = `
@@ -524,6 +587,7 @@ function renderPreview() {
     ${taskTextHtml}
     ${guidanceTextHtml}
     ${mcqCountHtml}
+    ${mcqQuestionsHtml}
   `.trim();
 }
 
@@ -609,7 +673,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   );
 }
 
-async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAccept) {
+async function generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept) {
   const abort = startGeneration();
   const slot = logProgress("shell.generating.mcqProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -621,7 +685,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, questionCount: 5 }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, questionCount, optionCount }),
         signal: abort.signal,
       },
     );
@@ -635,7 +699,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
     }
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, onAccept) },
+      { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept) },
     ]);
     return;
   }
@@ -865,7 +929,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale) {
   logBot(() => t("shell.askMcq.prompt"), [
-    { labelKey: "shell.askMcq.yes", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, () => showDraftReadyActions()) },
+    { labelKey: "shell.askMcq.yes", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, () => showDraftReadyActions()) },
     { labelKey: "shell.askMcq.no",  action: showDraftReadyActions },
   ]);
 }
@@ -901,10 +965,68 @@ function startGenerateMcqFlow() {
 
 function askForCertLevelMcqOnly(sourceMaterial) {
   logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic",       action: () => generateMcqInBackground(sourceMaterial, "basic",         currentLocale, () => showModuleActions()) },
-    { labelKey: "shell.certLevel.intermediate", action: () => generateMcqInBackground(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()) },
-    { labelKey: "shell.certLevel.advanced",     action: () => generateMcqInBackground(sourceMaterial, "advanced",     currentLocale, () => showModuleActions()) },
+    { labelKey: "shell.certLevel.basic",       action: () => askForMcqQuestionCount(sourceMaterial, "basic", currentLocale, () => showModuleActions()) },
+    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()) },
+    { labelKey: "shell.certLevel.advanced",     action: () => askForMcqQuestionCount(sourceMaterial, "advanced", currentLocale, () => showModuleActions()) },
   ]);
+}
+
+function askForMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) {
+  logBot(() => t("shell.mcq.questionCountPrompt"), [
+    { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, 3, onAccept) },
+    { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, 5, onAccept) },
+    { labelKey: "shell.mcq.questionCountChoice10", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, 10, onAccept) },
+    { labelKey: "shell.mcq.questionCountCustom", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) },
+  ]);
+}
+
+function askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) {
+  logForm(
+    "text",
+    () => t("shell.mcq.questionCountPrompt"),
+    "shell.mcq.questionCountPlaceholder",
+    "shell.action.next",
+    (rawValue) => {
+      const questionCount = parsePositiveIntInRange(rawValue, 1, 20);
+      if (questionCount === null) {
+        logBot(() => t("shell.mcq.questionCountInvalid"), [
+          { labelKey: "shell.action.retry", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) },
+          { labelKey: "shell.action.cancel", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) },
+        ]);
+        return;
+      }
+      askForMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept);
+    },
+  );
+}
+
+function askForMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) {
+  logBot(() => tf("shell.mcq.optionCountPrompt", { count: questionCount }), [
+    { labelKey: "shell.mcq.optionCountChoice3", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, 3, onAccept) },
+    { labelKey: "shell.mcq.optionCountChoice4", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, 4, onAccept) },
+    { labelKey: "shell.mcq.optionCountChoice5", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, 5, onAccept) },
+    { labelKey: "shell.mcq.optionCountCustom", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) },
+  ]);
+}
+
+function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) {
+  logForm(
+    "text",
+    () => tf("shell.mcq.optionCountPrompt", { count: questionCount }),
+    "shell.mcq.optionCountPlaceholder",
+    "shell.action.next",
+    (rawValue) => {
+      const optionCount = parsePositiveIntInRange(rawValue, 2, 6);
+      if (optionCount === null) {
+        logBot(() => t("shell.mcq.optionCountInvalid"), [
+          { labelKey: "shell.action.retry", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) },
+          { labelKey: "shell.action.cancel", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) },
+        ]);
+        return;
+      }
+      generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept);
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------

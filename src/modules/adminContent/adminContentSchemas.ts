@@ -119,6 +119,7 @@ export const mcqGenerationBodySchema = z.object({
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
   questionCount: z.number().int().min(1).max(20).default(10),
+  optionCount: z.number().int().min(2).max(6).default(4),
 });
 
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {

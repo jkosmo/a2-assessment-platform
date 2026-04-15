@@ -29,6 +29,7 @@ describe("llm content generation prompts", () => {
       certificationLevel: "advanced",
       locale: "en-GB",
       questionCount: 4,
+      optionCount: 4,
     });
 
     expect(userPrompt).toContain("The source material is for you only. The candidate will NOT see it.");
@@ -99,6 +100,7 @@ describe("llm content generation prompts", () => {
         certificationLevel: "basic",
         locale: "en-GB",
         questionCount: 3,
+        optionCount: 4,
       });
 
       expect(userPrompt).toContain("Certification level: basic");
@@ -112,6 +114,7 @@ describe("llm content generation prompts", () => {
         certificationLevel: "intermediate",
         locale: "nb",
         questionCount: 4,
+        optionCount: 4,
       });
 
       expect(userPrompt).toContain("Certification level: intermediate");
@@ -125,6 +128,7 @@ describe("llm content generation prompts", () => {
         certificationLevel: "advanced",
         locale: "en-GB",
         questionCount: 5,
+        optionCount: 4,
       });
 
       expect(userPrompt).toContain("Certification level: advanced");
@@ -133,9 +137,9 @@ describe("llm content generation prompts", () => {
     });
 
     it("distractor guidelines differ across levels", () => {
-      const basic = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "basic", locale: "en-GB", questionCount: 1 }).userPrompt;
-      const intermediate = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "intermediate", locale: "en-GB", questionCount: 1 }).userPrompt;
-      const advanced = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "advanced", locale: "en-GB", questionCount: 1 }).userPrompt;
+      const basic = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "basic", locale: "en-GB", questionCount: 1, optionCount: 4 }).userPrompt;
+      const intermediate = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "intermediate", locale: "en-GB", questionCount: 1, optionCount: 4 }).userPrompt;
+      const advanced = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "advanced", locale: "en-GB", questionCount: 1, optionCount: 4 }).userPrompt;
 
       // Each level has distinct guideline text
       expect(basic).not.toEqual(intermediate);
@@ -148,11 +152,25 @@ describe("llm content generation prompts", () => {
         certificationLevel: "intermediate",
         locale: "en-GB",
         questionCount: 4,
+        optionCount: 5,
       });
 
       expect(userPrompt).toContain("## Option parity");
       expect(userPrompt).toContain("comparable in length and level of detail");
-      expect(userPrompt).toContain("Each question must have exactly 4 answer options");
+      expect(userPrompt).toContain("Each question must have exactly 5 answer options");
+    });
+
+    it("embeds the requested option count in the MCQ authoring prompt", () => {
+      const { userPrompt } = buildMcqGenerationPrompts({
+        sourceMaterial: "Any topic.",
+        certificationLevel: "intermediate",
+        locale: "en-GB",
+        questionCount: 4,
+        optionCount: 3,
+      });
+
+      expect(userPrompt).toContain("Generate 4 multiple-choice questions");
+      expect(userPrompt).toContain("Each question must have exactly 3 answer options");
     });
   });
 });
