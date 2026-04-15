@@ -333,21 +333,23 @@ specific model choices are deferred to implementation, where concrete quality an
 evidence will inform the decision. A call type may also justify a larger or more capable
 model than the default tier if testing reveals a real need.
 
-| Call type | Tier | Quality requirement | Frequency |
-|-----------|------|-------------------|-----------|
-| `generate_draft` | High | Creative, domain-aware, long output | Low – one per authoring session |
-| `generate_mcq` | High | Subtle distractors, strict option parity | Low – one per authoring session |
-| Translation | Medium | Accurate and fluent, less creative | Medium – one per locale per save |
-| Intent classifier | Low | Reliable JSON output, constrained vocabulary | High – every free-form message |
+| Call type | Tier | Quality requirement | Speed requirement | Frequency |
+|-----------|------|-------------------|------------------|-----------|
+| `generate_draft` | High | Creative, domain-aware, long output | Low – runs in background | Low – one per authoring session |
+| `generate_mcq` | High | Subtle distractors, strict option parity | Low – runs in background | Low – one per authoring session |
+| Translation | Medium | Accurate and fluent, less creative | Medium – user is waiting for locale switch | Medium – one per locale per save |
+| Intent classifier | Low | Reliable JSON output, constrained vocabulary | High – user is blocked until resolved | High – every free-form message |
 
 **Tier definitions:**
-- **High:** Use the most capable available deployment. Do not substitute a cheaper model
-  to save cost here — output quality directly affects assessment content that participants
-  will see.
-- **Medium:** A capable but faster/cheaper deployment is likely sufficient. Validate
-  against a set of representative field values before committing to a specific model.
-- **Low:** Use the fastest available deployment that reliably returns valid typed JSON
-  for the defined command vocabulary. Cost matters here because this runs on every message.
+- **High:** Prioritise quality over speed. These calls run in the background and the user
+  is not blocked, so a slower but more capable model is acceptable. Do not substitute for
+  cost or speed alone — output quality directly affects assessment content participants see.
+- **Medium:** Balance quality and speed. The user has explicitly requested translation and
+  is aware of the wait, but perceptible latency should be minimised. Validate quality
+  against representative field values before committing to a model.
+- **Low:** Prioritise speed and reliability of structured output. The user is directly
+  blocked until the classifier responds. A model that is slightly less capable but
+  consistently fast is preferable to a slower, higher-capability model here.
 
 Specific model selection for each tier happens at implementation time, informed by
 quality testing on real module content. The choice should be revisited whenever a new
