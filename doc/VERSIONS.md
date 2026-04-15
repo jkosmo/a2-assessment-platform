@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.76 - 2026-04-15
+
+feat: i18n all shell chat strings (#296 follow-up) — locale switch now affects full UI
+
+- All hardcoded Norwegian strings in admin-content-shell.js replaced with t()/tf() calls
+- Added shell.* translation keys to adminContentBase (en-GB), adminContentLateOverrides.nb, and .nn
+- tf() helper added for parameterised strings ({count}, {preview}, {versionNo})
+- Switching locale in top-bar dropdown now updates all chat messages, buttons, and prompts
+
 ## 0.9.75 - 2026-04-15
 
 feat: Slice 2 (#296) — source-material intake and LLM draft creation via conversational shell

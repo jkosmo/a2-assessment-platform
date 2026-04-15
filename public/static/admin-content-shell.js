@@ -34,6 +34,15 @@ function t(key) {
   return map[key] ?? key;
 }
 
+// Template translation: replaces {varName} placeholders in the translated string.
+function tf(key, vars) {
+  let str = t(key);
+  for (const [k, v] of Object.entries(vars)) {
+    str = str.replace(`{${k}}`, String(v));
+  }
+  return str;
+}
+
 function localizeValue(value) {
   if (!value) return "";
   if (typeof value === "string") {
@@ -257,7 +266,7 @@ function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
     btn.disabled = true;
     textarea.disabled = true;
     const preview = val.length > 80 ? val.slice(0, 80) + "…" : val;
-    pushUserMessage(`Kildemateriale (${val.length} tegn): "${preview}"`);
+    pushUserMessage(tf("shell.source.userPreview", { count: val.length, preview }));
     onSubmit(val);
   }
 
@@ -323,7 +332,7 @@ function renderPreview() {
 
     badgeClass = hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell";
     badgeText = hasDraft
-      ? "Ulagret utkast"
+      ? t("shell.draft.unsavedBadge")
       : isLive
       ? t("adminContent.status.badge.live")
       : isDraft
@@ -365,12 +374,12 @@ function renderPreview() {
         <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
         <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText.slice(0, 300))}${guidanceText.length > 300 ? "…" : ""}</div>`;
     }
-    if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${mcqCount} flervalgsspørsmål</p>`;
+    if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`;
   } else if (hasDraft) {
     // New module shell not yet saved — show draft content only
     badgeClass = "draft";
-    badgeText = "Ulagret utkast";
-    titleHtml = `<div class="preview-module-title">${escapeHtml(sessionDraft.title || "Ny modul")}</div>`;
+    badgeText = t("shell.draft.unsavedBadge");
+    titleHtml = `<div class="preview-module-title">${escapeHtml(sessionDraft.title || t("shell.newModule.defaultTitle"))}</div>`;
     const taskText = sessionDraft.taskText ?? "";
     const guidanceText = sessionDraft.guidanceText ?? "";
     const mcqCount = sessionDraft.mcqQuestions?.length ?? 0;
@@ -385,7 +394,7 @@ function renderPreview() {
         <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
         <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText.slice(0, 300))}${guidanceText.length > 300 ? "…" : ""}</div>`;
     }
-    if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${mcqCount} flervalgsspørsmål</p>`;
+    if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`;
   }
 
   previewContent.innerHTML = `
@@ -421,12 +430,12 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
 
   const progressMsg = document.createElement("div");
   progressMsg.className = "chat-msg chat-msg--bot";
-  progressMsg.innerHTML = `<div class="chat-bubble chat-bubble--progress"><span class="chat-spinner"></span>Genererer modulutkast…</div>`;
+  progressMsg.innerHTML = `<div class="chat-bubble chat-bubble--progress"><span class="chat-spinner"></span>${escapeHtml(t("shell.generating.draftProgress"))}</div>`;
 
   const abortBtn = document.createElement("button");
   abortBtn.type = "button";
   abortBtn.className = "btn-secondary chat-choice-btn";
-  abortBtn.textContent = "Avbryt";
+  abortBtn.textContent = t("shell.action.cancel");
   abortBtn.addEventListener("click", () => {
     abort.abort();
     abortBtn.disabled = true;
@@ -451,12 +460,12 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
     sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
 
     if (err?.name === "AbortError" || String(err).includes("abort")) {
-      replaceMessage(progressMsg, "Generering avbrutt.");
+      replaceMessage(progressMsg, escapeHtml(t("shell.generating.draftAborted")));
       return;
     }
-    replaceMessage(progressMsg, `Generering feilet: ${escapeHtml(String(err?.message ?? err))}`, [
+    replaceMessage(progressMsg, `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(String(err?.message ?? err))}`, [
       {
-        label: "Prøv igjen",
+        label: t("shell.action.retry"),
         action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, onAccept),
       },
     ]);
@@ -469,14 +478,14 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   const draft = result?.draft ?? result;
   const taskPreview = (draft.taskText ?? "").slice(0, 120);
   const resultHtml = `
-    <strong>Utkast klart!</strong>
-    <p style="margin:8px 0 4px;font-size:13px;color:var(--color-meta)">Oppgavetekst (utdrag):</p>
+    <strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
+    <p style="margin:8px 0 4px;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.taskPreviewLabel"))}</p>
     <p style="margin:0 0 8px;font-size:13px">${escapeHtml(taskPreview)}${draft.taskText?.length > 120 ? "…" : ""}</p>
   `;
 
   replaceMessage(progressMsg, resultHtml, [
     {
-      label: "Bruk dette utkastet",
+      label: t("shell.generating.acceptDraft"),
       action: () => {
         sessionDraft = sessionDraft
           ? { ...sessionDraft, taskText: draft.taskText, guidanceText: draft.guidanceText }
@@ -486,13 +495,13 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
       },
     },
     {
-      label: "Forkast",
+      label: t("shell.generating.discardDraft"),
       action: () => {
         sessionState = selectedModuleId ? "module-loaded" : "idle";
-        pushBotMessage("Utkastet ble forkastet. Hva vil du gjøre?", [
-          { label: "Prøv igjen med nytt materiale", action: () => startGenerateDraftFlow() },
-          ...(selectedModuleId ? [{ label: "Tilbake til modulen", action: () => showModuleActions() }] : []),
-          { label: "Tilbake til start", action: startIdle },
+        pushBotMessage(t("shell.generating.draftDiscarded"), [
+          { label: t("shell.generating.retryWithMaterial"), action: () => startGenerateDraftFlow() },
+          ...(selectedModuleId ? [{ label: t("shell.generating.backToModule"), action: () => showModuleActions() }] : []),
+          { label: t("shell.generating.backToStart"), action: startIdle },
         ]);
       },
     },
@@ -504,12 +513,12 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
 
   const progressMsg = document.createElement("div");
   progressMsg.className = "chat-msg chat-msg--bot";
-  progressMsg.innerHTML = `<div class="chat-bubble chat-bubble--progress"><span class="chat-spinner"></span>Genererer flervalgsspørsmål…</div>`;
+  progressMsg.innerHTML = `<div class="chat-bubble chat-bubble--progress"><span class="chat-spinner"></span>${escapeHtml(t("shell.generating.mcqProgress"))}</div>`;
 
   const abortBtn = document.createElement("button");
   abortBtn.type = "button";
   abortBtn.className = "btn-secondary chat-choice-btn";
-  abortBtn.textContent = "Avbryt";
+  abortBtn.textContent = t("shell.action.cancel");
   abortBtn.addEventListener("click", () => {
     abort.abort();
     abortBtn.disabled = true;
@@ -534,12 +543,12 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
     sessionState = sessionDraft ? "draft-pending" : "module-loaded";
 
     if (err?.name === "AbortError" || String(err).includes("abort")) {
-      replaceMessage(progressMsg, "MCQ-generering avbrutt.");
+      replaceMessage(progressMsg, escapeHtml(t("shell.generating.mcqAborted")));
       return;
     }
-    replaceMessage(progressMsg, `MCQ-generering feilet: ${escapeHtml(String(err?.message ?? err))}`, [
+    replaceMessage(progressMsg, `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(String(err?.message ?? err))}`, [
       {
-        label: "Prøv igjen",
+        label: t("shell.action.retry"),
         action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, onAccept),
       },
     ]);
@@ -551,13 +560,13 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
 
   const questions = result?.questions ?? [];
   const resultHtml = `
-    <strong>${questions.length} flervalgsspørsmål generert!</strong>
-    ${questions.length > 0 ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">Første spørsmål: ${escapeHtml((questions[0].stem ?? "").slice(0, 100))}…</p>` : ""}
+    <strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
+    ${questions.length > 0 ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.mcqFirstQuestion"))}${escapeHtml((questions[0].stem ?? "").slice(0, 100))}…</p>` : ""}
   `;
 
   replaceMessage(progressMsg, resultHtml, [
     {
-      label: "Bruk disse spørsmålene",
+      label: t("shell.generating.acceptMcq"),
       action: () => {
         sessionDraft = sessionDraft
           ? { ...sessionDraft, mcqQuestions: questions }
@@ -567,11 +576,11 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
       },
     },
     {
-      label: "Forkast",
+      label: t("shell.generating.discardMcq"),
       action: () => {
-        pushBotMessage("MCQ-spørsmålene ble forkastet.", [
-          { label: "Generer nye spørsmål", action: () => askForMcqGeneration(sourceMaterial, certLevel, locale) },
-          { label: "Fortsett uten MCQ", action: () => showDraftReadyActions() },
+        pushBotMessage(t("shell.generating.mcqDiscarded"), [
+          { label: t("shell.generating.regenerateMcq"), action: () => askForMcqGeneration(sourceMaterial, certLevel, locale) },
+          { label: t("shell.generating.skipMcq"), action: () => showDraftReadyActions() },
         ]);
       },
     },
@@ -588,31 +597,31 @@ function startIdle() {
   selectedModuleId = null;
   sessionDraft = null;
   renderPreview();
-  pushBotMessage("Hva vil du gjøre?", [
-    { label: "Åpne eksisterende modul", action: startModulePicker },
-    { label: "Opprett ny modul", action: startNewModuleFlow },
+  pushBotMessage(t("shell.idle.prompt"), [
+    { label: t("shell.idle.openExisting"), action: startModulePicker },
+    { label: t("shell.idle.createNew"), action: startNewModuleFlow },
   ]);
 }
 
 async function startModulePicker() {
   sessionState = "picking-module";
-  const progress = pushBotProgress("Laster moduler…");
+  const progress = pushBotProgress(t("shell.modules.loading"));
 
   try {
     const data = await apiFetch("/api/admin/content/modules", getHeaders);
     modules = Array.isArray(data) ? data : (data?.modules ?? []);
   } catch {
-    replaceMessage(progress, "Kunne ikke laste moduler. Prøv igjen.", [
-      { label: "Prøv igjen", action: startModulePicker },
-      { label: "Avbryt", action: startIdle },
+    replaceMessage(progress, t("shell.modules.loadError"), [
+      { label: t("shell.action.retry"), action: startModulePicker },
+      { label: t("shell.action.cancel"), action: startIdle },
     ]);
     return;
   }
 
   if (modules.length === 0) {
-    replaceMessage(progress, "Ingen moduler funnet.", [
-      { label: "Opprett ny modul", action: startNewModuleFlow },
-      { label: "Avbryt", action: startIdle },
+    replaceMessage(progress, t("shell.modules.empty"), [
+      { label: t("shell.idle.createNew"), action: startNewModuleFlow },
+      { label: t("shell.action.cancel"), action: startIdle },
     ]);
     return;
   }
@@ -624,7 +633,7 @@ async function startModulePicker() {
     )
     .join("");
 
-  replaceMessage(progress, `Velg en modul:<div class="module-list">${listHtml}</div>`);
+  replaceMessage(progress, `${escapeHtml(t("shell.modules.selectPrompt"))}<div class="module-list">${listHtml}</div>`);
 
   const choicesRow = document.createElement("div");
   choicesRow.className = "chat-choices chat-choices--column";
@@ -650,10 +659,10 @@ async function startModulePicker() {
   const cancelBtn = document.createElement("button");
   cancelBtn.type = "button";
   cancelBtn.className = "btn-secondary chat-choice-btn";
-  cancelBtn.textContent = "Avbryt";
+  cancelBtn.textContent = t("shell.action.cancel");
   cancelBtn.addEventListener("click", () => {
     disableChoices();
-    pushUserMessage("Avbryt");
+    pushUserMessage(t("shell.action.cancel"));
     startIdle();
   });
   choicesRow.appendChild(cancelBtn);
@@ -665,14 +674,14 @@ async function loadModule(moduleId) {
   sessionState = "loading-module";
   selectedModuleId = moduleId;
   sessionDraft = null;
-  const progress = pushBotProgress("Laster modul…");
+  const progress = pushBotProgress(t("shell.module.loading"));
 
   try {
     bundle = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
   } catch {
-    replaceMessage(progress, "Kunne ikke laste modulen. Prøv igjen.", [
-      { label: "Velg annen modul", action: startModulePicker },
-      { label: "Avbryt", action: startIdle },
+    replaceMessage(progress, t("shell.module.loadError"), [
+      { label: t("shell.module.pickAnother"), action: startModulePicker },
+      { label: t("shell.action.cancel"), action: startIdle },
     ]);
     return;
   }
@@ -683,8 +692,8 @@ async function loadModule(moduleId) {
   const title = localizeValue(bundle.module.title) || moduleId;
   const isLive = !!bundle.module.activeVersionId;
   const statusNote = isLive
-    ? `Live – Modul v${bundle.selectedConfiguration.moduleVersion?.versionNo ?? "?"}`
-    : "Ingen publisert versjon";
+    ? tf("shell.module.liveStatus", { versionNo: bundle.selectedConfiguration.moduleVersion?.versionNo ?? "?" })
+    : t("shell.module.noPublishedVersion");
 
   replaceMessage(
     progress,
@@ -695,17 +704,17 @@ async function loadModule(moduleId) {
 
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
-  pushBotMessage("Hva vil du gjøre med denne modulen?", [
-    { label: "Generer nytt innhold fra kildemateriale", action: () => startGenerateDraftFlow() },
-    ...(hasDraft ? [{ label: "Generer flervalgsspørsmål", action: () => startGenerateMcqFlow() }] : []),
-    { label: "Rediger i avansert editor", action: () => openAdvancedEditor(selectedModuleId) },
-    { label: "Velg annen modul", action: startModulePicker },
+  pushBotMessage(t("shell.module.actionsPrompt"), [
+    { label: t("shell.module.generateContent"), action: () => startGenerateDraftFlow() },
+    ...(hasDraft ? [{ label: t("shell.module.generateMcq"), action: () => startGenerateMcqFlow() }] : []),
+    { label: t("shell.module.editAdvanced"), action: () => openAdvancedEditor(selectedModuleId) },
+    { label: t("shell.module.pickAnother"), action: startModulePicker },
   ]);
 }
 
 function openAdvancedEditor(moduleId) {
   const url = `/admin-content/advanced${moduleId ? `?moduleId=${encodeURIComponent(moduleId)}` : ""}`;
-  pushBotMessage("Åpner avansert editor for denne modulen…");
+  pushBotMessage(t("shell.module.openingEditor"));
   setTimeout(() => { location.href = url; }, 400);
 }
 
@@ -715,9 +724,9 @@ function openAdvancedEditor(moduleId) {
 
 function startNewModuleFlow() {
   pushTextInputForm(
-    "Hva skal modulen hete?",
-    "Tittel på modul…",
-    "Neste",
+    t("shell.newModule.titlePrompt"),
+    t("shell.newModule.titlePlaceholder"),
+    t("shell.action.next"),
     (title) => askForSourceMaterial(title, null),
   );
 }
@@ -728,28 +737,25 @@ function startNewModuleFlow() {
 
 function askForSourceMaterial(moduleTitle, existingModuleId) {
   pushTextareaForm(
-    `<strong>Lim inn kildemateriale</strong><br><span style="font-size:13px;color:var(--color-meta)">Dette er kun bakgrunnsmateriale for deg som forfatter – kandidaten ser det ikke.</span>`,
-    "Lim inn faglig tekst, prosedyre, regelverk eller annet kildemateriale…",
-    "Neste",
+    `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
+    t("shell.source.placeholder"),
+    t("shell.action.next"),
     (sourceMaterial) => askForCertLevel(moduleTitle, existingModuleId, sourceMaterial),
   );
 }
 
-const CERT_LEVEL_LABELS = { basic: "Grunnleggende", intermediate: "Middels", advanced: "Avansert" };
-const LOCALE_LABELS_GEN = { nb: "Norsk bokmål", nn: "Norsk nynorsk", "en-GB": "English (UK)" };
-
 function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
-  pushBotMessage("Velg sertifiseringsnivå:", [
+  pushBotMessage(t("shell.certLevel.prompt"), [
     {
-      label: "Grunnleggende",
+      label: t("shell.certLevel.basic"),
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale),
     },
     {
-      label: "Middels",
+      label: t("shell.certLevel.intermediate"),
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale),
     },
     {
-      label: "Avansert",
+      label: t("shell.certLevel.advanced"),
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale),
     },
   ]);
@@ -759,8 +765,8 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   if (existingModuleId) {
     // Generating for an existing module — go straight to generation
     pushBotMessage(
-      `Starter generering for <strong>${escapeHtml(localizeValue(bundle?.module?.title) || existingModuleId)}</strong>…<br>` +
-      `<span style="font-size:13px;color:var(--color-meta)">Nivå: ${escapeHtml(CERT_LEVEL_LABELS[certLevel] ?? certLevel)} · Språk: ${escapeHtml(LOCALE_LABELS_GEN[locale] ?? locale)}</span>`,
+      `${escapeHtml(t("shell.generating.startingFor"))} <strong>${escapeHtml(localizeValue(bundle?.module?.title) || existingModuleId)}</strong>…<br>` +
+      `<span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.certLevel.label"))}: ${escapeHtml(t(`shell.certLevel.${certLevel}`) || certLevel)} · ${escapeHtml(t("shell.locale.label"))}: ${escapeHtml(localeLabels[locale] ?? locale)}</span>`,
     );
     generateDraftInBackground(sourceMaterial, certLevel, locale, (draft) => {
       askForMcqGeneration(sourceMaterial, certLevel, locale);
@@ -769,7 +775,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   }
 
   // New module: create shell first, then generate
-  const progress = pushBotProgress(`Oppretter modul «${escapeHtml(moduleTitle)}»…`);
+  const progress = pushBotProgress(`${t("shell.newModule.creating").replace(/…$/, "")} «${escapeHtml(moduleTitle)}»…`);
 
   let newModule;
   try {
@@ -786,11 +792,11 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   } catch (err) {
     replaceMessage(
       progress,
-      `Klarte ikke opprette modul automatisk.<br><span style="font-size:13px;color:var(--color-meta)">Du kan opprette modulen manuelt i den avanserte editoren og deretter generere innhold derfra.</span>`,
+      `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
-        { label: "Åpne avansert editor", action: () => { location.href = "/admin-content/advanced"; } },
-        { label: "Prøv igjen", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
-        { label: "Avbryt", action: startIdle },
+        { label: t("shell.action.openAdvancedEditor"), action: () => { location.href = "/admin-content/advanced"; } },
+        { label: t("shell.action.retry"), action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
+        { label: t("shell.action.cancel"), action: startIdle },
       ],
     );
     return;
@@ -799,7 +805,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   selectedModuleId = newModule?.id ?? newModule?.moduleId;
   replaceMessage(
     progress,
-    `Modul <strong>${escapeHtml(moduleTitle)}</strong> opprettet.` +
+    `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(moduleTitle)}</strong>` +
     `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(selectedModuleId)}</span>`,
   );
 
@@ -812,28 +818,28 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale) {
-  pushBotMessage("Vil du også generere flervalgsspørsmål (MCQ) fra samme kildemateriale?", [
+  pushBotMessage(t("shell.askMcq.prompt"), [
     {
-      label: "Ja, generer MCQ",
+      label: t("shell.askMcq.yes"),
       action: () =>
         generateMcqInBackground(sourceMaterial, certLevel, locale, () => showDraftReadyActions()),
     },
-    { label: "Nei, fortsett uten MCQ", action: showDraftReadyActions },
+    { label: t("shell.askMcq.no"), action: showDraftReadyActions },
   ]);
 }
 
 function showDraftReadyActions() {
   sessionState = "draft-pending";
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
-  const msgParts = ["Utkastet er klart."];
-  if (hasMcq) msgParts.push(`${sessionDraft.mcqQuestions.length} MCQ-spørsmål inkludert.`);
-  msgParts.push("Du kan åpne den avanserte editoren for å lagre og publisere.");
+  const msgParts = [t("shell.draftReady.message")];
+  if (hasMcq) msgParts.push(tf("shell.draftReady.mcqCount", { count: sessionDraft.mcqQuestions.length }));
+  msgParts.push(t("shell.draftReady.hint"));
 
   pushBotMessage(msgParts.join(" "), [
     ...(selectedModuleId
-      ? [{ label: "Åpne i avansert editor", action: () => openAdvancedEditor(selectedModuleId) }]
+      ? [{ label: t("shell.draftReady.openEditor"), action: () => openAdvancedEditor(selectedModuleId) }]
       : []),
-    { label: "Start på nytt", action: startIdle },
+    { label: t("shell.draftReady.restart"), action: startIdle },
   ]);
 }
 
@@ -844,25 +850,25 @@ function startGenerateDraftFlow() {
 
 function startGenerateMcqFlow() {
   pushTextareaForm(
-    "<strong>Lim inn kildemateriale for MCQ</strong>",
-    "Kildemateriale for spørsmålene…",
-    "Neste",
+    `<strong>${escapeHtml(t("shell.mcqSource.promptTitle"))}</strong>`,
+    t("shell.mcqSource.placeholder"),
+    t("shell.action.next"),
     (sourceMaterial) => askForCertLevelMcqOnly(sourceMaterial),
   );
 }
 
 function askForCertLevelMcqOnly(sourceMaterial) {
-  pushBotMessage("Velg sertifiseringsnivå for spørsmålene:", [
+  pushBotMessage(t("shell.mcqCertLevel.prompt"), [
     {
-      label: "Grunnleggende",
+      label: t("shell.certLevel.basic"),
       action: () => generateMcqInBackground(sourceMaterial, "basic", currentLocale, () => showModuleActions()),
     },
     {
-      label: "Middels",
+      label: t("shell.certLevel.intermediate"),
       action: () => generateMcqInBackground(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()),
     },
     {
-      label: "Avansert",
+      label: t("shell.certLevel.advanced"),
       action: () => generateMcqInBackground(sourceMaterial, "advanced", currentLocale, () => showModuleActions()),
     },
   ]);
