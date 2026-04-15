@@ -18,7 +18,7 @@
       @media (max-width: 900px) { .workspace-shell { grid-template-columns: 1fr; } }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
-      .preview-pane { position: sticky; top: var(--space-2); }
+      .preview-pane { position: sticky; top: var(--space-2); max-height: calc(100vh - var(--space-4)); overflow-y: auto; }
       /* Locale bar only shown when a module is loaded (JS adds .visible) */
       .preview-locale-bar { display: none; gap: 4px; margin-bottom: var(--space-1); }
       .preview-locale-bar.visible { display: flex; }

@@ -61,35 +61,50 @@ The implementation already uses:
 
 ### Preview depth
 
-The shell preview is functional, but has until now been shallower than the design intent:
+The shell preview is functional, and the current branch now goes materially further:
 
-- scenario / task text was truncated in preview
-- guidance text was truncated in preview
-- MCQ count was shown, but not the actual MCQ content
+- scenario / task text now renders in full
+- guidance text now renders in full
+- MCQ now renders as actual questions with options, correct answer, and rationale
+- the preview pane is scrollable so long drafts and MCQ sets can be inspected without leaving the shell
 
-This is being extended in the current implementation round.
+There is still a UX gap around making the preview even more obviously the primary review
+surface, but it is no longer just a shallow summary.
 
 ### MCQ generation control
 
-MCQ generation exists, but had been opinionated:
+MCQ generation exists and is now less opinionated than before:
 
-- question count was hardcoded in the shell
-- answer option count was fixed in the prompt
-- the chat did not ask the user how many questions or options to generate
+- the shell now asks how many questions to generate
+- the shell now asks how many answer options each question should have
+- custom counts are supported within validated bounds
 
-This is also being addressed in the current implementation round.
+This is no longer just planned; it is implemented in the shell and backend prompt path.
+
+### Free-text revision loop is now partially present
+
+The shell now supports a first real free-text revision loop for generated content:
+
+- revise scenario / guidance through chat after a draft has been generated
+- revise MCQ through chat after questions have been generated
+- keep the preview pane in sync before the user moves on to the advanced editor
+
+This is still narrower than the full `#297` design:
+
+- there is no general intent-classifier yet
+- revisions are targeted to draft text and MCQ, not the full content surface
+- there is no multilingual apply/translate workflow yet
 
 ## Not Yet Implemented
 
-### Free-form conversational edit/apply loop (`#297`)
+### Full free-form conversational edit/apply loop (`#297`)
 
-The biggest remaining gap versus the approved design is still the free-form
-edit loop. The current shell is primarily structured and guided. It does **not**
-yet support:
+The biggest remaining gap versus the approved design is still the *full* free-form
+edit loop. The current shell now supports targeted free-text revision for draft text
+and MCQ, but it does **not** yet support:
 
-- arbitrary edit instructions in chat
 - intent classification into typed `CommandIntent`
-- editing scenario text, guidance text, MCQ, and version content directly through free-form chat
+- editing rubric, prompt, submission schema, assessment policy, and version content directly through free-form chat
 - conversational translation/apply flows across locales
 
 ### Safe conversational CRUD and publish flows (`#298`)

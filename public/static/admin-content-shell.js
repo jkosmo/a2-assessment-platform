@@ -591,6 +591,15 @@ function renderPreview() {
   `.trim();
 }
 
+function scrollPreviewToTop() {
+  previewPane?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function scrollPreviewToBottom() {
+  if (!previewPane) return;
+  previewPane.scrollTo({ top: previewPane.scrollHeight, behavior: "smooth" });
+}
+
 // ---------------------------------------------------------------------------
 // LLM generation — non-blocking, AbortController-guarded
 // ---------------------------------------------------------------------------
@@ -641,12 +650,9 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  const taskPreview = (draft.taskText ?? "").slice(0, 120);
-  const hasMore = (draft.taskText?.length ?? 0) > 120;
   logResolveSlot(slot,
     () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
-      <p style="margin:8px 0 4px;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.taskPreviewLabel"))}</p>
-      <p style="margin:0 0 8px;font-size:13px">${escapeHtml(taskPreview)}${hasMore ? "…" : ""}</p>`,
+      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
     [
       {
         labelKey: "shell.generating.acceptDraft",
@@ -655,6 +661,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
             ? { ...sessionDraft, taskText: draft.taskText, guidanceText: draft.guidanceText }
             : { taskText: draft.taskText, guidanceText: draft.guidanceText, mcqQuestions: [] };
           renderPreview();
+          scrollPreviewToTop();
           onAccept(draft, sourceMaterial, certLevel, locale);
         },
       },
@@ -708,10 +715,9 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  const firstStem = questions.length > 0 ? (questions[0].stem ?? "").slice(0, 100) : null;
   logResolveSlot(slot,
     () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
-      ${firstStem !== null ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.mcqFirstQuestion"))}${escapeHtml(firstStem)}…</p>` : ""}`,
+      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
     [
       {
         labelKey: "shell.generating.acceptMcq",
@@ -720,6 +726,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
             ? { ...sessionDraft, mcqQuestions: questions }
             : { taskText: "", guidanceText: "", mcqQuestions: questions };
           renderPreview();
+          scrollPreviewToBottom();
           onAccept(questions);
         },
       },
@@ -734,6 +741,136 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
       },
     ],
   );
+}
+
+async function reviseDraftInBackground(instruction, onAccept) {
+  const abort = startGeneration();
+  const slot = logProgress("shell.revision.draftProgress");
+  slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
+
+  let result;
+  try {
+    result = await apiFetch(
+      "/api/admin/content/generate/module-draft/revise",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          taskText: sessionDraft?.taskText ?? "",
+          guidanceText: sessionDraft?.guidanceText ?? "",
+          instruction,
+          locale: currentLocale,
+        }),
+        signal: abort.signal,
+      },
+    );
+  } catch (err) {
+    generationAbort = null;
+    sessionState = sessionDraft ? "draft-pending" : "module-loaded";
+
+    if (err?.name === "AbortError" || String(err).includes("abort")) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.revision.draftAborted")));
+      return;
+    }
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => reviseDraftInBackground(instruction, onAccept) },
+    ]);
+    return;
+  }
+
+  generationAbort = null;
+  sessionState = "draft-pending";
+
+  const draft = result?.draft ?? result;
+  logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`, [
+    {
+      labelKey: "shell.revision.acceptDraft",
+      action: () => {
+        sessionDraft = sessionDraft
+          ? { ...sessionDraft, taskText: draft.taskText, guidanceText: draft.guidanceText }
+          : { taskText: draft.taskText, guidanceText: draft.guidanceText, mcqQuestions: [] };
+        renderPreview();
+        scrollPreviewToTop();
+        onAccept(draft);
+      },
+    },
+    {
+      labelKey: "shell.revision.discardChanges",
+      action: () => {
+        logBot(() => t("shell.revision.discarded"), [
+          { labelKey: "shell.revision.tryAgain", action: startDraftRevisionFlow },
+          { labelKey: "shell.generating.backToModule", action: showModuleActions },
+        ]);
+      },
+    },
+  ]);
+}
+
+async function reviseMcqInBackground(instruction, onAccept) {
+  const abort = startGeneration();
+  const slot = logProgress("shell.revision.mcqProgress");
+  slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
+
+  const currentQuestions = sessionDraft?.mcqQuestions ?? [];
+  let result;
+  try {
+    result = await apiFetch(
+      "/api/admin/content/generate/mcq/revise",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          questions: currentQuestions,
+          instruction,
+          locale: currentLocale,
+          questionCount: currentQuestions.length,
+          optionCount: currentQuestions[0]?.options?.length ?? 4,
+        }),
+        signal: abort.signal,
+      },
+    );
+  } catch (err) {
+    generationAbort = null;
+    sessionState = sessionDraft ? "draft-pending" : "module-loaded";
+
+    if (err?.name === "AbortError" || String(err).includes("abort")) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.revision.mcqAborted")));
+      return;
+    }
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => reviseMcqInBackground(instruction, onAccept) },
+    ]);
+    return;
+  }
+
+  generationAbort = null;
+  sessionState = "draft-pending";
+
+  const questions = result?.questions ?? [];
+  logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`, [
+    {
+      labelKey: "shell.revision.acceptMcq",
+      action: () => {
+        sessionDraft = sessionDraft
+          ? { ...sessionDraft, mcqQuestions: questions }
+          : { taskText: "", guidanceText: "", mcqQuestions: questions };
+        renderPreview();
+        scrollPreviewToBottom();
+        onAccept(questions);
+      },
+    },
+    {
+      labelKey: "shell.revision.discardChanges",
+      action: () => {
+        logBot(() => t("shell.revision.discarded"), [
+          { labelKey: "shell.revision.tryAgain", action: startMcqRevisionFlow },
+          { labelKey: "shell.generating.backToModule", action: showModuleActions },
+        ]);
+      },
+    },
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -820,9 +957,12 @@ async function loadModule(moduleId) {
 
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
+  const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
+    ...(hasDraft ? [{ labelKey: "shell.module.editDraftChat", action: startDraftRevisionFlow }] : []),
+    ...(hasMcq ? [{ labelKey: "shell.module.editMcqChat", action: startMcqRevisionFlow }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
   ]);
@@ -943,6 +1083,8 @@ function showDraftReadyActions() {
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
   }, [
+    { labelKey: "shell.draftReady.reviseDraft", action: startDraftRevisionFlow },
+    ...(mcqCount > 0 ? [{ labelKey: "shell.draftReady.reviseMcq", action: startMcqRevisionFlow }] : []),
     ...(selectedModuleId ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }] : []),
     { labelKey: "shell.draftReady.restart", action: startIdle },
   ]);
@@ -960,6 +1102,36 @@ function startGenerateMcqFlow() {
     "shell.mcqSource.placeholder",
     "shell.action.next",
     (sourceMaterial) => askForCertLevelMcqOnly(sourceMaterial),
+  );
+}
+
+function startDraftRevisionFlow() {
+  if (!sessionDraft?.taskText && !sessionDraft?.guidanceText) {
+    logBot(() => t("shell.revision.draftUnavailable"));
+    return;
+  }
+
+  logForm(
+    "textarea",
+    () => `<strong>${escapeHtml(t("shell.revision.draftPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.draftPromptHint"))}</span>`,
+    "shell.revision.placeholder",
+    "shell.revision.submit",
+    (instruction) => reviseDraftInBackground(instruction, () => showDraftReadyActions()),
+  );
+}
+
+function startMcqRevisionFlow() {
+  if ((sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
+    logBot(() => t("shell.revision.mcqUnavailable"));
+    return;
+  }
+
+  logForm(
+    "textarea",
+    () => `<strong>${escapeHtml(t("shell.revision.mcqPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.mcqPromptHint"))}</span>`,
+    "shell.revision.placeholder",
+    "shell.revision.submit",
+    (instruction) => reviseMcqInBackground(instruction, () => showDraftReadyActions()),
   );
 }
 

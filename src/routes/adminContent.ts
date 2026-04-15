@@ -23,13 +23,17 @@ import {
   moduleVersionBodySchema,
   benchmarkExampleVersionBodySchema,
   moduleDraftGenerationBodySchema,
+  moduleDraftRevisionBodySchema,
   mcqGenerationBodySchema,
+  mcqRevisionBodySchema,
   parseRequest,
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
 import {
   generateModuleDraft,
   generateMcqQuestions,
+  reviseModuleDraft,
+  reviseMcqQuestions,
 } from "../modules/adminContent/llmContentGenerationService.js";
 import {
   toCreateModuleInput,
@@ -302,6 +306,22 @@ adminContentRouter.post("/generate/module-draft", async (request, response) => {
   }
 });
 
+adminContentRouter.post("/generate/module-draft/revise", async (request, response) => {
+  const { data, error } = parseRequest(moduleDraftRevisionBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const draft = await reviseModuleDraft(data);
+    response.json({ draft });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
+  }
+});
+
 adminContentRouter.post("/generate/mcq", async (request, response) => {
   const { data, error } = parseRequest(mcqGenerationBodySchema, request.body);
   if (error) {
@@ -314,6 +334,26 @@ adminContentRouter.post("/generate/mcq", async (request, response) => {
       ...data,
       questionCount: data.questionCount ?? 10,
       optionCount: data.optionCount ?? 4,
+    });
+    response.json({ questions: result.questions });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
+  }
+});
+
+adminContentRouter.post("/generate/mcq/revise", async (request, response) => {
+  const { data, error } = parseRequest(mcqRevisionBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const result = await reviseMcqQuestions({
+      ...data,
+      questionCount: data.questionCount ?? data.questions.length,
+      optionCount: data.optionCount ?? Math.max(...data.questions.map((question) => question.options.length)),
     });
     response.json({ questions: result.questions });
   } catch (err) {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { env } from "../../config/env.js";
+import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,6 +21,13 @@ export type ModuleDraftResult = {
   includesScenario: boolean;
 };
 
+export type ModuleDraftRevisionInput = {
+  taskText: string;
+  guidanceText: string;
+  instruction: string;
+  locale: GenerationLocale;
+};
+
 export type McqGenerationInput = {
   sourceMaterial: string;
   certificationLevel: CertificationLevel;
@@ -37,6 +45,21 @@ export type GeneratedMcqQuestion = {
 
 export type McqGenerationResult = {
   questions: GeneratedMcqQuestion[];
+};
+
+export type RevisableMcqQuestion = {
+  stem: LocalizedText;
+  options: LocalizedText[];
+  correctAnswer: LocalizedText;
+  rationale?: LocalizedText;
+};
+
+export type McqRevisionInput = {
+  questions: RevisableMcqQuestion[];
+  instruction: string;
+  locale: GenerationLocale;
+  questionCount?: number;
+  optionCount?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -201,6 +224,99 @@ Return a single JSON object:
   return { systemPrompt, userPrompt };
 }
 
+export function buildModuleDraftRevisionPrompts(input: ModuleDraftRevisionInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a module content editor for a professional certification platform. Revise the provided draft based on the user's change request. Return strict JSON only - no markdown, no commentary.";
+
+  const userPrompt = `Revise the following certification module draft based on the instruction below.
+
+Language: ${LOCALE_DISPLAY[input.locale]}
+
+## Revision rules
+
+- Apply the requested change directly to the draft.
+- Keep the output self-contained for candidates.
+- Do not mention hidden source material or the editing process.
+- Preserve the overall structure unless the instruction clearly asks for structural changes.
+- If the task includes a scenario, keep it at the top of taskText labelled "Scenario:".
+
+## Current draft
+
+taskText:
+${input.taskText}
+
+guidanceText:
+${input.guidanceText}
+
+## Revision instruction
+
+${input.instruction}
+
+## Return format
+
+Return a single JSON object:
+{
+  "taskText": "revised task text in ${LOCALE_DISPLAY[input.locale]}",
+  "guidanceText": "revised guidance text in ${LOCALE_DISPLAY[input.locale]}",
+  "includesScenario": true or false
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+export function buildMcqRevisionPrompts(input: McqRevisionInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const questionCount = input.questionCount ?? input.questions.length;
+  const optionCount = input.optionCount ?? Math.max(...input.questions.map((question) => question.options.length));
+  const serializedQuestions = JSON.stringify(input.questions, null, 2);
+  const systemPrompt =
+    "You are an MCQ content editor for a professional certification platform. Revise the provided question set based on the user's change request. Return strict JSON only - no markdown, no commentary.";
+
+  const userPrompt = `Revise the following multiple-choice questions based on the instruction below.
+
+Language: ${LOCALE_DISPLAY[input.locale]}
+
+## Revision rules
+
+- Preserve the number of questions unless the instruction clearly asks for a different count.
+- Preserve the number of answer options per question unless the instruction clearly asks for a different count.
+- Keep each question self-contained and understandable without external context.
+- The correctAnswer must match one of the options verbatim.
+- Keep distractors comparable in length and level of detail to the correct answer.
+
+Target question count: ${questionCount}
+Target option count per question: ${optionCount}
+
+## Current questions
+
+${serializedQuestions}
+
+## Revision instruction
+
+${input.instruction}
+
+## Return format
+
+Return a single JSON object:
+{
+  "questions": [
+    {
+      "stem": "question text",
+      "options": ["option 1", "option 2", "option 3"],
+      "correctAnswer": "option 1",
+      "rationale": "brief explanation"
+    }
+  ]
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
 async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
@@ -272,6 +388,28 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   const parsed = mcqGenerationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`MCQ generation LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+export async function reviseModuleDraft(input: ModuleDraftRevisionInput): Promise<ModuleDraftResult> {
+  const { systemPrompt, userPrompt } = buildModuleDraftRevisionPrompts(input);
+
+  const raw = await callLlm(systemPrompt, userPrompt);
+  const parsed = moduleDraftResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Module draft revision LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGenerationResult> {
+  const { systemPrompt, userPrompt } = buildMcqRevisionPrompts(input);
+
+  const raw = await callLlm(systemPrompt, userPrompt);
+  const parsed = mcqGenerationResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`MCQ revision LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
 }

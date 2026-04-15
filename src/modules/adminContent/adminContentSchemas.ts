@@ -114,12 +114,27 @@ export const moduleDraftGenerationBodySchema = z.object({
   locale: generationLocaleSchema,
 });
 
+export const moduleDraftRevisionBodySchema = z.object({
+  taskText: z.string().trim().min(1),
+  guidanceText: z.string().trim().min(1),
+  instruction: z.string().trim().min(1),
+  locale: generationLocaleSchema,
+});
+
 export const mcqGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
   questionCount: z.number().int().min(1).max(20).default(10),
   optionCount: z.number().int().min(2).max(6).default(4),
+});
+
+export const mcqRevisionBodySchema = z.object({
+  questions: z.array(mcqQuestionSchema).min(1),
+  instruction: z.string().trim().min(1),
+  locale: generationLocaleSchema,
+  questionCount: z.number().int().min(1).max(20).optional(),
+  optionCount: z.number().int().min(2).max(6).optional(),
 });
 
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {

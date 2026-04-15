@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMcqGenerationPrompts,
+  buildMcqRevisionPrompts,
   buildModuleDraftPrompts,
+  buildModuleDraftRevisionPrompts,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
 describe("llm content generation prompts", () => {
@@ -42,6 +44,42 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("If background facts are needed, incorporate them directly into the question stem.");
     expect(userPrompt).toContain("## Source material (hidden author background)");
     expect(userPrompt).not.toContain("based on the source material below.");
+  });
+
+  it("builds draft revision prompts around an explicit change instruction", () => {
+    const { userPrompt } = buildModuleDraftRevisionPrompts({
+      taskText: "Scenario:\n\nA workplace conflict has escalated.\n\nExplain how mediation could help.",
+      guidanceText: "A strong answer should explain core mediation principles.",
+      instruction: "Make the scenario more concrete and add clearer expectations about evidence.",
+      locale: "en-GB",
+    });
+
+    expect(userPrompt).toContain("## Current draft");
+    expect(userPrompt).toContain("## Revision instruction");
+    expect(userPrompt).toContain("Make the scenario more concrete");
+    expect(userPrompt).toContain('If the task includes a scenario, keep it at the top of taskText labelled "Scenario:".');
+    expect(userPrompt).toContain('"includesScenario": true or false');
+  });
+
+  it("builds MCQ revision prompts that preserve count and option parity by default", () => {
+    const { userPrompt } = buildMcqRevisionPrompts({
+      questions: [
+        {
+          stem: "What best describes solidarity action?",
+          options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+          correctAnswer: "A collective response",
+          rationale: "Solidarity action is collective rather than individual.",
+        },
+      ],
+      instruction: "Make the distractors more plausible.",
+      locale: "en-GB",
+    });
+
+    expect(userPrompt).toContain("Preserve the number of questions unless the instruction clearly asks for a different count.");
+    expect(userPrompt).toContain("Preserve the number of answer options per question unless the instruction clearly asks for a different count.");
+    expect(userPrompt).toContain("Target question count: 1");
+    expect(userPrompt).toContain("Target option count per question: 4");
+    expect(userPrompt).toContain("Make the distractors more plausible.");
   });
 
   // #245 — scenario generation decision
