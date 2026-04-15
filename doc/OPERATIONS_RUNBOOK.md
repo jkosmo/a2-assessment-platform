@@ -11,6 +11,7 @@ This runbook covers day-to-day runtime operations for the A2 Assessment Platform
 Related documents:
 - [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md)
 - [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md)
+- [PRODUCTION_RESTORE_RUNBOOK.md](PRODUCTION_RESTORE_RUNBOOK.md)
 - [INCIDENTS.md](INCIDENTS.md)
 
 ## Production Deployment and Rollback
@@ -112,7 +113,8 @@ When escalating:
 1. Preserve evidence first.
 2. Record the incident in [INCIDENTS.md](INCIDENTS.md).
 3. Use [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md) for KQL/log confirmation.
-4. Use [doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md](design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md) for database recovery posture and restore expectations.
+4. Use [PRODUCTION_RESTORE_RUNBOOK.md](PRODUCTION_RESTORE_RUNBOOK.md) for restore decision and operator steps.
+5. Use [doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md](design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md) for database recovery posture and longer-term architecture expectations.
 
 ## Runtime Topology
 
