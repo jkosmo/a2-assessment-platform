@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.75 - 2026-04-15
+
+feat: Slice 2 (#296) — source-material intake and LLM draft creation via conversational shell
+
+- Guided new-module wizard: title → source material (textarea) → cert level → locale → create shell → generate
+- Non-blocking draft generation with AbortController; progress card + Abort button during generation
+- Accept/discard result pattern — existing draft state unchanged until user explicitly accepts
+- MCQ generation flow with same non-blocking pattern
+- `sessionDraft` state reflected in preview with "Ulagret utkast" badge
+- "Generer nytt innhold" action available from loaded-module state
+- Fix `apiFetch` calls in shell to use function form so identity headers are actually sent
+
 ## 0.9.74 - 2026-04-14
 
 ux: close #291, #300, and nav-badge half of #290
