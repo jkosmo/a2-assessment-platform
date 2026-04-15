@@ -104,6 +104,31 @@ const DISTRACTOR_GUIDELINES: Record<CertificationLevel, string> = {
     "Distractors must represent common expert-level confusions, subtle definitional errors, or claims that are correct in a different context but wrong here. A well-prepared candidate should have to think carefully.",
 };
 
+function localizeForPrompt(value: LocalizedText | undefined, locale: GenerationLocale): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value[locale] ?? value.nb ?? value["en-GB"] ?? value.nn ?? Object.values(value)[0] ?? "";
+}
+
+function buildIndexedMcqPreview(questions: RevisableMcqQuestion[], locale: GenerationLocale): string {
+  return questions
+    .map((question, questionIndex) => {
+      const optionLines = (question.options ?? [])
+        .map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${localizeForPrompt(option, locale)}`)
+        .join("\n");
+
+      return [
+        `Question ${questionIndex + 1}`,
+        `Stem: ${localizeForPrompt(question.stem, locale)}`,
+        "Options:",
+        optionLines,
+        `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
+        `Rationale: ${localizeForPrompt(question.rationale, locale)}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
 function buildUrl(): string {
   const endpoint = (env.AZURE_OPENAI_ENDPOINT ?? "").trim().replace(/\/+$/, "");
   const deployment = env.AZURE_OPENAI_DEPLOYMENT ?? "";
@@ -274,6 +299,7 @@ export function buildMcqRevisionPrompts(input: McqRevisionInput): {
   const questionCount = input.questionCount ?? input.questions.length;
   const optionCount = input.optionCount ?? Math.max(...input.questions.map((question) => question.options.length));
   const serializedQuestions = JSON.stringify(input.questions, null, 2);
+  const indexedQuestions = buildIndexedMcqPreview(input.questions, input.locale);
   const systemPrompt =
     "You are an MCQ content editor for a professional certification platform. Revise the provided question set based on the user's change request. Return strict JSON only - no markdown, no commentary.";
 
@@ -288,11 +314,17 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 - Keep each question self-contained and understandable without external context.
 - The correctAnswer must match one of the options verbatim.
 - Keep distractors comparable in length and level of detail to the correct answer.
+- If the instruction points to a specific question or option reference such as "question 3", "Q3", "3b", "option B in question 3", or "third alternative in question 3", apply the change to that exact target.
+- When the instruction asks for a local change to one option, one question, or one rationale, keep the rest of the question set unchanged unless a broader rewrite is explicitly requested.
 
 Target question count: ${questionCount}
 Target option count per question: ${optionCount}
 
-## Current questions
+## Current questions (indexed review view)
+
+${indexedQuestions}
+
+## Current questions (JSON source of truth)
 
 ${serializedQuestions}
 

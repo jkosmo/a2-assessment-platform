@@ -137,6 +137,7 @@ let generationAbort = null; // AbortController for active generation
 
 // Draft state — sessionDraft mirrors what will be saved; null until user accepts a generated result
 let sessionDraft = null; // { taskText, guidanceText, mcqQuestions: [] }
+let previewDraft = null; // review candidate shown in preview before accept
 
 // Chat log — every rendered message is stored here as a re-renderable spec so
 // that retranslateChat() can rebuild the entire dialog on locale switch.
@@ -462,7 +463,7 @@ function retranslateChat() {
 function renderPreviewLocaleBar() {
   // Only show the locale switcher when content is loaded — avoids duplicating
   // the top-bar UI language selector when nothing is being previewed.
-  const hasContent = !!bundle || !!sessionDraft;
+  const hasContent = !!bundle || !!sessionDraft || !!previewDraft;
   previewLocaleBar.classList.toggle("visible", hasContent);
   previewLocaleBar.innerHTML = "";
   if (!hasContent) return;
@@ -483,12 +484,13 @@ function renderPreviewLocaleBar() {
 }
 
 function renderPreview() {
-  if (!bundle && !sessionDraft) {
+  if (!bundle && !sessionDraft && !previewDraft) {
     previewContent.innerHTML = `<p class="preview-empty">${escapeHtml(t("adminContent.status.noneTitle"))}</p>`;
     return;
   }
 
-  const hasDraft = !!sessionDraft;
+  const activeDraft = previewDraft ?? sessionDraft;
+  const hasDraft = !!activeDraft;
 
   let titleHtml = "";
   let descriptionHtml = "";
@@ -531,13 +533,13 @@ function renderPreview() {
 
     // Use draft content if accepted, else bundle content
     const taskText = hasDraft
-      ? sessionDraft.taskText
+      ? activeDraft.taskText
       : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.taskText) : "";
     const guidanceText = hasDraft
-      ? sessionDraft.guidanceText
+      ? activeDraft.guidanceText
       : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.guidanceText) : "";
     const mcqQuestions = hasDraft
-      ? (sessionDraft.mcqQuestions ?? [])
+      ? (activeDraft.mcqQuestions ?? [])
       : (cfg.mcqSetVersion?.questions ?? []);
     const mcqCount = mcqQuestions.length;
 
@@ -557,10 +559,10 @@ function renderPreview() {
     // New module shell not yet saved — show draft content only
     badgeClass = "draft";
     badgeText = t("shell.draft.unsavedBadge");
-    titleHtml = `<div class="preview-module-title">${escapeHtml(sessionDraft.title || t("shell.newModule.defaultTitle"))}</div>`;
-    const taskText = sessionDraft.taskText ?? "";
-    const guidanceText = sessionDraft.guidanceText ?? "";
-    const mcqQuestions = sessionDraft.mcqQuestions ?? [];
+    titleHtml = `<div class="preview-module-title">${escapeHtml(activeDraft.title || t("shell.newModule.defaultTitle"))}</div>`;
+    const taskText = activeDraft.taskText ?? "";
+    const guidanceText = activeDraft.guidanceText ?? "";
+    const mcqQuestions = activeDraft.mcqQuestions ?? [];
     const mcqCount = mcqQuestions.length;
 
     if (taskText) {
@@ -598,6 +600,30 @@ function scrollPreviewToTop() {
 function scrollPreviewToBottom() {
   if (!previewPane) return;
   previewPane.scrollTo({ top: previewPane.scrollHeight, behavior: "smooth" });
+}
+
+function buildPreviewCandidate(patch) {
+  const baseDraft = previewDraft ?? sessionDraft ?? {};
+  return {
+    ...baseDraft,
+    ...patch,
+    title: patch.title ?? baseDraft.title ?? sessionDraft?.title ?? "",
+    taskText: patch.taskText ?? baseDraft.taskText ?? sessionDraft?.taskText ?? "",
+    guidanceText: patch.guidanceText ?? baseDraft.guidanceText ?? sessionDraft?.guidanceText ?? "",
+    mcqQuestions: patch.mcqQuestions ?? baseDraft.mcqQuestions ?? sessionDraft?.mcqQuestions ?? [],
+  };
+}
+
+function setPreviewCandidate(patch) {
+  previewDraft = buildPreviewCandidate(patch);
+  renderPreviewLocaleBar();
+  renderPreview();
+}
+
+function clearPreviewCandidate() {
+  previewDraft = null;
+  renderPreviewLocaleBar();
+  renderPreview();
 }
 
 // ---------------------------------------------------------------------------
@@ -650,6 +676,8 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
+  setPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  scrollPreviewToTop();
   logResolveSlot(slot,
     () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
@@ -657,10 +685,8 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
       {
         labelKey: "shell.generating.acceptDraft",
         action: () => {
-          sessionDraft = sessionDraft
-            ? { ...sessionDraft, taskText: draft.taskText, guidanceText: draft.guidanceText }
-            : { taskText: draft.taskText, guidanceText: draft.guidanceText, mcqQuestions: [] };
-          renderPreview();
+          sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+          clearPreviewCandidate();
           scrollPreviewToTop();
           onAccept(draft, sourceMaterial, certLevel, locale);
         },
@@ -668,6 +694,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
       {
         labelKey: "shell.generating.discardDraft",
         action: () => {
+          clearPreviewCandidate();
           sessionState = selectedModuleId ? "module-loaded" : "idle";
           logBot(() => t("shell.generating.draftDiscarded"), [
             { labelKey: "shell.generating.retryWithMaterial", action: () => startGenerateDraftFlow() },
@@ -715,6 +742,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
+  setPreviewCandidate({ mcqQuestions: questions });
+  scrollPreviewToBottom();
   logResolveSlot(slot,
     () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
@@ -722,10 +751,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
       {
         labelKey: "shell.generating.acceptMcq",
         action: () => {
-          sessionDraft = sessionDraft
-            ? { ...sessionDraft, mcqQuestions: questions }
-            : { taskText: "", guidanceText: "", mcqQuestions: questions };
-          renderPreview();
+          sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
+          clearPreviewCandidate();
           scrollPreviewToBottom();
           onAccept(questions);
         },
@@ -733,6 +760,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
       {
         labelKey: "shell.generating.discardMcq",
         action: () => {
+          clearPreviewCandidate();
           logBot(() => t("shell.generating.mcqDiscarded"), [
             { labelKey: "shell.generating.regenerateMcq", action: () => askForMcqGeneration(sourceMaterial, certLevel, locale) },
             { labelKey: "shell.generating.skipMcq", action: () => showDraftReadyActions() },
@@ -783,14 +811,14 @@ async function reviseDraftInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
+  setPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  scrollPreviewToTop();
   logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`, [
     {
       labelKey: "shell.revision.acceptDraft",
       action: () => {
-        sessionDraft = sessionDraft
-          ? { ...sessionDraft, taskText: draft.taskText, guidanceText: draft.guidanceText }
-          : { taskText: draft.taskText, guidanceText: draft.guidanceText, mcqQuestions: [] };
-        renderPreview();
+        sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+        clearPreviewCandidate();
         scrollPreviewToTop();
         onAccept(draft);
       },
@@ -798,6 +826,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
     {
       labelKey: "shell.revision.discardChanges",
       action: () => {
+        clearPreviewCandidate();
         logBot(() => t("shell.revision.discarded"), [
           { labelKey: "shell.revision.tryAgain", action: startDraftRevisionFlow },
           { labelKey: "shell.generating.backToModule", action: showModuleActions },
@@ -849,14 +878,14 @@ async function reviseMcqInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
+  setPreviewCandidate({ mcqQuestions: questions });
+  scrollPreviewToBottom();
   logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`, [
     {
       labelKey: "shell.revision.acceptMcq",
       action: () => {
-        sessionDraft = sessionDraft
-          ? { ...sessionDraft, mcqQuestions: questions }
-          : { taskText: "", guidanceText: "", mcqQuestions: questions };
-        renderPreview();
+        sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
+        clearPreviewCandidate();
         scrollPreviewToBottom();
         onAccept(questions);
       },
@@ -864,6 +893,7 @@ async function reviseMcqInBackground(instruction, onAccept) {
     {
       labelKey: "shell.revision.discardChanges",
       action: () => {
+        clearPreviewCandidate();
         logBot(() => t("shell.revision.discarded"), [
           { labelKey: "shell.revision.tryAgain", action: startMcqRevisionFlow },
           { labelKey: "shell.generating.backToModule", action: showModuleActions },
@@ -882,6 +912,7 @@ function startIdle() {
   bundle = null;
   selectedModuleId = null;
   sessionDraft = null;
+  previewDraft = null;
   chatLog = [];
   renderPreview();
   logBot(() => t("shell.idle.prompt"), [
@@ -892,6 +923,9 @@ function startIdle() {
 
 async function startModulePicker() {
   sessionState = "picking-module";
+  previewDraft = null;
+  renderPreviewLocaleBar();
+  renderPreview();
   const slot = logProgress("shell.modules.loading");
 
   try {
@@ -927,6 +961,7 @@ async function loadModule(moduleId) {
   sessionState = "loading-module";
   selectedModuleId = moduleId;
   sessionDraft = null;
+  previewDraft = null;
   const slot = logProgress("shell.module.loading");
 
   try {
@@ -979,6 +1014,9 @@ function openAdvancedEditor(moduleId) {
 // ---------------------------------------------------------------------------
 
 function startNewModuleFlow() {
+  previewDraft = null;
+  renderPreviewLocaleBar();
+  renderPreview();
   logForm(
     "text",
     () => t("shell.newModule.titlePrompt"),
