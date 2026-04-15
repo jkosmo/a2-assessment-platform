@@ -121,10 +121,16 @@ const uiLocaleSelect = document.getElementById("localeSelect");
 // Chat rendering
 // ---------------------------------------------------------------------------
 
-function pushBotMessage(html, choices = []) {
+// messageKey: when provided the bubble gets data-message-key so the locale
+// handler can re-translate it in-place without knowing its content.
+function pushBotMessage(html, choices = [], messageKey = null) {
   const msg = document.createElement("div");
   msg.className = "chat-msg chat-msg--bot";
-  msg.innerHTML = `<div class="chat-bubble">${html}</div>`;
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+  bubble.innerHTML = html;
+  if (messageKey) bubble.dataset.messageKey = messageKey;
+  msg.appendChild(bubble);
   if (choices.length > 0) {
     const row = document.createElement("div");
     row.className = "chat-choices";
@@ -208,9 +214,9 @@ function escapeHtml(str) {
 // The form is intentionally outside the bubble so it fills the chat pane width.
 // placeholderKey and submitLabelKey are i18n keys; they are stored as data
 // attributes so the locale-switch handler can re-translate them in-place.
-function pushTextInputForm(promptHtml, placeholderKey, submitLabelKey, onSubmit) {
+function pushTextInputForm(promptHtml, placeholderKey, submitLabelKey, onSubmit, promptKey = null) {
   // 1. Label bubble
-  pushBotMessage(promptHtml);
+  pushBotMessage(promptHtml, [], promptKey);
 
   // 2. Full-width form row (not inside a bubble)
   const formRow = document.createElement("div");
@@ -251,9 +257,9 @@ function pushTextInputForm(promptHtml, placeholderKey, submitLabelKey, onSubmit)
 
 // Renders a label bubble followed by a full-width textarea form.
 // placeholderKey and submitLabelKey are i18n keys stored as data attributes.
-function pushTextareaForm(promptHtml, placeholderKey, submitLabelKey, onSubmit) {
+function pushTextareaForm(promptHtml, placeholderKey, submitLabelKey, onSubmit, promptKey = null) {
   // 1. Label bubble
-  pushBotMessage(promptHtml);
+  pushBotMessage(promptHtml, [], promptKey);
 
   // 2. Full-width form column (not inside a bubble)
   const formCol = document.createElement("div");
@@ -613,7 +619,7 @@ function startIdle() {
   pushBotMessage(t("shell.idle.prompt"), [
     { labelKey: "shell.idle.openExisting", action: startModulePicker },
     { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
-  ]);
+  ], "shell.idle.prompt");
 }
 
 async function startModulePicker() {
@@ -723,7 +729,7 @@ function showModuleActions() {
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
-  ]);
+  ], "shell.module.actionsPrompt");
 }
 
 function openAdvancedEditor(moduleId) {
@@ -742,6 +748,7 @@ function startNewModuleFlow() {
     "shell.newModule.titlePlaceholder",
     "shell.action.next",
     (title) => askForSourceMaterial(title, null),
+    "shell.newModule.titlePrompt",
   );
 }
 
@@ -772,7 +779,7 @@ function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
       labelKey: "shell.certLevel.advanced",
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale),
     },
-  ]);
+  ], "shell.certLevel.prompt");
 }
 
 async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale) {
@@ -839,22 +846,28 @@ function askForMcqGeneration(sourceMaterial, certLevel, locale) {
         generateMcqInBackground(sourceMaterial, certLevel, locale, () => showDraftReadyActions()),
     },
     { labelKey: "shell.askMcq.no", action: showDraftReadyActions },
-  ]);
+  ], "shell.askMcq.prompt");
 }
 
 function showDraftReadyActions() {
   sessionState = "draft-pending";
-  const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
+  const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const msgParts = [t("shell.draftReady.message")];
-  if (hasMcq) msgParts.push(tf("shell.draftReady.mcqCount", { count: sessionDraft.mcqQuestions.length }));
+  if (mcqCount > 0) msgParts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
   msgParts.push(t("shell.draftReady.hint"));
 
-  pushBotMessage(msgParts.join(" "), [
+  const msgEl = pushBotMessage(msgParts.join(" "), [
     ...(selectedModuleId
       ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }]
       : []),
     { labelKey: "shell.draftReady.restart", action: startIdle },
   ]);
+  // Store data for in-place re-translation on locale switch
+  const bubble = msgEl.querySelector(".chat-bubble");
+  if (bubble) {
+    bubble.dataset.messageKey = "draftReady";
+    bubble.dataset.mcqCount = String(mcqCount);
+  }
 }
 
 // Separate entry point for MCQ-only generation from the module actions menu
@@ -885,7 +898,7 @@ function askForCertLevelMcqOnly(sourceMaterial) {
       labelKey: "shell.certLevel.advanced",
       action: () => generateMcqInBackground(sourceMaterial, "advanced", currentLocale, () => showModuleActions()),
     },
-  ]);
+  ], "shell.mcqCertLevel.prompt");
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,6 +1048,20 @@ function populateUiLocaleSelect() {
     }
     for (const el of chatMessages.querySelectorAll("[data-placeholder-key]")) {
       el.placeholder = t(el.dataset.placeholderKey);
+    }
+    // Re-translate bot message bubbles that carry a message key
+    for (const bubble of chatMessages.querySelectorAll(".chat-bubble[data-message-key]")) {
+      const key = bubble.dataset.messageKey;
+      if (key === "draftReady") {
+        // Interpolated message — re-build from stored context
+        const count = Number(bubble.dataset.mcqCount ?? 0);
+        const parts = [t("shell.draftReady.message")];
+        if (count > 0) parts.push(tf("shell.draftReady.mcqCount", { count }));
+        parts.push(t("shell.draftReady.hint"));
+        bubble.textContent = parts.join(" ");
+      } else {
+        bubble.textContent = t(key);
+      }
     }
     translatePageStaticText();
     renderPreviewLocaleBar();

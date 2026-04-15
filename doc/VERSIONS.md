@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.79 - 2026-04-15
+
+ux: re-translate bot message bubbles on locale switch
+
+- pushBotMessage accepts optional messageKey; bubble gets data-message-key
+- pushTextInputForm / pushTextareaForm accept optional promptKey (5th param)
+- Locale handler iterates .chat-bubble[data-message-key] and sets textContent
+- showDraftReadyActions stores data-mcq-count for in-place re-interpolation
+- Covers: idle prompt, module actions, cert level, MCQ prompts, form labels
+
 ## 0.9.78 - 2026-04-15
 
 ux: locale switch translates chat in-place without clearing history
