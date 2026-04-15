@@ -270,7 +270,7 @@ Before production go-live, we should have:
 Current repo status:
 - concrete restore operator guidance now lives in `doc/PRODUCTION_RESTORE_RUNBOOK.md`
 - vaulted backup is operationally available and evidenced through `doc/design/PRODUCTION_RESTORE_DRILL_2026-04-15.md`
-- logical-export path still requires follow-up implementation before it can be treated as operationally available
+- logical-export path is now documented and script-backed through `doc/PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md` and `scripts/azure/create-logical-export.ps1`
 
 ## Decision Summary
 Chosen strategy:

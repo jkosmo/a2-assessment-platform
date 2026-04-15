@@ -12,6 +12,7 @@ Related documents:
 - [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)
 - [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md)
 - [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md)
+- [PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md](PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md)
 - [design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md](design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md)
 - [design/PRODUCTION_RESTORE_DRILL_2026-04-15.md](design/PRODUCTION_RESTORE_DRILL_2026-04-15.md)
 - [INCIDENTS.md](INCIDENTS.md)
@@ -32,11 +33,11 @@ Current recovery-path availability:
 - app/config rollback by redeploy: available now
 - native PostgreSQL PITR restore: available now
 - Azure Backup vaulted backup restore: available now
-- logical export safety copy: not yet configured, tracked in `#223`
+- logical export safety copy: operator-ready when taken before a high-risk change
 
 Important consequence:
 - today, production has two usable database restore paths: native PostgreSQL PITR and Azure Backup vaulted restore
-- do not assume logical-export recovery exists until `#223` is completed
+- logical-export recovery is conditional on a pre-change export actually being created and recorded
 
 Current Azure Backup vaulted-backup objects:
 - backup vault: `a2-assessment-platform-prd-bkv-hea5kl`
@@ -111,12 +112,12 @@ Current status:
 
 ### Path 3: Logical export / manual reconstruction
 Use logical export only when all of the following become true:
-- `#223` has been completed
 - a relevant pre-change export exists
 - PITR or vaulted backup is unavailable or insufficient for the case
 
 Current status:
-- not available yet in this environment
+- runbook and script are available in this environment
+- recovery through this path is only available for changes where the export was actually taken
 
 ### Stop and escalate
 Stop and escalate before touching production if any of these are true:
@@ -383,24 +384,22 @@ Current validation status:
 
 ## Logical Export Recovery Runbook
 
-This path is planned but not yet available in production.
-
-Status gate:
-- do not select this path until `#223` is complete and a relevant export exists
+This path is available as a change-controlled fallback when a pre-change export has been taken.
 
 Use when:
 - a pre-change export exists
 - targeted/manual reconstruction is safer than a broader restore
 - PITR or vaulted backup is unavailable or would roll back too much unrelated data
 
-Expected operator steps once `#223` is complete:
+Reference:
+- [PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md](PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md)
+
+Expected operator steps:
 1. locate the approved pre-change export
 2. validate checksum/retention/access context
 3. restore into isolated PostgreSQL target
 4. verify the same domain objects and participant history as PITR
 5. use the restored copy for targeted reconstruction or cutover as explicitly approved
-
-Until `#223` is complete, treat this as unavailable.
 
 ## Evidence to Capture
 
@@ -422,5 +421,5 @@ Add the final record to [INCIDENTS.md](INCIDENTS.md).
 For the current production phase:
 - use normal redeploy for app/config-only regressions
 - choose between native PITR and vaulted backup based on incident window and trust in the source runtime
-- finish `#223` before claiming pre-change logical safety copies exist
+- require a pre-change logical export for high-risk production data changes
 - treat `#222` evidence as the current baseline for restore rehearsals

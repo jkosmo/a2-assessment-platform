@@ -12,6 +12,7 @@ Related documents:
 - [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md)
 - [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md)
 - [PRODUCTION_RESTORE_RUNBOOK.md](PRODUCTION_RESTORE_RUNBOOK.md)
+- [PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md](PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md)
 - [INCIDENTS.md](INCIDENTS.md)
 
 ## Production Deployment and Rollback
@@ -41,6 +42,7 @@ Before approving a production deploy:
    - PostgreSQL production profile values
 4. Confirm no manual portal changes are being relied on for the deploy to succeed.
 5. Confirm there is no active incident that would make production verification ambiguous.
+6. If the deploy includes schema/data risk, confirm a pre-change logical export has been taken and recorded.
 
 ### Production post-deploy verification
 
@@ -90,6 +92,7 @@ Use the simplest safe option that matches the failure mode.
    - symptoms: web app fails during startup migration, older code cannot safely run against current schema, or new schema caused app breakage
    - action: stop and assess before redeploying older code
    - likely path: corrective forward deploy or explicit database recovery, not blind rollback
+   - if the change was classified as high-risk, verify whether a pre-change logical export exists before choosing the recovery path
 
 3. Recent destructive or corrupt writes
    - symptoms: wrong results persisted, damaged certification state, unexpected deletes/updates
