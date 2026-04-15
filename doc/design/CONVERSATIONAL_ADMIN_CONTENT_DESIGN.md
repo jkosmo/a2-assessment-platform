@@ -328,18 +328,31 @@ No retry loop.
 
 ### Model cost and capability tiering
 
-Not all calls require the same model quality. Matching model to task reduces cost and
-latency for the calls that run most frequently.
+Not all calls require the same model quality. The design defines tiers by requirement —
+specific model choices are deferred to implementation, where concrete quality and latency
+evidence will inform the decision. A call type may also justify a larger or more capable
+model than the default tier if testing reveals a real need.
 
-| Call type | Quality requirement | Recommended tier | Rationale |
-|-----------|-------------------|-----------------|-----------|
-| `generate_draft` | High – creative, domain-aware | High-capability (GPT-4 class) | Quality directly affects assessment content |
-| `generate_mcq` | High – subtle distractors, option parity | High-capability (GPT-4 class) | Distractor quality degrades significantly on cheaper models |
-| Translation | Medium – accurate, fluent | Mid-tier (gpt-4.1-mini or equivalent) | Less creative, more mechanical; mid-tier is sufficient |
-| Intent classifier | Low – JSON output, constrained vocabulary | Fast/cheap (gpt-5.4-nano or equivalent) | Runs on every message; smallest model that reliably produces typed JSON |
+| Call type | Tier | Quality requirement | Frequency |
+|-----------|------|-------------------|-----------|
+| `generate_draft` | High | Creative, domain-aware, long output | Low – one per authoring session |
+| `generate_mcq` | High | Subtle distractors, strict option parity | Low – one per authoring session |
+| Translation | Medium | Accurate and fluent, less creative | Medium – one per locale per save |
+| Intent classifier | Low | Reliable JSON output, constrained vocabulary | High – every free-form message |
 
-The project already operates with `gpt-4.1-mini` and is tracking `gpt-5.4-nano` (issue #303).
-These map directly to the translation and classification tiers.
+**Tier definitions:**
+- **High:** Use the most capable available deployment. Do not substitute a cheaper model
+  to save cost here — output quality directly affects assessment content that participants
+  will see.
+- **Medium:** A capable but faster/cheaper deployment is likely sufficient. Validate
+  against a set of representative field values before committing to a specific model.
+- **Low:** Use the fastest available deployment that reliably returns valid typed JSON
+  for the defined command vocabulary. Cost matters here because this runs on every message.
+
+Specific model selection for each tier happens at implementation time, informed by
+quality testing on real module content. The choice should be revisited whenever a new
+model becomes available in the Azure OpenAI deployment or when production evidence
+shows quality drift.
 
 **Backend implication:** `callLlm` currently reads a single `AZURE_OPENAI_DEPLOYMENT` env var.
 Supporting tiering requires either:
