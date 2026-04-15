@@ -219,106 +219,150 @@ field values.
 
 ---
 
-## LLM Latency Strategy
+## LLM Latency and Call Management
 
-### Why this needs explicit design
+### Non-negotiable requirement
 
-LLM calls in this workspace take measurably longer than users expect from a UI interaction.
-The current `callLlm` implementation is fully blocking (`await response.json()`,
-`max_completion_tokens: 4000`, no streaming). Realistic round-trip times on Azure OpenAI:
+> **The UI must never lock or become unresponsive because of an LLM call.**
+> This applies without exception. All LLM calls execute in the background.
+> The user must always be able to read, navigate, edit, and cancel while any call is in flight.
 
-| Call type | Typical latency | Worst case |
-|-----------|----------------|------------|
-| `generate_draft` (module task + guidance) | 5–12 s | 20 s |
-| `generate_mcq` (10 questions) | 8–18 s | 30 s |
-| Translation (all three locales) | 4–10 s | 15 s |
-| Intent classifier (Slice 3, short prompt) | 0.5–2 s | 4 s |
+This is a hard design constraint, not a guideline. Any implementation that violates it —
+even briefly — is a defect.
 
-A blocking spinner that freezes the workspace for 10–20 seconds will feel broken.
-The design must ensure the user can work continuously regardless of generation state.
+### Latency profile
 
-### Core rule
+The current `callLlm` is fully blocking (`await response.json()`, `max_completion_tokens: 4000`,
+no streaming). Realistic round-trip times on Azure OpenAI:
 
-> A generation call in flight must never prevent the user from reading, navigating,
-> or manually editing the current draft.
+| Call type | Typical | Worst case | Trigger |
+|-----------|---------|------------|---------|
+| `generate_draft` | 5–12 s | 20 s | Explicit user action |
+| `generate_mcq` | 8–18 s | 30 s | Explicit user action |
+| Translation per locale | 3–8 s | 15 s | Explicit user action |
+| Intent classifier | 0.5–2 s | 4 s | Each free-form message |
 
-### Per call-type strategy
+### Call trigger discipline
+
+LLM calls must only be triggered by **explicit user actions** — never automatically.
+
+Forbidden triggers:
+- Auto-generate on paste or on text input change.
+- Auto-translate when the user switches locale.
+- Re-classify on every keystroke in the chat input.
+
+Required trigger pattern:
+- Generation: user clicks a clearly labelled action button ("Generer utkast", "Generer spørsmål").
+- Translation: user explicitly requests translation after source-locale content is complete.
+- Classification: user submits a message (Enter or Send button) — not before.
+
+This rule prevents unnecessary calls, keeps costs predictable, and avoids the user being
+surprised by background activity they did not request.
+
+### Single active call per type
+
+At most one generation call and one classification call may be in flight simultaneously.
+
+```
+State:  [ generationInFlight: boolean, classifierInFlight: boolean ]
+```
+
+**If the user triggers a new generation while one is already running:**
+- Cancel the in-flight call via `AbortController.abort()`.
+- Start the new call immediately.
+- Inform the user: "Forrige generering ble avbrutt – starter ny."
+
+Rationale: the new call supersedes the old one. Queuing would leave the user waiting for
+a result based on inputs they have already changed.
+
+**If the user submits a new chat message while the classifier is running:**
+- Queue the new message. Process it when the classifier is free.
+- Show a brief "behandler…" indicator in the chat input.
+- Do not allow the user to submit a third message until the queued one is processed.
+  This caps the queue depth at 1 and prevents call chains from building up.
+
+**Mutations (save, publish, etc.) are never queued.** They are always initiated explicitly
+by the user through a confirmation gate and execute synchronously against the API (< 1 s).
+A mutation cannot be triggered while a generation is in flight — the confirmation button
+is disabled until the generation resolves or is cancelled.
+
+### Per call-type behaviour
 
 #### Content generation (`generate_draft`, `generate_mcq`)
 
-These are the slowest calls and the most common in the authoring workflow.
-
-**Approach: non-blocking background generation.**
-
-1. User triggers generation (source material submitted, certificationLevel selected).
-2. Chat pane immediately shows a progress card:
+1. User clicks the generation action button.
+2. Button becomes "Avbryt" immediately. Chat pane shows a non-modal progress card:
    ```
-   Genererer modulutkast…
-   ████████░░░░░░░░░░  dette kan ta 10–20 sekunder
-   [Avbryt]
+   Genererer modulutkast…  [Avbryt]
    ```
-3. The rest of the UI remains fully interactive: user can switch preview locale,
-   read existing draft, or manually edit any content card via the existing dialogs.
-4. When generation completes, the preview pane highlights the new fields and the chat
-   pane shows a summary: "Utkast klart – taskText og guidanceText er oppdatert."
-5. The user must explicitly accept ("Bruk dette utkastet") before draft state is updated.
-   This prevents partial overwrites if the user has manually edited fields while waiting.
-
-**Abort:** The Avbryt button calls `AbortController.abort()` on the in-flight fetch.
-The backend route forwards the `AbortSignal` to the Azure OpenAI call if Node 18+ supports it;
-otherwise the request completes server-side but the result is discarded on the frontend.
-
-#### MCQ generation
-
-Same non-blocking pattern as above. The progress card shows question count:
-"Genererer 10 flervalgsspørsmål…"
-
-After completion, the chat pane shows a preview of the first two questions before the user
-accepts. This lets the user quickly assess quality before committing.
+   The progress card is informational only — it does not overlay or disable anything else.
+3. The user may continue working: switch preview locale, edit content cards, read the draft.
+4. On completion, the chat pane shows a result card:
+   ```
+   Utkast klart.  [Bruk dette utkastet]  [Forkast]
+   ```
+   The existing draft is untouched until the user chooses "Bruk dette utkastet".
+   This explicit accept step prevents a completed call from overwriting manual edits
+   made while the call was running.
+5. On abort (user or network): progress card is replaced by "Generering avbrutt."
+   No draft state is changed.
 
 #### Translation (Slice 3)
 
-Translation operates on fields that are already written. Non-blocking is critical here
-because the user may be working in another locale while translation runs.
+Translation is triggered per locale, not for all locales in one call.
+The user explicitly selects which target locale to translate into.
 
-Translation runs per field or per locale, not as a single monolithic call. This allows:
-- Showing partial results as each field completes.
-- Letting the user abort mid-translation without losing partial output.
+Each locale translation runs as a separate call. Results appear in the preview as they
+complete, marked "Oversatt – ikke godkjent" until the user accepts each one.
+The user can accept, reject, or edit each translated locale independently.
 
-Each translated field is shown in the preview immediately as it arrives, marked
-"Oversatt – ikke lagret" until the user accepts.
+#### Intent classification (Slice 3)
 
-#### Intent classification (Slice 3, fast path)
+The classifier has a short, constrained prompt and a small, typed output.
+Expected latency: 0.5–2 s. The call is triggered on message submit only.
 
-The intent classifier has a short, constrained prompt and small output.
-Expected latency: 0.5–2 s. This is fast enough to stay in the synchronous user flow.
+The user sees a brief "tolker…" indicator next to the sent message — not a full spinner.
+The chat input is disabled until the classifier responds (at most a 2 s wait).
+If the classifier returns `{ type: "unknown" }`, the chatbot asks the user to rephrase.
+No retry loop.
 
-Strategy:
-- Show a brief "Tolker kommando…" indicator in the chat pane (not a full spinner).
-- If the response takes more than 2 s, upgrade to a visible progress state.
-- If classification returns `{ type: "unknown" }`, the chatbot asks the user to rephrase
-  immediately — no retry loop.
+### Model cost and capability tiering
 
-### Streaming (future enhancement, not in Slice 1–2)
+Not all calls require the same model quality. Matching model to task reduces cost and
+latency for the calls that run most frequently.
 
-The current `callLlm` function returns a parsed JSON object. Azure OpenAI supports
-`stream: true`, which returns token-by-token via Server-Sent Events.
+| Call type | Quality requirement | Recommended tier | Rationale |
+|-----------|-------------------|-----------------|-----------|
+| `generate_draft` | High – creative, domain-aware | High-capability (GPT-4 class) | Quality directly affects assessment content |
+| `generate_mcq` | High – subtle distractors, option parity | High-capability (GPT-4 class) | Distractor quality degrades significantly on cheaper models |
+| Translation | Medium – accurate, fluent | Mid-tier (gpt-4.1-mini or equivalent) | Less creative, more mechanical; mid-tier is sufficient |
+| Intent classifier | Low – JSON output, constrained vocabulary | Fast/cheap (gpt-5.4-nano or equivalent) | Runs on every message; smallest model that reliably produces typed JSON |
 
-Streaming is not implemented in the current backend. Adding it requires:
-1. New SSE-capable route (or upgrade of `/generate/module-draft`).
-2. Frontend `EventSource` or `fetch` with `ReadableStream` consumer.
-3. Partial JSON buffering until a complete object is available for validation.
+The project already operates with `gpt-4.1-mini` and is tracking `gpt-5.4-nano` (issue #303).
+These map directly to the translation and classification tiers.
 
-Streaming would improve perceived responsiveness for generation (visible typing effect)
-but adds implementation complexity. It is deferred to a post-Slice-2 enhancement.
-The non-blocking async pattern above covers the latency problem sufficiently for MVP.
+**Backend implication:** `callLlm` currently reads a single `AZURE_OPENAI_DEPLOYMENT` env var.
+Supporting tiering requires either:
+- A `deployment` parameter override on `callLlm` per call site, or
+- Separate env vars: `AZURE_OPENAI_DEPLOYMENT_GENERATION`, `AZURE_OPENAI_DEPLOYMENT_FAST`.
 
-### What does NOT change because of this
+This is a backend change scoped to Slice 2 (when translation is added) and Slice 3
+(when the intent classifier is added). Slice 1 uses the existing single deployment.
 
-- All mutations (save draft, publish) remain synchronous in the user flow.
-  These are fast API calls (< 1 s) and confirmation gates already handle the pause naturally.
-- The intent classifier result is always validated before any mutation executes.
-  Optimistic execution of mutations (apply before classification confirms) is not permitted.
+### Streaming
+
+The current `callLlm` awaits the full JSON response before returning. Azure OpenAI
+supports `stream: true` with token-by-token SSE output, but streaming structured JSON
+requires buffering until the object is complete before validation can run.
+
+Streaming is **not required for the non-blocking design** — the progress card pattern
+satisfies the non-negotiable requirement without it. Streaming would add perceived
+responsiveness (visible typing effect during generation) but is a non-trivial backend
+change (new SSE route, `ReadableStream` consumer on the frontend, partial JSON buffering).
+
+Decision point: evaluate streaming after the first SMO usability session on Slice 2.
+If users express that the progress card does not give enough feedback during 10–20 s waits,
+streaming is prioritised before Slice 3. Otherwise it remains a post-Slice-5 enhancement.
 
 ---
 
@@ -468,10 +512,11 @@ The split-pane layout should be CSS Grid:
    or is the status summary sufficient? Recommendation: task text + status chain in Slice 1,
    full MCQ in Slice 3 when the edit loop is live.
 
-5. **Streaming priority.** The non-blocking async pattern is the MVP plan. If SMO
-   feedback shows that the progress card is not reassuring enough during 10–20 s waits,
-   streaming should be prioritised before Slice 3. This requires a new SSE endpoint and
-   frontend stream consumer. Decision point: after first SMO usability test on Slice 2.
+5. **`callLlm` deployment parameter.** Tiering requires a `deployment` override on
+   `callLlm`. Should this be a parameter on the function signature, or separate env vars
+   per tier? Separate env vars keep config explicit but add operational overhead.
+   A parameter is more flexible but requires all call sites to specify a tier.
+   Decide when scoping Slice 2 backend work.
 
 ---
 
