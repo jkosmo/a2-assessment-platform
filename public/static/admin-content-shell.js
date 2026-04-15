@@ -191,18 +191,15 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-// Renders a bot message containing a single-line text input form.
-// onSubmit(value: string) is called when the user submits. Returns the wrapper element.
+// Renders a label bubble followed by a full-width text input form row.
+// The form is intentionally outside the bubble so it fills the chat pane width.
 function pushTextInputForm(promptHtml, placeholder, submitLabel, onSubmit) {
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--bot";
+  // 1. Label bubble
+  pushBotMessage(promptHtml);
 
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble";
-  bubble.innerHTML = promptHtml;
-
-  const form = document.createElement("div");
-  form.className = "chat-inline-form";
+  // 2. Full-width form row (not inside a bubble)
+  const formRow = document.createElement("div");
+  formRow.className = "chat-form-row";
 
   const input = document.createElement("input");
   input.type = "text";
@@ -227,28 +224,22 @@ function pushTextInputForm(promptHtml, placeholder, submitLabel, onSubmit) {
   btn.addEventListener("click", submit);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
 
-  form.appendChild(input);
-  form.appendChild(btn);
-  bubble.appendChild(form);
-  msg.appendChild(bubble);
-
-  chatMessages.appendChild(msg);
-  msg.scrollIntoView({ behavior: "smooth", block: "end" });
+  formRow.appendChild(input);
+  formRow.appendChild(btn);
+  chatMessages.appendChild(formRow);
+  formRow.scrollIntoView({ behavior: "smooth", block: "end" });
   setTimeout(() => input.focus(), 80);
-  return msg;
+  return formRow;
 }
 
-// Renders a bot message with a textarea for longer input (source material).
+// Renders a label bubble followed by a full-width textarea form.
 function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--bot";
+  // 1. Label bubble
+  pushBotMessage(promptHtml);
 
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble";
-  bubble.innerHTML = promptHtml;
-
-  const form = document.createElement("div");
-  form.className = "chat-inline-form chat-inline-form--column";
+  // 2. Full-width form column (not inside a bubble)
+  const formCol = document.createElement("div");
+  formCol.className = "chat-form-col";
 
   const textarea = document.createElement("textarea");
   textarea.className = "chat-textarea";
@@ -265,7 +256,6 @@ function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
     if (!val) { textarea.focus(); return; }
     btn.disabled = true;
     textarea.disabled = true;
-    // Summarise for display rather than echoing full text
     const preview = val.length > 80 ? val.slice(0, 80) + "…" : val;
     pushUserMessage(`Kildemateriale (${val.length} tegn): "${preview}"`);
     onSubmit(val);
@@ -273,15 +263,12 @@ function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
 
   btn.addEventListener("click", submit);
 
-  form.appendChild(textarea);
-  form.appendChild(btn);
-  bubble.appendChild(form);
-  msg.appendChild(bubble);
-
-  chatMessages.appendChild(msg);
-  msg.scrollIntoView({ behavior: "smooth", block: "end" });
+  formCol.appendChild(textarea);
+  formCol.appendChild(btn);
+  chatMessages.appendChild(formCol);
+  formCol.scrollIntoView({ behavior: "smooth", block: "end" });
   setTimeout(() => textarea.focus(), 80);
-  return msg;
+  return formCol;
 }
 
 // ---------------------------------------------------------------------------
