@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.78 - 2026-04-15
+
+ux: locale switch translates chat in-place without clearing history
+
+- All choice buttons, form inputs and submit buttons store data-label-key /
+  data-placeholder-key attributes so the locale handler can re-translate them
+- Choices use labelKey:"key" instead of label:t("key") so keys are available
+  at re-render time
+- Locale change handler iterates [data-label-key] and [data-placeholder-key]
+  elements; no chat history cleared, no page reload
+- pushTextInputForm / pushTextareaForm now take keys, not already-translated strings
+
 ## 0.9.77 - 2026-04-15
 
 ux: locale switch translates chat in-place instead of resetting dialog

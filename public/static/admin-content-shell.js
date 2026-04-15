@@ -132,10 +132,12 @@ function pushBotMessage(html, choices = []) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn-secondary chat-choice-btn";
-      btn.textContent = c.label;
+      const labelText = c.labelKey ? t(c.labelKey) : c.label;
+      btn.textContent = labelText;
+      if (c.labelKey) btn.dataset.labelKey = c.labelKey;
       btn.addEventListener("click", () => {
         disableChoices();
-        pushUserMessage(c.label);
+        pushUserMessage(c.labelKey ? t(c.labelKey) : c.label);
         c.action();
       });
       row.appendChild(btn);
@@ -173,10 +175,12 @@ function replaceMessage(msgEl, html, choices = []) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn-secondary chat-choice-btn";
-      btn.textContent = c.label;
+      const labelText = c.labelKey ? t(c.labelKey) : c.label;
+      btn.textContent = labelText;
+      if (c.labelKey) btn.dataset.labelKey = c.labelKey;
       btn.addEventListener("click", () => {
         disableChoices();
-        pushUserMessage(c.label);
+        pushUserMessage(c.labelKey ? t(c.labelKey) : c.label);
         c.action();
       });
       row.appendChild(btn);
@@ -202,7 +206,9 @@ function escapeHtml(str) {
 
 // Renders a label bubble followed by a full-width text input form row.
 // The form is intentionally outside the bubble so it fills the chat pane width.
-function pushTextInputForm(promptHtml, placeholder, submitLabel, onSubmit) {
+// placeholderKey and submitLabelKey are i18n keys; they are stored as data
+// attributes so the locale-switch handler can re-translate them in-place.
+function pushTextInputForm(promptHtml, placeholderKey, submitLabelKey, onSubmit) {
   // 1. Label bubble
   pushBotMessage(promptHtml);
 
@@ -213,13 +219,15 @@ function pushTextInputForm(promptHtml, placeholder, submitLabel, onSubmit) {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "chat-text-input";
-  input.placeholder = placeholder;
+  input.placeholder = t(placeholderKey);
+  input.dataset.placeholderKey = placeholderKey;
   input.setAttribute("autocomplete", "off");
 
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "btn-primary chat-submit-btn";
-  btn.textContent = submitLabel;
+  btn.textContent = t(submitLabelKey);
+  btn.dataset.labelKey = submitLabelKey;
 
   function submit() {
     const val = input.value.trim();
@@ -242,7 +250,8 @@ function pushTextInputForm(promptHtml, placeholder, submitLabel, onSubmit) {
 }
 
 // Renders a label bubble followed by a full-width textarea form.
-function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
+// placeholderKey and submitLabelKey are i18n keys stored as data attributes.
+function pushTextareaForm(promptHtml, placeholderKey, submitLabelKey, onSubmit) {
   // 1. Label bubble
   pushBotMessage(promptHtml);
 
@@ -252,13 +261,15 @@ function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
 
   const textarea = document.createElement("textarea");
   textarea.className = "chat-textarea";
-  textarea.placeholder = placeholder;
+  textarea.placeholder = t(placeholderKey);
+  textarea.dataset.placeholderKey = placeholderKey;
   textarea.rows = 6;
 
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "btn-primary chat-submit-btn";
-  btn.textContent = submitLabel;
+  btn.textContent = t(submitLabelKey);
+  btn.dataset.labelKey = submitLabelKey;
 
   function submit() {
     const val = textarea.value.trim();
@@ -436,6 +447,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   abortBtn.type = "button";
   abortBtn.className = "btn-secondary chat-choice-btn";
   abortBtn.textContent = t("shell.action.cancel");
+  abortBtn.dataset.labelKey = "shell.action.cancel";
   abortBtn.addEventListener("click", () => {
     abort.abort();
     abortBtn.disabled = true;
@@ -465,7 +477,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
     }
     replaceMessage(progressMsg, `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(String(err?.message ?? err))}`, [
       {
-        label: t("shell.action.retry"),
+        labelKey: "shell.action.retry",
         action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, onAccept),
       },
     ]);
@@ -485,7 +497,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
 
   replaceMessage(progressMsg, resultHtml, [
     {
-      label: t("shell.generating.acceptDraft"),
+      labelKey: "shell.generating.acceptDraft",
       action: () => {
         sessionDraft = sessionDraft
           ? { ...sessionDraft, taskText: draft.taskText, guidanceText: draft.guidanceText }
@@ -495,13 +507,13 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
       },
     },
     {
-      label: t("shell.generating.discardDraft"),
+      labelKey: "shell.generating.discardDraft",
       action: () => {
         sessionState = selectedModuleId ? "module-loaded" : "idle";
         pushBotMessage(t("shell.generating.draftDiscarded"), [
-          { label: t("shell.generating.retryWithMaterial"), action: () => startGenerateDraftFlow() },
-          ...(selectedModuleId ? [{ label: t("shell.generating.backToModule"), action: () => showModuleActions() }] : []),
-          { label: t("shell.generating.backToStart"), action: startIdle },
+          { labelKey: "shell.generating.retryWithMaterial", action: () => startGenerateDraftFlow() },
+          ...(selectedModuleId ? [{ labelKey: "shell.generating.backToModule", action: () => showModuleActions() }] : []),
+          { labelKey: "shell.generating.backToStart", action: startIdle },
         ]);
       },
     },
@@ -519,6 +531,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
   abortBtn.type = "button";
   abortBtn.className = "btn-secondary chat-choice-btn";
   abortBtn.textContent = t("shell.action.cancel");
+  abortBtn.dataset.labelKey = "shell.action.cancel";
   abortBtn.addEventListener("click", () => {
     abort.abort();
     abortBtn.disabled = true;
@@ -548,7 +561,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
     }
     replaceMessage(progressMsg, `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(String(err?.message ?? err))}`, [
       {
-        label: t("shell.action.retry"),
+        labelKey: "shell.action.retry",
         action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, onAccept),
       },
     ]);
@@ -566,7 +579,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
 
   replaceMessage(progressMsg, resultHtml, [
     {
-      label: t("shell.generating.acceptMcq"),
+      labelKey: "shell.generating.acceptMcq",
       action: () => {
         sessionDraft = sessionDraft
           ? { ...sessionDraft, mcqQuestions: questions }
@@ -576,11 +589,11 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, onAcce
       },
     },
     {
-      label: t("shell.generating.discardMcq"),
+      labelKey: "shell.generating.discardMcq",
       action: () => {
         pushBotMessage(t("shell.generating.mcqDiscarded"), [
-          { label: t("shell.generating.regenerateMcq"), action: () => askForMcqGeneration(sourceMaterial, certLevel, locale) },
-          { label: t("shell.generating.skipMcq"), action: () => showDraftReadyActions() },
+          { labelKey: "shell.generating.regenerateMcq", action: () => askForMcqGeneration(sourceMaterial, certLevel, locale) },
+          { labelKey: "shell.generating.skipMcq", action: () => showDraftReadyActions() },
         ]);
       },
     },
@@ -598,8 +611,8 @@ function startIdle() {
   sessionDraft = null;
   renderPreview();
   pushBotMessage(t("shell.idle.prompt"), [
-    { label: t("shell.idle.openExisting"), action: startModulePicker },
-    { label: t("shell.idle.createNew"), action: startNewModuleFlow },
+    { labelKey: "shell.idle.openExisting", action: startModulePicker },
+    { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
   ]);
 }
 
@@ -612,16 +625,16 @@ async function startModulePicker() {
     modules = Array.isArray(data) ? data : (data?.modules ?? []);
   } catch {
     replaceMessage(progress, t("shell.modules.loadError"), [
-      { label: t("shell.action.retry"), action: startModulePicker },
-      { label: t("shell.action.cancel"), action: startIdle },
+      { labelKey: "shell.action.retry", action: startModulePicker },
+      { labelKey: "shell.action.cancel", action: startIdle },
     ]);
     return;
   }
 
   if (modules.length === 0) {
     replaceMessage(progress, t("shell.modules.empty"), [
-      { label: t("shell.idle.createNew"), action: startNewModuleFlow },
-      { label: t("shell.action.cancel"), action: startIdle },
+      { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
+      { labelKey: "shell.action.cancel", action: startIdle },
     ]);
     return;
   }
@@ -660,6 +673,7 @@ async function startModulePicker() {
   cancelBtn.type = "button";
   cancelBtn.className = "btn-secondary chat-choice-btn";
   cancelBtn.textContent = t("shell.action.cancel");
+  cancelBtn.dataset.labelKey = "shell.action.cancel";
   cancelBtn.addEventListener("click", () => {
     disableChoices();
     pushUserMessage(t("shell.action.cancel"));
@@ -680,8 +694,8 @@ async function loadModule(moduleId) {
     bundle = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
   } catch {
     replaceMessage(progress, t("shell.module.loadError"), [
-      { label: t("shell.module.pickAnother"), action: startModulePicker },
-      { label: t("shell.action.cancel"), action: startIdle },
+      { labelKey: "shell.module.pickAnother", action: startModulePicker },
+      { labelKey: "shell.action.cancel", action: startIdle },
     ]);
     return;
   }
@@ -705,10 +719,10 @@ async function loadModule(moduleId) {
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   pushBotMessage(t("shell.module.actionsPrompt"), [
-    { label: t("shell.module.generateContent"), action: () => startGenerateDraftFlow() },
-    ...(hasDraft ? [{ label: t("shell.module.generateMcq"), action: () => startGenerateMcqFlow() }] : []),
-    { label: t("shell.module.editAdvanced"), action: () => openAdvancedEditor(selectedModuleId) },
-    { label: t("shell.module.pickAnother"), action: startModulePicker },
+    { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
+    ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
+    { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
+    { labelKey: "shell.module.pickAnother", action: startModulePicker },
   ]);
 }
 
@@ -725,8 +739,8 @@ function openAdvancedEditor(moduleId) {
 function startNewModuleFlow() {
   pushTextInputForm(
     t("shell.newModule.titlePrompt"),
-    t("shell.newModule.titlePlaceholder"),
-    t("shell.action.next"),
+    "shell.newModule.titlePlaceholder",
+    "shell.action.next",
     (title) => askForSourceMaterial(title, null),
   );
 }
@@ -738,8 +752,8 @@ function startNewModuleFlow() {
 function askForSourceMaterial(moduleTitle, existingModuleId) {
   pushTextareaForm(
     `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
-    t("shell.source.placeholder"),
-    t("shell.action.next"),
+    "shell.source.placeholder",
+    "shell.action.next",
     (sourceMaterial) => askForCertLevel(moduleTitle, existingModuleId, sourceMaterial),
   );
 }
@@ -747,15 +761,15 @@ function askForSourceMaterial(moduleTitle, existingModuleId) {
 function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
   pushBotMessage(t("shell.certLevel.prompt"), [
     {
-      label: t("shell.certLevel.basic"),
+      labelKey: "shell.certLevel.basic",
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale),
     },
     {
-      label: t("shell.certLevel.intermediate"),
+      labelKey: "shell.certLevel.intermediate",
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale),
     },
     {
-      label: t("shell.certLevel.advanced"),
+      labelKey: "shell.certLevel.advanced",
       action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale),
     },
   ]);
@@ -794,9 +808,9 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       progress,
       `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
-        { label: t("shell.action.openAdvancedEditor"), action: () => { location.href = "/admin-content/advanced"; } },
-        { label: t("shell.action.retry"), action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
-        { label: t("shell.action.cancel"), action: startIdle },
+        { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content/advanced"; } },
+        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
+        { labelKey: "shell.action.cancel", action: startIdle },
       ],
     );
     return;
@@ -820,11 +834,11 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 function askForMcqGeneration(sourceMaterial, certLevel, locale) {
   pushBotMessage(t("shell.askMcq.prompt"), [
     {
-      label: t("shell.askMcq.yes"),
+      labelKey: "shell.askMcq.yes",
       action: () =>
         generateMcqInBackground(sourceMaterial, certLevel, locale, () => showDraftReadyActions()),
     },
-    { label: t("shell.askMcq.no"), action: showDraftReadyActions },
+    { labelKey: "shell.askMcq.no", action: showDraftReadyActions },
   ]);
 }
 
@@ -837,9 +851,9 @@ function showDraftReadyActions() {
 
   pushBotMessage(msgParts.join(" "), [
     ...(selectedModuleId
-      ? [{ label: t("shell.draftReady.openEditor"), action: () => openAdvancedEditor(selectedModuleId) }]
+      ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }]
       : []),
-    { label: t("shell.draftReady.restart"), action: startIdle },
+    { labelKey: "shell.draftReady.restart", action: startIdle },
   ]);
 }
 
@@ -851,8 +865,8 @@ function startGenerateDraftFlow() {
 function startGenerateMcqFlow() {
   pushTextareaForm(
     `<strong>${escapeHtml(t("shell.mcqSource.promptTitle"))}</strong>`,
-    t("shell.mcqSource.placeholder"),
-    t("shell.action.next"),
+    "shell.mcqSource.placeholder",
+    "shell.action.next",
     (sourceMaterial) => askForCertLevelMcqOnly(sourceMaterial),
   );
 }
@@ -860,15 +874,15 @@ function startGenerateMcqFlow() {
 function askForCertLevelMcqOnly(sourceMaterial) {
   pushBotMessage(t("shell.mcqCertLevel.prompt"), [
     {
-      label: t("shell.certLevel.basic"),
+      labelKey: "shell.certLevel.basic",
       action: () => generateMcqInBackground(sourceMaterial, "basic", currentLocale, () => showModuleActions()),
     },
     {
-      label: t("shell.certLevel.intermediate"),
+      labelKey: "shell.certLevel.intermediate",
       action: () => generateMcqInBackground(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()),
     },
     {
-      label: t("shell.certLevel.advanced"),
+      labelKey: "shell.certLevel.advanced",
       action: () => generateMcqInBackground(sourceMaterial, "advanced", currentLocale, () => showModuleActions()),
     },
   ]);
@@ -1015,7 +1029,17 @@ function populateUiLocaleSelect() {
     currentLocale = chosen;
     // Keep preview locale in sync if it wasn't manually overridden
     if (previewLocale === prev) previewLocale = chosen;
-    reRenderCurrentState();
+    // Re-translate all interactive elements in-place — no history cleared
+    for (const btn of chatMessages.querySelectorAll("[data-label-key]")) {
+      btn.textContent = t(btn.dataset.labelKey);
+    }
+    for (const el of chatMessages.querySelectorAll("[data-placeholder-key]")) {
+      el.placeholder = t(el.dataset.placeholderKey);
+    }
+    translatePageStaticText();
+    renderPreviewLocaleBar();
+    renderPreview();
+    renderWorkspaceNavigation();
   });
 }
 
