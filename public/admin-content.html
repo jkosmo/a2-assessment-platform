@@ -63,6 +63,15 @@
 
       .module-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
       .module-list-item { font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+      /* ── Chat inline forms (text input / textarea) ────────────────────────── */
+      .chat-inline-form { display: flex; gap: 6px; margin-top: 8px; align-items: flex-start; }
+      .chat-inline-form--column { flex-direction: column; }
+      .chat-text-input { flex: 1; padding: 7px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); min-width: 0; }
+      .chat-text-input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      .chat-textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 13px; font-family: inherit; background: #fff; color: var(--color-text); resize: vertical; box-sizing: border-box; }
+      .chat-textarea:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      .chat-submit-btn { white-space: nowrap; }
     </style>
   </head>
   <body>
