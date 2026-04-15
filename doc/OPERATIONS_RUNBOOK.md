@@ -13,6 +13,107 @@ Related documents:
 - [AZURE_ENVIRONMENTS.md](AZURE_ENVIRONMENTS.md)
 - [INCIDENTS.md](INCIDENTS.md)
 
+## Production Deployment and Rollback
+
+This section covers the minimum operator runbook for production cutover, post-deploy verification, and rollback decision-making.
+
+Production deploys are executed through GitHub Actions:
+- workflow: `.github/workflows/deploy-azure.yml`
+- environment: `production`
+- approval gate: GitHub Environment required reviewers
+
+Production configuration is expected to live in GitHub Environment state, not as manual portal drift:
+- non-secret runtime/config values: GitHub Environment `production` variables
+- secrets: GitHub Environment `production` secrets
+- Azure infrastructure shape: `infra/azure/main.bicep`
+- deployment orchestration: `scripts/azure/deploy-environment.ps1`
+
+### Pre-deploy checklist
+
+Before approving a production deploy:
+1. Confirm the intended commit/ref is the one being deployed.
+2. Confirm `deploy-staging` completed successfully in the same workflow run.
+3. Confirm the production GitHub Environment still has the intended runtime values:
+   - authentication mode and Entra values
+   - LLM runtime values
+   - participant notification channel
+   - PostgreSQL production profile values
+4. Confirm no manual portal changes are being relied on for the deploy to succeed.
+5. Confirm there is no active incident that would make production verification ambiguous.
+
+### Production post-deploy verification
+
+Minimum verification after every production deploy:
+1. Verify web `GET /healthz`.
+2. Verify web `GET /version`.
+3. Verify the worker app responds on `/healthz`.
+4. Verify production Entra sign-in succeeds on one real route such as `/participant`.
+5. Verify one production assessment path that exercises the currently intended LLM runtime.
+6. Verify one participant notification path if the deploy changed notification or communication settings.
+7. Check recent logs for:
+   - `unhandled_error`
+   - `llm_evaluation_failed`
+   - `assessment_job_stuck_alert`
+   - `participant_notification_failed`
+8. Confirm queue backlog is stable or decreasing after startup churn.
+
+Recommended evidence to capture in the deploy record or incident notes:
+- workflow run URL
+- deployed commit SHA
+- web app URL and worker app URL
+- version response
+- whether LLM and notification smoke paths passed
+
+### Rollback boundary
+
+Application code can be redeployed quickly. Database state cannot be assumed to roll back with the application.
+
+Important boundary:
+- App Service code/config rollback is usually a redeploy action.
+- PostgreSQL schema/data rollback is a recovery action and may require PITR, vaulted backup restore, or logical export-assisted repair.
+
+Do not assume that re-deploying an older commit will reverse:
+- Prisma migrations that already ran
+- destructive data writes
+- operator/admin changes already committed to the database
+
+### Production rollback decision guide
+
+Use the simplest safe option that matches the failure mode.
+
+1. Configuration or app-only regression
+   - symptoms: startup regression, bad runtime flag, broken route, bad LLM/notification wiring, no evidence of destructive writes
+   - action: redeploy the last known good commit through the same GitHub workflow
+
+2. Migration or schema compatibility regression
+   - symptoms: web app fails during startup migration, older code cannot safely run against current schema, or new schema caused app breakage
+   - action: stop and assess before redeploying older code
+   - likely path: corrective forward deploy or explicit database recovery, not blind rollback
+
+3. Recent destructive or corrupt writes
+   - symptoms: wrong results persisted, damaged certification state, unexpected deletes/updates
+   - action: use the recovery decision tree from the PostgreSQL recovery documentation
+   - likely path: PITR first, then vaulted backup or logical export where needed
+
+4. Infrastructure/runtime outage without data corruption
+   - symptoms: app unavailable but data believed intact
+   - action: prefer redeploy/restart/recreate through the standard Azure workflow before escalating to database recovery
+
+### Escalation triggers
+
+Escalate beyond a normal application redeploy when any of the following are true:
+- a production migration has already applied and rollback safety is unclear
+- participant results or certification status may have been written incorrectly
+- appeal state or manual-review data may have been corrupted
+- repeated worker failures are causing queue churn or stale-lock resets
+- notification delivery failed after a business write and user impact is unclear
+
+When escalating:
+1. Preserve evidence first.
+2. Record the incident in [INCIDENTS.md](INCIDENTS.md).
+3. Use [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md) for KQL/log confirmation.
+4. Use [doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md](design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md) for database recovery posture and restore expectations.
+
 ## Runtime Topology
 
 The current runtime no longer assumes a single all-in-one production process.

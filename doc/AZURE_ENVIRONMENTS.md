@@ -134,7 +134,51 @@ Redeploy production:
 2. Wait for `deploy-staging` to complete first.
 3. Approve the `production` GitHub Environment gate.
 4. Verify the workflow logs include both `PostgreSQL server` and `PostgreSQL database` outputs.
-5. Verify `/healthz`, `/version`, and one end-to-end production smoke path after deploy.
+5. Record the workflow run URL and deployed commit SHA.
+6. Verify web `/healthz` and `/version`.
+7. Verify worker `/healthz`.
+8. Verify one real Entra sign-in on a production route.
+9. Verify one production LLM-backed path when `LLM_MODE=azure_openai`.
+10. Verify one participant notification path when notification settings changed.
+11. Check recent logs for `unhandled_error`, `llm_evaluation_failed`, `assessment_job_stuck_alert`, and notification failures before declaring the deploy complete.
+
+## Production rollback runbook
+Production rollback uses the same GitHub workflow path as deploy. Avoid portal-only fixes unless they are part of an explicitly documented incident response.
+
+### Safe rollback case: app/config regression only
+Use this path when:
+- the issue is isolated to application code or runtime configuration
+- there is no evidence of destructive schema or data change
+
+Steps:
+1. Identify the last known good commit.
+2. Trigger `.github/workflows/deploy-azure.yml` with:
+   - `deploy_production=true`
+   - `ref=<last-known-good-ref>`
+3. Wait for `deploy-staging` to complete.
+4. Approve the `production` environment gate.
+5. Re-run the same post-deploy verification checklist.
+
+### Unsafe rollback case: schema/data uncertainty
+Do not do a blind application rollback when any of these are true:
+- a Prisma migration has already applied and backward compatibility is unclear
+- participant results or certification state may already be written incorrectly
+- destructive or corrupt writes may have reached production data
+
+Use the database recovery track instead:
+- consult `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`
+- use PITR or the appropriate restore path
+- treat the incident as a recovery operation, not a simple redeploy
+
+### Minimum rollback evidence
+Capture at least:
+- triggering incident or reason for rollback
+- affected workflow run
+- rollback workflow run
+- chosen rollback boundary:
+  - app/config redeploy
+  - database recovery
+- verification outcome after rollback
 
 ## Teardown runbook
 Teardown should remove the whole environment resource group to avoid orphaned cost.
