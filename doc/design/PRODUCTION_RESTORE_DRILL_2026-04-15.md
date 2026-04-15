@@ -10,6 +10,8 @@ to:
 - exercised with real production backup data
 - timed with real Azure jobs
 - evidenced with actual restore artifacts
+- rehydrated into an isolated PostgreSQL validation target
+- validated through a running application instance against restored data
 
 This drill intentionally avoided any cutover or mutation of the live production application/database.
 
@@ -19,11 +21,13 @@ Prove that we can:
 - trigger a restore from that recovery point
 - restore into an isolated Azure target
 - capture actual restore timing and generated artifacts
+- replay the restored application database into an isolated PostgreSQL server
+- boot the application against the restored database and verify real read paths
 
-This drill did **not** yet aim to:
+This drill did **not** aim to:
 - repoint the live production app
 - overwrite the production database
-- claim that restored data has already been rehydrated into a booted validation app
+- perform any production cutover
 
 ## Production Source
 - source server: `a2-assessment-platform-prd-pg-hea5kl`
@@ -37,7 +41,8 @@ This drill did **not** yet aim to:
 - datastore: `VaultStore`
 - state: `Completed`
 
-## Isolated Restore Target
+## Isolated Restore Targets
+File-restore target:
 - storage account: `a2prdrestorehea5kl`
 - container: `pgrestore-drill-20260415`
 - container URL: `https://a2prdrestorehea5kl.blob.core.windows.net/pgrestore-drill-20260415`
@@ -48,6 +53,14 @@ Storage target properties:
 - HTTPS only: `true`
 - public blob access: `false`
 
+Phase-2 validation target:
+- PostgreSQL server: `a2-assessment-drill-pg-hea5kl`
+- FQDN: `a2-assessment-drill-pg-hea5kl.postgres.database.azure.com`
+- resource group: `rg-a2-assessment-production`
+- version: `16`
+- SKU: `Standard_B1ms`
+- app validation port: `4312`
+
 ## Restore Method
 Chosen method:
 - Azure Backup restore as files
@@ -55,7 +68,7 @@ Chosen method:
 Reason:
 - safest first drill
 - proves the vaulted-backup restore path without touching the running production database
-- gives us concrete artifacts that can later be replayed into an isolated PostgreSQL validation target
+- gives us concrete artifacts that can be replayed into an isolated PostgreSQL validation target
 
 ## Commands Used
 
@@ -116,6 +129,20 @@ az dataprotection backup-instance restore trigger `
   --no-wait
 ```
 
+Replay into isolated PostgreSQL validation target:
+
+```powershell
+pg_restore `
+  --host=a2-assessment-drill-pg-hea5kl.postgres.database.azure.com `
+  --port=5432 `
+  --username=restoreadmin `
+  --dbname=postgres `
+  --clean --if-exists --create `
+  --no-owner --no-privileges `
+  --verbose --exit-on-error `
+  d98a8d0a-89c8-4b84-9c58-c6c8743e8478_database_a2assessment.sql
+```
+
 ## Measured Result
 
 Restore job:
@@ -148,7 +175,61 @@ Observed blobs in the isolated restore container:
 The application database export was present:
 - `d98a8d0a-89c8-4b84-9c58-c6c8743e8478_database_a2assessment.sql`
 
-This proves that Azure Backup restore produced isolated SQL artifacts for the production application database.
+This proved that Azure Backup restore produced isolated SQL artifacts for the production application database.
+
+## Phase 2 Rehydration and App Validation
+
+The restored file set was downloaded locally and inspected before replay:
+- `d98a8d0a-89c8-4b84-9c58-c6c8743e8478_database_a2assessment.sql` was confirmed to be a PostgreSQL custom dump
+- PostgreSQL client tooling (`psql`, `pg_restore`) was installed locally to replay the dump
+
+Replay result:
+- restore completed successfully
+- database `a2assessment` was recreated on the isolated validation server
+- schema, enum types, tables, indexes, and foreign keys were restored
+- production rows for `User`, `Submission`, `AssessmentDecision`, `Appeal`, and `CertificationStatus` were present after replay
+
+Observed restored counts:
+- users: `1`
+- submissions: `1`
+- decisions: `2`
+- appeals: `1`
+- manual reviews: `0`
+- certifications: `1`
+
+Known participant history used for validation:
+- participant external ID: `16a6dfa1-351f-40e6-adc5-b8519b9e4eb6`
+- participant email: `jko@a-2.no`
+- module ID: `cmnyu47pa0000oafg7p89vusz`
+- module title (nb): `Hormuzstredet: geografi og strategisk betydning`
+- submission ID: `cmnyu6gmt000hoafgxqbxl4ox`
+
+Decision and appeal lineage observed after replay:
+- automatic fail decision present with score `44.29`
+- appeal-resolution decision present with parent decision reference intact
+- resolved appeal present with timestamps and resolution note
+- certification status remained `NOT_CERTIFIED`
+
+Isolated app boot:
+- application built successfully with `npm run build`
+- application started against the restored database with:
+  - `AUTH_MODE=mock`
+  - `PROCESS_ROLE=web`
+  - `LLM_MODE=stub`
+  - `PARTICIPANT_NOTIFICATION_CHANNEL=log`
+- `/healthz` returned `200`
+
+Participant-path verification:
+- `GET /api/me` returned the restored participant identity and existing consent state
+- `GET /api/modules/completed` returned the restored module history
+- latest completed submission and latest decision matched the restored appeal-resolution state
+
+Admin/reporting-path verification:
+- `GET /api/me` with `ADMINISTRATOR,REPORT_READER` mock roles returned the expected elevated roles
+- `GET /api/reports/completion` returned report totals based on the restored dataset:
+  - total submissions: `1`
+  - completed submissions: `1`
+  - completion rate: `1`
 
 ## What This Drill Proved
 - production vaulted backup is not only configured, but usable
@@ -156,27 +237,25 @@ This proves that Azure Backup restore produced isolated SQL artifacts for the pr
 - Azure Backup restore permissions, vault identity, and target storage configuration were sufficient
 - the restore path completed successfully without touching the live production database
 - the production application database payload was emitted as SQL artifacts into an isolated container
+- the SQL artifacts can be replayed into an isolated PostgreSQL validation server
+- the application can boot successfully against the restored database
+- a real participant-history path and a real admin/reporting path both work against the restored data
+- decision lineage and appeal state remained intact after rehydration
 
-## What This Drill Did Not Yet Prove
-- replay of the restored SQL into an isolated PostgreSQL validation server
-- app boot against the restored database
-- `/healthz` against a restored runtime
-- participant-path and admin/reporting-path verification against restored data
-- direct proof that one known participant's submissions, results, completion state, and decision lineage are intact after rehydration
+## What This Drill Did Not Prove
+- production cutover to a restored database
+- performance behavior of a larger restored dataset under load
+- recovery behavior when the incident requires replay of data newer than the selected restore point
 
 ## Gaps and Follow-up
-Remaining gap before `#222` can be treated as fully complete:
-- rehydrate the restored SQL into an isolated PostgreSQL target
-- boot the app against that isolated target
-- verify one participant path and one admin/reporting path
-- verify one known participant's restored assessment history end-to-end
-
 Recommended next step:
-- run a second-phase drill that replays `database_a2assessment.sql` into an isolated PostgreSQL target and validates application boot/read paths against it
+- keep this drill evidence as the baseline for future cadence-based restore rehearsals
+- reuse the same isolated-server pattern when `#223` adds pre-change logical export recovery
 
-## Interim Assessment
+## Assessment
 This drill materially improves confidence in the production recovery posture:
-- vaulted backup path is now proven to the point of recoverable artifacts
-- measured restore timing is now based on evidence rather than assumption
+- vaulted backup path is proven from recovery point to isolated SQL artifacts
+- replay into isolated PostgreSQL is proven
+- application boot and key read paths are proven against restored production data
 
-But the drill is still only a partial end-to-end recovery rehearsal until restored data has been rehydrated into a running validation environment.
+This drill now counts as an end-to-end isolated restore rehearsal for the current production backup design.
