@@ -14,6 +14,7 @@ Each environment must use a dedicated resource group and be deployable via CI/CD
 - CI/CD workflow: `.github/workflows/deploy-azure.yml`
 - Observability runbook: `doc/OBSERVABILITY_RUNBOOK.md`
 - Restore runbook: `doc/PRODUCTION_RESTORE_RUNBOOK.md`
+- Logical export runbook: `doc/PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md`
 - Environment variable templates:
 - `.azure/environments/staging.env.example`
 - `.azure/environments/production.env.example`
@@ -37,6 +38,7 @@ Current baseline note:
 - Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
 - Current production decision: prioritize backup/recovery hardening ahead of PostgreSQL HA; HA is intentionally deferred while the service remains a non-critical internal application.
 - Current production PostgreSQL profile should be represented explicitly in environment variables/IaC rather than portal-only drift.
+- Current production logical pre-change exports use storage account `a2prdrestorehea5kl` and container `logical-exports`; this is an operator-run fallback path, not an automatic backup layer.
 - `PROCESS_ROLE`, `PORT`, and `DATABASE_URL` are platform-managed at deploy/runtime and are not expected as user-managed GitHub Environment variables.
 
 ## Environment separation
