@@ -128,6 +128,13 @@ describe("participant console runtime config", () => {
     const response = await request(app).get("/admin-content");
 
     expect(response.status).toBe(200);
+    expect(response.text).toContain("admin-content-shell.js");
+  });
+
+  it("serves advanced admin content editor at /admin-content/advanced", async () => {
+    const response = await request(app).get("/admin-content/advanced");
+
+    expect(response.status).toBe(200);
     expect(response.text).toContain("admin-content.js");
   });
 
@@ -149,7 +156,9 @@ describe("participant console runtime config", () => {
       "/participant",
       "/participant/completed",
       "/review",
-      "/admin-content",
+      // /admin-content is the new conversational shell (no mock-identity-card panel)
+      // /admin-content/advanced is the full editor that retains the panel
+      "/admin-content/advanced",
       "/calibration",
     ];
 
@@ -223,7 +232,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="courseCertSection"');
       }
 
-      if (pagePath === "/admin-content") {
+      if (pagePath === "/admin-content/advanced") {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('<details id="outputDetails">');
         expect(response.text).toContain("<summary>View raw response</summary>");

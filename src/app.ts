@@ -60,6 +60,10 @@ app.get("/admin-content", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content.html"));
 });
 
+app.get("/admin-content/advanced", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-advanced.html"));
+});
+
 app.get("/review", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "review.html"));
 });

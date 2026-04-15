@@ -3671,7 +3671,21 @@ setLocale(currentLocale);
 activateModuleStartMode(activeModuleStartMode);
 setDefaultFormValues();
 loadVersion();
-loadParticipantConsoleConfig();
+loadParticipantConsoleConfig().then(async () => {
+  const autoModuleId = new URLSearchParams(location.search).get("moduleId");
+  if (autoModuleId) {
+    try {
+      activateModuleStartMode("existing");
+      await loadModules();
+      if (modules.some((m) => m.id === autoModuleId)) {
+        setSelectedModule(autoModuleId);
+        await handleLoadSelectedModuleContent();
+      }
+    } catch {
+      // non-fatal – editor is still usable without auto-load
+    }
+  }
+});
 renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
