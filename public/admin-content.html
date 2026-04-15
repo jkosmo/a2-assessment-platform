@@ -19,7 +19,9 @@
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
       .preview-pane { position: sticky; top: var(--space-2); }
-      .preview-locale-bar { display: flex; gap: 4px; margin-bottom: var(--space-1); }
+      /* Locale bar only shown when a module is loaded (JS adds .visible) */
+      .preview-locale-bar { display: none; gap: 4px; margin-bottom: var(--space-1); }
+      .preview-locale-bar.visible { display: flex; }
       .preview-locale-btn { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; }
       .preview-locale-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
       .preview-locale-btn:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
@@ -56,9 +58,13 @@
       .chat-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--color-border-soft); border-top-color: var(--color-blue); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
       @keyframes spin { to { transform: rotate(360deg); } }
 
-      .chat-choices { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px var(--space-1) var(--space-1); }
+      /* Contain bubble content so long error strings don't cause horizontal scroll */
+      .chat-pane { overflow: hidden; }
+      .chat-bubble { overflow-wrap: break-word; word-break: break-word; min-width: 0; }
+
+      .chat-choices { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px var(--space-1) var(--space-1); max-width: 100%; }
       .chat-choices--column { flex-direction: column; align-items: flex-start; }
-      .chat-choice-btn { width: auto !important; padding: 6px 14px !important; font-size: 13px !important; border-radius: 999px !important; }
+      .chat-choice-btn { width: auto !important; max-width: 100% !important; padding: 6px 14px !important; font-size: 13px !important; border-radius: 999px !important; }
       .chat-choice-btn:disabled { opacity: 0.45; cursor: default; }
 
       .module-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }

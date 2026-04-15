@@ -276,7 +276,13 @@ function pushTextareaForm(promptHtml, placeholder, submitLabel, onSubmit) {
 // ---------------------------------------------------------------------------
 
 function renderPreviewLocaleBar() {
+  // Only show the locale switcher when content is loaded — avoids duplicating
+  // the top-bar UI language selector when nothing is being previewed.
+  const hasContent = !!bundle || !!sessionDraft;
+  previewLocaleBar.classList.toggle("visible", hasContent);
   previewLocaleBar.innerHTML = "";
+  if (!hasContent) return;
+
   for (const loc of supportedLocales) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -778,10 +784,15 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
     );
     newModule = body?.module ?? body;
   } catch (err) {
-    replaceMessage(progress, `Klarte ikke opprette modul: ${escapeHtml(String(err?.message ?? err))}`, [
-      { label: "Prøv igjen", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
-      { label: "Avbryt", action: startIdle },
-    ]);
+    replaceMessage(
+      progress,
+      `Klarte ikke opprette modul automatisk.<br><span style="font-size:13px;color:var(--color-meta)">Du kan opprette modulen manuelt i den avanserte editoren og deretter generere innhold derfra.</span>`,
+      [
+        { label: "Åpne avansert editor", action: () => { location.href = "/admin-content/advanced"; } },
+        { label: "Prøv igjen", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
+        { label: "Avbryt", action: startIdle },
+      ],
+    );
     return;
   }
 
