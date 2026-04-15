@@ -25,6 +25,9 @@ concurrency:
 
 jobs:
   deploy-staging:
+    # Only run on manual workflow_dispatch — push to main deploys production directly.
+    # This prevents main-branch commits from overwriting a feature-branch staging deploy.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -102,7 +105,15 @@ jobs:
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
 
   deploy-production:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_production == 'true' }}
+    # Runs on push to main (direct production deploy, no staging dependency),
+    # OR on workflow_dispatch when deploy_production=true AND staging succeeded.
+    if: |
+      always() && (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' &&
+         github.event.inputs.deploy_production == 'true' &&
+         needs.deploy-staging.result == 'success')
+      )
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
