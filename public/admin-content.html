@@ -67,11 +67,12 @@
       /* ── Chat full-width forms (rendered outside bubble so they fill pane width) */
       .chat-form-row { display: flex; gap: 8px; align-items: center; padding: 4px var(--space-1) var(--space-1); }
       .chat-form-col { display: flex; flex-direction: column; gap: 8px; padding: 4px var(--space-1) var(--space-1); }
-      .chat-text-input { flex: 1; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); min-width: 0; }
+      .chat-text-input { flex: 1 1 0; width: 0; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); }
       .chat-text-input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
       .chat-textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 13px; font-family: inherit; background: #fff; color: var(--color-text); resize: vertical; box-sizing: border-box; }
       .chat-textarea:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
-      .chat-submit-btn { white-space: nowrap; align-self: flex-end; }
+      /* Override global button{width:100%} for chat form submit buttons */
+      .chat-submit-btn { width: auto !important; white-space: nowrap; flex-shrink: 0; align-self: flex-end; }
     </style>
   </head>
   <body>
