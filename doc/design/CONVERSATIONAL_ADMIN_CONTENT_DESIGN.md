@@ -510,9 +510,11 @@ The split-pane layout should be CSS Grid:
 
 ## Open Questions
 
-1. **New page URL.** Should the conversational workspace live at `/admin-content-v2` during
+1. **New page URL.** ~~Should the conversational workspace live at `/admin-content-v2` during
    rollout, or replace `/admin-content` immediately with the advanced editor accessible at
-   `/admin-content/advanced`? The current plan assumes `/admin-content-v2` for now.
+   `/admin-content/advanced`?~~ **Decided 2026-04-15:** The new workspace takes over
+   `/admin-content`. The existing advanced editor moves to `/admin-content/advanced` and
+   remains linked from the new workspace throughout rollout.
 
 2. **Intent classifier model.** When free-form intent classification is introduced (#297),
    should it use the same Azure OpenAI deployment as content generation, or a faster/cheaper
@@ -546,7 +548,7 @@ The split-pane layout should be CSS Grid:
 - [x] Safety model for guarded actions is documented
 - [x] Fallback/rollback plan is documented
 - [x] Open unknowns are listed
-- [ ] Approved by user before implementation of #295 begins
+- [x] Approved by user before implementation of #295 begins (2026-04-15)
 
 ---
 
