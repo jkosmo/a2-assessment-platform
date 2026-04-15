@@ -37,6 +37,7 @@ Current baseline note:
 - Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
 - Current production decision: prioritize backup/recovery hardening ahead of PostgreSQL HA; HA is intentionally deferred while the service remains a non-critical internal application.
 - Current production PostgreSQL profile should be represented explicitly in environment variables/IaC rather than portal-only drift.
+- Current production also has a manually provisioned Azure Backup vault for PostgreSQL vaulted backup; this is an active protection layer but is not yet codified in repo IaC.
 - `PROCESS_ROLE`, `PORT`, and `DATABASE_URL` are platform-managed at deploy/runtime and are not expected as user-managed GitHub Environment variables.
 
 ## Environment separation

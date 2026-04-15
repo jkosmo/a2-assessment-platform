@@ -269,7 +269,8 @@ Before production go-live, we should have:
 
 Current repo status:
 - concrete restore operator guidance now lives in `doc/PRODUCTION_RESTORE_RUNBOOK.md`
-- vaulted backup and logical-export paths still require follow-up implementation before they can be treated as operationally available
+- Azure Backup vaulted backup is now configured in production
+- logical-export path still requires follow-up implementation before it can be treated as operationally available
 
 ## Decision Summary
 Chosen strategy:
