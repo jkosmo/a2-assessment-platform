@@ -718,6 +718,32 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
   return localizedQuestions;
 }
 
+function buildDefaultSubmissionSchema() {
+  return {
+    fields: [
+      {
+        id: "response",
+        label: {
+          "en-GB": "Your answer",
+          nb: "Ditt svar",
+          nn: "Ditt svar",
+        },
+        type: "textarea",
+        required: true,
+        placeholder: {
+          "en-GB": "Write your answer here",
+          nb: "Skriv svaret ditt her",
+          nn: "Skriv svaret ditt her",
+        },
+      },
+    ],
+  };
+}
+
+function resolveSubmissionSchemaPayload() {
+  return bundle?.selectedConfiguration?.moduleVersion?.submissionSchema ?? buildDefaultSubmissionSchema();
+}
+
 function tryParseJsonTranslation(key, fallback) {
   try {
     return JSON.parse(t(key));
@@ -1023,6 +1049,7 @@ async function saveDraftBundleInBackground() {
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
         mcqSetVersionId: mcqBody?.mcqSetVersion?.id,
+        submissionSchema: resolveSubmissionSchemaPayload(),
       }),
     });
 
@@ -1030,12 +1057,9 @@ async function saveDraftBundleInBackground() {
     sessionDraft = null;
     previewDraft = null;
     await loadModule(moduleId);
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`, [
-      { labelKey: "shell.save.publishNow", action: publishLatestDraftInBackground },
-      { labelKey: "shell.save.editMore", action: showModuleActions },
-      { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(moduleId) },
-    ]);
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
     showToast(t("shell.save.success"), "success");
+    showModuleActions();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1064,12 +1088,9 @@ async function publishLatestDraftInBackground() {
     );
     latestSavedModuleVersionId = moduleVersionId;
     await loadModule(moduleId);
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`, [
-      { labelKey: "shell.module.editInChat", action: startUnifiedRevisionFlow },
-      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
-      { labelKey: "shell.module.pickAnother", action: startModulePicker },
-    ]);
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
     showToast(t("shell.publish.success"), "success");
+    showModuleActions();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1224,12 +1245,14 @@ function showModuleActions() {
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
-    ...((hasDraft || hasMcq) ? [{ labelKey: "shell.module.editInChat", action: startUnifiedRevisionFlow }] : []),
     ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
     ...(!hasDraft && canPublish ? [{ labelKey: "shell.draftReady.publish", action: publishLatestDraftInBackground }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
   ]);
+  if (hasDraft || hasMcq) {
+    startUnifiedRevisionFlow();
+  }
 }
 
 function openAdvancedEditor(moduleId) {
@@ -1350,11 +1373,11 @@ function showDraftReadyActions() {
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
   }, [
-    { labelKey: "shell.draftReady.editInChat", action: startUnifiedRevisionFlow },
     { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     ...(selectedModuleId ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }] : []),
     { labelKey: "shell.draftReady.restart", action: startIdle },
   ]);
+  startUnifiedRevisionFlow();
 }
 
 // Separate entry point for MCQ-only generation from the module actions menu
@@ -1550,11 +1573,23 @@ async function loadConsoleConfig() {
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
+async function initShell() {
+  populateUiLocaleSelect();
+  translatePageStaticText();
+  renderPreviewLocaleBar();
+  renderPreview();
+  loadVersion();
+  await loadConsoleConfig();
 
-populateUiLocaleSelect();
-translatePageStaticText();
-renderPreviewLocaleBar();
-renderPreview();
-loadVersion();
-loadConsoleConfig();
-startIdle();
+  const autoModuleId = new URLSearchParams(location.search).get("moduleId");
+  if (autoModuleId) {
+    await loadModule(autoModuleId);
+    return;
+  }
+
+  startIdle();
+}
+
+initShell().catch(() => {
+  startIdle();
+});

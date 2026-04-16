@@ -149,6 +149,17 @@ function buildIndexedMcqPreview(questions: RevisableMcqQuestion[], locale: Gener
     .join("\n\n");
 }
 
+function normalizeGeneratedMcqQuestions(questions: GeneratedMcqQuestion[]): string {
+  return JSON.stringify(
+    questions.map((question) => ({
+      stem: question.stem.trim(),
+      options: question.options.map((option) => option.trim()),
+      correctAnswer: question.correctAnswer.trim(),
+      rationale: question.rationale.trim(),
+    })),
+  );
+}
+
 function buildUrl(): string {
   const endpoint = (env.AZURE_OPENAI_ENDPOINT ?? "").trim().replace(/\/+$/, "");
   const deployment = env.AZURE_OPENAI_DEPLOYMENT ?? "";
@@ -336,6 +347,7 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 - Keep distractors comparable in length and level of detail to the correct answer.
 - If the instruction points to a specific question or option reference such as "question 3", "Q3", "3b", "option B in question 3", or "third alternative in question 3", apply the change to that exact target.
 - When the instruction asks for a local change to one option, one question, or one rationale, keep the rest of the question set unchanged unless a broader rewrite is explicitly requested.
+- The revised output must contain a concrete, material change that satisfies the instruction. Do not return the original wording unchanged.
 
 Target question count: ${questionCount}
 Target option count per question: ${optionCount}
@@ -535,12 +547,39 @@ export async function reviseModuleDraft(input: ModuleDraftRevisionInput): Promis
 export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGenerationResult> {
   const { systemPrompt, userPrompt } = buildMcqRevisionPrompts(input);
 
-  const raw = await callLlm(systemPrompt, userPrompt);
-  const parsed = mcqGenerationResponseCodec.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`MCQ revision LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  const parseRevision = async (promptText: string) => {
+    const raw = await callLlm(systemPrompt, promptText);
+    const parsed = mcqGenerationResponseCodec.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(`MCQ revision LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+    }
+    return parsed.data;
+  };
+
+  const sourceQuestions: GeneratedMcqQuestion[] = input.questions.map((question) => ({
+    stem: localizeForPrompt(question.stem, input.locale),
+    options: (question.options ?? []).map((option) => localizeForPrompt(option, input.locale)),
+    correctAnswer: localizeForPrompt(question.correctAnswer, input.locale),
+    rationale: localizeForPrompt(question.rationale, input.locale),
+  }));
+
+  const originalSignature = normalizeGeneratedMcqQuestions(sourceQuestions);
+  const firstAttempt = await parseRevision(userPrompt);
+  if (normalizeGeneratedMcqQuestions(firstAttempt.questions) !== originalSignature) {
+    return firstAttempt;
   }
-  return parsed.data;
+
+  const retryPrompt = `${userPrompt}
+
+## Retry rule
+
+Your previous attempt was materially identical to the source questions. Try again and make the requested change concrete and visible in the returned question set.`;
+  const secondAttempt = await parseRevision(retryPrompt);
+  if (normalizeGeneratedMcqQuestions(secondAttempt.questions) === originalSignature) {
+    throw new Error("MCQ revision did not produce a material change. Please request a more specific change and try again.");
+  }
+
+  return secondAttempt;
 }
 
 export async function localizeModuleDraft(input: ModuleDraftLocalizationInput): Promise<ModuleDraftResult> {

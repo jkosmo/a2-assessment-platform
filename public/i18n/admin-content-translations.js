@@ -10,6 +10,7 @@ export const localeLabels = baseLocaleLabels;
 const adminContentBase = {
   "nav.profile": "Profile",
   "adminContentPage.title": "Content Setup Workspace",
+  "adminContentPage.chatLink": "Back to conversational editor",
   "adminContentPage.subtitle": "Define module content and scoring rules in a guided sequence.",
   "adminContentPage.versionLabel": "Version:",
   "adminContent.module.title": "2) Create module shell manually",
@@ -471,6 +472,7 @@ const adminContentBase = {
 const nbOverrides = {
   "nav.profile": "Profil",
   "adminContentPage.title": "Arbeidsflate for innholdsoppsett",
+  "adminContentPage.chatLink": "Tilbake til samtaledrevet editor",
   "adminContentPage.subtitle": "Definer modulinnhold og vurderingsregler i en tydelig rekkefølge.",
   "adminContentPage.versionLabel": "Versjon:",
   "adminContent.module.title": "2) Opprett modulgrunnlag manuelt",
@@ -784,6 +786,7 @@ const nbOverrides = {
 const nnOverrides = {
   "nav.profile": "Profil",
   "adminContentPage.title": "Arbeidsflate for innhaldsoppsett",
+  "adminContentPage.chatLink": "Tilbake til samtaledriven editor",
   "adminContentPage.subtitle": "Definer modulinnhald og vurderingsreglar i ei tydeleg rekkjefølgje.",
   "adminContentPage.versionLabel": "Versjon:",
   "adminContent.module.title": "1) Opprett modulgrunnlag",

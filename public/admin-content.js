@@ -1140,6 +1140,13 @@ function populateFormFromModuleExport(moduleExport) {
   const rubricVersion = selectedConfiguration.rubricVersion ?? null;
   const promptTemplateVersion = selectedConfiguration.promptTemplateVersion ?? null;
   const mcqSetVersion = selectedConfiguration.mcqSetVersion ?? null;
+  const module = moduleExport?.module ?? null;
+
+  moduleTitleInput.value = formatEditorValue(module?.title, "");
+  moduleDescriptionInput.value = formatEditorValue(module?.description, "");
+  moduleCertificationLevelInput.value = formatEditorValue(module?.certificationLevel, "");
+  moduleValidFromInput.value = typeof module?.validFrom === "string" ? module.validFrom : "";
+  moduleValidToInput.value = typeof module?.validTo === "string" ? module.validTo : "";
 
   rubricCriteriaJsonInput.value = formatEditorValue(rubricVersion?.criteria, "");
   rubricScalingRuleJsonInput.value = formatEditorValue(rubricVersion?.scalingRule, "");
@@ -1577,6 +1584,7 @@ function setSelectedModule(nextModuleId, syncInput = true) {
   const nextId = typeof nextModuleId === "string" ? nextModuleId.trim() : "";
   const moduleChanged = nextId !== selectedModuleId;
   selectedModuleId = nextId;
+  updateBackToChatLink();
   if (syncInput) {
     selectedModuleIdInput.value = selectedModuleId;
   }
@@ -3809,6 +3817,13 @@ function populateCalibrationStatusOptions() {
     optionLabel.appendChild(optionText);
     calibrationStatuses.appendChild(optionLabel);
   }
+}
+
+function updateBackToChatLink() {
+  const link = document.getElementById("backToChatLink");
+  if (!link) return;
+  const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
+  link.href = moduleId ? `/admin-content?moduleId=${encodeURIComponent(moduleId)}` : "/admin-content";
 }
 
 function validateThresholds(values) {
