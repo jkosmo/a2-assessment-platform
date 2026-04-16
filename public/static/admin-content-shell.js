@@ -138,6 +138,7 @@ let generationAbort = null; // AbortController for active generation
 // Draft state — sessionDraft mirrors what will be saved; null until user accepts a generated result
 let sessionDraft = null; // { taskText, guidanceText, mcqQuestions: [] }
 let previewDraft = null; // review candidate shown in preview before accept
+let latestSavedModuleVersionId = null;
 
 // Chat log — every rendered message is stored here as a re-renderable spec so
 // that retranslateChat() can rebuild the entire dialog on locale switch.
@@ -626,6 +627,58 @@ function clearPreviewCandidate() {
   renderPreview();
 }
 
+function translateLocalizedText(text) {
+  if (!text) return "";
+  return {
+    "en-GB": text,
+    nb: text,
+    nn: text,
+  };
+}
+
+function tryParseJsonTranslation(key, fallback) {
+  try {
+    return JSON.parse(t(key));
+  } catch {
+    return fallback;
+  }
+}
+
+function resolveCurrentRubricPayload() {
+  const rubric = bundle?.selectedConfiguration?.rubricVersion;
+  return {
+    criteria: rubric?.criteria ?? tryParseJsonTranslation("adminContent.defaults.criteriaJson", {}),
+    scalingRule: rubric?.scalingRule ?? tryParseJsonTranslation("adminContent.defaults.scalingRuleJson", {}),
+    passRule: rubric?.passRule ?? tryParseJsonTranslation("adminContent.defaults.passRuleJson", {}),
+  };
+}
+
+function resolveCurrentPromptPayload() {
+  const prompt = bundle?.selectedConfiguration?.promptTemplateVersion;
+  return {
+    systemPrompt: prompt?.systemPrompt ?? translateLocalizedText(t("adminContent.defaults.systemPrompt")),
+    userPromptTemplate: prompt?.userPromptTemplate ?? translateLocalizedText(t("adminContent.defaults.userPromptTemplate")),
+    examples: prompt?.examples ?? tryParseJsonTranslation("adminContent.defaults.examplesJson", []),
+  };
+}
+
+function resolveMcqTitlePayload() {
+  const existingTitle = bundle?.selectedConfiguration?.mcqSetVersion?.title;
+  if (existingTitle) return existingTitle;
+  const moduleTitle = bundle?.module?.title ?? sessionDraft?.title ?? t("shell.newModule.defaultTitle");
+  return typeof moduleTitle === "string" ? translateLocalizedText(moduleTitle) : moduleTitle;
+}
+
+function resolveDraftForSave() {
+  const taskText = sessionDraft?.taskText ?? localizeValue(bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "");
+  const guidanceText = sessionDraft?.guidanceText ?? localizeValue(bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "");
+  const mcqQuestions = sessionDraft?.mcqQuestions?.length
+    ? sessionDraft.mcqQuestions
+    : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
+
+  return { taskText, guidanceText, mcqQuestions };
+}
+
 // ---------------------------------------------------------------------------
 // LLM generation — non-blocking, AbortController-guarded
 // ---------------------------------------------------------------------------
@@ -676,35 +729,15 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  setPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  clearPreviewCandidate();
   scrollPreviewToTop();
-  logResolveSlot(slot,
+  logResolveSlot(
+    slot,
     () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
-    [
-      {
-        labelKey: "shell.generating.acceptDraft",
-        action: () => {
-          sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
-          clearPreviewCandidate();
-          scrollPreviewToTop();
-          onAccept(draft, sourceMaterial, certLevel, locale);
-        },
-      },
-      {
-        labelKey: "shell.generating.discardDraft",
-        action: () => {
-          clearPreviewCandidate();
-          sessionState = selectedModuleId ? "module-loaded" : "idle";
-          logBot(() => t("shell.generating.draftDiscarded"), [
-            { labelKey: "shell.generating.retryWithMaterial", action: () => startGenerateDraftFlow() },
-            ...(selectedModuleId ? [{ labelKey: "shell.generating.backToModule", action: () => showModuleActions() }] : []),
-            { labelKey: "shell.generating.backToStart", action: startIdle },
-          ]);
-        },
-      },
-    ],
   );
+  onAccept?.(draft, sourceMaterial, certLevel, locale);
 }
 
 async function generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept) {
@@ -742,33 +775,15 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  setPreviewCandidate({ mcqQuestions: questions });
+  sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
+  clearPreviewCandidate();
   scrollPreviewToBottom();
-  logResolveSlot(slot,
+  logResolveSlot(
+    slot,
     () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
-    [
-      {
-        labelKey: "shell.generating.acceptMcq",
-        action: () => {
-          sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
-          clearPreviewCandidate();
-          scrollPreviewToBottom();
-          onAccept(questions);
-        },
-      },
-      {
-        labelKey: "shell.generating.discardMcq",
-        action: () => {
-          clearPreviewCandidate();
-          logBot(() => t("shell.generating.mcqDiscarded"), [
-            { labelKey: "shell.generating.regenerateMcq", action: () => askForMcqGeneration(sourceMaterial, certLevel, locale) },
-            { labelKey: "shell.generating.skipMcq", action: () => showDraftReadyActions() },
-          ]);
-        },
-      },
-    ],
   );
+  onAccept?.(questions);
 }
 
 async function reviseDraftInBackground(instruction, onAccept) {
@@ -811,29 +826,11 @@ async function reviseDraftInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  setPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  clearPreviewCandidate();
   scrollPreviewToTop();
-  logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`, [
-    {
-      labelKey: "shell.revision.acceptDraft",
-      action: () => {
-        sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
-        clearPreviewCandidate();
-        scrollPreviewToTop();
-        onAccept(draft);
-      },
-    },
-    {
-      labelKey: "shell.revision.discardChanges",
-      action: () => {
-        clearPreviewCandidate();
-        logBot(() => t("shell.revision.discarded"), [
-          { labelKey: "shell.revision.tryAgain", action: startDraftRevisionFlow },
-          { labelKey: "shell.generating.backToModule", action: showModuleActions },
-        ]);
-      },
-    },
-  ]);
+  logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`);
+  onAccept?.(draft);
 }
 
 async function reviseMcqInBackground(instruction, onAccept) {
@@ -878,29 +875,117 @@ async function reviseMcqInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  setPreviewCandidate({ mcqQuestions: questions });
+  sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
+  clearPreviewCandidate();
   scrollPreviewToBottom();
-  logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`, [
-    {
-      labelKey: "shell.revision.acceptMcq",
-      action: () => {
-        sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
-        clearPreviewCandidate();
-        scrollPreviewToBottom();
-        onAccept(questions);
-      },
-    },
-    {
-      labelKey: "shell.revision.discardChanges",
-      action: () => {
-        clearPreviewCandidate();
-        logBot(() => t("shell.revision.discarded"), [
-          { labelKey: "shell.revision.tryAgain", action: startMcqRevisionFlow },
-          { labelKey: "shell.generating.backToModule", action: showModuleActions },
-        ]);
-      },
-    },
-  ]);
+  logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`);
+  onAccept?.(questions);
+}
+
+async function saveDraftBundleInBackground() {
+  const moduleId = selectedModuleId;
+  if (!moduleId) {
+    logBot(() => t("shell.save.moduleRequired"));
+    return;
+  }
+
+  const { taskText, guidanceText, mcqQuestions } = resolveDraftForSave();
+  if (!taskText.trim()) {
+    logBot(() => t("shell.save.taskRequired"));
+    return;
+  }
+  if (!mcqQuestions.length) {
+    logBot(() => t("shell.save.mcqRequired"));
+    return;
+  }
+
+  const slot = logProgress("shell.save.progress");
+  slot.abortBtn.remove();
+
+  try {
+    const rubricPayload = resolveCurrentRubricPayload();
+    const promptPayload = resolveCurrentPromptPayload();
+
+    const rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify(rubricPayload),
+    });
+
+    const promptBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/prompt-template-versions`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify(promptPayload),
+    });
+
+    const mcqBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/mcq-set-versions`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        title: resolveMcqTitlePayload(),
+        questions: mcqQuestions,
+      }),
+    });
+
+    const moduleVersionBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        taskText: translateLocalizedText(taskText),
+        guidanceText: translateLocalizedText(guidanceText),
+        rubricVersionId: rubricBody?.rubricVersion?.id,
+        promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
+        mcqSetVersionId: mcqBody?.mcqSetVersion?.id,
+      }),
+    });
+
+    latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
+    sessionDraft = null;
+    previewDraft = null;
+    await loadModule(moduleId);
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`, [
+      { labelKey: "shell.save.publishNow", action: publishLatestDraftInBackground },
+      { labelKey: "shell.save.editMore", action: showModuleActions },
+      { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(moduleId) },
+    ]);
+    showToast(t("shell.save.success"), "success");
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: saveDraftBundleInBackground },
+      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
+    ]);
+  }
+}
+
+async function publishLatestDraftInBackground() {
+  const moduleId = selectedModuleId;
+  const moduleVersionId = latestSavedModuleVersionId ?? bundle?.selectedConfiguration?.moduleVersion?.id;
+  if (!moduleId || !moduleVersionId) {
+    logBot(() => t("shell.publish.versionRequired"));
+    return;
+  }
+
+  const slot = logProgress("shell.publish.progress");
+  slot.abortBtn.remove();
+
+  try {
+    await apiFetch(
+      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(moduleVersionId)}/publish`,
+      getHeaders,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    latestSavedModuleVersionId = moduleVersionId;
+    await loadModule(moduleId);
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`, [
+      { labelKey: "shell.module.editInChat", action: startUnifiedRevisionFlow },
+      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
+      { labelKey: "shell.module.pickAnother", action: startModulePicker },
+    ]);
+    showToast(t("shell.publish.success"), "success");
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
+      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
+    ]);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -990,14 +1075,67 @@ async function loadModule(moduleId) {
   showModuleActions();
 }
 
+function detectRevisionTargets(instruction) {
+  const normalized = String(instruction ?? "").toLowerCase();
+  const hasDraft = !!(sessionDraft?.taskText || sessionDraft?.guidanceText);
+  const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
+
+  if (!hasDraft && !hasMcq) return { draft: false, mcq: false };
+  if (hasDraft && !hasMcq) return { draft: true, mcq: false };
+  if (!hasDraft && hasMcq) return { draft: false, mcq: true };
+
+  const mentionsDraft = /\bscenario\b|veiled|guidance|oppgavetekst|task text|task\b|case\b|kontekst|context|wording|formul|tekst|språk|language|oversett|translate/i.test(normalized);
+  const mentionsMcq = /\bmcq\b|flervalg|multiple[- ]choice|spørsmål|questions?|\bq\d+\b|\b\d+[a-e]\b|alternativ|options?|svaralternativ|correct answer|riktig svar|distractor/i.test(normalized);
+
+  if (mentionsDraft && !mentionsMcq) return { draft: true, mcq: false };
+  if (mentionsMcq && !mentionsDraft) return { draft: false, mcq: true };
+  return { draft: true, mcq: true };
+}
+
+async function runUnifiedRevision(instruction) {
+  const targets = detectRevisionTargets(instruction);
+
+  if (!targets.draft && !targets.mcq) {
+    logBot(() => t("shell.revision.unavailable"));
+    return;
+  }
+
+  if (targets.draft) {
+    await reviseDraftInBackground(instruction);
+  }
+  if (targets.mcq) {
+    await reviseMcqInBackground(instruction);
+  }
+  showDraftReadyActions();
+}
+
+function startUnifiedRevisionFlow() {
+  if (!sessionDraft?.taskText && !sessionDraft?.guidanceText && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
+    logBot(() => t("shell.revision.unavailable"));
+    return;
+  }
+
+  logForm(
+    "textarea",
+    () => `<strong>${escapeHtml(t("shell.revision.unifiedPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.unifiedPromptHint"))}</span>`,
+    "shell.revision.placeholder",
+    "shell.revision.submit",
+    (instruction) => runUnifiedRevision(instruction),
+  );
+}
+
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
+  const selectedModuleVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+  const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
+  const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
-    ...(hasDraft ? [{ labelKey: "shell.module.editDraftChat", action: startDraftRevisionFlow }] : []),
-    ...(hasMcq ? [{ labelKey: "shell.module.editMcqChat", action: startMcqRevisionFlow }] : []),
+    ...((hasDraft || hasMcq) ? [{ labelKey: "shell.module.editInChat", action: startUnifiedRevisionFlow }] : []),
+    ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
+    ...(!hasDraft && canPublish ? [{ labelKey: "shell.draftReady.publish", action: publishLatestDraftInBackground }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
   ]);
@@ -1121,8 +1259,8 @@ function showDraftReadyActions() {
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
   }, [
-    { labelKey: "shell.draftReady.reviseDraft", action: startDraftRevisionFlow },
-    ...(mcqCount > 0 ? [{ labelKey: "shell.draftReady.reviseMcq", action: startMcqRevisionFlow }] : []),
+    { labelKey: "shell.draftReady.editInChat", action: startUnifiedRevisionFlow },
+    { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     ...(selectedModuleId ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }] : []),
     { labelKey: "shell.draftReady.restart", action: startIdle },
   ]);
@@ -1140,36 +1278,6 @@ function startGenerateMcqFlow() {
     "shell.mcqSource.placeholder",
     "shell.action.next",
     (sourceMaterial) => askForCertLevelMcqOnly(sourceMaterial),
-  );
-}
-
-function startDraftRevisionFlow() {
-  if (!sessionDraft?.taskText && !sessionDraft?.guidanceText) {
-    logBot(() => t("shell.revision.draftUnavailable"));
-    return;
-  }
-
-  logForm(
-    "textarea",
-    () => `<strong>${escapeHtml(t("shell.revision.draftPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.draftPromptHint"))}</span>`,
-    "shell.revision.placeholder",
-    "shell.revision.submit",
-    (instruction) => reviseDraftInBackground(instruction, () => showDraftReadyActions()),
-  );
-}
-
-function startMcqRevisionFlow() {
-  if ((sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
-    logBot(() => t("shell.revision.mcqUnavailable"));
-    return;
-  }
-
-  logForm(
-    "textarea",
-    () => `<strong>${escapeHtml(t("shell.revision.mcqPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.mcqPromptHint"))}</span>`,
-    "shell.revision.placeholder",
-    "shell.revision.submit",
-    (instruction) => reviseMcqInBackground(instruction, () => showDraftReadyActions()),
   );
 }
 
