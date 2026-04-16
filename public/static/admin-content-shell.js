@@ -324,9 +324,12 @@ function _domFormFields(entry) {
   }
 
   btn.addEventListener("click", submit);
-  if (entry.formType !== "textarea") {
-    inputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
-  }
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (entry.formType === "textarea" && e.shiftKey) return;
+    e.preventDefault();
+    submit();
+  });
   wrap.appendChild(inputEl);
   wrap.appendChild(btn);
   chatMessages.appendChild(wrap);
@@ -504,8 +507,12 @@ function renderPreview() {
   let mcqQuestionsHtml = "";
 
   if (bundle) {
-    const mod = bundle.module;
-    const cfg = bundle.selectedConfiguration;
+    const mod = bundle?.module ?? null;
+    const cfg = bundle?.selectedConfiguration ?? {};
+    if (!mod) {
+      previewContent.innerHTML = `<p class="preview-empty">${escapeHtml(t("adminContent.status.noneTitle"))}</p>`;
+      return;
+    }
     const isLive = !!mod.activeVersionId && cfg.moduleVersion?.id === mod.activeVersionId;
     const isDraft = !!cfg.moduleVersion && !isLive;
 
@@ -1063,9 +1070,9 @@ async function loadModule(moduleId) {
   renderPreview();
 
   // Capture data for retranslatable closure
-  const capturedTitle = localizeValue(bundle.module.title) || moduleId;
-  const capturedIsLive = !!bundle.module.activeVersionId;
-  const capturedVersionNo = bundle.selectedConfiguration.moduleVersion?.versionNo ?? "?";
+  const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
+  const capturedIsLive = !!bundle?.module?.activeVersionId;
+  const capturedVersionNo = bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
   logResolveSlot(slot, () => {
     const statusNote = capturedIsLive
       ? tf("shell.module.liveStatus", { versionNo: capturedVersionNo })
