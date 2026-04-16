@@ -44,12 +44,16 @@ function tf(key, vars) {
 }
 
 function localizeValue(value) {
+  return localizeValueForLocale(value, previewLocale);
+}
+
+function localizeValueForLocale(value, locale) {
   if (!value) return "";
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
       if (parsed && typeof parsed === "object") {
-        return parsed[previewLocale] ?? parsed["nb"] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? "";
+        return parsed[locale] ?? parsed["nb"] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? "";
       }
     } catch {
       // plain string
@@ -57,7 +61,7 @@ function localizeValue(value) {
     return value;
   }
   if (typeof value === "object") {
-    return value[previewLocale] ?? value["nb"] ?? value["en-GB"] ?? Object.values(value)[0] ?? "";
+    return value[locale] ?? value["nb"] ?? value["en-GB"] ?? Object.values(value)[0] ?? "";
   }
   return String(value);
 }
@@ -541,10 +545,10 @@ function renderPreview() {
 
     // Use draft content if accepted, else bundle content
     const taskText = hasDraft
-      ? activeDraft.taskText
+      ? localizeValue(activeDraft.taskText)
       : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.taskText) : "";
     const guidanceText = hasDraft
-      ? activeDraft.guidanceText
+      ? localizeValue(activeDraft.guidanceText)
       : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.guidanceText) : "";
     const mcqQuestions = hasDraft
       ? (activeDraft.mcqQuestions ?? [])
@@ -568,8 +572,8 @@ function renderPreview() {
     badgeClass = "draft";
     badgeText = t("shell.draft.unsavedBadge");
     titleHtml = `<div class="preview-module-title">${escapeHtml(activeDraft.title || t("shell.newModule.defaultTitle"))}</div>`;
-    const taskText = activeDraft.taskText ?? "";
-    const guidanceText = activeDraft.guidanceText ?? "";
+    const taskText = localizeValue(activeDraft.taskText ?? "");
+    const guidanceText = localizeValue(activeDraft.guidanceText ?? "");
     const mcqQuestions = activeDraft.mcqQuestions ?? [];
     const mcqCount = mcqQuestions.length;
 
@@ -636,11 +640,82 @@ function clearPreviewCandidate() {
 
 function translateLocalizedText(text) {
   if (!text) return "";
+  if (typeof text === "object") return text;
   return {
     "en-GB": text,
     nb: text,
     nn: text,
   };
+}
+
+function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
+  const result = {};
+  for (const locale of supportedLocales) {
+    if (locale === baseLocale) {
+      result[locale] = baseText;
+      continue;
+    }
+    result[locale] = translatedEntries[locale] ?? baseText;
+  }
+  return result;
+}
+
+async function localizeDraftAcrossLocales(taskText, guidanceText, sourceLocale) {
+  const localized = {
+    taskText: buildLocalizedTextMap(sourceLocale, taskText),
+    guidanceText: buildLocalizedTextMap(sourceLocale, guidanceText),
+  };
+
+  for (const targetLocale of supportedLocales) {
+    if (targetLocale === sourceLocale) continue;
+    const result = await apiFetch(
+      "/api/admin/content/generate/module-draft/localize",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({ taskText, guidanceText, sourceLocale, targetLocale }),
+      },
+    );
+    const draft = result?.draft ?? result;
+    localized.taskText[targetLocale] = draft?.taskText ?? taskText;
+    localized.guidanceText[targetLocale] = draft?.guidanceText ?? guidanceText;
+  }
+
+  return localized;
+}
+
+async function localizeMcqAcrossLocales(questions, sourceLocale) {
+  const localizedQuestions = questions.map((question) => ({
+    stem: buildLocalizedTextMap(sourceLocale, question.stem),
+    options: question.options.map((option) => buildLocalizedTextMap(sourceLocale, option)),
+    correctAnswer: buildLocalizedTextMap(sourceLocale, question.correctAnswer),
+    rationale: buildLocalizedTextMap(sourceLocale, question.rationale),
+  }));
+
+  for (const targetLocale of supportedLocales) {
+    if (targetLocale === sourceLocale) continue;
+    const result = await apiFetch(
+      "/api/admin/content/generate/mcq/localize",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({ questions, sourceLocale, targetLocale }),
+      },
+    );
+    const translatedQuestions = result?.questions ?? [];
+    translatedQuestions.forEach((question, index) => {
+      if (!localizedQuestions[index]) return;
+      localizedQuestions[index].stem[targetLocale] = question?.stem ?? localizedQuestions[index].stem[sourceLocale];
+      localizedQuestions[index].correctAnswer[targetLocale] = question?.correctAnswer ?? localizedQuestions[index].correctAnswer[sourceLocale];
+      localizedQuestions[index].rationale[targetLocale] = question?.rationale ?? localizedQuestions[index].rationale[sourceLocale];
+      (question?.options ?? []).forEach((option, optionIndex) => {
+        if (!localizedQuestions[index].options[optionIndex]) return;
+        localizedQuestions[index].options[optionIndex][targetLocale] = option ?? localizedQuestions[index].options[optionIndex][sourceLocale];
+      });
+    });
+  }
+
+  return localizedQuestions;
 }
 
 function tryParseJsonTranslation(key, fallback) {
@@ -677,8 +752,8 @@ function resolveMcqTitlePayload() {
 }
 
 function resolveDraftForSave() {
-  const taskText = sessionDraft?.taskText ?? localizeValue(bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "");
-  const guidanceText = sessionDraft?.guidanceText ?? localizeValue(bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "");
+  const taskText = sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "";
+  const guidanceText = sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "";
   const mcqQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
@@ -736,7 +811,8 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.guidanceText, locale);
+  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, guidanceText: localizedDraft.guidanceText });
   clearPreviewCandidate();
   scrollPreviewToTop();
   logResolveSlot(
@@ -782,7 +858,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
+  const localizedQuestions = await localizeMcqAcrossLocales(questions, locale);
+  sessionDraft = buildPreviewCandidate({ mcqQuestions: localizedQuestions });
   clearPreviewCandidate();
   scrollPreviewToBottom();
   logResolveSlot(
@@ -806,8 +883,8 @@ async function reviseDraftInBackground(instruction, onAccept) {
       {
         method: "POST",
         body: JSON.stringify({
-          taskText: sessionDraft?.taskText ?? "",
-          guidanceText: sessionDraft?.guidanceText ?? "",
+          taskText: localizeValueForLocale(sessionDraft?.taskText ?? "", currentLocale),
+          guidanceText: localizeValueForLocale(sessionDraft?.guidanceText ?? "", currentLocale),
           instruction,
           locale: currentLocale,
         }),
@@ -833,7 +910,8 @@ async function reviseDraftInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  sessionDraft = buildPreviewCandidate({ taskText: draft.taskText, guidanceText: draft.guidanceText });
+  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.guidanceText, currentLocale);
+  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, guidanceText: localizedDraft.guidanceText });
   clearPreviewCandidate();
   scrollPreviewToTop();
   logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`);
@@ -845,7 +923,12 @@ async function reviseMcqInBackground(instruction, onAccept) {
   const slot = logProgress("shell.revision.mcqProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
-  const currentQuestions = sessionDraft?.mcqQuestions ?? [];
+  const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
+    stem: localizeValueForLocale(question.stem, currentLocale),
+    options: (question.options ?? []).map((option) => localizeValueForLocale(option, currentLocale)),
+    correctAnswer: localizeValueForLocale(question.correctAnswer, currentLocale),
+    rationale: localizeValueForLocale(question.rationale, currentLocale),
+  }));
   let result;
   try {
     result = await apiFetch(
@@ -882,7 +965,8 @@ async function reviseMcqInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  sessionDraft = buildPreviewCandidate({ mcqQuestions: questions });
+  const localizedQuestions = await localizeMcqAcrossLocales(questions, currentLocale);
+  sessionDraft = buildPreviewCandidate({ mcqQuestions: localizedQuestions });
   clearPreviewCandidate();
   scrollPreviewToBottom();
   logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`);
@@ -897,7 +981,7 @@ async function saveDraftBundleInBackground() {
   }
 
   const { taskText, guidanceText, mcqQuestions } = resolveDraftForSave();
-  if (!taskText.trim()) {
+  if (!localizeValueForLocale(taskText, currentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"));
     return;
   }

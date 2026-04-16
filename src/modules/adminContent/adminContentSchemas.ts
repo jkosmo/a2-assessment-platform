@@ -137,6 +137,26 @@ export const mcqRevisionBodySchema = z.object({
   optionCount: z.number().int().min(2).max(6).optional(),
 });
 
+export const moduleDraftLocalizationBodySchema = z.object({
+  taskText: z.string().trim().min(1),
+  guidanceText: z.string().trim().min(1),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
+});
+
+export const generatedMcqQuestionBodySchema = z.object({
+  stem: z.string().trim().min(1),
+  options: z.array(z.string().trim().min(1)).min(2).max(6),
+  correctAnswer: z.string().trim().min(1),
+  rationale: z.string().trim().min(1),
+});
+
+export const mcqLocalizationBodySchema = z.object({
+  questions: z.array(generatedMcqQuestionBodySchema).min(1),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
+});
+
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

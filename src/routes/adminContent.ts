@@ -23,14 +23,18 @@ import {
   moduleVersionBodySchema,
   benchmarkExampleVersionBodySchema,
   moduleDraftGenerationBodySchema,
+  moduleDraftLocalizationBodySchema,
   moduleDraftRevisionBodySchema,
   mcqGenerationBodySchema,
+  mcqLocalizationBodySchema,
   mcqRevisionBodySchema,
   parseRequest,
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
 import {
   generateModuleDraft,
+  localizeModuleDraft,
+  localizeMcqQuestions,
   generateMcqQuestions,
   reviseModuleDraft,
   reviseMcqQuestions,
@@ -322,6 +326,22 @@ adminContentRouter.post("/generate/module-draft/revise", async (request, respons
   }
 });
 
+adminContentRouter.post("/generate/module-draft/localize", async (request, response) => {
+  const { data, error } = parseRequest(moduleDraftLocalizationBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const draft = await localizeModuleDraft(data);
+    response.json({ draft });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
+  }
+});
+
 adminContentRouter.post("/generate/mcq", async (request, response) => {
   const { data, error } = parseRequest(mcqGenerationBodySchema, request.body);
   if (error) {
@@ -355,6 +375,22 @@ adminContentRouter.post("/generate/mcq/revise", async (request, response) => {
       questionCount: data.questionCount ?? data.questions.length,
       optionCount: data.optionCount ?? Math.max(...data.questions.map((question) => question.options.length)),
     });
+    response.json({ questions: result.questions });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
+  }
+});
+
+adminContentRouter.post("/generate/mcq/localize", async (request, response) => {
+  const { data, error } = parseRequest(mcqLocalizationBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const result = await localizeMcqQuestions(data);
     response.json({ questions: result.questions });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

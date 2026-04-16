@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMcqGenerationPrompts,
+  buildMcqLocalizationPrompts,
   buildMcqRevisionPrompts,
   buildModuleDraftPrompts,
+  buildModuleDraftLocalizationPrompts,
   buildModuleDraftRevisionPrompts,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
@@ -23,6 +25,40 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("use the scenario as the basis for their response");
     expect(userPrompt).toContain("## Source material (hidden author background)");
     expect(userPrompt).not.toContain("based on the source material below.");
+  });
+
+  it("builds module draft localization prompts for target language translation", () => {
+    const { userPrompt } = buildModuleDraftLocalizationPrompts({
+      taskText: "Scenario:\n\nWorkers are discussing collective action.",
+      guidanceText: "A strong answer should explain key principles.",
+      sourceLocale: "nb",
+      targetLocale: "en-GB",
+    });
+
+    expect(userPrompt).toContain("Translate the following certification module draft from Norwegian Bokm");
+    expect(userPrompt).toContain("to British English");
+    expect(userPrompt).toContain('If taskText starts with "Scenario:", preserve that label in the target language.');
+    expect(userPrompt).toContain('"taskText": "translated task text in British English"');
+  });
+
+  it("builds MCQ localization prompts that preserve option structure", () => {
+    const { userPrompt } = buildMcqLocalizationPrompts({
+      questions: [
+        {
+          stem: "Hva er solidaritet?",
+          options: ["Kollektiv handling", "Privat fordel", "Sanksjon", "Bonus"],
+          correctAnswer: "Kollektiv handling",
+          rationale: "Solidaritet handler om felles handling.",
+        },
+      ],
+      sourceLocale: "nb",
+      targetLocale: "nn",
+    });
+
+    expect(userPrompt).toContain("Translate the following multiple-choice questions from Norwegian Bokm");
+    expect(userPrompt).toContain("to Norwegian Nynorsk");
+    expect(userPrompt).toContain("Preserve the number of answer options for each question.");
+    expect(userPrompt).toContain("correctAnswer must match one of the translated options verbatim.");
   });
 
   it("requires MCQs to be self-contained and not refer to hidden source material", () => {

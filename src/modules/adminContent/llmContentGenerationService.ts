@@ -62,6 +62,26 @@ export type McqRevisionInput = {
   optionCount?: number;
 };
 
+export type ModuleDraftLocalizationInput = {
+  taskText: string;
+  guidanceText: string;
+  sourceLocale: GenerationLocale;
+  targetLocale: GenerationLocale;
+};
+
+export type McqLocalizationQuestion = {
+  stem: string;
+  options: string[];
+  correctAnswer: string;
+  rationale: string;
+};
+
+export type McqLocalizationInput = {
+  questions: McqLocalizationQuestion[];
+  sourceLocale: GenerationLocale;
+  targetLocale: GenerationLocale;
+};
+
 // ---------------------------------------------------------------------------
 // Response codecs
 // ---------------------------------------------------------------------------
@@ -349,6 +369,83 @@ Return a single JSON object:
   return { systemPrompt, userPrompt };
 }
 
+export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizationInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a professional translator for a certification platform. Translate the provided module draft faithfully and return strict JSON only - no markdown, no commentary.";
+
+  const userPrompt = `Translate the following certification module draft from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+
+## Translation rules
+
+- Preserve meaning, structure, tone and difficulty.
+- Keep the content fully self-contained for candidates.
+- If taskText starts with "Scenario:", preserve that label in the target language.
+- Do not add or remove assessment requirements.
+- Do not summarise.
+
+## Source draft
+
+taskText:
+${input.taskText}
+
+guidanceText:
+${input.guidanceText}
+
+## Return format
+
+Return a single JSON object:
+{
+  "taskText": "translated task text in ${LOCALE_DISPLAY[input.targetLocale]}",
+  "guidanceText": "translated guidance text in ${LOCALE_DISPLAY[input.targetLocale]}",
+  "includesScenario": true or false
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+export function buildMcqLocalizationPrompts(input: McqLocalizationInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a professional translator for a certification platform. Translate the provided MCQ set faithfully and return strict JSON only - no markdown, no commentary.";
+
+  const serializedQuestions = JSON.stringify(input.questions, null, 2);
+  const userPrompt = `Translate the following multiple-choice questions from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+
+## Translation rules
+
+- Preserve meaning, difficulty, structure and question count.
+- Preserve the number of answer options for each question.
+- Keep each question self-contained.
+- correctAnswer must match one of the translated options verbatim.
+- Translate rationale as well.
+- Do not add or remove questions or options.
+
+## Source questions
+
+${serializedQuestions}
+
+## Return format
+
+Return a single JSON object:
+{
+  "questions": [
+    {
+      "stem": "translated question text",
+      "options": ["translated option 1", "translated option 2"],
+      "correctAnswer": "one of the translated options verbatim",
+      "rationale": "translated rationale"
+    }
+  ]
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
 async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
@@ -442,6 +539,28 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   const parsed = mcqGenerationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`MCQ revision LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+export async function localizeModuleDraft(input: ModuleDraftLocalizationInput): Promise<ModuleDraftResult> {
+  const { systemPrompt, userPrompt } = buildModuleDraftLocalizationPrompts(input);
+
+  const raw = await callLlm(systemPrompt, userPrompt);
+  const parsed = moduleDraftResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Module draft localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+export async function localizeMcqQuestions(input: McqLocalizationInput): Promise<McqGenerationResult> {
+  const { systemPrompt, userPrompt } = buildMcqLocalizationPrompts(input);
+
+  const raw = await callLlm(systemPrompt, userPrompt);
+  const parsed = mcqGenerationResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`MCQ localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
 }
