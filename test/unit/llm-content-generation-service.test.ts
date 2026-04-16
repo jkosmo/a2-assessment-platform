@@ -6,6 +6,8 @@ import {
   buildModuleDraftPrompts,
   buildModuleDraftLocalizationPrompts,
   buildModuleDraftRevisionPrompts,
+  extractMcqRevisionTargets,
+  hasMeaningfulMcqRevision,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
 describe("llm content generation prompts", () => {
@@ -25,6 +27,63 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("use the scenario as the basis for their response");
     expect(userPrompt).toContain("## Source material (hidden author background)");
     expect(userPrompt).not.toContain("based on the source material below.");
+  });
+
+  it("extracts explicit MCQ targets from compact option references", () => {
+    expect(extractMcqRevisionTargets("Endre alternativ 1C slik at det blir mer plausibelt.")).toEqual([
+      { questionIndex: 0, optionIndex: 2 },
+    ]);
+    expect(extractMcqRevisionTargets("Change option B in question 3.")).toEqual([
+      { questionIndex: 2, optionIndex: 1 },
+    ]);
+  });
+
+  it("treats targeted MCQ revisions as invalid when the named option is unchanged", () => {
+    const sourceQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    const revisedQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A revised salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    expect(
+      hasMeaningfulMcqRevision(sourceQuestions, revisedQuestions, "Endre alternativ 1C slik at det blir mer plausibelt."),
+    ).toBe(false);
+  });
+
+  it("accepts targeted MCQ revisions when the named option is changed", () => {
+    const sourceQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    const revisedQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A coordinated workplace petition", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    expect(
+      hasMeaningfulMcqRevision(sourceQuestions, revisedQuestions, "Endre alternativ 1C slik at det blir mer plausibelt."),
+    ).toBe(true);
   });
 
   it("builds module draft localization prompts for target language translation", () => {

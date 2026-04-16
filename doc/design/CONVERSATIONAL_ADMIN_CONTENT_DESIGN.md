@@ -2,7 +2,7 @@
 
 **Issue:** #294 (design prereq for #293 epic)
 **Status:** Approved – implementation in progress
-**Date:** 2026-04-15
+**Date:** 2026-04-16
 
 ---
 

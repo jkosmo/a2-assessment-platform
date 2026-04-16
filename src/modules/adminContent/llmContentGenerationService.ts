@@ -160,6 +160,111 @@ function normalizeGeneratedMcqQuestions(questions: GeneratedMcqQuestion[]): stri
   );
 }
 
+function normalizeMcqTextForComparison(value: string | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+export type McqRevisionTarget = {
+  questionIndex: number;
+  optionIndex: number | null;
+};
+
+export function extractMcqRevisionTargets(instruction: string): McqRevisionTarget[] {
+  const normalized = String(instruction ?? "").toLowerCase();
+  const targets: McqRevisionTarget[] = [];
+  const seen = new Set<string>();
+
+  const pushTarget = (questionIndex: number | null, optionIndex: number | null) => {
+    if (!Number.isInteger(questionIndex) || questionIndex === null || questionIndex < 0) {
+      return;
+    }
+    if (optionIndex === null) {
+      for (const existing of targets) {
+        if (existing.questionIndex === questionIndex && existing.optionIndex !== null) {
+          return;
+        }
+      }
+    }
+    const key = `${questionIndex}:${optionIndex ?? "q"}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    targets.push({ questionIndex, optionIndex });
+  };
+
+  for (const match of normalized.matchAll(/\b(?:option|alternativ|answer)\s*([a-f])\s*(?:i|in)?\s*(?:question|q|spørsmål|sporsmal)\s*(\d+)\b/gi)) {
+    const optionIndex = match[1].charCodeAt(0) - 97;
+    const questionIndex = Number.parseInt(match[2] ?? "", 10) - 1;
+    pushTarget(questionIndex, optionIndex);
+  }
+
+  for (const match of normalized.matchAll(/\b(\d+)\s*([a-f])\b/gi)) {
+    const questionIndex = Number.parseInt(match[1] ?? "", 10) - 1;
+    const optionIndex = match[2].charCodeAt(0) - 97;
+    pushTarget(questionIndex, optionIndex);
+  }
+
+  for (const match of normalized.matchAll(/\b(?:question|q|spørsmål|sporsmal)\s*(\d+)\b/gi)) {
+    const questionIndex = Number.parseInt(match[1] ?? "", 10) - 1;
+    pushTarget(questionIndex, null);
+  }
+
+  return targets;
+}
+
+function hasTargetedMcqChange(
+  sourceQuestions: GeneratedMcqQuestion[],
+  revisedQuestions: GeneratedMcqQuestion[],
+  target: McqRevisionTarget,
+): boolean {
+  const sourceQuestion = sourceQuestions[target.questionIndex];
+  const revisedQuestion = revisedQuestions[target.questionIndex];
+  if (!sourceQuestion || !revisedQuestion) {
+    return false;
+  }
+
+  if (target.optionIndex !== null) {
+    const sourceOption = sourceQuestion.options[target.optionIndex];
+    const revisedOption = revisedQuestion.options[target.optionIndex];
+    if (sourceOption === undefined || revisedOption === undefined) {
+      return false;
+    }
+    return normalizeMcqTextForComparison(sourceOption) !== normalizeMcqTextForComparison(revisedOption);
+  }
+
+  return (
+    normalizeMcqTextForComparison(sourceQuestion.stem) !== normalizeMcqTextForComparison(revisedQuestion.stem) ||
+    normalizeMcqTextForComparison(sourceQuestion.correctAnswer) !== normalizeMcqTextForComparison(revisedQuestion.correctAnswer) ||
+    normalizeMcqTextForComparison(sourceQuestion.rationale) !== normalizeMcqTextForComparison(revisedQuestion.rationale) ||
+    sourceQuestion.options.length !== revisedQuestion.options.length ||
+    sourceQuestion.options.some((option, index) => {
+      const revisedOption = revisedQuestion.options[index];
+      return normalizeMcqTextForComparison(option) !== normalizeMcqTextForComparison(revisedOption);
+    })
+  );
+}
+
+export function hasMeaningfulMcqRevision(
+  sourceQuestions: GeneratedMcqQuestion[],
+  revisedQuestions: GeneratedMcqQuestion[],
+  instruction: string,
+): boolean {
+  const sourceSignature = normalizeGeneratedMcqQuestions(sourceQuestions);
+  const revisedSignature = normalizeGeneratedMcqQuestions(revisedQuestions);
+  if (sourceSignature === revisedSignature) {
+    return false;
+  }
+
+  const explicitTargets = extractMcqRevisionTargets(instruction);
+  if (explicitTargets.length === 0) {
+    return true;
+  }
+
+  return explicitTargets.every((target) => hasTargetedMcqChange(sourceQuestions, revisedQuestions, target));
+}
+
 function buildUrl(): string {
   const endpoint = (env.AZURE_OPENAI_ENDPOINT ?? "").trim().replace(/\/+$/, "");
   const deployment = env.AZURE_OPENAI_DEPLOYMENT ?? "";
@@ -562,10 +667,8 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
     correctAnswer: localizeForPrompt(question.correctAnswer, input.locale),
     rationale: localizeForPrompt(question.rationale, input.locale),
   }));
-
-  const originalSignature = normalizeGeneratedMcqQuestions(sourceQuestions);
   const firstAttempt = await parseRevision(userPrompt);
-  if (normalizeGeneratedMcqQuestions(firstAttempt.questions) !== originalSignature) {
+  if (hasMeaningfulMcqRevision(sourceQuestions, firstAttempt.questions, input.instruction)) {
     return firstAttempt;
   }
 
@@ -573,9 +676,11 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
 
 ## Retry rule
 
-Your previous attempt was materially identical to the source questions. Try again and make the requested change concrete and visible in the returned question set.`;
+Your previous attempt did not apply the requested change concretely enough.
+If the instruction names a specific question or option reference such as "question 3", "Q3", "3b", or "option B in question 3", you must change that exact target in a clearly visible way.
+Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`;
   const secondAttempt = await parseRevision(retryPrompt);
-  if (normalizeGeneratedMcqQuestions(secondAttempt.questions) === originalSignature) {
+  if (!hasMeaningfulMcqRevision(sourceQuestions, secondAttempt.questions, input.instruction)) {
     throw new Error("MCQ revision did not produce a material change. Please request a more specific change and try again.");
   }
 

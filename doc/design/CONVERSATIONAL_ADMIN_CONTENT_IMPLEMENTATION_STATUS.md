@@ -2,7 +2,7 @@
 
 **Related epic:** `#293`  
 **Reference design:** [CONVERSATIONAL_ADMIN_CONTENT_DESIGN.md](./CONVERSATIONAL_ADMIN_CONTENT_DESIGN.md)  
-**Last updated:** 2026-04-15
+**Last updated:** 2026-04-16
 
 ## Purpose
 
@@ -127,12 +127,15 @@ into the remaining locales. That flow is not yet implemented in the shell.
 The shell currently accepts pasted text source material. It does not yet expose
 document upload in the conversational intake flow.
 
+This remains explicitly on the remaining-work list because SMOs should be able to
+start from uploaded source files, not only pasted text.
+
 ## Recommended Remaining Order
 
-1. Finish shell usability gaps:
-   - richer preview
-   - MCQ generation controls
-2. Implement free-form conversational edit loop (`#297`)
+1. Finish the remaining shell usability gaps:
+   - more deterministic roundtrip between shell and advanced editor
+   - stronger guarantees that targeted MCQ revisions actually change the referenced option/question
+2. Implement the fuller free-form conversational edit loop (`#297`)
 3. Implement guarded conversational CRUD/publish flows (`#298`)
 4. Add file upload source-material intake (`#310`)
 5. Close out test/docs/rollout work (`#299`)
