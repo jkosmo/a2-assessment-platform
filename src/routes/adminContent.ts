@@ -28,6 +28,7 @@ import {
   mcqGenerationBodySchema,
   mcqLocalizationBodySchema,
   mcqRevisionBodySchema,
+  sourceMaterialUploadBodySchema,
   parseRequest,
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
@@ -39,6 +40,12 @@ import {
   reviseModuleDraft,
   reviseMcqQuestions,
 } from "../modules/adminContent/llmContentGenerationService.js";
+import {
+  extractSourceMaterialText,
+  SourceMaterialExtractionError,
+  SourceMaterialTooLargeError,
+  UnsupportedSourceMaterialFormatError,
+} from "../modules/adminContent/sourceMaterialExtractionService.js";
 import {
   toCreateModuleInput,
   toCreatePromptTemplateVersionInput,
@@ -293,6 +300,41 @@ adminContentRouter.post("/modules/:moduleId/restore", async (request, response) 
 // ---------------------------------------------------------------------------
 // LLM content generation
 // ---------------------------------------------------------------------------
+
+adminContentRouter.post("/source-material/extract", async (request, response) => {
+  const { data, error } = parseRequest(sourceMaterialUploadBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const result = await extractSourceMaterialText(data);
+    response.json(result);
+  } catch (err) {
+    if (err instanceof UnsupportedSourceMaterialFormatError) {
+      response.status(400).json({
+        error: "unsupported_file_type",
+        message: "Supported file formats: .txt, .md, .pdf, .docx, .doc, .pptx, .ppt, .rtf, .odt, .odp, .ods.",
+      });
+      return;
+    }
+    if (err instanceof SourceMaterialTooLargeError) {
+      response.status(400).json({
+        error: "file_too_large",
+        message: "The uploaded file is too large. Use a file up to 2 MB.",
+      });
+      return;
+    }
+    if (err instanceof SourceMaterialExtractionError) {
+      response.status(400).json({ error: "source_material_extract_failed", message: err.message });
+      return;
+    }
+
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "source_material_extract_failed", message });
+  }
+});
 
 adminContentRouter.post("/generate/module-draft", async (request, response) => {
   const { data, error } = parseRequest(moduleDraftGenerationBodySchema, request.body);

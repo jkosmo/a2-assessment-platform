@@ -2,7 +2,7 @@
 
 **Related epic:** `#293`  
 **Reference design:** [CONVERSATIONAL_ADMIN_CONTENT_DESIGN.md](./CONVERSATIONAL_ADMIN_CONTENT_DESIGN.md)  
-**Last updated:** 2026-04-16
+**Last updated:** 2026-04-17
 
 ## Purpose
 
@@ -43,6 +43,7 @@ The current shell already includes:
 The shell already supports:
 
 - pasting source material into chat
+- uploading source material files through the conversational shell
 - choosing certification level
 - generating a draft via `POST /api/admin/content/generate/module-draft`
 - generating MCQ via `POST /api/admin/content/generate/mcq`
@@ -122,13 +123,28 @@ conversational shell does not yet expose the full guarded action model described
 The design allows the user to explicitly request translation of authored content
 into the remaining locales. That flow is not yet implemented in the shell.
 
-### File upload source-material intake (`#310`)
+### File upload breadth (`#310`)
 
-The shell currently accepts pasted text source material. It does not yet expose
-document upload in the conversational intake flow.
+The shell now supports source-material upload for the current minimum set:
 
-This remains explicitly on the remaining-work list because SMOs should be able to
-start from uploaded source files, not only pasted text.
+- `.txt`
+- `.md`
+- `.pdf`
+- `.docx`
+- `.doc`
+- `.pptx`
+- `.ppt`
+- `.rtf`
+- `.odt`
+- `.odp`
+- `.ods`
+
+This closes the biggest functional gap in the intake flow, but `#310` still remains
+relevant if we later want:
+
+- broader OpenDocument / legacy-office coverage beyond the current minimum
+- better extraction quality guarantees for legacy `.doc` / `.ppt`
+- richer provenance / preview of what text was extracted from the uploaded file
 
 ## Recommended Remaining Order
 
@@ -137,8 +153,8 @@ start from uploaded source files, not only pasted text.
    - stronger guarantees that targeted MCQ revisions actually change the referenced option/question
 2. Implement the fuller free-form conversational edit loop (`#297`)
 3. Implement guarded conversational CRUD/publish flows (`#298`)
-4. Add file upload source-material intake (`#310`)
-5. Close out test/docs/rollout work (`#299`)
+4. Close out test/docs/rollout work (`#299`)
+5. Polish file-upload depth and extraction UX (`#310`)
 
 ## Practical Takeaway
 

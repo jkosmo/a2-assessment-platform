@@ -192,6 +192,38 @@ const workspaceNav = document.getElementById("workspaceNav");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
 
+const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
+const SOURCE_MATERIAL_ACCEPT =
+  ".txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.rtf,.odt,.odp,.ods,text/plain,text/markdown,text/x-markdown,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/rtf,text/rtf,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.presentation,application/vnd.oasis.opendocument.spreadsheet";
+const SOURCE_MATERIAL_ALLOWED_EXTENSIONS = new Set([
+  ".txt",
+  ".md",
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".rtf",
+  ".odt",
+  ".odp",
+  ".ods",
+]);
+const SOURCE_MATERIAL_ALLOWED_MIME_TYPES = new Set([
+  "text/plain",
+  "text/markdown",
+  "text/x-markdown",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/rtf",
+  "text/rtf",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.oasis.opendocument.spreadsheet",
+]);
+
 // ---------------------------------------------------------------------------
 // Chat rendering — low-level DOM helpers (no logging)
 // ---------------------------------------------------------------------------
@@ -202,6 +234,57 @@ function escapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function parseApiErrorMessage(error, fallbackKey) {
+  const fallback = t(fallbackKey);
+  if (!(error instanceof Error) || typeof error.message !== "string") {
+    return fallback;
+  }
+
+  const match = error.message.match(/^\d+:\s*(\{[\s\S]*\})$/);
+  if (!match) return fallback;
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    return parsed.message || parsed.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function isSupportedSourceMaterialFile(file) {
+  const normalizedName = String(file?.name ?? "").toLowerCase();
+  const extension = normalizedName.includes(".")
+    ? normalizedName.slice(normalizedName.lastIndexOf("."))
+    : "";
+  if (SOURCE_MATERIAL_ALLOWED_EXTENSIONS.has(extension)) {
+    return true;
+  }
+
+  const normalizedType = String(file?.type ?? "").toLowerCase();
+  return SOURCE_MATERIAL_ALLOWED_MIME_TYPES.has(normalizedType);
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("file_reader_failed"));
+        return;
+      }
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      if (!base64) {
+        reject(new Error("file_reader_failed"));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("file_reader_failed"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function _domScroll(el) {
@@ -329,7 +412,7 @@ function _domFormFields(entry) {
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = ".txt,text/plain";
+    fileInput.accept = SOURCE_MATERIAL_ACCEPT;
     fileInput.hidden = true;
 
     uploadBtn.addEventListener("click", () => fileInput.click());
@@ -337,27 +420,46 @@ function _domFormFields(entry) {
       const file = fileInput.files?.[0];
       if (!file) return;
 
-      const looksLikeText = file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt");
-      if (!looksLikeText) {
+      if (!isSupportedSourceMaterialFile(file)) {
         showToast(t("shell.source.fileTypeInvalid"), "error");
         fileInput.value = "";
         return;
       }
-      if (file.size > 512000) {
+      if (file.size > SOURCE_MATERIAL_MAX_BYTES) {
         showToast(t("shell.source.fileTooLarge"), "error");
         fileInput.value = "";
         return;
       }
 
+      const originalLabel = uploadBtn.textContent;
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = t("shell.source.uploading");
+
       try {
-        const text = await file.text();
+        const contentBase64 = await readFileAsBase64(file);
+        const result = await apiFetch(
+          "/api/admin/content/source-material/extract",
+          getHeaders,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              fileName: file.name,
+              mimeType: file.type || undefined,
+              contentBase64,
+            }),
+          },
+        );
+        const text = result.extractedText ?? "";
         inputEl.value = inputEl.value.trim()
           ? `${inputEl.value.replace(/\s+$/, "")}\n\n${text.trim()}`
           : text.trim();
         inputEl.focus();
-      } catch {
-        showToast(t("shell.source.fileReadError"), "error");
+        showToast(tf("shell.source.fileImported", { fileName: file.name }), "success");
+      } catch (error) {
+        showToast(parseApiErrorMessage(error, "shell.source.fileReadError"), "error");
       } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = originalLabel;
         fileInput.value = "";
       }
     });

@@ -109,6 +109,12 @@ export const generationLocaleSchema = z.enum(["en-GB", "nb", "nn"]);
 export const certificationLevelSchema = z.enum(["basic", "intermediate", "advanced"]);
 export const generationModeSchema = z.enum(["ordinary", "thorough"]);
 
+export const sourceMaterialUploadBodySchema = z.object({
+  fileName: z.string().trim().min(1),
+  mimeType: z.string().trim().optional(),
+  contentBase64: z.string().trim().min(1),
+});
+
 export const moduleDraftGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
