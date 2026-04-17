@@ -7,6 +7,36 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.92 - 2026-04-17
+
+test: functional UI test coverage for admin-content shell and advanced editor (#318)
+
+- Extract deriveModuleStatusChains + findLinkedVersion to public/static/module-status-logic.js (pure, no DOM, testable from Node)
+- admin-content.js imports from module-status-logic.js; deriveModuleStatusView is now a locale wrapper
+- 23 new unit + structural tests in test/admin-content-state-rail.test.js:
+  - findLinkedVersion: 4 cases (null/empty, falsy id, match, no match)
+  - deriveModuleStatusChains: 7 cases (null, shell-only, draft-only, published, published+draft, linked rubric, technicalDetails)
+  - HTML structure: both pages have state rail element IDs + i18n keys + hidden attribute
+  - CSS smoke: all sr-badge modifier classes present in shared.css
+  - Call-site smoke: renderPreview/renderModuleStatus/renderContentCards each call updateStateRail()
+- Add admin-content-advanced.html to workspace-html-fallbacks.test.js (was missing)
+- Add doc/design/SHELL_ADVANCED_PARITY.md: feature parity checklist between shell and advanced editor
+
+## 0.9.91 - 2026-04-17
+
+feat: unified state rail in conversational shell and advanced editor (#313)
+
+- Add .state-rail and .sr-badge CSS to shared.css (published/saved-draft/working/unsaved)
+- Add #stateRail strip to admin-content.html and admin-content-advanced.html
+  - Starts hidden; revealed by JS when a module is selected
+  - Four fields: module name, editing state badge, live state badge, changes badge
+- admin-content-shell.js: add updateStateRail(); called at end of renderPreview()
+  - Reads sessionDraft, bundle.selectedConfiguration, bundle.versions for live version lookup
+- admin-content.js: add updateStateRail(); called at end of renderModuleStatus() and renderContentCards()
+  - Reads dirtyCards.size and deriveModuleStatusView() for badge derivation
+- Add 13 i18n keys (stateRail.*) to all locales: en-GB, nb, nn, lateOverrides
+- UX assessment saved to doc/design/UX_PRODUCT_ASSESSMENT_ADMIN_CONTENT_REDESIGN_2026-04-17.md
+
 ## 0.9.80 - 2026-04-15
 
 ux: chatLog — robust generic re-translation of entire dialog on locale switch
