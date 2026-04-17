@@ -787,6 +787,28 @@ function resolveDraftForSave() {
   return { taskText, guidanceText, mcqQuestions };
 }
 
+function createSessionDraftFromLoadedModule() {
+  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion ?? null;
+  const mcqQuestions = bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? [];
+  const moduleTitle = bundle?.module?.title ?? t("shell.newModule.defaultTitle");
+
+  if (!moduleVersion && mcqQuestions.length === 0) {
+    return false;
+  }
+
+  sessionDraft = buildPreviewCandidate({
+    title: moduleTitle,
+    taskText: moduleVersion?.taskText ?? "",
+    guidanceText: moduleVersion?.guidanceText ?? "",
+    mcqQuestions,
+  });
+  previewDraft = null;
+  sessionState = "draft-pending";
+  renderPreviewLocaleBar();
+  renderPreview();
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // LLM generation — non-blocking, AbortController-guarded
 // ---------------------------------------------------------------------------
@@ -1152,7 +1174,8 @@ async function startModulePicker() {
   logModuleChoices(modules);
 }
 
-async function loadModule(moduleId) {
+async function loadModule(moduleId, options = {}) {
+  const { resumeEditing = false } = options;
   sessionState = "loading-module";
   selectedModuleId = moduleId;
   sessionDraft = null;
@@ -1170,6 +1193,7 @@ async function loadModule(moduleId) {
   }
 
   sessionState = "module-loaded";
+  const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
   renderPreview();
 
   // Capture data for retranslatable closure
@@ -1182,6 +1206,11 @@ async function loadModule(moduleId) {
       : t("shell.module.noPublishedVersion");
     return `<strong>${escapeHtml(capturedTitle)}</strong> ${escapeHtml(t("shell.module.loaded"))}<br><span style="color:var(--color-meta);font-size:13px">${escapeHtml(statusNote)}</span>`;
   });
+  if (resumedIntoDraft) {
+    logBot(() => t("shell.module.resumeEditingReady"));
+    showDraftReadyActions();
+    return;
+  }
   showModuleActions();
 }
 
@@ -1237,12 +1266,23 @@ function startUnifiedRevisionFlow() {
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
+  const canResumeEditing = !hasDraft && !!bundle?.selectedConfiguration?.moduleVersion;
   const selectedModuleVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
   const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
+    ...(canResumeEditing ? [{
+      labelKey: "shell.module.resumeChatEdit",
+      action: () => {
+        if (createSessionDraftFromLoadedModule()) {
+          showDraftReadyActions();
+        } else {
+          showModuleActions();
+        }
+      },
+    }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
     ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
@@ -1580,8 +1620,9 @@ async function initShell() {
   await loadConsoleConfig();
 
   const autoModuleId = new URLSearchParams(location.search).get("moduleId");
+  const resumeEditing = new URLSearchParams(location.search).get("resumeEditing") === "1";
   if (autoModuleId) {
-    await loadModule(autoModuleId);
+    await loadModule(autoModuleId, { resumeEditing });
     return;
   }
 

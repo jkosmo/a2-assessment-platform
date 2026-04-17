@@ -3823,7 +3823,7 @@ function updateBackToChatLink() {
   const link = document.getElementById("backToChatLink");
   if (!link) return;
   const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
-  link.href = moduleId ? `/admin-content?moduleId=${encodeURIComponent(moduleId)}` : "/admin-content";
+  link.href = moduleId ? `/admin-content?moduleId=${encodeURIComponent(moduleId)}&resumeEditing=1` : "/admin-content";
 }
 
 function validateThresholds(values) {
