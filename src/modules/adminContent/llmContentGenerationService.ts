@@ -8,11 +8,13 @@ import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 
 export type CertificationLevel = "basic" | "intermediate" | "advanced";
 export type GenerationLocale = "en-GB" | "nb" | "nn";
+export type GenerationMode = "ordinary" | "thorough";
 
 export type ModuleDraftInput = {
   sourceMaterial: string;
   certificationLevel: CertificationLevel;
   locale: GenerationLocale;
+  generationMode: GenerationMode;
 };
 
 export type ModuleDraftResult = {
@@ -32,6 +34,7 @@ export type McqGenerationInput = {
   sourceMaterial: string;
   certificationLevel: CertificationLevel;
   locale: GenerationLocale;
+  generationMode: GenerationMode;
   questionCount: number;
   optionCount: number;
 };
@@ -122,6 +125,21 @@ const DISTRACTOR_GUIDELINES: Record<CertificationLevel, string> = {
     "Distractors must be plausible misconceptions or near-misses that a partially informed candidate might choose. Avoid obviously absurd or unrelated options.",
   advanced:
     "Distractors must represent common expert-level confusions, subtle definitional errors, or claims that are correct in a different context but wrong here. A well-prepared candidate should have to think carefully.",
+};
+
+const GENERATION_MODE_GUIDELINES: Record<GenerationMode, { moduleDraft: string; mcq: string }> = {
+  ordinary: {
+    moduleDraft:
+      "Prefer a strong first-pass draft: keep the scenario realistic and self-contained, but avoid over-elaborating the situation or adding unnecessary sub-questions.",
+    mcq:
+      "Prefer a balanced first-pass question set: keep stems concise, ensure the level is appropriate, and avoid adding extra complexity unless it clearly improves assessment quality.",
+  },
+  thorough: {
+    moduleDraft:
+      "Take a more thorough authoring pass: produce a richer, more concrete scenario when appropriate, sharpen the task wording, and make the guidance more specific about what strong evidence and reasoning look like.",
+    mcq:
+      "Take a more thorough authoring pass: make stems precise, ensure distractors are substantively plausible, and tune the set so that difficulty, coverage, and rationale quality are clearly stronger than a quick baseline draft.",
+  },
 };
 
 function localizeForPrompt(value: LocalizedText | undefined, locale: GenerationLocale): string {
@@ -283,6 +301,7 @@ export function buildModuleDraftPrompts(input: ModuleDraftInput): {
 
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
+Generation mode: ${input.generationMode}
 
 ## Authoring constraints
 
@@ -291,6 +310,7 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 - Do not mention "source material", "the text above", "the material", "the document", "the attachment", or equivalent wording.
 - Do not tell the candidate to read, review, use, cite, or refer to any unseen material.
 - Any facts, context, terminology, or scenario details needed by the candidate must be embedded directly in the generated task itself.
+- ${GENERATION_MODE_GUIDELINES[input.generationMode].moduleDraft}
 
 ## Scenario decision
 
@@ -338,6 +358,7 @@ export function buildMcqGenerationPrompts(input: McqGenerationInput): {
 
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
+Generation mode: ${input.generationMode}
 
 ## Authoring constraints
 
@@ -350,6 +371,7 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 ## Distractor quality
 
 ${DISTRACTOR_GUIDELINES[input.certificationLevel]}
+${GENERATION_MODE_GUIDELINES[input.generationMode].mcq}
 
 ## Option parity
 

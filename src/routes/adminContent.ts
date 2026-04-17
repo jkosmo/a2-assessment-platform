@@ -302,7 +302,10 @@ adminContentRouter.post("/generate/module-draft", async (request, response) => {
   }
 
   try {
-    const draft = await generateModuleDraft(data);
+    const draft = await generateModuleDraft({
+      ...data,
+      generationMode: data.generationMode ?? "ordinary",
+    });
     response.json({ draft });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -352,6 +355,7 @@ adminContentRouter.post("/generate/mcq", async (request, response) => {
   try {
     const result = await generateMcqQuestions({
       ...data,
+      generationMode: data.generationMode ?? "ordinary",
       questionCount: data.questionCount ?? 10,
       optionCount: data.optionCount ?? 4,
     });

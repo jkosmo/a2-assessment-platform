@@ -16,6 +16,7 @@ describe("llm content generation prompts", () => {
       sourceMaterial: "Internal policy notes about safe handling of customer data.",
       certificationLevel: "intermediate",
       locale: "en-GB",
+      generationMode: "ordinary",
     });
 
     expect(userPrompt).toContain("The source material is for you only. The candidate will NOT see it.");
@@ -27,6 +28,18 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("use the scenario as the basis for their response");
     expect(userPrompt).toContain("## Source material (hidden author background)");
     expect(userPrompt).not.toContain("based on the source material below.");
+  });
+
+  it("includes generation mode guidance in module draft prompts", () => {
+    const { userPrompt } = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "intermediate",
+      locale: "en-GB",
+      generationMode: "thorough",
+    });
+
+    expect(userPrompt).toContain("Generation mode: thorough");
+    expect(userPrompt).toContain("Take a more thorough authoring pass");
   });
 
   it("extracts explicit MCQ targets from compact option references", () => {
@@ -125,6 +138,7 @@ describe("llm content generation prompts", () => {
       sourceMaterial: "Reference notes about escalation thresholds and confidentiality duties.",
       certificationLevel: "advanced",
       locale: "en-GB",
+      generationMode: "ordinary",
       questionCount: 4,
       optionCount: 4,
     });
@@ -139,6 +153,20 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("If background facts are needed, incorporate them directly into the question stem.");
     expect(userPrompt).toContain("## Source material (hidden author background)");
     expect(userPrompt).not.toContain("based on the source material below.");
+  });
+
+  it("includes generation mode guidance in MCQ prompts", () => {
+    const { userPrompt } = buildMcqGenerationPrompts({
+      sourceMaterial: "Reference notes about escalation thresholds and confidentiality duties.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "thorough",
+      questionCount: 4,
+      optionCount: 4,
+    });
+
+    expect(userPrompt).toContain("Generation mode: thorough");
+    expect(userPrompt).toContain("Take a more thorough authoring pass");
   });
 
   it("builds draft revision prompts around an explicit change instruction", () => {
@@ -188,6 +216,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Theory of leadership ethics.",
         certificationLevel: "intermediate",
         locale: "en-GB",
+        generationMode: "ordinary",
       });
 
       expect(userPrompt).toContain("Include a scenario in taskText when:");
@@ -201,6 +230,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Leadership frameworks.",
         certificationLevel: "advanced",
         locale: "nb",
+        generationMode: "ordinary",
       });
 
       expect(userPrompt).toContain('Place it at the very top of taskText, clearly labelled "Scenario:"');
@@ -212,6 +242,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Source.",
         certificationLevel: "basic",
         locale: "en-GB",
+        generationMode: "ordinary",
       });
 
       expect(userPrompt).toContain('"includesScenario": true or false');
@@ -222,6 +253,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Financial regulations.",
         certificationLevel: "advanced",
         locale: "nb",
+        generationMode: "thorough",
       });
 
       expect(userPrompt).toContain("Certification level: advanced");
@@ -236,6 +268,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Intro to biology.",
         certificationLevel: "basic",
         locale: "en-GB",
+        generationMode: "ordinary",
         questionCount: 3,
         optionCount: 4,
       });
@@ -250,6 +283,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Sociology theory.",
         certificationLevel: "intermediate",
         locale: "nb",
+        generationMode: "ordinary",
         questionCount: 4,
         optionCount: 4,
       });
@@ -264,6 +298,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Advanced contract law.",
         certificationLevel: "advanced",
         locale: "en-GB",
+        generationMode: "thorough",
         questionCount: 5,
         optionCount: 4,
       });
@@ -274,9 +309,9 @@ describe("llm content generation prompts", () => {
     });
 
     it("distractor guidelines differ across levels", () => {
-      const basic = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "basic", locale: "en-GB", questionCount: 1, optionCount: 4 }).userPrompt;
-      const intermediate = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "intermediate", locale: "en-GB", questionCount: 1, optionCount: 4 }).userPrompt;
-      const advanced = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "advanced", locale: "en-GB", questionCount: 1, optionCount: 4 }).userPrompt;
+      const basic = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "basic", locale: "en-GB", generationMode: "ordinary", questionCount: 1, optionCount: 4 }).userPrompt;
+      const intermediate = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "intermediate", locale: "en-GB", generationMode: "ordinary", questionCount: 1, optionCount: 4 }).userPrompt;
+      const advanced = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "advanced", locale: "en-GB", generationMode: "thorough", questionCount: 1, optionCount: 4 }).userPrompt;
 
       // Each level has distinct guideline text
       expect(basic).not.toEqual(intermediate);
@@ -288,6 +323,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Any topic.",
         certificationLevel: "intermediate",
         locale: "en-GB",
+        generationMode: "ordinary",
         questionCount: 4,
         optionCount: 5,
       });
@@ -302,6 +338,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Any topic.",
         certificationLevel: "intermediate",
         locale: "en-GB",
+        generationMode: "ordinary",
         questionCount: 4,
         optionCount: 3,
       });

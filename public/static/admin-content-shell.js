@@ -152,7 +152,7 @@ let latestSavedModuleVersionId = null;
 //   { kind:'form',  formType:'text'|'textarea', promptHtml:()=>string,
 //                   placeholderKey:string, submitKey:string, onSubmit:fn, submitted:bool }
 //   { kind:'module-choices', modules:Module[], active:bool }
-// Choice: { labelKey:string, action:()=>void }
+// Choice: { labelKey?:string, label?:string, action:()=>void }
 let chatLog = [];
 
 // Identity / headers
@@ -224,6 +224,10 @@ function _deactivateAll() {
 
 // Build a choices row from an array of { labelKey, action } specs.
 // disabled=true renders non-interactive buttons for past history.
+function resolveChoiceLabel(choice) {
+  return choice.label ?? t(choice.labelKey);
+}
+
 function _domChoiceRow(choices, disabled) {
   const row = document.createElement("div");
   row.className = "chat-choices";
@@ -231,13 +235,13 @@ function _domChoiceRow(choices, disabled) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn-secondary chat-choice-btn";
-    btn.textContent = t(c.labelKey);
+    btn.textContent = resolveChoiceLabel(c);
     btn.disabled = disabled;
     if (!disabled) {
       btn.addEventListener("click", () => {
         _disableAllDomChoices();
         _deactivateAll();
-        logUser(t(c.labelKey));
+        logUser(resolveChoiceLabel(c));
         c.action();
       });
     }
@@ -293,10 +297,12 @@ function _domProgress(textKeyOrFn) {
 // Called both on first render and during retranslateChat for unsubmitted forms.
 function _domFormFields(entry) {
   const wrap = document.createElement("div");
-  wrap.className = entry.formType === "textarea" ? "chat-form-col" : "chat-form-row";
+  const isMultiLine = entry.formType === "textarea" || entry.formType === "source-material";
+  const isSourceMaterial = entry.formType === "source-material";
+  wrap.className = isMultiLine ? "chat-form-col" : "chat-form-row";
 
   let inputEl;
-  if (entry.formType === "textarea") {
+  if (isMultiLine) {
     inputEl = document.createElement("textarea");
     inputEl.className = "chat-textarea";
     inputEl.rows = 6;
@@ -307,6 +313,60 @@ function _domFormFields(entry) {
     inputEl.setAttribute("autocomplete", "off");
   }
   inputEl.placeholder = t(entry.placeholderKey);
+
+  if (isSourceMaterial) {
+    const uploadRow = document.createElement("div");
+    uploadRow.className = "chat-form-row";
+
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "btn-secondary chat-choice-btn";
+    uploadBtn.textContent = t("shell.source.uploadBtn");
+
+    const uploadHint = document.createElement("span");
+    uploadHint.className = "chat-form-help";
+    uploadHint.textContent = t("shell.source.uploadHint");
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".txt,text/plain";
+    fileInput.hidden = true;
+
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      const looksLikeText = file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt");
+      if (!looksLikeText) {
+        showToast(t("shell.source.fileTypeInvalid"), "error");
+        fileInput.value = "";
+        return;
+      }
+      if (file.size > 512000) {
+        showToast(t("shell.source.fileTooLarge"), "error");
+        fileInput.value = "";
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        inputEl.value = inputEl.value.trim()
+          ? `${inputEl.value.replace(/\s+$/, "")}\n\n${text.trim()}`
+          : text.trim();
+        inputEl.focus();
+      } catch {
+        showToast(t("shell.source.fileReadError"), "error");
+      } finally {
+        fileInput.value = "";
+      }
+    });
+
+    uploadRow.appendChild(uploadBtn);
+    uploadRow.appendChild(uploadHint);
+    uploadRow.appendChild(fileInput);
+    wrap.appendChild(uploadRow);
+  }
 
   const btn = document.createElement("button");
   btn.type = "button";
@@ -319,7 +379,7 @@ function _domFormFields(entry) {
     btn.disabled = true;
     inputEl.disabled = true;
     entry.submitted = true;
-    const displayText = entry.formType === "textarea"
+    const displayText = isMultiLine
       ? tf("shell.source.userPreview", { count: val.length, preview: val.length > 80 ? val.slice(0, 80) + "…" : val })
       : val;
     _deactivateAll();
@@ -330,7 +390,7 @@ function _domFormFields(entry) {
   btn.addEventListener("click", submit);
   inputEl.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || e.isComposing) return;
-    if (entry.formType === "textarea" && e.shiftKey) return;
+    if (isMultiLine && e.shiftKey) return;
     e.preventDefault();
     submit();
   });
@@ -824,7 +884,7 @@ function startGeneration() {
   return generationAbort;
 }
 
-async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAccept) {
+async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept) {
   const abort = startGeneration();
   const slot = logProgress("shell.generating.draftProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -836,7 +896,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode }),
         signal: abort.signal,
       },
     );
@@ -850,7 +910,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
     }
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, onAccept) },
+      { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept) },
     ]);
     return;
   }
@@ -871,7 +931,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, onAc
   onAccept?.(draft, sourceMaterial, certLevel, locale);
 }
 
-async function generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept) {
+async function generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) {
   const abort = startGeneration();
   const slot = logProgress("shell.generating.mcqProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -883,7 +943,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, questionCount, optionCount }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, questionCount, optionCount }),
         signal: abort.signal,
       },
     );
@@ -897,7 +957,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, questi
     }
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept) },
+      { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) },
     ]);
     return;
   }
@@ -1120,6 +1180,114 @@ async function publishLatestDraftInBackground() {
   }
 }
 
+async function unpublishModuleInBackground() {
+  const moduleId = selectedModuleId;
+  if (!moduleId) return;
+
+  const slot = logProgress("shell.unpublish.progress");
+  slot.abortBtn.remove();
+
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await loadModule(moduleId);
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.unpublish.success"))}</strong>`);
+    showToast(t("shell.unpublish.success"), "success");
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.unpublish.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: unpublishModuleInBackground },
+    ]);
+  }
+}
+
+async function archiveModuleInBackground() {
+  const moduleId = selectedModuleId;
+  if (!moduleId) return;
+
+  const slot = logProgress("shell.archive.progress");
+  slot.abortBtn.remove();
+
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    bundle = null;
+    selectedModuleId = null;
+    sessionDraft = null;
+    previewDraft = null;
+    latestSavedModuleVersionId = null;
+    renderPreviewLocaleBar();
+    renderPreview();
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.success"))}</strong>`);
+    showToast(t("shell.archive.success"), "success");
+    startIdle();
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: archiveModuleInBackground },
+    ]);
+  }
+}
+
+async function restoreArchivedModuleInBackground(moduleId, moduleTitle) {
+  const slot = logProgress("shell.restore.progress");
+  slot.abortBtn.remove();
+
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.restore.success", { module: moduleTitle ?? moduleId }))}</strong>`);
+    showToast(tf("shell.restore.success", { module: moduleTitle ?? moduleId }), "success");
+    await loadModule(moduleId);
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.restore.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => restoreArchivedModuleInBackground(moduleId, moduleTitle) },
+      { labelKey: "shell.action.cancel", action: startIdle },
+    ]);
+  }
+}
+
+async function startArchivedModulePicker() {
+  const slot = logProgress("shell.archive.loading");
+  slot.abortBtn.remove();
+
+  try {
+    const data = await apiFetch(`/api/admin/content/modules/archive?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
+    const archivedModules = Array.isArray(data?.modules) ? data.modules : [];
+    if (archivedModules.length === 0) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.archive.empty")), [
+        { labelKey: "shell.action.cancel", action: startIdle },
+      ]);
+      return;
+    }
+
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.prompt"))}</strong>`);
+    logBot(
+      () => escapeHtml(t("shell.archive.pickHint")),
+      [
+        ...archivedModules.map((module) => ({
+          label: module.title || module.id,
+          action: () => restoreArchivedModuleInBackground(module.id, module.title || module.id),
+        })),
+        { labelKey: "shell.action.cancel", action: startIdle },
+      ],
+    );
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: startArchivedModulePicker },
+      { labelKey: "shell.action.cancel", action: startIdle },
+    ]);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Chat flows
 // ---------------------------------------------------------------------------
@@ -1130,11 +1298,13 @@ function startIdle() {
   selectedModuleId = null;
   sessionDraft = null;
   previewDraft = null;
+  latestSavedModuleVersionId = null;
   chatLog = [];
   renderPreview();
   logBot(() => t("shell.idle.prompt"), [
     { labelKey: "shell.idle.openExisting", action: startModulePicker },
     { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
+    { labelKey: "shell.module.restoreArchived", action: startArchivedModulePicker },
   ]);
 }
 
@@ -1180,6 +1350,7 @@ async function loadModule(moduleId, options = {}) {
   selectedModuleId = moduleId;
   sessionDraft = null;
   previewDraft = null;
+  latestSavedModuleVersionId = null;
   const slot = logProgress("shell.module.loading");
 
   try {
@@ -1269,6 +1440,8 @@ function showModuleActions() {
   const canResumeEditing = !hasDraft && !!bundle?.selectedConfiguration?.moduleVersion;
   const selectedModuleVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
   const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
+  const canUnpublish = !hasDraft && !!bundle?.module?.activeVersionId;
+  const canArchive = !hasDraft && !!selectedModuleId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
@@ -1285,8 +1458,11 @@ function showModuleActions() {
     }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
+    { labelKey: "shell.module.restoreArchived", action: startArchivedModulePicker },
     ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
     ...(!hasDraft && canPublish ? [{ labelKey: "shell.draftReady.publish", action: publishLatestDraftInBackground }] : []),
+    ...(canUnpublish ? [{ labelKey: "shell.module.unpublish", action: unpublishModuleInBackground }] : []),
+    ...(canArchive ? [{ labelKey: "shell.module.archive", action: archiveModuleInBackground }] : []),
   ]);
   if (hasDraft || hasMcq) {
     startUnifiedRevisionFlow();
@@ -1322,7 +1498,7 @@ function startNewModuleFlow() {
 
 function askForSourceMaterial(moduleTitle, existingModuleId) {
   logForm(
-    "textarea",
+    "source-material",
     () => `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
     "shell.source.placeholder",
     "shell.action.next",
@@ -1332,13 +1508,20 @@ function askForSourceMaterial(moduleTitle, existingModuleId) {
 
 function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
   logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic",        action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "basic",         currentLocale) },
-    { labelKey: "shell.certLevel.intermediate",  action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "intermediate",  currentLocale) },
-    { labelKey: "shell.certLevel.advanced",      action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, "advanced",      currentLocale) },
+    { labelKey: "shell.certLevel.basic", action: () => askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale) },
+    { labelKey: "shell.certLevel.intermediate", action: () => askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale) },
+    { labelKey: "shell.certLevel.advanced", action: () => askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale) },
   ]);
 }
 
-async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale) {
+function askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale) {
+  logBot(() => t("shell.generationMode.prompt"), [
+    { labelKey: "shell.generationMode.ordinary", action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "ordinary") },
+    { labelKey: "shell.generationMode.thorough", action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "thorough") },
+  ]);
+}
+
+async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode) {
   if (existingModuleId) {
     const capturedTitle = localizeValue(bundle?.module?.title) || existingModuleId;
     const levelKey = `shell.certLevel.${certLevel}`;
@@ -1347,8 +1530,8 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       `${escapeHtml(t("shell.generating.startingFor"))} <strong>${escapeHtml(capturedTitle)}</strong>…<br>` +
       `<span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.certLevel.label"))}: ${escapeHtml(t(levelKey) || certLevel)} · ${escapeHtml(t("shell.locale.label"))}: ${escapeHtml(localeLabels[genLocale] ?? genLocale)}</span>`,
     );
-    generateDraftInBackground(sourceMaterial, certLevel, locale, () => {
-      askForMcqGeneration(sourceMaterial, certLevel, locale);
+    generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
+      askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
     });
     return;
   }
@@ -1373,7 +1556,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
         { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content/advanced"; } },
-        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale) },
+        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],
     );
@@ -1390,14 +1573,14 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   sessionDraft = { title: moduleTitle, taskText: "", guidanceText: "", mcqQuestions: [] };
   renderPreview();
 
-  generateDraftInBackground(sourceMaterial, certLevel, locale, () => {
-    askForMcqGeneration(sourceMaterial, certLevel, locale);
+  generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
+    askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
   });
 }
 
-function askForMcqGeneration(sourceMaterial, certLevel, locale) {
+function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {
   logBot(() => t("shell.askMcq.prompt"), [
-    { labelKey: "shell.askMcq.yes", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, () => showDraftReadyActions()) },
+    { labelKey: "shell.askMcq.yes", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, () => showDraftReadyActions()) },
     { labelKey: "shell.askMcq.no",  action: showDraftReadyActions },
   ]);
 }
@@ -1425,7 +1608,7 @@ function startGenerateDraftFlow() {
 
 function startGenerateMcqFlow() {
   logForm(
-    "textarea",
+    "source-material",
     () => `<strong>${escapeHtml(t("shell.mcqSource.promptTitle"))}</strong>`,
     "shell.mcqSource.placeholder",
     "shell.action.next",
@@ -1435,22 +1618,29 @@ function startGenerateMcqFlow() {
 
 function askForCertLevelMcqOnly(sourceMaterial) {
   logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic",       action: () => askForMcqQuestionCount(sourceMaterial, "basic", currentLocale, () => showModuleActions()) },
-    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()) },
-    { labelKey: "shell.certLevel.advanced",     action: () => askForMcqQuestionCount(sourceMaterial, "advanced", currentLocale, () => showModuleActions()) },
+    { labelKey: "shell.certLevel.basic", action: () => askForMcqGenerationMode(sourceMaterial, "basic", currentLocale, () => showModuleActions()) },
+    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqGenerationMode(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()) },
+    { labelKey: "shell.certLevel.advanced", action: () => askForMcqGenerationMode(sourceMaterial, "advanced", currentLocale, () => showModuleActions()) },
   ]);
 }
 
-function askForMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) {
+function askForMcqGenerationMode(sourceMaterial, certLevel, locale, onAccept) {
+  logBot(() => t("shell.generationMode.prompt"), [
+    { labelKey: "shell.generationMode.ordinary", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, "ordinary", onAccept) },
+    { labelKey: "shell.generationMode.thorough", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, "thorough", onAccept) },
+  ]);
+}
+
+function askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
   logBot(() => t("shell.mcq.questionCountPrompt"), [
-    { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, 3, onAccept) },
-    { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, 5, onAccept) },
-    { labelKey: "shell.mcq.questionCountChoice10", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, 10, onAccept) },
-    { labelKey: "shell.mcq.questionCountCustom", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) },
+    { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 3, onAccept) },
+    { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 5, onAccept) },
+    { labelKey: "shell.mcq.questionCountChoice10", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 10, onAccept) },
+    { labelKey: "shell.mcq.questionCountCustom", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
   ]);
 }
 
-function askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) {
+function askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
   logForm(
     "text",
     () => t("shell.mcq.questionCountPrompt"),
@@ -1460,26 +1650,26 @@ function askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccep
       const questionCount = parsePositiveIntInRange(rawValue, 1, 20);
       if (questionCount === null) {
         logBot(() => t("shell.mcq.questionCountInvalid"), [
-          { labelKey: "shell.action.retry", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) },
-          { labelKey: "shell.action.cancel", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, onAccept) },
+          { labelKey: "shell.action.retry", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
+          { labelKey: "shell.action.cancel", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
         ]);
         return;
       }
-      askForMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept);
+      askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept);
     },
   );
 }
 
-function askForMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) {
+function askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) {
   logBot(() => tf("shell.mcq.optionCountPrompt", { count: questionCount }), [
-    { labelKey: "shell.mcq.optionCountChoice3", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, 3, onAccept) },
-    { labelKey: "shell.mcq.optionCountChoice4", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, 4, onAccept) },
-    { labelKey: "shell.mcq.optionCountChoice5", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, 5, onAccept) },
-    { labelKey: "shell.mcq.optionCountCustom", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) },
+    { labelKey: "shell.mcq.optionCountChoice3", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 3, onAccept) },
+    { labelKey: "shell.mcq.optionCountChoice4", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 4, onAccept) },
+    { labelKey: "shell.mcq.optionCountChoice5", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 5, onAccept) },
+    { labelKey: "shell.mcq.optionCountCustom", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
   ]);
 }
 
-function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) {
+function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) {
   logForm(
     "text",
     () => tf("shell.mcq.optionCountPrompt", { count: questionCount }),
@@ -1489,12 +1679,12 @@ function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionC
       const optionCount = parsePositiveIntInRange(rawValue, 2, 6);
       if (optionCount === null) {
         logBot(() => t("shell.mcq.optionCountInvalid"), [
-          { labelKey: "shell.action.retry", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) },
-          { labelKey: "shell.action.cancel", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, questionCount, onAccept) },
+          { labelKey: "shell.action.retry", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
+          { labelKey: "shell.action.cancel", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
         ]);
         return;
       }
-      generateMcqInBackground(sourceMaterial, certLevel, locale, questionCount, optionCount, onAccept);
+      generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
     },
   );
 }

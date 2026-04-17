@@ -107,11 +107,13 @@ export const benchmarkExampleVersionBodySchema = z.object({
 
 export const generationLocaleSchema = z.enum(["en-GB", "nb", "nn"]);
 export const certificationLevelSchema = z.enum(["basic", "intermediate", "advanced"]);
+export const generationModeSchema = z.enum(["ordinary", "thorough"]);
 
 export const moduleDraftGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
+  generationMode: generationModeSchema.default("ordinary"),
 });
 
 export const moduleDraftRevisionBodySchema = z.object({
@@ -125,6 +127,7 @@ export const mcqGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
+  generationMode: generationModeSchema.default("ordinary"),
   questionCount: z.number().int().min(1).max(20).default(10),
   optionCount: z.number().int().min(2).max(6).default(4),
 });
