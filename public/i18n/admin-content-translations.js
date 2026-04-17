@@ -509,6 +509,12 @@ const adminContentBase = {
   "stateRail.live.none": "No published version",
   "stateRail.changes.unsaved": "Unsaved changes",
   "stateRail.changes.saved": "All saved",
+  "handoff.hasDraft.prompt": "You have an unsaved working draft. What would you like to do?",
+  "handoff.hasDraft.takeDraft": "Take draft to advanced editor",
+  "handoff.hasDraft.saveFirst": "Save draft first, then open advanced editor",
+  "handoff.hasDraft.discard": "Discard draft and open advanced editor",
+  "handoff.draftRestored": "Working draft carried over from conversational editor. Changes are not yet saved.",
+  "handoff.advanced.dirtyWarning": "You have unsaved changes in the advanced editor. Only task text, guidance and MCQ questions will carry back to the conversational editor — other changes (rubric, prompt template, etc.) will be lost. Continue?",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -835,6 +841,12 @@ const nbOverrides = {
   "stateRail.live.none": "Ingen publisert versjon",
   "stateRail.changes.unsaved": "Ulagrede endringer",
   "stateRail.changes.saved": "Alt lagret",
+  "handoff.hasDraft.prompt": "Du har et ulagret arbeidsutkast. Hva vil du gjøre?",
+  "handoff.hasDraft.takeDraft": "Ta med utkastet til avansert redigering",
+  "handoff.hasDraft.saveFirst": "Lagre utkastet, og åpne avansert redigering",
+  "handoff.hasDraft.discard": "Forkast utkastet og åpne avansert redigering",
+  "handoff.draftRestored": "Arbeidsutkast hentet fra samtale. Endringene er ikke lagret ennå.",
+  "handoff.advanced.dirtyWarning": "Du har ulagrede endringer i detaljredigering. Kun oppgavetekst, veiledning og MCQ vil bli med tilbake til samtale — resten (rubrikk, prompt m.m.) vil gå tapt. Vil du fortsette?",
 };
 const nnOverrides = {
   "nav.profile": "Profil",
@@ -1159,6 +1171,12 @@ const nnOverrides = {
   "stateRail.live.none": "Ingen publisert versjon",
   "stateRail.changes.unsaved": "Ulagra endringar",
   "stateRail.changes.saved": "Alt lagra",
+  "handoff.hasDraft.prompt": "Du har eit ulagra arbeidsutkast. Kva vil du gjera?",
+  "handoff.hasDraft.takeDraft": "Ta med utkastet til detaljredigering",
+  "handoff.hasDraft.saveFirst": "Lagra utkastet, og opne detaljredigering",
+  "handoff.hasDraft.discard": "Kast utkastet og opne detaljredigering",
+  "handoff.draftRestored": "Arbeidsutkast henta frå samtale. Endringane er ikkje lagra enno.",
+  "handoff.advanced.dirtyWarning": "Du har ulagra endringar i detaljredigering. Berre oppgåvetekst, rettleiing og MCQ vil bli med tilbake til samtale — resten (rubrikk, prompt m.m.) vil gå tapt. Vil du halde fram?",
 };
 
 const adminContentLateOverrides = {
@@ -1361,6 +1379,12 @@ const adminContentLateOverrides = {
     "stateRail.live.none": "Ingen publisert versjon",
     "stateRail.changes.unsaved": "Ulagrede endringer",
     "stateRail.changes.saved": "Alt lagret",
+    "handoff.hasDraft.prompt": "Du har et ulagret arbeidsutkast. Hva vil du gjøre?",
+    "handoff.hasDraft.takeDraft": "Ta med utkastet til avansert redigering",
+    "handoff.hasDraft.saveFirst": "Lagre utkastet, og åpne avansert redigering",
+    "handoff.hasDraft.discard": "Forkast utkastet og åpne avansert redigering",
+    "handoff.draftRestored": "Arbeidsutkast hentet fra samtale. Endringene er ikke lagret ennå.",
+    "handoff.advanced.dirtyWarning": "Du har ulagrede endringer i detaljredigering. Kun oppgavetekst, veiledning og MCQ vil bli med tilbake til samtale — resten (rubrikk, prompt m.m.) vil gå tapt. Vil du fortsette?",
   },
   nn: {
     "adminContent.module.title": "2) Opprett modulgrunnlag manuelt",
@@ -1561,6 +1585,12 @@ const adminContentLateOverrides = {
     "stateRail.live.none": "Ingen publisert versjon",
     "stateRail.changes.unsaved": "Ulagra endringar",
     "stateRail.changes.saved": "Alt lagra",
+    "handoff.hasDraft.prompt": "Du har eit ulagra arbeidsutkast. Kva vil du gjera?",
+    "handoff.hasDraft.takeDraft": "Ta med utkastet til detaljredigering",
+    "handoff.hasDraft.saveFirst": "Lagra utkastet, og opne detaljredigering",
+    "handoff.hasDraft.discard": "Kast utkastet og opne detaljredigering",
+    "handoff.draftRestored": "Arbeidsutkast henta frå samtale. Endringane er ikkje lagra enno.",
+    "handoff.advanced.dirtyWarning": "Du har ulagra endringar i detaljredigering. Berre oppgåvetekst, rettleiing og MCQ vil bli med tilbake til samtale — resten (rubrikk, prompt m.m.) vil gå tapt. Vil du halde fram?",
   },
 };
 

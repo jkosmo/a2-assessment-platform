@@ -7,6 +7,27 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.93 - 2026-04-17
+
+feat: safe working-draft handoff between conversational shell and advanced editor (#314)
+
+- New public/static/admin-content-handoff.js: writeHandoff/readAndClearHandoff via sessionStorage
+  (tab-scoped, survives page refresh, 10-min TTL, keyed by moduleId)
+- Shell → Advanced: openAdvancedEditor() checks sessionDraft before navigating
+  - If unsaved draft: shows 3-choice dialog (take draft / save first / discard)
+  - "Save first" uses saveDraftBundleInBackground({ afterSave }) new callback
+  - Always writes locale context to handoff for restoration in advanced
+- Advanced receives shell handoff: applyHandoffFromShell() runs after auto-load
+  - Populates taskText/guidanceText/mcqQuestions fields from handoff draft
+  - Marks versionDetails and mcq cards as dirty; shows toast
+- Advanced → Shell: initBackToChatHandoff() intercepts #backToChatLink click
+  - If dirtyCards: window.confirm() warning (partial-transfer caveat explained)
+  - Writes content field values + locale to handoff before navigating
+- Shell receives advanced handoff: applyHandoffDraft() in loadModule()
+  - Handoff draft wins over resumeEditing/createSessionDraftFromLoadedModule
+  - Locale from handoff applied to currentLocale/previewLocale
+- 6 new i18n keys (handoff.*) in all 5 locale slots: en-GB, nb, nn, lateOverrides.nb/.nn
+
 ## 0.9.92 - 2026-04-17
 
 test: functional UI test coverage for admin-content shell and advanced editor (#318)

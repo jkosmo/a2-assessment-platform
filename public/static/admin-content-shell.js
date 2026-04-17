@@ -15,6 +15,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -1038,6 +1039,23 @@ function createSessionDraftFromLoadedModule() {
   return true;
 }
 
+function applyHandoffDraft(draft) {
+  if (!draft?.taskText && !draft?.guidanceText && !(draft?.mcqQuestions?.length > 0)) {
+    return false;
+  }
+  sessionDraft = buildPreviewCandidate({
+    title: bundle?.module?.title ?? "",
+    taskText: draft.taskText ?? "",
+    guidanceText: draft.guidanceText ?? "",
+    mcqQuestions: draft.mcqQuestions ?? [],
+  });
+  previewDraft = null;
+  sessionState = "draft-pending";
+  renderPreviewLocaleBar();
+  renderPreview();
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // LLM generation — non-blocking, AbortController-guarded
 // ---------------------------------------------------------------------------
@@ -1250,7 +1268,8 @@ async function reviseMcqInBackground(instruction, onAccept) {
   onAccept?.(questions);
 }
 
-async function saveDraftBundleInBackground() {
+async function saveDraftBundleInBackground(options = {}) {
+  const { afterSave = null } = options;
   const moduleId = selectedModuleId;
   if (!moduleId) {
     logBot(() => t("shell.save.moduleRequired"));
@@ -1310,10 +1329,11 @@ async function saveDraftBundleInBackground() {
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
     showToast(t("shell.save.success"), "success");
+    if (afterSave) afterSave();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: saveDraftBundleInBackground },
+      { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
       { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
     ]);
   }
@@ -1533,7 +1553,19 @@ async function loadModule(moduleId, options = {}) {
   }
 
   sessionState = "module-loaded";
-  const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
+
+  // Check for a handoff payload written by the advanced editor (or by ourselves before navigating away).
+  // Handoff wins over resumeEditing: it carries more recent unsaved state than the saved bundle.
+  const handoff = readAndClearHandoff(moduleId);
+  if (handoff?.locale && supportedLocales.includes(handoff.locale) && handoff.locale !== currentLocale) {
+    currentLocale = handoff.locale;
+    if (handoff.previewLocale && supportedLocales.includes(handoff.previewLocale)) {
+      previewLocale = handoff.previewLocale;
+    }
+  }
+  const resumedIntoDraft = handoff?.draft
+    ? applyHandoffDraft(handoff.draft)
+    : resumeEditing && createSessionDraftFromLoadedModule();
   renderPreview();
 
   // Capture data for retranslatable closure
@@ -1640,8 +1672,39 @@ function showModuleActions() {
 
 function openAdvancedEditor(moduleId) {
   const url = `/admin-content/advanced${moduleId ? `?moduleId=${encodeURIComponent(moduleId)}` : ""}`;
-  logBot(() => t("shell.module.openingEditor"));
-  setTimeout(() => { location.href = url; }, 400);
+  const hasUnsavedDraft =
+    !!sessionDraft &&
+    !!(sessionDraft.taskText || sessionDraft.guidanceText || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
+
+  if (!hasUnsavedDraft) {
+    // No unsaved work — carry locale context only so the advanced editor can restore it
+    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale });
+    logBot(() => t("shell.module.openingEditor"));
+    setTimeout(() => { location.href = url; }, 400);
+    return;
+  }
+
+  // Has unsaved work — ask what to do
+  const navigateWithDraft = () => {
+    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: sessionDraft, locale: currentLocale, previewLocale });
+    logBot(() => t("shell.module.openingEditor"));
+    setTimeout(() => { location.href = url; }, 400);
+  };
+  const navigateWithoutDraft = () => {
+    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale });
+    logBot(() => t("shell.module.openingEditor"));
+    setTimeout(() => { location.href = url; }, 400);
+  };
+
+  logBot(() => t("handoff.hasDraft.prompt"), [
+    { labelKey: "handoff.hasDraft.takeDraft", action: navigateWithDraft },
+    {
+      labelKey: "handoff.hasDraft.saveFirst",
+      action: () => saveDraftBundleInBackground({ afterSave: navigateWithoutDraft }),
+    },
+    { labelKey: "handoff.hasDraft.discard", action: navigateWithoutDraft },
+    { labelKey: "shell.action.cancel", action: showModuleActions },
+  ]);
 }
 
 // ---------------------------------------------------------------------------

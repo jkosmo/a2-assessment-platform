@@ -14,6 +14,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { findLinkedVersion, deriveModuleStatusChains } from "/static/module-status-logic.js";
+import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -3642,12 +3643,16 @@ loadParticipantConsoleConfig().then(async () => {
       if (modules.some((m) => m.id === autoModuleId)) {
         setSelectedModule(autoModuleId);
         await handleLoadSelectedModuleContent();
+        // Apply any working draft carried over from the conversational shell.
+        // Must run after populateFormFromModuleExport so it can override form fields.
+        applyHandoffFromShell(autoModuleId);
       }
     } catch {
       // non-fatal – editor is still usable without auto-load
     }
   }
 });
+initBackToChatHandoff();
 renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
@@ -3778,6 +3783,63 @@ function updateBackToChatLink() {
   if (!link) return;
   const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
   link.href = moduleId ? `/admin-content?moduleId=${encodeURIComponent(moduleId)}&resumeEditing=1` : "/admin-content";
+}
+
+function initBackToChatHandoff() {
+  const link = document.getElementById("backToChatLink");
+  if (!link) return;
+  link.addEventListener("click", (e) => {
+    if (dirtyCards.size > 0) {
+      // Some cards have unsaved changes — only task text, guidance and MCQ can transfer
+      const confirmed = window.confirm(t("handoff.advanced.dirtyWarning"));
+      if (!confirmed) {
+        e.preventDefault();
+        return;
+      }
+    }
+    // Write handoff with whatever is currently in the content fields so the shell
+    // can restore them even when dirtyCards is empty (locale context travels too).
+    const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || null;
+    let mcqQuestions = [];
+    try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+    writeHandoff({
+      moduleId,
+      source: "advanced",
+      draft: {
+        taskText: moduleVersionTaskTextInput?.value ?? "",
+        guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+        mcqQuestions,
+      },
+      locale: currentLocale,
+    });
+    // Let the default navigation proceed — handoff is in sessionStorage
+  });
+}
+
+function applyHandoffFromShell(moduleId) {
+  const handoff = readAndClearHandoff(moduleId);
+  if (!handoff || handoff.source !== "shell" || !handoff.draft) return;
+
+  const { taskText, guidanceText, mcqQuestions } = handoff.draft;
+  if (!taskText && !guidanceText && !(mcqQuestions?.length > 0)) return;
+
+  if (moduleVersionTaskTextInput) {
+    moduleVersionTaskTextInput.value = formatEditorValue(taskText, "");
+    dirtyCards.add("versionDetails");
+  }
+  if (moduleVersionGuidanceTextInput) {
+    moduleVersionGuidanceTextInput.value = formatEditorValue(guidanceText, "");
+    dirtyCards.add("versionDetails");
+  }
+  if (mcqQuestionsJsonInput && Array.isArray(mcqQuestions) && mcqQuestions.length > 0) {
+    mcqQuestionsJsonInput.value = JSON.stringify(mcqQuestions, null, 2);
+    dirtyCards.add("mcq");
+  }
+
+  renderModuleStatus();
+  renderContentCards();
+  syncAllTextareaHeights();
+  showToast(t("handoff.draftRestored"), "info");
 }
 
 function validateThresholds(values) {
