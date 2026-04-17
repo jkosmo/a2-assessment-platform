@@ -1059,7 +1059,6 @@ async function saveDraftBundleInBackground() {
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
     showToast(t("shell.save.success"), "success");
-    showModuleActions();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1090,7 +1089,6 @@ async function publishLatestDraftInBackground() {
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
     showToast(t("shell.publish.success"), "success");
-    showModuleActions();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1245,10 +1243,10 @@ function showModuleActions() {
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
-    ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
-    ...(!hasDraft && canPublish ? [{ labelKey: "shell.draftReady.publish", action: publishLatestDraftInBackground }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
+    ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
+    ...(!hasDraft && canPublish ? [{ labelKey: "shell.draftReady.publish", action: publishLatestDraftInBackground }] : []),
   ]);
   if (hasDraft || hasMcq) {
     startUnifiedRevisionFlow();
@@ -1373,9 +1371,9 @@ function showDraftReadyActions() {
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
   }, [
-    { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     ...(selectedModuleId ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }] : []),
     { labelKey: "shell.draftReady.restart", action: startIdle },
+    { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
   ]);
   startUnifiedRevisionFlow();
 }
