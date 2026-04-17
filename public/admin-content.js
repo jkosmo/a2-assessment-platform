@@ -934,7 +934,9 @@ function buildEditorSnapshotFromDraft(draft) {
     mcqQuestionsJson: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.questions, "")),
     moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
     moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
-    moduleVersionSubmissionSchema: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.submissionSchema, "")),
+    moduleVersionSubmissionSchema: normalizeSnapshotValue(
+      JSON.stringify(normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchema), null, 2),
+    ),
     moduleVersionAssessmentPolicy: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "")),
     moduleVersionRubricVersionId: "",
     moduleVersionPromptTemplateVersionId: "",
@@ -1174,7 +1176,11 @@ function applyImportDraftToForm(draft) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
-  moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema, "");
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema),
+    null,
+    2,
+  );
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "");
   if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
 
@@ -1214,7 +1220,11 @@ function populateFormFromModuleExport(moduleExport) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
-  moduleVersionSubmissionSchemaInput.value = formatEditorValue(moduleVersion?.submissionSchema, "");
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField(moduleVersion?.submissionSchema),
+    null,
+    2,
+  );
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(moduleVersion?.assessmentPolicy, "");
   if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
   moduleVersionRubricVersionIdInput.value = rubricVersion?.id ?? "";
@@ -1258,9 +1268,7 @@ function buildParticipantPreviewPayload() {
         moduleVersionGuidanceTextInput.value,
         "adminContent.moduleVersion.guidanceText",
       ),
-      submissionSchema: moduleVersionSubmissionSchemaInput.value.trim()
-        ? parseJsonField(moduleVersionSubmissionSchemaInput.value.trim(), "adminContent.moduleVersion.submissionSchemaJson")
-        : null,
+      submissionSchema: normalizeSubmissionSchemaToSingleField(moduleVersionSubmissionSchemaInput.value.trim()),
       questions,
     },
   };
@@ -1475,7 +1483,7 @@ function setDefaultFormValues() {
   mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
-  moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
   syncAllTextareaHeights();
   editorBaselineSnapshot = getEditorSnapshot();
@@ -1626,7 +1634,7 @@ function clearVersionFields() {
   mcqQuestionsJsonInput.value = "";
   moduleVersionTaskTextInput.value = "";
   moduleVersionGuidanceTextInput.value = "";
-  moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
   moduleVersionRubricVersionIdInput.value = "";
   moduleVersionPromptTemplateVersionIdInput.value = "";
@@ -1822,7 +1830,11 @@ async function handleCreateModule(options = { silent: false }) {
   mcqQuestionsJsonInput.value = savedVersionFields.mcqQuestionsJson;
   moduleVersionTaskTextInput.value = savedVersionFields.moduleVersionTaskText;
   moduleVersionGuidanceTextInput.value = savedVersionFields.moduleVersionGuidanceText;
-  moduleVersionSubmissionSchemaInput.value = savedVersionFields.moduleVersionSubmissionSchema;
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField(savedVersionFields.moduleVersionSubmissionSchema),
+    null,
+    2,
+  );
   moduleVersionAssessmentPolicyInput.value = savedVersionFields.moduleVersionAssessmentPolicy;
   syncAllTextareaHeights();
   // Mark restored content as dirty (not yet saved as a version) and refresh cards.
@@ -1997,7 +2009,9 @@ async function handleCreateModuleVersion(options = { silent: false }) {
   const rawSubmissionSchema = moduleVersionSubmissionSchemaInput.value.trim();
   let submissionSchema;
   if (rawSubmissionSchema) {
-    submissionSchema = parseJsonField(rawSubmissionSchema, "adminContent.moduleVersion.submissionSchemaJson");
+    submissionSchema = normalizeSubmissionSchemaToSingleField(
+      parseJsonField(rawSubmissionSchema, "adminContent.moduleVersion.submissionSchemaJson"),
+    );
   }
   const rawAssessmentPolicy = moduleVersionAssessmentPolicyInput.value.trim();
   const assessmentPolicy = rawAssessmentPolicy
@@ -2203,22 +2217,45 @@ async function handleApplyImportDraft(rawValue) {
 }
 
 function resolvePromptFields() {
-  const customJson = promptCustomFieldsInput.value.trim();
-  if (customJson) {
-    const parsed = JSON.parse(customJson);
-    return Array.isArray(parsed) ? parsed : Array.isArray(parsed?.fields) ? parsed.fields : [];
-  }
-  const fields = [];
-  if (promptFieldResponse.checked) {
-    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
-  }
-  if (promptFieldReflection.checked) {
-    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
-  }
-  if (promptFieldPromptExcerpt.checked) {
-    fields.push({ id: "promptExcerpt", label: { "en-GB": "Supporting material", "nb": "Støttemateriale", "nn": "Støttemateriell" }, type: "text", required: false, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
-  }
-  return fields;
+  return [buildDefaultSubmissionField()];
+}
+
+function buildDefaultSubmissionField(overrides = {}) {
+  return {
+    id: "response",
+    label: {
+      "en-GB": "Your response",
+      nb: "Ditt svar",
+      nn: "Ditt svar",
+      ...(typeof overrides.label === "object" && overrides.label !== null ? overrides.label : {}),
+    },
+    type: "textarea",
+    required: true,
+    ...(typeof overrides.placeholder === "object" && overrides.placeholder !== null
+      ? { placeholder: overrides.placeholder }
+      : {}),
+    ...(typeof overrides.defaultValue === "object" && overrides.defaultValue !== null
+      ? { defaultValue: overrides.defaultValue }
+      : {}),
+  };
+}
+
+function normalizeSubmissionSchemaToSingleField(input) {
+  const parsed = (() => {
+    if (!input) return {};
+    if (typeof input === "string") {
+      try {
+        return JSON.parse(input);
+      } catch {
+        return {};
+      }
+    }
+    return input;
+  })();
+
+  const fields = Array.isArray(parsed?.fields) ? parsed.fields : Array.isArray(parsed) ? parsed : [];
+  const firstField = fields[0] && typeof fields[0] === "object" ? fields[0] : {};
+  return { fields: [buildDefaultSubmissionField(firstField)] };
 }
 
 async function handleOpenParticipantPreview() {
@@ -2270,6 +2307,13 @@ function getJsonSummary(rawValue) {
   }
 }
 
+function getSubmissionSchemaSummary(rawValue) {
+  const schema = normalizeSubmissionSchemaToSingleField(rawValue);
+  const field = schema.fields?.[0] ?? buildDefaultSubmissionField();
+  const label = localizeContentValue(field.label);
+  return label ? `${t("adminContent.dialog.submissionSchema.singleFieldSummary")} — ${label}` : t("adminContent.dialog.submissionSchema.singleFieldSummary");
+}
+
 function setCardSummary(elementId, text) {
   const el = document.getElementById(elementId);
   if (!el) return;
@@ -2319,7 +2363,7 @@ function renderContentCards() {
   setCardUnsaved("contentCard_mcq_unsaved", dirtyCards.has("mcq"));
 
   // Innleveringsskjema
-  setCardSummary("contentCard_submissionSchema_summary", getJsonSummary(moduleVersionSubmissionSchemaInput.value));
+  setCardSummary("contentCard_submissionSchema_summary", getSubmissionSchemaSummary(moduleVersionSubmissionSchemaInput.value));
   setCardUnsaved("contentCard_submissionSchema_unsaved", dirtyCards.has("submissionSchema"));
 
   // Show/hide save button row
@@ -3033,6 +3077,7 @@ function setActiveSsLocale(locale) {
 function createSubmissionFieldRow(field, idx) {
   const fId = `ssF_${_ssFieldCounter++}`;
   const locales = ["en-GB", "nb", "nn"];
+  const singleFieldMode = true;
 
   const row = document.createElement("div");
   row.className = "ss-field-row";
@@ -3041,13 +3086,16 @@ function createSubmissionFieldRow(field, idx) {
   header.className = "ss-field-header";
   const titleSpan = document.createElement("span");
   titleSpan.style.cssText = "font-size:12px;font-weight:700;color:var(--color-meta)";
-  titleSpan.textContent = `${t("adminContent.dialog.submissionSchema.fieldLabel") || "Field"} ${idx + 1}`;
+  titleSpan.textContent = singleFieldMode
+    ? (t("adminContent.dialog.submissionSchema.singleFieldTitle") || "Response field")
+    : `${t("adminContent.dialog.submissionSchema.fieldLabel") || "Field"} ${idx + 1}`;
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "ss-field-remove";
   removeBtn.setAttribute("aria-label", "Remove");
   removeBtn.textContent = "×";
   removeBtn.addEventListener("click", () => row.remove());
+  removeBtn.hidden = singleFieldMode;
   header.append(titleSpan, removeBtn);
   row.appendChild(header);
 
@@ -3060,21 +3108,23 @@ function createSubmissionFieldRow(field, idx) {
   const idInput = document.createElement("input");
   idInput.className = "ss-field-id";
   idInput.autocomplete = "off";
-  idInput.value = field?.id ?? "";
+  idInput.value = singleFieldMode ? "response" : (field?.id ?? "");
   idInput.placeholder = "response";
+  idInput.disabled = singleFieldMode;
   idWrap.append(idLabel, idInput);
   const typeWrap = document.createElement("div");
   const typeLabel = document.createElement("label");
   typeLabel.textContent = t("adminContent.dialog.submissionSchema.fieldType") || "Type";
   const typeSelect = document.createElement("select");
   typeSelect.className = "ss-field-type";
-  for (const opt of ["textarea", "text", "number"]) {
+  for (const opt of singleFieldMode ? ["textarea"] : ["textarea", "text", "number"]) {
     const o = document.createElement("option");
     o.value = opt;
     o.textContent = opt;
     if (field?.type === opt) o.selected = true;
     typeSelect.appendChild(o);
   }
+  typeSelect.disabled = singleFieldMode;
   typeWrap.append(typeLabel, typeSelect);
   idTypeRow.append(idWrap, typeWrap);
   row.appendChild(idTypeRow);
@@ -3086,7 +3136,8 @@ function createSubmissionFieldRow(field, idx) {
   const reqCheck = document.createElement("input");
   reqCheck.type = "checkbox";
   reqCheck.className = "ss-field-required";
-  reqCheck.checked = field?.required !== false;
+  reqCheck.checked = singleFieldMode ? true : field?.required !== false;
+  reqCheck.disabled = singleFieldMode;
   const reqSpan = document.createElement("span");
   reqSpan.textContent = t("adminContent.dialog.submissionSchema.fieldRequired") || "Required";
   reqLabel.append(reqCheck, reqSpan);
@@ -3158,14 +3209,10 @@ function openSubmissionSchemaDialog(triggerBtn) {
 
   const list = document.getElementById("dlgSS_fieldsList");
   list.innerHTML = "";
-  let schema = {};
-  try { schema = JSON.parse(moduleVersionSubmissionSchemaInput.value.trim() || "{}"); } catch { schema = {}; }
-  const fields = Array.isArray(schema?.fields) ? schema.fields : [];
-  if (fields.length === 0) {
-    list.appendChild(createSubmissionFieldRow({ id: "", type: "textarea", required: true }, 0));
-  } else {
-    fields.forEach((f, i) => list.appendChild(createSubmissionFieldRow(f, i)));
-  }
+  const schema = normalizeSubmissionSchemaToSingleField(moduleVersionSubmissionSchemaInput.value.trim());
+  list.appendChild(createSubmissionFieldRow(schema.fields[0], 0));
+  const addFieldBtn = document.getElementById("dlgSS_addField");
+  if (addFieldBtn) addFieldBtn.hidden = true;
 
   setActiveDialogLocaleTab(dialog, "en-GB");
   setActiveSsLocale("en-GB");
@@ -3178,13 +3225,13 @@ function applySubmissionSchemaDialog() {
   const fields = [];
 
   for (const row of document.querySelectorAll("#dlgSS_fieldsList .ss-field-row")) {
-    const id = row.querySelector(".ss-field-id")?.value.trim() ?? "";
+    const id = "response";
     if (!id) {
       setMessage(t("adminContent.dialog.submissionSchema.errorIdRequired") || "All fields must have an ID.", "error");
       return;
     }
-    const type = row.querySelector(".ss-field-type")?.value ?? "textarea";
-    const required = row.querySelector(".ss-field-required")?.checked ?? true;
+    const type = "textarea";
+    const required = true;
     const label = {};
     for (const locale of locales) {
       label[locale] = row.querySelector(`[data-locale="${locale}"] .ss-field-label`)?.value ?? "";
@@ -3209,7 +3256,11 @@ function applySubmissionSchemaDialog() {
     fields.push(fieldObj);
   }
 
-  moduleVersionSubmissionSchemaInput.value = fields.length > 0 ? JSON.stringify({ fields }, null, 2) : "";
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField({ fields }),
+    null,
+    2,
+  );
   dirtyCards.add("submissionSchema");
   syncAllTextareaHeights();
   renderContentCards();
@@ -3334,10 +3385,10 @@ copyAuthoringPromptButton.addEventListener("click", () => {
   activateModuleStartMode("import");
   promptCertificationLevelSelect.value = "";
   promptMcqCountInput.value = "10";
-  promptCustomFieldsInput.value = "";
-  promptFieldResponse.checked = true;
-  promptFieldReflection.checked = true;
-  promptFieldPromptExcerpt.checked = true;
+  if (promptCustomFieldsInput) promptCustomFieldsInput.value = "";
+  if (promptFieldResponse) promptFieldResponse.checked = true;
+  if (promptFieldReflection) promptFieldReflection.checked = false;
+  if (promptFieldPromptExcerpt) promptFieldPromptExcerpt.checked = false;
   authoringPromptDialog.showModal();
 });
 
@@ -3675,11 +3726,7 @@ document.getElementById("dialogSubmissionSchemaApply")?.addEventListener("click"
   applySubmissionSchemaDialog();
 });
 document.getElementById("dlgSS_addField")?.addEventListener("click", () => {
-  const list = document.getElementById("dlgSS_fieldsList");
-  const idx = list.querySelectorAll(".ss-field-row").length;
-  list.appendChild(createSubmissionFieldRow({ id: "", type: "textarea", required: true }, idx));
-  const activeTab = document.querySelector("#dialogSubmissionSchema .dialog-locale-tab.active");
-  setActiveSsLocale(activeTab?.dataset.localeTab ?? "en-GB");
+  // Advanced UI now standardises on one free-text submission field per module.
 });
 document.getElementById("dialogSubmissionSchema")?.addEventListener("click", (e) => {
   const tab = e.target.closest(".dialog-locale-tab");

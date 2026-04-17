@@ -127,7 +127,7 @@
 
       <div class="shell-header">
         <h1>Content Workspace</h1>
-        <a href="/admin-content/advanced" class="advanced-link">Avansert redigering ↗</a>
+        <a id="advancedEditorLink" href="/admin-content/advanced" class="advanced-link">Avansert redigering ↗</a>
       </div>
 
       <div class="workspace-shell">
@@ -142,7 +142,8 @@
 
         <!-- Chat pane -->
         <section class="card chat-pane" aria-label="Samtaleassistent">
-          <div id="chatMessages" class="chat-messages" aria-live="polite" aria-atomic="false"></div>
+          <div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false"></div>
+          <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
         </section>
 
       </div>

@@ -514,7 +514,7 @@
       <details class="json-fallback-panel">
         <summary data-i18n="adminContent.jsonFallback.submissionSchema">Submission form schema — raw JSON (advanced)</summary>
         <div><label for="moduleVersionSubmissionSchema" data-i18n="adminContent.moduleVersion.submissionSchemaJson">Submission form schema (JSON, optional)</label><textarea id="moduleVersionSubmissionSchema" rows="4"></textarea></div>
-        <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Defines the fields shown to participants. If empty, default 3-field form is used. Example: <code>{"fields":[{"id":"response","label":"Your answer","type":"textarea","required":true}]}</code></div>
+        <div class="small" data-i18n="adminContent.help.submissionSchemaJson">Advanced authoring now standardizes on one free-text response field per module. The raw JSON fallback remains available for compatibility.</div>
       </details>
       <div class="row">
         <div><label for="moduleVersionRubricVersionId" data-i18n="adminContent.moduleVersion.rubricVersionId">Scoring rules version ID</label><input id="moduleVersionRubricVersionId" /></div>
@@ -982,8 +982,8 @@
         <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn">NN</button>
       </div>
       <div class="dialog-section-label" data-i18n="adminContent.dialog.submissionSchema.sectionFields">Fields</div>
+      <div class="small" data-i18n="adminContent.dialog.submissionSchema.singleFieldHint">Advanced authoring now uses one free-text response field per module.</div>
       <div id="dlgSS_fieldsList"></div>
-      <button type="button" id="dlgSS_addField" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.submissionSchema.addField">Add field</span></button>
       <div class="dialog-footer">
         <button type="button" id="dialogSubmissionSchemaCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Cancel</button>
         <button type="button" id="dialogSubmissionSchemaApply" class="btn-primary" data-i18n="adminContent.dialog.apply">Update draft</button>
@@ -1006,17 +1006,7 @@
           <label for="promptMcqCount" data-i18n="adminContent.promptDialog.mcqCount">Number of MCQ questions</label>
           <input id="promptMcqCount" type="number" value="10" min="1" max="50" autocomplete="off" />
         </div>
-        <fieldset class="pill-group-fieldset" style="margin-top: var(--space-1);">
-          <legend data-i18n="adminContent.promptDialog.fieldLabel">Submission fields to include</legend>
-          <label class="checkbox-label"><input type="checkbox" id="promptFieldResponse" checked /> <span data-i18n="adminContent.promptDialog.fieldResponse">Response</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="promptFieldReflection" checked /> <span data-i18n="adminContent.promptDialog.fieldReflection">Reflection</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="promptFieldPromptExcerpt" checked /> <span data-i18n="adminContent.promptDialog.fieldPromptExcerpt">Prompt excerpt</span></label>
-        </fieldset>
-        <div style="margin-top: var(--space-1);">
-          <label for="promptCustomFields" data-i18n="adminContent.promptDialog.customFields">Custom fields JSON (overrides checkboxes)</label>
-          <textarea id="promptCustomFields" rows="5" data-i18n-placeholder="adminContent.promptDialog.customFieldsPlaceholder" placeholder="[{&quot;id&quot;:&quot;response&quot;,&quot;type&quot;:&quot;textarea&quot;,&quot;required&quot;:true}]"></textarea>
-          <div class="small" data-i18n="adminContent.promptDialog.customFieldsHint">Leave empty to use the checkboxes above.</div>
-        </div>
+        <div class="small" style="margin-top: var(--space-1);" data-i18n="adminContent.promptDialog.singleFieldNote">The authoring prompt now assumes one free-text response field per module.</div>
         <div class="row" style="margin-top: var(--space-2);">
           <div><button type="submit" id="promptDialogCopy" class="btn-primary" data-i18n="adminContent.promptDialog.copy">Copy</button></div>
           <div><button type="button" id="promptDialogCancel" class="btn-secondary" data-i18n="adminContent.promptDialog.cancel">Cancel</button></div>

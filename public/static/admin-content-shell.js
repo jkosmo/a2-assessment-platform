@@ -122,6 +122,8 @@ const previewContent = document.getElementById("previewContent");
 const workspaceNav = document.getElementById("workspaceNav");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
+const advancedEditorLink = document.getElementById("advancedEditorLink");
+const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 const stateRail = document.getElementById("stateRail");
 const srModuleName = document.getElementById("srModuleName");
 const srEditing = document.getElementById("srEditing");
@@ -171,6 +173,41 @@ function escapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function htmlToPlainText(html) {
+  const fragment = document.createElement("div");
+  fragment.innerHTML = html;
+  return fragment.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+let announcerResetHandle = null;
+function announceStatus(message) {
+  if (!shellStatusAnnouncer || !message) return;
+  if (announcerResetHandle) clearTimeout(announcerResetHandle);
+  shellStatusAnnouncer.textContent = "";
+  requestAnimationFrame(() => {
+    shellStatusAnnouncer.textContent = message;
+    announcerResetHandle = setTimeout(() => {
+      shellStatusAnnouncer.textContent = "";
+      announcerResetHandle = null;
+    }, 1200);
+  });
+}
+
+function setChatBusy(isBusy) {
+  if (!chatMessages) return;
+  if (isBusy) {
+    chatMessages.setAttribute("aria-busy", "true");
+  } else {
+    chatMessages.removeAttribute("aria-busy");
+  }
+}
+
+function focusFirstEnabledChoice(container) {
+  const firstChoice = container?.querySelector?.(".chat-choice-btn:not([disabled])");
+  if (!firstChoice) return;
+  setTimeout(() => firstChoice.focus(), 40);
 }
 
 function parseApiErrorMessage(error, fallbackKey) {
@@ -248,7 +285,7 @@ function resolveChoiceLabel(choice) {
   return choice.label ?? t(choice.labelKey);
 }
 
-function _domChoiceRow(choices, disabled) {
+function _domChoiceRow(choices, disabled, autoFocus = false) {
   const row = document.createElement("div");
   row.className = "chat-choices";
   for (const c of choices) {
@@ -267,10 +304,13 @@ function _domChoiceRow(choices, disabled) {
     }
     row.appendChild(btn);
   }
+  if (autoFocus && !disabled) {
+    focusFirstEnabledChoice(row);
+  }
   return row;
 }
 
-function _domBotBubble(html, choices, disabled) {
+function _domBotBubble(html, choices, disabled, autoFocusChoices = false) {
   const msg = document.createElement("div");
   msg.className = "chat-msg chat-msg--bot";
   const bubble = document.createElement("div");
@@ -278,7 +318,7 @@ function _domBotBubble(html, choices, disabled) {
   bubble.innerHTML = html;
   msg.appendChild(bubble);
   if (choices && choices.length > 0) {
-    msg.appendChild(_domChoiceRow(choices, disabled));
+    msg.appendChild(_domChoiceRow(choices, disabled, autoFocusChoices));
   }
   chatMessages.appendChild(msg);
   _domScroll(msg);
@@ -297,6 +337,8 @@ function _domUserBubble(text) {
 // textKeyOrFn: i18n key string OR () => string for dynamic text.
 function _domProgress(textKeyOrFn) {
   const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
+  setChatBusy(true);
+  announceStatus(text);
   const msg = document.createElement("div");
   msg.className = "chat-msg chat-msg--bot";
   const bubble = document.createElement("div");
@@ -509,6 +551,9 @@ function _domModuleChoicesCol(modules, active) {
   row.appendChild(cancelBtn);
   chatMessages.appendChild(row);
   _domScroll(row);
+  if (active) {
+    focusFirstEnabledChoice(row);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -519,7 +564,7 @@ function _domModuleChoicesCol(modules, active) {
 function logBot(htmlFn, choices = []) {
   const entry = { kind: "bot", html: htmlFn, choices, active: choices.length > 0 };
   chatLog.push(entry);
-  _domBotBubble(htmlFn(), choices, false);
+  _domBotBubble(htmlFn(), choices, false, choices.length > 0);
 }
 
 // Log + render a user bubble. Marks all preceding entries inactive.
@@ -541,12 +586,17 @@ function logProgress(textKeyOrFn) {
 // Resolve a progress slot with its final content + choices.
 // Updates both the log entry and the DOM element in-place.
 function logResolveSlot(slot, htmlFn, choices = []) {
+  setChatBusy(false);
   slot.entry.html = htmlFn;
   slot.entry.choices = choices;
   slot.entry.active = choices.length > 0;
   slot.el.innerHTML = `<div class="chat-bubble">${htmlFn()}</div>`;
   if (choices.length > 0) {
-    slot.el.appendChild(_domChoiceRow(choices, false));
+    slot.el.appendChild(_domChoiceRow(choices, false, true));
+  }
+  const announcement = htmlToPlainText(htmlFn());
+  if (announcement && announcement.length <= 160) {
+    announceStatus(announcement);
   }
   _domScroll(slot.el);
 }
@@ -617,6 +667,7 @@ function renderPreviewLocaleBar() {
 }
 
 function renderPreview() {
+  updateAdvancedEditorLink();
   const opts = { locale: previewLocale, t, tf };
 
   if (!bundle && !sessionDraft && !previewDraft) {
@@ -1228,6 +1279,7 @@ async function saveDraftBundleInBackground(options = {}) {
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
     showToast(t("shell.save.success"), "success");
+    announceStatus(t("shell.save.success"));
     if (afterSave) afterSave();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
@@ -1259,6 +1311,7 @@ async function publishLatestDraftInBackground() {
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
     showToast(t("shell.publish.success"), "success");
+    announceStatus(t("shell.publish.success"));
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1283,6 +1336,7 @@ async function unpublishModuleInBackground() {
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.unpublish.success"))}</strong>`);
     showToast(t("shell.unpublish.success"), "success");
+    announceStatus(t("shell.unpublish.success"));
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.unpublish.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1312,6 +1366,7 @@ async function archiveModuleInBackground() {
     renderPreview();
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.success"))}</strong>`);
     showToast(t("shell.archive.success"), "success");
+    announceStatus(t("shell.archive.success"));
     startIdle();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
@@ -1332,6 +1387,7 @@ async function restoreArchivedModuleInBackground(moduleId, moduleTitle) {
     });
     logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.restore.success", { module: moduleTitle ?? moduleId }))}</strong>`);
     showToast(tf("shell.restore.success", { module: moduleTitle ?? moduleId }), "success");
+    announceStatus(tf("shell.restore.success", { module: moduleTitle ?? moduleId }));
     await loadModule(moduleId);
   } catch (err) {
     const errMsg = String(err?.message ?? err);
@@ -1374,6 +1430,176 @@ async function startArchivedModulePicker() {
       { labelKey: "shell.action.cancel", action: startIdle },
     ]);
   }
+}
+
+function buildLocalizedCopyValue(value) {
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      supportedLocales.map((locale) => {
+        const localizedValue = localizeValueForLocale(value, locale) || localizeValueForLocale(value, "en-GB") || "";
+        return [locale, `${localizedValue} ${t("shell.duplicate.copySuffix")}`.trim()];
+      }),
+    );
+  }
+  const fallback = String(value ?? "").trim();
+  const label = fallback || t("shell.newModule.defaultTitle");
+  return Object.fromEntries(
+    supportedLocales.map((locale) => [locale, `${label} ${t("shell.duplicate.copySuffix")}`.trim()]),
+  );
+}
+
+async function duplicateCurrentModuleInBackground() {
+  const sourceModule = bundle?.module;
+  const sourceConfig = bundle?.selectedConfiguration ?? {};
+  if (!sourceModule) {
+    logBot(() => t("shell.duplicate.moduleRequired"));
+    return;
+  }
+
+  const slot = logProgress("shell.duplicate.progress");
+  slot.abortBtn.remove();
+
+  try {
+    const createBody = await apiFetch(
+      "/api/admin/content/modules",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: buildLocalizedCopyValue(sourceModule.title),
+          description: sourceModule.description ?? undefined,
+          certificationLevel: sourceModule.certificationLevel ?? "intermediate",
+          validFrom: sourceModule.validFrom ?? undefined,
+          validTo: sourceModule.validTo ?? undefined,
+        }),
+      },
+    );
+    const duplicatedModule = createBody?.module ?? createBody;
+    const duplicatedModuleId = duplicatedModule?.id;
+    if (!duplicatedModuleId) {
+      throw new Error(t("shell.duplicate.errorUnknown"));
+    }
+
+    const rubricVersion = sourceConfig.rubricVersion
+      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/rubric-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          criteria: sourceConfig.rubricVersion.criteria,
+          scalingRule: sourceConfig.rubricVersion.scalingRule,
+          passRule: sourceConfig.rubricVersion.passRule,
+        }),
+      })
+      : null;
+
+    const promptTemplateVersion = sourceConfig.promptTemplateVersion
+      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/prompt-template-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          systemPrompt: sourceConfig.promptTemplateVersion.systemPrompt,
+          userPromptTemplate: sourceConfig.promptTemplateVersion.userPromptTemplate,
+          examples: sourceConfig.promptTemplateVersion.examples ?? [],
+        }),
+      })
+      : null;
+
+    const mcqSetVersion = sourceConfig.mcqSetVersion
+      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/mcq-set-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          title: sourceConfig.mcqSetVersion.title,
+          questions: sourceConfig.mcqSetVersion.questions ?? [],
+        }),
+      })
+      : null;
+
+    if (sourceConfig.moduleVersion) {
+      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/module-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          taskText: sourceConfig.moduleVersion.taskText,
+          guidanceText: sourceConfig.moduleVersion.guidanceText,
+          rubricVersionId: rubricVersion?.rubricVersion?.id,
+          promptTemplateVersionId: promptTemplateVersion?.promptTemplateVersion?.id,
+          mcqSetVersionId: mcqSetVersion?.mcqSetVersion?.id,
+          submissionSchema: sourceConfig.moduleVersion.submissionSchema ?? buildDefaultSubmissionSchema(),
+          assessmentPolicy: sourceConfig.moduleVersion.assessmentPolicy ?? undefined,
+        }),
+      });
+    }
+
+    const sourceLabel = localizeValue(sourceModule.title) || sourceModule.id;
+    await loadModule(duplicatedModuleId);
+    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.duplicate.success", { module: sourceLabel }))}</strong>`);
+    showToast(tf("shell.duplicate.success", { module: sourceLabel }), "success");
+    announceStatus(tf("shell.duplicate.success", { module: sourceLabel }));
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.duplicate.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: duplicateCurrentModuleInBackground },
+    ]);
+  }
+}
+
+async function deleteModuleInBackground() {
+  const moduleId = selectedModuleId;
+  if (!moduleId) return;
+
+  const slot = logProgress("shell.delete.progress");
+  slot.abortBtn.remove();
+
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, {
+      method: "DELETE",
+    });
+    bundle = null;
+    selectedModuleId = null;
+    sessionDraft = null;
+    previewDraft = null;
+    latestSavedModuleVersionId = null;
+    renderPreviewLocaleBar();
+    renderPreview();
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.delete.success"))}</strong>`);
+    showToast(t("shell.delete.success"), "success");
+    announceStatus(t("shell.delete.success"));
+    startIdle();
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.delete.errorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: deleteModuleInBackground },
+    ]);
+  }
+}
+
+function confirmModuleDeletion() {
+  const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
+  if (!moduleLabel) {
+    logBot(() => t("shell.delete.moduleRequired"));
+    return;
+  }
+
+  logForm(
+    "text",
+    () => `<strong>${escapeHtml(tf("shell.delete.confirmPrompt", { module: moduleLabel }))}</strong>`,
+    "shell.delete.confirmPlaceholder",
+    "shell.delete.confirmSubmit",
+    (typedValue) => {
+      if (typedValue.trim() !== moduleLabel) {
+        logBot(() => t("shell.delete.confirmMismatch"), [
+          { labelKey: "shell.action.retry", action: confirmModuleDeletion },
+          { labelKey: "shell.action.cancel", action: showModuleActions },
+        ]);
+        return;
+      }
+      deleteModuleInBackground();
+    },
+  );
+}
+
+function confirmHighImpactAction(promptKey, confirmKey, action, cancelAction = showModuleActions, vars = {}) {
+  logBot(() => escapeHtml(tf(promptKey, vars)), [
+    { labelKey: confirmKey, action },
+    { labelKey: "shell.action.cancel", action: cancelAction },
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1542,7 +1768,9 @@ function showModuleActions() {
   const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
   const canUnpublish = !hasDraft && !!bundle?.module?.activeVersionId;
   const canArchive = !hasDraft && !!selectedModuleId;
+  const canDelete = !hasDraft && !!selectedModuleId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
+  const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
   logBot(() => t("shell.module.actionsPrompt"), [
     { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
     ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
@@ -1556,13 +1784,24 @@ function showModuleActions() {
         }
       },
     }] : []),
+    ...(!hasDraft ? [{ labelKey: "shell.module.duplicate", action: duplicateCurrentModuleInBackground }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
     { labelKey: "shell.module.restoreArchived", action: startArchivedModulePicker },
     ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
-    ...(!hasDraft && canPublish ? [{ labelKey: "shell.draftReady.publish", action: publishLatestDraftInBackground }] : []),
-    ...(canUnpublish ? [{ labelKey: "shell.module.unpublish", action: unpublishModuleInBackground }] : []),
-    ...(canArchive ? [{ labelKey: "shell.module.archive", action: archiveModuleInBackground }] : []),
+    ...(!hasDraft && canPublish ? [{
+      labelKey: "shell.draftReady.publish",
+      action: () => confirmHighImpactAction("shell.publish.confirmPrompt", "shell.publish.confirmAction", publishLatestDraftInBackground, showModuleActions, { module: moduleLabel }),
+    }] : []),
+    ...(canUnpublish ? [{
+      labelKey: "shell.module.unpublish",
+      action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
+    }] : []),
+    ...(canArchive ? [{
+      labelKey: "shell.module.archive",
+      action: () => confirmHighImpactAction("shell.archive.confirmPrompt", "shell.archive.confirmAction", archiveModuleInBackground, showModuleActions, { module: moduleLabel }),
+    }] : []),
+    ...(canDelete ? [{ labelKey: "shell.module.delete", action: confirmModuleDeletion }] : []),
   ]);
   if (hasDraft || hasMcq) {
     startUnifiedRevisionFlow();
@@ -1604,6 +1843,23 @@ function openAdvancedEditor(moduleId) {
     { labelKey: "handoff.hasDraft.discard", action: navigateWithoutDraft },
     { labelKey: "shell.action.cancel", action: showModuleActions },
   ]);
+}
+
+function updateAdvancedEditorLink() {
+  if (!advancedEditorLink) return;
+  const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
+  advancedEditorLink.href = moduleId
+    ? `/admin-content/advanced?moduleId=${encodeURIComponent(moduleId)}`
+    : "/admin-content/advanced";
+}
+
+function bindAdvancedEditorLink() {
+  if (!advancedEditorLink) return;
+  advancedEditorLink.addEventListener("click", (event) => {
+    if (!selectedModuleId && !sessionDraft) return;
+    event.preventDefault();
+    openAdvancedEditor(selectedModuleId);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1935,6 +2191,8 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
+  bindAdvancedEditorLink();
+  updateAdvancedEditorLink();
   renderPreviewLocaleBar();
   renderPreview();
   loadVersion();

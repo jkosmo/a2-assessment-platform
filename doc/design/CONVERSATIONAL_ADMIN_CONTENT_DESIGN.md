@@ -479,6 +479,78 @@ document. The current plan keeps it accessible throughout all slices.
 
 ---
 
+## Design Decision: One Free-Text Submission Per Module
+
+**Decision date:** 2026-04-17
+
+### Decision
+
+New authoring should standardise on **one free-text response field per module**.
+
+This applies to both:
+
+- the conversational workspace at `/admin-content`
+- the advanced editor at `/admin-content/advanced`
+
+### Rationale
+
+The platform now has a course-level structure. That means multi-part assessment flows can
+be expressed as:
+
+- one course
+- several modules
+- one free-text response per module
+
+This is a cleaner mental model than allowing one module to contain several separate
+candidate answer fields.
+
+The result is:
+
+- better alignment between conversational and advanced authoring
+- simpler module semantics: one module = one authored task = one candidate response
+- lower UI complexity in the advanced editor
+- less ambiguity around what a module is assessing
+
+### Consequences
+
+#### Positive
+
+- Conversational and advanced authoring become more consistent.
+- Submission authoring becomes easier to explain and document.
+- The preview, save, publish, and review flows stay simpler.
+- Existing course structure can carry multi-step assessments without needing several
+  answer fields inside a single module.
+
+#### Trade-offs
+
+- A single module can no longer model "Part A / Part B / Part C" as distinct submission
+  fields in the intended authoring path.
+- Some existing complex module designs may need to be split into multiple modules if they
+  are better expressed as separate responses.
+- Course design takes on slightly more responsibility for structuring larger assessments.
+
+### Scope of the decision
+
+This is currently a **product and UI decision**, not an immediate hard backend removal.
+
+That means:
+
+- the advanced UI should be simplified to one standard submission field per module
+- the conversational UI remains aligned with that same model
+- backend/schema tolerance for richer structures may remain temporarily during transition
+
+### Migration stance
+
+This decision should apply first to:
+
+- new authoring
+- redesign work under epic `#293`
+
+It does **not** require immediate destructive migration of older module data. Existing
+content can be preserved while the new authoring path becomes the default.
+
+---
+
 ## Implementation Notes for Slice 1 (#295)
 
 The shell can be implemented as:
@@ -559,6 +631,8 @@ The split-pane layout should be CSS Grid:
 
 - GitHub epic: #293
 - Branch strategy: [ADMIN_CONTENT_EPIC_BRANCH_STRATEGY.md](ADMIN_CONTENT_EPIC_BRANCH_STRATEGY.md)
+- Verification checklist: [CONVERSATIONAL_ADMIN_CONTENT_VERIFICATION_CHECKLIST.md](CONVERSATIONAL_ADMIN_CONTENT_VERIFICATION_CHECKLIST.md)
+- WCAG checklist: [CONVERSATIONAL_ADMIN_CONTENT_WCAG_CHECKLIST.md](CONVERSATIONAL_ADMIN_CONTENT_WCAG_CHECKLIST.md)
 - AI workflow: [AI_WORKFLOW.md](AI_WORKFLOW.md)
 - Previous editor design: [ADMIN_CONTENT_DIALOG_REDESIGN.md](ADMIN_CONTENT_DIALOG_REDESIGN.md) (issue #135, closed)
 - LLM generation service: `src/modules/adminContent/llmContentGenerationService.ts`

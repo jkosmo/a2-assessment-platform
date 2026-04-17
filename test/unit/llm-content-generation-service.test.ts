@@ -42,6 +42,27 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("Take a more thorough authoring pass");
   });
 
+  it("uses certification level to calibrate module difficulty and guidance detail", () => {
+    const basicPrompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "basic",
+      locale: "en-GB",
+      generationMode: "ordinary",
+    }).userPrompt;
+
+    const advancedPrompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+    }).userPrompt;
+
+    expect(basicPrompt).toContain("Use the certification level as the primary difficulty control.");
+    expect(basicPrompt).toContain("guidanceText must stay high-level and candidate-safe");
+    expect(advancedPrompt).toContain("It may involve ambiguity, competing considerations, or nuanced application");
+    expect(advancedPrompt).toContain("must support high-quality responses without functioning as an answer key");
+  });
+
   it("extracts explicit MCQ targets from compact option references", () => {
     expect(extractMcqRevisionTargets("Endre alternativ 1C slik at det blir mer plausibelt.")).toEqual([
       { questionIndex: 0, optionIndex: 2 },
@@ -65,6 +86,30 @@ describe("llm content generation prompts", () => {
       {
         stem: "What best describes solidarity action?",
         options: ["A collective response", "A private complaint", "A legal sanction", "A revised salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    expect(
+      hasMeaningfulMcqRevision(sourceQuestions, revisedQuestions, "Endre alternativ 1C slik at det blir mer plausibelt."),
+    ).toBe(false);
+  });
+
+  it("treats targeted MCQ revisions as invalid when the named option is only cosmetically rephrased", () => {
+    const sourceQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    const revisedQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A slightly revised legal sanction", "A salary bonus"],
         correctAnswer: "A collective response",
         rationale: "Solidarity action is collective rather than individual.",
       },
@@ -167,6 +212,22 @@ describe("llm content generation prompts", () => {
 
     expect(userPrompt).toContain("Generation mode: thorough");
     expect(userPrompt).toContain("Take a more thorough authoring pass");
+  });
+
+  it("uses certification level to calibrate MCQ difficulty without hardcoding four options", () => {
+    const { userPrompt } = buildMcqGenerationPrompts({
+      sourceMaterial: "Reference notes about escalation thresholds and confidentiality duties.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      questionCount: 4,
+      optionCount: 5,
+    });
+
+    expect(userPrompt).toContain("Questions should test nuanced understanding and discrimination.");
+    expect(userPrompt).toContain("All 5 options in a question must be comparable in length and level of detail.");
+    expect(userPrompt).toContain("Review each set of 5 options before finalising");
+    expect(userPrompt).toContain("At intermediate and advanced levels, ensure at least one distractor is close enough to require real discrimination.");
   });
 
   it("builds draft revision prompts around an explicit change instruction", () => {

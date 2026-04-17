@@ -127,6 +127,24 @@ const DISTRACTOR_GUIDELINES: Record<CertificationLevel, string> = {
     "Distractors must represent common expert-level confusions, subtle definitional errors, or claims that are correct in a different context but wrong here. A well-prepared candidate should have to think carefully.",
 };
 
+const MODULE_DRAFT_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
+  basic:
+    "Keep the task approachable. Use plain language, a single clear situation when a scenario is needed, and avoid layered tensions or multiple competing sub-problems. guidanceText must stay high-level and candidate-safe: describe qualities of a strong answer without giving the candidate a near-complete answer outline.",
+  intermediate:
+    "Aim for moderate complexity. The task may include one realistic tension or trade-off, but it must still be easy to parse on first read. guidanceText should indicate what good reasoning looks like without turning into a checklist the candidate can copy directly.",
+  advanced:
+    "Use a more demanding but still readable task. It may involve ambiguity, competing considerations, or nuanced application, but avoid unnecessary complication for its own sake. guidanceText must support high-quality responses without functioning as an answer key or revealing every major point the candidate should make.",
+};
+
+const MCQ_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
+  basic:
+    "Questions should test core recognition and basic understanding. Keep stems direct, avoid trick wording, and prefer distractors that are related but still clearly distinguishable to a prepared beginner.",
+  intermediate:
+    "Questions should test applied understanding. Use plausible distractors, but keep the stem readable and avoid stacking too many conditions into a single item.",
+  advanced:
+    "Questions should test nuanced understanding and discrimination. The correct answer must not stand out stylistically, and at least one distractor should be close enough that the candidate must reason carefully before choosing.",
+};
+
 const GENERATION_MODE_GUIDELINES: Record<GenerationMode, { moduleDraft: string; mcq: string }> = {
   ordinary: {
     moduleDraft:
@@ -136,9 +154,9 @@ const GENERATION_MODE_GUIDELINES: Record<GenerationMode, { moduleDraft: string; 
   },
   thorough: {
     moduleDraft:
-      "Take a more thorough authoring pass: produce a richer, more concrete scenario when appropriate, sharpen the task wording, and make the guidance more specific about what strong evidence and reasoning look like.",
+      "Take a more thorough authoring pass: improve clarity, realism and polish, but do not make the task harder just because this is a deeper pass. Use the chosen certification level to decide difficulty.",
     mcq:
-      "Take a more thorough authoring pass: make stems precise, ensure distractors are substantively plausible, and tune the set so that difficulty, coverage, and rationale quality are clearly stronger than a quick baseline draft.",
+      "Take a more thorough authoring pass: make stems precise, ensure distractors are substantively plausible, and improve coverage and rationale quality without automatically increasing difficulty beyond the chosen certification level.",
   },
 };
 
@@ -183,6 +201,83 @@ function normalizeMcqTextForComparison(value: string | undefined): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+}
+
+function tokenizeMcqText(value: string | undefined): string[] {
+  return normalizeMcqTextForComparison(value)
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function calculateTokenOverlap(left: string[], right: string[]): number {
+  if (left.length === 0 || right.length === 0) return 0;
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  let shared = 0;
+  for (const token of leftSet) {
+    if (rightSet.has(token)) shared += 1;
+  }
+  return shared / Math.max(leftSet.size, rightSet.size, 1);
+}
+
+function countExtraTokens(base: string[], candidate: string[]): number {
+  const baseSet = new Set(base);
+  return candidate.filter((token) => !baseSet.has(token)).length;
+}
+
+function isTokenSubset(left: string[], right: string[]): boolean {
+  const rightSet = new Set(right);
+  return left.every((token) => rightSet.has(token));
+}
+
+function isSubstantivelyDifferentText(source: string | undefined, revised: string | undefined): boolean {
+  const normalizedSource = normalizeMcqTextForComparison(source);
+  const normalizedRevised = normalizeMcqTextForComparison(revised);
+  if (!normalizedSource || !normalizedRevised) {
+    return normalizedSource !== normalizedRevised;
+  }
+  if (normalizedSource === normalizedRevised) {
+    return false;
+  }
+
+  const sourceTokens = tokenizeMcqText(normalizedSource);
+  const revisedTokens = tokenizeMcqText(normalizedRevised);
+  const tokenOverlap = calculateTokenOverlap(sourceTokens, revisedTokens);
+  const charDelta = Math.abs(normalizedSource.length - normalizedRevised.length);
+  const sourceContainsRevised = normalizedSource.includes(normalizedRevised);
+  const revisedContainsSource = normalizedRevised.includes(normalizedSource);
+  const sourceTokensSubsetOfRevised = isTokenSubset(sourceTokens, revisedTokens);
+  const revisedTokensSubsetOfSource = isTokenSubset(revisedTokens, sourceTokens);
+  const extraTokenCount = revisedContainsSource
+    ? countExtraTokens(sourceTokens, revisedTokens)
+    : sourceContainsRevised
+      ? countExtraTokens(revisedTokens, sourceTokens)
+      : Number.POSITIVE_INFINITY;
+
+  if (
+    tokenOverlap >= 0.85 &&
+    (sourceContainsRevised || revisedContainsSource)
+  ) {
+    return false;
+  }
+
+  if ((sourceContainsRevised || revisedContainsSource) && extraTokenCount <= 2) {
+    return false;
+  }
+
+  if (
+    (sourceTokensSubsetOfRevised && countExtraTokens(sourceTokens, revisedTokens) <= 2) ||
+    (revisedTokensSubsetOfSource && countExtraTokens(revisedTokens, sourceTokens) <= 2)
+  ) {
+    return false;
+  }
+
+  if (tokenOverlap >= 0.9 && charDelta <= 12) {
+    return false;
+  }
+
+  return true;
 }
 
 export type McqRevisionTarget = {
@@ -249,17 +344,17 @@ function hasTargetedMcqChange(
     if (sourceOption === undefined || revisedOption === undefined) {
       return false;
     }
-    return normalizeMcqTextForComparison(sourceOption) !== normalizeMcqTextForComparison(revisedOption);
+    return isSubstantivelyDifferentText(sourceOption, revisedOption);
   }
 
   return (
-    normalizeMcqTextForComparison(sourceQuestion.stem) !== normalizeMcqTextForComparison(revisedQuestion.stem) ||
-    normalizeMcqTextForComparison(sourceQuestion.correctAnswer) !== normalizeMcqTextForComparison(revisedQuestion.correctAnswer) ||
-    normalizeMcqTextForComparison(sourceQuestion.rationale) !== normalizeMcqTextForComparison(revisedQuestion.rationale) ||
+    isSubstantivelyDifferentText(sourceQuestion.stem, revisedQuestion.stem) ||
+    isSubstantivelyDifferentText(sourceQuestion.correctAnswer, revisedQuestion.correctAnswer) ||
+    isSubstantivelyDifferentText(sourceQuestion.rationale, revisedQuestion.rationale) ||
     sourceQuestion.options.length !== revisedQuestion.options.length ||
     sourceQuestion.options.some((option, index) => {
       const revisedOption = revisedQuestion.options[index];
-      return normalizeMcqTextForComparison(option) !== normalizeMcqTextForComparison(revisedOption);
+      return isSubstantivelyDifferentText(option, revisedOption);
     })
   );
 }
@@ -310,7 +405,12 @@ Generation mode: ${input.generationMode}
 - Do not mention "source material", "the text above", "the material", "the document", "the attachment", or equivalent wording.
 - Do not tell the candidate to read, review, use, cite, or refer to any unseen material.
 - Any facts, context, terminology, or scenario details needed by the candidate must be embedded directly in the generated task itself.
+- Use the certification level as the primary difficulty control.
+- ${MODULE_DRAFT_LEVEL_GUIDELINES[input.certificationLevel]}
 - ${GENERATION_MODE_GUIDELINES[input.generationMode].moduleDraft}
+- guidanceText is candidate-facing support, not assessor notes and not an answer key.
+- guidanceText must stay shorter and less specific than a marking rubric.
+- Describe what characterises a strong response at a high level; do not enumerate every concrete point the candidate should include.
 
 ## Scenario decision
 
@@ -371,17 +471,20 @@ Generation mode: ${input.generationMode}
 ## Distractor quality
 
 ${DISTRACTOR_GUIDELINES[input.certificationLevel]}
+${MCQ_LEVEL_GUIDELINES[input.certificationLevel]}
 ${GENERATION_MODE_GUIDELINES[input.generationMode].mcq}
 
 ## Option parity
 
-All 4 options in a question must be comparable in length and level of detail. This is critical: a candidate should not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others.
+All ${input.optionCount} options in a question must be comparable in length and level of detail. This is critical: a candidate should not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others.
 
 Rules:
 - Write all options at the same level of specificity — if the correct answer contains a qualifier or clause, the distractors must too.
 - If the correct answer is a short phrase, keep all options short. If it is a full sentence, make all options full sentences of similar length.
 - Never pad distractors with vague filler words just to match length; instead, write distractors that are substantively comparable but wrong.
-- Review each set of 4 options before finalising: if any single option stands out in length or detail, rewrite it.
+- Review each set of ${input.optionCount} options before finalising: if any single option stands out in length or detail, rewrite it.
+- Avoid obviously wrong distractors, joke answers, or options that are noticeably more generic than the correct answer.
+- At intermediate and advanced levels, ensure at least one distractor is close enough to require real discrimination.
 
 Each question must have exactly ${input.optionCount} answer options. The correctAnswer must be one of the options verbatim.
 Write all text in ${LOCALE_DISPLAY[input.locale]}.
@@ -475,6 +578,7 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 - If the instruction points to a specific question or option reference such as "question 3", "Q3", "3b", "option B in question 3", or "third alternative in question 3", apply the change to that exact target.
 - When the instruction asks for a local change to one option, one question, or one rationale, keep the rest of the question set unchanged unless a broader rewrite is explicitly requested.
 - The revised output must contain a concrete, material change that satisfies the instruction. Do not return the original wording unchanged.
+- A local revision must be substantively different, not just a cosmetic rephrasing or a minor wording tweak.
 
 Target question count: ${questionCount}
 Target option count per question: ${optionCount}

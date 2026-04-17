@@ -108,15 +108,22 @@ and MCQ, but it does **not** yet support:
 - editing rubric, prompt, submission schema, assessment policy, and version content directly through free-form chat
 - conversational translation/apply flows across locales
 
-### Safe conversational CRUD and publish flows (`#298`)
+### Safe conversational CRUD and publish flows are now materially in place
 
-The advanced editor and backend APIs support the underlying operations, but the
-conversational shell does not yet expose the full guarded action model described in the design:
+The conversational shell now exposes more of the lifecycle surface directly:
 
-- save draft with version-chain confirmation
-- publish with confirmation card
-- archive / restore / delete via chat
-- typed confirmation for destructive actions
+- save draft
+- duplicate module
+- publish latest saved version
+- unpublish
+- archive
+- restore archived module
+- delete with typed name confirmation
+
+The remaining gap is no longer “CRUD is absent”, but rather:
+
+- whether the action framing feels sufficiently coherent and trustworthy in final UX review
+- whether duplicate / delete behaviour feels production-safe enough after manual staging verification
 
 ### Translation flow
 
@@ -139,22 +146,15 @@ The shell now supports source-material upload for the current minimum set:
 - `.odp`
 - `.ods`
 
-This closes the biggest functional gap in the intake flow, but `#310` still remains
-relevant if we later want:
-
-- broader OpenDocument / legacy-office coverage beyond the current minimum
-- better extraction quality guarantees for legacy `.doc` / `.ppt`
-- richer provenance / preview of what text was extracted from the uploaded file
+This closes the biggest functional gap in the intake flow. The main remaining work is
+now extraction quality and staging verification, not format breadth.
 
 ## Recommended Remaining Order
 
-1. Finish the remaining shell usability gaps:
-   - more deterministic roundtrip between shell and advanced editor
-   - stronger guarantees that targeted MCQ revisions actually change the referenced option/question
-2. Implement the fuller free-form conversational edit loop (`#297`)
-3. Implement guarded conversational CRUD/publish flows (`#298`)
-4. Close out test/docs/rollout work (`#299`)
-5. Polish file-upload depth and extraction UX (`#310`)
+1. Run the full manual verification checklist on staging
+2. Complete the WCAG / UI review and severity triage
+3. Decide which remaining shell/editor inconsistencies should block default rollout
+4. Keep refining the deeper conversational edit loop where staging feedback shows real gaps
 
 ## Practical Takeaway
 
@@ -170,3 +170,34 @@ The remaining work is now mainly about:
 
 That means the next handoff should be treated as continuation of an existing shell,
 not a fresh implementation from the design doc.
+
+## Additional Design Decision (2026-04-17)
+
+New authoring should standardise on **one free-text submission field per module**.
+
+Reason:
+
+- course-level structure now exists
+- multi-part assessment can therefore be expressed through several modules in one course
+- this gives a cleaner and more consistent model than multiple answer fields inside one module
+
+Practical implication:
+
+- the conversational shell is already aligned with this model
+- the advanced editor should now be simplified toward the same model
+- backend tolerance for richer submission schema can remain temporarily during transition
+
+### Status update
+
+The advanced editor is now being aligned to this same authoring model:
+
+- the primary advanced authoring path standardises on one `response` textarea field
+- advanced submission-schema editing is simplified toward that one-field model
+- raw JSON fallback remains available for compatibility rather than as the primary workflow
+
+## Verification and Review Assets
+
+These review assets now exist to support the final completion pass:
+
+- [CONVERSATIONAL_ADMIN_CONTENT_VERIFICATION_CHECKLIST.md](./CONVERSATIONAL_ADMIN_CONTENT_VERIFICATION_CHECKLIST.md)
+- [CONVERSATIONAL_ADMIN_CONTENT_WCAG_CHECKLIST.md](./CONVERSATIONAL_ADMIN_CONTENT_WCAG_CHECKLIST.md)
