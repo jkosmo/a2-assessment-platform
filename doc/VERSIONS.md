@@ -7,6 +7,27 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.95 - 2026-04-17
+
+feat: tier-based confirmation model — replaces window.confirm() with proper dialogs (#316)
+
+- admin-content-advanced.html: 3 new <dialog> elements
+  - #dialogSimpleConfirm: tier-1 confirm for unpublish / archive / import overwrite
+  - #dialogDeleteConfirm: tier-2 hard two-step for delete module (type-to-confirm)
+  - #dialogUnsavedHandoff: navigation guard when leaving with unsaved changes
+    — 3 choices: save + go back / go back without saving / cancel
+- admin-content.js: dialog helper functions showSimpleConfirm(), showDeleteConfirm(),
+  showUnsavedHandoffDialog() — all return Promises; event listeners cleaned up on close
+- handleDeleteSelectedModule() → showDeleteConfirm() (hard two-step)
+- handleUnpublishModule() → showSimpleConfirm() (tier-1)
+- handleArchiveModule() → showSimpleConfirm() (tier-1)
+- handleApplyImportDraft() → showSimpleConfirm() (tier-1)
+- initBackToChatHandoff(): async click handler; showUnsavedHandoffDialog() with save path
+  calling handleSaveContentBundle() before navigating; no-dirty path unchanged
+- Zero window.confirm() calls remain in admin-content.js
+- i18n: new confirm/unsaved keys added in all 5 locale slots (en-GB, nb, nn, late.nb, late.nn)
+- test/admin-content-translations.test.js: 11 new keys added to required-keys list
+
 ## 0.9.94 - 2026-04-17
 
 feat: preview-paritet — delt preview-surface i advanced editor (#315)

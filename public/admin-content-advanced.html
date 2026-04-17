@@ -1024,6 +1024,45 @@
       </form>
     </dialog>
 
+    <!-- Tier 1: Simple confirmation dialog (unpublish / archive / import overwrite) -->
+    <dialog id="dialogSimpleConfirm" aria-labelledby="dlgSimpleConfirmTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dlgSimpleConfirmTitle" class="field-dialog-title">—</h2>
+      </div>
+      <p id="dlgSimpleConfirmMsg" style="line-height:1.6;margin:0 0 var(--space-2)">—</p>
+      <div class="dialog-footer">
+        <button type="button" id="dlgSimpleConfirmCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Avbryt</button>
+        <button type="button" id="dlgSimpleConfirmOk" class="btn-primary" data-i18n="adminContent.confirm.simple.confirmBtn">Bekreft</button>
+      </div>
+    </dialog>
+
+    <!-- Tier 2: Delete module — hard two-step (type to confirm) -->
+    <dialog id="dialogDeleteConfirm" aria-labelledby="dlgDeleteConfirmTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dlgDeleteConfirmTitle" class="field-dialog-title" data-i18n="adminContent.confirm.delete.title">Slett modul</h2>
+      </div>
+      <p id="dlgDeleteConfirmMsg" style="line-height:1.6;margin:0 0 var(--space-1)">—</p>
+      <label for="dlgDeleteTypeConfirm" id="dlgDeleteTypeLabel" style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">—</label>
+      <input id="dlgDeleteTypeConfirm" autocomplete="off" style="margin-bottom:var(--space-2)" />
+      <div class="dialog-footer">
+        <button type="button" id="dlgDeleteConfirmCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Avbryt</button>
+        <button type="button" id="dlgDeleteConfirmOk" class="btn-danger" data-i18n="adminContent.confirm.delete.confirmBtn" disabled>Slett</button>
+      </div>
+    </dialog>
+
+    <!-- Navigation guard: unsaved changes when leaving advanced editor -->
+    <dialog id="dialogUnsavedHandoff" aria-labelledby="dlgUnsavedHandoffTitle" class="field-dialog">
+      <div class="field-dialog-header">
+        <h2 id="dlgUnsavedHandoffTitle" class="field-dialog-title" data-i18n="handoff.unsaved.title">Ulagrede endringer</h2>
+      </div>
+      <p style="line-height:1.6;margin:0 0 var(--space-2)" data-i18n="handoff.unsaved.body">Du har ulagrede endringer i detaljredigeringen. Kun oppgavetekst, veiledning og MCQ vil bli med tilbake til samtalen.</p>
+      <div class="dialog-footer" style="flex-wrap:wrap;gap:var(--space-1)">
+        <button type="button" id="dlgUnsavedSave" class="btn-primary" data-i18n="handoff.unsaved.saveFirst">Lagre og gå tilbake</button>
+        <button type="button" id="dlgUnsavedDiscard" class="btn-secondary" data-i18n="handoff.unsaved.discard">Gå tilbake uten å lagre</button>
+        <button type="button" id="dlgUnsavedCancel" class="btn-secondary" data-i18n="adminContent.dialog.cancel">Avbryt</button>
+      </div>
+    </dialog>
+
     <script src="/static/i18n/admin-content-translations.js" type="module"></script>
     <script src="/static/admin-content.js" type="module"></script>
   </body>

@@ -648,6 +648,102 @@ function parseActionableErrorMessage(error) {
   return raw;
 }
 
+// ── Dialog helpers (tier-based confirmation model) ──────────────────────────
+
+/** Tier 1: simple confirm — single OK / Cancel choice. Returns Promise<boolean>. */
+function showSimpleConfirm(titleText, messageText, okLabel) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("dialogSimpleConfirm");
+    const titleEl = document.getElementById("dlgSimpleConfirmTitle");
+    const msgEl = document.getElementById("dlgSimpleConfirmMsg");
+    const okBtn = document.getElementById("dlgSimpleConfirmOk");
+    const cancelBtn = document.getElementById("dlgSimpleConfirmCancel");
+
+    titleEl.textContent = titleText;
+    msgEl.textContent = messageText;
+    okBtn.textContent = okLabel || t("adminContent.confirm.simple.confirmBtn");
+
+    const onOk = () => { cleanup(); dialog.close(); resolve(true); };
+    const onCancel = () => { cleanup(); dialog.close(); resolve(false); };
+    const onClose = () => { cleanup(); resolve(false); };
+
+    function cleanup() {
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+    }
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+  });
+}
+
+/** Tier 2: hard two-step — user must type the module name to enable delete. Returns Promise<boolean>. */
+function showDeleteConfirm(moduleLabel) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("dialogDeleteConfirm");
+    const msgEl = document.getElementById("dlgDeleteConfirmMsg");
+    const typeLabelEl = document.getElementById("dlgDeleteTypeLabel");
+    const typeInput = document.getElementById("dlgDeleteTypeConfirm");
+    const okBtn = document.getElementById("dlgDeleteConfirmOk");
+    const cancelBtn = document.getElementById("dlgDeleteConfirmCancel");
+
+    msgEl.textContent = t("adminContent.confirm.deleteModule").replace("{module}", moduleLabel);
+    typeLabelEl.textContent = t("adminContent.confirm.delete.typeLabel").replace("{module}", moduleLabel);
+    typeInput.value = "";
+    okBtn.disabled = true;
+
+    const onInput = () => { okBtn.disabled = typeInput.value.trim() !== moduleLabel; };
+    const onOk = () => { cleanup(); dialog.close(); resolve(true); };
+    const onCancel = () => { cleanup(); dialog.close(); resolve(false); };
+    const onClose = () => { cleanup(); resolve(false); };
+
+    function cleanup() {
+      typeInput.removeEventListener("input", onInput);
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+    }
+
+    typeInput.addEventListener("input", onInput);
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+    typeInput.focus();
+  });
+}
+
+/** Navigation guard: unsaved changes in advanced editor. Returns Promise<'save'|'discard'|'cancel'>. */
+function showUnsavedHandoffDialog() {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("dialogUnsavedHandoff");
+    const saveBtn = document.getElementById("dlgUnsavedSave");
+    const discardBtn = document.getElementById("dlgUnsavedDiscard");
+    const cancelBtn = document.getElementById("dlgUnsavedCancel");
+
+    const onSave = () => { cleanup(); dialog.close(); resolve("save"); };
+    const onDiscard = () => { cleanup(); dialog.close(); resolve("discard"); };
+    const onCancel = () => { cleanup(); dialog.close(); resolve("cancel"); };
+    const onClose = () => { cleanup(); resolve("cancel"); };
+
+    function cleanup() {
+      saveBtn.removeEventListener("click", onSave);
+      discardBtn.removeEventListener("click", onDiscard);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+    }
+
+    saveBtn.addEventListener("click", onSave);
+    discardBtn.addEventListener("click", onDiscard);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+  });
+}
+
 function parseJsonField(value, fieldLabelKey) {
   try {
     return JSON.parse(value);
@@ -1751,9 +1847,7 @@ async function handleDeleteSelectedModule() {
 
   const module = modules.find((item) => item.id === selectedModuleId) ?? null;
   const moduleLabel = module?.title ?? selectedModuleId;
-  const confirmed = window.confirm(
-    t("adminContent.confirm.deleteModule").replace("{module}", moduleLabel),
-  );
+  const confirmed = await showDeleteConfirm(moduleLabel);
   if (!confirmed) {
     return;
   }
@@ -1979,7 +2073,8 @@ async function handleUnpublishModule() {
   const moduleId = resolveModuleIdOrThrow();
   const module = modules.find((item) => item.id === moduleId) ?? null;
   const moduleLabel = module?.title ?? moduleId;
-  const confirmed = window.confirm(
+  const confirmed = await showSimpleConfirm(
+    t("adminContent.confirm.unpublish.title"),
     t("adminContent.confirm.unpublishModule").replace("{module}", moduleLabel),
   );
   if (!confirmed) {
@@ -2049,7 +2144,8 @@ async function handleArchiveModule() {
   const moduleId = resolveModuleIdOrThrow();
   const module = modules.find((item) => item.id === moduleId) ?? null;
   const moduleLabel = module?.title ?? moduleId;
-  const confirmed = window.confirm(
+  const confirmed = await showSimpleConfirm(
+    t("adminContent.confirm.archive.title"),
     t("adminContent.confirm.archiveModule").replace("{module}", moduleLabel),
   );
   if (!confirmed) {
@@ -2077,7 +2173,10 @@ async function handleApplyImportDraft(rawValue) {
 
   const draft = normalizeImportDraftPayload(parsed);
   if (shouldConfirmImportOverwrite(draft)) {
-    const confirmed = window.confirm(t("adminContent.confirm.importOverwrite"));
+    const confirmed = await showSimpleConfirm(
+      t("adminContent.confirm.importOverwrite.title"),
+      t("adminContent.confirm.importOverwrite"),
+    );
     if (!confirmed) {
       setMessage(t("adminContent.message.importCancelled"));
       return;
@@ -3796,31 +3895,48 @@ function updateBackToChatLink() {
 function initBackToChatHandoff() {
   const link = document.getElementById("backToChatLink");
   if (!link) return;
-  link.addEventListener("click", (e) => {
-    if (dirtyCards.size > 0) {
-      // Some cards have unsaved changes — only task text, guidance and MCQ can transfer
-      const confirmed = window.confirm(t("handoff.advanced.dirtyWarning"));
-      if (!confirmed) {
-        e.preventDefault();
+  link.addEventListener("click", async (e) => {
+    /** Writes current form state to sessionStorage for the shell to pick up. */
+    function doWriteHandoff() {
+      const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || null;
+      let mcqQuestions = [];
+      try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+      writeHandoff({
+        moduleId,
+        source: "advanced",
+        draft: {
+          taskText: moduleVersionTaskTextInput?.value ?? "",
+          guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+          mcqQuestions,
+        },
+        locale: currentLocale,
+      });
+    }
+
+    if (dirtyCards.size === 0) {
+      // No unsaved changes — write handoff and let natural navigation proceed.
+      doWriteHandoff();
+      return;
+    }
+
+    // Has unsaved changes — intercept and show dialog.
+    e.preventDefault();
+    const dest = link.href;
+    const choice = await showUnsavedHandoffDialog();
+
+    if (choice === "cancel") return;
+
+    if (choice === "save") {
+      try {
+        await handleSaveContentBundle();
+      } catch (error) {
+        setMessage(parseActionableErrorMessage(error), "error");
         return;
       }
     }
-    // Write handoff with whatever is currently in the content fields so the shell
-    // can restore them even when dirtyCards is empty (locale context travels too).
-    const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || null;
-    let mcqQuestions = [];
-    try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
-    writeHandoff({
-      moduleId,
-      source: "advanced",
-      draft: {
-        taskText: moduleVersionTaskTextInput?.value ?? "",
-        guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
-        mcqQuestions,
-      },
-      locale: currentLocale,
-    });
-    // Let the default navigation proceed — handoff is in sessionStorage
+
+    doWriteHandoff();
+    location.href = dest;
   });
 }
 

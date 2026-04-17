@@ -58,6 +58,17 @@ describe("admin content translation resources", () => {
       "adminContent.errors.previewPopupBlocked",
       "adminContent.confirm.deleteModule",
       "adminContent.confirm.importOverwrite",
+      "adminContent.confirm.simple.confirmBtn",
+      "adminContent.confirm.delete.title",
+      "adminContent.confirm.delete.typeLabel",
+      "adminContent.confirm.delete.confirmBtn",
+      "adminContent.confirm.unpublish.title",
+      "adminContent.confirm.archive.title",
+      "adminContent.confirm.importOverwrite.title",
+      "handoff.unsaved.title",
+      "handoff.unsaved.body",
+      "handoff.unsaved.saveFirst",
+      "handoff.unsaved.discard",
     ];
 
     for (const locale of supportedLocales) {
