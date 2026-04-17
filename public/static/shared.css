@@ -668,6 +668,73 @@ dialog::backdrop {
   }
 }
 
+/* ── State rail ───────────────────────────────────────────────────────────── */
+.state-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 8px 12px;
+  margin-bottom: var(--space-2);
+  background: var(--color-module-summary-bg);
+  border: 1px solid var(--color-module-summary-border);
+  border-radius: var(--radius-card);
+}
+
+.state-rail[hidden] { display: none; }
+
+.state-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.state-rail-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-meta);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.state-rail-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.state-rail-sep {
+  color: var(--color-border-soft);
+  font-size: 14px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* State rail badges */
+.sr-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sr-badge--published   { background: #e6f4ea; color: #12613a; }
+.sr-badge--saved-draft { background: #e8f0fe; color: #1a5276; }
+.sr-badge--working     { background: #edf1f7; color: #42526b; }
+.sr-badge--unsaved     { background: #fff3db; color: #7a4b00; }
+
+@media (max-width: 700px) {
+  .state-rail { gap: 6px 10px; }
+  .state-rail-sep { display: none; }
+}
+
 @media (max-width: 600px) {
   .queue-table-wrap table,
   .table-wrap table {

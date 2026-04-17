@@ -191,6 +191,11 @@ const previewContent = document.getElementById("previewContent");
 const workspaceNav = document.getElementById("workspaceNav");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
+const stateRail = document.getElementById("stateRail");
+const srModuleName = document.getElementById("srModuleName");
+const srEditing = document.getElementById("srEditing");
+const srLive = document.getElementById("srLive");
+const srChanges = document.getElementById("srChanges");
 
 const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
 const SOURCE_MATERIAL_ACCEPT =
@@ -765,6 +770,7 @@ function renderPreview() {
     ${mcqCountHtml}
     ${mcqQuestionsHtml}
   `.trim();
+  updateStateRail();
 }
 
 function scrollPreviewToTop() {
@@ -774,6 +780,67 @@ function scrollPreviewToTop() {
 function scrollPreviewToBottom() {
   if (!previewPane) return;
   previewPane.scrollTo({ top: previewPane.scrollHeight, behavior: "smooth" });
+}
+
+// ---------------------------------------------------------------------------
+// State rail
+// ---------------------------------------------------------------------------
+
+function makeSrBadge(modifier, text) {
+  return `<span class="sr-badge sr-badge--${modifier}">${escapeHtml(text)}</span>`;
+}
+
+function updateStateRail() {
+  if (!stateRail) return;
+  const hasModule = !!selectedModuleId;
+  stateRail.hidden = !hasModule;
+  if (!hasModule) return;
+
+  const mod = bundle?.module ?? null;
+  const cfg = bundle?.selectedConfiguration ?? {};
+  const versionNo = cfg.moduleVersion?.versionNo;
+  const isLive = !!mod?.activeVersionId && cfg.moduleVersion?.id === mod.activeVersionId;
+
+  if (srModuleName) {
+    srModuleName.textContent = localizeValue(mod?.title) || selectedModuleId;
+  }
+
+  if (srEditing) {
+    if (sessionDraft) {
+      srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
+    } else if (versionNo != null && !isLive) {
+      srEditing.innerHTML = makeSrBadge("saved-draft", tf("stateRail.editing.savedDraft", { versionNo }));
+    } else if (versionNo != null && isLive) {
+      srEditing.innerHTML = makeSrBadge("published", tf("stateRail.editing.published", { versionNo }));
+    } else {
+      srEditing.innerHTML = `<span class="state-rail-value">—</span>`;
+    }
+  }
+
+  if (srLive) {
+    if (isLive && versionNo != null) {
+      srLive.innerHTML = makeSrBadge("published", tf("stateRail.live.published", { versionNo }));
+    } else if (mod?.activeVersionId) {
+      const liveVer = bundle?.versions?.moduleVersions?.find((v) => v.id === mod.activeVersionId);
+      const liveNo = liveVer?.versionNo;
+      srLive.innerHTML = makeSrBadge(
+        "published",
+        liveNo != null
+          ? tf("stateRail.live.published", { versionNo: liveNo })
+          : t("stateRail.live.publishedUnknown"),
+      );
+    } else {
+      srLive.innerHTML = `<span class="state-rail-value" style="color:var(--color-meta)">${escapeHtml(t("stateRail.live.none"))}</span>`;
+    }
+  }
+
+  if (srChanges) {
+    if (sessionDraft) {
+      srChanges.innerHTML = makeSrBadge("unsaved", t("stateRail.changes.unsaved"));
+    } else {
+      srChanges.innerHTML = `<span class="state-rail-value" style="color:var(--color-success)">${escapeHtml(t("stateRail.changes.saved"))}</span>`;
+    }
+  }
 }
 
 function buildPreviewCandidate(patch) {

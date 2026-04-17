@@ -124,6 +124,28 @@
         <select id="localeSelect" class="locale-select-compact"></select>
       </div>
     </div>
+    <div id="stateRail" class="state-rail" hidden aria-label="Modulstatus">
+      <div class="state-rail-item">
+        <span class="state-rail-label" data-i18n="stateRail.label.module">Modul</span>
+        <span id="srModuleName" class="state-rail-value">—</span>
+      </div>
+      <span class="state-rail-sep" aria-hidden="true">·</span>
+      <div class="state-rail-item">
+        <span class="state-rail-label" data-i18n="stateRail.label.editing">Du redigerer</span>
+        <span id="srEditing"></span>
+      </div>
+      <span class="state-rail-sep" aria-hidden="true">·</span>
+      <div class="state-rail-item">
+        <span class="state-rail-label" data-i18n="stateRail.label.live">Live nå</span>
+        <span id="srLive"></span>
+      </div>
+      <span class="state-rail-sep" aria-hidden="true">·</span>
+      <div class="state-rail-item">
+        <span class="state-rail-label" data-i18n="stateRail.label.changes">Endringer</span>
+        <span id="srChanges"></span>
+      </div>
+    </div>
+
     <h1 data-i18n="adminContentPage.title">Content Setup Workspace</h1>
     <p class="small"><a id="backToChatLink" href="/admin-content" data-i18n="adminContentPage.chatLink">Back to conversational editor</a></p>
     <p class="small" data-i18n="adminContentPage.subtitle">Define module content and scoring rules in a guided sequence.</p>

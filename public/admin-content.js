@@ -13,6 +13,7 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
+import { findLinkedVersion, deriveModuleStatusChains } from "/static/module-status-logic.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -73,6 +74,11 @@ const moduleStatusDraft = document.getElementById("moduleStatusDraft");
 const moduleStatusPublishedAt = document.getElementById("moduleStatusPublishedAt");
 const moduleStatusCounts = document.getElementById("moduleStatusCounts");
 const moduleStatusDetails = document.getElementById("moduleStatusDetails");
+const stateRail = document.getElementById("stateRail");
+const srModuleName = document.getElementById("srModuleName");
+const srEditing = document.getElementById("srEditing");
+const srLive = document.getElementById("srLive");
+const srChanges = document.getElementById("srChanges");
 const unpublishModuleBtn = document.getElementById("unpublishModuleBtn");
 const archiveModuleBtn = document.getElementById("archiveModuleBtn");
 const archiveSearchInput = document.getElementById("archiveSearchInput");
@@ -895,135 +901,80 @@ function renderStatusChain(element, versions) {
   });
 }
 
-function findLinkedVersion(versions, id) {
-  if (!Array.isArray(versions) || !id) {
-    return null;
-  }
-
-  return versions.find((version) => version.id === id) ?? null;
-}
-
 function deriveModuleStatusView(moduleExport) {
-  if (!moduleExport?.module) {
-    return null;
-  }
+  const chains = deriveModuleStatusChains(moduleExport);
+  if (!chains) return null;
 
   const module = moduleExport.module;
-  const moduleVersions = moduleExport?.versions?.moduleVersions ?? [];
-  const rubricVersions = moduleExport?.versions?.rubricVersions ?? [];
-  const promptTemplateVersions = moduleExport?.versions?.promptTemplateVersions ?? [];
-  const mcqSetVersions = moduleExport?.versions?.mcqSetVersions ?? [];
-
-  const liveModuleVersion = module.activeVersionId
-    ? findLinkedVersion(moduleVersions, module.activeVersionId)
-    : null;
-  const latestModuleVersion = moduleVersions[0] ?? null;
-  const latestRubricVersion = rubricVersions[0] ?? null;
-  const latestPromptTemplateVersion = promptTemplateVersions[0] ?? null;
-  const latestMcqSetVersion = mcqSetVersions[0] ?? null;
-
-  const liveRubricVersion = liveModuleVersion
-    ? findLinkedVersion(rubricVersions, liveModuleVersion.rubricVersionId)
-    : null;
-  const livePromptTemplateVersion = liveModuleVersion
-    ? findLinkedVersion(promptTemplateVersions, liveModuleVersion.promptTemplateVersionId)
-    : null;
-  const liveMcqSetVersion = liveModuleVersion
-    ? findLinkedVersion(mcqSetVersions, liveModuleVersion.mcqSetVersionId)
-    : null;
-
-  const latestDraftModuleVersion = liveModuleVersion
-    ? latestModuleVersion && latestModuleVersion.id !== liveModuleVersion.id
-      ? latestModuleVersion
-      : null
-    : latestModuleVersion;
-  const latestDraftRubricVersion = latestDraftModuleVersion
-    ? findLinkedVersion(rubricVersions, latestDraftModuleVersion.rubricVersionId)
-    : null;
-  const latestDraftPromptTemplateVersion = latestDraftModuleVersion
-    ? findLinkedVersion(promptTemplateVersions, latestDraftModuleVersion.promptTemplateVersionId)
-    : null;
-  const latestDraftMcqSetVersion = latestDraftModuleVersion
-    ? findLinkedVersion(mcqSetVersions, latestDraftModuleVersion.mcqSetVersionId)
-    : null;
-
-  const hasLiveVersion = Boolean(liveModuleVersion);
-  const hasDraftVersion = Boolean(latestDraftModuleVersion);
-  const hasAnySavedVersions = Boolean(
-    latestModuleVersion || latestRubricVersion || latestPromptTemplateVersion || latestMcqSetVersion,
-  );
-
-  let badgeKey = "adminContent.status.badge.none";
-  let badgeClass = "shell";
-  let summaryKey = "adminContent.status.noneSummary";
-
-  if (hasLiveVersion && hasDraftVersion) {
-    badgeKey = "adminContent.status.badge.draft";
-    badgeClass = "draft";
-    summaryKey = "adminContent.status.summary.liveWithDraft";
-  } else if (hasLiveVersion) {
-    badgeKey = "adminContent.status.badge.live";
-    badgeClass = "live";
-    summaryKey = "adminContent.status.summary.liveOnly";
-  } else if (hasAnySavedVersions) {
-    badgeKey = "adminContent.status.badge.draftOnly";
-    badgeClass = "draft";
-    summaryKey = "adminContent.status.summary.draftOnly";
-  } else {
-    badgeKey = "adminContent.status.badge.shellOnly";
-    badgeClass = "shell";
-    summaryKey = "adminContent.status.summary.shellOnly";
-  }
-
-  const technicalDetails = {
-    moduleId: module.id,
-    activeVersionId: module.activeVersionId ?? null,
-    liveModuleVersionId: liveModuleVersion?.id ?? null,
-    latestModuleVersionId: latestModuleVersion?.id ?? null,
-    latestDraftModuleVersionId: latestDraftModuleVersion?.id ?? null,
-    liveRubricVersionId: liveRubricVersion?.id ?? null,
-    livePromptTemplateVersionId: livePromptTemplateVersion?.id ?? null,
-    liveMcqSetVersionId: liveMcqSetVersion?.id ?? null,
-    latestRubricVersionId: latestRubricVersion?.id ?? null,
-    latestPromptTemplateVersionId: latestPromptTemplateVersion?.id ?? null,
-    latestMcqSetVersionId: latestMcqSetVersion?.id ?? null,
-    exportSource: moduleExport?.selectedConfiguration?.source ?? null,
-  };
-
   return {
     title: localizeContentValue(module.title),
     description: localizeContentValue(module.description),
     certificationLevel: localizeContentValue(module.certificationLevel),
     validFrom: module.validFrom,
     validTo: module.validTo,
-    badgeKey,
-    badgeClass,
-    summaryKey,
-    liveChain: liveModuleVersion
-      ? [
-        { label: "Module", versionNo: liveModuleVersion.versionNo },
-        liveRubricVersion ? { label: "Rubric", versionNo: liveRubricVersion.versionNo } : null,
-        livePromptTemplateVersion ? { label: "Prompt", versionNo: livePromptTemplateVersion.versionNo } : null,
-        liveMcqSetVersion ? { label: "MCQ", versionNo: liveMcqSetVersion.versionNo } : null,
-      ].filter(Boolean)
-      : [],
-    latestDraftChain: latestDraftModuleVersion
-      ? [
-        { label: "Module", versionNo: latestDraftModuleVersion.versionNo },
-        latestDraftRubricVersion ? { label: "Rubric", versionNo: latestDraftRubricVersion.versionNo } : null,
-        latestDraftPromptTemplateVersion ? { label: "Prompt", versionNo: latestDraftPromptTemplateVersion.versionNo } : null,
-        latestDraftMcqSetVersion ? { label: "MCQ", versionNo: latestDraftMcqSetVersion.versionNo } : null,
-      ].filter(Boolean)
-      : [],
-    publishedAt: liveModuleVersion?.publishedAt ?? null,
-    versionsCountsChain: [
-      moduleVersions.length > 0 ? { label: "Module", versionNo: moduleVersions.length } : null,
-      rubricVersions.length > 0 ? { label: "Rubric", versionNo: rubricVersions.length } : null,
-      promptTemplateVersions.length > 0 ? { label: "Prompt", versionNo: promptTemplateVersions.length } : null,
-      mcqSetVersions.length > 0 ? { label: "MCQ", versionNo: mcqSetVersions.length } : null,
-    ].filter(Boolean),
-    technicalDetails,
+    ...chains,
   };
+}
+
+// ---------------------------------------------------------------------------
+// State rail
+// ---------------------------------------------------------------------------
+
+function makeSrBadge(modifier, text) {
+  return `<span class="sr-badge sr-badge--${modifier}">${escapeHtml(text)}</span>`;
+}
+
+function updateStateRail() {
+  if (!stateRail) return;
+  const hasModule = !!selectedModuleId && !!selectedModuleStatus;
+  stateRail.hidden = !hasModule;
+  if (!hasModule) return;
+
+  const view = deriveModuleStatusView(selectedModuleStatus);
+  if (!view) return;
+
+  const hasUnsaved = dirtyCards.size > 0;
+
+  if (srModuleName) {
+    srModuleName.textContent = view.title || selectedModuleId;
+  }
+
+  if (srEditing) {
+    if (hasUnsaved) {
+      srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
+    } else if (view.latestDraftChain.length > 0) {
+      srEditing.innerHTML = makeSrBadge(
+        "saved-draft",
+        tf("stateRail.editing.savedDraft", { versionNo: view.latestDraftChain[0].versionNo }),
+      );
+    } else if (view.liveChain.length > 0) {
+      srEditing.innerHTML = makeSrBadge(
+        "published",
+        tf("stateRail.editing.published", { versionNo: view.liveChain[0].versionNo }),
+      );
+    } else {
+      srEditing.innerHTML = `<span class="state-rail-value">—</span>`;
+    }
+  }
+
+  if (srLive) {
+    if (view.liveChain.length > 0) {
+      srLive.innerHTML = makeSrBadge(
+        "published",
+        tf("stateRail.live.published", { versionNo: view.liveChain[0].versionNo }),
+      );
+    } else {
+      srLive.innerHTML = `<span class="state-rail-value" style="color:var(--color-meta)">${escapeHtml(t("stateRail.live.none"))}</span>`;
+    }
+  }
+
+  if (srChanges) {
+    if (hasUnsaved) {
+      srChanges.innerHTML = makeSrBadge("unsaved", t("stateRail.changes.unsaved"));
+    } else {
+      srChanges.innerHTML = `<span class="state-rail-value" style="color:var(--color-success)">${escapeHtml(t("stateRail.changes.saved"))}</span>`;
+    }
+  }
 }
 
 function coerceModuleExportToImportDraft(payload) {
@@ -1558,6 +1509,7 @@ function renderModuleStatus() {
     moduleStatusCounts.textContent = "-";
   }
   moduleStatusDetails.textContent = JSON.stringify(view.technicalDetails, null, 2);
+  updateStateRail();
 }
 
 function clearVersionFields() {
@@ -2273,6 +2225,8 @@ function renderContentCards() {
   if (publishFromCardsBtn) {
     publishFromCardsBtn.hidden = !publishModuleVersionIdInput.value.trim();
   }
+
+  updateStateRail();
 }
 
 // ── Assessment policy helper ───────────────────────────────────────────────────
