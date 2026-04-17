@@ -111,6 +111,46 @@
       table { width: 100%; border-collapse: collapse; min-width: 920px; }
       th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
       tr:hover { background: var(--color-row-hover); }
+
+      /* ── Preview panel ─────────────────────────────────────────────────── */
+      .adv-workspace-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-2); align-items: start; }
+      .adv-workspace-layout.preview-open { grid-template-columns: 1fr 380px; }
+      @media (max-width: 900px) { .adv-workspace-layout.preview-open { grid-template-columns: 1fr; } }
+
+      .adv-preview-pane { position: sticky; top: var(--space-2); max-height: calc(100vh - var(--space-4)); overflow-y: auto; }
+
+      .adv-preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-1); }
+      .adv-preview-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); }
+      .adv-preview-toggle { background: none; border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; white-space: nowrap; width: auto !important; }
+      .adv-preview-toggle:hover { border-color: var(--color-link-hover-border); color: var(--color-text); }
+      .adv-preview-toggle.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
+
+      /* Locale bar (same as shell) */
+      .preview-locale-bar { display: none; gap: 4px; margin-bottom: var(--space-1); }
+      .preview-locale-bar.visible { display: flex; }
+      .preview-locale-btn { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; width: auto !important; }
+      .preview-locale-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
+      .preview-locale-btn:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
+
+      /* Reuse shell preview classes (already in shared.css for module-status-badge; these are panel-specific) */
+      .preview-module-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-1); margin-bottom: 8px; }
+      .preview-module-title { font-size: 18px; font-weight: 700; color: var(--color-text); }
+      .preview-description { font-size: 13px; color: var(--color-meta); margin: 0 0 8px; }
+      .preview-version-chain { font-size: 12px; color: var(--color-link-active); font-weight: 600; margin: 0 0 var(--space-1); }
+      .preview-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin: var(--space-1) 0 4px; }
+      .preview-text-block { font-size: 14px; color: var(--color-text); line-height: 1.6; white-space: pre-wrap; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-1); }
+      .preview-text-secondary { color: var(--color-meta); }
+      .preview-meta { font-size: 12px; color: var(--color-meta); margin: 8px 0 0; }
+      .preview-mcq-list { display: flex; flex-direction: column; gap: var(--space-1); margin-top: 8px; }
+      .preview-mcq-item { background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-1); }
+      .preview-mcq-question-header { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin-bottom: 6px; }
+      .preview-mcq-stem { font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 8px; line-height: 1.5; }
+      .preview-mcq-options { margin: 0 0 10px 18px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+      .preview-mcq-option { color: var(--color-text); line-height: 1.45; }
+      .preview-mcq-option.correct { font-weight: 700; color: var(--color-link-active); }
+      .preview-mcq-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--color-meta); margin-top: 6px; }
+      .preview-mcq-meta-label { font-weight: 700; color: var(--color-text); }
+      .preview-empty { color: var(--color-meta); font-style: italic; }
     </style>
   </head>
   <body>
@@ -146,10 +186,15 @@
       </div>
     </div>
 
-    <h1 data-i18n="adminContentPage.title">Content Setup Workspace</h1>
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:var(--space-1); margin-bottom:var(--space-1);">
+      <h1 data-i18n="adminContentPage.title" style="margin:0">Content Setup Workspace</h1>
+      <button id="advPreviewToggleBtn" type="button" class="adv-preview-toggle" data-i18n="advPreview.toggle.open" aria-pressed="false">Vis forhåndsvisning</button>
+    </div>
     <p class="small"><a id="backToChatLink" href="/admin-content" data-i18n="adminContentPage.chatLink">Back to conversational editor</a></p>
     <p class="small" data-i18n="adminContentPage.subtitle">Define module content and scoring rules in a guided sequence.</p>
 
+    <div id="advWorkspaceLayout" class="adv-workspace-layout">
+    <div id="advEditorContent">
     <section class="card mock-identity-card">
       <details class="mock-identity-panel">
         <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
@@ -657,6 +702,19 @@
         <pre id="output" class="pre-content"></pre>
       </details>
     </section>
+    </div><!-- #advEditorContent -->
+
+    <!-- Preview pane — shown when toggle is active -->
+    <aside id="advPreviewPane" class="card adv-preview-pane" aria-label="Forhåndsvisning" hidden>
+      <div class="adv-preview-header">
+        <span class="adv-preview-title" data-i18n="advPreview.panelTitle">Forhåndsvisning</span>
+      </div>
+      <div id="advPreviewLocaleBar" class="preview-locale-bar"></div>
+      <div id="advPreviewContent">
+        <p class="preview-empty" data-i18n="advPreview.empty">Ingen modul lastet.</p>
+      </div>
+    </aside>
+    </div><!-- #advWorkspaceLayout -->
 
     </main>
 

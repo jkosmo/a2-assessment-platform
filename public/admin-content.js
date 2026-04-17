@@ -15,6 +15,7 @@ import {
 } from "/static/participant-console-state.js";
 import { findLinkedVersion, deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
+import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -452,6 +453,10 @@ let participantRuntimeConfig = {
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let dirtyCards = new Set();
 let _dialogTriggerRef = null;
+
+// Advanced preview panel state
+let advPreviewLocale = null; // set to currentLocale on first open
+let advPreviewOpen = false;
 
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
@@ -1511,6 +1516,7 @@ function renderModuleStatus() {
   }
   moduleStatusDetails.textContent = JSON.stringify(view.technicalDetails, null, 2);
   updateStateRail();
+  renderAdvancedPreview();
 }
 
 function clearVersionFields() {
@@ -2228,6 +2234,7 @@ function renderContentCards() {
   }
 
   updateStateRail();
+  renderAdvancedPreview();
 }
 
 // ── Assessment policy helper ───────────────────────────────────────────────────
@@ -3653,6 +3660,7 @@ loadParticipantConsoleConfig().then(async () => {
   }
 });
 initBackToChatHandoff();
+initAdvancedPreview();
 renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
@@ -3840,6 +3848,100 @@ function applyHandoffFromShell(moduleId) {
   renderContentCards();
   syncAllTextareaHeights();
   showToast(t("handoff.draftRestored"), "info");
+}
+
+// ---------------------------------------------------------------------------
+// Advanced editor — participant preview panel
+// ---------------------------------------------------------------------------
+
+function initAdvancedPreview() {
+  const toggleBtn = document.getElementById("advPreviewToggleBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      advPreviewOpen = !advPreviewOpen;
+      if (advPreviewOpen && !advPreviewLocale) {
+        advPreviewLocale = currentLocale;
+      }
+      const layout = document.getElementById("advWorkspaceLayout");
+      const pane = document.getElementById("advPreviewPane");
+      if (layout) layout.classList.toggle("preview-open", advPreviewOpen);
+      if (pane) pane.hidden = !advPreviewOpen;
+      toggleBtn.classList.toggle("active", advPreviewOpen);
+      toggleBtn.setAttribute("aria-pressed", String(advPreviewOpen));
+      toggleBtn.textContent = advPreviewOpen
+        ? t("advPreview.toggle.close")
+        : t("advPreview.toggle.open");
+      if (advPreviewOpen) {
+        renderAdvancedPreviewLocaleBar();
+        renderAdvancedPreview();
+      }
+    });
+  }
+}
+
+function renderAdvancedPreviewLocaleBar() {
+  const bar = document.getElementById("advPreviewLocaleBar");
+  if (!bar || !advPreviewOpen) return;
+  const hasModule = !!selectedModuleId;
+  bar.classList.toggle("visible", hasModule);
+  bar.innerHTML = "";
+  if (!hasModule) return;
+
+  for (const loc of supportedLocales) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "preview-locale-btn" + (loc === advPreviewLocale ? " active" : "");
+    btn.textContent = localeLabels[loc] ?? loc;
+    btn.setAttribute("aria-pressed", String(loc === advPreviewLocale));
+    btn.addEventListener("click", () => {
+      advPreviewLocale = loc;
+      renderAdvancedPreviewLocaleBar();
+      renderAdvancedPreview();
+    });
+    bar.appendChild(btn);
+  }
+}
+
+function renderAdvancedPreview() {
+  const content = document.getElementById("advPreviewContent");
+  if (!content || !advPreviewOpen) return;
+  const locale = advPreviewLocale ?? currentLocale;
+  const opts = { locale, t, tf };
+
+  if (!selectedModuleId || !selectedModuleStatus) {
+    content.innerHTML = buildPreviewHtml({ emptyText: t("advPreview.empty") }, opts);
+    return;
+  }
+
+  const view = deriveModuleStatusView(selectedModuleStatus);
+  const hasUnsaved = dirtyCards.size > 0;
+
+  // Version chain: prefer live if editing live, else latest draft
+  const chain = view
+    ? (view.liveChain.length > 0 && !hasUnsaved ? view.liveChain : (view.latestDraftChain.length > 0 ? view.latestDraftChain : view.liveChain))
+    : [];
+  const versionChain = chain.map((e) => `${e.label} v${e.versionNo}`).join(" · ");
+
+  // Badge
+  const badgeClass = hasUnsaved ? "draft" : (view?.badgeClass ?? "shell");
+  const badgeText = hasUnsaved
+    ? t("shell.draft.unsavedBadge")
+    : t(view?.badgeKey ?? "adminContent.status.badge.none");
+
+  // Content from form fields (live values — what the user is currently editing)
+  let mcqQuestions = [];
+  try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+
+  content.innerHTML = buildPreviewHtml({
+    title: moduleTitleInput?.value ?? "",
+    description: moduleDescriptionInput?.value ?? "",
+    taskText: moduleVersionTaskTextInput?.value ?? "",
+    guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+    mcqQuestions,
+    versionChain,
+    badgeClass,
+    badgeText,
+  }, opts);
 }
 
 function validateThresholds(values) {

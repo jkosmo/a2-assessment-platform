@@ -16,6 +16,7 @@ import {
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
+import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -46,77 +47,6 @@ function tf(key, vars) {
 
 function localizeValue(value) {
   return localizeValueForLocale(value, previewLocale);
-}
-
-function localizeValueForLocale(value, locale) {
-  if (!value) return "";
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      if (parsed && typeof parsed === "object") {
-        return parsed[locale] ?? parsed["nb"] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? "";
-      }
-    } catch {
-      // plain string
-    }
-    return value;
-  }
-  if (typeof value === "object") {
-    return value[locale] ?? value["nb"] ?? value["en-GB"] ?? Object.values(value)[0] ?? "";
-  }
-  return String(value);
-}
-
-function localizeOptionList(options) {
-  if (!Array.isArray(options)) return [];
-  return options.map((option) => localizeValue(option)).filter(Boolean);
-}
-
-function renderPreviewMcqQuestions(questions) {
-  if (!Array.isArray(questions) || questions.length === 0) return "";
-
-  const questionItems = questions
-    .map((question, index) => {
-      const stem = localizeValue(question?.stem ?? "");
-      const rationale = localizeValue(question?.rationale ?? "");
-      const correctAnswer = localizeValue(question?.correctAnswer ?? "");
-      const options = localizeOptionList(question?.options);
-      const optionItems = options
-        .map((option) => {
-          const isCorrect = correctAnswer && option === correctAnswer;
-          return `<li class="preview-mcq-option${isCorrect ? " correct" : ""}">${escapeHtml(option)}</li>`;
-        })
-        .join("");
-
-      const rationaleHtml = rationale
-        ? `
-          <div class="preview-mcq-meta">
-            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
-            <span>${escapeHtml(rationale)}</span>
-          </div>`
-        : "";
-
-      return `
-        <article class="preview-mcq-item">
-          <div class="preview-mcq-question-header">${escapeHtml(tf("shell.preview.questionNumber", { number: index + 1 }))}</div>
-          <div class="preview-mcq-stem">${escapeHtml(stem)}</div>
-          <ol class="preview-mcq-options" type="A">
-            ${optionItems}
-          </ol>
-          <div class="preview-mcq-meta">
-            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.correctAnswer"))}</span>
-            <span>${escapeHtml(correctAnswer)}</span>
-          </div>
-          ${rationaleHtml}
-        </article>`;
-    })
-    .join("");
-
-  return `
-    <div class="preview-section-label">${escapeHtml(t("shell.preview.mcqSection"))}</div>
-    <div class="preview-mcq-list">
-      ${questionItems}
-    </div>`;
 }
 
 function parsePositiveIntInRange(rawValue, min, max) {
@@ -199,6 +129,7 @@ const srLive = document.getElementById("srLive");
 const srChanges = document.getElementById("srChanges");
 
 const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
+const SOURCE_MATERIAL_MAX_CHARS = 50000;
 const SOURCE_MATERIAL_ACCEPT =
   ".txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.rtf,.odt,.odp,.ods,text/plain,text/markdown,text/x-markdown,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/rtf,text/rtf,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.presentation,application/vnd.oasis.opendocument.spreadsheet";
 const SOURCE_MATERIAL_ALLOWED_EXTENSIONS = new Set([
@@ -389,6 +320,7 @@ function _domFormFields(entry) {
   const isMultiLine = entry.formType === "textarea" || entry.formType === "source-material";
   const isSourceMaterial = entry.formType === "source-material";
   wrap.className = isMultiLine ? "chat-form-col" : "chat-form-row";
+  let uploadedSourceMaterial = null;
 
   let inputEl;
   if (isMultiLine) {
@@ -456,11 +388,17 @@ function _domFormFields(entry) {
           },
         );
         const text = result.extractedText ?? "";
-        inputEl.value = inputEl.value.trim()
-          ? `${inputEl.value.replace(/\s+$/, "")}\n\n${text.trim()}`
-          : text.trim();
+        const trimmedText = text.trim();
+        if (!trimmedText) {
+          throw new Error("empty_extracted_text");
+        }
+        uploadedSourceMaterial = {
+          fileName: file.name,
+          extractedText: trimmedText,
+        };
+        uploadHint.textContent = tf("shell.source.fileImported", { fileName: file.name });
         inputEl.focus();
-        showToast(tf("shell.source.fileImported", { fileName: file.name }), "success");
+        showToast(t("shell.source.fileReady"), "success");
       } catch (error) {
         showToast(parseApiErrorMessage(error, "shell.source.fileReadError"), "error");
       } finally {
@@ -482,6 +420,25 @@ function _domFormFields(entry) {
   btn.textContent = t(entry.submitKey);
 
   function submit() {
+    if (isSourceMaterial) {
+      const notes = inputEl.value.trim();
+      const uploadedText = uploadedSourceMaterial?.extractedText ?? "";
+      const combinedSourceMaterial = [uploadedText, notes].filter(Boolean).join("\n\n").trim();
+      if (!combinedSourceMaterial) { inputEl.focus(); return; }
+      if (combinedSourceMaterial.length > SOURCE_MATERIAL_MAX_CHARS) {
+        showToast(t("shell.source.textTooLong"), "error");
+        inputEl.focus();
+        return;
+      }
+      btn.disabled = true;
+      inputEl.disabled = true;
+      entry.submitted = true;
+      _deactivateAll();
+      logUser(t("shell.source.userPreview"));
+      entry.onSubmit(combinedSourceMaterial);
+      return;
+    }
+
     const val = inputEl.value.trim();
     if (!val) { inputEl.focus(); return; }
     btn.disabled = true;
@@ -660,117 +617,59 @@ function renderPreviewLocaleBar() {
 }
 
 function renderPreview() {
+  const opts = { locale: previewLocale, t, tf };
+
   if (!bundle && !sessionDraft && !previewDraft) {
-    previewContent.innerHTML = `<p class="preview-empty">${escapeHtml(t("adminContent.status.noneTitle"))}</p>`;
+    previewContent.innerHTML = buildPreviewHtml({ emptyText: t("adminContent.status.noneTitle") }, opts);
+    updateStateRail();
     return;
   }
 
   const activeDraft = previewDraft ?? sessionDraft;
   const hasDraft = !!activeDraft;
 
-  let titleHtml = "";
-  let descriptionHtml = "";
-  let versionChainHtml = "";
-  let badgeClass = "shell";
-  let badgeText = t("adminContent.status.badge.none");
-  let taskTextHtml = "";
-  let guidanceTextHtml = "";
-  let mcqCountHtml = "";
-  let mcqQuestionsHtml = "";
-
   if (bundle) {
     const mod = bundle?.module ?? null;
     const cfg = bundle?.selectedConfiguration ?? {};
     if (!mod) {
-      previewContent.innerHTML = `<p class="preview-empty">${escapeHtml(t("adminContent.status.noneTitle"))}</p>`;
+      previewContent.innerHTML = buildPreviewHtml({ emptyText: t("adminContent.status.noneTitle") }, opts);
+      updateStateRail();
       return;
     }
     const isLive = !!mod.activeVersionId && cfg.moduleVersion?.id === mod.activeVersionId;
     const isDraft = !!cfg.moduleVersion && !isLive;
-
-    badgeClass = hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell";
-    badgeText = hasDraft
-      ? t("shell.draft.unsavedBadge")
-      : isLive
-      ? t("adminContent.status.badge.live")
-      : isDraft
-      ? t("adminContent.status.badge.draft")
-      : t("adminContent.status.badge.none");
-
-    const title = localizeValue(mod.title) || mod.id;
-    const description = localizeValue(mod.description);
-    titleHtml = `<div class="preview-module-title">${escapeHtml(title)}</div>`;
-    if (description) descriptionHtml = `<p class="preview-description">${escapeHtml(description)}</p>`;
 
     const versionChainParts = [];
     if (cfg.moduleVersion) versionChainParts.push(`Modul v${cfg.moduleVersion.versionNo}`);
     if (cfg.rubricVersion) versionChainParts.push(`Rubrikk v${cfg.rubricVersion.versionNo}`);
     if (cfg.promptTemplateVersion) versionChainParts.push(`Prompt v${cfg.promptTemplateVersion.versionNo}`);
     if (cfg.mcqSetVersion) versionChainParts.push(`MCQ v${cfg.mcqSetVersion.versionNo}`);
-    if (versionChainParts.length > 0) {
-      versionChainHtml = `<p class="preview-version-chain">${escapeHtml(versionChainParts.join(" · "))}</p>`;
-    }
 
-    // Use draft content if accepted, else bundle content
-    const taskText = hasDraft
-      ? localizeValue(activeDraft.taskText)
-      : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.taskText) : "";
-    const guidanceText = hasDraft
-      ? localizeValue(activeDraft.guidanceText)
-      : cfg.moduleVersion ? localizeValue(cfg.moduleVersion.guidanceText) : "";
-    const mcqQuestions = hasDraft
-      ? (activeDraft.mcqQuestions ?? [])
-      : (cfg.mcqSetVersion?.questions ?? []);
-    const mcqCount = mcqQuestions.length;
-
-    if (taskText) {
-      taskTextHtml = `
-        <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.taskText"))}</div>
-        <div class="preview-text-block">${escapeHtml(taskText)}</div>`;
-    }
-    if (guidanceText) {
-      guidanceTextHtml = `
-        <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
-        <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText)}</div>`;
-    }
-    if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`;
-    mcqQuestionsHtml = renderPreviewMcqQuestions(mcqQuestions);
+    previewContent.innerHTML = buildPreviewHtml({
+      title: mod.title,
+      description: mod.description,
+      taskText: hasDraft ? activeDraft.taskText : (cfg.moduleVersion?.taskText ?? ""),
+      guidanceText: hasDraft ? activeDraft.guidanceText : (cfg.moduleVersion?.guidanceText ?? ""),
+      mcqQuestions: hasDraft ? (activeDraft.mcqQuestions ?? []) : (cfg.mcqSetVersion?.questions ?? []),
+      versionChain: versionChainParts.join(" · "),
+      badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
+      badgeText: hasDraft
+        ? t("shell.draft.unsavedBadge")
+        : isLive ? t("adminContent.status.badge.live")
+        : isDraft ? t("adminContent.status.badge.draft")
+        : t("adminContent.status.badge.none"),
+    }, opts);
   } else if (hasDraft) {
-    // New module shell not yet saved — show draft content only
-    badgeClass = "draft";
-    badgeText = t("shell.draft.unsavedBadge");
-    titleHtml = `<div class="preview-module-title">${escapeHtml(activeDraft.title || t("shell.newModule.defaultTitle"))}</div>`;
-    const taskText = localizeValue(activeDraft.taskText ?? "");
-    const guidanceText = localizeValue(activeDraft.guidanceText ?? "");
-    const mcqQuestions = activeDraft.mcqQuestions ?? [];
-    const mcqCount = mcqQuestions.length;
-
-    if (taskText) {
-      taskTextHtml = `
-        <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.taskText"))}</div>
-        <div class="preview-text-block">${escapeHtml(taskText)}</div>`;
-    }
-    if (guidanceText) {
-      guidanceTextHtml = `
-        <div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
-        <div class="preview-text-block preview-text-secondary">${escapeHtml(guidanceText)}</div>`;
-    }
-    if (mcqCount > 0) mcqCountHtml = `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`;
-    mcqQuestionsHtml = renderPreviewMcqQuestions(mcqQuestions);
+    previewContent.innerHTML = buildPreviewHtml({
+      title: activeDraft.title || t("shell.newModule.defaultTitle"),
+      taskText: activeDraft.taskText ?? "",
+      guidanceText: activeDraft.guidanceText ?? "",
+      mcqQuestions: activeDraft.mcqQuestions ?? [],
+      badgeClass: "draft",
+      badgeText: t("shell.draft.unsavedBadge"),
+    }, opts);
   }
 
-  previewContent.innerHTML = `
-    <div class="preview-module-header">
-      ${titleHtml}
-      <span class="module-status-badge ${badgeClass}">${escapeHtml(badgeText)}</span>
-    </div>
-    ${descriptionHtml}
-    ${versionChainHtml}
-    ${taskTextHtml}
-    ${guidanceTextHtml}
-    ${mcqCountHtml}
-    ${mcqQuestionsHtml}
-  `.trim();
   updateStateRail();
 }
 

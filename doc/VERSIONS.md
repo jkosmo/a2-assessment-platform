@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.9.94 - 2026-04-17
+
+feat: preview-paritet — delt preview-surface i advanced editor (#315)
+
+- New public/static/admin-content-preview.js: shared renderer exported as
+  buildPreviewHtml(data, {locale, t, tf}) and localizeValueForLocale(value, locale)
+- admin-content-shell.js refactored to import from shared module; renderPreview()
+  delegates to buildPreviewHtml(); ~100 lines of duplicated rendering removed
+- admin-content-advanced.html: dockable right-side preview panel
+  - #advWorkspaceLayout grid: 1fr | 380px when open; collapses to 1fr on narrow screens
+  - #advPreviewPane (hidden by default), #advPreviewLocaleBar, #advPreviewContent
+  - Toggle button (#advPreviewToggleBtn) in page header, aria-pressed wired
+  - All preview CSS (locale bar, MCQ items, text blocks, badges) inline in page
+- admin-content.js: initAdvancedPreview() wires toggle; renderAdvancedPreview()
+  reads live form field values (not saved state) so preview reflects current edits
+  renderAdvancedPreviewLocaleBar() matches shell locale-bar UX
+  Both renderModuleStatus() and renderContentCards() call renderAdvancedPreview()
+- 4 new i18n keys (advPreview.*) in all 5 locale slots: en-GB, nb, nn, lateOverrides.nb/.nn
+
 ## 0.9.93 - 2026-04-17
 
 feat: safe working-draft handoff between conversational shell and advanced editor (#314)
