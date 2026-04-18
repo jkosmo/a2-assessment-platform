@@ -51,7 +51,8 @@ let participantRuntimeConfig = {
   calibrationWorkspace: { accessRoles: [] },
 };
 
-let getHeaders = {};
+let _headerValues = {};
+function getHeaders() { return _headerValues; }
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -510,9 +511,9 @@ async function init() {
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
-    getHeaders = buildConsoleHeaders(cfg);
+    _headerValues = buildConsoleHeaders(cfg);
   } catch {
-    getHeaders = {};
+    _headerValues = {};
   }
 
   buildLocaleSelector();

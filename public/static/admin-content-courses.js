@@ -255,7 +255,7 @@ async function renderNewCourseConversational() {
         <input id="convTitleInput" type="text" placeholder="Kurstittel…" autocomplete="off" maxlength="200" />
         <button id="convTitleNext" class="btn btn-primary">Neste</button>
       </div>
-      <div id="convAfterTitle"></div>
+      <div class="conv-step" id="convAfterTitle"></div>
     </div>`;
 
   const titleInput = document.getElementById("convTitleInput");
@@ -298,7 +298,7 @@ function showConvCertStep() {
       <button class="conv-choice-btn" data-cert="intermediate">Intermediate</button>
       <button class="conv-choice-btn" data-cert="advanced">Advanced</button>
     </div>
-    <div id="convAfterCert"></div>`;
+    <div class="conv-step" id="convAfterCert"></div>`;
 
   document.getElementById("convCertChoices")?.addEventListener("click", e => {
     const btn = e.target.closest("[data-cert]");
@@ -331,7 +331,7 @@ function showConvModuleStep() {
       <button class="conv-choice-btn" id="convAddModulesBtn">Legg til moduler</button>
       <button class="conv-choice-btn" id="convSkipModulesBtn">Hopp over</button>
     </div>
-    <div id="convAfterModuleChoice"></div>`;
+    <div class="conv-step" id="convAfterModuleChoice"></div>`;
 
   document.getElementById("convAddModulesBtn")?.addEventListener("click", () => {
     document.getElementById("convAddModulesBtn").disabled = true;
@@ -384,7 +384,7 @@ function showConvModuleSearch() {
     <div class="form-actions">
       <button id="convCreateBtn" class="btn btn-primary">Opprett kurs</button>
     </div>
-    <div id="convAfterModules"></div>`;
+    <div class="conv-step" id="convAfterModules"></div>`;
 
   renderConvModuleList();
   initConvCombobox();

@@ -139,6 +139,22 @@ describe("courses conversational flow CSS", () => {
     // Same class used for both <button> and <a> elements in row-actions flex container
     expect(libraryHtml).toMatch(/\.row-action-btn\s*\{[^}]*width\s*:\s*auto/);
   });
+
+  it("combobox-row button has width: auto — prevents global reset collapsing the module search input", () => {
+    const html = readFile("public/admin-content-courses.html");
+    // Same pattern as .conv-input-area button fix (v0.10.4): global button{width:100%} collapses
+    // the adjacent input in a flex row unless the button explicitly sets width: auto.
+    expect(html).toMatch(/\.combobox-row\s+button\s*\{[^}]*width\s*:\s*auto/);
+  });
+
+  it("conv-step defines flex column layout — provides spacing inside dynamically-injected step containers", () => {
+    const html = readFile("public/admin-content-courses.html");
+    // convAfter* divs are nested inside .conv-flow, not direct children, so they don't inherit
+    // the flow's gap. .conv-step makes each injected step container its own flex column with gap.
+    expect(html).toMatch(/\.conv-step\s*\{[^}]*display\s*:\s*flex/);
+    expect(html).toMatch(/\.conv-step\s*\{[^}]*flex-direction\s*:\s*column/);
+    expect(html).toMatch(/\.conv-step\s*\{[^}]*gap\s*:/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -168,6 +184,20 @@ describe("courses JS contracts", () => {
     expect(fnIdx, "convCreateCourse function must exist").toBeGreaterThan(-1);
     const postIdx = js.indexOf('"POST"', fnIdx);
     expect(postIdx, "convCreateCourse must issue a POST request").toBeGreaterThan(fnIdx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Library JS contracts
+// ---------------------------------------------------------------------------
+
+describe("library JS contracts", () => {
+  it("getHeaders is defined as a function, not a plain object — prevents apiFetch treating it as fetch options", () => {
+    const js = readFile("public/static/admin-content-library.js");
+    // Same root cause as courses.js Bug G (v0.10.2): plain object causes apiFetch to treat it as
+    // options arg and silently ignore the method/body in the 3rd arg — all POSTs become GETs.
+    expect(js).toMatch(/function getHeaders\s*\(\s*\)/);
+    expect(js).not.toMatch(/^let getHeaders\s*=\s*\{/m);
   });
 });
 

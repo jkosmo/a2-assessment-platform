@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.6 - 2026-04-18
+
+fix: library.js getHeaders plain-object bug + conv course flow spacing + combobox width (#330, #331)
+
+- public/static/admin-content-library.js: `let getHeaders = {}` → `let _headerValues = {}; function getHeaders() { return _headerValues; }` — same root cause as v0.10.2 Bug G; all POST calls (create module, archive, restore, duplicate) were silently becoming GETs; create-module dialog showed "Fikk ikke modul-ID." (#331)
+- public/admin-content-courses.html: added `.conv-step { display: flex; flex-direction: column; gap: var(--space-2) }` — convAfter* wrapper divs are nested inside .conv-flow, not direct flex children, so they didn't inherit the flow's gap; fixes no-spacing issue (#330)
+- public/admin-content-courses.html: added `.combobox-row button { width: auto; flex-shrink: 0 }` — same global button{width:100%} reset issue as v0.10.4; fixes collapsed module-search input (#330)
+- public/static/admin-content-courses.js: added `class="conv-step"` to all four convAfter* placeholder divs so the CSS rule applies
+- test/admin-content-ui-contracts.test.js: three new contract tests — combobox-row button width, conv-step flex layout, library.js getHeaders function
+
 ## 0.10.5 - 2026-04-18
 
 test: UI contract tests for flex-button width overrides, getHeaders function contract, conversational flow CSS, moduleExport unwrap
