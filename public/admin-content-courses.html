@@ -347,6 +347,7 @@
       }
       .conv-input-area input {
         flex: 1;
+        min-width: 0;
         padding: 9px 12px;
         border: 1px solid var(--color-border-soft);
         border-radius: var(--radius-card);
@@ -357,6 +358,7 @@
         color: var(--color-text);
       }
       .conv-input-area input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      .conv-input-area button { width: auto; flex-shrink: 0; }
       .conv-choices {
         display: flex;
         gap: 8px;
@@ -364,6 +366,7 @@
         margin-top: 4px;
       }
       .conv-choice-btn {
+        width: auto;
         padding: 8px 18px;
         font-size: 14px;
         font-weight: 600;

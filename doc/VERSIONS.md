@@ -7,6 +7,12 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.4 - 2026-04-18
+
+fix: conv-input-area button width — global button{width:100%} override missing, input field collapsed
+
+- public/admin-content-courses.html: .conv-input-area button { width: auto; flex-shrink: 0 }; .conv-choice-btn { width: auto }; added min-width: 0 to input so flex-shrink works correctly
+
 ## 0.10.3 - 2026-04-18
 
 feat: conversational new-course creation — replace locale-tab form for /courses/new (#329)
