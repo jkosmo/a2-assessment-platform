@@ -355,3 +355,5 @@ if ($env:GITHUB_OUTPUT) {
   Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_server_name=$postgresServerName"
   Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_database_name=$postgresDatabaseName"
 }
+
+exit 0

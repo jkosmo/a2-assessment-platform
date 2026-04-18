@@ -7,6 +7,12 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.10 - 2026-04-18
+
+fix: deploy-environment.ps1 avsluttes med exit 0 — PowerShell 7 propagerer $LASTEXITCODE fra native kommandoer som scriptets exit code
+
+- scripts/azure/deploy-environment.ps1: lagt til `exit 0` på slutten; deploy-scriptet kjørte vellykket (apper deployet, health checks OK) men returnerte exit code 1 fordi $LASTEXITCODE var 1 etter mislykket `az ad app show`-kall (fanget i try/catch), og PowerShell 7 propagerer $LASTEXITCODE ved scriptavslutning uten eksplisitt exit
+
 ## 0.10.9 - 2026-04-18
 
 fix: deploy-environment.ps1 bruker az rest/Graph API for SPA redirect URI (az ad app update støtter ikke --spa-redirect-uris)
