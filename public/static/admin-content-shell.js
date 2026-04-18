@@ -709,7 +709,7 @@ function renderPreview() {
         ? t("shell.draft.unsavedBadge")
         : isLive ? t("adminContent.status.badge.live")
         : isDraft ? t("adminContent.status.badge.draft")
-        : t("adminContent.status.badge.none"),
+        : t("adminContent.status.badge.shellOnly"),
     }, opts);
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({

@@ -76,7 +76,17 @@ function formatDate(iso) {
 
 function localizedText(value) {
   if (!value) return "";
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    if (value.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed[currentLocale] ?? parsed["en-GB"] ?? Object.values(parsed).find(Boolean) ?? value;
+        }
+      } catch { /* plain string */ }
+    }
+    return value;
+  }
   return value[currentLocale] ?? value["en-GB"] ?? Object.values(value).find(Boolean) ?? "";
 }
 

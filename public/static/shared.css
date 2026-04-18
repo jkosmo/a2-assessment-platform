@@ -580,6 +580,26 @@ body.auth-entra .mock-identity-card {
   content: " ...";
 }
 
+a.btn-primary,
+a.btn-secondary,
+a.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-button);
+  min-height: var(--button-min-height);
+  padding: var(--space-1);
+  box-sizing: border-box;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
 .btn-primary {
   background: var(--color-blue);
   border-color: var(--color-blue);

@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.1 - 2026-04-18
+
+fix: 8 stage-testing bugs from epic #328 verification
+
+- Bug #1: admin-content-library.html: filter button "Har upublisert draft" → "Har upublisert utkast"
+- Bug #2: adminContentQueries.ts: apply localizeContentText to certificationLevel in listLibraryModules(); admin-content-library.js: add "foundation" to CERT_LABELS, normalize to lowercase in certBadge()
+- Bug #3: admin-content-library.html: .row-actions add flex-wrap:wrap; .col-actions add min-width:260px
+- Bug #4: admin-content-library.js: sortable columns by Modulnavn and Sist endret with asc/desc toggle
+- Bug #5: admin-content-library.js: createAndNavigate() and renderLibrary() now navigate to new path-based URLs (/admin-content/module/:id/conversation|advanced)
+- Bug #6: admin-content-shell.js: badge text for loaded module with no versions changed from "badge.none" to "badge.shellOnly"
+- Bug #7: admin-content-courses.js: localizedText() now parses JSON-encoded strings for localized course titles
+- Bug #8: shared.css: added a.btn-primary/secondary/danger base styles so anchor-as-button renders correctly
+
 ## 0.10.0 - 2026-04-18
 
 feat: admin content IA redesign complete — epic #328 ready for stage verification

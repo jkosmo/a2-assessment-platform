@@ -82,6 +82,8 @@ const navKalibrering = document.getElementById("navKalibrering");
 let allModules = [];
 let activeFilter = "all";
 let searchQuery = "";
+let sortColumn = "title"; // "title" | "updatedAt"
+let sortDirection = "asc"; // "asc" | "desc"
 let pendingCreateTarget = null; // "conversation" | "advanced"
 
 // ---------------------------------------------------------------------------
@@ -97,6 +99,7 @@ const STATUS_LABELS = {
 
 const CERT_LABELS = {
   basic: "Basic",
+  foundation: "Foundation",
   intermediate: "Intermediate",
   advanced: "Advanced",
 };
@@ -107,7 +110,9 @@ function statusBadge(status) {
 
 function certBadge(level) {
   if (!level) return `<span class="cert-badge">—</span>`;
-  return `<span class="cert-badge">${CERT_LABELS[level] ?? level}</span>`;
+  const normalized = typeof level === "string" ? level.toLowerCase() : level;
+  const label = CERT_LABELS[normalized] ?? CERT_LABELS[level] ?? level;
+  return `<span class="cert-badge">${label}</span>`;
 }
 
 function escapeHtml(s) {
@@ -132,11 +137,20 @@ function applyFilter(modules) {
       m.id.toLowerCase().includes(q)
     );
   }
-  if (activeFilter === "all") return result;
-  if (activeFilter === "active") return result.filter(m => m.status !== "archived");
-  if (activeFilter === "archived") return result.filter(m => m.status === "archived");
-  if (activeFilter === "unpublished_draft") return result.filter(m => m.status === "unpublished_draft");
-  if (activeFilter === "published") return result.filter(m => m.status === "published");
+  if (activeFilter === "active") result = result.filter(m => m.status !== "archived");
+  else if (activeFilter === "archived") result = result.filter(m => m.status === "archived");
+  else if (activeFilter === "unpublished_draft") result = result.filter(m => m.status === "unpublished_draft");
+  else if (activeFilter === "published") result = result.filter(m => m.status === "published");
+
+  result = [...result].sort((a, b) => {
+    let cmp = 0;
+    if (sortColumn === "title") {
+      cmp = (a.title ?? "").localeCompare(b.title ?? "", currentLocale);
+    } else if (sortColumn === "updatedAt") {
+      cmp = (a.updatedAt ?? "").localeCompare(b.updatedAt ?? "");
+    }
+    return sortDirection === "asc" ? cmp : -cmp;
+  });
   return result;
 }
 
@@ -164,8 +178,8 @@ function renderLibrary() {
   }
 
   const rows = visible.map(m => {
-    const openConvUrl = `/admin-content?moduleId=${encodeURIComponent(m.id)}`;
-    const openAdvUrl = `/admin-content/advanced?moduleId=${encodeURIComponent(m.id)}`;
+    const openConvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/conversation`;
+    const openAdvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/advanced`;
     const isArchived = m.status === "archived";
 
     const courseCountCell = m.courseCount > 0
@@ -193,16 +207,21 @@ function renderLibrary() {
     </tr>`;
   }).join("");
 
+  const titleDir = sortColumn === "title" ? sortDirection : "none";
+  const dateDir = sortColumn === "updatedAt" ? sortDirection : "none";
+  const titleIcon = titleDir === "asc" ? "↑" : titleDir === "desc" ? "↓" : "↕";
+  const dateIcon = dateDir === "asc" ? "↑" : dateDir === "desc" ? "↓" : "↕";
+
   libraryContent.innerHTML = `
     <div class="library-table-wrap">
       <table class="library-table" aria-label="Modulbibliotek">
         <thead>
           <tr>
-            <th scope="col">Modulnavn</th>
+            <th scope="col" class="sortable${titleDir !== "none" ? ` sort-${titleDir}` : ""}" data-sort="title" aria-sort="${titleDir !== "none" ? titleDir + "ending" : "none"}">Modulnavn <i class="sort-indicator" aria-hidden="true">${titleIcon}</i></th>
             <th scope="col">Sertifiseringsnivå</th>
             <th scope="col">Status</th>
             <th scope="col">Brukt i kurs</th>
-            <th scope="col">Sist endret</th>
+            <th scope="col" class="sortable${dateDir !== "none" ? ` sort-${dateDir}` : ""}" data-sort="updatedAt" aria-sort="${dateDir !== "none" ? dateDir + "ending" : "none"}">Sist endret <i class="sort-indicator" aria-hidden="true">${dateIcon}</i></th>
             <th scope="col">Handlinger</th>
           </tr>
         </thead>
@@ -211,6 +230,18 @@ function renderLibrary() {
     </div>`;
 
   document.getElementById("libraryTableBody")?.addEventListener("click", handleTableClick);
+  document.querySelectorAll(".library-table th[data-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.sort;
+      if (sortColumn === col) {
+        sortDirection = sortDirection === "asc" ? "desc" : "asc";
+      } else {
+        sortColumn = col;
+        sortDirection = "asc";
+      }
+      renderLibrary();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -380,9 +411,9 @@ async function createAndNavigate(target) {
 
     createModuleDialog.close();
     if (target === "conversation") {
-      window.location.href = `/admin-content?moduleId=${encodeURIComponent(newId)}`;
+      window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/conversation`;
     } else {
-      window.location.href = `/admin-content/advanced?moduleId=${encodeURIComponent(newId)}`;
+      window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/advanced`;
     }
   } catch (err) {
     createModuleError.textContent = err?.message ?? "Kunne ikke opprette modul.";

@@ -107,7 +107,14 @@
       .col-status { white-space: nowrap; }
       .col-courses { white-space: nowrap; }
       .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
-      .col-actions { white-space: nowrap; }
+      .col-actions { white-space: nowrap; min-width: 260px; }
+
+      /* ── Sortable column headers ─────────────────────────────────────────── */
+      .library-table th.sortable { cursor: pointer; user-select: none; }
+      .library-table th.sortable:hover { color: var(--color-link-active); }
+      .sort-indicator { display: inline-block; margin-left: 4px; opacity: 0.4; font-style: normal; }
+      .library-table th.sort-asc .sort-indicator,
+      .library-table th.sort-desc .sort-indicator { opacity: 1; color: var(--color-link-active); }
 
       /* ── Status badges ───────────────────────────────────────────────────── */
       .status-badge {
@@ -153,7 +160,7 @@
       .course-count-zero { color: var(--color-meta); font-size: 13px; }
 
       /* ── Row actions ─────────────────────────────────────────────────────── */
-      .row-actions { display: flex; gap: 4px; align-items: center; }
+      .row-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
       .row-action-btn {
         padding: 4px 10px;
         font-size: 12px;
@@ -262,7 +269,7 @@
         <div class="library-filters" role="group" aria-label="Filtrer moduler">
           <button class="library-filter-btn active" data-filter="all">Alle</button>
           <button class="library-filter-btn" data-filter="active">Aktive</button>
-          <button class="library-filter-btn" data-filter="unpublished_draft">Har upublisert draft</button>
+          <button class="library-filter-btn" data-filter="unpublished_draft">Har upublisert utkast</button>
           <button class="library-filter-btn" data-filter="published">Publiserte</button>
           <button class="library-filter-btn" data-filter="archived">Arkiverte</button>
         </div>

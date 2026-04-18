@@ -25,7 +25,7 @@ export async function listLibraryModules(locale: SupportedLocale = "en-GB") {
   return modules.map((module) => ({
     id: module.id,
     title: localizeContentText(locale, module.title) ?? module.title,
-    certificationLevel: module.certificationLevel ?? null,
+    certificationLevel: localizeContentText(locale, module.certificationLevel) ?? module.certificationLevel ?? null,
     status: deriveLibraryStatus(module),
     archivedAt: module.archivedAt?.toISOString() ?? null,
     updatedAt: module.updatedAt.toISOString(),
