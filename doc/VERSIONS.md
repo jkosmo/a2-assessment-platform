@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.5 - 2026-04-18
+
+test: UI contract tests for flex-button width overrides, getHeaders function contract, conversational flow CSS, moduleExport unwrap
+
+- test/admin-content-ui-contracts.test.js: new describe blocks for "courses conversational flow CSS" (flex container width overrides), "courses JS contracts" (getHeaders function, renderNewCourseConversational delegation, POST contract), "shell JS contracts" (moduleExport unwrap); also fixed two stale assertions: backToChatLink moved to advancedJs check, aria-label="Kursliste" moved to JS check, advPreviewContent replaces previewContent for advanced HTML
+- These tests would have caught: button{width:100%} override missing (v0.10.4), getHeaders plain object (v0.10.2 Bug G), bundle.moduleExport unwrap missing (v0.10.2 Bug B)
+
 ## 0.10.4 - 2026-04-18
 
 fix: conv-input-area button width — global button{width:100%} override missing, input field collapsed
