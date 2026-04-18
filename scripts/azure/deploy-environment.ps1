@@ -314,14 +314,23 @@ if ($AuthMode -eq "entra" -and $EntraClientId) {
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/"
   Write-Host "Updating SPA redirect URI on Entra app registration $EntraClientId to: $spaRedirectUri"
   try {
-    az ad app update --id $EntraClientId --spa-redirect-uris $spaRedirectUri | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "SPA redirect URI updated."
+    $appObjectId = (az ad app show --id $EntraClientId --query id -o tsv 2>&1).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $appObjectId) {
+      Write-Warning "Could not resolve app object ID for $EntraClientId (exit $LASTEXITCODE). Configure SPA redirect URI manually in the Azure portal."
     } else {
-      Write-Warning "Could not update SPA redirect URI automatically (exit $LASTEXITCODE). Run manually: az ad app update --id $EntraClientId --spa-redirect-uris $spaRedirectUri"
+      $body = '{"spa":{"redirectUris":["' + $spaRedirectUri + '"]}}'
+      $result = az rest --method PATCH `
+        --uri "https://graph.microsoft.com/v1.0/applications/$appObjectId" `
+        --headers "Content-Type=application/json" `
+        --body $body 2>&1
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "SPA redirect URI updated."
+      } else {
+        Write-Warning "Could not update SPA redirect URI automatically (exit $LASTEXITCODE): $result. Configure manually in Azure portal."
+      }
     }
   } catch {
-    Write-Warning "Could not update SPA redirect URI automatically: $($_.Exception.Message). Run manually: az ad app update --id $EntraClientId --spa-redirect-uris $spaRedirectUri"
+    Write-Warning "Could not update SPA redirect URI automatically: $($_.Exception.Message). Configure manually in Azure portal."
   }
 }
 

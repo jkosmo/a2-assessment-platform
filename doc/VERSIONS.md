@@ -7,6 +7,12 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.9 - 2026-04-18
+
+fix: deploy-environment.ps1 bruker az rest/Graph API for SPA redirect URI (az ad app update støtter ikke --spa-redirect-uris)
+
+- scripts/azure/deploy-environment.ps1: bytter fra `az ad app update --spa-redirect-uris` (ikke støttet) til `az ad app show` + `az rest PATCH graph.microsoft.com/v1.0/applications/<objectId>` med `{"spa":{"redirectUris":[...]}}` — samme mønster som setup-dev-tenant-auth.ps1 bruker for scopes. Feil gir advarsel, stopper ikke deploy.
+
 ## 0.10.8 - 2026-04-18
 
 fix: deploy-environment.ps1 oppdaterer SPA redirect URI automatisk etter deploy
