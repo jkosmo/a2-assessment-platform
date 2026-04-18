@@ -91,7 +91,11 @@ export function deriveModuleStatusChains(moduleExport) {
   let badgeClass = "shell";
   let summaryKey = "adminContent.status.noneSummary";
 
-  if (hasLiveVersion && hasDraftVersion) {
+  if (module.archivedAt) {
+    badgeKey = "adminContent.status.badge.archived";
+    badgeClass = "shell";
+    summaryKey = "adminContent.status.summary.archived";
+  } else if (hasLiveVersion && hasDraftVersion) {
     badgeKey = "adminContent.status.badge.draft";
     badgeClass = "draft";
     summaryKey = "adminContent.status.summary.liveWithDraft";

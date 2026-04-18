@@ -8,6 +8,7 @@ import {
   getModuleContentBundle,
   listAdminModules,
   listArchivedModules,
+  listLibraryModules,
   createPromptTemplateVersion,
   createRubricVersion,
   publishModuleVersion,
@@ -85,6 +86,16 @@ adminContentRouter.post("/modules", async (request, response) => {
   }
 });
 
+adminContentRouter.get("/modules/library", async (request, response) => {
+  const locale = (request.query.locale as string) || request.context?.locale || "en-GB";
+  try {
+    const modules = await listLibraryModules(locale as Parameters<typeof listLibraryModules>[0]);
+    response.json({ modules });
+  } catch {
+    response.status(500).json({ error: "list_library_failed" });
+  }
+});
+
 adminContentRouter.get("/modules", async (request, response) => {
   const modules = await listAdminModules(request.context?.locale ?? "en-GB");
   response.json({ modules });
@@ -98,6 +109,15 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
   }
 
   try {
+    const courseCount = await adminContentRepository.countModuleCourses(request.params.moduleId);
+    if (courseCount > 0) {
+      response.status(409).json({
+        error: "module_in_use",
+        message: `Cannot delete module: it is used in ${courseCount} course(s). Remove it from all courses first.`,
+        courseCount,
+      });
+      return;
+    }
     const deletedModule = await deleteModule(request.params.moduleId, actorId);
     response.json({ deletedModule });
   } catch (error) {

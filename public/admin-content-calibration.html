@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kalibrering – A2 Content</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      /* ── Content area nav ────────────────────────────────────────────────── */
+      .content-area-nav {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border-soft);
+        margin-bottom: var(--space-3);
+      }
+      .content-area-nav-link {
+        padding: 10px var(--space-2);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-meta);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        white-space: nowrap;
+      }
+      .content-area-nav-link:hover { color: var(--color-text); }
+      .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+
+      /* ── Access denied ───────────────────────────────────────────────────── */
+      .access-denied {
+        text-align: center;
+        padding: var(--space-5) var(--space-3);
+        background: var(--color-surface);
+        border: 1px solid var(--color-table-wrap-border);
+        border-radius: var(--radius-card);
+        max-width: 480px;
+        margin: var(--space-3) auto;
+      }
+      .access-denied-title { font-size: 20px; font-weight: 700; margin: 0 0 10px; }
+      .access-denied-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+
+      /* ── Calibration layout ──────────────────────────────────────────────── */
+      .calibration-workspace { display: flex; flex-direction: column; gap: var(--space-2); }
+
+      .calibration-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .calibration-header h1 { margin: 0; font-size: 22px; }
+      .calibration-module-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--color-link-active);
+        background: var(--color-blue-light);
+        border: 1px solid var(--color-blue);
+        border-radius: 999px;
+        padding: 3px 10px;
+      }
+
+      /* ── Loading ─────────────────────────────────────────────────────────── */
+      .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
+
+      <div class="page-top-bar">
+        <nav id="workspaceNav" class="workspace-nav"></nav>
+        <div class="locale-picker">
+          <span id="appVersion" class="version-badge">…</span>
+          <label for="localeSelect" class="sr-only">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+        <a href="/admin-content" class="content-area-nav-link" id="navModuler">Moduler</a>
+        <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs">Kurs</a>
+        <a href="/admin-content/calibration" class="content-area-nav-link active" id="navKalibrering">Kalibrering</a>
+      </nav>
+
+      <div id="pageContent">
+        <div class="page-loading">Laster…</div>
+      </div>
+
+    </main>
+
+    <!-- Calibration workspace content (hidden until access confirmed) -->
+    <template id="calibrationWorkspaceTemplate">
+      <div class="calibration-workspace">
+
+        <div class="calibration-header">
+          <h1>Kalibrering</h1>
+          <span id="calibrationModuleLabel" class="calibration-module-label" hidden></span>
+        </div>
+
+        <section class="card">
+          <h2 data-i18n="calibration.filters.title">Calibration filters</h2>
+          <div class="row">
+            <div>
+              <label for="calibrationModuleId" data-i18n="calibration.filters.moduleId">Module ID</label>
+              <select id="calibrationModuleId"></select>
+            </div>
+            <div>
+              <label for="calibrationModuleVersionId" data-i18n="calibration.filters.moduleVersionId">Module version ID</label>
+              <input id="calibrationModuleVersionId" data-i18n-placeholder="calibration.filters.moduleVersionPlaceholder" placeholder="Optional module version ID" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <fieldset class="pill-group-fieldset">
+                <legend id="calibrationStatusesLegend" data-i18n="calibration.filters.statuses">Submission statuses</legend>
+                <div id="calibrationStatuses" class="pill-group" role="group" aria-labelledby="calibrationStatusesLegend"></div>
+              </fieldset>
+            </div>
+            <div>
+              <label for="calibrationLimit" data-i18n="calibration.filters.limit">Max outcomes</label>
+              <input id="calibrationLimit" type="number" min="1" max="500" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="calibrationDateFrom" data-i18n="calibration.filters.dateFrom">Date from</label>
+              <input id="calibrationDateFrom" type="date" />
+            </div>
+            <div>
+              <label for="calibrationDateTo" data-i18n="calibration.filters.dateTo">Date to</label>
+              <input id="calibrationDateTo" type="date" />
+            </div>
+          </div>
+          <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
+            <div><button id="loadCalibration" class="btn-secondary" data-i18n="calibration.filters.load">Load calibration snapshot</button></div>
+            <div class="small" id="calibrationMeta"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 data-i18n="calibration.signals.title">Quality signals</h2>
+          <pre id="calibrationSignals"></pre>
+        </section>
+
+        <section id="thresholdEditorSection" class="card" style="display:none">
+          <h2 data-i18n="calibration.thresholds.title">Calibration thresholds</h2>
+          <p class="small" data-i18n="calibration.thresholds.subtitle">Effective thresholds for this module. These control how scores are routed to pass, manual review (yellow), or fail.</p>
+
+          <h3 data-i18n="calibration.thresholds.section.total">Total</h3>
+          <div class="row">
+            <div>
+              <label for="thresholdTotalMin" data-i18n="calibration.thresholds.totalMin">Pass score (min out of 100)</label>
+              <input id="thresholdTotalMin" type="number" min="0" max="100" step="1" />
+              <div class="small" data-i18n="calibration.thresholds.totalMinHelp">Minimum total score to pass.</div>
+            </div>
+          </div>
+
+          <h3 data-i18n="calibration.thresholds.section.manualReview">Manual review zone</h3>
+          <div class="row">
+            <div>
+              <label for="thresholdBorderlineMin" data-i18n="calibration.thresholds.borderlineMin">Yellow zone start</label>
+              <input id="thresholdBorderlineMin" type="number" min="0" max="100" step="1" />
+              <div class="small" data-i18n="calibration.thresholds.borderlineMinHelp">Scores at or above this value enter the yellow/manual-review zone.</div>
+            </div>
+            <div>
+              <label for="thresholdBorderlineMax" data-i18n="calibration.thresholds.borderlineMax">Yellow zone end</label>
+              <input id="thresholdBorderlineMax" type="number" min="0" max="100" step="1" />
+              <div class="small" data-i18n="calibration.thresholds.borderlineMaxHelp">Scores at or below this value stay in the yellow zone.</div>
+            </div>
+          </div>
+
+          <h3 data-i18n="calibration.thresholds.section.practical">Practical submission</h3>
+          <div class="row">
+            <div>
+              <label for="thresholdPracticalMinPercent" data-i18n="calibration.thresholds.practicalMinPercent">Submission min %</label>
+              <input id="thresholdPracticalMinPercent" type="number" min="0" max="100" step="1" />
+              <div class="small" data-i18n="calibration.thresholds.practicalMinPercentHelp">Minimum percentage of the submission maximum that the practical component must reach.</div>
+            </div>
+          </div>
+
+          <h3 data-i18n="calibration.thresholds.section.mcq">Multiple choice questions</h3>
+          <div class="row">
+            <div>
+              <label for="thresholdMcqMinPercent" data-i18n="calibration.thresholds.mcqMinPercent">MCQ min % correct</label>
+              <input id="thresholdMcqMinPercent" type="number" min="0" max="100" step="1" />
+              <div class="small" data-i18n="calibration.thresholds.mcqMinPercentHelp">Minimum percentage correct on the multiple choice questions.</div>
+            </div>
+          </div>
+
+          <div id="thresholdBandPreview" class="small" style="margin-top: var(--space-1)"></div>
+          <div id="thresholdValidationError" class="small" style="color:var(--color-error,red)"></div>
+
+          <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
+            <div>
+              <button id="publishThresholds" class="btn-secondary" data-i18n="calibration.thresholds.publish" disabled>Publish thresholds</button>
+            </div>
+          </div>
+          <div id="thresholdPublishResult" class="small"></div>
+        </section>
+
+        <section class="card">
+          <h2 data-i18n="calibration.outcomes.title">Historical outcomes</h2>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Historical outcomes">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="calibration.outcomes.submissionId">Submission</th>
+                  <th scope="col" data-i18n="calibration.outcomes.submittedAt">Submitted</th>
+                  <th scope="col" data-i18n="calibration.outcomes.status">Status</th>
+                  <th scope="col" data-i18n="calibration.outcomes.moduleVersion">Module version</th>
+                  <th scope="col" data-i18n="calibration.outcomes.totalScore">Total score</th>
+                  <th scope="col" data-i18n="calibration.outcomes.passFail">Pass/fail</th>
+                  <th scope="col" data-i18n="calibration.outcomes.manualReview">Manual review signal</th>
+                </tr>
+              </thead>
+              <tbody id="calibrationOutcomesBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 data-i18n="calibration.anchors.title">Benchmark anchors</h2>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Benchmark anchors">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="calibration.anchors.promptVersion">Prompt version</th>
+                  <th scope="col" data-i18n="calibration.anchors.benchmarkCount">Benchmark examples</th>
+                  <th scope="col" data-i18n="calibration.anchors.sourcePromptVersion">Source prompt version</th>
+                  <th scope="col" data-i18n="calibration.anchors.sourceModuleVersion">Source module version</th>
+                  <th scope="col" data-i18n="calibration.anchors.createdAt">Created</th>
+                </tr>
+              </thead>
+              <tbody id="calibrationAnchorsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </template>
+
+    <script type="module" src="/static/admin-content-calibration.js"></script>
+  </body>
+</html>

@@ -7,6 +7,90 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.0 - 2026-04-18
+
+feat: admin content IA redesign complete — epic #328 ready for stage verification
+
+- All child issues implemented: #321 (module library), #322 (unified workspace), #323 (archive simplification), #324 (lifecycle action placement), #325 (courses workspace), #326 (calibration workspace), #327 (advanced editor simplification)
+- doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md: updated section 7 (transition routes replaced by live paths), status updated to reflect implementation complete
+
+## 0.9.101 - 2026-04-18
+
+feat: lifecycle action placement — library owns duplicate/archive, workspace owns publish/unpublish (#324)
+
+- public/static/admin-content-shell.js: removed duplicate, archive, and delete from showModuleActions() primary choices; module workspace shell now surfaces only generate, resume, editAdvanced, pickAnother, saveDraft, publish, unpublish — duplicate/archive/delete live in the library
+- public/admin-content-advanced.html: duplicate/delete already demoted to advancedToolsSection (<details>) by #327; archiveModuleBtn remains secondary in status section; publishFromCards and unpublishModuleBtn remain primary workspace actions
+
+## 0.9.100 - 2026-04-18
+
+feat: advanced editor simplification — module-context-driven, tools section demoted (#327)
+
+- public/admin-content-advanced.html: wrapped moduleStartModeTabs + import/manual/existing panels in <details id="advancedToolsSection"> (collapsed by default); added summary "Modulverktøy"; added CSS for details disclosure
+- public/admin-content.js: activateModuleStartMode() now opens advancedToolsSection before switching tabs; removed auto-open of tools section on init (no activateModuleStartMode call at boot); removed activateModuleStartMode("existing") when auto-loading module from path — advanced editor now opens directly in module context
+- public/i18n/admin-content-translations.js: added adminContent.tools.summary (en-GB/nb/nn)
+
+## 0.9.99 - 2026-04-18
+
+feat: archive simplification — library owns archive, remove archive section from advanced (#323)
+
+- public/admin-content-advanced.html: removed archiveLibrarySection card
+- public/admin-content.js: removed archiveSearchInput/archiveSearchBtn/archiveLibraryList DOM refs, loadArchiveLibrary() function, and archive search event listeners; archiveModuleBtn retained as secondary action in module status
+- public/static/admin-content-shell.js: removed "restore archived" from startIdle() and showModuleActions() primary choices; archived module status shown in chat on load via shell.module.archivedStatus
+- public/static/module-status-logic.js: archived badge/summary when module.archivedAt is set (badge.archived, summary.archived)
+- public/i18n/admin-content-translations.js: added adminContent.status.badge.archived + summary.archived (en-GB/nb/nn), shell.module.archivedStatus (en-GB/nb/nn)
+
+## 0.9.98 - 2026-04-18
+
+feat: unified module workspace — shared state rail + mode switch (#322)
+
+- public/admin-content.html: extended state rail (srPreview, srLang), replaced shell-header with module-workspace-header + mode switch, removed old advanced-link anchor
+- public/admin-content-advanced.html: same state rail extension + mode switch (Avansert active by default), removed back-to-chat link element
+- public/static/admin-content-shell.js: path-based moduleId from /admin-content/module/:id/conversation, openAdvancedEditor() uses /module/:id/advanced URL, replaced advancedEditorLink binding with modeSwitchAdvancedBtn, srPreview/srLang populated in updateStateRail()
+- public/admin-content.js: path-based moduleId from /admin-content/module/:id/advanced, srPreview/srLang in updateStateRail(), modeSwitchConversation button wired, navigateToConversation() uses /module/:id/conversation?resumeEditing=1
+- public/i18n/admin-content-translations.js: 7 new keys (stateRail.label.preview, stateRail.preview.workingDraft/published, stateRail.label.language, stateRail.language.format, workspace.mode.conversation/advanced) in en-GB, nb, nn
+
+## 0.9.97 - 2026-04-17
+
+feat: admin content IA redesign — module library, courses workspace, calibration workspace (#328)
+
+- public/admin-content-library.html + public/static/admin-content-library.js (Issue #321)
+  - Module library as primary entry at /admin-content
+  - Table with 6 cols: Modulnavn, Sertifiseringsnivå, Status, Brukt i kurs, Sist endret, Handlinger
+  - 5 filter tabs (Alle/Aktive/Upublisert draft/Publiserte/Arkiverte) + search
+  - Status badge priority: archived > unpublished_draft > published > ready
+  - Brukt i kurs: clickable count, opens popover with course names
+  - Row actions: Åpne i Samtale, Åpne i Avansert, Dupliser, Arkiver/Gjenopprett
+  - Client-side module duplicate (fetches export bundle, reconstructs)
+  - Opprett ny modul dialog with 2 CTAs (Samtale / Avansert)
+  - Empty state: "Ingen moduler ennå"
+- public/admin-content-courses.html + public/static/admin-content-courses.js (Issue #325)
+  - Courses workspace at /admin-content/courses, /courses/new, /courses/:courseId
+  - Course list: table with Tittel, Sertifiseringsnivå, Antall moduler, Sist endret, Handlinger
+  - Route detection: list vs. detail view in single HTML
+  - Empty state: "Ingen kurs ennå"
+  - Course detail: locale-faner (en-GB/nb/nn) for title/description
+  - Searchable combobox for module add (filters already-added modules)
+  - Move up / Move down buttons per module row (no drag-and-drop)
+  - Delete course confirmation dialog (modules not deleted)
+- public/admin-content-calibration.html + public/static/admin-content-calibration.js (Issue #326)
+  - Calibration workspace at /admin-content/calibration
+  - Role-gate: access denied state if user lacks calibration role (no redirect, no blank screen)
+  - Access denied: title "Ingen tilgang", explanation, link back to Moduler
+  - Deep-link with ?moduleId= prefills module filter and shows module badge
+  - Full calibration UI ported: filters, quality signals, thresholds, outcomes, anchors
+  - Publish thresholds via POST /api/calibration/workspace/publish-thresholds
+- src/app.ts: new routes for library, courses, calibration, module workspace targets
+- src/routes/adminContent.ts: GET /modules/library endpoint, DELETE guard (409 if used in courses)
+- src/routes/adminCourses.ts: DELETE /:courseId endpoint
+- src/modules/adminContent: listLibraryModules(), deriveLibraryStatus(), countModuleCourses()
+- src/modules/course: deleteCourse()
+- content-area-nav (Moduler | Kurs | Kalibrering) on all 3 new workspaces
+- Kalibrering nav hidden for users without calibration role
+
+## 0.9.96 - 2026-04-17
+
+feat: safe working-draft handoff between conversational shell and advanced editor (#316 / working-draft contract tests)
+
 ## 0.9.95 - 2026-04-17
 
 feat: tier-based confirmation model — replaces window.confirm() with proper dialogs (#316)

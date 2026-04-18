@@ -36,6 +36,10 @@
       .import-file { display: grid; gap: calc(var(--space-1) * 0.5); }
       textarea { overflow-y: hidden; resize: vertical; }
       .manual-shell-row textarea { min-height: 88px; }
+      #advancedToolsSection { margin-bottom: var(--space-2); }
+      #advancedToolsSection > summary { font-size: 14px; font-weight: 600; color: var(--color-meta); cursor: pointer; padding: 6px 0 4px; user-select: none; list-style: revert; }
+      #advancedToolsSection > summary:hover { color: var(--color-text); }
+      #advancedToolsSection[open] > summary { margin-bottom: var(--space-1); border-bottom: 1px solid var(--color-border-soft); padding-bottom: var(--space-1); }
       .start-mode-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
       .start-mode-tab { display: inline-flex; align-items: center; width: auto; padding: 10px 16px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); color: var(--color-navy); cursor: pointer; font-size: 14px; font-weight: 600; }
       .start-mode-tab.active { border-color: var(--color-blue); background: var(--color-blue-light); color: var(--color-link-active); }
@@ -151,6 +155,44 @@
       .preview-mcq-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--color-meta); margin-top: 6px; }
       .preview-mcq-meta-label { font-weight: 700; color: var(--color-text); }
       .preview-empty { color: var(--color-meta); font-style: italic; }
+
+      /* ── Module workspace header + mode switch ───────────────────────────── */
+      .module-workspace-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        margin-bottom: var(--space-1);
+      }
+      .module-mode-switch {
+        display: inline-flex;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: 999px;
+        padding: 2px;
+        gap: 0;
+      }
+      .module-mode-btn {
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        border: none;
+        border-radius: 999px;
+        background: none;
+        color: var(--color-meta);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .module-mode-btn.active {
+        background: var(--color-blue);
+        color: #fff;
+        cursor: default;
+      }
+      .module-mode-btn:hover:not(.active) {
+        background: var(--color-blue-light);
+        color: var(--color-link-active);
+      }
     </style>
   </head>
   <body>
@@ -184,13 +226,28 @@
         <span class="state-rail-label" data-i18n="stateRail.label.changes">Endringer</span>
         <span id="srChanges"></span>
       </div>
+      <span class="state-rail-sep" aria-hidden="true">·</span>
+      <div class="state-rail-item">
+        <span class="state-rail-label" data-i18n="stateRail.label.preview">Preview viser</span>
+        <span id="srPreview"></span>
+      </div>
+      <span class="state-rail-sep" aria-hidden="true">·</span>
+      <div class="state-rail-item">
+        <span class="state-rail-label" data-i18n="stateRail.label.language">Språk</span>
+        <span id="srLang" class="state-rail-value"></span>
+      </div>
     </div>
 
-    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:var(--space-1); margin-bottom:var(--space-1);">
-      <h1 data-i18n="adminContentPage.title" style="margin:0">Content Setup Workspace</h1>
-      <button id="advPreviewToggleBtn" type="button" class="adv-preview-toggle" data-i18n="advPreview.toggle.open" aria-pressed="false">Vis forhåndsvisning</button>
+    <div class="module-workspace-header">
+      <div style="display:flex; align-items:baseline; gap:var(--space-2); flex-wrap:wrap;">
+        <h1 id="moduleWorkspaceTitle" data-i18n="adminContentPage.title" style="margin:0">Content Setup Workspace</h1>
+        <button id="advPreviewToggleBtn" type="button" class="adv-preview-toggle" data-i18n="advPreview.toggle.open" aria-pressed="false">Vis forhåndsvisning</button>
+      </div>
+      <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
+        <button class="module-mode-btn" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="false">Samtale</button>
+        <button class="module-mode-btn active" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="true">Avansert</button>
+      </div>
     </div>
-    <p class="small"><a id="backToChatLink" href="/admin-content" data-i18n="adminContentPage.chatLink">Back to conversational editor</a></p>
     <p class="small" data-i18n="adminContentPage.subtitle">Define module content and scoring rules in a guided sequence.</p>
 
     <div id="advWorkspaceLayout" class="adv-workspace-layout">
@@ -234,11 +291,13 @@
       <button type="button" id="tabKalibrering" role="tab" class="content-tab" aria-selected="false" data-i18n="nav.calibration">Kalibrering</button>
     </div>
     <div id="modulesTab">
-    <div id="moduleStartModeTabs" class="start-mode-nav" role="tablist" aria-label="Module start paths">
-      <button type="button" id="startModeImportTab" class="start-mode-tab" role="tab" aria-selected="false" aria-controls="startModeImportPanel" data-i18n="adminContent.startMode.import">LLM draft</button>
-      <button type="button" id="startModeManualTab" class="start-mode-tab" role="tab" aria-selected="false" aria-controls="startModeManualPanel" data-i18n="adminContent.startMode.manual">Manual</button>
-      <button type="button" id="startModeExistingTab" class="start-mode-tab active" role="tab" aria-selected="true" aria-controls="startModeExistingPanel" data-i18n="adminContent.startMode.existing">Existing module</button>
-    </div>
+    <details id="advancedToolsSection">
+      <summary data-i18n="adminContent.tools.summary">Modulverktøy</summary>
+      <div id="moduleStartModeTabs" class="start-mode-nav" role="tablist" aria-label="Module start paths" style="margin-top:var(--space-1)">
+        <button type="button" id="startModeImportTab" class="start-mode-tab" role="tab" aria-selected="false" aria-controls="startModeImportPanel" data-i18n="adminContent.startMode.import">LLM draft</button>
+        <button type="button" id="startModeManualTab" class="start-mode-tab" role="tab" aria-selected="false" aria-controls="startModeManualPanel" data-i18n="adminContent.startMode.manual">Manual</button>
+        <button type="button" id="startModeExistingTab" class="start-mode-tab active" role="tab" aria-selected="true" aria-controls="startModeExistingPanel" data-i18n="adminContent.startMode.existing">Existing module</button>
+      </div>
 
     <section class="card import-panel" id="startModeImportPanel" role="tabpanel" aria-labelledby="startModeImportTab" hidden>
       <h2 data-i18n="adminContent.import.title">1) Start from draft JSON (optional)</h2>
@@ -304,21 +363,7 @@
       <div class="small" data-i18n="adminContent.help.deleteModule">Deletes only empty modules without submissions, versions, or published content.</div>
       <div class="small" id="selectedModuleMeta"></div>
     </section>
-
-    <section class="card" id="archiveLibrarySection">
-      <h2 data-i18n="adminContent.archive.title">Module archive library</h2>
-      <div class="small" data-i18n="adminContent.archive.hint">Archived modules are hidden from the main list. Search here to restore or inspect them.</div>
-      <div class="row" style="margin-top:var(--space-1)">
-        <div>
-          <label for="archiveSearchInput" data-i18n="adminContent.archive.searchLabel">Search by title</label>
-          <input id="archiveSearchInput" data-i18n-placeholder="adminContent.archive.searchPlaceholder" placeholder="Filter archived modules..." />
-        </div>
-        <div style="display:flex;align-items:flex-end">
-          <button id="archiveSearchBtn" class="btn-secondary" data-i18n="adminContent.archive.searchBtn">Search</button>
-        </div>
-      </div>
-      <div id="archiveLibraryList" style="margin-top:var(--space-1)"></div>
-    </section>
+    </details>
 
     <section class="card">
       <h2 data-i18n="adminContent.status.title">4) Module status</h2>

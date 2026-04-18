@@ -22,6 +22,38 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    listLibraryModules() {
+      return client.module.findMany({
+        orderBy: { title: "asc" },
+        select: {
+          id: true,
+          title: true,
+          certificationLevel: true,
+          archivedAt: true,
+          updatedAt: true,
+          activeVersionId: true,
+          activeVersion: {
+            select: { id: true, versionNo: true },
+          },
+          versions: {
+            orderBy: { versionNo: "desc" },
+            take: 1,
+            select: { id: true, versionNo: true, publishedAt: true },
+          },
+          _count: {
+            select: { courseModules: true },
+          },
+          courseModules: {
+            select: {
+              course: {
+                select: { id: true, title: true },
+              },
+            },
+          },
+        },
+      });
+    },
+
     listArchivedModuleSummaries(search?: string) {
       return client.module.findMany({
         where: {
@@ -102,6 +134,10 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           createdAt: true,
         },
       });
+    },
+
+    async countModuleCourses(moduleId: string) {
+      return client.courseModule.count({ where: { moduleId } });
     },
 
     deleteModule(moduleId: string) {

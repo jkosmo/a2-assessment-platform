@@ -79,6 +79,24 @@ export async function archiveCourse(courseId: string, actorId?: string) {
   return updated;
 }
 
+export async function deleteCourse(courseId: string, actorId?: string) {
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+
+  await runInTransaction(async (tx) => {
+    await tx.courseModule.deleteMany({ where: { courseId } });
+    await tx.course.delete({ where: { id: courseId } });
+  });
+
+  await recordAuditEvent({
+    entityType: auditEntityTypes.course,
+    entityId: courseId,
+    action: auditActions.course.archived,
+    actorId,
+    metadata: { courseId },
+  });
+}
+
 export async function setCourseModules(
   courseId: string,
   modules: Array<{ moduleId: string; sortOrder: number }>,

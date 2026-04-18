@@ -13,6 +13,7 @@ export {
   publishModuleVersionWithThresholds,
 } from "./adminContentCommands.js";
 
-export { listAdminModules, listArchivedModules, getModuleContentBundle } from "./adminContentQueries.js";
+export { listAdminModules, listArchivedModules, getModuleContentBundle, listLibraryModules } from "./adminContentQueries.js";
+export type { ModuleLibraryStatus } from "./adminContentQueries.js";
 
 export { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";

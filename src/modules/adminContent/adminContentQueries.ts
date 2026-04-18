@@ -3,6 +3,43 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 
+export type ModuleLibraryStatus = "archived" | "unpublished_draft" | "published" | "ready";
+
+function deriveLibraryStatus(module: {
+  archivedAt: Date | null;
+  activeVersionId: string | null;
+  versions: Array<{ id: string; versionNo: number; publishedAt: Date | null }>;
+}): ModuleLibraryStatus {
+  if (module.archivedAt) return "archived";
+  const latestVersion = module.versions[0] ?? null;
+  if (!latestVersion) return "ready";
+  if (!module.activeVersionId) return "unpublished_draft";
+  const latestIsActive = latestVersion.id === module.activeVersionId;
+  if (!latestIsActive) return "unpublished_draft";
+  return "published";
+}
+
+export async function listLibraryModules(locale: SupportedLocale = "en-GB") {
+  const modules = await adminContentRepository.listLibraryModules();
+
+  return modules.map((module) => ({
+    id: module.id,
+    title: localizeContentText(locale, module.title) ?? module.title,
+    certificationLevel: module.certificationLevel ?? null,
+    status: deriveLibraryStatus(module),
+    archivedAt: module.archivedAt?.toISOString() ?? null,
+    updatedAt: module.updatedAt.toISOString(),
+    activeVersionId: module.activeVersionId,
+    activeVersionNo: module.activeVersion?.versionNo ?? null,
+    latestVersionNo: module.versions[0]?.versionNo ?? null,
+    courseCount: module._count.courseModules,
+    courses: module.courseModules.map((cm) => ({
+      id: cm.course.id,
+      title: localizeContentText(locale, cm.course.title) ?? cm.course.title,
+    })),
+  }));
+}
+
 export async function listArchivedModules(locale: SupportedLocale = "en-GB", search?: string) {
   const modules = await adminContentRepository.listArchivedModuleSummaries(search);
 

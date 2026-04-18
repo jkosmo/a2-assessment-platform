@@ -122,13 +122,15 @@ const previewContent = document.getElementById("previewContent");
 const workspaceNav = document.getElementById("workspaceNav");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
-const advancedEditorLink = document.getElementById("advancedEditorLink");
+const modeSwitchAdvancedBtn = document.getElementById("modeSwitchAdvanced");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 const stateRail = document.getElementById("stateRail");
 const srModuleName = document.getElementById("srModuleName");
 const srEditing = document.getElementById("srEditing");
 const srLive = document.getElementById("srLive");
 const srChanges = document.getElementById("srChanges");
+const srPreview = document.getElementById("srPreview");
+const srLang = document.getElementById("srLang");
 
 const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
 const SOURCE_MATERIAL_MAX_CHARS = 50000;
@@ -667,7 +669,6 @@ function renderPreviewLocaleBar() {
 }
 
 function renderPreview() {
-  updateAdvancedEditorLink();
   const opts = { locale: previewLocale, t, tf };
 
   if (!bundle && !sessionDraft && !previewDraft) {
@@ -791,6 +792,18 @@ function updateStateRail() {
     } else {
       srChanges.innerHTML = `<span class="state-rail-value" style="color:var(--color-success)">${escapeHtml(t("stateRail.changes.saved"))}</span>`;
     }
+  }
+
+  if (srPreview) {
+    srPreview.innerHTML = sessionDraft
+      ? makeSrBadge("unsaved", t("stateRail.preview.workingDraft"))
+      : `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
+  }
+
+  if (srLang) {
+    const uiLabel = localeLabels[currentLocale] ?? currentLocale;
+    const previewLabel = localeLabels[previewLocale ?? currentLocale] ?? (previewLocale ?? currentLocale);
+    srLang.textContent = tf("stateRail.language.format", { uiLocale: uiLabel, previewLocale: previewLabel });
   }
 }
 
@@ -1618,7 +1631,6 @@ function startIdle() {
   logBot(() => t("shell.idle.prompt"), [
     { labelKey: "shell.idle.openExisting", action: startModulePicker },
     { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
-    { labelKey: "shell.module.restoreArchived", action: startArchivedModulePicker },
   ]);
 }
 
@@ -1696,11 +1708,14 @@ async function loadModule(moduleId, options = {}) {
   // Capture data for retranslatable closure
   const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
   const capturedIsLive = !!bundle?.module?.activeVersionId;
+  const capturedIsArchived = !!bundle?.module?.archivedAt;
   const capturedVersionNo = bundle?.selectedConfiguration?.moduleVersion?.versionNo ?? "?";
   logResolveSlot(slot, () => {
-    const statusNote = capturedIsLive
-      ? tf("shell.module.liveStatus", { versionNo: capturedVersionNo })
-      : t("shell.module.noPublishedVersion");
+    const statusNote = capturedIsArchived
+      ? t("shell.module.archivedStatus")
+      : capturedIsLive
+        ? tf("shell.module.liveStatus", { versionNo: capturedVersionNo })
+        : t("shell.module.noPublishedVersion");
     return `<strong>${escapeHtml(capturedTitle)}</strong> ${escapeHtml(t("shell.module.loaded"))}<br><span style="color:var(--color-meta);font-size:13px">${escapeHtml(statusNote)}</span>`;
   });
   if (resumedIntoDraft) {
@@ -1767,8 +1782,6 @@ function showModuleActions() {
   const selectedModuleVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
   const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
   const canUnpublish = !hasDraft && !!bundle?.module?.activeVersionId;
-  const canArchive = !hasDraft && !!selectedModuleId;
-  const canDelete = !hasDraft && !!selectedModuleId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
   const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
   logBot(() => t("shell.module.actionsPrompt"), [
@@ -1784,10 +1797,8 @@ function showModuleActions() {
         }
       },
     }] : []),
-    ...(!hasDraft ? [{ labelKey: "shell.module.duplicate", action: duplicateCurrentModuleInBackground }] : []),
     { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     { labelKey: "shell.module.pickAnother", action: startModulePicker },
-    { labelKey: "shell.module.restoreArchived", action: startArchivedModulePicker },
     ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
     ...(!hasDraft && canPublish ? [{
       labelKey: "shell.draftReady.publish",
@@ -1797,11 +1808,6 @@ function showModuleActions() {
       labelKey: "shell.module.unpublish",
       action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     }] : []),
-    ...(canArchive ? [{
-      labelKey: "shell.module.archive",
-      action: () => confirmHighImpactAction("shell.archive.confirmPrompt", "shell.archive.confirmAction", archiveModuleInBackground, showModuleActions, { module: moduleLabel }),
-    }] : []),
-    ...(canDelete ? [{ labelKey: "shell.module.delete", action: confirmModuleDeletion }] : []),
   ]);
   if (hasDraft || hasMcq) {
     startUnifiedRevisionFlow();
@@ -1809,7 +1815,9 @@ function showModuleActions() {
 }
 
 function openAdvancedEditor(moduleId) {
-  const url = `/admin-content/advanced${moduleId ? `?moduleId=${encodeURIComponent(moduleId)}` : ""}`;
+  const url = moduleId
+    ? `/admin-content/module/${encodeURIComponent(moduleId)}/advanced`
+    : "/admin-content/advanced";
   const hasUnsavedDraft =
     !!sessionDraft &&
     !!(sessionDraft.taskText || sessionDraft.guidanceText || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
@@ -1845,21 +1853,10 @@ function openAdvancedEditor(moduleId) {
   ]);
 }
 
-function updateAdvancedEditorLink() {
-  if (!advancedEditorLink) return;
-  const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
-  advancedEditorLink.href = moduleId
-    ? `/admin-content/advanced?moduleId=${encodeURIComponent(moduleId)}`
-    : "/admin-content/advanced";
-}
-
-function bindAdvancedEditorLink() {
-  if (!advancedEditorLink) return;
-  advancedEditorLink.addEventListener("click", (event) => {
-    if (!selectedModuleId && !sessionDraft) return;
-    event.preventDefault();
-    openAdvancedEditor(selectedModuleId);
-  });
+function bindModeSwitchButtons() {
+  if (modeSwitchAdvancedBtn) {
+    modeSwitchAdvancedBtn.addEventListener("click", () => openAdvancedEditor(selectedModuleId));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2191,14 +2188,16 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
-  bindAdvancedEditorLink();
-  updateAdvancedEditorLink();
+  bindModeSwitchButtons();
   renderPreviewLocaleBar();
   renderPreview();
   loadVersion();
   await loadConsoleConfig();
 
-  const autoModuleId = new URLSearchParams(location.search).get("moduleId");
+  // Path-based moduleId: /admin-content/module/:moduleId/conversation
+  const pathModuleId = window.location.pathname.match(/\/admin-content\/module\/([^/]+)\//)?.[1] ?? null;
+  const queryModuleId = new URLSearchParams(location.search).get("moduleId");
+  const autoModuleId = pathModuleId ?? queryModuleId;
   const resumeEditing = new URLSearchParams(location.search).get("resumeEditing") === "1";
   if (autoModuleId) {
     await loadModule(autoModuleId, { resumeEditing });

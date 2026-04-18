@@ -81,11 +81,10 @@ const srModuleName = document.getElementById("srModuleName");
 const srEditing = document.getElementById("srEditing");
 const srLive = document.getElementById("srLive");
 const srChanges = document.getElementById("srChanges");
+const srPreview = document.getElementById("srPreview");
+const srLang = document.getElementById("srLang");
 const unpublishModuleBtn = document.getElementById("unpublishModuleBtn");
 const archiveModuleBtn = document.getElementById("archiveModuleBtn");
-const archiveSearchInput = document.getElementById("archiveSearchInput");
-const archiveSearchBtn = document.getElementById("archiveSearchBtn");
-const archiveLibraryList = document.getElementById("archiveLibraryList");
 
 const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
@@ -1079,6 +1078,18 @@ function updateStateRail() {
       srChanges.innerHTML = `<span class="state-rail-value" style="color:var(--color-success)">${escapeHtml(t("stateRail.changes.saved"))}</span>`;
     }
   }
+
+  if (srPreview) {
+    srPreview.innerHTML = hasUnsaved
+      ? makeSrBadge("unsaved", t("stateRail.preview.workingDraft"))
+      : `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
+  }
+
+  if (srLang) {
+    const uiLabel = localeLabels[currentLocale] ?? currentLocale;
+    const previewLabel = localeLabels[advPreviewLocale ?? currentLocale] ?? (advPreviewLocale ?? currentLocale);
+    srLang.textContent = tf("stateRail.language.format", { uiLocale: uiLabel, previewLocale: previewLabel });
+  }
 }
 
 function coerceModuleExportToImportDraft(payload) {
@@ -1437,6 +1448,9 @@ function activateModuleStartMode(mode) {
   if (!moduleStartModeTabs || !startModeImportTab || !startModeManualTab || !startModeExistingTab) {
     return;
   }
+
+  const toolsSection = document.getElementById("advancedToolsSection");
+  if (toolsSection) toolsSection.open = true;
 
   const normalizedMode = mode === "import" || mode === "manual" || mode === "existing" ? mode : "existing";
   activeModuleStartMode = normalizedMode;
@@ -2103,55 +2117,6 @@ async function handleUnpublishModule() {
   setMessage(t("adminContent.message.moduleUnpublished"), "success");
   log(body);
   await refreshSelectedModuleStatus();
-}
-
-async function loadArchiveLibrary(search) {
-  archiveLibraryList.textContent = t("adminContent.archive.loading");
-  try {
-    const url = `/api/admin/content/modules/archive${search ? `?search=${encodeURIComponent(search)}` : ""}`;
-    const body = await apiFetch(url, headers);
-    const items = body.modules ?? [];
-    if (items.length === 0) {
-      archiveLibraryList.textContent = t("adminContent.archive.empty");
-      return;
-    }
-    archiveLibraryList.innerHTML = "";
-    for (const item of items) {
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:var(--space-1);padding:var(--space-1);border:1px solid var(--color-border-soft);border-radius:var(--radius-card);background:var(--color-surface);margin-bottom:calc(var(--space-1)*0.5)";
-
-      const info = document.createElement("div");
-      const archivedDate = item.archivedAt ? new Date(item.archivedAt).toLocaleDateString() : "-";
-      info.innerHTML = `<span style="font-weight:600">${item.title ?? item.id}</span> <span style="color:var(--color-meta);font-size:13px">${item.certificationLevel ?? ""} — ${t("adminContent.archive.archivedOn")} ${archivedDate}</span>`;
-
-      const restoreBtn = document.createElement("button");
-      restoreBtn.className = "btn-secondary";
-      restoreBtn.style.cssText = "width:auto;padding:4px 12px;font-size:13px;flex-shrink:0";
-      restoreBtn.textContent = t("adminContent.archive.restoreBtn");
-      restoreBtn.addEventListener("click", async () => {
-        await runWithBusyButton(restoreBtn, async () => {
-          try {
-            await apiFetch(
-              `/api/admin/content/modules/${encodeURIComponent(item.id)}/restore`,
-              headers,
-              { method: "POST", body: JSON.stringify({}) },
-            );
-            setMessage(t("adminContent.archive.restored").replace("{module}", item.title ?? item.id), "success");
-            await loadModules();
-            await loadArchiveLibrary(archiveSearchInput.value.trim());
-          } catch (error) {
-            setMessage(parseActionableErrorMessage(error), "error");
-          }
-        });
-      });
-
-      row.appendChild(info);
-      row.appendChild(restoreBtn);
-      archiveLibraryList.appendChild(row);
-    }
-  } catch (error) {
-    archiveLibraryList.textContent = parseActionableErrorMessage(error);
-  }
 }
 
 async function handleArchiveModule() {
@@ -3444,16 +3409,6 @@ unpublishModuleBtn.addEventListener("click", async () => {
   });
 });
 
-archiveSearchBtn.addEventListener("click", async () => {
-  await runWithBusyButton(archiveSearchBtn, async () => {
-    await loadArchiveLibrary(archiveSearchInput.value.trim());
-  });
-});
-
-archiveSearchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") archiveSearchBtn.click();
-});
-
 archiveModuleBtn.addEventListener("click", async () => {
   await runWithBusyButton(archiveModuleBtn, async () => {
     try {
@@ -3784,14 +3739,13 @@ document.getElementById("previewCardsBtn")?.addEventListener("click", async () =
 
 populateLocaleSelect();
 setLocale(currentLocale);
-activateModuleStartMode(activeModuleStartMode);
 setDefaultFormValues();
 loadVersion();
 loadParticipantConsoleConfig().then(async () => {
-  const autoModuleId = new URLSearchParams(location.search).get("moduleId");
+  const pathModuleId = window.location.pathname.match(/\/admin-content\/module\/([^/]+)\//)?.[1] ?? null;
+  const autoModuleId = pathModuleId ?? new URLSearchParams(location.search).get("moduleId");
   if (autoModuleId) {
     try {
-      activateModuleStartMode("existing");
       await loadModules();
       if (modules.some((m) => m.id === autoModuleId)) {
         setSelectedModule(autoModuleId);
@@ -3932,59 +3886,72 @@ function populateCalibrationStatusOptions() {
   }
 }
 
+function getConversationUrl() {
+  const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
+  return moduleId
+    ? `/admin-content/module/${encodeURIComponent(moduleId)}/conversation?resumeEditing=1`
+    : "/admin-content";
+}
+
 function updateBackToChatLink() {
   const link = document.getElementById("backToChatLink");
   if (!link) return;
-  const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
-  link.href = moduleId ? `/admin-content?moduleId=${encodeURIComponent(moduleId)}&resumeEditing=1` : "/admin-content";
+  link.href = getConversationUrl();
+}
+
+function navigateToConversation() {
+  function doWriteHandoff() {
+    const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || null;
+    let mcqQuestions = [];
+    try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+    writeHandoff({
+      moduleId,
+      source: "advanced",
+      draft: {
+        taskText: moduleVersionTaskTextInput?.value ?? "",
+        guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+        mcqQuestions,
+      },
+      locale: currentLocale,
+    });
+  }
+
+  const dest = getConversationUrl();
+
+  if (dirtyCards.size === 0) {
+    doWriteHandoff();
+    location.href = dest;
+    return;
+  }
+
+  showUnsavedHandoffDialog().then((choice) => {
+    if (choice === "cancel") return;
+    if (choice === "save") {
+      handleSaveContentBundle().then(() => {
+        doWriteHandoff();
+        location.href = dest;
+      }).catch((error) => {
+        setMessage(parseActionableErrorMessage(error), "error");
+      });
+      return;
+    }
+    doWriteHandoff();
+    location.href = dest;
+  });
 }
 
 function initBackToChatHandoff() {
   const link = document.getElementById("backToChatLink");
-  if (!link) return;
-  link.addEventListener("click", async (e) => {
-    /** Writes current form state to sessionStorage for the shell to pick up. */
-    function doWriteHandoff() {
-      const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || null;
-      let mcqQuestions = [];
-      try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
-      writeHandoff({
-        moduleId,
-        source: "advanced",
-        draft: {
-          taskText: moduleVersionTaskTextInput?.value ?? "",
-          guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
-          mcqQuestions,
-        },
-        locale: currentLocale,
-      });
-    }
-
-    if (dirtyCards.size === 0) {
-      // No unsaved changes — write handoff and let natural navigation proceed.
-      doWriteHandoff();
-      return;
-    }
-
-    // Has unsaved changes — intercept and show dialog.
-    e.preventDefault();
-    const dest = link.href;
-    const choice = await showUnsavedHandoffDialog();
-
-    if (choice === "cancel") return;
-
-    if (choice === "save") {
-      try {
-        await handleSaveContentBundle();
-      } catch (error) {
-        setMessage(parseActionableErrorMessage(error), "error");
-        return;
-      }
-    }
-
-    doWriteHandoff();
-    location.href = dest;
-  });
+  if (link) {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      navigateToConversation();
+    });
+  }
+  const modeSwitchConversationBtn = document.getElementById("modeSwitchConversation");
+  if (modeSwitchConversationBtn) {
+    modeSwitchConversationBtn.addEventListener("click", navigateToConversation);
+  }
 }
 
 function applyHandoffFromShell(moduleId) {

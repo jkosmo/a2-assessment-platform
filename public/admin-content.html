@@ -88,6 +88,44 @@
       .chat-textarea:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
       /* Override global button{width:100%} for chat form submit buttons */
       .chat-submit-btn { width: auto !important; white-space: nowrap; flex-shrink: 0; align-self: flex-end; }
+
+      /* ── Module workspace header + mode switch ───────────────────────────── */
+      .module-workspace-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        margin-bottom: var(--space-2);
+      }
+      .module-mode-switch {
+        display: inline-flex;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: 999px;
+        padding: 2px;
+        gap: 0;
+      }
+      .module-mode-btn {
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        border: none;
+        border-radius: 999px;
+        background: none;
+        color: var(--color-meta);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .module-mode-btn.active {
+        background: var(--color-blue);
+        color: #fff;
+        cursor: default;
+      }
+      .module-mode-btn:hover:not(.active) {
+        background: var(--color-blue-light);
+        color: var(--color-link-active);
+      }
     </style>
   </head>
   <body>
@@ -123,11 +161,24 @@
           <span class="state-rail-label" data-i18n="stateRail.label.changes">Endringer</span>
           <span id="srChanges"></span>
         </div>
+        <span class="state-rail-sep" aria-hidden="true">·</span>
+        <div class="state-rail-item">
+          <span class="state-rail-label" data-i18n="stateRail.label.preview">Preview viser</span>
+          <span id="srPreview"></span>
+        </div>
+        <span class="state-rail-sep" aria-hidden="true">·</span>
+        <div class="state-rail-item">
+          <span class="state-rail-label" data-i18n="stateRail.label.language">Språk</span>
+          <span id="srLang" class="state-rail-value"></span>
+        </div>
       </div>
 
-      <div class="shell-header">
-        <h1>Content Workspace</h1>
-        <a id="advancedEditorLink" href="/admin-content/advanced" class="advanced-link">Avansert redigering ↗</a>
+      <div class="module-workspace-header">
+        <h1 id="moduleWorkspaceTitle" style="margin:0; font-size:22px">Content Workspace</h1>
+        <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
+          <button class="module-mode-btn active" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="true">Samtale</button>
+          <button class="module-mode-btn" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="false">Avansert</button>
+        </div>
       </div>
 
       <div class="workspace-shell">

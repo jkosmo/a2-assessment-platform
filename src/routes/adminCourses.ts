@@ -6,6 +6,7 @@ import {
   publishCourse,
   archiveCourse,
   setCourseModules,
+  deleteCourse,
   courseRepository,
 } from "../modules/course/index.js";
 import { localizedTextSchema } from "../modules/adminContent/adminContentSchemas.js";
@@ -141,6 +142,15 @@ adminCoursesRouter.post("/:courseId/archive", async (request, response, next) =>
   try {
     const course = await archiveCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.delete("/:courseId", async (request, response, next) => {
+  try {
+    await deleteCourse(request.params.courseId, request.context?.userId);
+    response.status(204).send();
   } catch (error) {
     next(error);
   }
