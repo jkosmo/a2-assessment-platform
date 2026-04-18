@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createModule,
+  updateModuleTitle,
   createBenchmarkExampleVersion,
   createMcqSetVersion,
   createModuleVersion,
@@ -19,6 +20,7 @@ import {
 } from "../modules/adminContent/index.js";
 import {
   moduleCreateBodySchema,
+  moduleTitleUpdateBodySchema,
   rubricBodySchema,
   promptTemplateBodySchema,
   mcqSetBodySchema,
@@ -100,6 +102,26 @@ adminContentRouter.get("/modules/library", async (request, response) => {
 adminContentRouter.get("/modules", async (request, response) => {
   const modules = await listAdminModules(request.context?.locale ?? "en-GB");
   response.json({ modules });
+});
+
+adminContentRouter.patch("/modules/:moduleId/title", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { data, error } = parseRequest(moduleTitleUpdateBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  try {
+    const serialized = JSON.stringify(data.title);
+    const module = await updateModuleTitle(request.params.moduleId, serialized, actorId);
+    response.json({ module });
+  } catch {
+    response.status(400).json({ error: "update_title_failed", message: "Could not update module title." });
+  }
 });
 
 adminContentRouter.delete("/modules/:moduleId", async (request, response) => {

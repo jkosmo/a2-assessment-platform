@@ -23,7 +23,7 @@ export function deriveShellModuleActionModel({
   const actionKeys = ["generateContent"];
   if (hasDraft) actionKeys.push("generateMcq");
   if (canResumeEditing) actionKeys.push("resumeChatEdit");
-  actionKeys.push("editAdvanced", "pickAnother");
+  actionKeys.push("directEdit", "editAdvanced", "pickAnother");
   if (hasDraft) actionKeys.push("saveDraft");
   if (!hasDraft && canPublish) actionKeys.push("publish");
   if (canUnpublish) actionKeys.push("unpublish");
@@ -35,7 +35,7 @@ export function deriveShellModuleActionModel({
 }
 
 export function deriveShellDraftReadyActionModel({ hasSelectedModule }) {
-  const actionKeys = [];
+  const actionKeys = ["directEdit"];
   if (hasSelectedModule) actionKeys.push("openEditor");
   actionKeys.push("restart", "saveDraft");
   return {

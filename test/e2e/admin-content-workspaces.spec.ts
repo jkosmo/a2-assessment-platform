@@ -23,6 +23,13 @@ type MockCourse = {
   moduleCount?: number;
   updatedAt?: string;
   publishedAt?: string;
+  description?: Record<string, string>;
+  modules?: Array<{
+    moduleId: string;
+    sortOrder: number;
+    moduleTitle?: Record<string, string> | string;
+  }>;
+  archivedAt?: string | null;
 };
 
 type MockModuleExport = {
@@ -196,6 +203,12 @@ async function submitActiveChatInput(page: Page, value: string) {
   await clickEnabledButton(page, /Next|Neste|Næste/i);
 }
 
+function courseTitleForLocale(title: Record<string, string> | string | undefined, locale = "en-GB") {
+  if (!title) return "";
+  if (typeof title === "string") return title;
+  return title[locale] ?? title["en-GB"] ?? title.nb ?? title.nn ?? Object.values(title)[0] ?? "";
+}
+
 async function mockCommonApis(page: Page, {
   modules = [],
   libraryModules = [],
@@ -209,6 +222,19 @@ async function mockCommonApis(page: Page, {
 } = {}) {
   const mutableModules = [...modules];
   const exportMap = new Map<string, MockModuleExport>(Object.entries(moduleExports));
+  const mutableCourses = courses.map((course) => ({
+    ...course,
+    description: course.description ?? {},
+    modules: [...(course.modules ?? [])],
+    archivedAt: course.archivedAt ?? null,
+  }));
+  const state = {
+    mutableModules,
+    mutableCourses,
+    exportMap,
+    lastDraftGenerationBody: null as any,
+    lastSourceMaterialExtraction: null as any,
+  };
 
   await page.route("**/participant/config", async (route: Route) => {
     await route.fulfill({
@@ -285,13 +311,33 @@ async function mockCommonApis(page: Page, {
     const body = route.request().postDataJSON() as {
       certificationLevel?: string;
       generationMode?: string;
+      sourceMaterial?: string;
     };
+    state.lastDraftGenerationBody = body;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         taskText: `Scenario for ${body.certificationLevel ?? "basic"} / ${body.generationMode ?? "ordinary"}`,
         guidanceText: "A strong response should explain the core concepts clearly.",
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/content/source-material/extract", async (route: Route) => {
+    const body = route.request().postDataJSON() as {
+      fileName?: string;
+      mimeType?: string;
+      contentBase64?: string;
+    };
+    state.lastSourceMaterialExtraction = body;
+    const extractedText = `Extracted source material from ${body.fileName ?? "upload.txt"}`;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        fileName: body.fileName ?? "upload.txt",
+        extractedText,
       }),
     });
   });
@@ -433,6 +479,92 @@ async function mockCommonApis(page: Page, {
     });
   });
 
+  await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route: Route) => {
+    const segments = new URL(route.request().url()).pathname.split("/");
+    const moduleVersionId = decodeURIComponent(segments[segments.length - 2] ?? "");
+    const moduleId = decodeURIComponent(segments[segments.length - 4] ?? "");
+    const moduleExport = exportMap.get(moduleId);
+    if (!moduleExport) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+    moduleExport.module.activeVersionId = moduleVersionId;
+    const versionNo = moduleExport.selectedConfiguration.moduleVersion?.versionNo ?? 1;
+    const moduleRecord = mutableModules.find((item) => item.id === moduleId);
+    if (moduleRecord) {
+      moduleRecord.activeVersion = { versionNo };
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        moduleVersion: moduleExport.selectedConfiguration.moduleVersion ?? { id: moduleVersionId, versionNo },
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/content/modules/*/unpublish", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
+    const moduleExport = exportMap.get(moduleId);
+    if (moduleExport) {
+      moduleExport.module.activeVersionId = null;
+    }
+    const moduleRecord = mutableModules.find((item) => item.id === moduleId);
+    if (moduleRecord) {
+      delete moduleRecord.activeVersion;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ moduleId }),
+    });
+  });
+
+  await page.route("**/api/admin/content/modules/archive", async (route: Route) => {
+    const archived = Array.from(exportMap.values())
+      .filter((item) => item.module.archivedAt)
+      .map((item) => ({
+        id: item.module.id,
+        title: courseTitleForLocale(item.module.title),
+      }));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ modules: archived }),
+    });
+  });
+
+  await page.route("**/api/admin/content/modules/*/archive", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
+    const moduleExport = exportMap.get(moduleId);
+    if (moduleExport) {
+      moduleExport.module.archivedAt = "2026-04-18T12:00:00.000Z";
+      moduleExport.module.activeVersionId = null;
+    }
+    const moduleRecord = mutableModules.find((item) => item.id === moduleId);
+    if (moduleRecord) {
+      delete moduleRecord.activeVersion;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ moduleId, archivedAt: "2026-04-18T12:00:00.000Z" }),
+    });
+  });
+
+  await page.route("**/api/admin/content/modules/*/restore", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
+    const moduleExport = exportMap.get(moduleId);
+    if (moduleExport) {
+      moduleExport.module.archivedAt = null;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ moduleId }),
+    });
+  });
+
   await page.route("**/api/admin/content/modules", async (route: Route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
@@ -475,7 +607,33 @@ async function mockCommonApis(page: Page, {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ courses }),
+        body: JSON.stringify({ courses: mutableCourses }),
+      });
+      return;
+    }
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as {
+        title?: Record<string, string> | string;
+        description?: Record<string, string>;
+        certificationLevel?: string;
+      };
+      const id = `course-${mutableCourses.length + 1}`;
+      const course = {
+        id,
+        title: typeof body.title === "string" ? localizedText(body.title) : (body.title ?? localizedText(`Course ${mutableCourses.length + 1}`)),
+        description: body.description ?? {},
+        certificationLevel: body.certificationLevel ?? "basic",
+        moduleCount: 0,
+        updatedAt: "2026-04-18T12:00:00.000Z",
+        publishedAt: undefined,
+        modules: [],
+        archivedAt: null,
+      };
+      mutableCourses.push(course);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ course }),
       });
       return;
     }
@@ -487,15 +645,190 @@ async function mockCommonApis(page: Page, {
   });
 
   await page.route("**/api/admin/content/courses/*", async (route: Route) => {
+    const url = new URL(route.request().url());
+    const segments = url.pathname.split("/");
+    const isModulesRoute = segments.includes("modules");
+    const isPublishRoute = url.pathname.endsWith("/publish");
+    const isArchiveRoute = url.pathname.endsWith("/archive");
+    const courseId = decodeURIComponent(
+      isModulesRoute || isPublishRoute || isArchiveRoute
+        ? (segments[segments.length - 2] ?? "")
+        : (segments[segments.length - 1] ?? ""),
+    );
+    const course = mutableCourses.find((item) => item.id === courseId);
+
+    if (isModulesRoute) {
+      if (!course) {
+        await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+        return;
+      }
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON() as { modules?: Array<{ moduleId: string; sortOrder: number }> };
+        course.modules = (body.modules ?? []).map((item) => {
+          const moduleMatch =
+            mutableModules.find((module) => module.id === item.moduleId) ??
+            Array.from(exportMap.values()).find((module) => module.module.id === item.moduleId)?.module;
+          return {
+            moduleId: item.moduleId,
+            sortOrder: item.sortOrder,
+            moduleTitle:
+              "title" in (moduleMatch ?? {})
+                ? (moduleMatch as any).title
+                : item.moduleId,
+          };
+        });
+        course.moduleCount = course.modules.length;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ modules: course.modules }),
+        });
+        return;
+      }
+    }
+
+    if (isPublishRoute && course) {
+      course.publishedAt = "2026-04-18T12:00:00.000Z";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+      return;
+    }
+
+    if (isArchiveRoute && course) {
+      course.archivedAt = "2026-04-18T12:00:00.000Z";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+      return;
+    }
+
+    if (!course) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ course }),
+      });
+      return;
+    }
+
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as {
+        title?: Record<string, string>;
+        description?: Record<string, string>;
+        certificationLevel?: string;
+      };
+      course.title = body.title ?? course.title;
+      course.description = body.description ?? course.description;
+      course.certificationLevel = body.certificationLevel ?? course.certificationLevel;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ course }),
+      });
+      return;
+    }
+
+    if (route.request().method() === "DELETE") {
+      const index = mutableCourses.findIndex((item) => item.id === courseId);
+      if (index >= 0) {
+        mutableCourses.splice(index, 1);
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ courseId }),
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({}),
     });
   });
+
+  return state;
 }
 
 test.describe("admin content browser coverage", () => {
+  test("advanced editor can save, publish, and unpublish a module version", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [
+                localizedText("Option A"),
+                localizedText("Option B"),
+                localizedText("Option C"),
+                localizedText("Option D"),
+              ],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/advanced");
+
+    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
+    await page.locator("#saveContentBundle").click();
+    await expect(page.getByText("Draft saved (steps 5–8).")).toBeVisible();
+    await expect(page.locator("#publishModuleVersionId")).not.toHaveValue("");
+
+    await page.locator("#publishModuleVersion").click();
+    await expect(page.getByText("Module version published.")).toBeVisible();
+    await expect(page.locator("#moduleStatusLive")).toContainText("Module v1");
+    await expect(page.locator("#unpublishModuleBtn")).toBeVisible();
+
+    await page.locator("#unpublishModuleBtn").click();
+    await page.locator("#dlgSimpleConfirmOk").click();
+    await expect(page.getByText("Module unpublished.")).toBeVisible();
+    await expect(page.locator("#moduleStatusLive")).toContainText("No published version");
+  });
+
+  test("advanced editor hands unsaved task text back to the conversational workspace", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: {
+            "en-GB": "Original scenario",
+            nb: "Originalt scenario",
+            nn: "Opphavleg scenario",
+          },
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/advanced");
+
+    await page.locator("#editBtn_versionDetails").click();
+    await expect(page.locator("#dialogVersionDetails")).toHaveAttribute("open", "");
+    await page.locator("#dlgVD_task_enGB").fill("Edited in advanced editor");
+    await page.locator("#dialogVersionDetailsApply").click();
+    await page.locator("#modeSwitchConversation").click();
+    await expect(page.locator("#dialogUnsavedHandoff")).toHaveAttribute("open", "");
+    await page.locator("#dlgUnsavedDiscard").click();
+
+    await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation\?resumeEditing=1$/);
+    await expect(page.getByText("Edited in advanced editor")).toBeVisible();
+    await expect(page.getByText("The current module draft is ready for further editing in chat.")).toBeVisible();
+  });
+
   test("shell can create a new module, generate content, and save without losing the module ID", async ({ page }) => {
     await mockCommonApis(page);
 
@@ -561,6 +894,36 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("English scenario")).toHaveCount(0);
   });
 
+  test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
+    const state = await mockCommonApis(page);
+
+    await page.goto("/admin-content");
+
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Upload module");
+
+    const fileInput = page.locator('input[type="file"]').last();
+    await fileInput.setInputFiles({
+      name: "source.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      buffer: Buffer.from("fake-word-content"),
+    });
+
+    await expect(page.getByText("source.docx")).toBeVisible();
+    const sourceTextarea = page.locator(".chat-textarea:enabled").last();
+    await sourceTextarea.fill("Use a practical workplace framing.");
+    await clickEnabledButton(page, /Next|Neste|Næste/i);
+    await clickEnabledButton(page, "Basic");
+    await clickEnabledButton(page, "Ordinary");
+
+    await expect
+      .poll(() => state.lastDraftGenerationBody?.sourceMaterial ?? "")
+      .toContain("Extracted source material from source.docx");
+    await expect
+      .poll(() => state.lastDraftGenerationBody?.sourceMaterial ?? "")
+      .toContain("Use a practical workplace framing.");
+  });
+
   test("shell advanced mode switch preserves the selected module in the route", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -593,6 +956,34 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/advanced$/);
     await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("courses conversational flow can add a module and land on the saved course detail view", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      libraryModules: [
+        { id: "module-1", title: "Trade unions" },
+        { id: "module-2", title: "Collective bargaining" },
+      ],
+    });
+
+    await page.goto("/admin-content/courses/new");
+
+    const titleInput = page.locator("#convTitleInput");
+    await titleInput.fill("Labour rights");
+    await titleInput.press("Enter");
+    await clickEnabledButton(page, "Basic");
+    await clickEnabledButton(page, "Legg til moduler");
+
+    await page.locator("#convComboboxInput").fill("Trade");
+    await page.locator(".combobox-option").first().click();
+    await page.locator("#convAddModuleItemBtn").click();
+    await expect(page.locator("#convModuleListContainer")).toContainText("Trade unions");
+
+    await page.locator("#convCreateBtn").click();
+    await expect(page).toHaveURL(/\/admin-content\/courses\/course-1$/);
+    await expect(page.locator("#detailPageTitle")).toContainText("Labour rights");
+    await expect(page.locator("#moduleListContainer")).toContainText("Trade unions");
+    await expect.poll(() => state.mutableCourses[0]?.modules?.length ?? 0).toBe(1);
   });
 
   test("shell idle flow opens the module picker and renders existing module choices", async ({ page }) => {

@@ -385,6 +385,7 @@ function _domFormFields(entry) {
     inputEl.setAttribute("autocomplete", "off");
   }
   inputEl.placeholder = t(entry.placeholderKey);
+  if (entry.initialValue) inputEl.value = entry.initialValue;
 
   if (isSourceMaterial) {
     const uploadRow = document.createElement("div");
@@ -611,8 +612,8 @@ function logResolveSlot(slot, htmlFn, choices = []) {
 }
 
 // Log + render a text input or textarea form (prompt bubble + input fields).
-function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit) {
-  const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false };
+function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "") {
+  const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue };
   chatLog.push(entry);
   _domBotBubble(promptHtmlFn(), [], false);
   _domFormFields(entry);
@@ -875,6 +876,38 @@ async function localizeDraftAcrossLocales(taskText, guidanceText, sourceLocale) 
       },
     );
     const draft = result?.draft ?? result;
+    localized.taskText[targetLocale] = draft?.taskText ?? taskText;
+    localized.guidanceText[targetLocale] = draft?.guidanceText ?? guidanceText;
+  }
+
+  return localized;
+}
+
+async function localizeDraftAcrossLocalesWithTitle(title, taskText, guidanceText, sourceLocale) {
+  const localized = {
+    title: buildLocalizedTextMap(sourceLocale, title),
+    taskText: buildLocalizedTextMap(sourceLocale, taskText),
+    guidanceText: buildLocalizedTextMap(sourceLocale, guidanceText),
+  };
+
+  for (const targetLocale of supportedLocales) {
+    if (targetLocale === sourceLocale) continue;
+    let result;
+    try {
+      result = await apiFetch(
+        "/api/admin/content/generate/module-draft/localize",
+        getHeaders,
+        {
+          method: "POST",
+          body: JSON.stringify({ title, taskText, guidanceText, sourceLocale, targetLocale }),
+        },
+      );
+    } catch {
+      // Graceful degradation: keep source text for failed locale
+      continue;
+    }
+    const draft = result?.draft ?? result;
+    localized.title[targetLocale] = draft?.title ?? title;
     localized.taskText[targetLocale] = draft?.taskText ?? taskText;
     localized.guidanceText[targetLocale] = draft?.guidanceText ?? guidanceText;
   }
@@ -1260,6 +1293,13 @@ async function saveDraftBundleInBackground(options = {}) {
   try {
     const rubricPayload = resolveCurrentRubricPayload();
     const promptPayload = resolveCurrentPromptPayload();
+
+    if (sessionDraft?.title && typeof sessionDraft.title === "object") {
+      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, getHeaders, {
+        method: "PATCH",
+        body: JSON.stringify({ title: sessionDraft.title }),
+      });
+    }
 
     const rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, getHeaders, {
       method: "POST",
@@ -1775,6 +1815,93 @@ function startUnifiedRevisionFlow() {
   );
 }
 
+function startDirectEditFlow() {
+  const currentTitle = localizeValue(sessionDraft?.title ?? bundle?.module?.title) || "";
+  const currentTaskText = localizeValueForLocale(
+    sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "",
+    currentLocale,
+  );
+  const currentGuidanceText = localizeValueForLocale(
+    sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "",
+    currentLocale,
+  );
+
+  function onGuidanceDone(newGuidanceText) {
+    const titleAtCapture = onGuidanceDone._capturedTitle;
+    const taskTextAtCapture = onGuidanceDone._capturedTaskText;
+
+    const abort = startGeneration();
+    const slot = logProgress(() => t("shell.directEdit.translating"));
+    slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
+
+    localizeDraftAcrossLocalesWithTitle(titleAtCapture, taskTextAtCapture, newGuidanceText, currentLocale)
+      .then((localized) => {
+        generationAbort = null;
+        sessionDraft = buildPreviewCandidate({
+          title: localized.title,
+          taskText: localized.taskText,
+          guidanceText: localized.guidanceText,
+        });
+        sessionState = "draft-pending";
+        clearPreviewCandidate();
+        scrollPreviewToBottom();
+        logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.done"))}</strong>`);
+        showDraftReadyActions();
+      })
+      .catch(() => {
+        generationAbort = null;
+        sessionDraft = buildPreviewCandidate({
+          title: buildLocalizedTextMap(currentLocale, titleAtCapture),
+          taskText: buildLocalizedTextMap(currentLocale, taskTextAtCapture),
+          guidanceText: buildLocalizedTextMap(currentLocale, newGuidanceText),
+        });
+        sessionState = "draft-pending";
+        clearPreviewCandidate();
+        logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.translateError")));
+        showDraftReadyActions();
+      });
+  }
+
+  function onScenarioDone(newTaskText) {
+    const capturedTitle = onScenarioDone._capturedTitle;
+    onGuidanceDone._capturedTitle = capturedTitle;
+    onGuidanceDone._capturedTaskText = newTaskText;
+    logForm(
+      "textarea",
+      () => `<strong>${escapeHtml(t("shell.directEdit.guidancePrompt"))}</strong>`,
+      "shell.directEdit.guidancePlaceholder",
+      "shell.directEdit.submit",
+      onGuidanceDone,
+      currentGuidanceText,
+    );
+  }
+
+  function onTitleDone(newTitle) {
+    onScenarioDone._capturedTitle = newTitle;
+    onGuidanceDone._capturedTitle = newTitle;
+    logForm(
+      "textarea",
+      () => `<strong>${escapeHtml(t("shell.directEdit.scenarioPrompt"))}</strong>`,
+      "shell.directEdit.scenarioPlaceholder",
+      "shell.directEdit.submit",
+      onScenarioDone,
+      currentTaskText,
+    );
+  }
+
+  logBot(() => `<strong>${escapeHtml(t("shell.directEdit.titlePrompt"))}</strong>`, [
+    { labelKey: "shell.action.cancel", action: sessionDraft ? showDraftReadyActions : showModuleActions },
+  ]);
+  logForm(
+    "text",
+    () => "",
+    "shell.directEdit.titlePlaceholder",
+    "shell.directEdit.submit",
+    onTitleDone,
+    currentTitle,
+  );
+}
+
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
@@ -1804,6 +1931,7 @@ function showModuleActions() {
         }
       },
     },
+    directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
     editAdvanced: { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
@@ -1980,6 +2108,7 @@ function showDraftReadyActions() {
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
+    directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
     openEditor: { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) },
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
@@ -2138,10 +2267,14 @@ function renderWorkspaceNavigation() {
 
 // Translates static text that lives in the HTML source (not rendered by chat flow).
 function translatePageStaticText() {
-  const h1 = document.querySelector(".shell-header h1");
-  if (h1) h1.textContent = t("shell.page.title");
-  const advLink = document.querySelector(".advanced-link");
-  if (advLink) advLink.textContent = t("shell.page.advancedLink");
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  }
+  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (key) el.placeholder = t(key);
+  }
 }
 
 

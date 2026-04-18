@@ -140,6 +140,14 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       return client.courseModule.count({ where: { moduleId } });
     },
 
+    updateModuleTitle(moduleId: string, title: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { title },
+        select: { id: true, title: true },
+      });
+    },
+
     deleteModule(moduleId: string) {
       return client.module.delete({
         where: { id: moduleId },

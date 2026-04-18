@@ -1,5 +1,6 @@
 export {
   createModule,
+  updateModuleTitle,
   deleteModule,
   createRubricVersion,
   createPromptTemplateVersion,

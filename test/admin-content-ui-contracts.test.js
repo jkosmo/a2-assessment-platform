@@ -220,4 +220,67 @@ describe("shell JS contracts", () => {
     // shows "Ingen modul valgt" even after a module loads successfully.
     expect(js).toMatch(/bundle\s*=\s*\w+\?\.\s*moduleExport/);
   });
+
+  it("translatePageStaticText iterates [data-i18n] so privacy warning translates on locale switch", () => {
+    const js = readFile("public/static/admin-content-shell.js");
+    // Must use querySelectorAll('[data-i18n]') loop, not just hardcoded element selectors.
+    // Without this the privacy warning stays in English regardless of locale.
+    expect(js).toContain('querySelectorAll("[data-i18n]")');
+  });
+
+  it("shell page h1 carries data-i18n so it translates with locale", () => {
+    const html = readFile("public/admin-content.html");
+    expect(html).toContain('data-i18n="shell.page.title"');
+  });
+
+  it("logForm accepts initialValue argument for pre-fill", () => {
+    const js = readFile("public/static/admin-content-shell.js");
+    // Signature must carry initialValue so direct-edit flow can pre-fill fields.
+    expect(js).toMatch(/function logForm\s*\([^)]*initialValue/);
+    expect(js).toContain("entry.initialValue");
+  });
+
+  it("deriveShellModuleActionModel includes directEdit action", () => {
+    const js = readFile("public/static/admin-content-shell-state.js");
+    expect(js).toContain('"directEdit"');
+  });
+
+  it("deriveShellDraftReadyActionModel includes directEdit action", () => {
+    const js = readFile("public/static/admin-content-shell-state.js");
+    // Must appear in both models so the action is reachable from both states.
+    const matches = (js.match(/"directEdit"/g) ?? []).length;
+    expect(matches).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shell.directEdit.* i18n keys exist in all three locales", () => {
+    const i18n = readFile("public/i18n/admin-content-translations.js");
+    const keys = [
+      "shell.directEdit.action",
+      "shell.directEdit.titlePrompt",
+      "shell.directEdit.scenarioPrompt",
+      "shell.directEdit.guidancePrompt",
+      "shell.directEdit.submit",
+      "shell.directEdit.translating",
+      "shell.directEdit.done",
+      "shell.directEdit.translateError",
+    ];
+    for (const key of keys) {
+      // Must appear at least 3 times: en-GB base + nb override + nn override
+      const count = (i18n.match(new RegExp(key.replace(/\./g, "\\."), "g")) ?? []).length;
+      expect(count).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("PATCH /modules/:id/title route exists in backend router", () => {
+    const routes = readFile("src/routes/adminContent.ts");
+    expect(routes).toContain('"/modules/:moduleId/title"');
+    expect(routes).toContain("updateModuleTitle");
+  });
+
+  it("saveDraftBundleInBackground PATCHes module title when sessionDraft.title is a localized object", () => {
+    const js = readFile("public/static/admin-content-shell.js");
+    expect(js).toContain("sessionDraft?.title");
+    expect(js).toContain("/title`");
+    expect(js).toContain('"PATCH"');
+  });
 });

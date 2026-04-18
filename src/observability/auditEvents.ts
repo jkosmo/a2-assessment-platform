@@ -25,6 +25,7 @@ export type AuditEntityType = NestedValue<typeof auditEntityTypes>;
 export const auditActions = {
   adminContent: {
     moduleCreated: "module_created",
+    moduleTitleUpdated: "module_title_updated",
     moduleDeleted: "module_deleted",
     moduleUnpublished: "module_unpublished",
     moduleArchived: "module_archived",
@@ -95,6 +96,10 @@ export type AuditAction = NestedValue<typeof auditActions>;
 export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleCreated]: EventMetadata<{
     moduleId: string;
+  }>;
+  [auditActions.adminContent.moduleTitleUpdated]: EventMetadata<{
+    moduleId: string;
+    title: string;
   }>;
   [auditActions.adminContent.moduleDeleted]: EventMetadata<{
     moduleId: string;

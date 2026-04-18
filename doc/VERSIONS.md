@@ -7,6 +7,23 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.14 - 2026-04-18
+
+feat(samtale): direkteredigering av tittel, scenario og forventning med automatisk oversettelse (#332)
+
+- public/static/admin-content-shell.js: ny `startDirectEditFlow()` — tre sekvensielle pre-fylte skjema for tittel, scenario og forventning; `localizeDraftAcrossLocalesWithTitle()` oversetter alle tre felt til de to andre locale via eksisterende API; graceful degradering ved oversettelsesfeil
+- public/static/admin-content-shell.js: `logForm()` får valgfritt 6. argument `initialValue` for pre-fylling — eksisterende kall upåvirket
+- public/static/admin-content-shell.js: `saveDraftBundleInBackground()` sender PATCH /modules/:id/title når `sessionDraft.title` er et lokalisert objekt
+- public/static/admin-content-shell-state.js: `directEdit`-aksjon lagt til i begge aksjonsmodeller (`deriveShellModuleActionModel`, `deriveShellDraftReadyActionModel`)
+- public/i18n/admin-content-translations.js: nye `shell.directEdit.*`-nøkler for en-GB, nb, nn
+- src/modules/adminContent/adminContentSchemas.ts: `moduleDraftLocalizationBodySchema` får valgfritt `title`-felt; ny `moduleTitleUpdateBodySchema`
+- src/modules/adminContent/llmContentGenerationService.ts: `ModuleDraftLocalizationInput` og `ModuleDraftResult` utvides med `title?`; `buildModuleDraftLocalizationPrompts` inkluderer tittel i prompt og returformat
+- src/modules/adminContent/adminContentRepository.ts: ny `updateModuleTitle()`
+- src/modules/adminContent/adminContentCommands.ts: ny `updateModuleTitle()` med audit
+- src/observability/auditEvents.ts: ny audit-hendelse `moduleTitleUpdated`
+- src/routes/adminContent.ts: ny PATCH `/modules/:moduleId/title`-rute
+- test/admin-content-ui-contracts.test.js: 6 nye kontrakttester (30 totalt)
+
 ## 0.10.13 - 2026-04-18
 
 fix: MSAL redirectUri — bruk /admin-content i stedet for / (rot-URL er ikke en HTML-side)

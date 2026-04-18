@@ -20,6 +20,7 @@ export type ModuleDraftInput = {
 export type ModuleDraftResult = {
   taskText: string;
   guidanceText: string;
+  title?: string;
   includesScenario: boolean;
 };
 
@@ -68,6 +69,7 @@ export type McqRevisionInput = {
 export type ModuleDraftLocalizationInput = {
   taskText: string;
   guidanceText: string;
+  title?: string;
   sourceLocale: GenerationLocale;
   targetLocale: GenerationLocale;
 };
@@ -92,6 +94,7 @@ export type McqLocalizationInput = {
 const moduleDraftResponseCodec = z.object({
   taskText: z.string().min(1),
   guidanceText: z.string().min(1),
+  title: z.string().min(1).optional(),
   includesScenario: z.boolean(),
 });
 
@@ -619,6 +622,14 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
   const systemPrompt =
     "You are a professional translator for a certification platform. Translate the provided module draft faithfully and return strict JSON only - no markdown, no commentary.";
 
+  const titleSection = input.title
+    ? `\ntitle:\n${input.title}\n`
+    : "";
+
+  const titleReturnField = input.title
+    ? `\n  "title": "translated title in ${LOCALE_DISPLAY[input.targetLocale]}",`
+    : "";
+
   const userPrompt = `Translate the following certification module draft from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
 
 ## Translation rules
@@ -630,7 +641,7 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
 - Do not summarise.
 
 ## Source draft
-
+${titleSection}
 taskText:
 ${input.taskText}
 
@@ -640,7 +651,7 @@ ${input.guidanceText}
 ## Return format
 
 Return a single JSON object:
-{
+{${titleReturnField}
   "taskText": "translated task text in ${LOCALE_DISPLAY[input.targetLocale]}",
   "guidanceText": "translated guidance text in ${LOCALE_DISPLAY[input.targetLocale]}",
   "includesScenario": true or false

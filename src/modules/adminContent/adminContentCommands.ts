@@ -102,6 +102,18 @@ export async function createModule(input: CreateModuleInput) {
   return module;
 }
 
+export async function updateModuleTitle(moduleId: string, title: string, actorId: string) {
+  const module = await adminContentRepository.updateModuleTitle(moduleId, title);
+  await recordAuditEvent({
+    entityType: auditEntityTypes.module,
+    entityId: moduleId,
+    action: auditActions.adminContent.moduleTitleUpdated,
+    actorId,
+    metadata: { moduleId, title },
+  });
+  return module;
+}
+
 export async function deleteModule(moduleId: string, actorId: string) {
   const module = await adminContentRepository.findModuleDeleteSummary(moduleId);
 

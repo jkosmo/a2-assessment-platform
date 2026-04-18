@@ -24,6 +24,10 @@ export const moduleCreateBodySchema = z.object({
   validTo: z.string().trim().optional(),
 });
 
+export const moduleTitleUpdateBodySchema = z.object({
+  title: localizedTextObjectSchema,
+});
+
 export const rubricBodySchema = z.object({
   criteria: z.record(z.unknown()),
   scalingRule: z.record(z.unknown()),
@@ -149,6 +153,7 @@ export const mcqRevisionBodySchema = z.object({
 export const moduleDraftLocalizationBodySchema = z.object({
   taskText: z.string().trim().min(1),
   guidanceText: z.string().trim().min(1),
+  title: z.string().trim().min(1).optional(),
   sourceLocale: generationLocaleSchema,
   targetLocale: generationLocaleSchema,
 });
