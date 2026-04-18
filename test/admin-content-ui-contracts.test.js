@@ -136,8 +136,16 @@ describe("courses conversational flow CSS", () => {
 
   it("library row-action-btn has width: auto — prevents global button reset in flex rows", () => {
     const libraryHtml = readFile("public/admin-content-library.html");
-    // Same class used for both <button> and <a> elements in row-actions flex container
     expect(libraryHtml).toMatch(/\.row-action-btn\s*\{[^}]*width\s*:\s*auto/);
+  });
+
+  it("row-action-btn has min-height: 0 in both library and courses — prevents global button{min-height:40px} making <button> taller than sibling <a> elements", () => {
+    const libraryHtml = readFile("public/admin-content-library.html");
+    const coursesHtml = readFile("public/admin-content-courses.html");
+    // shared.css sets button { min-height: 40px }. Without min-height: 0 override, <button class="row-action-btn">
+    // is 40px while <a class="row-action-btn"> is ~25px — visible height mismatch in the same row.
+    expect(libraryHtml).toMatch(/\.row-action-btn\s*\{[^}]*min-height\s*:\s*0/);
+    expect(coursesHtml).toMatch(/\.row-action-btn\s*\{[^}]*min-height\s*:\s*0/);
   });
 
   it("combobox-row button has width: auto — prevents global reset collapsing the module search input", () => {

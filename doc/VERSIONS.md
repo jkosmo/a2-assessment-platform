@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.12 - 2026-04-18
+
+fix: Opprett ny modul — title sendt som plain string, ikke {en-GB:...}-objekt
+
+- public/static/admin-content-library.js: createAndNavigate sender `title` direkte som string i stedet for `{ "en-GB": title }`; localizedTextSchema aksepterer string|{en-GB,nb,nn} men partial objekt uten nb/nn gir 400 validation_error
+
+## 0.10.11 - 2026-04-18
+
+fix: row-action-btn min-height: 0 — global button{min-height:40px} ga ulik høyde på <button> og <a> i samme rad
+
+- public/admin-content-library.html: .row-action-btn får min-height: 0 (+ normalisert rekkefølge av properties)
+- public/admin-content-courses.html: .row-action-btn komplett rewrite til å matche library — la til width:auto, min-height:0, line-height:1.4, font-family:inherit, justify-content:center, box-sizing:border-box
+- test/admin-content-ui-contracts.test.js: ny kontraktstest verifiserer min-height:0 i begge filer
+
 ## 0.10.10 - 2026-04-18
 
 fix: deploy-environment.ps1 avsluttes med exit 0 — PowerShell 7 propagerer $LASTEXITCODE fra native kommandoer som scriptets exit code

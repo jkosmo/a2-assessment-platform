@@ -103,9 +103,16 @@
       /* ── Row actions ─────────────────────────────────────────────────────── */
       .row-actions { display: flex; gap: 4px; align-items: center; }
       .row-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
+        min-height: 0;
         padding: 4px 10px;
         font-size: 12px;
         font-weight: 600;
+        line-height: 1.4;
+        font-family: inherit;
         border: 1px solid var(--color-border-soft);
         border-radius: var(--radius-button);
         background: var(--color-surface);
@@ -113,8 +120,7 @@
         cursor: pointer;
         white-space: nowrap;
         text-decoration: none;
-        display: inline-flex;
-        align-items: center;
+        box-sizing: border-box;
       }
       .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
       .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }

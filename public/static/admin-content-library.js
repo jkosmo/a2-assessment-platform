@@ -405,7 +405,7 @@ async function createAndNavigate(target) {
   try {
     const body = await apiFetch("/api/admin/content/modules", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ title: { "en-GB": title }, certificationLevel: level }),
+      body: JSON.stringify({ title, certificationLevel: level }),
     });
     const newId = body.module?.id ?? body.id;
     if (!newId) throw new Error("Fikk ikke modul-ID.");
