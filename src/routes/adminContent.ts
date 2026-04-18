@@ -15,6 +15,7 @@ import {
   unpublishModule,
   archiveModule,
   restoreModule,
+  adminContentRepository,
 } from "../modules/adminContent/index.js";
 import {
   moduleCreateBodySchema,

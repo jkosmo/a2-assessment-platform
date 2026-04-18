@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 
-type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion">;
+type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseModule">;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
