@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.8 - 2026-04-18
+
+fix: deploy-environment.ps1 oppdaterer SPA redirect URI automatisk etter deploy
+
+- scripts/azure/deploy-environment.ps1: etter health-check, hvis AuthMode=entra og EntraClientId er satt, kjøres `az ad app update --id $EntraClientId --spa-redirect-uris https://$webAppName.azurewebsites.net/`. Feil gir advarsel med manuell kommando, men stopper ikke deploy. Eliminerer AADSTS50011 ved nye ruter uten manuelt Azure Portal-arbeid.
+- Komplementær til v0.10.7-fiksen (stabil redirectUri + sessionStorage restore i api-client.js).
+
 ## 0.10.7 - 2026-04-18
 
 fix: MSAL redirect URI — use stable origin "/" + sessionStorage destination restore

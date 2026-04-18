@@ -310,6 +310,21 @@ function Wait-Healthy {
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App"
 
+if ($AuthMode -eq "entra" -and $EntraClientId) {
+  $spaRedirectUri = "https://$webAppName.azurewebsites.net/"
+  Write-Host "Updating SPA redirect URI on Entra app registration $EntraClientId to: $spaRedirectUri"
+  try {
+    az ad app update --id $EntraClientId --spa-redirect-uris $spaRedirectUri | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "SPA redirect URI updated."
+    } else {
+      Write-Warning "Could not update SPA redirect URI automatically (exit $LASTEXITCODE). Run manually: az ad app update --id $EntraClientId --spa-redirect-uris $spaRedirectUri"
+    }
+  } catch {
+    Write-Warning "Could not update SPA redirect URI automatically: $($_.Exception.Message). Run manually: az ad app update --id $EntraClientId --spa-redirect-uris $spaRedirectUri"
+  }
+}
+
 if ($BudgetContactEmail) {
   & "$PSScriptRoot/configure-cost-guardrails.ps1" `
     -SubscriptionId $SubscriptionId `
