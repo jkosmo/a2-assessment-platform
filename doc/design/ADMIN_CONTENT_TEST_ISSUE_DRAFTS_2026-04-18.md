@@ -48,6 +48,24 @@ Several regressions only show up in real browser behavior.
 - critical-path e2e suite runs against local app or staging-ready environment
 - failures clearly identify browser-only regressions
 
+### Progress note
+
+An initial Playwright suite now exists and runs against a lightweight static admin-content server with mocked API responses.
+
+The first browser scenarios cover:
+
+- shell idle state -> open existing module -> module picker choices render
+- courses conversational title step using Enter
+- courses delete dialog behavior
+- axe smoke checks on shell and courses routes
+
+The next step for this draft item is to widen browser coverage to:
+
+- shell <-> advanced handoff
+- save/publish flows
+- locale switching
+- file upload source-material flow
+
 ## 3. Admin Content: add dynamic WCAG and keyboard regression coverage
 
 ### Why

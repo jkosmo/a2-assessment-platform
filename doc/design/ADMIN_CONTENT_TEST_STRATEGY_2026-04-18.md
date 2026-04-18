@@ -133,11 +133,13 @@ The first three foundations are now in motion:
 - pure preview/localization/state logic now has explicit unit coverage
 - shared UI contracts exist for module and course workspaces
 - a first jsdom-based DOM test harness is running for the main admin-content workspaces
+- a first Playwright suite now runs against a lightweight static admin-content server with mocked API responses
+- browser coverage already includes shell idle/module-picker flow, course conversational Enter behavior, course delete dialog behavior, and axe-based accessibility smoke checks
 
 The next meaningful gap is no longer "can we test anything at all?", but:
 
 - broader DOM interaction coverage for save/publish/handoff flows
-- real browser coverage with Playwright
+- broader real browser coverage for handoff, save/publish, locale switching, and file upload
 - dynamic WCAG and visual regression on top of that
 
 ## Critical Scenarios We Must Eventually Automate
