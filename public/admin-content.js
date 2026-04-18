@@ -1086,9 +1086,7 @@ function updateStateRail() {
   }
 
   if (srLang) {
-    const uiLabel = localeLabels[currentLocale] ?? currentLocale;
-    const previewLabel = localeLabels[advPreviewLocale ?? currentLocale] ?? (advPreviewLocale ?? currentLocale);
-    srLang.textContent = tf("stateRail.language.format", { uiLocale: uiLabel, previewLocale: previewLabel });
+    srLang.textContent = localeLabels[advPreviewLocale ?? currentLocale] ?? (advPreviewLocale ?? currentLocale);
   }
 }
 

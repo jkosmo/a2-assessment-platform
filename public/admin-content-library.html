@@ -162,6 +162,10 @@
       /* ── Row actions ─────────────────────────────────────────────────────── */
       .row-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
       .row-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
         padding: 4px 10px;
         font-size: 12px;
         font-weight: 600;
@@ -171,6 +175,10 @@
         color: var(--color-text);
         cursor: pointer;
         white-space: nowrap;
+        text-decoration: none;
+        font-family: inherit;
+        line-height: 1.4;
+        box-sizing: border-box;
       }
       .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
       .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }

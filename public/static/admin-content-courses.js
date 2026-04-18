@@ -42,7 +42,8 @@ let participantRuntimeConfig = {
   calibrationWorkspace: { accessRoles: [] },
 };
 
-let getHeaders = {};
+let _headerValues = {};
+function getHeaders() { return _headerValues; }
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -222,6 +223,344 @@ async function confirmDelete() {
 // ---------------------------------------------------------------------------
 // ── DETAIL VIEW ───────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
+// ── NEW COURSE — CONVERSATIONAL FLOW ──────────────────────────────────────
+// ---------------------------------------------------------------------------
+
+// Conversational state for new-course creation
+let convTitle = "";
+let convCertLevel = "";
+let convModules = []; // { moduleId, title }
+
+async function renderNewCourseConversational() {
+  convTitle = "";
+  convCertLevel = "";
+  convModules = [];
+
+  // Load library modules for the optional module-add step
+  try {
+    const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
+    allLibraryModules = (libData.modules ?? []).filter(m => m.status !== "archived");
+  } catch {
+    allLibraryModules = [];
+  }
+
+  pageContent.innerHTML = `
+    <div class="page-header-back">
+      <a href="/admin-content/courses" class="back-link">← Tilbake til kursliste</a>
+    </div>
+    <div class="page-header">
+      <h1>Opprett nytt kurs</h1>
+    </div>
+    <div class="conv-flow" id="convFlow">
+      <div class="conv-bot-msg">
+        <p>Hva skal kurset hete? Skriv tittelen slik du vil at deltakerne skal se den.</p>
+      </div>
+      <div class="conv-input-area" id="convTitleArea">
+        <input id="convTitleInput" type="text" placeholder="Kurstittel…" autocomplete="off" maxlength="200" />
+        <button id="convTitleNext" class="btn btn-primary">Neste</button>
+      </div>
+      <div id="convAfterTitle"></div>
+    </div>`;
+
+  const titleInput = document.getElementById("convTitleInput");
+  const titleNext = document.getElementById("convTitleNext");
+
+  function submitTitle() {
+    const val = titleInput?.value.trim() ?? "";
+    if (!val) { titleInput?.focus(); return; }
+    convTitle = val;
+    if (titleInput) titleInput.disabled = true;
+    if (titleNext) titleNext.disabled = true;
+    appendConvUserBubble(escapeHtml(convTitle));
+    showConvCertStep();
+  }
+
+  titleNext?.addEventListener("click", submitTitle);
+  titleInput?.addEventListener("keydown", e => { if (e.key === "Enter") submitTitle(); });
+  titleInput?.focus();
+}
+
+function appendConvUserBubble(html) {
+  const flow = document.getElementById("convFlow");
+  if (!flow) return;
+  const bubble = document.createElement("div");
+  bubble.className = "conv-user-bubble";
+  bubble.innerHTML = html;
+  flow.insertBefore(bubble, document.getElementById("convAfterTitle"));
+}
+
+function showConvCertStep() {
+  const after = document.getElementById("convAfterTitle");
+  if (!after) return;
+
+  after.innerHTML = `
+    <div class="conv-bot-msg">
+      <p>Hvilket sertifiseringsnivå passer for dette kurset?</p>
+    </div>
+    <div class="conv-choices" id="convCertChoices">
+      <button class="conv-choice-btn" data-cert="basic">Basic</button>
+      <button class="conv-choice-btn" data-cert="intermediate">Intermediate</button>
+      <button class="conv-choice-btn" data-cert="advanced">Advanced</button>
+    </div>
+    <div id="convAfterCert"></div>`;
+
+  document.getElementById("convCertChoices")?.addEventListener("click", e => {
+    const btn = e.target.closest("[data-cert]");
+    if (!btn) return;
+    convCertLevel = btn.dataset.cert;
+    document.querySelectorAll(".conv-choice-btn").forEach(b => b.disabled = true);
+    appendConvCertBubble(btn.textContent.trim());
+    showConvModuleStep();
+  });
+}
+
+function appendConvCertBubble(label) {
+  const certChoices = document.getElementById("convCertChoices");
+  if (!certChoices) return;
+  const bubble = document.createElement("div");
+  bubble.className = "conv-user-bubble";
+  bubble.textContent = label;
+  certChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterCert"));
+}
+
+function showConvModuleStep() {
+  const after = document.getElementById("convAfterCert");
+  if (!after) return;
+
+  after.innerHTML = `
+    <div class="conv-bot-msg">
+      <p>Vil du legge til moduler nå, eller hoppe over til du har opprettet kurset?</p>
+    </div>
+    <div class="conv-choices" id="convModuleChoices">
+      <button class="conv-choice-btn" id="convAddModulesBtn">Legg til moduler</button>
+      <button class="conv-choice-btn" id="convSkipModulesBtn">Hopp over</button>
+    </div>
+    <div id="convAfterModuleChoice"></div>`;
+
+  document.getElementById("convAddModulesBtn")?.addEventListener("click", () => {
+    document.getElementById("convAddModulesBtn").disabled = true;
+    document.getElementById("convSkipModulesBtn").disabled = true;
+    appendConvAfterModuleChoice("Legg til moduler");
+    showConvModuleSearch();
+  });
+
+  document.getElementById("convSkipModulesBtn")?.addEventListener("click", () => {
+    document.getElementById("convAddModulesBtn").disabled = true;
+    document.getElementById("convSkipModulesBtn").disabled = true;
+    appendConvAfterModuleChoice("Hopp over");
+    convCreateCourse();
+  });
+}
+
+function appendConvAfterModuleChoice(label) {
+  const moduleChoices = document.getElementById("convModuleChoices");
+  if (!moduleChoices) return;
+  const bubble = document.createElement("div");
+  bubble.className = "conv-user-bubble";
+  bubble.textContent = label;
+  moduleChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterModuleChoice"));
+}
+
+function showConvModuleSearch() {
+  const after = document.getElementById("convAfterModuleChoice");
+  if (!after) return;
+
+  convModules = [];
+  comboboxQuery = "";
+  comboboxSelectedId = null;
+  comboboxOpen = false;
+
+  after.innerHTML = `
+    <div class="conv-bot-msg">
+      <p>Søk etter moduler og legg dem til i kurset. Trykk <strong>Opprett kurs</strong> når du er ferdig.</p>
+    </div>
+    <div id="convModuleListContainer"></div>
+    <div class="combobox-row" style="margin-bottom:var(--space-2)">
+      <div class="combobox-wrap" id="convComboboxWrap">
+        <input id="convComboboxInput" type="text" class="combobox-input"
+          placeholder="Søk på modulnavn eller modul-ID…"
+          autocomplete="off" role="combobox" aria-expanded="false"
+          aria-autocomplete="list" aria-controls="convComboboxDropdown" />
+        <div id="convComboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
+      </div>
+      <button id="convAddModuleItemBtn" class="btn btn-secondary" disabled>Legg til</button>
+    </div>
+    <div class="form-actions">
+      <button id="convCreateBtn" class="btn btn-primary">Opprett kurs</button>
+    </div>
+    <div id="convAfterModules"></div>`;
+
+  renderConvModuleList();
+  initConvCombobox();
+
+  document.getElementById("convCreateBtn")?.addEventListener("click", convCreateCourse);
+}
+
+function renderConvModuleList() {
+  const container = document.getElementById("convModuleListContainer");
+  if (!container) return;
+  if (convModules.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = `<div class="module-list" id="convModuleList">
+    ${convModules.map((m, i) => `
+      <div class="module-list-item" data-module-id="${escapeHtml(m.moduleId)}">
+        <span class="module-list-item-order">${i + 1}.</span>
+        <span class="module-list-item-title">${escapeHtml(m.title)}</span>
+        <div class="module-list-item-actions">
+          <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
+          <button class="module-move-btn" data-move="down" data-index="${i}" ${i === convModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
+          <button class="module-remove-btn" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
+        </div>
+      </div>`).join("")}
+  </div>`;
+  document.getElementById("convModuleList")?.addEventListener("click", handleConvModuleListClick);
+}
+
+function handleConvModuleListClick(e) {
+  const moveBtn = e.target.closest("[data-move]");
+  if (moveBtn) {
+    const idx = parseInt(moveBtn.dataset.index, 10);
+    const swap = moveBtn.dataset.move === "up" ? idx - 1 : idx + 1;
+    if (swap >= 0 && swap < convModules.length) {
+      [convModules[idx], convModules[swap]] = [convModules[swap], convModules[idx]];
+      renderConvModuleList();
+    }
+    return;
+  }
+  const removeBtn = e.target.closest("[data-remove]");
+  if (removeBtn) {
+    convModules.splice(parseInt(removeBtn.dataset.remove, 10), 1);
+    renderConvModuleList();
+    updateConvComboboxDropdown();
+  }
+}
+
+function initConvCombobox() {
+  const input = document.getElementById("convComboboxInput");
+  const addBtn = document.getElementById("convAddModuleItemBtn");
+
+  input?.addEventListener("input", () => {
+    comboboxQuery = input.value;
+    comboboxSelectedId = null;
+    comboboxOpen = comboboxQuery.trim().length > 0;
+    if (addBtn) addBtn.disabled = true;
+    updateConvComboboxDropdown();
+  });
+  input?.addEventListener("focus", () => {
+    if (comboboxQuery.trim()) { comboboxOpen = true; updateConvComboboxDropdown(); }
+  });
+  input?.addEventListener("blur", () => {
+    setTimeout(() => { comboboxOpen = false; updateConvComboboxDropdown(); }, 150);
+  });
+  addBtn?.addEventListener("click", addConvSelectedModule);
+}
+
+function updateConvComboboxDropdown() {
+  const input = document.getElementById("convComboboxInput");
+  const dropdown = document.getElementById("convComboboxDropdown");
+  const addBtn = document.getElementById("convAddModuleItemBtn");
+  if (!input || !dropdown) return;
+
+  const addedIds = new Set(convModules.map(m => m.moduleId));
+  const q = comboboxQuery.trim().toLowerCase();
+  const options = allLibraryModules.filter(m => {
+    if (addedIds.has(m.id)) return false;
+    if (!q) return true;
+    return (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
+  });
+
+  if (!comboboxOpen || comboboxQuery.trim() === "") {
+    dropdown.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    return;
+  }
+  dropdown.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+
+  if (options.length === 0) {
+    dropdown.innerHTML = `<div class="combobox-empty">Ingen moduler matcher søket.</div>`;
+    comboboxSelectedId = null;
+    if (addBtn) addBtn.disabled = true;
+    return;
+  }
+
+  dropdown.innerHTML = options.map(m => `
+    <div class="combobox-option${m.id === comboboxSelectedId ? " selected" : ""}"
+      role="option" aria-selected="${m.id === comboboxSelectedId}"
+      data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(localizedText(m.title) || m.id)}">
+      ${escapeHtml(localizedText(m.title) || m.id)}
+      <span class="combobox-option-id">${escapeHtml(m.id)}</span>
+    </div>`).join("");
+
+  dropdown.querySelectorAll(".combobox-option").forEach(opt => {
+    opt.addEventListener("mousedown", e => {
+      e.preventDefault();
+      comboboxSelectedId = opt.dataset.moduleId;
+      const title = opt.dataset.moduleTitle;
+      if (input) input.value = title.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"');
+      comboboxOpen = false;
+      updateConvComboboxDropdown();
+      if (addBtn) addBtn.disabled = false;
+    });
+  });
+
+  if (addBtn) addBtn.disabled = !comboboxSelectedId;
+}
+
+function addConvSelectedModule() {
+  if (!comboboxSelectedId) return;
+  const mod = allLibraryModules.find(m => m.id === comboboxSelectedId);
+  if (!mod) return;
+  convModules.push({ moduleId: mod.id, title: localizedText(mod.title) || mod.id });
+  comboboxSelectedId = null;
+  comboboxQuery = "";
+  comboboxOpen = false;
+  const input = document.getElementById("convComboboxInput");
+  if (input) input.value = "";
+  updateConvComboboxDropdown();
+  renderConvModuleList();
+}
+
+async function convCreateCourse() {
+  const createBtn = document.getElementById("convCreateBtn");
+  if (createBtn) createBtn.disabled = true;
+
+  const after = document.getElementById("convAfterModules") ?? document.getElementById("convAfterModuleChoice");
+  if (after) {
+    after.innerHTML = `<div class="conv-saving-indicator">Oppretter kurs…</div>`;
+  }
+
+  try {
+    const body = await apiFetch("/api/admin/content/courses", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        title: convTitle,
+        certificationLevel: convCertLevel,
+      }),
+    });
+    const savedCourseId = body.course?.id;
+    if (!savedCourseId) throw new Error("Fikk ikke kurs-ID fra serveren.");
+
+    if (convModules.length > 0) {
+      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(savedCourseId)}/modules`, getHeaders, {
+        method: "PUT",
+        body: JSON.stringify({ modules: convModules.map((m, i) => ({ moduleId: m.moduleId, sortOrder: i })) }),
+      });
+    }
+
+    showToast("Kurs opprettet.", "success");
+    window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
+  } catch (err) {
+    if (after) {
+      after.innerHTML = `<div class="error-banner">${escapeHtml(err?.message ?? "Kunne ikke opprette kurs.")}</div>`;
+    }
+    if (createBtn) createBtn.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 // Active locale tab for the detail form
 let activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
@@ -238,6 +577,11 @@ let comboboxSelectedId = null;
 let comboboxOpen = false;
 
 async function renderDetailView(courseId) {
+  if (!courseId) {
+    await renderNewCourseConversational();
+    return;
+  }
+
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
 
   let course = null;
@@ -732,9 +1076,9 @@ async function init() {
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
-    getHeaders = buildConsoleHeaders(cfg);
+    _headerValues = buildConsoleHeaders(cfg);
   } catch {
-    getHeaders = {};
+    _headerValues = {};
   }
 
   buildLocaleSelector();

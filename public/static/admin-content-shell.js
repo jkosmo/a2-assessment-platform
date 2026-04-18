@@ -801,9 +801,7 @@ function updateStateRail() {
   }
 
   if (srLang) {
-    const uiLabel = localeLabels[currentLocale] ?? currentLocale;
-    const previewLabel = localeLabels[previewLocale ?? currentLocale] ?? (previewLocale ?? currentLocale);
-    srLang.textContent = tf("stateRail.language.format", { uiLocale: uiLabel, previewLocale: previewLabel });
+    srLang.textContent = localeLabels[previewLocale ?? currentLocale] ?? (previewLocale ?? currentLocale);
   }
 }
 
@@ -1680,7 +1678,8 @@ async function loadModule(moduleId, options = {}) {
   const slot = logProgress("shell.module.loading");
 
   try {
-    bundle = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
+    const exportData = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
+    bundle = exportData?.moduleExport ?? null;
   } catch {
     logResolveSlot(slot, () => t("shell.module.loadError"), [
       { labelKey: "shell.module.pickAnother", action: startModulePicker },

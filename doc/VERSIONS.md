@@ -7,6 +7,26 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.3 - 2026-04-18
+
+feat: conversational new-course creation — replace locale-tab form for /courses/new (#329)
+
+- public/static/admin-content-courses.js: renderNewCourseConversational() — step-by-step chat flow: title (free-text input), cert level (choice buttons), optional module search (searchable combobox + reorder/remove list), then creates course via POST + PUT modules; renderDetailView(null) delegates to it
+- public/admin-content-courses.html: conversational flow CSS (conv-flow, conv-bot-msg, conv-user-bubble, conv-input-area, conv-choices, conv-choice-btn, conv-saving-indicator)
+- Edit view for existing courses (/courses/:id) is unchanged — form with locale tabs remains
+
+## 0.10.2 - 2026-04-18
+
+fix: 7 stage-testing bugs from v0.10.1 verification
+
+- Bug B: admin-content-shell.js: loadModule() unwrap bundle.moduleExport (API returns { moduleExport: {...} }, not the bundle directly) — root cause of empty preview pane and blank state rail values in Samtale
+- Bug C: admin-content-shell.js + admin-content.js: srLang now shows preview locale only (removed redundant "UI: {locale}" prefix — top menu already shows UI locale)
+- Bug D: auto-fixed by Bug B — state rail DU REDIGERER and LIVE NÅ now populate correctly once bundle.module is accessible
+- Bug E: admin-content.html: added GDPR/privacy warning (same as Avansert) above the workspace header
+- Bug F: auto-fixed by Bug B — state rail values now consistent between Samtale and Avansert
+- Bug G: admin-content-courses.js: getHeaders changed from plain object to function so apiFetch correctly separates headers from fetch options — POST/PUT/DELETE requests were silently converted to GET (body/method from 3rd param were lost), causing "Fikk ikke kurs-ID" on course creation
+- Bug A: admin-content-library.html: row-action-btn gets display:inline-flex + width:auto + text-decoration:none — buttons and anchor links in the same flex row now render identically
+
 ## 0.10.1 - 2026-04-18
 
 fix: 8 stage-testing bugs from epic #328 verification
