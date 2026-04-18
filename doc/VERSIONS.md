@@ -7,6 +7,13 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.13 - 2026-04-18
+
+fix: MSAL redirectUri — bruk /admin-content i stedet for / (rot-URL er ikke en HTML-side)
+
+- public/api-client.js: redirectUri endret fra origin+"/" til origin+"/admin-content"; rot-URL returnerer bare tekst ("a2-assessment-platform"), ingen JS laster, handleRedirectPromise() kjører aldri og auth-koden i URL-hash behandles ikke
+- scripts/azure/deploy-environment.ps1: SPA redirect URI oppdatert til https://$webAppName.azurewebsites.net/admin-content
+
 ## 0.10.12 - 2026-04-18
 
 fix: Opprett ny modul — title sendt som plain string, ikke {en-GB:...}-objekt

@@ -26,7 +26,7 @@ async function initMsal(entraConfig) {
     auth: {
       clientId: entraConfig.clientId,
       authority: entraConfig.authority,
-      redirectUri: window.location.origin + "/",
+      redirectUri: window.location.origin + "/admin-content",
     },
     cache: {
       cacheLocation: "sessionStorage",

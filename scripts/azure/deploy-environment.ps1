@@ -311,7 +311,7 @@ Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web Ap
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App"
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
-  $spaRedirectUri = "https://$webAppName.azurewebsites.net/"
+  $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
   Write-Host "Updating SPA redirect URI on Entra app registration $EntraClientId to: $spaRedirectUri"
   try {
     $appObjectId = (az ad app show --id $EntraClientId --query id -o tsv 2>&1).Trim()
