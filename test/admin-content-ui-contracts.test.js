@@ -60,7 +60,8 @@ describe("admin content workspace UI contracts", () => {
     expect(advancedHtml).toContain('id="advPreviewContent"');
     expect(advancedJs).toContain('document.getElementById("backToChatLink")');
     expect(advancedJs).toContain("function updateBackToChatLink()");
-    expect(advancedJs).toContain("resumeEditing=1");
+    expect(advancedJs).toContain('buildAdminContentConversationUrl');
+    expect(advancedJs).toContain('resolveConversationModuleId');
   });
 
   it("keeps shared list-view interaction styling between library and courses", () => {

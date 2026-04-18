@@ -14,6 +14,11 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import {
+  detectCoursesRoute,
+  buildCourseDeleteDialogText,
+  deriveCourseListRows,
+} from "/static/admin-content-courses-state.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -103,15 +108,7 @@ function certBadge(level) {
 // ---------------------------------------------------------------------------
 
 function detectRoute() {
-  const path = window.location.pathname;
-  if (path === "/admin-content/courses/new" || path.endsWith("/courses/new")) {
-    return { view: "detail", courseId: null };
-  }
-  const match = path.match(/\/admin-content\/courses\/([^/]+)$/);
-  if (match) {
-    return { view: "detail", courseId: match[1] };
-  }
-  return { view: "list" };
+  return detectCoursesRoute(window.location.pathname);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,22 +145,21 @@ async function renderListView() {
     return;
   }
 
-  const rows = courses.map(c => {
-    const title = localizedText(c.title) || c.id;
-    const updatedAt = c.updatedAt ?? c.publishedAt ?? null;
-    return `<tr>
-      <td class="col-title">${escapeHtml(title)}</td>
-      <td class="col-level">${certBadge(c.certificationLevel)}</td>
-      <td class="col-module-count">${c.moduleCount ?? 0}</td>
-      <td class="col-updated">${formatDate(updatedAt)}</td>
+  const rows = deriveCourseListRows(courses, {
+    localizeTitle: localizedText,
+    formatDate,
+  }).map((course) => `<tr>
+      <td class="col-title">${escapeHtml(course.title)}</td>
+      <td class="col-level">${certBadge(course.certificationLevel)}</td>
+      <td class="col-module-count">${course.moduleCount}</td>
+      <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
       <td class="col-actions">
         <div class="row-actions">
-          <a href="/admin-content/courses/${encodeURIComponent(c.id)}" class="row-action-btn">Rediger</a>
-          <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(c.id)}" data-course-title="${escapeHtml(title)}">Slett</button>
+          <a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>
+          <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Slett</button>
         </div>
       </td>
-    </tr>`;
-  }).join("");
+    </tr>`).join("");
 
   pageContent.innerHTML = `
     <div class="page-header">
@@ -202,7 +198,7 @@ let pendingDeleteId = null;
 
 function openDeleteDialog(courseId, courseTitle) {
   pendingDeleteId = courseId;
-  deleteDialogText.textContent = `Er du sikker på at du vil slette kurset «${courseTitle}»? Modulene forblir i biblioteket uendret.`;
+  deleteDialogText.textContent = buildCourseDeleteDialogText(courseTitle);
   deleteDialog.showModal();
 }
 

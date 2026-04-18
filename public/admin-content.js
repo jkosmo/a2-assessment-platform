@@ -16,6 +16,10 @@ import {
 import { findLinkedVersion, deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import {
+  buildAdminContentConversationUrl,
+  resolveConversationModuleId,
+} from "/static/admin-content-handoff-routes.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -3885,10 +3889,8 @@ function populateCalibrationStatusOptions() {
 }
 
 function getConversationUrl() {
-  const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || "";
-  return moduleId
-    ? `/admin-content/module/${encodeURIComponent(moduleId)}/conversation?resumeEditing=1`
-    : "/admin-content";
+  const moduleId = resolveConversationModuleId({ selectedModuleId, search: location.search });
+  return buildAdminContentConversationUrl(moduleId, { resumeEditing: true });
 }
 
 function updateBackToChatLink() {
@@ -3899,7 +3901,7 @@ function updateBackToChatLink() {
 
 function navigateToConversation() {
   function doWriteHandoff() {
-    const moduleId = selectedModuleId || new URLSearchParams(location.search).get("moduleId") || null;
+    const moduleId = resolveConversationModuleId({ selectedModuleId, search: location.search }) || null;
     let mcqQuestions = [];
     try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
     writeHandoff({

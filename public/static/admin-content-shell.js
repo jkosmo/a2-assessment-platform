@@ -17,6 +17,13 @@ import {
 import { showToast } from "/static/toast.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import {
+  detectShellRevisionTargets,
+  deriveShellModuleActionModel,
+  deriveShellDraftReadyActionModel,
+  resolveShellResumeBehavior,
+} from "/static/admin-content-shell-state.js";
+import { buildAdminContentAdvancedUrl } from "/static/admin-content-handoff-routes.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -1699,9 +1706,13 @@ async function loadModule(moduleId, options = {}) {
       previewLocale = handoff.previewLocale;
     }
   }
-  const resumedIntoDraft = handoff?.draft
+  const resumeBehavior = resolveShellResumeBehavior({
+    hasHandoffDraft: !!handoff?.draft,
+    resumeEditing,
+  });
+  const resumedIntoDraft = resumeBehavior.shouldApplyHandoffDraft
     ? applyHandoffDraft(handoff.draft)
-    : resumeEditing && createSessionDraftFromLoadedModule();
+    : resumeBehavior.shouldCreateDraftFromLoadedModule && createSessionDraftFromLoadedModule();
   renderPreview();
 
   // Capture data for retranslatable closure
@@ -1726,20 +1737,10 @@ async function loadModule(moduleId, options = {}) {
 }
 
 function detectRevisionTargets(instruction) {
-  const normalized = String(instruction ?? "").toLowerCase();
-  const hasDraft = !!(sessionDraft?.taskText || sessionDraft?.guidanceText);
-  const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
-
-  if (!hasDraft && !hasMcq) return { draft: false, mcq: false };
-  if (hasDraft && !hasMcq) return { draft: true, mcq: false };
-  if (!hasDraft && hasMcq) return { draft: false, mcq: true };
-
-  const mentionsDraft = /\bscenario\b|veiled|guidance|oppgavetekst|task text|task\b|case\b|kontekst|context|wording|formul|tekst|språk|language|oversett|translate/i.test(normalized);
-  const mentionsMcq = /\bmcq\b|flervalg|multiple[- ]choice|spørsmål|questions?|\bq\d+\b|\b\d+[a-e]\b|alternativ|options?|svaralternativ|correct answer|riktig svar|distractor/i.test(normalized);
-
-  if (mentionsDraft && !mentionsMcq) return { draft: true, mcq: false };
-  if (mentionsMcq && !mentionsDraft) return { draft: false, mcq: true };
-  return { draft: true, mcq: true };
+  return detectShellRevisionTargets(instruction, {
+    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.guidanceText),
+    hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
+  });
 }
 
 async function runUnifiedRevision(instruction) {
@@ -1783,10 +1784,17 @@ function showModuleActions() {
   const canUnpublish = !hasDraft && !!bundle?.module?.activeVersionId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
   const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
-  logBot(() => t("shell.module.actionsPrompt"), [
-    { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
-    ...(hasDraft ? [{ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() }] : []),
-    ...(canResumeEditing ? [{
+  const model = deriveShellModuleActionModel({
+    hasDraft,
+    hasMcq,
+    canResumeEditing,
+    canPublish,
+    canUnpublish,
+  });
+  const actionMap = {
+    generateContent: { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
+    generateMcq: { labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() },
+    resumeChatEdit: {
       labelKey: "shell.module.resumeChatEdit",
       action: () => {
         if (createSessionDraftFromLoadedModule()) {
@@ -1795,28 +1803,27 @@ function showModuleActions() {
           showModuleActions();
         }
       },
-    }] : []),
-    { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
-    { labelKey: "shell.module.pickAnother", action: startModulePicker },
-    ...(hasDraft ? [{ labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground }] : []),
-    ...(!hasDraft && canPublish ? [{
+    },
+    editAdvanced: { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
+    pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
+    saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
+    publish: {
       labelKey: "shell.draftReady.publish",
       action: () => confirmHighImpactAction("shell.publish.confirmPrompt", "shell.publish.confirmAction", publishLatestDraftInBackground, showModuleActions, { module: moduleLabel }),
-    }] : []),
-    ...(canUnpublish ? [{
+    },
+    unpublish: {
       labelKey: "shell.module.unpublish",
       action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
-    }] : []),
-  ]);
-  if (hasDraft || hasMcq) {
+    },
+  };
+  logBot(() => t("shell.module.actionsPrompt"), model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
+  if (model.shouldOfferUnifiedRevision) {
     startUnifiedRevisionFlow();
   }
 }
 
 function openAdvancedEditor(moduleId) {
-  const url = moduleId
-    ? `/admin-content/module/${encodeURIComponent(moduleId)}/advanced`
-    : "/admin-content/advanced";
+  const url = buildAdminContentAdvancedUrl(moduleId);
   const hasUnsavedDraft =
     !!sessionDraft &&
     !!(sessionDraft.taskText || sessionDraft.guidanceText || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
@@ -1971,17 +1978,21 @@ function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) 
 function showDraftReadyActions() {
   sessionState = "draft-pending";
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
+  const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
+  const actionMap = {
+    openEditor: { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) },
+    restart: { labelKey: "shell.draftReady.restart", action: startIdle },
+    saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
+  };
   logBot(() => {
     const parts = [t("shell.draftReady.message")];
     if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
-  }, [
-    ...(selectedModuleId ? [{ labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) }] : []),
-    { labelKey: "shell.draftReady.restart", action: startIdle },
-    { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
-  ]);
-  startUnifiedRevisionFlow();
+  }, model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
+  if (model.shouldOpenUnifiedRevision) {
+    startUnifiedRevisionFlow();
+  }
 }
 
 // Separate entry point for MCQ-only generation from the module actions menu

@@ -113,3 +113,13 @@ Large DOM-heavy files are expensive to test directly.
 
 - the most error-prone state logic is testable without DOM setup
 - new unit tests cover those extracted modules
+
+### Progress note
+
+Initial extraction is now done for:
+
+- shell revision-target detection and action ordering
+- advanced/conversational handoff route building
+- course route detection, delete-copy generation, and list-row derivation
+
+This means the next step for this draft item is not more extraction for its own sake, but using the extracted modules to grow DOM/browser coverage around the remaining interaction-heavy flows.

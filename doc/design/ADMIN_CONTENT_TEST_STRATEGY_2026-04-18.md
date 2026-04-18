@@ -125,6 +125,21 @@ Preferred stack:
 4. Add Playwright critical-path flows.
 5. Add dynamic accessibility checks and screenshot baselines.
 
+## Progress Update
+
+The first three foundations are now in motion:
+
+- backlog/issues are documented in the draft issue file
+- pure preview/localization/state logic now has explicit unit coverage
+- shared UI contracts exist for module and course workspaces
+- a first jsdom-based DOM test harness is running for the main admin-content workspaces
+
+The next meaningful gap is no longer "can we test anything at all?", but:
+
+- broader DOM interaction coverage for save/publish/handoff flows
+- real browser coverage with Playwright
+- dynamic WCAG and visual regression on top of that
+
 ## Critical Scenarios We Must Eventually Automate
 
 ### Module authoring
