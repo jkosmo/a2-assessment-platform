@@ -41,10 +41,10 @@ app.get("/", (_request, response) => {
 });
 
 app.get("/healthz", (_request, response) => {
-  response.json({ status: "ok", version: appVersion });
+  response.json({ status: "ok" });
 });
 
-app.get("/version", (_request, response) => {
+app.get("/version", generalApiLimiter, (_request, response) => {
   response.json({ app: appName, version: appVersion });
 });
 
@@ -108,7 +108,7 @@ app.get("/results", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "results.html"));
 });
 
-app.get("/participant/config", (_request, response) => {
+app.get("/participant/config", generalApiLimiter, (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });
 

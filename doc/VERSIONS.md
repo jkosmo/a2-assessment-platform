@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.16 - 2026-04-19
+
+fix(security): bølge 1 pilot-klargjøring — DB-push-fallback, kalibrering rollesjekk, LLM rate limit (#338, #339, #340)
+
+- infra/azure/main.bicep: PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK satt til 'false' for alle miljøer (var 'true' for stage) — forhindrer at db push-fallback omgår migrasjonshistorikk (#340)
+- public/static/admin-content-calibration.js: `hasCalibrationAccess()` leser nå faktiske brukerroller fra `/api/me` i stedet for statisk konfig-default `identityDefaults.roles`; `renderWorkspaceNavigation()` bruker samme kilde; `activeUserRoles` populeres i `init()` (#338)
+- src/middleware/rateLimiting.ts: ny `generateLimiter` (10 req/min per bruker) for LLM-endepunkter; `resetRateLimitState()` inkluderer ny store (#339)
+- src/routes/adminContent.ts: `generateLimiter` lagt til på alle 7 LLM-endepunkter (`/source-material/extract`, `/generate/module-draft`, `/generate/module-draft/revise`, `/generate/module-draft/localize`, `/generate/mcq`, `/generate/mcq/revise`, `/generate/mcq/localize`) (#339)
+- src/app.ts: `/healthz` fjerner versjonsnummer fra respons; `/version` og `/participant/config` får rate-limiting (#339)
+
 ## 0.10.15 - 2026-04-19
 
 fix(samtale): direkteredigering flyttes til preview-panelet (#333)

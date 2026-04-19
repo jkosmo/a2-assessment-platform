@@ -47,6 +47,7 @@ let participantRuntimeConfig = {
 };
 
 let getHeaders = {};
+let activeUserRoles = [];
 
 // ---------------------------------------------------------------------------
 // DOM refs (top-level, always present)
@@ -99,7 +100,7 @@ const allSubmissionStatuses = ["SUBMITTED", "PROCESSING", "SCORED", "UNDER_REVIE
 
 function hasCalibrationAccess() {
   const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
-  const userRoles = new Set(participantRuntimeConfig.identityDefaults?.roles ?? []);
+  const userRoles = new Set(activeUserRoles);
   return [...calibrationRoles].some(r => userRoles.has(r));
 }
 
@@ -578,7 +579,7 @@ function mountCalibrationWorkspace(preferredModuleId) {
 
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
-  const roles = participantRuntimeConfig.identityDefaults?.roles?.join(",") ?? "SUBJECT_MATTER_OWNER";
+  const roles = activeUserRoles.join(",") || "SUBJECT_MATTER_OWNER";
   const allItems = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     roles,
@@ -647,6 +648,13 @@ async function init() {
     getHeaders = buildConsoleHeaders(cfg);
   } catch {
     getHeaders = {};
+  }
+
+  try {
+    const me = await apiFetch("/api/me", getHeaders);
+    activeUserRoles = me?.user?.roles ?? [];
+  } catch {
+    activeUserRoles = [];
   }
 
   buildLocaleSelector();

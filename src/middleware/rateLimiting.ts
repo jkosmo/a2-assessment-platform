@@ -7,6 +7,7 @@ const generalApiStore = new MemoryStore();
 const submissionCreateStore = new MemoryStore();
 const assessmentRunStore = new MemoryStore();
 const mcqSubmitStore = new MemoryStore();
+const generateStore = new MemoryStore();
 
 function resolveRateLimitKey(request: Request) {
   return request.context?.userId ?? request.ip ?? "unknown";
@@ -76,11 +77,21 @@ export const mcqSubmitLimiter = createLimiter({
   },
 });
 
+export const generateLimiter = createLimiter({
+  store: generateStore,
+  limit: 10,
+  message: {
+    error: "rate_limited",
+    message: "Too many generation requests. Retry in 60 seconds.",
+  },
+});
+
 export async function resetRateLimitState() {
   await Promise.all([
     generalApiStore.resetAll?.(),
     submissionCreateStore.resetAll?.(),
     assessmentRunStore.resetAll?.(),
     mcqSubmitStore.resetAll?.(),
+    generateStore.resetAll?.(),
   ]);
 }

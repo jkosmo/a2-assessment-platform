@@ -57,6 +57,7 @@ import {
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
+import { generateLimiter } from "../middleware/rateLimiting.js";
 
 const adminContentRouter = Router();
 
@@ -344,7 +345,7 @@ adminContentRouter.post("/modules/:moduleId/restore", async (request, response) 
 // LLM content generation
 // ---------------------------------------------------------------------------
 
-adminContentRouter.post("/source-material/extract", async (request, response) => {
+adminContentRouter.post("/source-material/extract", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(sourceMaterialUploadBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -379,7 +380,7 @@ adminContentRouter.post("/source-material/extract", async (request, response) =>
   }
 });
 
-adminContentRouter.post("/generate/module-draft", async (request, response) => {
+adminContentRouter.post("/generate/module-draft", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(moduleDraftGenerationBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -398,7 +399,7 @@ adminContentRouter.post("/generate/module-draft", async (request, response) => {
   }
 });
 
-adminContentRouter.post("/generate/module-draft/revise", async (request, response) => {
+adminContentRouter.post("/generate/module-draft/revise", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(moduleDraftRevisionBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -414,7 +415,7 @@ adminContentRouter.post("/generate/module-draft/revise", async (request, respons
   }
 });
 
-adminContentRouter.post("/generate/module-draft/localize", async (request, response) => {
+adminContentRouter.post("/generate/module-draft/localize", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(moduleDraftLocalizationBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -430,7 +431,7 @@ adminContentRouter.post("/generate/module-draft/localize", async (request, respo
   }
 });
 
-adminContentRouter.post("/generate/mcq", async (request, response) => {
+adminContentRouter.post("/generate/mcq", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(mcqGenerationBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -451,7 +452,7 @@ adminContentRouter.post("/generate/mcq", async (request, response) => {
   }
 });
 
-adminContentRouter.post("/generate/mcq/revise", async (request, response) => {
+adminContentRouter.post("/generate/mcq/revise", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(mcqRevisionBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -471,7 +472,7 @@ adminContentRouter.post("/generate/mcq/revise", async (request, response) => {
   }
 });
 
-adminContentRouter.post("/generate/mcq/localize", async (request, response) => {
+adminContentRouter.post("/generate/mcq/localize", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(mcqLocalizationBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
