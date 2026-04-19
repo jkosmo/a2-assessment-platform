@@ -256,9 +256,8 @@ describe("shell JS contracts", () => {
     const i18n = readFile("public/i18n/admin-content-translations.js");
     const keys = [
       "shell.directEdit.action",
-      "shell.directEdit.titlePrompt",
-      "shell.directEdit.scenarioPrompt",
-      "shell.directEdit.guidancePrompt",
+      "shell.directEdit.editingBadge",
+      "shell.directEdit.editingHint",
       "shell.directEdit.submit",
       "shell.directEdit.translating",
       "shell.directEdit.done",
@@ -269,6 +268,22 @@ describe("shell JS contracts", () => {
       const count = (i18n.match(new RegExp(key.replace(/\./g, "\\."), "g")) ?? []).length;
       expect(count).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it("enterPreviewEditMode renders editable fields directly in preview pane", () => {
+    const js = readFile("public/static/admin-content-shell.js");
+    // Must use previewContent.innerHTML directly, not logForm — fields must be in preview pane.
+    expect(js).toContain("function enterPreviewEditMode");
+    expect(js).toContain("previewEditTitle");
+    expect(js).toContain("previewEditTaskText");
+    expect(js).toContain("previewEditGuidanceText");
+    expect(js).toContain("preview-edit-textarea");
+  });
+
+  it("preview-pane--editing CSS class locks locale bar during edit", () => {
+    const html = readFile("public/admin-content.html");
+    expect(html).toContain("preview-pane--editing");
+    expect(html).toMatch(/preview-pane--editing[^{]*\{[^}]*pointer-events:\s*none/);
   });
 
   it("PATCH /modules/:id/title route exists in backend router", () => {

@@ -45,6 +45,29 @@
       .preview-mcq-meta-label { font-weight: 700; color: var(--color-text); }
       .preview-empty { color: var(--color-meta); font-style: italic; }
 
+      /* Preview edit mode — fields match preview visual language exactly */
+      .preview-pane--editing .preview-locale-btn { opacity: 0.4; pointer-events: none; }
+      .preview-edit-title {
+        font-size: 18px; font-weight: 700; color: var(--color-text);
+        border: none; border-bottom: 2px solid var(--color-blue);
+        background: transparent; width: 100%; outline: none;
+        font-family: inherit; padding: 0 0 2px;
+      }
+      .preview-edit-textarea {
+        display: block; width: 100%; box-sizing: border-box;
+        font-size: 14px; font-family: inherit; line-height: 1.6;
+        color: var(--color-text); background: var(--color-module-summary-bg);
+        border: 1px solid var(--color-blue); border-radius: var(--radius-card);
+        padding: var(--space-1); resize: vertical; min-height: 100px;
+        white-space: pre-wrap;
+      }
+      .preview-edit-textarea--secondary { color: var(--color-meta); }
+      .preview-edit-actions {
+        display: flex; gap: var(--space-1); justify-content: flex-end;
+        margin-top: var(--space-2); padding-top: var(--space-1);
+        border-top: 1px solid var(--color-border-soft);
+      }
+
       /* Module status badges (shared with advanced editor) */
       .module-status-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; white-space: nowrap; }
       .module-status-badge.live { background: #e6f4ea; color: #12613a; }

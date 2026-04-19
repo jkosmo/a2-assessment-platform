@@ -7,6 +7,17 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.15 - 2026-04-19
+
+fix(samtale): direkteredigering flyttes til preview-panelet (#333)
+
+Erstatter steg-for-steg chat-skjema fra #332 med inline redigering direkte i forhåndsvisningspanelet. Alle tre felt (tittel, scenario, forventning) vises simultant som redigerbare elementer med samme visuelle stil som eksisterende preview-klasser. Locale-bar låses under redigering. Lokalisering og lagring er uendret.
+
+- public/admin-content.html: CSS for `.preview-pane--editing`, `.preview-edit-title`, `.preview-edit-textarea`, `.preview-edit-actions`
+- public/static/admin-content-shell.js: ny `enterPreviewEditMode()` — setter previewContent.innerHTML med redigerbare felt og Bekreft/Avbryt; `startDirectEditFlow()` delegerer til denne
+- public/i18n/admin-content-translations.js: nye nøkler `shell.directEdit.editingBadge` og `shell.directEdit.editingHint` for en-GB, nb, nn
+- test/admin-content-ui-contracts.test.js: 2 nye kontrakter (32 totalt)
+
 ## 0.10.14 - 2026-04-18
 
 feat(samtale): direkteredigering av tittel, scenario og forventning med automatisk oversettelse (#332)

@@ -1816,6 +1816,10 @@ function startUnifiedRevisionFlow() {
 }
 
 function startDirectEditFlow() {
+  enterPreviewEditMode();
+}
+
+function enterPreviewEditMode() {
   const currentTitle = localizeValue(sessionDraft?.title ?? bundle?.module?.title) || "";
   const currentTaskText = localizeValueForLocale(
     sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "",
@@ -1826,15 +1830,60 @@ function startDirectEditFlow() {
     currentLocale,
   );
 
-  function onGuidanceDone(newGuidanceText) {
-    const titleAtCapture = onGuidanceDone._capturedTitle;
-    const taskTextAtCapture = onGuidanceDone._capturedTaskText;
+  // Lock locale bar and signal edit mode visually
+  const previewPaneEl = document.querySelector(".preview-pane");
+  if (previewPaneEl) previewPaneEl.classList.add("preview-pane--editing");
+
+  // Build edit-mode HTML using same visual classes as preview
+  const escapedTitle = escapeHtml(currentTitle);
+  const escapedTask = escapeHtml(currentTaskText);
+  const escapedGuidance = escapeHtml(currentGuidanceText);
+  const labelTask = escapeHtml(t("adminContent.moduleVersion.taskText"));
+  const labelGuidance = escapeHtml(t("adminContent.moduleVersion.guidanceText"));
+
+  previewContent.innerHTML = `
+    <div class="preview-module-header">
+      <input id="previewEditTitle" class="preview-edit-title" value="${escapedTitle}"
+        aria-label="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
+      <span class="module-status-badge draft">${escapeHtml(t("shell.directEdit.editingBadge"))}</span>
+    </div>
+    <div class="preview-section-label">${labelTask}</div>
+    <textarea id="previewEditTaskText" class="preview-edit-textarea"
+      aria-label="${labelTask}">${escapedTask}</textarea>
+    <div class="preview-section-label">${labelGuidance}</div>
+    <textarea id="previewEditGuidanceText" class="preview-edit-textarea preview-edit-textarea--secondary"
+      aria-label="${labelGuidance}">${escapedGuidance}</textarea>
+    <div class="preview-edit-actions">
+      <button id="previewEditCancel" class="btn-secondary">${escapeHtml(t("shell.action.cancel"))}</button>
+      <button id="previewEditConfirm" class="btn-primary">${escapeHtml(t("shell.directEdit.submit"))}</button>
+    </div>
+  `.trim();
+
+  scrollPreviewToTop();
+  document.getElementById("previewEditTitle")?.focus();
+
+  function exitEditMode() {
+    if (previewPaneEl) previewPaneEl.classList.remove("preview-pane--editing");
+    renderPreview();
+  }
+
+  document.getElementById("previewEditCancel").addEventListener("click", () => {
+    exitEditMode();
+    if (sessionDraft) showDraftReadyActions(); else showModuleActions();
+  });
+
+  document.getElementById("previewEditConfirm").addEventListener("click", () => {
+    const newTitle = document.getElementById("previewEditTitle").value.trim() || currentTitle;
+    const newTaskText = document.getElementById("previewEditTaskText").value.trim() || currentTaskText;
+    const newGuidanceText = document.getElementById("previewEditGuidanceText").value.trim() || currentGuidanceText;
+
+    exitEditMode();
 
     const abort = startGeneration();
     const slot = logProgress(() => t("shell.directEdit.translating"));
     slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
-    localizeDraftAcrossLocalesWithTitle(titleAtCapture, taskTextAtCapture, newGuidanceText, currentLocale)
+    localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, currentLocale)
       .then((localized) => {
         generationAbort = null;
         sessionDraft = buildPreviewCandidate({
@@ -1844,15 +1893,14 @@ function startDirectEditFlow() {
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
-        scrollPreviewToBottom();
         logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.done"))}</strong>`);
         showDraftReadyActions();
       })
       .catch(() => {
         generationAbort = null;
         sessionDraft = buildPreviewCandidate({
-          title: buildLocalizedTextMap(currentLocale, titleAtCapture),
-          taskText: buildLocalizedTextMap(currentLocale, taskTextAtCapture),
+          title: buildLocalizedTextMap(currentLocale, newTitle),
+          taskText: buildLocalizedTextMap(currentLocale, newTaskText),
           guidanceText: buildLocalizedTextMap(currentLocale, newGuidanceText),
         });
         sessionState = "draft-pending";
@@ -1860,46 +1908,9 @@ function startDirectEditFlow() {
         logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.translateError")));
         showDraftReadyActions();
       });
-  }
+  });
 
-  function onScenarioDone(newTaskText) {
-    const capturedTitle = onScenarioDone._capturedTitle;
-    onGuidanceDone._capturedTitle = capturedTitle;
-    onGuidanceDone._capturedTaskText = newTaskText;
-    logForm(
-      "textarea",
-      () => `<strong>${escapeHtml(t("shell.directEdit.guidancePrompt"))}</strong>`,
-      "shell.directEdit.guidancePlaceholder",
-      "shell.directEdit.submit",
-      onGuidanceDone,
-      currentGuidanceText,
-    );
-  }
-
-  function onTitleDone(newTitle) {
-    onScenarioDone._capturedTitle = newTitle;
-    onGuidanceDone._capturedTitle = newTitle;
-    logForm(
-      "textarea",
-      () => `<strong>${escapeHtml(t("shell.directEdit.scenarioPrompt"))}</strong>`,
-      "shell.directEdit.scenarioPlaceholder",
-      "shell.directEdit.submit",
-      onScenarioDone,
-      currentTaskText,
-    );
-  }
-
-  logBot(() => `<strong>${escapeHtml(t("shell.directEdit.titlePrompt"))}</strong>`, [
-    { labelKey: "shell.action.cancel", action: sessionDraft ? showDraftReadyActions : showModuleActions },
-  ]);
-  logForm(
-    "text",
-    () => "",
-    "shell.directEdit.titlePlaceholder",
-    "shell.directEdit.submit",
-    onTitleDone,
-    currentTitle,
-  );
+  logBot(() => escapeHtml(t("shell.directEdit.editingHint")));
 }
 
 function showModuleActions() {
