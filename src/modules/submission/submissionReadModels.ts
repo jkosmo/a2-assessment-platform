@@ -123,8 +123,6 @@ export function toSubmissionResultView(submission: OwnedSubmission) {
     },
     decision,
     latestAppeal,
-    llmEvaluation,
-    mcqAttempt,
     participantGuidance: {
       decisionReason: decision?.decisionReason ?? null,
       confidenceNote: llmEvaluation?.confidenceNote ?? null,

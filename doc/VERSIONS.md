@@ -7,6 +7,20 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.17 - 2026-04-19
+
+fix(security): bølge 2 pilot-klargjøring — deltaker-payload, admin-overtakelse, rutekartkart (#335, #336, #344)
+
+- src/modules/submission/submissionReadModels.ts: `toSubmissionResultView` fjerner `llmEvaluation` og `mcqAttempt` fra deltaker-responsen — rå evalueringssignaler er nå kun synlig internt; `participantGuidance` beholder all nødvendig kuratert informasjon (#335)
+- src/routes/assessments.ts: `GET /api/assessments/:submissionId` fjerner `latestEvaluation` fra deltaker-polling-respons (#335)
+- test/m1-core-flow.test.ts: oppdatert kontraktassertion — bekrefter at `llmEvaluation` og `mcqAttempt` er fraværende, `participantGuidance` er tilstede (#335)
+- test/unit/read-models.test.ts: ny kontraktsassertion bekrefter fravær av råfelt i `toSubmissionResultView` (#335)
+- src/modules/review/manualReviewService.ts: `claimManualReview` og `finalizeManualReviewOverride` får `isAdmin`-parameter; admin kan overta allerede tildelte saker med auditlogging av forrige eier (#336)
+- src/modules/appeal/appealService.ts: `claimAppeal` og `resolveAppeal` får `isAdmin`-parameter; samme mønster som review (#336)
+- src/routes/reviews.ts, src/routes/appeals.ts: leser `ADMINISTRATOR`-rolle fra `request.context.roles`, sender `isAdmin` til tjenestene (#336)
+- src/observability/auditEvents.ts: nye audit-handlinger `manualReview.adminTakeover` og `appeal.adminTakeover` med metadata for forrige og ny eier (#336)
+- doc/route-map.md: ny fil — pilot-rute/workspace-kart med kanoniske ruter, legacy-ruter (demarkert), og API-basistier (#344)
+
 ## 0.10.16 - 2026-04-19
 
 fix(security): bølge 1 pilot-klargjøring — DB-push-fallback, kalibrering rollesjekk, LLM rate limit (#338, #339, #340)

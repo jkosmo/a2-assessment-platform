@@ -67,8 +67,9 @@ reviewsRouter.post("/:reviewId/claim", async (request, response, next) => {
     return;
   }
 
+  const isAdmin = (request.context?.roles ?? []).includes("ADMINISTRATOR");
   try {
-    const review = await claimManualReview(request.params.reviewId, userId);
+    const review = await claimManualReview(request.params.reviewId, userId, isAdmin);
     response.json({ review });
   } catch (error) {
     next(error);
@@ -88,10 +89,12 @@ reviewsRouter.post("/:reviewId/override", async (request, response, next) => {
     return;
   }
 
+  const isAdmin = (request.context?.roles ?? []).includes("ADMINISTRATOR");
   try {
     const result = await finalizeManualReviewOverride({
       reviewId: request.params.reviewId,
       reviewerId: userId,
+      isAdmin,
       ...parsed.data,
     });
     response.json(result);
