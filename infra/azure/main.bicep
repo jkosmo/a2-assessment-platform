@@ -1085,6 +1085,7 @@ resource appealOverdueAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' 
 
 output webAppName string = webApp.name
 output workerAppName string = workerApp.name
+output parserAppName string = parserApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name

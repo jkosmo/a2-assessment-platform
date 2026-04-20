@@ -49,7 +49,8 @@ param(
   [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
   [string]$AcsEmailSenderDisplayName = "A2 Assessment Platform",
   [string]$BudgetContactEmail = "",
-  [double]$MonthlyBudgetAmount = 30
+  [double]$MonthlyBudgetAmount = 30,
+  [string]$ParserWorkerAuthKey = ""
 )
 
 Set-StrictMode -Version Latest
@@ -57,6 +58,12 @@ $ErrorActionPreference = "Stop"
 
 if (-not $ResourceGroupName) {
   $ResourceGroupName = "rg-a2-assessment-$EnvironmentName"
+}
+
+if (-not $ParserWorkerAuthKey) {
+  $randomBytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+  $ParserWorkerAuthKey = ([System.BitConverter]::ToString($randomBytes)).Replace("-", "").ToLower()
+  Write-Host "Generated ParserWorkerAuthKey (store securely for future re-deployments)."
 }
 
 function Get-TempBasePath {
@@ -259,12 +266,14 @@ $deployment = az deployment group create `
               participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
+              parserWorkerAuthKey=$ParserWorkerAuthKey `
   --parameters "@$ipParamsFile" `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 
 $webAppName = $deployment.webAppName.value
 $workerAppName = $deployment.workerAppName.value
+$parserAppName = $deployment.parserAppName.value
 $postgresServerName = $deployment.postgresServerName.value
 $postgresDatabaseName = $deployment.postgresDatabaseName.value
 
@@ -273,6 +282,9 @@ if (-not $webAppName) {
 }
 if (-not $workerAppName) {
   throw "workerAppName output missing from deployment."
+}
+if (-not $parserAppName) {
+  throw "parserAppName output missing from deployment."
 }
 
 $tempBasePath = Get-TempBasePath
@@ -319,6 +331,7 @@ if ($IsLinux -or $IsMacOS) {
 
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
 
 function Wait-Healthy {
   param([string]$Url, [string]$Label)
@@ -342,6 +355,7 @@ function Wait-Healthy {
 
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App"
+Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App"
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
