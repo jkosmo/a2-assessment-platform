@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.18 - 2026-04-20
+
+fix(infra): Azure secrets og nettverksherding — Key Vault, PostgreSQL IP-allowlist, RBAC (#334)
+
+- infra/azure/main.bicep: `postgresFirewallAllowAzure` (`0.0.0.0/0.0.0.0`) erstattet med `postgresFirewallRules`-loop drevet av ny `dbAllowedIpAddresses`-parameter
+- infra/azure/main.bicep: ny `keyVault`-ressurs (Standard SKU, RBAC-modus, soft-delete 7 dager)
+- infra/azure/main.bicep: KV-hemmeligheter `DATABASE-URL`, `AZURE-OPENAI-API-KEY` (betinget), `ACS-CONNECTION-STRING` (betinget) erstatter direkte parameter-verdier i app settings
+- infra/azure/main.bicep: `DATABASE_URL`, `AZURE_OPENAI_API_KEY`, `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING` i webApp og workerApp er nå KV-referanser (`@Microsoft.KeyVault(VaultName=...;SecretName=...)`)
+- infra/azure/main.bicep: `webAppKvRole` og `workerAppKvRole` rolle-tildelinger — `Key Vault Secrets User` for begge managed identities
+- infra/azure/main.bicep: `keyVaultName` lagt til outputs
+- infra/azure/deploy.sh: nytt deploy-script som henter App Service outbound IPs automatisk og sender dem som `dbAllowedIpAddresses`; inkluderer RBAC-audit-instruksjoner (INFRA-004)
+
 ## 0.10.17 - 2026-04-19
 
 fix(security): bølge 2 pilot-klargjøring — deltaker-payload, admin-overtakelse, rutekartkart (#335, #336, #344)

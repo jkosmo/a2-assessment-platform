@@ -168,6 +168,9 @@ param participantNotificationWebhookTimeoutMs int = 5000
 @description('Display name used as the sender name in ACS email notifications.')
 param acsEmailSenderDisplayName string = 'A2 Assessment Platform'
 
+@description('Allowed outbound IP address ranges for PostgreSQL firewall. Each element: { name: string, startIpAddress: string, endIpAddress: string }. Query from App Service outbound IPs before deploying.')
+param dbAllowedIpAddresses array = []
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
@@ -182,6 +185,7 @@ var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')
 var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
 var createAcsEmail = participantNotificationChannel == 'acs_email'
 var postgresHost = '${postgresServerName}.postgres.database.azure.com'
+var keyVaultName = 'a2-${envCode}-kv-${suffix}'
 var postgresConnectionString = 'postgresql://${uriComponent(postgresAdministratorLogin)}:${uriComponent(postgresAdministratorPassword)}@${postgresHost}:5432/${postgresDatabaseName}?schema=public&sslmode=require'
 var llmFailureAlertQuery = '''
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
@@ -349,12 +353,61 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
   }
 }
 
-resource postgresFirewallAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = {
-  parent: postgresServer
-  name: 'allow-azure-services'
+resource postgresFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = [
+  for ip in dbAllowedIpAddresses: {
+    parent: postgresServer
+    name: ip.name
+    properties: {
+      startIpAddress: ip.startIpAddress
+      endIpAddress: ip.endIpAddress
+    }
+  }
+]
+
+// ---------------------------------------------------------------------------
+// Key Vault — secrets storage (INFRA-002)
+// ---------------------------------------------------------------------------
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: keyVaultName
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
   properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
+    sku: { family: 'A', name: 'standard' }
+    tenantId: tenant().tenantId
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+    enablePurgeProtection: false
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource kvSecretDatabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'DATABASE-URL'
+  properties: {
+    value: postgresConnectionString
+  }
+}
+
+resource kvSecretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(azureOpenAiApiKey)) {
+  parent: keyVault
+  name: 'AZURE-OPENAI-API-KEY'
+  properties: {
+    value: azureOpenAiApiKey
+  }
+}
+
+resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (createAcsEmail) {
+  parent: keyVault
+  name: 'ACS-CONNECTION-STRING'
+  properties: {
+    value: acsService.listKeys().primaryConnectionString
   }
 }
 
@@ -398,7 +451,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'DATABASE_URL'
-          value: postgresConnectionString
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
         {
           name: 'AUTH_MODE'
@@ -438,7 +491,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_OPENAI_API_KEY'
-          value: azureOpenAiApiKey
+          value: !empty(azureOpenAiApiKey) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)' : ''
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -498,7 +551,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
-          value: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+          value: createAcsEmail ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ACS-CONNECTION-STRING)' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER'
@@ -597,7 +650,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'DATABASE_URL'
-          value: postgresConnectionString
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
         {
           name: 'LLM_MODE'
@@ -613,7 +666,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_OPENAI_API_KEY'
-          value: azureOpenAiApiKey
+          value: !empty(azureOpenAiApiKey) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)' : ''
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -673,7 +726,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
-          value: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+          value: createAcsEmail ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ACS-CONNECTION-STRING)' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER'
@@ -717,6 +770,32 @@ resource workerAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
         enabled: true
       }
     ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Key Vault RBAC — Key Vault Secrets User for both app identities (INFRA-002)
+// ---------------------------------------------------------------------------
+
+var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e0'
+
+resource webAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, webApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, workerApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -907,3 +986,4 @@ output appInsightsConnectionString string = appInsights.properties.ConnectionStr
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
 output postgresServerName string = postgresServer.name
 output postgresDatabaseName string = postgresDatabase.name
+output keyVaultName string = keyVault.name
