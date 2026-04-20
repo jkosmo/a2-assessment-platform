@@ -777,7 +777,7 @@ resource workerAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // Key Vault RBAC — Key Vault Secrets User for both app identities (INFRA-002)
 // ---------------------------------------------------------------------------
 
-var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e0'
+var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 
 resource webAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: keyVault
