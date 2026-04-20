@@ -157,6 +157,34 @@ az group create `
   --tags environment=$EnvironmentName costCenter=$CostCenter owner=$Owner | Out-Null
 Assert-LastExitCode "az group create"
 
+# Query App Service outbound IPs for PostgreSQL firewall allowlist (#334)
+$envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
+Write-Host "Querying App Service outbound IPs for PostgreSQL firewall allowlist..."
+
+$existingWebApp = (az webapp list -g $ResourceGroupName --query "[?contains(name,'${envCode}-app')].name" -o tsv 2>$null)
+$existingWorkerApp = (az webapp list -g $ResourceGroupName --query "[?contains(name,'${envCode}-worker')].name" -o tsv 2>$null)
+$existingWebApp = if ($existingWebApp) { ($existingWebApp -split "`n")[0].Trim() } else { "" }
+$existingWorkerApp = if ($existingWorkerApp) { ($existingWorkerApp -split "`n")[0].Trim() } else { "" }
+
+$dbAllowedIpAddresses = @()
+if ($existingWebApp -and $existingWorkerApp) {
+  Write-Host "Found App Services: $existingWebApp, $existingWorkerApp"
+  $webIps = (az webapp show -n $existingWebApp -g $ResourceGroupName --query "outboundIpAddresses" -o tsv).Split(",")
+  $workerIps = (az webapp show -n $existingWorkerApp -g $ResourceGroupName --query "outboundIpAddresses" -o tsv).Split(",")
+  $allIps = ($webIps + $workerIps) | Where-Object { $_ } | Sort-Object -Unique
+  $i = 0
+  foreach ($ip in $allIps) {
+    $dbAllowedIpAddresses += @{ name = "app-outbound-$i"; startIpAddress = $ip; endIpAddress = $ip }
+    $i++
+  }
+  Write-Host "Firewall rules: $i IPs"
+} else {
+  Write-Host "NOTE: App Services not yet deployed — dbAllowedIpAddresses will be empty on first deploy."
+}
+
+$ipParamsFile = Join-Path (Get-TempBasePath) "a2-ip-params-$EnvironmentName.json"
+@{ dbAllowedIpAddresses = $dbAllowedIpAddresses } | ConvertTo-Json -Depth 5 | Set-Content -Path $ipParamsFile -Encoding UTF8
+
 if ($ParticipantNotificationChannel -eq "acs_email") {
   Write-Host "Checking Microsoft.Communication provider registration (required for acs_email channel)..."
   $providerState = (az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv 2>$null)
@@ -227,6 +255,7 @@ $deployment = az deployment group create `
               participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
+  --parameters "@$ipParamsFile" `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 
