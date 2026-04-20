@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.20 - 2026-04-20
+
+sec(infra): parser runtime isolation — kilde-material parsing i separat App Service uten DB/AI-hemmeligheter (#341)
+
+- src/parserApp.ts: ny Express-app (thin) med HMAC-SHA256 auth-middleware, in-memory jobbstore (TTL 10 min), `POST /parse` og `GET /parse/:jobId`
+- src/clients/parserWorkerClient.ts: ny — HMAC-signering, HTTP-klient; lokal fallback (in-process) når `PARSER_WORKER_URL` ikke er satt
+- src/config/env.ts: `PARSER_WORKER_URL` og `PARSER_WORKER_AUTH_KEY` (valgfrie)
+- src/routes/adminContent.ts: `POST /source-material/extract` returnerer nå `202 { jobId }`; ny `GET /source-material/extract/:jobId` poll-endepunkt
+- public/static/admin-content-shell.js: synkront kall erstattet med 30×1s poll-løkke
+- scripts/runtime/parserStartup.mjs: ny oppstartsscript for parser App Service (ingen DB-migrering)
+- infra/azure/main.bicep: ny `parserApp`-ressurs uten DATABASE_URL/OpenAI/ACS; `parserWorkerAuthKey`-parameter; KV-hemmelighet `PARSER-WORKER-AUTH-KEY`; `PARSER_WORKER_URL` + `PARSER_WORKER_AUTH_KEY` lagt til i webApp
+- test/m2-source-material-extract.test.ts: integrasjonstester for async extract-flyt
+
 ## 0.10.19 - 2026-04-20
 
 sec(api): ressurseierskap, rapportscoping og revisjons-personvern (#337)

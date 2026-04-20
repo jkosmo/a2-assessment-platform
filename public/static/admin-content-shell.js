@@ -427,7 +427,7 @@ function _domFormFields(entry) {
 
       try {
         const contentBase64 = await readFileAsBase64(file);
-        const result = await apiFetch(
+        const { jobId } = await apiFetch(
           "/api/admin/content/source-material/extract",
           getHeaders,
           {
@@ -439,7 +439,20 @@ function _domFormFields(entry) {
             }),
           },
         );
-        const text = result.extractedText ?? "";
+
+        let poll;
+        for (let i = 0; i < 30; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          poll = await apiFetch(
+            `/api/admin/content/source-material/extract/${jobId}`,
+            getHeaders,
+          );
+          if (poll.status === "done" || poll.status === "failed") break;
+        }
+        if (!poll || poll.status === "pending") throw new Error("parse_timeout");
+        if (poll.status === "failed") throw new Error(poll.error ?? "parse_failed");
+
+        const text = poll.extractedText ?? "";
         const trimmedText = text.trim();
         if (!trimmedText) {
           throw new Error("empty_extracted_text");

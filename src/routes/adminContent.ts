@@ -45,11 +45,9 @@ import {
   reviseMcqQuestions,
 } from "../modules/adminContent/llmContentGenerationService.js";
 import {
-  extractSourceMaterialText,
-  SourceMaterialExtractionError,
-  SourceMaterialTooLargeError,
-  UnsupportedSourceMaterialFormatError,
-} from "../modules/adminContent/sourceMaterialExtractionService.js";
+  submitParseJob,
+  getParsedResult,
+} from "../clients/parserWorkerClient.js";
 import {
   toCreateModuleInput,
   toCreatePromptTemplateVersionInput,
@@ -396,28 +394,23 @@ adminContentRouter.post("/source-material/extract", generateLimiter, async (requ
   }
 
   try {
-    const result = await extractSourceMaterialText(data);
+    const jobId = await submitParseJob(data);
+    response.status(202).json({ jobId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "source_material_extract_failed", message });
+  }
+});
+
+adminContentRouter.get("/source-material/extract/:jobId", generateLimiter, async (request, response) => {
+  try {
+    const result = await getParsedResult(request.params.jobId as string);
+    if (!result) {
+      response.status(404).json({ error: "job_not_found" });
+      return;
+    }
     response.json(result);
   } catch (err) {
-    if (err instanceof UnsupportedSourceMaterialFormatError) {
-      response.status(400).json({
-        error: "unsupported_file_type",
-        message: "Supported file formats: .txt, .md, .pdf, .docx, .doc, .pptx, .ppt, .rtf, .odt, .odp, .ods.",
-      });
-      return;
-    }
-    if (err instanceof SourceMaterialTooLargeError) {
-      response.status(400).json({
-        error: "file_too_large",
-        message: "The uploaded file is too large. Use a file up to 2 MB.",
-      });
-      return;
-    }
-    if (err instanceof SourceMaterialExtractionError) {
-      response.status(400).json({ error: "source_material_extract_failed", message: err.message });
-      return;
-    }
-
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "source_material_extract_failed", message });
   }

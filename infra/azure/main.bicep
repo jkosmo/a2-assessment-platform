@@ -171,11 +171,16 @@ param acsEmailSenderDisplayName string = 'A2 Assessment Platform'
 @description('Allowed outbound IP address ranges for PostgreSQL firewall. Each element: { name: string, startIpAddress: string, endIpAddress: string }. Query from App Service outbound IPs before deploying.')
 param dbAllowedIpAddresses array = []
 
+@description('HMAC shared secret for service-to-service auth between web/worker apps and the parser worker. Must be a random 32-byte hex string.')
+@secure()
+param parserWorkerAuthKey string
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
 var webAppName = toLower('${appNamePrefix}-${envCode}-app-${suffix}')
 var workerAppName = toLower('${appNamePrefix}-${envCode}-worker-${suffix}')
+var parserAppName = toLower('${appNamePrefix}-${envCode}-parser-${suffix}')
 var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
@@ -411,6 +416,14 @@ resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   }
 }
 
+resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'PARSER-WORKER-AUTH-KEY'
+  properties: {
+    value: parserWorkerAuthKey
+  }
+}
+
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   name: webAppName
   location: location
@@ -568,6 +581,14 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK'
           value: environmentName == 'production' ? 'false' : 'true'
+        }
+        {
+          name: 'PARSER_WORKER_URL'
+          value: 'https://${parserApp.properties.defaultHostName}'
+        }
+        {
+          name: 'PARSER_WORKER_AUTH_KEY'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARSER-WORKER-AUTH-KEY)'
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
@@ -756,6 +777,89 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
 resource workerAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   name: '${workerAppName}-diagnostics'
   scope: workerApp
+  properties: {
+    workspaceId: logAnalyticsWorkspace.id
+    logs: [
+      {
+        category: 'AppServiceConsoleLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parser worker App Service — no DB or AI secrets (INFRA-341)
+// ---------------------------------------------------------------------------
+
+resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: parserAppName
+  location: location
+  kind: 'app,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'NODE|22-lts'
+      appCommandLine: 'node scripts/runtime/parserStartup.mjs'
+      alwaysOn: true
+      ftpsState: 'Disabled'
+      minTlsVersion: '1.2'
+      appSettings: [
+        {
+          name: 'APP_ROLE'
+          value: 'parser'
+        }
+        {
+          name: 'NODE_ENV'
+          value: environmentName == 'production' ? 'production' : 'development'
+        }
+        {
+          name: 'PORT'
+          value: '8080'
+        }
+        {
+          name: 'WEBSITES_PORT'
+          value: '8080'
+        }
+        {
+          name: 'PARSER_WORKER_AUTH_KEY'
+          value: parserWorkerAuthKey
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'false'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+      ]
+    }
+  }
+}
+
+resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: '${parserAppName}-diagnostics'
+  scope: parserApp
   properties: {
     workspaceId: logAnalyticsWorkspace.id
     logs: [

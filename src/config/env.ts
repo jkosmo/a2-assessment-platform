@@ -60,6 +60,14 @@ const envSchema = z.object({
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   ASSESSMENT_JOB_LEASE_DURATION_MS: z.coerce.number().int().positive().default(300000),
   ASSESSMENT_JOB_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(600000),
+  PARSER_WORKER_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().url().optional(),
+  ),
+  PARSER_WORKER_AUTH_KEY: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -98,6 +106,11 @@ if (
   console.error(
     "AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING and ACS_EMAIL_SENDER are required when PARTICIPANT_NOTIFICATION_CHANNEL=acs_email",
   );
+  process.exit(1);
+}
+
+if (env.PARSER_WORKER_URL && !env.PARSER_WORKER_AUTH_KEY) {
+  console.error("PARSER_WORKER_AUTH_KEY is required when PARSER_WORKER_URL is set");
   process.exit(1);
 }
 
