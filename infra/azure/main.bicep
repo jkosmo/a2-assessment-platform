@@ -567,7 +567,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK'
-          value: 'false'
+          value: environmentName == 'production' ? 'false' : 'true'
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
