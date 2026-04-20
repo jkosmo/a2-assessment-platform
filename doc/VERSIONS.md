@@ -7,6 +7,19 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.19 - 2026-04-20
+
+sec(api): ressurseierskap, rapportscoping og revisjons-personvern (#337)
+
+- prisma/schema.prisma + migrering: `Module.createdById` (nullable) + `User.createdModules`-relasjon
+- src/routes/adminContent.ts: `assertModuleOwnership()` — SMO kan kun mutere egne moduler; ADMINISTRATOR har alltid tilgang; legacy-moduler (createdById=null) er admin-only
+- src/modules/adminContent/adminContentRepository.ts: ny `findModuleOwner()`-metode
+- src/modules/adminContent/adminContentCommands.ts: `createModule` setter `createdById` fra `actorId`
+- src/config/capabilities.ts: `SUBJECT_MATTER_OWNER` fjernet fra `reports`-kapabilitet (API-003)
+- src/services/auditService.ts: `actor.email` strippes fra revisjonslogg når kallerens rolle mangler `hasAuditReadAccess` (API-005)
+- test/m2-module-ownership.test.ts: to-SMO-isolasjonstest + legacy-modul-test
+- test/m2-audit-pipeline.test.ts: API-005-test (participant ser ikke actor.email; reviewer ser det)
+
 ## 0.10.18 - 2026-04-20
 
 fix(infra): Azure secrets og nettverksherding — Key Vault, PostgreSQL IP-allowlist, RBAC (#334)

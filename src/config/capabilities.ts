@@ -80,7 +80,7 @@ export const API_ROUTE_CAPABILITIES = [
   {
     id: "reports",
     prefix: "/api/reports",
-    roles: [AppRole.ADMINISTRATOR, AppRole.REPORT_READER, AppRole.SUBJECT_MATTER_OWNER],
+    roles: [AppRole.ADMINISTRATOR, AppRole.REPORT_READER],
   },
   {
     id: "admin_content",

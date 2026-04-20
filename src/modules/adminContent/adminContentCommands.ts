@@ -83,6 +83,7 @@ export async function createModule(input: CreateModuleInput) {
     certificationLevel: input.certificationLevel,
     validFrom: input.validFrom,
     validTo: input.validTo,
+    createdById: input.actorId,
   });
 
   await recordAuditEvent({

@@ -21,6 +21,13 @@ const adminHeaders = {
   "x-user-name": "Platform Admin",
 };
 
+const reviewerHeaders = {
+  "x-user-id": "reviewer-audit-1",
+  "x-user-email": "reviewer@company.com",
+  "x-user-name": "Audit Reviewer",
+  "x-user-roles": "REVIEWER",
+};
+
 describe("MVP audit event pipeline", () => {
   afterAll(async () => {
     await prisma.$disconnect();
@@ -139,6 +146,51 @@ describe("MVP audit event pipeline", () => {
       .set(adminHeaders);
     expect(adminResponse.status).toBe(200);
     expect(adminResponse.body.submissionId).toBe(submissionId);
+  });
+
+  it("API-005: strips actor.email from audit events for participants; retains it for privileged callers", async () => {
+    const modulesResponse = await request(app).get("/api/modules?includeCompleted=true").set(participantHeaders);
+    expect(modulesResponse.status).toBe(200);
+    const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
+      (m) => m.title === "Generative AI Foundations",
+    );
+    if (!seedModule) throw new Error("Seed module not found.");
+
+    const submissionResponse = await request(app)
+      .post("/api/submissions")
+      .set(participantHeaders)
+      .send({
+        moduleId: seedModule.id,
+        deliveryType: "text",
+        responseJson: {
+          response: "API-005 audit privacy test submission.",
+          reflection: "Checking email exposure in audit trail.",
+          promptExcerpt: "Privacy test.",
+        },
+      });
+    expect(submissionResponse.status).toBe(201);
+    const submissionId = submissionResponse.body.submission.id as string;
+
+    // Participant reads their own audit trail — actor.email must be absent
+    const participantAudit = await request(app)
+      .get(`/api/audit/submissions/${submissionId}`)
+      .set(participantHeaders);
+    expect(participantAudit.status).toBe(200);
+    const participantEvents = participantAudit.body.events as Array<{ actor: { email?: string } | null }>;
+    const actorsWithEmail = participantEvents.filter((e) => e.actor && "email" in e.actor);
+    expect(actorsWithEmail).toHaveLength(0);
+
+    // Reviewer reads the same audit trail — actor.email must be present for events with actors
+    const reviewerAudit = await request(app)
+      .get(`/api/audit/submissions/${submissionId}`)
+      .set(reviewerHeaders);
+    expect(reviewerAudit.status).toBe(200);
+    const reviewerEvents = reviewerAudit.body.events as Array<{ actor: { email?: string } | null }>;
+    const eventsWithActor = reviewerEvents.filter((e) => e.actor !== null);
+    expect(eventsWithActor.length).toBeGreaterThan(0);
+    eventsWithActor.forEach((e) => {
+      expect(e.actor).toHaveProperty("email");
+    });
   });
 });
 

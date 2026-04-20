@@ -58,8 +58,21 @@ import {
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
+import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 
 const adminContentRouter = Router();
+
+async function assertModuleOwnership(moduleId: string, actorId: string, roles: string[]) {
+  if (roles.includes("ADMINISTRATOR")) return;
+  const module = await adminContentRepository.findModuleOwner(moduleId);
+  if (!module) throw new NotFoundError("Module");
+  if (module.createdById === null) {
+    throw new ForbiddenError("This module was created before ownership tracking. Only an ADMINISTRATOR can modify it.", "legacy_module");
+  }
+  if (module.createdById !== actorId) {
+    throw new ForbiddenError("You can only modify modules you created.", "module_ownership");
+  }
+}
 
 adminContentRouter.use("/courses", adminCoursesRouter);
 
@@ -117,10 +130,15 @@ adminContentRouter.patch("/modules/:moduleId/title", async (request, response) =
     return;
   }
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const serialized = JSON.stringify(data.title);
     const module = await updateModuleTitle(request.params.moduleId, serialized, actorId);
     response.json({ module });
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     response.status(400).json({ error: "update_title_failed", message: "Could not update module title." });
   }
 });
@@ -133,6 +151,7 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
   }
 
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const courseCount = await adminContentRepository.countModuleCourses(request.params.moduleId);
     if (courseCount > 0) {
       response.status(409).json({
@@ -145,6 +164,10 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
     const deletedModule = await deleteModule(request.params.moduleId, actorId);
     response.json({ deletedModule });
   } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     response.status(400).json({ error: "delete_module_failed", message: "Could not delete module." });
   }
 });
@@ -266,6 +289,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
   }
 
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const moduleVersion = await publishModuleVersion(
       request.params.moduleId,
       request.params.moduleVersionId,
@@ -273,6 +297,10 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     );
     response.json({ moduleVersion });
   } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
   }
 });
@@ -285,9 +313,14 @@ adminContentRouter.post("/modules/:moduleId/unpublish", async (request, response
   }
 
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const result = await unpublishModule(request.params.moduleId, actorId);
     response.json({ moduleId: result.moduleId, previousActiveVersionId: result.previousActiveVersionId });
   } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     const message = error instanceof Error ? error.message : "Could not unpublish module.";
     response.status(400).json({ error: "unpublish_module_failed", message });
   }
@@ -317,9 +350,14 @@ adminContentRouter.post("/modules/:moduleId/archive", async (request, response) 
   }
 
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const result = await archiveModule(request.params.moduleId, actorId);
     response.json({ moduleId: result.id, archivedAt: result.archivedAt });
   } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     const message = error instanceof Error ? error.message : "Could not archive module.";
     response.status(400).json({ error: "archive_module_failed", message });
   }
@@ -333,9 +371,14 @@ adminContentRouter.post("/modules/:moduleId/restore", async (request, response) 
   }
 
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const result = await restoreModule(request.params.moduleId, actorId);
     response.json({ moduleId: result.id });
   } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     const message = error instanceof Error ? error.message : "Could not restore module.";
     response.status(400).json({ error: "restore_module_failed", message });
   }

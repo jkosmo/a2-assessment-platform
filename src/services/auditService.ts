@@ -55,6 +55,7 @@ export async function getSubmissionAuditTrail(input: SubmissionAuditTrailInput) 
   }
 
   const events = await auditRepository.findSubmissionAuditEvents(input.submissionId);
+  const includeActorEmail = hasAuditReadAccess(input.roles);
 
   return {
     submissionId: submission.id,
@@ -69,7 +70,7 @@ export async function getSubmissionAuditTrail(input: SubmissionAuditTrailInput) 
         ? {
             id: event.actor.id,
             name: event.actor.name,
-            email: event.actor.email,
+            ...(includeActorEmail ? { email: event.actor.email } : {}),
           }
         : null,
       metadata: parseMetadata(event.metadataJson),
