@@ -102,7 +102,8 @@ jobs:
             -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
             -AcsEmailSenderDisplayName "${{ vars.ACS_EMAIL_SENDER_DISPLAY_NAME || 'A2 Assessment Platform' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
-            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
+            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
+            -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}"
 
   deploy-production:
     # Runs on push to main (direct production deploy, no staging dependency),
@@ -189,4 +190,5 @@ jobs:
             -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
             -AcsEmailSenderDisplayName "${{ vars.ACS_EMAIL_SENDER_DISPLAY_NAME || 'A2 Assessment Platform' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
-            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}"
+            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
+            -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}"
