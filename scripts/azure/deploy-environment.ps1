@@ -183,7 +183,11 @@ if ($existingWebApp -and $existingWorkerApp) {
 }
 
 $ipParamsFile = Join-Path (Get-TempBasePath) "a2-ip-params-$EnvironmentName.json"
-@{ dbAllowedIpAddresses = $dbAllowedIpAddresses } | ConvertTo-Json -Depth 5 | Set-Content -Path $ipParamsFile -Encoding UTF8
+@{
+  '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+  contentVersion = '1.0.0.0'
+  parameters     = @{ dbAllowedIpAddresses = @{ value = $dbAllowedIpAddresses } }
+} | ConvertTo-Json -Depth 10 | Set-Content -Path $ipParamsFile -Encoding UTF8
 
 if ($ParticipantNotificationChannel -eq "acs_email") {
   Write-Host "Checking Microsoft.Communication provider registration (required for acs_email channel)..."
