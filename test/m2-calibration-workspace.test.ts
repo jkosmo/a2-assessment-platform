@@ -73,6 +73,44 @@ describe("Calibration workspace Phase A", () => {
     expect(participantResponse.body.modules.length).toBe(participantDefault.body.modules.length);
   });
 
+  it("threshold contract: snapshot returns only totalMin (no phantom fields), publish round-trips totalMin", async () => {
+    const module = await prisma.module.findFirst({
+      where: { activeVersionId: { not: null } },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(module).toBeTruthy();
+
+    // 1. Snapshot shape: only totalMin + source in effectiveThresholds
+    const snap1 = await request(app)
+      .get(`/api/calibration/workspace?moduleId=${encodeURIComponent(module!.id)}&limit=1`)
+      .set(subjectMatterOwnerHeaders);
+    expect(snap1.status).toBe(200);
+    const thresholds = snap1.body.effectiveThresholds;
+    expect(thresholds).toHaveProperty("totalMin");
+    expect(thresholds).toHaveProperty("source");
+    expect(thresholds).not.toHaveProperty("practicalMinPercent");
+    expect(thresholds).not.toHaveProperty("mcqMinPercent");
+    expect(thresholds).not.toHaveProperty("borderlineMin");
+    expect(thresholds).not.toHaveProperty("borderlineMax");
+
+    // 2. Publish a new totalMin
+    const originalTotalMin = thresholds.totalMin as number;
+    const newTotalMin = originalTotalMin === 70 ? 75 : 70;
+    const publishResponse = await request(app)
+      .post("/api/calibration/workspace/publish-thresholds")
+      .set(subjectMatterOwnerHeaders)
+      .send({ moduleId: module!.id, totalMin: newTotalMin });
+    expect(publishResponse.status).toBe(200);
+
+    // 3. Snapshot reflects the new totalMin
+    const snap2 = await request(app)
+      .get(`/api/calibration/workspace?moduleId=${encodeURIComponent(module!.id)}&limit=1`)
+      .set(subjectMatterOwnerHeaders);
+    expect(snap2.status).toBe(200);
+    expect(snap2.body.effectiveThresholds.totalMin).toBe(newTotalMin);
+  });
+
   it("enforces role access and validates status query", async () => {
     const module = await prisma.module.findFirst({
       where: { activeVersionId: { not: null } },

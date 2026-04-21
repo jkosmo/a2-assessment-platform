@@ -139,12 +139,6 @@ const calibrationOutcomesBody = document.getElementById("calibrationOutcomesBody
 const calibrationAnchorsBody = document.getElementById("calibrationAnchorsBody");
 const thresholdEditorSection = document.getElementById("thresholdEditorSection");
 const thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
-const thresholdPracticalMinPercentInput = document.getElementById("thresholdPracticalMinPercent");
-const thresholdMcqMinPercentInput = document.getElementById("thresholdMcqMinPercent");
-const thresholdBorderlineMinInput = document.getElementById("thresholdBorderlineMin");
-const thresholdBorderlineMaxInput = document.getElementById("thresholdBorderlineMax");
-const thresholdBandPreview = document.getElementById("thresholdBandPreview");
-const thresholdValidationError = document.getElementById("thresholdValidationError");
 const publishThresholdsButton = document.getElementById("publishThresholds");
 const thresholdPublishResult = document.getElementById("thresholdPublishResult");
 
@@ -4074,82 +4068,20 @@ function renderAdvancedPreview() {
   }, opts);
 }
 
-function validateThresholds(values) {
-  const { totalMin, borderlineMin, borderlineMax } = values;
-  if (borderlineMin > borderlineMax) {
-    return t("calibration.thresholds.error.borderlineMinGtMax");
-  }
-  if (borderlineMax > totalMin) {
-    return t("calibration.thresholds.error.borderlineMaxGtTotalMin");
-  }
-  return null;
-}
-
 function getThresholdInputValues() {
-  return {
-    totalMin: Number(thresholdTotalMinInput?.value ?? 0),
-    practicalMinPercent: Number(thresholdPracticalMinPercentInput?.value ?? 0),
-    mcqMinPercent: Number(thresholdMcqMinPercentInput?.value ?? 0),
-    borderlineMin: Number(thresholdBorderlineMinInput?.value ?? 0),
-    borderlineMax: Number(thresholdBorderlineMaxInput?.value ?? 0),
-  };
-}
-
-function updateThresholdPreview() {
-  if (
-    !thresholdValidationError ||
-    !publishThresholdsButton ||
-    !thresholdBandPreview ||
-    !thresholdEditorSection ||
-    thresholdEditorSection.style.display === "none"
-  ) {
-    return;
-  }
-
-  const values = getThresholdInputValues();
-  const error = validateThresholds(values);
-
-  thresholdValidationError.textContent = error ?? "";
-  publishThresholdsButton.disabled = Boolean(error);
-
-  if (error) {
-    thresholdBandPreview.textContent = "";
-    return;
-  }
-
-  const preview = t("calibration.thresholds.preview.bands")
-    .replace("{redMax}", String(values.borderlineMin - 1))
-    .replace("{yellowMin}", String(values.borderlineMin))
-    .replace("{yellowMax}", String(values.borderlineMax))
-    .replace("{greenMin}", String(values.totalMin));
-  thresholdBandPreview.textContent = preview;
+  return { totalMin: Number(thresholdTotalMinInput?.value ?? 0) };
 }
 
 function renderThresholds(effectiveThresholds) {
-  if (
-    !thresholdEditorSection ||
-    !thresholdTotalMinInput ||
-    !thresholdPracticalMinPercentInput ||
-    !thresholdMcqMinPercentInput ||
-    !thresholdBorderlineMinInput ||
-    !thresholdBorderlineMaxInput ||
-    !thresholdPublishResult
-  ) {
-    return;
-  }
-
+  if (!thresholdEditorSection || !thresholdTotalMinInput || !thresholdPublishResult) return;
   thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
-  thresholdPracticalMinPercentInput.value = String(effectiveThresholds.practicalMinPercent);
-  thresholdMcqMinPercentInput.value = String(effectiveThresholds.mcqMinPercent);
-  thresholdBorderlineMinInput.value = String(effectiveThresholds.borderlineMin);
-  thresholdBorderlineMaxInput.value = String(effectiveThresholds.borderlineMax);
   thresholdPublishResult.textContent = t(
     effectiveThresholds.source === "module_policy"
       ? "calibration.thresholds.source.module"
       : "calibration.thresholds.source.global",
   );
   thresholdEditorSection.style.display = "";
-  updateThresholdPreview();
+  if (publishThresholdsButton) publishThresholdsButton.disabled = false;
 }
 
 function renderCalibrationWorkspace(body) {

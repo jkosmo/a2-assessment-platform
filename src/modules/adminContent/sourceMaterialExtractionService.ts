@@ -95,6 +95,20 @@ export class SourceMaterialExtractionError extends Error {
   }
 }
 
+export class SourceMaterialPolicyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SourceMaterialPolicyError";
+  }
+}
+
+export class SourceMaterialTimeoutError extends Error {
+  constructor(format: string, timeoutMs: number) {
+    super(`Parsing "${format}" timed out after ${timeoutMs}ms.`);
+    this.name = "SourceMaterialTimeoutError";
+  }
+}
+
 const defaultAdapters: SourceMaterialExtractionAdapters = {
   async parseOffice(buffer) {
     const ast = await parseOffice(buffer, {
@@ -131,6 +145,62 @@ const defaultAdapters: SourceMaterialExtractionAdapters = {
   },
 };
 
+const FORMAT_MAGIC_BYTES: Partial<Record<SupportedSourceMaterialFormat, readonly number[]>> = {
+  pdf:  [0x25, 0x50, 0x44, 0x46], // %PDF
+  docx: [0x50, 0x4b, 0x03, 0x04], // PK (ZIP)
+  pptx: [0x50, 0x4b, 0x03, 0x04],
+  odt:  [0x50, 0x4b, 0x03, 0x04],
+  odp:  [0x50, 0x4b, 0x03, 0x04],
+  ods:  [0x50, 0x4b, 0x03, 0x04],
+  doc:  [0xd0, 0xcf, 0x11, 0xe0], // OLE2
+  ppt:  [0xd0, 0xcf, 0x11, 0xe0],
+  rtf:  [0x7b, 0x5c, 0x72, 0x74], // {\rt
+};
+
+const OOXML_FORMATS: ReadonlySet<SupportedSourceMaterialFormat> = new Set(["docx", "pptx", "odt", "odp", "ods"]);
+
+function checkSourceMaterialSignature(
+  content: Buffer,
+  format: SupportedSourceMaterialFormat,
+  fileName: string,
+): void {
+  const expected = FORMAT_MAGIC_BYTES[format];
+  if (!expected) return;
+  if (content.byteLength < expected.length) {
+    throw new SourceMaterialPolicyError(`File "${fileName}" is too short to be a valid ${format} file.`);
+  }
+  for (let i = 0; i < expected.length; i++) {
+    if (content[i] !== expected[i]) {
+      throw new SourceMaterialPolicyError(`File "${fileName}" does not match the expected ${format} file signature.`);
+    }
+  }
+}
+
+function preflightOoxml(content: Buffer, format: SupportedSourceMaterialFormat, fileName: string): void {
+  if (!OOXML_FORMATS.has(format)) return;
+  // Verify ZIP end-of-central-directory (PK\x05\x06). ZIP comment can extend up to 65535 bytes before it.
+  const eocdMinStart = content.byteLength - 22;
+  if (eocdMinStart < 0) {
+    throw new SourceMaterialPolicyError(`File "${fileName}" is not a valid ${format} archive.`);
+  }
+  const eocdSearchStart = Math.max(0, eocdMinStart - 65535);
+  for (let i = eocdMinStart; i >= eocdSearchStart; i--) {
+    if (content[i] === 0x50 && content[i + 1] === 0x4b && content[i + 2] === 0x05 && content[i + 3] === 0x06) {
+      return;
+    }
+  }
+  throw new SourceMaterialPolicyError(`File "${fileName}" is not a valid ${format} archive.`);
+}
+
+function withLegacyTimeout<T>(promise: Promise<T>, timeoutMs: number, format: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new SourceMaterialTimeoutError(format, timeoutMs)), timeoutMs),
+    ),
+  ]);
+}
+
 export async function extractSourceMaterialText(
   input: SourceMaterialExtractionInput,
   adapters: SourceMaterialExtractionAdapters = defaultAdapters,
@@ -150,6 +220,9 @@ export async function extractSourceMaterialText(
     throw new SourceMaterialTooLargeError();
   }
 
+  checkSourceMaterialSignature(content, format, fileName);
+  preflightOoxml(content, format, fileName);
+
   let extractedText = "";
 
   try {
@@ -159,10 +232,10 @@ export async function extractSourceMaterialText(
         extractedText = content.toString("utf8");
         break;
       case "doc":
-        extractedText = await adapters.parseLegacyDoc(content);
+        extractedText = await withLegacyTimeout(adapters.parseLegacyDoc(content), 30_000, format);
         break;
       case "ppt":
-        extractedText = await adapters.parseLegacyPpt(content);
+        extractedText = await withLegacyTimeout(adapters.parseLegacyPpt(content), 30_000, format);
         break;
       case "pdf":
       case "docx":
@@ -177,6 +250,9 @@ export async function extractSourceMaterialText(
         throw new UnsupportedSourceMaterialFormatError(fileName);
     }
   } catch (error) {
+    if (error instanceof SourceMaterialPolicyError || error instanceof SourceMaterialTimeoutError) {
+      throw error;
+    }
     const message =
       error instanceof Error && error.message.trim()
         ? error.message.trim()

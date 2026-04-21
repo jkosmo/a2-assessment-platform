@@ -148,9 +148,8 @@
 
         <section id="thresholdEditorSection" class="card" style="display:none">
           <h2 data-i18n="calibration.thresholds.title">Calibration thresholds</h2>
-          <p class="small" data-i18n="calibration.thresholds.subtitle">Effective thresholds for this module. These control how scores are routed to pass, manual review (yellow), or fail.</p>
+          <p class="small" data-i18n="calibration.thresholds.subtitle">Sets the minimum total score required to pass this module.</p>
 
-          <h3 data-i18n="calibration.thresholds.section.total">Total</h3>
           <div class="row">
             <div>
               <label for="thresholdTotalMin" data-i18n="calibration.thresholds.totalMin">Pass score (min out of 100)</label>
@@ -158,41 +157,6 @@
               <div class="small" data-i18n="calibration.thresholds.totalMinHelp">Minimum total score to pass.</div>
             </div>
           </div>
-
-          <h3 data-i18n="calibration.thresholds.section.manualReview">Manual review zone</h3>
-          <div class="row">
-            <div>
-              <label for="thresholdBorderlineMin" data-i18n="calibration.thresholds.borderlineMin">Yellow zone start</label>
-              <input id="thresholdBorderlineMin" type="number" min="0" max="100" step="1" />
-              <div class="small" data-i18n="calibration.thresholds.borderlineMinHelp">Scores at or above this value enter the yellow/manual-review zone.</div>
-            </div>
-            <div>
-              <label for="thresholdBorderlineMax" data-i18n="calibration.thresholds.borderlineMax">Yellow zone end</label>
-              <input id="thresholdBorderlineMax" type="number" min="0" max="100" step="1" />
-              <div class="small" data-i18n="calibration.thresholds.borderlineMaxHelp">Scores at or below this value stay in the yellow zone.</div>
-            </div>
-          </div>
-
-          <h3 data-i18n="calibration.thresholds.section.practical">Practical submission</h3>
-          <div class="row">
-            <div>
-              <label for="thresholdPracticalMinPercent" data-i18n="calibration.thresholds.practicalMinPercent">Submission min %</label>
-              <input id="thresholdPracticalMinPercent" type="number" min="0" max="100" step="1" />
-              <div class="small" data-i18n="calibration.thresholds.practicalMinPercentHelp">Minimum percentage of the submission maximum that the practical component must reach.</div>
-            </div>
-          </div>
-
-          <h3 data-i18n="calibration.thresholds.section.mcq">Multiple choice questions</h3>
-          <div class="row">
-            <div>
-              <label for="thresholdMcqMinPercent" data-i18n="calibration.thresholds.mcqMinPercent">MCQ min % correct</label>
-              <input id="thresholdMcqMinPercent" type="number" min="0" max="100" step="1" />
-              <div class="small" data-i18n="calibration.thresholds.mcqMinPercentHelp">Minimum percentage correct on the multiple choice questions.</div>
-            </div>
-          </div>
-
-          <div id="thresholdBandPreview" class="small" style="margin-top: var(--space-1)"></div>
-          <div id="thresholdValidationError" class="small" style="color:var(--color-error,red)"></div>
 
           <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
             <div>

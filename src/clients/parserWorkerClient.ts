@@ -6,6 +6,8 @@ import {
   type SourceMaterialExtractionResult,
   UnsupportedSourceMaterialFormatError,
   SourceMaterialTooLargeError,
+  SourceMaterialPolicyError,
+  SourceMaterialTimeoutError,
 } from "../modules/adminContent/sourceMaterialExtractionService.js";
 
 export type ParseJobStatus = {
@@ -105,6 +107,10 @@ function submitLocalJob(input: SourceMaterialExtractionInput): string {
         job.error = "unsupported_file_type";
       } else if (err instanceof SourceMaterialTooLargeError) {
         job.error = "file_too_large";
+      } else if (err instanceof SourceMaterialPolicyError) {
+        job.error = err.message;
+      } else if (err instanceof SourceMaterialTimeoutError) {
+        job.error = "timeout";
       } else {
         job.error = err instanceof Error ? err.message : "extraction_failed";
       }

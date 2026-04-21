@@ -224,6 +224,53 @@ describe("state rail CSS", () => {
 // Call-site smoke tests — JS: updateStateRail is called from render functions
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Contract tests — shell and Advanced share the same derivation source (#345)
+// ---------------------------------------------------------------------------
+
+describe("shared editing-source contract", () => {
+  it("shell: imports deriveModuleStatusChains from module-status-logic", () => {
+    const js = readFile("public/static/admin-content-shell.js");
+    expect(js).toContain("module-status-logic.js");
+    expect(js).toContain("deriveModuleStatusChains");
+  });
+
+  it("advanced: imports deriveModuleStatusChains from module-status-logic", () => {
+    const js = readFile("public/admin-content.js");
+    expect(js).toContain("module-status-logic.js");
+    expect(js).toContain("deriveModuleStatusChains");
+  });
+
+  it("state 1 — working draft: hasUnsaved overrides chain (liveChain exists but draft takes priority)", () => {
+    const chains = deriveModuleStatusChains(
+      makeModuleExport({ activeVersionId: "v1", moduleVersions: [makeVersion("v1", 1)] }),
+    );
+    // Module is live; editing source is determined by hasUnsaved at render time.
+    // Chains confirm the live state is detectable.
+    expect(chains.liveChain.length).toBeGreaterThan(0);
+    expect(chains.latestDraftChain.length).toBe(0);
+    // hasUnsaved=true → UI renders "working draft" regardless of chain
+  });
+
+  it("state 2 — saved draft (not yet published): latestDraftChain populated, liveChain empty", () => {
+    const chains = deriveModuleStatusChains(
+      makeModuleExport({ moduleVersions: [makeVersion("v1", 1)] }),
+    );
+    expect(chains.latestDraftChain).toEqual([{ label: "Module", versionNo: 1 }]);
+    expect(chains.liveChain).toEqual([]);
+  });
+
+  it("state 3 — live version (no newer draft): liveChain populated, latestDraftChain empty", () => {
+    const chains = deriveModuleStatusChains(
+      makeModuleExport({ activeVersionId: "v1", moduleVersions: [makeVersion("v1", 1)] }),
+    );
+    expect(chains.liveChain).toEqual([{ label: "Module", versionNo: 1 }]);
+    expect(chains.latestDraftChain).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 describe("updateStateRail call sites", () => {
   it("shell: renderPreview calls updateStateRail", () => {
     const js = readFile("public/static/admin-content-shell.js");

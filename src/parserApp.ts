@@ -4,9 +4,12 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import {
   extractSourceMaterialText,
+  detectSourceMaterialFormat,
   type SourceMaterialExtractionResult,
   UnsupportedSourceMaterialFormatError,
   SourceMaterialTooLargeError,
+  SourceMaterialPolicyError,
+  SourceMaterialTimeoutError,
 } from "./modules/adminContent/sourceMaterialExtractionService.js";
 
 const parserEnvSchema = z.object({
@@ -34,6 +37,10 @@ type ParserJob = {
 const jobs = new Map<string, ParserJob>();
 const JOB_TTL_MS = 10 * 60 * 1000;
 const REPLAY_WINDOW_SECONDS = 60;
+
+function isFormatDisabled(format: string): boolean {
+  return process.env[`PARSER_FORMAT_DISABLED_${format.toUpperCase()}`] === "true";
+}
 
 function purgeExpiredJobs(): void {
   const now = Date.now();
@@ -121,20 +128,44 @@ parserApp.post("/parse", (req, res) => {
   const job: ParserJob = { id: jobId, status: "pending", createdAt: new Date() };
   jobs.set(jobId, job);
 
+  const startedAt = Date.now();
+  const { fileName, mimeType } = parseResult.data;
+  const format = detectSourceMaterialFormat(fileName, mimeType) ?? "unknown";
+  const fileBytes = Math.round(parseResult.data.contentBase64.replace(/\s+/g, "").length * 0.75);
+
   void (async () => {
+    if (format !== "unknown" && isFormatDisabled(format)) {
+      job.status = "failed";
+      job.error = "format_disabled";
+      console.log(JSON.stringify({ event: "parser_outcome", jobId, format, fileName, status: "policy_rejected", error: "format_disabled", durationMs: Date.now() - startedAt, fileBytes }));
+      return;
+    }
+
     try {
       const result = await extractSourceMaterialText(parseResult.data);
       job.status = "done";
       job.result = result;
+      console.log(JSON.stringify({ event: "parser_outcome", jobId, format: result.format, fileName: result.fileName, status: "accepted", durationMs: Date.now() - startedAt, fileBytes }));
     } catch (err) {
       job.status = "failed";
+      let outcomeStatus: string;
       if (err instanceof UnsupportedSourceMaterialFormatError) {
         job.error = "unsupported_file_type";
+        outcomeStatus = "policy_rejected";
       } else if (err instanceof SourceMaterialTooLargeError) {
         job.error = "file_too_large";
+        outcomeStatus = "resource_limit_exceeded";
+      } else if (err instanceof SourceMaterialPolicyError) {
+        job.error = err.message;
+        outcomeStatus = "policy_rejected";
+      } else if (err instanceof SourceMaterialTimeoutError) {
+        job.error = "timeout";
+        outcomeStatus = "timeout";
       } else {
         job.error = err instanceof Error ? err.message : "extraction_failed";
+        outcomeStatus = "parser_failed";
       }
+      console.log(JSON.stringify({ event: "parser_outcome", jobId, format, fileName, status: outcomeStatus, error: job.error, durationMs: Date.now() - startedAt, fileBytes }));
     }
   })();
 

@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.21 - 2026-04-21
+
+arch(wave4): parser-preflight, kalibreringskontrakt og redigeringskildekontrakt (#342, #343, #345)
+
+### #342 — Parser preflight og sikkerhet
+- src/modules/adminContent/sourceMaterialExtractionService.ts: to nye feilklasser (`SourceMaterialPolicyError`, `SourceMaterialTimeoutError`); magic bytes-sjekk; OOXML ZIP-preflight for docx/pptx/odt/odp/ods; 30s timeout for legacy doc/ppt via `Promise.race`
+- src/parserApp.ts: per-format kill switches (`PARSER_FORMAT_DISABLED_<FORMAT>=true`); strukturerte `parser_outcome`-logg-hendelser etter hvert jobb (status: accepted/policy_rejected/timeout/resource_limit_exceeded/parser_failed)
+- src/clients/parserWorkerClient.ts: håndterer `SourceMaterialPolicyError` og `SourceMaterialTimeoutError` i lokal fallback
+- doc/ops/PARSER_RUNBOOK.md: ny — kill switches, strukturerte hendelser, healthcheck, rotasjon av auth-nøkkel
+
+### #343 — Kalibreringsterskler: ett kanonisk kontrakt
+- public/admin-content-calibration.html, public/admin-content-advanced.html, public/calibration.html: fjernet fire ikke-fungerende felt (borderlineMin/Max, practicalMinPercent, mcqMinPercent) og band-preview; oppdatert subtitle
+- public/static/admin-content-calibration.js, public/admin-content.js, public/calibration.js: tilsvarende opprydding i variabeldeklarasjoner og funksjoner
+- test/m2-calibration-workspace.test.ts: ny integrasjonstest for snapshot→publish→snapshot rundtur med bekreftelse på at kun `totalMin` returneres
+
+### #345 — Felles redigeringskilde- og preview-kontrakt
+- public/static/admin-content-shell.js: importerer og bruker nå `deriveModuleStatusChains` fra `module-status-logic.js` (samme kilde som Advanced); fjernet manuell bundle-traversering i `updateStateRail()`
+- test/admin-content-state-rail.test.js: ny seksjon «shared editing-source contract» med tre kanoniske tilstandstester (working draft, saved draft, live)
+
 ## 0.10.20 - 2026-04-20
 
 sec(infra): parser runtime isolation — kilde-material parsing i separat App Service uten DB/AI-hemmeligheter (#341)
