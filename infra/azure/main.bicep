@@ -143,6 +143,12 @@ param queueBacklogAlertThreshold int = 5
 @description('Average response time threshold in seconds for latency alert.')
 param latencyAlertThresholdSeconds int = 3
 
+@description('Unhandled runtime error count threshold within the alert window.')
+param unhandledRuntimeErrorAlertThreshold int = 2
+
+@description('Notification failure count threshold within the alert window.')
+param notificationFailureAlertThreshold int = 1
+
 @description('Overdue appeal count threshold for escalation alert.')
 param appealOverdueAlertThreshold int = 1
 
@@ -186,6 +192,7 @@ var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffi
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
 var postgresServerName = toLower('${appNamePrefix}-${envCode}-pg-${suffix}')
 var createObservabilityActionGroup = !empty(observabilityAlertEmail)
+var createNotificationDeliveryAlert = participantNotificationChannel == 'acs_email' || participantNotificationChannel == 'webhook'
 var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')
 var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
 var createAcsEmail = participantNotificationChannel == 'acs_email'
@@ -220,6 +227,28 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where maxOverdueAppeals >= __THRESHOLD__
 '''
 var appealOverdueAlertQuery = replace(appealOverdueAlertQueryTemplate, '__THRESHOLD__', string(appealOverdueAlertThreshold))
+var unhandledRuntimeErrorAlertQueryTemplate = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(5m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"unhandled_error"'
+    or raw has '"event":"unhandled_rejection"'
+    or raw has '"event":"uncaught_exception"'
+| summarize errorCount = count()
+| where errorCount >= __THRESHOLD__
+'''
+var unhandledRuntimeErrorAlertQuery = replace(unhandledRuntimeErrorAlertQueryTemplate, '__THRESHOLD__', string(unhandledRuntimeErrorAlertThreshold))
+var notificationFailureAlertQueryTemplate = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(10m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"participant_notification_failed"'
+    or raw has '"event":"participant_notification_pipeline_failed"'
+    or raw has '"event":"recertification_reminder_failed"'
+| summarize failureCount = count()
+| where failureCount >= __THRESHOLD__
+'''
+var notificationFailureAlertQuery = replace(notificationFailureAlertQueryTemplate, '__THRESHOLD__', string(notificationFailureAlertThreshold))
 
 resource acsEmailService 'Microsoft.Communication/emailServices@2023-04-01' = if (createAcsEmail) {
   name: acsEmailServiceName
@@ -443,6 +472,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'NODE|22-lts'
       appCommandLine: 'node scripts/runtime/startup.mjs'
       alwaysOn: true
+      healthCheckPath: '/healthz'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
@@ -461,6 +491,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'WEBSITES_PORT'
           value: '8080'
+        }
+        {
+          name: 'WEBSITE_WARMUP_PATH'
+          value: '/healthz'
         }
         {
           name: 'DATABASE_URL'
@@ -817,6 +851,7 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'NODE|22-lts'
       appCommandLine: 'node scripts/runtime/parserStartup.mjs'
       alwaysOn: true
+      healthCheckPath: '/health'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
@@ -837,8 +872,12 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '8080'
         }
         {
+          name: 'WEBSITE_WARMUP_PATH'
+          value: '/health'
+        }
+        {
           name: 'PARSER_WORKER_AUTH_KEY'
-          value: parserWorkerAuthKey
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARSER-WORKER-AUTH-KEY)'
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
@@ -899,6 +938,16 @@ resource workerAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource parserAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, parserApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: parserApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -1066,6 +1115,126 @@ resource appealOverdueAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' 
       allOf: [
         {
           query: appealOverdueAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
+resource workerHealthAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-worker-health')
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    description: 'Worker app health check status indicates an unhealthy worker instance.'
+    severity: 1
+    enabled: true
+    scopes: [
+      workerApp.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'worker-health-check-status'
+          metricNamespace: 'Microsoft.Web/sites'
+          metricName: 'HealthCheckStatus'
+          operator: 'LessThan'
+          threshold: 1
+          timeAggregation: 'Average'
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: createObservabilityActionGroup
+      ? [
+          {
+            actionGroupId: observabilityActionGroup.id
+          }
+        ]
+      : []
+  }
+}
+
+resource unhandledRuntimeErrorAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-runtime-errors')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'Unhandled runtime errors detected'
+    description: 'Detects repeated unhandled runtime errors, rejections, or uncaught exceptions from runtime logs.'
+    severity: 1
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      allOf: [
+        {
+          query: unhandledRuntimeErrorAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
+resource notificationFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = if (createNotificationDeliveryAlert) {
+  name: toLower('${appNamePrefix}-${envCode}-notification-failures')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'Participant notification delivery failures detected'
+    description: 'Detects participant notification or recertification reminder delivery failures from runtime logs.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT10M'
+    windowSize: 'PT10M'
+    criteria: {
+      allOf: [
+        {
+          query: notificationFailureAlertQuery
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0

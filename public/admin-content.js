@@ -1368,30 +1368,12 @@ function renderWorkspaceNavigation() {
     return;
   }
 
-  const allItems = resolveWorkspaceNavigationItems(
+  const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
   ).filter((item) => item.visible);
-
-  const profileItem = allItems.find((item) => item.id === "profile");
-  const items = allItems.filter((item) => item.id !== "profile");
-
-  const localePicker = document.querySelector(".locale-picker");
-  if (localePicker && profileItem) {
-    localePicker.style.display = "flex";
-    localePicker.style.alignItems = "center";
-    localePicker.style.gap = "8px";
-    let profileLink = document.getElementById("profileNavLink");
-    if (!profileLink) {
-      profileLink = document.createElement("a");
-      profileLink.id = "profileNavLink";
-      localePicker.appendChild(profileLink);
-    }
-    profileLink.href = profileItem.path;
-    profileLink.textContent = t(profileItem.labelKey);
-    profileLink.className = profileItem.active ? "workspace-nav-link active" : "workspace-nav-link";
-  }
+  document.getElementById("profileNavLink")?.remove();
 
   workspaceNav.innerHTML = "";
   workspaceNav.hidden = items.length === 0;

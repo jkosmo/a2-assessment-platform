@@ -1,5 +1,6 @@
 import request from "supertest";
 import { app } from "../src/app.js";
+import { localizedTextCodec } from "../src/codecs/localizedTextCodec.js";
 import { prisma } from "../src/db/prisma.js";
 
 const adminHeaders = {
@@ -343,6 +344,48 @@ describe("MVP admin content management and publication", () => {
 
     expect(blockedDeleteResponse.status).toBe(400);
     expect(blockedDeleteResponse.body.error).toBe("delete_module_failed");
+  });
+
+  it("merges partial title locale patches instead of rejecting or dropping other locales", async () => {
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": `Patchable Module ${Date.now()}`,
+          nb: "Oppdaterbar modul",
+          nn: "Oppdaterbar modul nynorsk",
+        },
+      });
+
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
+
+    const patchResponse = await request(app)
+      .patch(`/api/admin/content/modules/${moduleId}/title`)
+      .set(adminHeaders)
+      .send({
+        title: {
+          nb: "Oppdatert modulnavn",
+        },
+      });
+
+    expect(patchResponse.status).toBe(200);
+
+    const storedModule = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { title: true },
+    });
+    const parsedTitle = localizedTextCodec.parse(storedModule?.title ?? null);
+
+    expect(typeof parsedTitle).toBe("object");
+    expect(parsedTitle).toMatchObject({
+      "en-GB": createModuleResponse.body.module.title["en-GB"],
+      nb: "Oppdatert modulnavn",
+      nn: "Oppdaterbar modul nynorsk",
+    });
+
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
   it("keeps previously completed modules visible to participant after publishing a new module", async () => {

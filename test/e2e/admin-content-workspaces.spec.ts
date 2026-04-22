@@ -32,6 +32,13 @@ type MockCourse = {
   archivedAt?: string | null;
 };
 
+type MockNavigationItem = {
+  id: string;
+  path: string;
+  labelKey: string;
+  requiredRoles?: string[];
+};
+
 type MockModuleExport = {
   module: {
     id: string;
@@ -214,11 +221,13 @@ async function mockCommonApis(page: Page, {
   libraryModules = [],
   courses = [],
   moduleExports = {},
+  navigationItems = [],
 }: {
   modules?: MockModule[];
   libraryModules?: MockLibraryModule[];
   courses?: MockCourse[];
   moduleExports?: Record<string, MockModuleExport>;
+  navigationItems?: MockNavigationItem[];
 } = {}) {
   const mutableModules = [...modules];
   const exportMap = new Map<string, MockModuleExport>(Object.entries(moduleExports));
@@ -233,6 +242,9 @@ async function mockCommonApis(page: Page, {
     mutableCourses,
     exportMap,
     lastDraftGenerationBody: null as any,
+    lastDraftLocalizationBody: null as any,
+    lastMcqLocalizationBody: null as any,
+    lastTitlePatchBody: null as any,
     lastSourceMaterialExtraction: null as any,
   };
 
@@ -242,7 +254,11 @@ async function mockCommonApis(page: Page, {
       contentType: "application/json",
       body: JSON.stringify({
         authMode: "mock",
-        navigation: { workspaceItems: [], profileItem: null },
+        navigation: {
+          items: navigationItems,
+          workspaceItems: navigationItems,
+          profileItem: navigationItems.find((item) => item.id === "profile") ?? null,
+        },
         identityDefaults: {
           userId: "content-owner-1",
           email: "content.owner@example.test",
@@ -292,18 +308,50 @@ async function mockCommonApis(page: Page, {
 
   await page.route("**/api/admin/content/generate/module-draft/localize", async (route: Route) => {
     const body = route.request().postDataJSON() as {
+      title?: string;
       taskText?: string;
       guidanceText?: string;
+      sourceLocale?: string;
       targetLocale?: string;
     };
+    state.lastDraftLocalizationBody = body;
     const suffix = body.targetLocale ?? "xx";
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
+        title: body.title ? `${body.title} [${suffix}]` : undefined,
         taskText: `${body.taskText ?? ""} [${suffix}]`,
         guidanceText: `${body.guidanceText ?? ""} [${suffix}]`,
       }),
+    });
+  });
+
+  await page.route("**/api/admin/content/modules/*/title", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
+    const moduleExport = exportMap.get(moduleId);
+    if (!moduleExport) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+
+    const body = route.request().postDataJSON() as { title?: Record<string, string> };
+    state.lastTitlePatchBody = body;
+    moduleExport.module.title = {
+      ...moduleExport.module.title,
+      ...(body.title ?? {}),
+    };
+
+    const moduleRecord = mutableModules.find((item) => item.id === moduleId);
+    if (moduleRecord) {
+      moduleRecord.title =
+        moduleExport.module.title["en-GB"] ?? moduleExport.module.title.nb ?? moduleExport.module.title.nn ?? moduleRecord.title;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ module: { id: moduleId, title: moduleExport.module.title } }),
     });
   });
 
@@ -345,8 +393,10 @@ async function mockCommonApis(page: Page, {
   await page.route("**/api/admin/content/generate/mcq/localize", async (route: Route) => {
     const body = route.request().postDataJSON() as {
       questions?: Array<{ stem?: string; options?: string[]; correctAnswer?: string; rationale?: string }>;
+      sourceLocale?: string;
       targetLocale?: string;
     };
+    state.lastMcqLocalizationBody = body;
     const targetLocale = body.targetLocale ?? "xx";
     const questions = (body.questions ?? []).map((question) => ({
       stem: `${question.stem ?? ""} [${targetLocale}]`,
@@ -892,6 +942,183 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#localeSelect").selectOption("nb");
     await expect(page.getByText("Norsk scenario")).toBeVisible();
     await expect(page.getByText("English scenario")).toHaveCount(0);
+  });
+
+  test("shell workspace nav keeps profile in the top menu", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+      navigationItems: [
+        { id: "calibration", path: "/calibration", labelKey: "nav.calibration" },
+        { id: "admin-content", path: "/admin-content", labelKey: "nav.adminContent" },
+        { id: "results", path: "/results", labelKey: "nav.results" },
+        { id: "profile", path: "/profile", labelKey: "nav.profile" },
+      ],
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    await expect(page.locator("#workspaceNav .workspace-nav-link")).toHaveCount(4);
+    await expect(page.locator('#workspaceNav .workspace-nav-link[href="/profile"]')).toBeVisible();
+    await expect(page.locator(".locale-picker #profileNavLink")).toHaveCount(0);
+  });
+
+  test("direct edit localizes from the active preview locale and save sends a title patch", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: {
+            "en-GB": "English scenario",
+            nb: "Norsk scenario",
+            nn: "Nynorsk scenario",
+          },
+          guidanceText: {
+            "en-GB": "English guidance",
+            nb: "Norsk veiledning",
+            nn: "Nynorsk rettleiing",
+          },
+          mcqQuestions: [
+            {
+              stem: { "en-GB": "English question", nb: "Norsk spÃ¸rsmÃ¥l", nn: "Nynorsk spÃ¸rsmÃ¥l" },
+              options: [
+                { "en-GB": "Option A", nb: "Alternativ A", nn: "Alternativ A" },
+                { "en-GB": "Option B", nb: "Alternativ B", nn: "Alternativ B" },
+                { "en-GB": "Option C", nb: "Alternativ C", nn: "Alternativ C" },
+                { "en-GB": "Option D", nb: "Alternativ D", nn: "Alternativ D" },
+              ],
+              correctAnswer: { "en-GB": "Option B", nb: "Alternativ B", nn: "Alternativ B" },
+              rationale: { "en-GB": "English rationale", nb: "Norsk begrunnelse", nn: "Nynorsk grunngjeving" },
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.addInitScript(() => {
+      sessionStorage.setItem("adminContent.handoff", JSON.stringify({
+        moduleId: "module-1",
+        source: "shell",
+        draft: null,
+        locale: "en-GB",
+        previewLocale: "nb",
+        timestamp: Date.now(),
+      }));
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
+    await page.locator("#previewEditTaskText").fill("Oppdatert norsk scenario");
+    await page.locator("#previewEditGuidanceText").fill("Oppdatert norsk veiledning");
+    await page.locator("#previewEditTitle").fill("Fagforeninger");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBe("nb");
+    await clickEnabledButton(page, /Save draft|Lagre utkast/);
+
+    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
+    await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Fagforeninger");
+    await expect(state.lastTitlePatchBody?.title?.["en-GB"]).toContain("[en-GB]");
+    await expect(page.locator("#srModuleName")).toHaveText("Fagforeninger");
+  });
+
+  test("direct edit keeps MCQ visible and editable through translation and save", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-2", title: "Workplace dialogue", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-2": buildMockModuleExport({
+          id: "module-2",
+          title: "Workplace dialogue",
+          moduleVersionId: "module-2-version-1",
+          taskText: {
+            "en-GB": "English scenario",
+            nb: "Norsk scenario",
+            nn: "Nynorsk scenario",
+          },
+          guidanceText: {
+            "en-GB": "English guidance",
+            nb: "Norsk veiledning",
+            nn: "Nynorsk rettleiing",
+          },
+          mcqQuestions: [
+            {
+              stem: { "en-GB": "English question", nb: "Norsk sporsmal", nn: "Nynorsk sporsmal" },
+              options: [
+                { "en-GB": "Option A", nb: "Alternativ A", nn: "Alternativ A" },
+                { "en-GB": "Option B", nb: "Alternativ B", nn: "Alternativ B" },
+                { "en-GB": "Option C", nb: "Alternativ C", nn: "Alternativ C" },
+                { "en-GB": "Option D", nb: "Alternativ D", nn: "Alternativ D" },
+              ],
+              correctAnswer: { "en-GB": "Option B", nb: "Alternativ B", nn: "Alternativ B" },
+              rationale: { "en-GB": "English rationale", nb: "Norsk begrunnelse", nn: "Nynorsk grunngjeving" },
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.addInitScript(() => {
+      sessionStorage.setItem("adminContent.handoff", JSON.stringify({
+        moduleId: "module-2",
+        source: "shell",
+        draft: null,
+        locale: "en-GB",
+        previewLocale: "nb",
+        timestamp: Date.now(),
+      }));
+    });
+
+    await page.goto("/admin-content/module/module-2/conversation");
+
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await expect(page.locator("#previewEditMcqStem0")).toHaveValue("Norsk sporsmal");
+    await page.locator("#previewEditMcqStem0").fill("Oppdatert norsk sporsmal");
+    await page.locator("#previewEditMcqOption0_1").fill("Oppdatert alternativ B");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect.poll(() => state.lastMcqLocalizationBody?.sourceLocale).toBe("nb");
+    await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
+    await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
+
+    await clickEnabledButton(page, /Save draft|Lagre utkast/);
+
+    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
+    await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
+    await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
+  });
+
+  test("shell publish returns to the module list after confirmation", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    await clickEnabledButton(page, /Publish|Publiser/);
+    await clickEnabledButton(page, /Publish|Publiser/);
+
+    await expect(page.locator(".module-list .module-list-item")).toContainText("Trade unions");
+    await expect(page.locator("#previewContent .preview-empty")).toBeVisible();
   });
 
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {

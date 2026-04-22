@@ -144,6 +144,13 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    findModuleTitle(moduleId: string) {
+      return client.module.findUnique({
+        where: { id: moduleId },
+        select: { id: true, title: true },
+      });
+    },
+
     async countModuleCourses(moduleId: string) {
       return client.courseModule.count({ where: { moduleId } });
     },

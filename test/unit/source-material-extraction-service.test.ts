@@ -14,6 +14,26 @@ function toBase64(value: string | Buffer) {
     : Buffer.from(value, "utf8").toString("base64");
 }
 
+function fakePdfBuffer() {
+  return Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n", "utf8");
+}
+
+function fakeOleBuffer() {
+  return Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+}
+
+function fakeOoxmlBuffer() {
+  return Buffer.from([
+    0x50, 0x4b, 0x03, 0x04,
+    0x50, 0x4b, 0x05, 0x06,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00,
+  ]);
+}
+
 describe("source material extraction service", () => {
   it("detects the expanded minimum file-type set", () => {
     expect(detectSourceMaterialFormat("notes.txt")).toBe("txt");
@@ -52,7 +72,7 @@ describe("source material extraction service", () => {
       {
         fileName: "slides.pptx",
         mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        contentBase64: toBase64("fake-pptx"),
+        contentBase64: toBase64(fakeOoxmlBuffer()),
       },
       {
         parseOffice: async (_buffer, format) => `parsed:${format}`,
@@ -69,7 +89,7 @@ describe("source material extraction service", () => {
     const result = await extractSourceMaterialText(
       {
         fileName: "legacy.doc",
-        contentBase64: toBase64("fake-doc"),
+        contentBase64: toBase64(fakeOleBuffer()),
       },
       {
         parseOffice: async () => "",
@@ -86,7 +106,7 @@ describe("source material extraction service", () => {
     const result = await extractSourceMaterialText(
       {
         fileName: "legacy.ppt",
-        contentBase64: toBase64("fake-ppt"),
+        contentBase64: toBase64(fakeOleBuffer()),
       },
       {
         parseOffice: async () => "",
@@ -136,7 +156,7 @@ describe("source material extraction service", () => {
       extractSourceMaterialText(
         {
           fileName: "notes.pdf",
-          contentBase64: toBase64("fake-pdf"),
+          contentBase64: toBase64(fakePdfBuffer()),
         },
         {
           parseOffice: async () => "   \n\n   ",

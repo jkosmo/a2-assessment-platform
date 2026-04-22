@@ -4,6 +4,8 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { localizedTextCodec, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
+import { NotFoundError } from "../../errors/AppError.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -103,7 +105,34 @@ export async function createModule(input: CreateModuleInput) {
   return module;
 }
 
-export async function updateModuleTitle(moduleId: string, title: string, actorId: string) {
+function normalizeLocalizedTitleSeed(title: string | null | undefined): LocalizedTextObject {
+  const parsed = localizedTextCodec.parse(title);
+  if (parsed && typeof parsed === "object") {
+    return { ...parsed };
+  }
+
+  const fallback = typeof parsed === "string" ? parsed.trim() : "";
+  if (!fallback) {
+    return {};
+  }
+
+  return {
+    "en-GB": fallback,
+    nb: fallback,
+    nn: fallback,
+  };
+}
+
+export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedTextObject, actorId: string) {
+  const existingModule = await adminContentRepository.findModuleTitle(moduleId);
+  if (!existingModule) {
+    throw new NotFoundError("Module", "module_not_found", "Module not found.");
+  }
+
+  const title = localizedTextCodec.serialize({
+    ...normalizeLocalizedTitleSeed(existingModule.title),
+    ...titlePatch,
+  });
   const module = await adminContentRepository.updateModuleTitle(moduleId, title);
   await recordAuditEvent({
     entityType: auditEntityTypes.module,

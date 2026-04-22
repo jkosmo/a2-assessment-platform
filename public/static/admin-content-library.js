@@ -445,14 +445,12 @@ async function loadModules() {
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
   const roles = participantRuntimeConfig.identityDefaults?.roles?.join(",") ?? "SUBJECT_MATTER_OWNER";
-  const allItems = resolveWorkspaceNavigationItems(
+  const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     roles,
     window.location.pathname,
   ).filter(item => item.visible);
-
-  const profileItem = allItems.find(item => item.id === "profile");
-  const items = allItems.filter(item => item.id !== "profile");
+  document.getElementById("profileNavLink")?.remove();
 
   workspaceNav.innerHTML = "";
   workspaceNav.hidden = items.length === 0;
@@ -462,21 +460,6 @@ function renderWorkspaceNavigation() {
     a.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
     a.textContent = t(item.labelKey) || item.id;
     workspaceNav.appendChild(a);
-  }
-
-  if (profileItem) {
-    const localePicker = document.querySelector(".locale-picker");
-    if (localePicker) {
-      let profileLink = document.getElementById("profileNavLink");
-      if (!profileLink) {
-        profileLink = document.createElement("a");
-        profileLink.id = "profileNavLink";
-        localePicker.appendChild(profileLink);
-      }
-      profileLink.href = profileItem.path;
-      profileLink.textContent = t(profileItem.labelKey);
-      profileLink.className = profileItem.active ? "workspace-nav-link active" : "workspace-nav-link";
-    }
   }
 }
 

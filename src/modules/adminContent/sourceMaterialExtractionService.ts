@@ -3,11 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { parseOffice } from "officeparser";
 
 const require = createRequire(import.meta.url);
 
-const WordExtractorCtor = require("word-extractor") as new () => {
+type WordExtractorCtor = new () => {
   extract: (input: string | Buffer) => Promise<{
     getBody: () => string;
     getHeaders?: (options?: { includeFooters?: boolean }) => string;
@@ -19,12 +18,46 @@ const WordExtractorCtor = require("word-extractor") as new () => {
   }>;
 };
 
-const pptParser = require("ppt") as {
+type PptParser = {
   readFile: (filename: string, options?: Record<string, unknown>) => unknown;
   utils: {
     to_text: (presentation: unknown) => string[];
   };
 };
+
+type OfficeParserModule = {
+  parseOffice: (
+    file: string | ArrayBuffer | Buffer,
+    config?: Record<string, unknown>,
+  ) => Promise<{ toText: () => string }>;
+};
+
+let officeParserPromise: Promise<OfficeParserModule> | null = null;
+let wordExtractorCtorPromise: Promise<WordExtractorCtor> | null = null;
+let pptParserPromise: Promise<PptParser> | null = null;
+
+async function loadOfficeParser() {
+  if (!officeParserPromise) {
+    officeParserPromise = import("officeparser").then((module) => ({
+      parseOffice: module.parseOffice,
+    }));
+  }
+  return officeParserPromise;
+}
+
+async function loadWordExtractorCtor() {
+  if (!wordExtractorCtorPromise) {
+    wordExtractorCtorPromise = Promise.resolve().then(() => require("word-extractor") as WordExtractorCtor);
+  }
+  return wordExtractorCtorPromise;
+}
+
+async function loadPptParser() {
+  if (!pptParserPromise) {
+    pptParserPromise = Promise.resolve().then(() => require("ppt") as PptParser);
+  }
+  return pptParserPromise;
+}
 
 export const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -111,6 +144,7 @@ export class SourceMaterialTimeoutError extends Error {
 
 const defaultAdapters: SourceMaterialExtractionAdapters = {
   async parseOffice(buffer) {
+    const { parseOffice } = await loadOfficeParser();
     const ast = await parseOffice(buffer, {
       outputErrorToConsole: false,
       extractAttachments: false,
@@ -120,6 +154,7 @@ const defaultAdapters: SourceMaterialExtractionAdapters = {
     return ast.toText();
   },
   async parseLegacyDoc(buffer) {
+    const WordExtractorCtor = await loadWordExtractorCtor();
     const extractor = new WordExtractorCtor();
     const document = await extractor.extract(buffer);
     return compactTextSections([
@@ -133,6 +168,7 @@ const defaultAdapters: SourceMaterialExtractionAdapters = {
     ]);
   },
   async parseLegacyPpt(buffer) {
+    const pptParser = await loadPptParser();
     const tempPath = path.join(os.tmpdir(), `a2-admin-content-${randomUUID()}.ppt`);
     await fs.writeFile(tempPath, buffer);
     try {

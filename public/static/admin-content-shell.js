@@ -821,10 +821,25 @@ function buildPreviewCandidate(patch) {
   return {
     ...baseDraft,
     ...patch,
-    title: patch.title ?? baseDraft.title ?? sessionDraft?.title ?? "",
-    taskText: patch.taskText ?? baseDraft.taskText ?? sessionDraft?.taskText ?? "",
-    guidanceText: patch.guidanceText ?? baseDraft.guidanceText ?? sessionDraft?.guidanceText ?? "",
-    mcqQuestions: patch.mcqQuestions ?? baseDraft.mcqQuestions ?? sessionDraft?.mcqQuestions ?? [],
+    title: patch.title ?? baseDraft.title ?? sessionDraft?.title ?? bundle?.module?.title ?? "",
+    taskText:
+      patch.taskText
+      ?? baseDraft.taskText
+      ?? sessionDraft?.taskText
+      ?? bundle?.selectedConfiguration?.moduleVersion?.taskText
+      ?? "",
+    guidanceText:
+      patch.guidanceText
+      ?? baseDraft.guidanceText
+      ?? sessionDraft?.guidanceText
+      ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText
+      ?? "",
+    mcqQuestions:
+      patch.mcqQuestions
+      ?? baseDraft.mcqQuestions
+      ?? sessionDraft?.mcqQuestions
+      ?? bundle?.selectedConfiguration?.mcqSetVersion?.questions
+      ?? [],
   };
 }
 
@@ -950,6 +965,28 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
   }
 
   return localizedQuestions;
+}
+
+function buildLocalizedMcqDraft(questions, sourceLocale) {
+  return (questions ?? []).map((question) => ({
+    stem: buildLocalizedTextMap(sourceLocale, question?.stem ?? ""),
+    options: (question?.options ?? []).map((option) => buildLocalizedTextMap(sourceLocale, option ?? "")),
+    correctAnswer: buildLocalizedTextMap(sourceLocale, question?.correctAnswer ?? ""),
+    rationale: buildLocalizedTextMap(sourceLocale, question?.rationale ?? ""),
+  }));
+}
+
+function resolveEditableMcqQuestions(locale) {
+  const sourceQuestions = sessionDraft?.mcqQuestions?.length
+    ? sessionDraft.mcqQuestions
+    : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
+
+  return sourceQuestions.map((question) => ({
+    stem: localizeValueForLocale(question?.stem ?? "", locale),
+    options: (question?.options ?? []).map((option) => localizeValueForLocale(option, locale)),
+    correctAnswer: localizeValueForLocale(question?.correctAnswer ?? "", locale),
+    rationale: localizeValueForLocale(question?.rationale ?? "", locale),
+  }));
 }
 
 function buildDefaultSubmissionSchema() {
@@ -1368,11 +1405,17 @@ async function publishLatestDraftInBackground() {
       getHeaders,
       { method: "POST", body: JSON.stringify({}) },
     );
-    latestSavedModuleVersionId = moduleVersionId;
-    await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
     showToast(t("shell.publish.success"), "success");
     announceStatus(t("shell.publish.success"));
+    bundle = null;
+    selectedModuleId = null;
+    sessionDraft = null;
+    previewDraft = null;
+    latestSavedModuleVersionId = null;
+    renderPreviewLocaleBar();
+    renderPreview();
+    await startModulePicker();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -1745,9 +1788,9 @@ async function loadModule(moduleId, options = {}) {
   const handoff = readAndClearHandoff(moduleId);
   if (handoff?.locale && supportedLocales.includes(handoff.locale) && handoff.locale !== currentLocale) {
     currentLocale = handoff.locale;
-    if (handoff.previewLocale && supportedLocales.includes(handoff.previewLocale)) {
-      previewLocale = handoff.previewLocale;
-    }
+  }
+  if (handoff?.previewLocale && supportedLocales.includes(handoff.previewLocale)) {
+    previewLocale = handoff.previewLocale;
   }
   const resumeBehavior = resolveShellResumeBehavior({
     hasHandoffDraft: !!handoff?.draft,
@@ -1823,15 +1866,17 @@ function startDirectEditFlow() {
 }
 
 function enterPreviewEditMode() {
-  const currentTitle = localizeValue(sessionDraft?.title ?? bundle?.module?.title) || "";
+  const editingLocale = previewLocale ?? currentLocale;
+  const currentTitle = localizeValueForLocale(sessionDraft?.title ?? bundle?.module?.title ?? "", editingLocale) || "";
   const currentTaskText = localizeValueForLocale(
     sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "",
-    currentLocale,
+    editingLocale,
   );
   const currentGuidanceText = localizeValueForLocale(
     sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "",
-    currentLocale,
+    editingLocale,
   );
+  const currentMcqQuestions = resolveEditableMcqQuestions(editingLocale);
 
   // Lock locale bar and signal edit mode visually
   const previewPaneEl = document.querySelector(".preview-pane");
@@ -1843,6 +1888,72 @@ function enterPreviewEditMode() {
   const escapedGuidance = escapeHtml(currentGuidanceText);
   const labelTask = escapeHtml(t("adminContent.moduleVersion.taskText"));
   const labelGuidance = escapeHtml(t("adminContent.moduleVersion.guidanceText"));
+  const mcqSectionLabel = escapeHtml(t("shell.preview.mcqSection"));
+  const optionsLabel = escapeHtml(t("adminContent.dialog.mcq.options"));
+  const correctAnswerLabel = escapeHtml(t("shell.preview.correctAnswer"));
+  const rationaleLabel = escapeHtml(t("adminContent.dialog.mcq.rationale"));
+  const mcqHelp = escapeHtml(t("adminContent.help.mcqQuestions"));
+  const mcqHtml = currentMcqQuestions.length
+    ? `
+      <div class="preview-section-label">${mcqSectionLabel}</div>
+      <div class="preview-edit-mcq-list">
+        ${currentMcqQuestions.map((question, questionIndex) => {
+          const questionLabel = escapeHtml(tf("shell.preview.questionNumber", { number: questionIndex + 1 }));
+          const options = Array.isArray(question.options) ? question.options : [];
+          const selectedOptionIndex = Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+          const optionsHtml = options
+            .map((option, optionIndex) => {
+              const optionLetter = String.fromCharCode(65 + optionIndex);
+              return `
+                <label class="preview-edit-mcq-option">
+                  <input
+                    type="radio"
+                    name="previewEditCorrectAnswer${questionIndex}"
+                    value="${optionIndex}"
+                    ${optionIndex === selectedOptionIndex ? "checked" : ""}
+                    aria-label="${escapeHtml(`${questionLabel} ${correctAnswerLabel} ${optionLetter}`)}"
+                  />
+                  <input
+                    type="text"
+                    id="previewEditMcqOption${questionIndex}_${optionIndex}"
+                    class="preview-edit-input"
+                    data-preview-edit-option
+                    value="${escapeHtml(option)}"
+                    aria-label="${escapeHtml(`${questionLabel} ${optionsLabel} ${optionLetter}`)}"
+                  />
+                </label>
+              `.trim();
+            })
+            .join("");
+
+          return `
+            <article class="preview-edit-mcq-item" data-preview-edit-question="${questionIndex}">
+              <div class="preview-mcq-question-header">${questionLabel}</div>
+              <textarea
+                id="previewEditMcqStem${questionIndex}"
+                class="preview-edit-textarea preview-edit-textarea--compact"
+                aria-label="${questionLabel}"
+              >${escapeHtml(question.stem)}</textarea>
+              <div class="preview-section-label">${optionsLabel}</div>
+              <div class="preview-edit-mcq-options">
+                ${optionsHtml}
+              </div>
+              <div class="preview-mcq-meta">
+                <span class="preview-mcq-meta-label">${correctAnswerLabel}</span>
+                <span class="preview-edit-mcq-help">${mcqHelp}</span>
+              </div>
+              <div class="preview-section-label">${rationaleLabel}</div>
+              <textarea
+                id="previewEditMcqRationale${questionIndex}"
+                class="preview-edit-textarea preview-edit-textarea--secondary preview-edit-textarea--compact"
+                aria-label="${escapeHtml(`${questionLabel} ${rationaleLabel}`)}"
+              >${escapeHtml(question.rationale)}</textarea>
+            </article>
+          `.trim();
+        }).join("")}
+      </div>
+    `
+    : "";
 
   previewContent.innerHTML = `
     <div class="preview-module-header">
@@ -1856,6 +1967,7 @@ function enterPreviewEditMode() {
     <div class="preview-section-label">${labelGuidance}</div>
     <textarea id="previewEditGuidanceText" class="preview-edit-textarea preview-edit-textarea--secondary"
       aria-label="${labelGuidance}">${escapedGuidance}</textarea>
+    ${mcqHtml}
     <div class="preview-edit-actions">
       <button id="previewEditCancel" class="btn-secondary">${escapeHtml(t("shell.action.cancel"))}</button>
       <button id="previewEditConfirm" class="btn-primary">${escapeHtml(t("shell.directEdit.submit"))}</button>
@@ -1879,6 +1991,24 @@ function enterPreviewEditMode() {
     const newTitle = document.getElementById("previewEditTitle").value.trim() || currentTitle;
     const newTaskText = document.getElementById("previewEditTaskText").value.trim() || currentTaskText;
     const newGuidanceText = document.getElementById("previewEditGuidanceText").value.trim() || currentGuidanceText;
+    const newMcqQuestions = currentMcqQuestions.map((question, questionIndex) => {
+      const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
+      const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
+      const options = optionInputs.map((input, optionIndex) => input.value.trim() || question.options[optionIndex] || "");
+      const checkedRadio = container?.querySelector(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`);
+      const checkedIndex = Number.parseInt(checkedRadio?.value ?? "-1", 10);
+      const safeCorrectAnswerIndex =
+        Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
+          ? checkedIndex
+          : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+
+      return {
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options,
+        correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    });
 
     exitEditMode();
 
@@ -1886,13 +2016,17 @@ function enterPreviewEditMode() {
     const slot = logProgress(() => t("shell.directEdit.translating"));
     slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
-    localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, currentLocale)
-      .then((localized) => {
+    Promise.all([
+      localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, editingLocale),
+      currentMcqQuestions.length ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale) : Promise.resolve([]),
+    ])
+      .then(([localizedDraft, localizedMcqQuestions]) => {
         generationAbort = null;
         sessionDraft = buildPreviewCandidate({
-          title: localized.title,
-          taskText: localized.taskText,
-          guidanceText: localized.guidanceText,
+          title: localizedDraft.title,
+          taskText: localizedDraft.taskText,
+          guidanceText: localizedDraft.guidanceText,
+          mcqQuestions: localizedMcqQuestions,
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
@@ -1902,9 +2036,10 @@ function enterPreviewEditMode() {
       .catch(() => {
         generationAbort = null;
         sessionDraft = buildPreviewCandidate({
-          title: buildLocalizedTextMap(currentLocale, newTitle),
-          taskText: buildLocalizedTextMap(currentLocale, newTaskText),
-          guidanceText: buildLocalizedTextMap(currentLocale, newGuidanceText),
+          title: buildLocalizedTextMap(editingLocale, newTitle),
+          taskText: buildLocalizedTextMap(editingLocale, newTaskText),
+          guidanceText: buildLocalizedTextMap(editingLocale, newGuidanceText),
+          mcqQuestions: buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
@@ -2244,14 +2379,12 @@ async function loadVersion() {
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
   const roles = participantRuntimeConfig.identityDefaults?.roles?.join(",") ?? "SUBJECT_MATTER_OWNER";
-  const allItems = resolveWorkspaceNavigationItems(
+  const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     roles,
     window.location.pathname,
   ).filter((item) => item.visible);
-
-  const profileItem = allItems.find((item) => item.id === "profile");
-  const items = allItems.filter((item) => item.id !== "profile");
+  document.getElementById("profileNavLink")?.remove();
 
   workspaceNav.innerHTML = "";
   workspaceNav.hidden = items.length === 0;
@@ -2263,20 +2396,6 @@ function renderWorkspaceNavigation() {
     workspaceNav.appendChild(a);
   }
 
-  if (profileItem) {
-    const localePicker = document.querySelector(".locale-picker");
-    if (localePicker) {
-      let profileLink = document.getElementById("profileNavLink");
-      if (!profileLink) {
-        profileLink = document.createElement("a");
-        profileLink.id = "profileNavLink";
-        localePicker.appendChild(profileLink);
-      }
-      profileLink.href = profileItem.path;
-      profileLink.textContent = t(profileItem.labelKey);
-      profileLink.className = profileItem.active ? "workspace-nav-link active" : "workspace-nav-link";
-    }
-  }
 }
 
 // Translates static text that lives in the HTML source (not rendered by chat flow).

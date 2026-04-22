@@ -82,26 +82,53 @@ Use correlation IDs first when diagnosing single-request or single-user failures
 
 ## Alert Baseline
 
-The current Azure alert baseline is narrower than the full signal list.
+The pilot alert baseline is intentionally small and focused on failures that otherwise require manual log discovery.
 
-Implemented alert-backed concerns:
-
-### Latency alert
+### Web latency alert
+- Alert resource: `*-latency-*`
 - Source: App Service metric `AverageResponseTime`
 - Severity: Sev2
 - Evaluates HTTP latency on the web app
 
-### LLM failure alert
+### LLM evaluation failure alert
+- Alert display name: `LLM evaluation failures detected`
 - Source: log query over `llm_evaluation_failed`
 - Severity: Sev2
 
 ### Queue backlog alert
+- Alert display name: `Assessment queue backlog is above threshold`
 - Source: log query over `assessment_queue_backlog`
 - Severity: Sev2
 - Alert logic applies a pending-job threshold in Azure query configuration
 
 ### Appeal overdue alert
+- Alert display name: `Overdue appeals detected`
 - Source: log query over `appeal_overdue_detected`
+- Severity: Sev2
+
+### Worker distress alert
+- Alert resources:
+  - `a2-assessment-platform-stg-worker-health`
+  - `a2-assessment-platform-prd-worker-health`
+- Source: App Service metric `HealthCheckStatus` on the worker app
+- Severity: Sev1
+- Purpose: catch worker unhealthy/crash states without waiting for manual log discovery
+
+### Unhandled runtime error alert
+- Alert display name: `Unhandled runtime errors detected`
+- Source: log query over:
+  - `unhandled_error`
+  - `unhandled_rejection`
+  - `uncaught_exception`
+- Severity: Sev1
+
+### Participant notification delivery alert
+- Alert display name: `Participant notification delivery failures detected`
+- Created when notification delivery uses `acs_email` or `webhook`
+- Source: log query over:
+  - `participant_notification_failed`
+  - `participant_notification_pipeline_failed`
+  - `recertification_reminder_failed`
 - Severity: Sev2
 
 ## Signals Without Dedicated Azure Alerts
@@ -109,12 +136,36 @@ Implemented alert-backed concerns:
 These events are useful today but are not described as first-class Azure alerts in the baseline:
 - `assessment_job_stale_lock_detected`
 - `assessment_job_stuck_alert`
-- `unhandled_error`
 - `submission_document_parse`
-- notification success/failure events
-- recertification reminder events
+- notification success events
+- recertification reminder success events
 
 They should still be queried during incident response.
+
+## Alert First Response
+
+### Worker distress alert
+- Alert:
+  - `a2-assessment-platform-stg-worker-health`
+  - `a2-assessment-platform-prd-worker-health`
+- First checks:
+  - confirm worker `GET /healthz`
+  - check recent restart activity and deployment timing
+  - check for `uncaught_exception`, `unhandled_rejection`, and startup failures in the worker log stream
+
+### Unhandled runtime error alert
+- Alert: `Unhandled runtime errors detected`
+- First checks:
+  - separate web-path failures from worker-path failures
+  - pull a recent sample from `unhandled_error`, `unhandled_rejection`, or `uncaught_exception`
+  - correlate to deploy window, affected route, and recent user flow
+
+### Participant notification delivery alert
+- Alert: `Participant notification delivery failures detected`
+- First checks:
+  - confirm whether `PARTICIPANT_NOTIFICATION_CHANNEL` is `acs_email` or `webhook`
+  - inspect recent `participant_notification_failed` events for `failureReason`
+  - verify whether the business write succeeded and whether manual user follow-up is required
 
 ## First Response Checklist
 
@@ -130,10 +181,11 @@ They should still be queried during incident response.
    - `llm_evaluation_failed`
    - `assessment_job_stuck_alert`
    - `assessment_job_stale_lock_detected`
+   - worker health check failures
 6. Query appeal monitor signals if the incident is queue/SLA related:
    - `appeal_sla_backlog`
    - `appeal_overdue_detected`
-7. Query notification events if users are missing status updates.
+7. Query notification events if users are missing status updates or a delivery alert fired.
 8. Record findings in [INCIDENTS.md](INCIDENTS.md).
 
 ## Core KQL Queries

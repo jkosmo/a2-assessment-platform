@@ -129,8 +129,7 @@ adminContentRouter.patch("/modules/:moduleId/title", async (request, response) =
   }
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    const serialized = JSON.stringify(data.title);
-    const module = await updateModuleTitle(request.params.moduleId, serialized, actorId);
+    const module = await updateModuleTitle(request.params.moduleId, data.title, actorId);
     response.json({ module });
   } catch (error) {
     if (error instanceof AppError) {
