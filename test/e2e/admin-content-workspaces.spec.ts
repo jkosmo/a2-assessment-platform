@@ -18,12 +18,12 @@ type MockLibraryModule = {
 
 type MockCourse = {
   id: string;
-  title: Record<string, string>;
-  certificationLevel: string;
+  title: Record<string, string> | string;
+  certificationLevel: string | null;
   moduleCount?: number;
   updatedAt?: string;
-  publishedAt?: string;
-  description?: Record<string, string>;
+  publishedAt?: string | null;
+  description?: Record<string, string> | null;
   modules?: Array<{
     moduleId: string;
     sortOrder: number;
@@ -233,7 +233,7 @@ async function mockCommonApis(page: Page, {
   const exportMap = new Map<string, MockModuleExport>(Object.entries(moduleExports));
   const mutableCourses = courses.map((course) => ({
     ...course,
-    description: course.description ?? {},
+    description: course.description ?? null,
     modules: [...(course.modules ?? [])],
     archivedAt: course.archivedAt ?? null,
   }));
