@@ -130,6 +130,7 @@ describe("Admin course management", () => {
       id: courseId,
       moduleCount: 2,
     });
+    expect(listedCourse?.updatedAt).toEqual(expect.any(String));
 
     const auditEvents = await prisma.auditEvent.findMany({
       where: {

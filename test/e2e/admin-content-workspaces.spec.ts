@@ -23,7 +23,7 @@ type MockCourse = {
   moduleCount?: number;
   updatedAt?: string;
   publishedAt?: string | null;
-  description?: Record<string, string> | null;
+  description?: Record<string, string> | string | null;
   modules?: Array<{
     moduleId: string;
     sortOrder: number;
@@ -771,6 +771,7 @@ async function mockCommonApis(page: Page, {
         };
       });
       course.moduleCount = course.modules.length;
+      course.updatedAt = "2026-04-23T12:00:00.000Z";
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -827,13 +828,14 @@ async function mockCommonApis(page: Page, {
 
     if (route.request().method() === "PUT") {
       const body = route.request().postDataJSON() as {
-        title?: Record<string, string>;
-        description?: Record<string, string>;
+        title?: Record<string, string> | string;
+        description?: Record<string, string> | string;
         certificationLevel?: string;
       };
       course.title = body.title ?? course.title;
       course.description = body.description ?? course.description;
       course.certificationLevel = body.certificationLevel ?? course.certificationLevel;
+      course.updatedAt = "2026-04-23T12:00:00.000Z";
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1428,6 +1430,43 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByRole("button", { name: "Advanced" })).toBeVisible();
   });
 
+  test("courses creation and detail view localize certification level labels to the active UI locale", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: { "en-GB": "Trade unions", nb: "Fagforeninger", nn: "Fagforeiningar" },
+          description: {
+            "en-GB": "English description",
+            nb: "Norsk beskrivelse",
+            nn: "Nynorsk skildring",
+          },
+          certificationLevel: "basic",
+          moduleCount: 1,
+          updatedAt: "2026-04-18T10:30:00.000Z",
+          modules: [],
+        },
+      ],
+      libraryModules: [],
+    });
+
+    await page.goto("/admin-content/courses/new");
+    await page.locator("#localeSelect").selectOption("nb");
+    await page.locator("#convTitleInput").fill("Arbeidsmiljo");
+    await page.locator("#convTitleInput").press("Enter");
+
+    await expect(page.getByRole("button", { name: "Grunnleggende" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Videregående" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Avansert" })).toBeVisible();
+
+    await page.goto("/admin-content/courses/course-1");
+    await expect(page.locator("#detailPageTitle")).toContainText("Fagforeninger");
+    await expect(page.locator("#certLevel")).toContainText("Grunnleggende");
+    await expect(page.locator("#tab-nb")).toHaveClass(/active/);
+    await expect(page.locator("#title-nb")).toHaveValue("Fagforeninger");
+    await expect(page.locator("#desc-nb")).toHaveValue("Norsk beskrivelse");
+  });
+
   test("courses conversational flow goes directly from certification choice to module search", async ({ page }) => {
     await mockCommonApis(page, {
       libraryModules: [{ id: "module-1", title: "Trade unions" }],
@@ -1442,6 +1481,30 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#convComboboxInput")).toBeVisible();
     await expect(page.locator("#convCreateBtn")).toBeVisible();
     await expect(page.getByText("Du kan også opprette kurset direkte")).toBeVisible();
+  });
+
+  test("courses list refreshes 'Sist endret' after saving course changes", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: { "en-GB": "Trade unions" },
+          description: { "en-GB": "Original description" },
+          certificationLevel: "basic",
+          moduleCount: 0,
+          updatedAt: "2026-04-18T10:30:00.000Z",
+          modules: [],
+        },
+      ],
+    });
+
+    await page.goto("/admin-content/courses/course-1");
+    await page.locator("#desc-en-GB").fill("Updated description");
+    await page.locator("#saveCourseBtn").click();
+    await expect(page.locator("#saveCourseBtn")).toBeEnabled();
+
+    await page.goto("/admin-content/courses");
+    await expect(page.locator("#coursesTableBody")).toContainText("23 Apr 2026");
   });
 
   test("courses list opens a delete dialog bound to the chosen course", async ({ page }) => {

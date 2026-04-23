@@ -134,7 +134,7 @@ function parseLocalizedFieldValues(value) {
 
 const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
 
-function certBadge(level) {
+function certBadgeLegacy(level) {
   if (!level) return `<span class="cert-badge">—</span>`;
   return `<span class="cert-badge">${CERT_LABELS[level] ?? level}</span>`;
 }
@@ -143,8 +143,31 @@ function certBadge(level) {
 // Route detection
 // ---------------------------------------------------------------------------
 
+function certLabel(level) {
+  if (!level) return "";
+  const key =
+    level === "basic"
+      ? "adminContent.promptDialog.certificationLevelBasic"
+      : level === "intermediate"
+        ? "adminContent.promptDialog.certificationLevelIntermediate"
+        : level === "advanced"
+          ? "adminContent.promptDialog.certificationLevelAdvanced"
+          : null;
+  return key ? t(key) : localizedText(level) || level;
+}
+
+function certBadgeLocalizedTemp(level) {
+  if (!level) return `<span class="cert-badge">â€”</span>`;
+  return `<span class="cert-badge">${escapeHtml(certLabel(level))}</span>`;
+}
+
 function detectRoute() {
   return detectCoursesRoute(window.location.pathname);
+}
+
+function certBadge(level) {
+  if (!level) return `<span class="cert-badge">-</span>`;
+  return `<span class="cert-badge">${escapeHtml(certLabel(level))}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,9 +353,9 @@ function showConvCertStep() {
       <p>Hvilket sertifiseringsnivå passer for dette kurset?</p>
     </div>
     <div class="conv-choices" id="convCertChoices">
-      <button class="conv-choice-btn" data-cert="basic">Basic</button>
-      <button class="conv-choice-btn" data-cert="intermediate">Intermediate</button>
-      <button class="conv-choice-btn" data-cert="advanced">Advanced</button>
+      <button class="conv-choice-btn" data-cert="basic">${escapeHtml(certLabel("basic"))}</button>
+      <button class="conv-choice-btn" data-cert="intermediate">${escapeHtml(certLabel("intermediate"))}</button>
+      <button class="conv-choice-btn" data-cert="advanced">${escapeHtml(certLabel("advanced"))}</button>
     </div>
     <div class="conv-step" id="convAfterCert"></div>`;
 
@@ -578,6 +601,8 @@ async function renderDetailView(courseId) {
 
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
 
+  activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
+
   let course = null;
   if (courseId) {
     try {
@@ -669,9 +694,9 @@ async function renderDetailView(courseId) {
           <label for="certLevel">Sertifiseringsnivå <span class="required-note">(påkrevd)</span></label>
           <select id="certLevel">
             <option value="">– Velg nivå –</option>
-            <option value="basic"${certLevel === "basic" ? " selected" : ""}>Basic</option>
-            <option value="intermediate"${certLevel === "intermediate" ? " selected" : ""}>Intermediate</option>
-            <option value="advanced"${certLevel === "advanced" ? " selected" : ""}>Advanced</option>
+            <option value="basic"${certLevel === "basic" ? " selected" : ""}>${escapeHtml(certLabel("basic"))}</option>
+            <option value="intermediate"${certLevel === "intermediate" ? " selected" : ""}>${escapeHtml(certLabel("intermediate"))}</option>
+            <option value="advanced"${certLevel === "advanced" ? " selected" : ""}>${escapeHtml(certLabel("advanced"))}</option>
           </select>
         </div>
       </div>

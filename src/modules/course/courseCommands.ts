@@ -108,5 +108,9 @@ export async function setCourseModules(
         data: modules.map((m) => ({ courseId, moduleId: m.moduleId, sortOrder: m.sortOrder })),
       });
     }
+    await tx.course.update({
+      where: { id: courseId },
+      data: { updatedAt: new Date() },
+    });
   });
 }

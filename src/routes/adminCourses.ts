@@ -60,6 +60,7 @@ adminCoursesRouter.get("/", async (_request, response, next) => {
       description: c.description,
       certificationLevel: c.certificationLevel,
       moduleCount: c._count.modules,
+      updatedAt: c.updatedAt.toISOString(),
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
     }));
@@ -80,6 +81,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       title: course.title,
       description: course.description,
       certificationLevel: course.certificationLevel,
+      updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
       modules: course.modules.map((cm) => ({

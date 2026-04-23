@@ -31,6 +31,7 @@ export interface AdminCourseListItem {
   description: string | null;
   certificationLevel: string | null;
   moduleCount: number;
+  updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
 }
@@ -40,6 +41,7 @@ export interface AdminCourseDetail {
   title: string;
   description: string | null;
   certificationLevel: string | null;
+  updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
   modules: Array<{
