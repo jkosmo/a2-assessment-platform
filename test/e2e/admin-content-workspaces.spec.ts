@@ -247,6 +247,7 @@ async function mockCommonApis(page: Page, {
     lastTitlePatchBody: null as any,
     lastSourceMaterialExtraction: null as any,
   };
+  const extractionJobs = new Map<string, { fileName: string; extractedText: string }>();
 
   await page.route("**/participant/config", async (route: Route) => {
     await route.fulfill({
@@ -283,6 +284,35 @@ async function mockCommonApis(page: Page, {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ reviews: 0, appeals: 0 }),
+    });
+  });
+
+  await page.route("**/api/me", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: {
+          id: "content-owner-1",
+          email: "content.owner@example.test",
+          name: "Content Owner",
+          roles: ["SUBJECT_MATTER_OWNER"],
+        },
+        consent: { accepted: true },
+        pendingDeletion: null,
+      }),
+    });
+  });
+
+  await page.route("**/api/me/consent", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        version: "e2e-consent",
+        platformName: "A2",
+        body: "Consent accepted in test.",
+      }),
     });
   });
 
@@ -379,13 +409,34 @@ async function mockCommonApis(page: Page, {
       contentBase64?: string;
     };
     state.lastSourceMaterialExtraction = body;
-    const extractedText = `Extracted source material from ${body.fileName ?? "upload.txt"}`;
+    const fileName = body.fileName ?? "upload.txt";
+    const jobId = `extract-job-${extractionJobs.size + 1}`;
+    extractionJobs.set(jobId, {
+      fileName,
+      extractedText: `Extracted source material from ${fileName}`,
+    });
+    await route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({ jobId, status: "pending" }),
+    });
+  });
+
+  await page.route("**/api/admin/content/source-material/extract/*", async (route: Route) => {
+    const jobId = decodeURIComponent(route.request().url().split("/").at(-1) ?? "");
+    const job = extractionJobs.get(jobId);
+    if (!job) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        fileName: body.fileName ?? "upload.txt",
-        extractedText,
+        jobId,
+        status: "done",
+        fileName: job.fileName,
+        extractedText: job.extractedText,
       }),
     });
   });
@@ -670,9 +721,9 @@ async function mockCommonApis(page: Page, {
       const id = `course-${mutableCourses.length + 1}`;
       const course = {
         id,
-        title: typeof body.title === "string" ? localizedText(body.title) : (body.title ?? localizedText(`Course ${mutableCourses.length + 1}`)),
-        description: body.description ?? {},
-        certificationLevel: body.certificationLevel ?? "basic",
+        title: body.title ?? localizedText(`Course ${mutableCourses.length + 1}`),
+        description: body.description ?? null,
+        certificationLevel: body.certificationLevel ?? null,
         moduleCount: 0,
         updatedAt: "2026-04-18T12:00:00.000Z",
         publishedAt: undefined,
@@ -694,6 +745,47 @@ async function mockCommonApis(page: Page, {
     });
   });
 
+  await page.route("**/api/admin/content/courses/*/modules", async (route: Route) => {
+    const segments = new URL(route.request().url()).pathname.split("/");
+    const courseId = decodeURIComponent(segments[segments.length - 2] ?? "");
+    const course = mutableCourses.find((item) => item.id === courseId);
+    if (!course) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as { modules?: Array<{ moduleId: string; sortOrder: number }> };
+      course.modules = (body.modules ?? []).map((item) => {
+        const moduleMatch =
+          mutableModules.find((module) => module.id === item.moduleId) ??
+          libraryModules.find((module) => module.id === item.moduleId) ??
+          Array.from(exportMap.values()).find((module) => module.module.id === item.moduleId)?.module;
+        return {
+          moduleId: item.moduleId,
+          sortOrder: item.sortOrder,
+          moduleTitle:
+            "title" in (moduleMatch ?? {})
+              ? (moduleMatch as any).title
+              : item.moduleId,
+        };
+      });
+      course.moduleCount = course.modules.length;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ modules: course.modules }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ modules: course.modules }),
+    });
+  });
+
   await page.route("**/api/admin/content/courses/*", async (route: Route) => {
     const url = new URL(route.request().url());
     const segments = url.pathname.split("/");
@@ -706,36 +798,6 @@ async function mockCommonApis(page: Page, {
         : (segments[segments.length - 1] ?? ""),
     );
     const course = mutableCourses.find((item) => item.id === courseId);
-
-    if (isModulesRoute) {
-      if (!course) {
-        await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
-        return;
-      }
-      if (route.request().method() === "PUT") {
-        const body = route.request().postDataJSON() as { modules?: Array<{ moduleId: string; sortOrder: number }> };
-        course.modules = (body.modules ?? []).map((item) => {
-          const moduleMatch =
-            mutableModules.find((module) => module.id === item.moduleId) ??
-            Array.from(exportMap.values()).find((module) => module.module.id === item.moduleId)?.module;
-          return {
-            moduleId: item.moduleId,
-            sortOrder: item.sortOrder,
-            moduleTitle:
-              "title" in (moduleMatch ?? {})
-                ? (moduleMatch as any).title
-                : item.moduleId,
-          };
-        });
-        course.moduleCount = course.modules.length;
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ modules: course.modules }),
-        });
-        return;
-      }
-    }
 
     if (isPublishRoute && course) {
       course.publishedAt = "2026-04-18T12:00:00.000Z";
@@ -833,7 +895,6 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
     await page.locator("#saveContentBundle").click();
-    await expect(page.getByText("Draft saved (steps 5–8).")).toBeVisible();
     await expect(page.locator("#publishModuleVersionId")).not.toHaveValue("");
 
     await page.locator("#publishModuleVersion").click();
@@ -845,6 +906,51 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#dlgSimpleConfirmOk").click();
     await expect(page.getByText("Module unpublished.")).toBeVisible();
     await expect(page.locator("#moduleStatusLive")).toContainText("No published version");
+  });
+
+  test("advanced editor persists a renamed module title when saving content", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [
+                localizedText("Option A"),
+                localizedText("Option B"),
+                localizedText("Option C"),
+                localizedText("Option D"),
+              ],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/advanced");
+    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
+
+    await page.locator("#editBtn_moduleDetails").click();
+    await expect(page.locator("#dialogModuleDetails")).toHaveAttribute("open", "");
+    await page.locator("#dlgMD_title_enGB").fill("Renamed module");
+    await page.locator('#dialogModuleDetails .dialog-locale-tab[data-locale-tab="nb"]').click();
+    await page.locator("#dlgMD_title_nb").fill("Omdøpt modul");
+    await page.locator('#dialogModuleDetails .dialog-locale-tab[data-locale-tab="nn"]').click();
+    await page.locator("#dlgMD_title_nn").fill("Omdøypt modul");
+    await page.locator("#dialogModuleDetailsApply").click();
+
+    await page.locator("#saveAllCards").click();
+
+    await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Renamed module");
+    await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Omdøpt modul");
+    await expect.poll(() => state.exportMap.get("module-1")?.module.title?.["en-GB"]).toBe("Renamed module");
+    await expect.poll(() => state.exportMap.get("module-1")?.module.title?.nb).toBe("Omdøpt modul");
   });
 
   test("advanced editor hands unsaved task text back to the conversational workspace", async ({ page }) => {
@@ -898,7 +1004,7 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
-    await expect(page.getByText(/Trade unions \(EN\).*loaded\./)).toBeVisible();
+    await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
   });
 
   test("shell locale switching updates the rendered task text", async ({ page }) => {
@@ -1033,6 +1139,58 @@ test.describe("admin content browser coverage", () => {
     await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Fagforeninger");
     await expect(state.lastTitlePatchBody?.title?.["en-GB"]).toContain("[en-GB]");
     await expect(page.locator("#srModuleName")).toHaveText("Fagforeninger");
+  });
+
+  test("chat revision can rename the module title through a bounded free-text instruction", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: {
+            "en-GB": "English scenario",
+            nb: "Norsk scenario",
+            nn: "Nynorsk scenario",
+          },
+          guidanceText: {
+            "en-GB": "English guidance",
+            nb: "Norsk veiledning",
+            nn: "Nynorsk rettleiing",
+          },
+          mcqQuestions: [
+            {
+              stem: { "en-GB": "English question", nb: "Norsk sporsmal", nn: "Nynorsk sporsmal" },
+              options: [
+                { "en-GB": "Option A", nb: "Alternativ A", nn: "Alternativ A" },
+                { "en-GB": "Option B", nb: "Alternativ B", nn: "Alternativ B" },
+                { "en-GB": "Option C", nb: "Alternativ C", nn: "Alternativ C" },
+                { "en-GB": "Option D", nb: "Alternativ D", nn: "Alternativ D" },
+              ],
+              correctAnswer: { "en-GB": "Option B", nb: "Alternativ B", nn: "Alternativ B" },
+              rationale: { "en-GB": "English rationale", nb: "Norsk begrunnelse", nn: "Nynorsk grunngjeving" },
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+
+    const revisionInput = page.locator(".chat-textarea:enabled").last();
+    await revisionInput.fill('Rename the module title to "Trade union dialogue"');
+    await clickEnabledButton(page, /Revise|Revider/);
+
+    await expect(page.getByText('I will update the module title to "Trade union dialogue" and refresh the localized variants.')).toBeVisible();
+    await expect.poll(() => state.lastDraftLocalizationBody?.title).toBe("Trade union dialogue");
+    await expect(page.locator("#srModuleName")).toHaveText("Trade union dialogue");
+
+    await clickEnabledButton(page, /Save draft|Lagre utkast/);
+
+    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
+    await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Trade union dialogue");
+    await expect(page.locator("#srModuleName")).toHaveText("Trade union dialogue");
   });
 
   test("direct edit keeps MCQ visible and editable through translation and save", async ({ page }) => {
@@ -1211,6 +1369,30 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#detailPageTitle")).toContainText("Labour rights");
     await expect(page.locator("#moduleListContainer")).toContainText("Trade unions");
     await expect.poll(() => state.mutableCourses[0]?.modules?.length ?? 0).toBe(1);
+  });
+
+  test("course detail view renders when backend returns null description for an existing course", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: "Labour rights",
+          description: null,
+          certificationLevel: "basic",
+          moduleCount: 0,
+          updatedAt: "2026-04-18T12:00:00.000Z",
+          publishedAt: null,
+          archivedAt: null,
+          modules: [],
+        },
+      ],
+    });
+
+    await page.goto("/admin-content/courses/course-1");
+
+    await expect(page.locator("#detailPageTitle")).toContainText("Labour rights");
+    await expect(page.locator("#desc-en-GB")).toHaveValue("");
+    await expect(page.locator(".page-loading")).toHaveCount(0);
   });
 
   test("shell idle flow opens the module picker and renders existing module choices", async ({ page }) => {

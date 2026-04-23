@@ -482,6 +482,14 @@ function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;
 }
 
+function tf(key, vars = {}) {
+  let str = t(key);
+  for (const [name, value] of Object.entries(vars)) {
+    str = str.replace(`{${name}}`, String(value));
+  }
+  return str;
+}
+
 function setMessage(text, type = "info") {
   if (!text) return;
   showToast(text, type === "error" ? "error" : type === "success" ? "success" : "info");
@@ -776,6 +784,21 @@ function parseLocalizedTextField(value, fieldLabelKey, options = { required: tru
 function parseLocalizedPreviewField(value, fieldLabelKey, options = { required: false }) {
   const parsed = parseLocalizedTextField(value, fieldLabelKey, options);
   return parsed ?? "";
+}
+
+function normalizeLocalizedTitlePatchValue(value, fieldLabelKey) {
+  const parsed = parseLocalizedTextField(value, fieldLabelKey, { required: false });
+  if (!parsed) {
+    return null;
+  }
+  if (typeof parsed === "string") {
+    return {
+      "en-GB": parsed,
+      nb: parsed,
+      nn: parsed,
+    };
+  }
+  return parsed;
 }
 
 function isLocalizedContentObject(value) {
@@ -2038,7 +2061,38 @@ async function handleCreateModuleVersion(options = { silent: false }) {
   return body;
 }
 
+function isSelectedModuleContentUninitialized() {
+  return Boolean(selectedModuleId)
+    && dirtyCards.size === 0
+    && !moduleTitleInput.value.trim()
+    && !rubricCriteriaJsonInput.value.trim()
+    && !promptSystemPromptInput.value.trim()
+    && !mcqQuestionsJsonInput.value.trim()
+    && !moduleVersionTaskTextInput.value.trim();
+}
+
 async function handleSaveContentBundle() {
+  if (isSelectedModuleContentUninitialized()) {
+    await handleLoadSelectedModuleContent();
+  }
+
+  const moduleId = resolveModuleIdOrThrow();
+  const titlePatch = normalizeLocalizedTitlePatchValue(moduleTitleInput.value, "adminContent.module.name");
+  let titleBody = null;
+  if (titlePatch) {
+    titleBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, headers, {
+      method: "PATCH",
+      body: JSON.stringify({ title: titlePatch }),
+    });
+    const savedTitle = titleBody?.module?.title ?? titlePatch;
+    const selectedModule = modules.find((item) => item.id === moduleId);
+    if (selectedModule) {
+      selectedModule.title = localizeContentValue(savedTitle) || selectedModule.title;
+    }
+    renderModuleDropdown();
+    renderModuleMeta();
+  }
+
   const rubricBody = await handleCreateRubricVersion({ silent: true });
   const promptBody = await handleCreatePromptTemplateVersion({ silent: true });
   const mcqBody = await handleCreateMcqSetVersion({ silent: true });
@@ -2046,13 +2100,14 @@ async function handleSaveContentBundle() {
 
   setMessage(t("adminContent.message.bundleSaved"), "success");
   log({
+    module: titleBody.module,
     rubricVersion: rubricBody.rubricVersion,
     promptTemplateVersion: promptBody.promptTemplateVersion,
     mcqSetVersion: mcqBody.mcqSetVersion,
     moduleVersion: moduleVersionBody.moduleVersion,
   });
   await refreshSelectedModuleStatus();
-  for (const key of ["rubric", "prompt", "mcq", "versionDetails", "assessmentPolicy", "submissionSchema"]) {
+  for (const key of ["moduleDetails", "rubric", "prompt", "mcq", "versionDetails", "assessmentPolicy", "submissionSchema"]) {
     dirtyCards.delete(key);
   }
   renderContentCards();

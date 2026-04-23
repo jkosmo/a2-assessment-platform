@@ -96,6 +96,42 @@ function localizedText(value) {
   return value[currentLocale] ?? value["en-GB"] ?? Object.values(value).find(Boolean) ?? "";
 }
 
+function parseLocalizedFieldValues(value) {
+  const empty = { "en-GB": "", nb: "", nn: "" };
+  if (value == null) {
+    return empty;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return {
+            "en-GB": typeof parsed["en-GB"] === "string" ? parsed["en-GB"] : "",
+            nb: typeof parsed.nb === "string" ? parsed.nb : "",
+            nn: typeof parsed.nn === "string" ? parsed.nn : "",
+          };
+        }
+      } catch {
+        // Fall through and treat it as a plain string.
+      }
+    }
+    return { "en-GB": value, nb: "", nn: "" };
+  }
+
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return {
+      "en-GB": typeof value["en-GB"] === "string" ? value["en-GB"] : "",
+      nb: typeof value.nb === "string" ? value.nb : "",
+      nn: typeof value.nn === "string" ? value.nn : "",
+    };
+  }
+
+  return empty;
+}
+
 const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
 
 function certBadge(level) {
@@ -614,11 +650,13 @@ async function renderDetailView(courseId) {
   }
 
   // Init locale values from existing course or empty
+  const titleValues = parseLocalizedFieldValues(course?.title);
+  const descriptionValues = parseLocalizedFieldValues(course?.description);
   const localeValues = {};
   for (const loc of ["en-GB", "nb", "nn"]) {
     localeValues[loc] = {
-      title: (typeof course?.title === "object" ? course.title[loc] : loc === "en-GB" ? course?.title : "") ?? "",
-      description: (typeof course?.description === "object" ? course.description[loc] : loc === "en-GB" ? course?.description : "") ?? "",
+      title: titleValues[loc] ?? "",
+      description: descriptionValues[loc] ?? "",
     };
   }
 

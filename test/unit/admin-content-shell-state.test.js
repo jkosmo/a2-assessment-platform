@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyShellEditInstruction,
   detectShellRevisionTargets,
   deriveShellModuleActionModel,
   deriveShellDraftReadyActionModel,
@@ -36,6 +37,61 @@ describe("admin content shell state helpers", () => {
     });
   });
 
+  describe("classifyShellEditInstruction", () => {
+    it("extracts a bounded title edit intent from free text", () => {
+      expect(
+        classifyShellEditInstruction('Rename the module title to "Trade union dialogue"', {
+          hasDraft: true,
+          hasMcq: true,
+          hasSelectedModule: true,
+        }),
+      ).toEqual({
+        kind: "title",
+        title: "Trade union dialogue",
+      });
+    });
+
+    it("routes pure translation requests to locale refresh instead of LLM revision", () => {
+      expect(
+        classifyShellEditInstruction("Translate the MCQ to nynorsk.", {
+          hasDraft: true,
+          hasMcq: true,
+          hasSelectedModule: true,
+        }),
+      ).toEqual({
+        kind: "translate",
+        draft: true,
+        mcq: true,
+      });
+    });
+
+    it("blocks unsupported low-level authoring requests behind advanced editor fallback", () => {
+      expect(
+        classifyShellEditInstruction("Adjust the rubric weights and update the pass rule.", {
+          hasDraft: true,
+          hasMcq: true,
+          hasSelectedModule: true,
+        }),
+      ).toEqual({
+        kind: "unsupported",
+        area: "rubric",
+      });
+    });
+
+    it("asks for clarification instead of applying overly broad cross-surface edits", () => {
+      expect(
+        classifyShellEditInstruction("Make this better.", {
+          hasDraft: true,
+          hasMcq: true,
+          hasSelectedModule: true,
+        }),
+      ).toEqual({
+        kind: "clarify",
+        reason: "too_broad",
+      });
+    });
+  });
+
   describe("deriveShellModuleActionModel", () => {
     it("keeps a consistent action order for loaded modules with an unsaved draft", () => {
       expect(
@@ -47,7 +103,7 @@ describe("admin content shell state helpers", () => {
           canUnpublish: false,
         }),
       ).toEqual({
-        actionKeys: ["generateContent", "generateMcq", "editAdvanced", "pickAnother", "saveDraft"],
+        actionKeys: ["generateContent", "generateMcq", "directEdit", "editAdvanced", "pickAnother", "saveDraft"],
         shouldOfferUnifiedRevision: true,
       });
     });
@@ -65,6 +121,7 @@ describe("admin content shell state helpers", () => {
         actionKeys: [
           "generateContent",
           "resumeChatEdit",
+          "directEdit",
           "editAdvanced",
           "pickAnother",
           "publish",
@@ -78,14 +135,14 @@ describe("admin content shell state helpers", () => {
   describe("deriveShellDraftReadyActionModel", () => {
     it("prefers open-editor first when a module already exists", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: true })).toEqual({
-        actionKeys: ["openEditor", "restart", "saveDraft"],
+        actionKeys: ["directEdit", "openEditor", "restart", "saveDraft"],
         shouldOpenUnifiedRevision: true,
       });
     });
 
     it("omits open-editor when no module has been created yet", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: false })).toEqual({
-        actionKeys: ["restart", "saveDraft"],
+        actionKeys: ["directEdit", "restart", "saveDraft"],
         shouldOpenUnifiedRevision: true,
       });
     });

@@ -18,6 +18,7 @@ import { showToast } from "/static/toast.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import {
+  classifyShellEditInstruction,
   detectShellRevisionTargets,
   deriveShellModuleActionModel,
   deriveShellDraftReadyActionModel,
@@ -774,7 +775,7 @@ function updateStateRail() {
   const hasUnsaved = !!sessionDraft;
 
   if (srModuleName) {
-    srModuleName.textContent = localizeValue(bundle?.module?.title) || selectedModuleId;
+    srModuleName.textContent = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || selectedModuleId;
   }
 
   if (srEditing) {
@@ -875,6 +876,27 @@ function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
     result[locale] = translatedEntries[locale] ?? baseText;
   }
   return result;
+}
+
+function normalizeModuleTitlePatch(title) {
+  if (!title) return null;
+  if (typeof title === "string") {
+    const normalized = title.trim();
+    if (!normalized) return null;
+    return buildLocalizedTextMap("en-GB", normalized);
+  }
+  if (typeof title !== "object") {
+    return null;
+  }
+
+  const normalized = {};
+  for (const locale of supportedLocales) {
+    const value = title?.[locale];
+    if (typeof value === "string" && value.trim()) {
+      normalized[locale] = value.trim();
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
 async function localizeDraftAcrossLocales(taskText, guidanceText, sourceLocale) {
@@ -1056,6 +1078,31 @@ function resolveDraftForSave() {
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
 
   return { taskText, guidanceText, mcqQuestions };
+}
+
+function resolveCurrentDraftSnapshot(locale = (previewLocale ?? currentLocale)) {
+  const fallbackTitle = bundle?.module?.title ?? sessionDraft?.title ?? t("shell.newModule.defaultTitle");
+  return {
+    sourceLocale: locale,
+    title: localizeValueForLocale(sessionDraft?.title ?? fallbackTitle, locale) || localizeValueForLocale(fallbackTitle, "en-GB") || "",
+    taskText: localizeValueForLocale(
+      sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "",
+      locale,
+    ),
+    guidanceText: localizeValueForLocale(
+      sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "",
+      locale,
+    ),
+    mcqQuestions: resolveEditableMcqQuestions(locale),
+  };
+}
+
+function commitSessionDraftPatch(patch, { scroll = "top" } = {}) {
+  sessionDraft = buildPreviewCandidate(patch);
+  sessionState = "draft-pending";
+  clearPreviewCandidate();
+  if (scroll === "bottom") scrollPreviewToBottom();
+  else scrollPreviewToTop();
 }
 
 function createSessionDraftFromLoadedModule() {
@@ -1309,6 +1356,71 @@ async function reviseMcqInBackground(instruction, onAccept) {
   onAccept?.(questions);
 }
 
+async function applyStructuredTitleEditInBackground(newTitle) {
+  const snapshot = resolveCurrentDraftSnapshot();
+  const slot = logProgress("shell.revision.titleProgress");
+  slot.abortBtn.remove();
+
+  try {
+    const localizedDraft = await localizeDraftAcrossLocalesWithTitle(
+      newTitle,
+      snapshot.taskText,
+      snapshot.guidanceText,
+      snapshot.sourceLocale,
+    );
+    commitSessionDraftPatch({
+      title: localizedDraft.title,
+      taskText: localizedDraft.taskText,
+      guidanceText: localizedDraft.guidanceText,
+    });
+    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`);
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.titleErrorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => applyStructuredTitleEditInBackground(newTitle) },
+      { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+    ]);
+  }
+}
+
+async function refreshLocalizedDraftInBackground({ draft, mcq }) {
+  const snapshot = resolveCurrentDraftSnapshot();
+  const slot = logProgress("shell.revision.translateProgress");
+  slot.abortBtn.remove();
+
+  try {
+    const localizedDraft = draft
+      ? await localizeDraftAcrossLocalesWithTitle(
+        snapshot.title,
+        snapshot.taskText,
+        snapshot.guidanceText,
+        snapshot.sourceLocale,
+      )
+      : null;
+    const localizedMcq = mcq && snapshot.mcqQuestions.length
+      ? await localizeMcqAcrossLocales(snapshot.mcqQuestions, snapshot.sourceLocale)
+      : null;
+
+    const patch = {};
+    if (localizedDraft) {
+      patch.title = localizedDraft.title;
+      patch.taskText = localizedDraft.taskText;
+      patch.guidanceText = localizedDraft.guidanceText;
+    }
+    if (localizedMcq) {
+      patch.mcqQuestions = localizedMcq;
+    }
+    commitSessionDraftPatch(patch, { scroll: localizedMcq && !localizedDraft ? "bottom" : "top" });
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`);
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.translateErrorPrefix"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => refreshLocalizedDraftInBackground({ draft, mcq }) },
+      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
+    ]);
+  }
+}
+
 async function saveDraftBundleInBackground(options = {}) {
   const { afterSave = null } = options;
   const moduleId = selectedModuleId;
@@ -1334,10 +1446,11 @@ async function saveDraftBundleInBackground(options = {}) {
     const rubricPayload = resolveCurrentRubricPayload();
     const promptPayload = resolveCurrentPromptPayload();
 
-    if (sessionDraft?.title && typeof sessionDraft.title === "object") {
+    const titlePatch = normalizeModuleTitlePatch(sessionDraft?.title);
+    if (titlePatch) {
       await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, getHeaders, {
         method: "PATCH",
-        body: JSON.stringify({ title: sessionDraft.title }),
+        body: JSON.stringify({ title: titlePatch }),
       });
     }
 
@@ -1829,19 +1942,79 @@ function detectRevisionTargets(instruction) {
   });
 }
 
-async function runUnifiedRevision(instruction) {
-  const targets = detectRevisionTargets(instruction);
+function describeStructuredEditIntent(intent) {
+  if (intent.kind === "title") {
+    return tf("shell.revision.intent.title", { title: intent.title });
+  }
+  if (intent.kind === "translate") {
+    return t("shell.revision.intent.translate");
+  }
+  if (intent.kind === "revision" && intent.draft && intent.mcq) {
+    return t("shell.revision.intent.draftAndMcq");
+  }
+  if (intent.kind === "revision" && intent.draft) {
+    return t("shell.revision.intent.draft");
+  }
+  if (intent.kind === "revision" && intent.mcq) {
+    return t("shell.revision.intent.mcq");
+  }
+  return "";
+}
 
-  if (!targets.draft && !targets.mcq) {
+async function runUnifiedRevision(instruction) {
+  const intent = classifyShellEditInstruction(instruction, {
+    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.guidanceText),
+    hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
+    hasSelectedModule: !!(selectedModuleId || sessionDraft?.title || bundle?.module?.title),
+  });
+
+  if (intent.kind === "unsupported") {
+    logBot(
+      () => `${escapeHtml(t("shell.revision.unsupported"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.unsupportedHint"))}</span>`,
+      [
+        { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+        { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
+      ],
+    );
+    return;
+  }
+
+  if (intent.kind === "clarify") {
+    logBot(() => escapeHtml(t("shell.revision.clarify")), [
+      { labelKey: "shell.revision.tryAgain", action: () => startUnifiedRevisionFlow() },
+      { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
+    ]);
+    return;
+  }
+
+  const summary = describeStructuredEditIntent(intent);
+  if (summary) {
+    logBot(() => escapeHtml(summary));
+  }
+
+  if (intent.kind === "title") {
+    await applyStructuredTitleEditInBackground(intent.title);
+    showDraftReadyActions();
+    return;
+  }
+
+  if (intent.kind === "translate") {
+    await refreshLocalizedDraftInBackground({ draft: intent.draft, mcq: intent.mcq });
+    showDraftReadyActions();
+    return;
+  }
+
+  if (intent.kind !== "revision") {
     logBot(() => t("shell.revision.unavailable"));
     return;
   }
 
-  if (targets.draft) {
-    await reviseDraftInBackground(instruction);
+  if (intent.draft) {
+    await reviseDraftInBackground(intent.instruction);
   }
-  if (targets.mcq) {
-    await reviseMcqInBackground(instruction);
+  if (intent.mcq) {
+    await reviseMcqInBackground(intent.instruction);
   }
   showDraftReadyActions();
 }

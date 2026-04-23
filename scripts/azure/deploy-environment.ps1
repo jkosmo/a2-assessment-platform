@@ -333,29 +333,88 @@ Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipP
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
 
-function Wait-Healthy {
-  param([string]$Url, [string]$Label)
-  $maxChecks = 30
-  $delaySeconds = 5
-  Write-Host "Validating deployment health endpoint: $Url"
-  for ($attempt = 1; $attempt -le $maxChecks; $attempt++) {
-    try {
-      $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10
-      if ($response.StatusCode -eq 200) {
-        Write-Host "$Label health check succeeded on attempt $attempt."
-        return
-      }
-    } catch {
-      Write-Host "$Label health check attempt $attempt/$maxChecks failed; retrying..."
+function Get-WebAppState {
+  param([string]$ResourceGroup, [string]$AppName)
+  try {
+    $state = (az webapp show --resource-group $ResourceGroup --name $AppName --query "state" -o tsv 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0) {
+      return $state
     }
-    Start-Sleep -Seconds $delaySeconds
+  } catch {
+    # Best-effort diagnostics only.
   }
-  throw "Deployment package published, but health endpoint check failed at $Url."
+  return ""
 }
 
-Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
-Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App"
-Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App"
+function Test-HealthEndpoint {
+  param([string]$Url)
+  try {
+    $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10
+    return @{
+      Success = ($response.StatusCode -eq 200)
+      StatusCode = $response.StatusCode
+      Error = ""
+    }
+  } catch {
+    $statusCode = ""
+    try {
+      $statusCode = [int]$_.Exception.Response.StatusCode
+    } catch {
+      $statusCode = ""
+    }
+    return @{
+      Success = $false
+      StatusCode = $statusCode
+      Error = $_.Exception.Message
+    }
+  }
+}
+
+function Wait-Healthy {
+  param(
+    [string]$Url,
+    [string]$Label,
+    [string]$AppName,
+    [string]$ResourceGroup
+  )
+
+  $phases = @(
+    @{ Name = "initial"; MaxChecks = 30; DelaySeconds = 5 },
+    @{ Name = "extended"; MaxChecks = 24; DelaySeconds = 10 }
+  )
+
+  Write-Host "Validating deployment health endpoint: $Url"
+  foreach ($phase in $phases) {
+    for ($attempt = 1; $attempt -le $phase.MaxChecks; $attempt++) {
+      $result = Test-HealthEndpoint -Url $Url
+      if ($result.Success) {
+        Write-Host "$Label health check succeeded during $($phase.Name) validation on attempt $attempt."
+        return
+      }
+
+      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
+      if ($attempt -eq $phase.MaxChecks -and $phase.Name -eq "initial") {
+        $appState = Get-WebAppState -ResourceGroup $ResourceGroup -AppName $AppName
+        if ($appState) {
+          Write-Warning "$Label did not respond healthy during initial validation$statusSuffix. App Service state is '$appState'. Entering extended recovery window."
+        } else {
+          Write-Warning "$Label did not respond healthy during initial validation$statusSuffix. Entering extended recovery window."
+        }
+      } else {
+        Write-Host "$Label health check attempt $attempt/$($phase.MaxChecks) in $($phase.Name) validation failed$statusSuffix; retrying..."
+      }
+      Start-Sleep -Seconds $phase.DelaySeconds
+    }
+  }
+
+  $finalState = Get-WebAppState -ResourceGroup $ResourceGroup -AppName $AppName
+  $finalStateSuffix = if ($finalState) { " Final App Service state: '$finalState'." } else { "" }
+  throw "Deployment package published, but health endpoint check failed at $Url.$finalStateSuffix"
+}
+
+Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
+Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
+Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"

@@ -4,7 +4,7 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
-import { localizedTextCodec, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
+import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../../errors/AppError.js";
 
 type CreateRubricVersionInput = {
@@ -123,7 +123,26 @@ function normalizeLocalizedTitleSeed(title: string | null | undefined): Localize
   };
 }
 
-export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedTextObject, actorId: string) {
+function normalizeLocalizedTitlePatch(titlePatch: LocalizedText): LocalizedTextObject {
+  if (typeof titlePatch === "string") {
+    const normalized = titlePatch.trim();
+    if (!normalized) {
+      return {};
+    }
+    return {
+      "en-GB": normalized,
+      nb: normalized,
+      nn: normalized,
+    };
+  }
+
+  const normalizedEntries = Object.entries(titlePatch).filter(
+    ([, value]) => typeof value === "string" && value.trim().length > 0,
+  );
+  return Object.fromEntries(normalizedEntries) as LocalizedTextObject;
+}
+
+export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedText, actorId: string) {
   const existingModule = await adminContentRepository.findModuleTitle(moduleId);
   if (!existingModule) {
     throw new NotFoundError("Module", "module_not_found", "Module not found.");
@@ -131,7 +150,7 @@ export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedT
 
   const title = localizedTextCodec.serialize({
     ...normalizeLocalizedTitleSeed(existingModule.title),
-    ...titlePatch,
+    ...normalizeLocalizedTitlePatch(titlePatch),
   });
   const module = await adminContentRepository.updateModuleTitle(moduleId, title);
   await recordAuditEvent({

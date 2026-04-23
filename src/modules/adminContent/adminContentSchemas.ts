@@ -12,6 +12,7 @@ export const localizedTextPatchObjectSchema = localizedTextObjectSchema.partial(
   (value) => Object.values(value).some((entry) => typeof entry === "string" && entry.trim().length > 0),
   { message: "At least one locale value is required." },
 );
+export const localizedTextPatchSchema = z.union([z.string().trim().min(1), localizedTextPatchObjectSchema]);
 
 export function localizedTextIdentity(value: LocalizedText): string {
   if (typeof value === "string") {
@@ -29,7 +30,7 @@ export const moduleCreateBodySchema = z.object({
 });
 
 export const moduleTitleUpdateBodySchema = z.object({
-  title: localizedTextPatchObjectSchema,
+  title: localizedTextPatchSchema,
 });
 
 export const rubricBodySchema = z.object({

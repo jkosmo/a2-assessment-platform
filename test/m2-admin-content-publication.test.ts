@@ -388,6 +388,46 @@ describe("MVP admin content management and publication", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
+  it("accepts a plain-string title patch and applies it to all locales", async () => {
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": `String Patch Module ${Date.now()}`,
+          nb: "Strengoppdatering modul",
+          nn: "Strengoppdatering modul nynorsk",
+        },
+      });
+
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
+
+    const patchResponse = await request(app)
+      .patch(`/api/admin/content/modules/${moduleId}/title`)
+      .set(adminHeaders)
+      .send({
+        title: "Unified module title",
+      });
+
+    expect(patchResponse.status).toBe(200);
+
+    const storedModule = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { title: true },
+    });
+    const parsedTitle = localizedTextCodec.parse(storedModule?.title ?? null);
+
+    expect(typeof parsedTitle).toBe("object");
+    expect(parsedTitle).toMatchObject({
+      "en-GB": "Unified module title",
+      nb: "Unified module title",
+      nn: "Unified module title",
+    });
+
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
+  });
+
   it("keeps previously completed modules visible to participant after publishing a new module", async () => {
     const isolatedParticipantHeaders = {
       "x-user-id": `participant-pub-regression-${Date.now()}`,

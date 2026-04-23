@@ -82,31 +82,24 @@ MCQ generation exists and is now less opinionated than before:
 
 This is no longer just planned; it is implemented in the shell and backend prompt path.
 
-### Free-text revision loop is now partially present
+### Free-text revision loop is now materially present
 
-The shell now supports a first real free-text revision loop for generated content:
+The shell now supports a bounded free-text edit/apply loop for the main authoring
+surface:
 
 - revise scenario / guidance through chat after a draft has been generated
 - revise MCQ through chat after questions have been generated
+- rename the module title through free-text chat
+- refresh localized variants from the current preview language
 - keep the preview pane in sync before the user moves on to the advanced editor
 
-This is still narrower than the full `#297` design:
+The important safety boundary is now explicit rather than implicit:
 
-- there is no general intent-classifier yet
-- revisions are targeted to draft text and MCQ, not the full content surface
-- there is no multilingual apply/translate workflow yet
+- chat edits are routed through a bounded classifier before execution
+- broad or ambiguous requests are clarified instead of applied blindly
+- rubric / prompt / submission-schema / assessment-policy changes are intentionally pushed to the advanced editor instead of being half-supported in chat
 
 ## Not Yet Implemented
-
-### Full free-form conversational edit/apply loop (`#297`)
-
-The biggest remaining gap versus the approved design is still the *full* free-form
-edit loop. The current shell now supports targeted free-text revision for draft text
-and MCQ, but it does **not** yet support:
-
-- intent classification into typed `CommandIntent`
-- editing rubric, prompt, submission schema, assessment policy, and version content directly through free-form chat
-- conversational translation/apply flows across locales
 
 ### Safe conversational CRUD and publish flows are now materially in place
 
