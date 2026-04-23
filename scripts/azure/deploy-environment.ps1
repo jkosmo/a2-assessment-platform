@@ -329,9 +329,11 @@ if ($IsLinux -or $IsMacOS) {
   [System.IO.Compression.ZipFile]::CreateFromDirectory($tmpRoot, $zipPath)
 }
 
-Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
+# Staging runs web, worker, and parser on the same small App Service plan.
+# Deploy the user-facing web app last so the plan can absorb worker/parser churn first.
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 
 function Get-WebAppState {
   param([string]$ResourceGroup, [string]$AppName)
@@ -412,9 +414,33 @@ function Wait-Healthy {
   throw "Deployment package published, but health endpoint check failed at $Url.$finalStateSuffix"
 }
 
+function Wait-Stable {
+  param(
+    [string]$Url,
+    [string]$Label,
+    [int]$RequiredSuccesses = 6,
+    [int]$DelaySeconds = 10
+  )
+
+  Write-Host "Confirming $Label remains healthy after deployment..."
+  for ($attempt = 1; $attempt -le $RequiredSuccesses; $attempt++) {
+    $result = Test-HealthEndpoint -Url $Url
+    if (-not $result.Success) {
+      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
+      throw "$Label became unhealthy during post-deploy stability validation$statusSuffix at $Url"
+    }
+
+    Write-Host "$Label stability check $attempt/$RequiredSuccesses succeeded."
+    if ($attempt -lt $RequiredSuccesses) {
+      Start-Sleep -Seconds $DelaySeconds
+    }
+  }
+}
+
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
+Wait-Stable -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
