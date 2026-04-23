@@ -9,7 +9,7 @@ import {
   deleteCourse,
   courseRepository,
 } from "../modules/course/index.js";
-import { localizedTextSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
@@ -17,9 +17,9 @@ import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/i
 const adminCoursesRouter = Router();
 
 const courseBodySchema = z.object({
-  title: localizedTextSchema,
-  description: localizedTextSchema.optional(),
-  certificationLevel: localizedTextSchema.optional(),
+  title: localizedTextPatchSchema,
+  description: localizedTextPatchSchema.optional(),
+  certificationLevel: localizedTextPatchSchema.optional(),
 });
 
 const setCourseModulesBodySchema = z.object({

@@ -342,7 +342,7 @@ function showConvCertStep() {
     convCertLevel = btn.dataset.cert;
     document.querySelectorAll(".conv-choice-btn").forEach(b => b.disabled = true);
     appendConvCertBubble(btn.textContent.trim());
-    showConvModuleStep();
+    showConvModuleSearch();
   });
 }
 
@@ -355,46 +355,8 @@ function appendConvCertBubble(label) {
   certChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterCert"));
 }
 
-function showConvModuleStep() {
-  const after = document.getElementById("convAfterCert");
-  if (!after) return;
-
-  after.innerHTML = `
-    <div class="conv-bot-msg">
-      <p>Vil du legge til moduler nå, eller hoppe over til du har opprettet kurset?</p>
-    </div>
-    <div class="conv-choices" id="convModuleChoices">
-      <button class="conv-choice-btn" id="convAddModulesBtn">Legg til moduler</button>
-      <button class="conv-choice-btn" id="convSkipModulesBtn">Hopp over</button>
-    </div>
-    <div class="conv-step" id="convAfterModuleChoice"></div>`;
-
-  document.getElementById("convAddModulesBtn")?.addEventListener("click", () => {
-    document.getElementById("convAddModulesBtn").disabled = true;
-    document.getElementById("convSkipModulesBtn").disabled = true;
-    appendConvAfterModuleChoice("Legg til moduler");
-    showConvModuleSearch();
-  });
-
-  document.getElementById("convSkipModulesBtn")?.addEventListener("click", () => {
-    document.getElementById("convAddModulesBtn").disabled = true;
-    document.getElementById("convSkipModulesBtn").disabled = true;
-    appendConvAfterModuleChoice("Hopp over");
-    convCreateCourse();
-  });
-}
-
-function appendConvAfterModuleChoice(label) {
-  const moduleChoices = document.getElementById("convModuleChoices");
-  if (!moduleChoices) return;
-  const bubble = document.createElement("div");
-  bubble.className = "conv-user-bubble";
-  bubble.textContent = label;
-  moduleChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterModuleChoice"));
-}
-
 function showConvModuleSearch() {
-  const after = document.getElementById("convAfterModuleChoice");
+  const after = document.getElementById("convAfterCert");
   if (!after) return;
 
   convModules = [];
@@ -404,7 +366,7 @@ function showConvModuleSearch() {
 
   after.innerHTML = `
     <div class="conv-bot-msg">
-      <p>Søk etter moduler og legg dem til i kurset. Trykk <strong>Opprett kurs</strong> når du er ferdig.</p>
+      <p>Søk etter moduler og legg dem til i kurset. Du kan også opprette kurset direkte hvis du vil legge til moduler senere.</p>
     </div>
     <div id="convModuleListContainer"></div>
     <div class="combobox-row" style="margin-bottom:var(--space-2)">
@@ -559,7 +521,7 @@ async function convCreateCourse() {
   const createBtn = document.getElementById("convCreateBtn");
   if (createBtn) createBtn.disabled = true;
 
-  const after = document.getElementById("convAfterModules") ?? document.getElementById("convAfterModuleChoice");
+  const after = document.getElementById("convAfterModules") ?? document.getElementById("convAfterCert");
   if (after) {
     after.innerHTML = `<div class="conv-saving-indicator">Oppretter kurs…</div>`;
   }
@@ -583,7 +545,7 @@ async function convCreateCourse() {
     }
 
     showToast("Kurs opprettet.", "success");
-    window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
+    window.location.href = "/admin-content/courses";
   } catch (err) {
     if (after) {
       after.innerHTML = `<div class="error-banner">${escapeHtml(err?.message ?? "Kunne ikke opprette kurs.")}</div>`;
@@ -941,12 +903,21 @@ function collectLocaleValues() {
   return { title, description };
 }
 
+function normalizeLocalizedRequestValue(valueMap) {
+  const entries = Object.entries(valueMap).filter(([, value]) => typeof value === "string" && value.trim());
+  if (entries.length === 0) return undefined;
+  if (entries.length === 1 && entries[0][0] === "en-GB") return entries[0][1];
+  return Object.fromEntries(entries);
+}
+
 async function saveCourse(courseId) {
   const saveBtn = document.getElementById("saveCourseBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
   const { title, description } = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
+  const normalizedTitle = normalizeLocalizedRequestValue(title);
+  const normalizedDescription = normalizeLocalizedRequestValue(description);
 
   // Validation
   if (!title["en-GB"]) {
@@ -977,8 +948,8 @@ async function saveCourse(courseId) {
       const body = await apiFetch("/api/admin/content/courses", getHeaders, {
         method: "POST",
         body: JSON.stringify({
-          title,
-          description: Object.keys(description).length > 0 ? description : undefined,
+          title: normalizedTitle,
+          description: normalizedDescription,
           certificationLevel: certLevel || undefined,
         }),
       });
@@ -989,8 +960,8 @@ async function saveCourse(courseId) {
       await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders, {
         method: "PUT",
         body: JSON.stringify({
-          title,
-          description: Object.keys(description).length > 0 ? description : undefined,
+          title: normalizedTitle,
+          description: normalizedDescription,
           certificationLevel: certLevel || undefined,
         }),
       });

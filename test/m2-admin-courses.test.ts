@@ -71,8 +71,9 @@ describe("Admin course management", () => {
       .send({
         title: {
           "en-GB": "Updated managed course",
-          nb: "Oppdatert administrert kurs",
-          nn: "Oppdatert administrert kurs",
+        },
+        description: {
+          "en-GB": "Updated description from the admin UI.",
         },
       });
     expect(updateCourseResponse.status).toBe(200);

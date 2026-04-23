@@ -1343,7 +1343,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("courses conversational flow can add a module and land on the saved course detail view", async ({ page }) => {
+  test("courses conversational flow goes straight to module selection and returns to the course list after save", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [
         { id: "module-1", title: "Trade unions" },
@@ -1357,7 +1357,6 @@ test.describe("admin content browser coverage", () => {
     await titleInput.fill("Labour rights");
     await titleInput.press("Enter");
     await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, "Legg til moduler");
 
     await page.locator("#convComboboxInput").fill("Trade");
     await page.locator(".combobox-option").first().click();
@@ -1365,9 +1364,9 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#convModuleListContainer")).toContainText("Trade unions");
 
     await page.locator("#convCreateBtn").click();
-    await expect(page).toHaveURL(/\/admin-content\/courses\/course-1$/);
-    await expect(page.locator("#detailPageTitle")).toContainText("Labour rights");
-    await expect(page.locator("#moduleListContainer")).toContainText("Trade unions");
+    await expect(page).toHaveURL(/\/admin-content\/courses$/);
+    await expect(page.getByRole("table", { name: "Kursliste" })).toBeVisible();
+    await expect(page.locator("#coursesTableBody")).toContainText("Labour rights");
     await expect.poll(() => state.mutableCourses[0]?.modules?.length ?? 0).toBe(1);
   });
 
@@ -1427,6 +1426,22 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByRole("button", { name: "Basic" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Intermediate" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Advanced" })).toBeVisible();
+  });
+
+  test("courses conversational flow goes directly from certification choice to module search", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [{ id: "module-1", title: "Trade unions" }],
+    });
+
+    await page.goto("/admin-content/courses/new");
+
+    await page.locator("#convTitleInput").fill("Labour rights");
+    await page.locator("#convTitleInput").press("Enter");
+    await clickEnabledButton(page, "Basic");
+
+    await expect(page.locator("#convComboboxInput")).toBeVisible();
+    await expect(page.locator("#convCreateBtn")).toBeVisible();
+    await expect(page.getByText("Du kan også opprette kurset direkte")).toBeVisible();
   });
 
   test("courses list opens a delete dialog bound to the chosen course", async ({ page }) => {
