@@ -132,6 +132,137 @@ function parseLocalizedFieldValues(value) {
   return empty;
 }
 
+function cloneLocalizedFieldValues(valueMap) {
+  const clone = {};
+  for (const locale of supportedLocales) {
+    clone[locale] = typeof valueMap?.[locale] === "string" ? valueMap[locale] : "";
+  }
+  return clone;
+}
+
+function cloneCourseLocaleValues(values) {
+  return {
+    title: cloneLocalizedFieldValues(values?.title),
+    description: cloneLocalizedFieldValues(values?.description),
+  };
+}
+
+function hasAnyLocalizedValue(valueMap) {
+  return supportedLocales.some((locale) => typeof valueMap?.[locale] === "string" && valueMap[locale].trim().length > 0);
+}
+
+function firstNonEmptyLocale(valueMap, preferredLocales = supportedLocales) {
+  const orderedLocales = [...new Set([...preferredLocales, ...supportedLocales])];
+  for (const locale of orderedLocales) {
+    const value = valueMap?.[locale];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return locale;
+    }
+  }
+  return null;
+}
+
+function getChangedCourseLocales(currentValues, initialValues) {
+  const changed = new Set();
+  for (const locale of supportedLocales) {
+    const currentTitle = currentValues?.title?.[locale] ?? "";
+    const initialTitle = initialValues?.title?.[locale] ?? "";
+    const currentDescription = currentValues?.description?.[locale] ?? "";
+    const initialDescription = initialValues?.description?.[locale] ?? "";
+    if (currentTitle !== initialTitle || currentDescription !== initialDescription) {
+      changed.add(locale);
+    }
+  }
+  return changed;
+}
+
+function applyCourseLocaleValuesToForm(values) {
+  for (const locale of supportedLocales) {
+    const titleInput = document.getElementById(`title-${locale}`);
+    const descriptionInput = document.getElementById(`desc-${locale}`);
+    if (titleInput) {
+      titleInput.value = values?.title?.[locale] ?? "";
+    }
+    if (descriptionInput) {
+      descriptionInput.value = values?.description?.[locale] ?? "";
+    }
+  }
+
+  const pageTitle = document.getElementById("detailPageTitle");
+  if (pageTitle) {
+    const titleForLocale =
+      values?.title?.[currentLocale] ??
+      values?.title?.["en-GB"] ??
+      values?.title?.nb ??
+      values?.title?.nn ??
+      "";
+    if (titleForLocale) {
+      pageTitle.textContent = titleForLocale;
+    }
+  }
+}
+
+function resolveCourseLocalizationSourceLocale(currentValues, initialValues) {
+  const changedLocales = getChangedCourseLocales(currentValues, initialValues);
+  if (changedLocales.size === 1) {
+    return [...changedLocales][0];
+  }
+  if (changedLocales.size === 0) {
+    return firstNonEmptyLocale(currentValues?.title, [activeDetailLocale, currentLocale, "en-GB"]) ??
+      firstNonEmptyLocale(currentValues?.description, [activeDetailLocale, currentLocale, "en-GB"]);
+  }
+  return null;
+}
+
+async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues, sourceLocale, preserveExisting = false }) {
+  const localized = {
+    title: cloneLocalizedFieldValues(titleValues),
+    description: cloneLocalizedFieldValues(descriptionValues),
+  };
+
+  const sourceTitle = localized.title[sourceLocale]?.trim() ?? "";
+  const sourceDescription = localized.description[sourceLocale]?.trim() ?? "";
+  const hasSourceTitle = sourceTitle.length > 0;
+  const hasSourceDescription = sourceDescription.length > 0;
+
+  if (!hasSourceTitle && !hasSourceDescription) {
+    return localized;
+  }
+
+  for (const targetLocale of supportedLocales) {
+    if (targetLocale === sourceLocale) continue;
+
+    try {
+      const result = await apiFetch("/api/admin/content/courses/localize-copy", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          ...(hasSourceTitle ? { title: sourceTitle } : {}),
+          ...(hasSourceDescription ? { description: sourceDescription } : {}),
+          sourceLocale,
+          targetLocale,
+        }),
+      });
+
+      if (hasSourceTitle) {
+        localized.title[targetLocale] = result?.title?.trim?.() || (preserveExisting ? localized.title[targetLocale] : "") || sourceTitle;
+      }
+      if (hasSourceDescription) {
+        localized.description[targetLocale] =
+          result?.description?.trim?.() || (preserveExisting ? localized.description[targetLocale] : "") || sourceDescription;
+      }
+    } catch {
+      if (hasSourceTitle && !localized.title[targetLocale]) {
+        localized.title[targetLocale] = sourceTitle;
+      }
+      if (hasSourceDescription && !localized.description[targetLocale]) {
+        localized.description[targetLocale] = sourceDescription;
+      }
+    }
+  }
+
+  return localized;
+}
+
 const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
 
 function certBadgeLegacy(level) {
@@ -550,10 +681,18 @@ async function convCreateCourse() {
   }
 
   try {
+    const sourceLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
+    const localizedValues = await localizeCourseCopyAcrossLocales({
+      titleValues: { [sourceLocale]: convTitle },
+      descriptionValues: {},
+      sourceLocale,
+    });
+    const normalizedTitle = normalizeLocalizedRequestValue(localizedValues.title) ?? convTitle;
+
     const body = await apiFetch("/api/admin/content/courses", getHeaders, {
       method: "POST",
       body: JSON.stringify({
-        title: convTitle,
+        title: normalizedTitle,
         certificationLevel: convCertLevel,
       }),
     });
@@ -581,6 +720,7 @@ async function convCreateCourse() {
 
 // Active locale tab for the detail form
 let activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
+let initialDetailLocaleValues = cloneCourseLocaleValues();
 
 // Course modules being edited (array of { moduleId, title })
 let courseModules = [];
@@ -646,6 +786,10 @@ async function renderDetailView(courseId) {
       description: descriptionValues[loc] ?? "",
     };
   }
+  initialDetailLocaleValues = cloneCourseLocaleValues({
+    title: titleValues,
+    description: descriptionValues,
+  });
 
   const certLevel = course?.certificationLevel ?? "";
   const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
@@ -939,18 +1083,27 @@ async function saveCourse(courseId) {
   const saveBtn = document.getElementById("saveCourseBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
-  const { title, description } = collectLocaleValues();
+  const collectedValues = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
-  const normalizedTitle = normalizeLocalizedRequestValue(title);
-  const normalizedDescription = normalizeLocalizedRequestValue(description);
+  const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
+  const effectiveValues = sourceLocale
+    ? await localizeCourseCopyAcrossLocales({
+        titleValues: collectedValues.title,
+        descriptionValues: collectedValues.description,
+        sourceLocale,
+        preserveExisting: true,
+      })
+    : cloneCourseLocaleValues(collectedValues);
+  const normalizedTitle = normalizeLocalizedRequestValue(effectiveValues.title);
+  const normalizedDescription = normalizeLocalizedRequestValue(effectiveValues.description);
 
   // Validation
-  if (!title["en-GB"]) {
+  if (!hasAnyLocalizedValue(effectiveValues.title)) {
     if (errorBanner) {
-      errorBanner.innerHTML = `<div class="error-banner">Tittel på engelsk (en-GB) er påkrevd.</div>`;
+      errorBanner.innerHTML = `<div class="error-banner">Tittel er påkrevd på minst ett språk.</div>`;
       errorBanner.hidden = false;
     }
-    document.getElementById("title-en-GB")?.focus();
+    document.getElementById(`title-${activeDetailLocale}`)?.focus();
     return;
   }
   if (!certLevel) {
@@ -964,6 +1117,7 @@ async function saveCourse(courseId) {
 
   if (errorBanner) errorBanner.hidden = true;
   if (saveBtn) saveBtn.disabled = true;
+  applyCourseLocaleValuesToForm(effectiveValues);
 
   try {
     let savedCourseId = courseId;
@@ -1000,6 +1154,7 @@ async function saveCourse(courseId) {
     });
 
     showToast("Kurs lagret.", "success");
+    initialDetailLocaleValues = cloneCourseLocaleValues(effectiveValues);
 
     // If new, navigate to the saved course URL
     if (!courseId) {

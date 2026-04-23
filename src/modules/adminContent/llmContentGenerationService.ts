@@ -87,6 +87,18 @@ export type McqLocalizationInput = {
   targetLocale: GenerationLocale;
 };
 
+export type CourseCopyLocalizationInput = {
+  title?: string;
+  description?: string;
+  sourceLocale: GenerationLocale;
+  targetLocale: GenerationLocale;
+};
+
+export type CourseCopyLocalizationResult = {
+  title?: string;
+  description?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Response codecs
 // ---------------------------------------------------------------------------
@@ -109,6 +121,13 @@ const mcqGenerationResponseCodec = z.object({
       }),
     )
     .min(1),
+});
+
+const courseCopyLocalizationResponseCodec = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+}).refine((value) => Boolean(value.title || value.description), {
+  message: "At least one localized field is required.",
 });
 
 // ---------------------------------------------------------------------------
@@ -700,6 +719,52 @@ Return a single JSON object:
   return { systemPrompt, userPrompt };
 }
 
+export function buildCourseCopyLocalizationPrompts(input: CourseCopyLocalizationInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a professional translator for a certification platform. Translate the provided course metadata faithfully and return strict JSON only - no markdown, no commentary.";
+
+  const titleSection = typeof input.title === "string" && input.title.trim().length > 0
+    ? `\ntitle:\n${input.title.trim()}\n`
+    : "";
+
+  const descriptionSection = typeof input.description === "string" && input.description.trim().length > 0
+    ? `\ndescription:\n${input.description.trim()}\n`
+    : "";
+
+  const returnFields: string[] = [];
+  if (titleSection) {
+    returnFields.push(`  "title": "translated title in ${LOCALE_DISPLAY[input.targetLocale]}"`);
+  }
+  if (descriptionSection) {
+    returnFields.push(`  "description": "translated description in ${LOCALE_DISPLAY[input.targetLocale]}"`);
+  }
+
+  const userPrompt = `Translate the following course metadata from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+
+## Translation rules
+
+- Preserve meaning, tone and intended audience.
+- Keep the course title concise and natural in the target language.
+- Keep the description faithful; do not add marketing copy or extra detail.
+- If a phrase should stay unchanged across languages, keep it unchanged.
+- Do not add or remove fields.
+
+## Source metadata
+${titleSection}
+${descriptionSection}
+## Return format
+
+Return a single JSON object:
+{
+${returnFields.join(",\n")}
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
 async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
@@ -842,6 +907,17 @@ export async function localizeMcqQuestions(input: McqLocalizationInput): Promise
   const parsed = mcqGenerationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`MCQ localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+export async function localizeCourseCopy(input: CourseCopyLocalizationInput): Promise<CourseCopyLocalizationResult> {
+  const { systemPrompt, userPrompt } = buildCourseCopyLocalizationPrompts(input);
+
+  const raw = await callLlm(systemPrompt, userPrompt);
+  const parsed = courseCopyLocalizationResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Course copy localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
 }

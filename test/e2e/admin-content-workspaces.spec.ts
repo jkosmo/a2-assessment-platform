@@ -216,6 +216,12 @@ function courseTitleForLocale(title: Record<string, string> | string | undefined
   return title[locale] ?? title["en-GB"] ?? title.nb ?? title.nn ?? Object.values(title)[0] ?? "";
 }
 
+function courseTextForLocale(value: Record<string, string> | string | undefined | null, locale = "en-GB") {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value[locale] ?? value["en-GB"] ?? value.nb ?? value.nn ?? Object.values(value)[0] ?? "";
+}
+
 async function mockCommonApis(page: Page, {
   modules = [],
   libraryModules = [],
@@ -244,6 +250,7 @@ async function mockCommonApis(page: Page, {
     lastDraftGenerationBody: null as any,
     lastDraftLocalizationBody: null as any,
     lastMcqLocalizationBody: null as any,
+    lastCourseLocalizationBodies: [] as any[],
     lastTitlePatchBody: null as any,
     lastSourceMaterialExtraction: null as any,
   };
@@ -353,6 +360,25 @@ async function mockCommonApis(page: Page, {
         title: body.title ? `${body.title} [${suffix}]` : undefined,
         taskText: `${body.taskText ?? ""} [${suffix}]`,
         guidanceText: `${body.guidanceText ?? ""} [${suffix}]`,
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/content/courses/localize-copy", async (route: Route) => {
+    const body = route.request().postDataJSON() as {
+      title?: string;
+      description?: string;
+      sourceLocale?: string;
+      targetLocale?: string;
+    };
+    state.lastCourseLocalizationBodies.push(body);
+    const suffix = body.targetLocale ?? "xx";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        title: body.title ? `${body.title} [${suffix}]` : undefined,
+        description: body.description ? `${body.description} [${suffix}]` : undefined,
       }),
     });
   });
@@ -798,6 +824,10 @@ async function mockCommonApis(page: Page, {
         ? (segments[segments.length - 2] ?? "")
         : (segments[segments.length - 1] ?? ""),
     );
+    if (courseId === "localize-copy") {
+      await route.fallback();
+      return;
+    }
     const course = mutableCourses.find((item) => item.id === courseId);
 
     if (isPublishRoute && course) {
@@ -1465,6 +1495,59 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#tab-nb")).toHaveClass(/active/);
     await expect(page.locator("#title-nb")).toHaveValue("Fagforeninger");
     await expect(page.locator("#desc-nb")).toHaveValue("Norsk beskrivelse");
+  });
+
+  test("courses conversational creation stores the typed title in the active locale and localizes the other variants", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      libraryModules: [],
+    });
+
+    await page.goto("/admin-content/courses/new");
+    await page.locator("#localeSelect").selectOption("nn");
+    await page.locator("#convTitleInput").fill("Arbeidsmiljøkurs");
+    await page.locator("#convTitleInput").press("Enter");
+    await page.locator('[data-cert="basic"]').click();
+    await page.locator("#convCreateBtn").click();
+
+    await expect(page).toHaveURL(/\/admin-content\/courses$/);
+    await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "nn")).toBe("Arbeidsmiljøkurs");
+    await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "en-GB")).toBe("Arbeidsmiljøkurs [en-GB]");
+    await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "nb")).toBe("Arbeidsmiljøkurs [nb]");
+    await expect.poll(() => state.lastCourseLocalizationBodies.map((body) => body.targetLocale).sort()).toEqual(["en-GB", "nb"]);
+  });
+
+  test("course detail save refreshes other locales when title and description are edited in one language", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: { "en-GB": "Trade unions", nb: "Fagforeninger", nn: "Fagforeiningar" },
+          description: {
+            "en-GB": "English description",
+            nb: "Norsk beskrivelse",
+            nn: "Nynorsk skildring",
+          },
+          certificationLevel: "basic",
+          moduleCount: 0,
+          updatedAt: "2026-04-18T10:30:00.000Z",
+          modules: [],
+        },
+      ],
+    });
+
+    await page.goto("/admin-content/courses/course-1");
+    await page.locator("#tab-nn").click();
+    await page.locator("#title-nn").fill("Nytt nynorsk kursnamn");
+    await page.locator("#desc-nn").fill("Oppdatert nynorsk skildring");
+    await page.locator("#saveCourseBtn").click();
+
+    await expect(page.locator("#title-nn")).toHaveValue("Nytt nynorsk kursnamn");
+    await expect(page.locator("#title-en-GB")).toHaveValue("Nytt nynorsk kursnamn [en-GB]");
+    await expect(page.locator("#desc-nb")).toHaveValue("Oppdatert nynorsk skildring [nb]");
+    await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "nn")).toBe("Nytt nynorsk kursnamn");
+    await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "en-GB")).toBe("Nytt nynorsk kursnamn [en-GB]");
+    await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.description, "nb")).toBe("Oppdatert nynorsk skildring [nb]");
+    await expect.poll(() => state.lastCourseLocalizationBodies.map((body) => body.targetLocale).slice(-2).sort()).toEqual(["en-GB", "nb"]);
   });
 
   test("courses conversational flow goes directly from certification choice to module search", async ({ page }) => {

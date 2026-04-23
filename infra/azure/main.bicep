@@ -481,6 +481,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: 'web'
         }
         {
+          name: 'SKIP_MIGRATE'
+          value: environmentName == 'production' ? 'false' : 'true'
+        }
+        {
           name: 'NODE_ENV'
           value: environmentName == 'production' ? 'production' : 'development'
         }
@@ -614,7 +618,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK'
-          value: environmentName == 'production' ? 'false' : 'true'
+          value: 'false'
         }
         {
           name: 'PARSER_WORKER_URL'

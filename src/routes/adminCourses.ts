@@ -9,10 +9,12 @@ import {
   deleteCourse,
   courseRepository,
 } from "../modules/course/index.js";
-import { localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
 import { NotFoundError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
+import { generateLimiter } from "../middleware/rateLimiting.js";
 
 const adminCoursesRouter = Router();
 
@@ -31,6 +33,15 @@ const setCourseModulesBodySchema = z.object({
   ),
 });
 
+const courseLocalizationBodySchema = z.object({
+  title: z.string().trim().min(1).optional(),
+  description: z.string().trim().min(1).optional(),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
+}).refine((value) => Boolean(value.title || value.description), {
+  message: "At least one field is required.",
+});
+
 adminCoursesRouter.post("/", async (request, response, next) => {
   const parsed = courseBodySchema.safeParse(request.body);
   if (!parsed.success) {
@@ -46,6 +57,29 @@ adminCoursesRouter.post("/", async (request, response, next) => {
       actorId: request.context?.userId,
     });
     response.status(201).json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.post("/localize-copy", generateLimiter, async (request, response, next) => {
+  const parsed = courseLocalizationBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  try {
+    if (parsed.data.sourceLocale === parsed.data.targetLocale) {
+      response.json({
+        title: parsed.data.title,
+        description: parsed.data.description,
+      });
+      return;
+    }
+
+    const result = await localizeCourseCopy(parsed.data);
+    response.json(result);
   } catch (error) {
     next(error);
   }
