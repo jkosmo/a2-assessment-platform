@@ -94,6 +94,33 @@ function Assert-LastExitCode([string]$stepName) {
   }
 }
 
+function New-ZipArchiveFromDirectory([string]$sourceDirectory, [string]$zipPath) {
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+  $sourceRoot = [System.IO.Path]::GetFullPath($sourceDirectory)
+  $directorySeparator = [System.IO.Path]::DirectorySeparatorChar
+  if (-not $sourceRoot.EndsWith($directorySeparator)) {
+    $sourceRoot = "$sourceRoot$directorySeparator"
+  }
+  $zipFile = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::CreateNew)
+  try {
+    $archive = New-Object System.IO.Compression.ZipArchive($zipFile, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+    try {
+      $files = Get-ChildItem -LiteralPath $sourceRoot -Recurse -File
+      foreach ($file in $files) {
+        $relativePath = $file.FullName.Substring($sourceRoot.Length)
+        $entryName = $relativePath.Replace([System.IO.Path]::DirectorySeparatorChar, '/').Replace([System.IO.Path]::AltDirectorySeparatorChar, '/')
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+      }
+    } finally {
+      $archive.Dispose()
+    }
+  } finally {
+    $zipFile.Dispose()
+  }
+}
+
 function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$ZipPath) {
   $maxAttempts = 5
   $delaySeconds = 15
@@ -325,8 +352,7 @@ if ($IsLinux -or $IsMacOS) {
     Pop-Location
   }
 } else {
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  [System.IO.Compression.ZipFile]::CreateFromDirectory($tmpRoot, $zipPath)
+  New-ZipArchiveFromDirectory -sourceDirectory $tmpRoot -zipPath $zipPath
 }
 
 # Staging runs web, worker, and parser on the same small App Service plan.
