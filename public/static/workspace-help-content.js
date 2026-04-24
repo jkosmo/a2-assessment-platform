@@ -34,8 +34,8 @@ const helpUi = {
 const overviewContent = {
   title: {
     "en-GB": "About the platform",
-    nb: "Om løsningen",
-    nn: "Om løysinga",
+    nb: "Om plattformen",
+    nn: "Om plattforma",
   },
   summary: {
     "en-GB": "The platform brings learning, assessment, follow-up, and content work into one shared flow.",
@@ -73,16 +73,16 @@ const overviewContent = {
       {
         title: "Hovedområder",
         items: [
-          "Participant er stedet der deltakere gjennomfører moduler, leverer svar og følger fremdrift.",
-          "Vurdering, kalibrering og resultat brukes til kvalitetssikring, oppfølging og rapportering.",
-          "Admin Content og Plattforminnstillinger brukes av innholdsansvarlige, ledere og administratorer.",
+          "Deltaker er stedet der deltakere gjennomfører moduler, leverer svar og følger fremdrift.",
+          "Manuell behandling, kalibrering og resultater brukes til kvalitetssikring, oppfølging og rapportering.",
+          "Innholdsforvaltning og plattforminnstillinger brukes av innholdsansvarlige og administratorer.",
         ],
       },
       {
         title: "Slik henger rollene sammen",
         items: [
           "Deltakere gjennomfører moduler og kurs.",
-          "Vurderere og klagebehandlere kvalitetssikrer ved behov.",
+          "Vurderere og ankebehandlere kvalitetssikrer ved behov.",
           "Innholdsansvarlige vedlikeholder moduler, kurs og kalibrering.",
         ],
       },
@@ -99,16 +99,16 @@ const overviewContent = {
       {
         title: "Hovudområde",
         items: [
-          "Participant er staden der deltakarar gjennomfører modular, leverer svar og følgjer framdrift.",
-          "Vurdering, kalibrering og resultat blir brukte til kvalitetssikring, oppfølging og rapportering.",
-          "Admin Content og plattforminnstillingar blir brukte av innhaldsansvarlege, leiarar og administratorar.",
+          "Deltakar er staden der deltakarar gjennomfører modular, leverer svar og følgjer framdrift.",
+          "Manuell handsaming, kalibrering og resultat blir brukte til kvalitetssikring, oppfølging og rapportering.",
+          "Innhaldsforvaltning og plattforminnstillingar blir brukte av innhaldsansvarlege og administratorar.",
         ],
       },
       {
         title: "Slik heng rollene saman",
         items: [
           "Deltakarar gjennomfører modular og kurs.",
-          "Vurderarar og klagebehandlarar kvalitetssikrar ved behov.",
+          "Vurderarar og ankebehandlarar kvalitetssikrar ved behov.",
           "Innhaldsansvarlege held ved like modular, kurs og kalibrering.",
         ],
       },
@@ -126,7 +126,7 @@ const overviewContent = {
 
 const workspaceContent = {
   participant: {
-    title: { "en-GB": "Participant", nb: "Participant", nn: "Participant" },
+    title: { "en-GB": "Participant", nb: "Deltaker", nn: "Deltakar" },
     summary: {
       "en-GB": "Use this page to load modules and courses, submit answers, and follow the assessment flow.",
       nb: "Bruk denne siden til å laste inn moduler og kurs, levere svar og følge vurderingsløpet.",
@@ -155,7 +155,7 @@ const workspaceContent = {
           title: "Dette gjør du her",
           items: [
             "Last først inn kurs eller moduler, og velg deretter modulen du skal jobbe med.",
-            "Opprett en innlevering før du forventer at MCQ eller vurdering skal åpne seg.",
+            "Opprett en innlevering før du forventer at flervalg eller vurdering skal åpne seg.",
             "Etter vurdering kan du se resultatet og bare bruke anke når du trenger ny vurdering.",
           ],
         },
@@ -172,7 +172,7 @@ const workspaceContent = {
           title: "Dette gjer du her",
           items: [
             "Last først inn kurs eller modular, og vel deretter modulen du skal jobbe med.",
-            "Opprett ei innlevering før du ventar at MCQ eller vurdering skal opne seg.",
+            "Opprett ei innlevering før du ventar at flerval eller vurdering skal opne seg.",
             "Etter vurdering kan du sjå resultatet og berre bruke klage når du treng ny vurdering.",
           ],
         },
@@ -227,7 +227,7 @@ const workspaceContent = {
         {
           title: "Greit å vite",
           items: [
-            "Denne siden er for ferdige saker. Nye innleveringer starter i Participant.",
+            "Denne siden er for ferdige saker. Nye innleveringer starter i Deltaker.",
             "Siste opplysninger om kursbevis vises også i Profil.",
           ],
         },
@@ -244,7 +244,7 @@ const workspaceContent = {
         {
           title: "Greitt å vite",
           items: [
-            "Denne sida er for ferdige saker. Nye innleveringar startar i Participant.",
+            "Denne sida er for ferdige saker. Nye innleveringar startar i Deltakar.",
             "Siste opplysningar om kursbevis blir også viste i Profil.",
           ],
         },
@@ -289,7 +289,7 @@ const workspaceContent = {
           title: "Greit å vite",
           items: [
             "Profil er personlig. Den viser din egen historikk, ikke rapportering for flere brukere.",
-            "Kurs du fullfører i Participant blir listet her når fullføringsdata er oppdatert.",
+            "Kurs du fullfører i Deltaker blir listet her når fullføringsdata er oppdatert.",
           ],
         },
       ],
@@ -306,7 +306,7 @@ const workspaceContent = {
           title: "Greitt å vite",
           items: [
             "Profil er personleg. Ho viser di eiga historikk, ikkje rapportering for fleire brukarar.",
-            "Kurs du fullfører i Participant blir lista her når fullføringsdata er oppdaterte.",
+            "Kurs du fullfører i Deltakar blir lista her når fullføringsdata er oppdaterte.",
           ],
         },
       ],
@@ -315,13 +315,13 @@ const workspaceContent = {
   review: {
     title: {
       "en-GB": "Review and appeals",
-      nb: "Vurdering og anker",
-      nn: "Vurdering og klager",
+      nb: "Manuell behandling og ankebehandling",
+      nn: "Manuell handsaming og ankebehandling",
     },
     summary: {
       "en-GB": "Use this workspace to claim manual review cases, process appeals, and record decisions with reasons.",
       nb: "Bruk denne arbeidsflaten til å overta manuelle vurderinger, behandle anker og registrere begrunnelser.",
-      nn: "Bruk denne arbeidsflata til å ta over manuelle vurderingar, behandle klager og registrere grunngivingar.",
+      nn: "Bruk denne arbeidsflata til å ta over manuelle vurderingar, behandle anker og registrere grunngivingar.",
     },
     sections: {
       "en-GB": [
@@ -354,7 +354,7 @@ const workspaceContent = {
           title: "Greit å vite",
           items: [
             "Statusfiltre hjelper deg å fokusere på åpne og pågående saker.",
-            "Administratorer kan ta over saker som allerede er claimet når det trengs.",
+            "Administratorer kan ta over saker som allerede er overtatt når det trengs.",
           ],
         },
       ],
@@ -371,7 +371,7 @@ const workspaceContent = {
           title: "Greitt å vite",
           items: [
             "Statusfilter hjelper deg å fokusere på opne og pågåande saker.",
-            "Administratorar kan ta over saker som alt er claima når det trengst.",
+            "Administratorar kan ta over saker som alt er tekne over når det trengst.",
           ],
         },
       ],
@@ -415,7 +415,7 @@ const workspaceContent = {
           title: "Greit å vite",
           items: [
             "Kalibrering påvirker framtidige vurderinger for den valgte moduloppsetningen.",
-            "Hvis du må endre modulinnhold, gjør du det i Admin Content, ikke her.",
+            "Hvis du må endre modulinnhold, gjør du det i Innholdsforvaltning, ikke her.",
           ],
         },
       ],
@@ -432,17 +432,17 @@ const workspaceContent = {
           title: "Greitt å vite",
           items: [
             "Kalibrering påverkar framtidige vurderingar for det valde moduloppsettet.",
-            "Viss du må endre modulinnhald, gjer du det i Admin Content, ikkje her.",
+            "Viss du må endre modulinnhald, gjer du det i Innhaldsforvaltning, ikkje her.",
           ],
         },
       ],
     },
   },
   results: {
-    title: { "en-GB": "Results", nb: "Resultat", nn: "Resultat" },
+    title: { "en-GB": "Results", nb: "Resultater", nn: "Resultat" },
     summary: {
       "en-GB": "Use Results to filter reporting data, compare module and course totals, and inspect participant-level detail.",
-      nb: "Bruk Resultat til å filtrere rapportdata, sammenligne modul- og kurstall og se detaljdata på deltakernivå.",
+      nb: "Bruk Resultater til å filtrere rapportdata, sammenligne modul- og kurstall og se detaljdata på deltakernivå.",
       nn: "Bruk Resultat til å filtrere rapportdata, samanlikne modul- og kurstal og sjå detaljdata på deltakarnivå.",
     },
     sections: {
@@ -500,11 +500,11 @@ const workspaceContent = {
     },
   },
   "admin-content-library": {
-    title: { "en-GB": "Module library", nb: "Modulbibliotek", nn: "Modulbibliotek" },
+    title: { "en-GB": "Module library", nb: "Innholdsforvaltning: moduler", nn: "Innhaldsforvaltning: modular" },
     summary: {
       "en-GB": "Use the library to find modules, create new ones, and open the right editing mode.",
-      nb: "Bruk biblioteket til å finne moduler, opprette nye og åpne riktig redigeringsmodus.",
-      nn: "Bruk biblioteket til å finne modular, opprette nye og opne rett redigeringsmodus.",
+      nb: "Bruk denne siden til å finne moduler, opprette nye og åpne riktig redigeringsmodus.",
+      nn: "Bruk denne sida til å finne modular, opprette nye og opne rett redigeringsmodus.",
     },
     sections: {
       "en-GB": [
@@ -536,7 +536,7 @@ const workspaceContent = {
         {
           title: "Greit å vite",
           items: [
-            "Publisering styrer hva deltakerne kan se. Utkast og arkiverte moduler blir bare i admin.",
+            "Publisering styrer hva deltakerne kan se. Utkast og arkiverte moduler vises bare i innholdsforvaltningen.",
             "Bruk i kurs kan inspiseres fra biblioteket når du trenger konsekvensoversikt.",
           ],
         },
@@ -553,7 +553,7 @@ const workspaceContent = {
         {
           title: "Greitt å vite",
           items: [
-            "Publisering styrer kva deltakarane kan sjå. Utkast og arkiverte modular blir berre i admin.",
+            "Publisering styrer kva deltakarane kan sjå. Utkast og arkiverte modular blir berre viste i innhaldsforvaltninga.",
             "Bruk i kurs kan sjåast frå biblioteket når du treng konsekvensoversikt.",
           ],
         },
@@ -561,11 +561,11 @@ const workspaceContent = {
     },
   },
   "admin-content-shell": {
-    title: { "en-GB": "Conversation editing", nb: "Samtaleredigering", nn: "Samtaleredigering" },
+    title: { "en-GB": "Conversation editing", nb: "Innholdsforvaltning: samtale", nn: "Innhaldsforvaltning: samtale" },
     summary: {
       "en-GB": "Use conversation editing for quick content changes with a live preview beside the chat.",
-      nb: "Bruk samtaleredigering til raske innholdsendringer med levende forhåndsvisning ved siden av chatten.",
-      nn: "Bruk samtaleredigering til raske innhaldsendringar med levande førehandsvising ved sida av chatten.",
+      nb: "Bruk samtaledelen i Innholdsforvaltning til raske innholdsendringer med forhåndsvisning ved siden av samtalen.",
+      nn: "Bruk samtaledelen i Innhaldsforvaltning til raske innhaldsendringar med førehandsvising ved sida av samtalen.",
     },
     sections: {
       "en-GB": [
@@ -590,15 +590,15 @@ const workspaceContent = {
           title: "Dette gjør du her",
           items: [
             "Velg en modul, be om konkrete innholdsendringer og se på forhåndsvisningen mens du jobber.",
-            "Bruk språkknappene i preview for å kontrollere deltakerteksten i hvert språk.",
+            "Bruk språkknappene i forhåndsvisningen for å kontrollere deltakerteksten i hvert språk.",
             "Lagre eller publiser fra handlingsflyten når utkastet ser riktig ut.",
           ],
         },
         {
           title: "Greit å vite",
           items: [
-            "Samtaleredigering passer best for tittel, oppgavetekst, veiledning, MCQ og oppfrisking av oversettelser.",
-            "Gå til avansert redigering når du trenger dypere endringer i rubric, prompt, policy eller schema.",
+            "Samtaledelen passer best for tittel, oppgavetekst, veiledning, flervalg og oppfrisking av oversettelser.",
+            "Gå til avansert redigering når du trenger dypere endringer i vurderingsmatrise, instruksjon, regler eller skjema.",
           ],
         },
       ],
@@ -607,15 +607,15 @@ const workspaceContent = {
           title: "Dette gjer du her",
           items: [
             "Vel ein modul, be om konkrete innhaldsendringar og sjå på førehandsvisinga medan du jobbar.",
-            "Bruk språkknappane i preview for å kontrollere deltakarteksten i kvart språk.",
+            "Bruk språkknappane i førehandsvisinga for å kontrollere deltakarteksten i kvart språk.",
             "Lagre eller publiser frå handlingsflyten når utkastet ser riktig ut.",
           ],
         },
         {
           title: "Greitt å vite",
           items: [
-            "Samtaleredigering passar best for tittel, oppgåvetekst, rettleiing, MCQ og oppfrisking av omsetjingar.",
-            "Gå til avansert redigering når du treng djupare endringar i rubric, prompt, policy eller schema.",
+            "Samtaledelen passar best for tittel, oppgåvetekst, rettleiing, flerval og oppfrisking av omsetjingar.",
+            "Gå til avansert redigering når du treng djupare endringar i vurderingsmatrise, instruksjon, reglar eller skjema.",
           ],
         },
       ],
@@ -624,8 +624,8 @@ const workspaceContent = {
   "admin-content-advanced": {
     title: {
       "en-GB": "Advanced module editing",
-      nb: "Avansert modulredigering",
-      nn: "Avansert modulredigering",
+      nb: "Innholdsforvaltning: avansert",
+      nn: "Innhaldsforvaltning: avansert",
     },
     summary: {
       "en-GB": "Use advanced editing when you need full control of content, scoring rules, and publication settings.",
@@ -655,14 +655,14 @@ const workspaceContent = {
           title: "Dette gjør du her",
           items: [
             "Jobb deg gjennom editorseksjonene for å oppdatere moduldata, versjonsinnhold og vurderingsoppsett.",
-            "Bruk preview-toggle og språkkontroller for å kontrollere hva deltakeren vil se.",
+            "Bruk knappen for forhåndsvisning og språkkontrollene for å kontrollere hva deltakeren vil se.",
             "Lagre før du publiserer, slik at du beholder en ryddig utkastshistorikk.",
           ],
         },
         {
           title: "Greit å vite",
           items: [
-            "Avansert redigering er riktig sted for endringer i rubric, prompt, policy og schema.",
+            "Avansert redigering er riktig sted for endringer i vurderingsmatrise, instruksjon, regler og skjema.",
             "Gå tilbake til samtale når du vil ha lettere ordlydsarbeid og rask iterasjon.",
           ],
         },
@@ -672,14 +672,14 @@ const workspaceContent = {
           title: "Dette gjer du her",
           items: [
             "Jobb deg gjennom editorseksjonane for å oppdatere moduldata, versjonsinnhald og vurderingsoppsett.",
-            "Bruk preview-toggle og språkkontrollar for å kontrollere kva deltakaren vil sjå.",
+            "Bruk knappen for førehandsvising og språkkontrollane for å kontrollere kva deltakaren vil sjå.",
             "Lagre før du publiserer, slik at du tek vare på ei ryddig utkastshistorikk.",
           ],
         },
         {
           title: "Greitt å vite",
           items: [
-            "Avansert redigering er rett stad for endringar i rubric, prompt, policy og schema.",
+            "Avansert redigering er rett stad for endringar i vurderingsmatrise, instruksjon, reglar og skjema.",
             "Gå tilbake til samtale når du vil ha lettare ordlydsarbeid og rask iterasjon.",
           ],
         },
@@ -687,7 +687,7 @@ const workspaceContent = {
     },
   },
   "admin-content-courses": {
-    title: { "en-GB": "Course management", nb: "Kursforvaltning", nn: "Kursforvaltning" },
+    title: { "en-GB": "Course management", nb: "Innholdsforvaltning: kurs", nn: "Innhaldsforvaltning: kurs" },
     summary: {
       "en-GB": "Use the course workspace to create courses, combine modules, and publish the finished learning path.",
       nb: "Bruk kursarbeidsflaten til å opprette kurs, sette sammen moduler og publisere læringsstien.",
@@ -717,7 +717,7 @@ const workspaceContent = {
           items: [
             "Opprett kurs fra listevisningen, og legg deretter til moduler i den rekkefølgen deltakerne skal ta dem.",
             "Bruk detaljvisningen til å redigere tittel, beskrivelse, nivå og modulsett.",
-            "Publiser kurset når det er klart. Upubliserte kurs vises ikke i Participant.",
+            "Publiser kurset når det er klart. Upubliserte kurs vises ikke i Deltaker.",
           ],
         },
         {
@@ -734,7 +734,7 @@ const workspaceContent = {
           items: [
             "Opprett kurs frå listevisinga, og legg deretter til modular i den rekkjefølgja deltakarane skal ta dei.",
             "Bruk detaljvisinga til å redigere tittel, skildring, nivå og modulsett.",
-            "Publiser kurset når det er klart. Upubliserte kurs blir ikkje viste i Participant.",
+            "Publiser kurset når det er klart. Upubliserte kurs blir ikkje viste i Deltakar.",
           ],
         },
         {
@@ -750,13 +750,13 @@ const workspaceContent = {
   "admin-content-calibration": {
     title: {
       "en-GB": "Calibration in Admin Content",
-      nb: "Kalibrering i Admin Content",
-      nn: "Kalibrering i Admin Content",
+      nb: "Innholdsforvaltning: kalibrering",
+      nn: "Innhaldsforvaltning: kalibrering",
     },
     summary: {
       "en-GB": "Use this page to calibrate from the content area when threshold work should stay close to modules and courses.",
-      nb: "Bruk denne siden til å kalibrere fra innholdsområdet når terskelarbeidet bør ligge tett på moduler og kurs.",
-      nn: "Bruk denne sida til å kalibrere frå innhaldsområdet når terskelarbeidet bør liggje tett på modular og kurs.",
+      nb: "Bruk denne siden til å kalibrere fra Innholdsforvaltning når terskelarbeidet bør ligge tett på moduler og kurs.",
+      nn: "Bruk denne sida til å kalibrere frå Innhaldsforvaltning når terskelarbeidet bør liggje tett på modular og kurs.",
     },
     sections: {
       "en-GB": [
@@ -780,9 +780,9 @@ const workspaceContent = {
         {
           title: "Dette gjør du her",
           items: [
-            "Velg modul og filtre før du laster kalibreringssnapshot.",
+            "Velg modul og filtre før du laster kalibreringsbilde.",
             "Se på kvalitetssignaler og utfallsfordeling før du justerer beståttgrensen.",
-            "Bruk denne siden når du vil kalibrere fra samme adminområde som moduler og kurs.",
+            "Bruk denne siden når du vil kalibrere fra samme område som moduler og kurs.",
           ],
         },
         {
@@ -797,9 +797,9 @@ const workspaceContent = {
         {
           title: "Dette gjer du her",
           items: [
-            "Vel modul og filter før du lastar kalibreringssnapshot.",
+            "Vel modul og filter før du lastar kalibreringsbilete.",
             "Sjå på kvalitetssignal og utfallsfordeling før du justerer beståttgrensa.",
-            "Bruk denne sida når du vil kalibrere frå same adminområde som modular og kurs.",
+            "Bruk denne sida når du vil kalibrere frå same området som modular og kurs.",
           ],
         },
         {

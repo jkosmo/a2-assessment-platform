@@ -7,6 +7,18 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.0 - 2026-04-24
+
+release(pilot): pilotklar plattform med kontekstsensitiv hjelp og operativ deploykunnskap
+
+- public/static/workspace-help.js, public/static/workspace-help-content.js, public/static/shared.css: delt `?`-hjelp i toppbaren med kontekstsensitiv og lokalisert hjelp for sentrale deltaker-, operatør- og adminflater
+- public/participant.html, public/participant-completed.html, public/profile.html, public/review.html, public/calibration.html, public/results.html, public/admin-platform.html, public/admin-content*.html: hjelpelaget koblet inn på arbeidsflatene
+- public/static/workspace-help-content.js: ny språk- og begrepsvask slik at `nb` og `nn` bruker norske/nynorske begreper som matcher faktisk meny og UI, uten engelske fagord i hjelpetekstene
+- doc/roles/report-reader.md: ny rollebeskrivelse for rapportleser
+- scripts/azure/deploy-environment.ps1, doc/AZURE_ENVIRONMENTS.md: driftsnotis lagt inn om at grønn `/healthz` etter App Service deploy ikke alltid betyr at ny package er aktiv; `/version` skal verifiseres, og en enkel webapp-restart kan være nødvendig i staging
+- Epic `#259` og underissues `#362–#366` lukket som levert
+- Verifisert med `npx vitest run test/workspace-help-contracts.test.js test/admin-content-ui-contracts.test.js` og `npm run build`
+
 ## 0.10.24 - 2026-04-24
 
 feat(help): kontekstsensitiv hjelp i arbeidsflatene + oppdatert rolledokumentasjon

@@ -463,6 +463,11 @@ function Wait-Stable {
   }
 }
 
+# Important operational note for future agents/operators:
+# App Service has occasionally reported a healthy /healthz immediately after zip deploy while still
+# serving the previous package/version for a short period. A green deploy + green health endpoint is
+# therefore not enough on its own when validating a release. Always verify /version after deployment,
+# and if the old version still responds, perform a single web app restart before escalating.
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
