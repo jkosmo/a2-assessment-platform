@@ -228,12 +228,14 @@ async function mockCommonApis(page: Page, {
   courses = [],
   moduleExports = {},
   navigationItems = [],
+  meRoles = ["SUBJECT_MATTER_OWNER"],
 }: {
   modules?: MockModule[];
   libraryModules?: MockLibraryModule[];
   courses?: MockCourse[];
   moduleExports?: Record<string, MockModuleExport>;
   navigationItems?: MockNavigationItem[];
+  meRoles?: string[];
 } = {}) {
   const mutableModules = [...modules];
   const exportMap = new Map<string, MockModuleExport>(Object.entries(moduleExports));
@@ -272,7 +274,7 @@ async function mockCommonApis(page: Page, {
           email: "content.owner@example.test",
           name: "Content Owner",
           department: "Learning",
-          roles: ["SUBJECT_MATTER_OWNER"],
+          roles: meRoles,
         },
       }),
     });
@@ -303,7 +305,7 @@ async function mockCommonApis(page: Page, {
           id: "content-owner-1",
           email: "content.owner@example.test",
           name: "Content Owner",
-          roles: ["SUBJECT_MATTER_OWNER"],
+          roles: meRoles,
         },
         consent: { accepted: true },
         pendingDeletion: null,
@@ -813,14 +815,26 @@ async function mockCommonApis(page: Page, {
     });
   });
 
+  await page.route("**/api/admin/content/courses/*/publish", async (route: Route) => {
+    const segments = new URL(route.request().url()).pathname.split("/");
+    const courseId = decodeURIComponent(segments[segments.length - 2] ?? "");
+    const course = mutableCourses.find((item) => item.id === courseId);
+    if (!course) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+
+    course.publishedAt = "2026-04-18T12:00:00.000Z";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+  });
+
   await page.route("**/api/admin/content/courses/*", async (route: Route) => {
     const url = new URL(route.request().url());
     const segments = url.pathname.split("/");
     const isModulesRoute = segments.includes("modules");
-    const isPublishRoute = url.pathname.endsWith("/publish");
     const isArchiveRoute = url.pathname.endsWith("/archive");
     const courseId = decodeURIComponent(
-      isModulesRoute || isPublishRoute || isArchiveRoute
+      isModulesRoute || isArchiveRoute
         ? (segments[segments.length - 2] ?? "")
         : (segments[segments.length - 1] ?? ""),
     );
@@ -829,12 +843,6 @@ async function mockCommonApis(page: Page, {
       return;
     }
     const course = mutableCourses.find((item) => item.id === courseId);
-
-    if (isPublishRoute && course) {
-      course.publishedAt = "2026-04-18T12:00:00.000Z";
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
-      return;
-    }
 
     if (isArchiveRoute && course) {
       course.archivedAt = "2026-04-18T12:00:00.000Z";
@@ -1082,7 +1090,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("English scenario")).toHaveCount(0);
   });
 
-  test("shell workspace nav keeps profile in the top menu", async ({ page }) => {
+  test("shell workspace nav keeps profile on the right and preserves participant link for multi-role users", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -1093,18 +1101,21 @@ test.describe("admin content browser coverage", () => {
         }),
       },
       navigationItems: [
+        { id: "participant", path: "/participant", labelKey: "nav.participant", requiredRoles: ["PARTICIPANT"] },
         { id: "calibration", path: "/calibration", labelKey: "nav.calibration" },
         { id: "admin-content", path: "/admin-content", labelKey: "nav.adminContent" },
         { id: "results", path: "/results", labelKey: "nav.results" },
         { id: "profile", path: "/profile", labelKey: "nav.profile" },
       ],
+      meRoles: ["SUBJECT_MATTER_OWNER", "PARTICIPANT"],
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
 
     await expect(page.locator("#workspaceNav .workspace-nav-link")).toHaveCount(4);
-    await expect(page.locator('#workspaceNav .workspace-nav-link[href="/profile"]')).toBeVisible();
-    await expect(page.locator(".locale-picker #profileNavLink")).toHaveCount(0);
+    await expect(page.locator('#workspaceNav .workspace-nav-link[href="/participant"]')).toBeVisible();
+    await expect(page.locator('#workspaceNav .workspace-nav-link[href="/profile"]')).toHaveCount(0);
+    await expect(page.locator('.locale-picker #profileNavLink[href="/profile"]')).toBeVisible();
   });
 
   test("direct edit localizes from the active preview locale and save sends a title patch", async ({ page }) => {
@@ -1588,6 +1599,31 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses");
     await expect(page.locator("#coursesTableBody")).toContainText("23 Apr 2026");
+  });
+
+  test("courses list can publish a saved course with modules", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: { "en-GB": "Trade unions" },
+          description: { "en-GB": "Original description" },
+          certificationLevel: "basic",
+          moduleCount: 1,
+          updatedAt: "2026-04-18T10:30:00.000Z",
+          publishedAt: null,
+          modules: [{ moduleId: "module-1", sortOrder: 1, moduleTitle: { "en-GB": "Trade unions" } }],
+        },
+      ],
+    });
+
+    await page.goto("/admin-content/courses");
+    await expect(page.locator('[data-action="publish"][data-course-id="course-1"]')).toBeVisible();
+
+    await page.locator('[data-action="publish"][data-course-id="course-1"]').click();
+
+    await expect.poll(() => state.mutableCourses[0]?.publishedAt ?? null).toBe("2026-04-18T12:00:00.000Z");
+    await expect(page.locator('[data-action="publish"][data-course-id="course-1"]')).toHaveCount(0);
   });
 
   test("courses list opens a delete dialog bound to the chosen course", async ({ page }) => {

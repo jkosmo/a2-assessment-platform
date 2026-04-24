@@ -15,6 +15,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -50,6 +51,7 @@ let participantRuntimeConfig = {
   navigation: { items: [] },
   calibrationWorkspace: { accessRoles: [] },
 };
+let activeUserRoles = [];
 
 let _headerValues = {};
 function getHeaders() { return _headerValues; }
@@ -59,6 +61,7 @@ function getHeaders() { return _headerValues; }
 // ---------------------------------------------------------------------------
 
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const libraryContent = document.getElementById("libraryContent");
@@ -123,6 +126,28 @@ function escapeHtml(s) {
 function formatDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString(currentLocale === "en-GB" ? "en-GB" : currentLocale, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function resolveContentAdminDefaults() {
+  const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;
+  if (defaults && typeof defaults === "object") {
+    return defaults;
+  }
+  return participantRuntimeConfig?.identityDefaults ?? {
+    userId: "content-owner-1",
+    email: "content.owner@company.com",
+    name: "Platform Content Owner",
+    department: "Learning",
+    roles: ["SUBJECT_MATTER_OWNER"],
+  };
+}
+
+function resolveActiveWorkspaceRoles() {
+  if (Array.isArray(activeUserRoles) && activeUserRoles.length > 0) {
+    return activeUserRoles;
+  }
+  const defaults = resolveContentAdminDefaults();
+  return Array.isArray(defaults?.roles) && defaults.roles.length > 0 ? defaults.roles : ["SUBJECT_MATTER_OWNER"];
 }
 
 // ---------------------------------------------------------------------------
@@ -444,28 +469,23 @@ async function loadModules() {
 
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
-  const roles = participantRuntimeConfig.identityDefaults?.roles?.join(",") ?? "SUBJECT_MATTER_OWNER";
+  const roles = resolveActiveWorkspaceRoles().join(",");
   const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     roles,
     window.location.pathname,
-  ).filter(item => item.visible);
-  document.getElementById("profileNavLink")?.remove();
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  for (const item of items) {
-    const a = document.createElement("a");
-    a.href = item.path;
-    a.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    a.textContent = t(item.labelKey) || item.id;
-    workspaceNav.appendChild(a);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker,
+    items,
+    buildLabel: (item) => t(item.labelKey) || item.id,
+  });
 }
 
 function renderContentAreaNav() {
   const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
-  const userRoles = new Set(participantRuntimeConfig.identityDefaults?.roles ?? []);
+  const userRoles = new Set(resolveActiveWorkspaceRoles());
   const hasCalibrationRole = [...calibrationRoles].some(r => userRoles.has(r));
   if (navKalibrering) navKalibrering.hidden = !hasCalibrationRole;
 }
@@ -482,6 +502,9 @@ function buildLocaleSelector() {
   localeSelect.addEventListener("change", () => {
     currentLocale = localeSelect.value;
     localStorage.setItem("participant.locale", currentLocale);
+    if (_headerValues && typeof _headerValues === "object") {
+      _headerValues["x-locale"] = currentLocale;
+    }
     loadModules();
   });
 }
@@ -494,9 +517,24 @@ async function init() {
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
-    _headerValues = buildConsoleHeaders(cfg);
+    const defaults = resolveContentAdminDefaults();
+    _headerValues = buildConsoleHeaders({
+      userId: defaults.userId,
+      email: defaults.email,
+      name: defaults.name,
+      department: defaults.department,
+      roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
+      locale: currentLocale,
+    });
   } catch {
     _headerValues = {};
+  }
+
+  try {
+    const me = await apiFetch("/api/me", getHeaders);
+    activeUserRoles = Array.isArray(me?.user?.roles) ? me.user.roles : [];
+  } catch {
+    activeUserRoles = [];
   }
 
   buildLocaleSelector();

@@ -53,6 +53,8 @@ describe("admin content courses state helpers", () => {
         certificationLevel: "advanced",
         moduleCount: 4,
         updatedLabel: "formatted:2026-04-18T10:30:00.000Z",
+        publishedAt: null,
+        archivedAt: null,
       },
       {
         courseId: "course-2",
@@ -60,6 +62,8 @@ describe("admin content courses state helpers", () => {
         certificationLevel: "basic",
         moduleCount: 0,
         updatedLabel: "formatted:2026-03-02T08:15:00.000Z",
+        publishedAt: "2026-03-02T08:15:00.000Z",
+        archivedAt: null,
       },
     ]);
   });

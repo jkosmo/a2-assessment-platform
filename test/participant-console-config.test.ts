@@ -124,11 +124,19 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain('id="courseCertSection"');
   });
 
+  it("serves profile page with completed courses section", async () => {
+    const response = await request(app).get("/profile");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("profile.js");
+    expect(response.text).toContain('id="coursesBody"');
+  });
+
   it("serves dedicated admin content workspace page", async () => {
     const response = await request(app).get("/admin-content");
 
     expect(response.status).toBe(200);
-    expect(response.text).toContain("admin-content-shell.js");
+    expect(response.text).toContain("admin-content-library.js");
   });
 
   it("serves advanced admin content editor at /admin-content/advanced", async () => {
@@ -333,5 +341,11 @@ describe("participant console runtime config", () => {
     expect(participantCompletedJsResponse.text).toContain('/api/courses/completions');
     expect(participantCompletedJsResponse.text).toContain('courseCertList');
     expect(participantCompletedJsResponse.text).toContain('renderCourseCertificates');
+
+    const profileJsResponse = await request(app).get("/static/profile.js");
+    expect(profileJsResponse.status).toBe(200);
+    expect(profileJsResponse.text).toContain('/api/courses/completions');
+    expect(profileJsResponse.text).toContain('function renderCourses(body)');
+    expect(profileJsResponse.text).toContain('const coursesBody = document.getElementById("coursesBody")');
   });
 });

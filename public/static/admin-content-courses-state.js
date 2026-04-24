@@ -22,5 +22,7 @@ export function deriveCourseListRows(courses, { localizeTitle, formatDate }) {
     certificationLevel: course.certificationLevel ?? "",
     moduleCount: course.moduleCount ?? 0,
     updatedLabel: formatDate(course.updatedAt ?? course.publishedAt ?? null),
+    publishedAt: course.publishedAt ?? null,
+    archivedAt: course.archivedAt ?? null,
   }));
 }

@@ -193,6 +193,14 @@ describe("courses JS contracts", () => {
     const postIdx = js.indexOf('"POST"', fnIdx);
     expect(postIdx, "convCreateCourse must issue a POST request").toBeGreaterThan(fnIdx);
   });
+
+  it("courses admin exposes publish controls for saved unpublished courses", () => {
+    const js = readFile("public/static/admin-content-courses.js");
+    expect(js).toContain("function canPublishCourse(course)");
+    expect(js).toContain('data-action="publish"');
+    expect(js).toContain('id="publishCourseBtn"');
+    expect(js).toContain('/publish`');
+  });
 });
 
 // ---------------------------------------------------------------------------

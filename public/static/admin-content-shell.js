@@ -15,6 +15,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import {
@@ -107,6 +108,7 @@ let participantRuntimeConfig = {
     roles: ["SUBJECT_MATTER_OWNER"],
   },
 };
+let activeUserRoles = [];
 
 function getHeaders() {
   const d = participantRuntimeConfig.identityDefaults ?? {};
@@ -129,6 +131,7 @@ const previewPane = document.getElementById("previewPane");
 const previewLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
 const modeSwitchAdvancedBtn = document.getElementById("modeSwitchAdvanced");
@@ -2551,24 +2554,18 @@ async function loadVersion() {
 
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
-  const roles = participantRuntimeConfig.identityDefaults?.roles?.join(",") ?? "SUBJECT_MATTER_OWNER";
+  const roles = activeUserRoles.join(",") || participantRuntimeConfig.identityDefaults?.roles?.join(",") || "SUBJECT_MATTER_OWNER";
   const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     roles,
     window.location.pathname,
-  ).filter((item) => item.visible);
-  document.getElementById("profileNavLink")?.remove();
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  for (const item of items) {
-    const a = document.createElement("a");
-    a.href = item.path;
-    a.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    a.textContent = t(item.labelKey) || item.id;
-    workspaceNav.appendChild(a);
-  }
-
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker,
+    items,
+    buildLabel: (item) => t(item.labelKey) || item.id,
+  });
 }
 
 // Translates static text that lives in the HTML source (not rendered by chat flow).
@@ -2624,6 +2621,13 @@ async function loadConsoleConfig() {
     }
   } catch {
     // use defaults
+  }
+
+  try {
+    const me = await apiFetch("/api/me", getHeaders);
+    activeUserRoles = Array.isArray(me?.user?.roles) ? me.user.roles : [];
+  } catch {
+    activeUserRoles = [];
   }
   renderWorkspaceNavigation();
   if (workspaceNav) {

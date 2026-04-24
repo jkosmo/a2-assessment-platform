@@ -19,6 +19,7 @@ import {
   buildCourseDeleteDialogText,
   deriveCourseListRows,
 } from "/static/admin-content-courses-state.js";
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -46,6 +47,7 @@ let participantRuntimeConfig = {
   navigation: { items: [] },
   calibrationWorkspace: { accessRoles: [] },
 };
+let activeUserRoles = [];
 
 let _headerValues = {};
 function getHeaders() { return _headerValues; }
@@ -55,6 +57,7 @@ function getHeaders() { return _headerValues; }
 // ---------------------------------------------------------------------------
 
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const pageContent = document.getElementById("pageContent");
@@ -301,6 +304,33 @@ function certBadge(level) {
   return `<span class="cert-badge">${escapeHtml(certLabel(level))}</span>`;
 }
 
+function canPublishCourse(course) {
+  const moduleCount = Number(course?.moduleCount ?? course?.modules?.length ?? 0);
+  return !course?.publishedAt && !course?.archivedAt && moduleCount > 0;
+}
+
+async function publishCourseInAdmin(courseId, triggerButton = null) {
+  if (!courseId) return;
+  if (triggerButton) triggerButton.disabled = true;
+
+  try {
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, getHeaders, {
+      method: "POST",
+    });
+    showToast(t("adminContent.courses.message.published") || "Kurs publisert.", "success");
+
+    const route = detectRoute();
+    if (route.view === "list") {
+      await renderListView();
+    } else {
+      await renderDetailView(courseId);
+    }
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke publisere kurs.", "error");
+    if (triggerButton) triggerButton.disabled = false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ── LIST VIEW ─────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
@@ -346,6 +376,9 @@ async function renderListView() {
       <td class="col-actions">
         <div class="row-actions">
           <a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>
+          ${canPublishCourse(course)
+            ? `<button class="row-action-btn" data-action="publish" data-course-id="${escapeHtml(course.courseId)}">Publiser</button>`
+            : ""}
           <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Slett</button>
         </div>
       </td>
@@ -375,9 +408,15 @@ async function renderListView() {
 }
 
 function handleListTableClick(event) {
-  const btn = event.target.closest("[data-action='delete']");
+  const btn = event.target.closest("[data-action]");
   if (!btn) return;
-  openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
+  if (btn.dataset.action === "publish") {
+    publishCourseInAdmin(btn.dataset.courseId, btn);
+    return;
+  }
+  if (btn.dataset.action === "delete") {
+    openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -793,6 +832,10 @@ async function renderDetailView(courseId) {
 
   const certLevel = course?.certificationLevel ?? "";
   const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
+  const showPublishButton = canPublishCourse({
+    ...course,
+    moduleCount: courseModules.length,
+  });
 
   pageContent.innerHTML = `
     <div class="page-header-back">
@@ -864,6 +907,7 @@ async function renderDetailView(courseId) {
 
       <div class="form-actions">
         <button id="saveCourseBtn" class="btn btn-primary">Lagre kurs</button>
+        ${showPublishButton ? `<button id="publishCourseBtn" class="btn btn-secondary">Publiser kurs</button>` : ""}
         <a href="/admin-content/courses" class="btn btn-secondary">Avbryt</a>
       </div>
 
@@ -1052,6 +1096,7 @@ function initDetailEventListeners(courseId) {
 
   // Save
   document.getElementById("saveCourseBtn")?.addEventListener("click", () => saveCourse(courseId));
+  document.getElementById("publishCourseBtn")?.addEventListener("click", () => publishCourseInAdmin(courseId));
 }
 
 // ---------------------------------------------------------------------------
@@ -1077,6 +1122,28 @@ function normalizeLocalizedRequestValue(valueMap) {
   if (entries.length === 0) return undefined;
   if (entries.length === 1 && entries[0][0] === "en-GB") return entries[0][1];
   return Object.fromEntries(entries);
+}
+
+function resolveContentAdminDefaults() {
+  const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;
+  if (defaults && typeof defaults === "object") {
+    return defaults;
+  }
+  return participantRuntimeConfig?.identityDefaults ?? {
+    userId: "content-owner-1",
+    email: "content.owner@company.com",
+    name: "Platform Content Owner",
+    department: "Learning",
+    roles: ["SUBJECT_MATTER_OWNER"],
+  };
+}
+
+function resolveActiveWorkspaceRoles() {
+  if (Array.isArray(activeUserRoles) && activeUserRoles.length > 0) {
+    return activeUserRoles;
+  }
+  const defaults = resolveContentAdminDefaults();
+  return Array.isArray(defaults?.roles) && defaults.roles.length > 0 ? defaults.roles : ["SUBJECT_MATTER_OWNER"];
 }
 
 async function saveCourse(courseId) {
@@ -1160,7 +1227,7 @@ async function saveCourse(courseId) {
     if (!courseId) {
       window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
     } else {
-      if (saveBtn) saveBtn.disabled = false;
+      await renderDetailView(courseId);
     }
   } catch (err) {
     if (errorBanner) {
@@ -1177,28 +1244,23 @@ async function saveCourse(courseId) {
 
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
-  const roles = participantRuntimeConfig.identityDefaults?.roles?.join(",") ?? "SUBJECT_MATTER_OWNER";
+  const roles = resolveActiveWorkspaceRoles().join(",");
   const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     roles,
     window.location.pathname,
-  ).filter(item => item.visible);
-  document.getElementById("profileNavLink")?.remove();
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  for (const item of items) {
-    const a = document.createElement("a");
-    a.href = item.path;
-    a.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    a.textContent = t(item.labelKey) || item.id;
-    workspaceNav.appendChild(a);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker,
+    items,
+    buildLabel: (item) => t(item.labelKey) || item.id,
+  });
 }
 
 function renderContentAreaNav() {
   const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
-  const userRoles = new Set(participantRuntimeConfig.identityDefaults?.roles ?? []);
+  const userRoles = new Set(resolveActiveWorkspaceRoles());
   const hasCalibrationRole = [...calibrationRoles].some(r => userRoles.has(r));
   if (navKalibrering) navKalibrering.hidden = !hasCalibrationRole;
 }
@@ -1215,6 +1277,9 @@ function buildLocaleSelector() {
   localeSelect.addEventListener("change", () => {
     currentLocale = localeSelect.value;
     localStorage.setItem("participant.locale", currentLocale);
+    if (_headerValues && typeof _headerValues === "object") {
+      _headerValues["x-locale"] = currentLocale;
+    }
     const route = detectRoute();
     if (route.view === "list") {
       renderListView();
@@ -1244,9 +1309,24 @@ async function init() {
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
-    _headerValues = buildConsoleHeaders(cfg);
+    const defaults = resolveContentAdminDefaults();
+    _headerValues = buildConsoleHeaders({
+      userId: defaults.userId,
+      email: defaults.email,
+      name: defaults.name,
+      department: defaults.department,
+      roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
+      locale: currentLocale,
+    });
   } catch {
     _headerValues = {};
+  }
+
+  try {
+    const me = await apiFetch("/api/me", getHeaders);
+    activeUserRoles = Array.isArray(me?.user?.roles) ? me.user.roles : [];
+  } catch {
+    activeUserRoles = [];
   }
 
   buildLocaleSelector();

@@ -13,6 +13,7 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { findLinkedVersion, deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
@@ -38,6 +39,7 @@ const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
 const mockRolePresetContainer = document.getElementById("mockRolePresetContainer");
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
@@ -1395,25 +1397,13 @@ function renderWorkspaceNavigation() {
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-  ).filter((item) => item.visible);
-  document.getElementById("profileNavLink")?.remove();
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  if (items.length === 0) {
-    return;
-  }
-
-  for (const item of items) {
-    const link = document.createElement("a");
-    link.href = item.path;
-    link.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    link.textContent = t(item.labelKey);
-    if (item.active) {
-      link.setAttribute("aria-current", "page");
-    }
-    workspaceNav.appendChild(link);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker,
+    items,
+    buildLabel: (item) => t(item.labelKey),
+  });
 }
 
 function getCurrentRoles() {

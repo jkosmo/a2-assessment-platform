@@ -16,6 +16,7 @@ import {
 } from "/static/participant-console-state.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -54,6 +55,7 @@ let activeUserRoles = [];
 // ---------------------------------------------------------------------------
 
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const pageContent = document.getElementById("pageContent");
@@ -87,6 +89,20 @@ let allModules = [];
 let latestCalibrationWorkspaceBody = null;
 
 const allSubmissionStatuses = ["SUBMITTED", "PROCESSING", "SCORED", "UNDER_REVIEW", "COMPLETED", "REJECTED"];
+
+function resolveContentAdminDefaults() {
+  const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;
+  if (defaults && typeof defaults === "object") {
+    return defaults;
+  }
+  return participantRuntimeConfig?.identityDefaults ?? {
+    userId: "content-owner-1",
+    email: "content.owner@company.com",
+    name: "Platform Content Owner",
+    department: "Learning",
+    roles: ["SUBJECT_MATTER_OWNER"],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Role gate
@@ -514,18 +530,13 @@ function renderWorkspaceNavigation() {
     participantRuntimeConfig?.navigation?.items,
     roles,
     window.location.pathname,
-  ).filter(item => item.visible);
-  document.getElementById("profileNavLink")?.remove();
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  for (const item of items) {
-    const a = document.createElement("a");
-    a.href = item.path;
-    a.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    a.textContent = t(item.labelKey) || item.id;
-    workspaceNav.appendChild(a);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker,
+    items,
+    buildLabel: (item) => t(item.labelKey) || item.id,
+  });
 }
 
 function renderContentAreaNav() {
@@ -547,6 +558,9 @@ function buildLocaleSelector() {
   localeSelect.addEventListener("change", () => {
     currentLocale = localeSelect.value;
     localStorage.setItem("participant.locale", currentLocale);
+    if (getHeaders && typeof getHeaders === "object") {
+      getHeaders["x-locale"] = currentLocale;
+    }
   });
 }
 
@@ -558,7 +572,15 @@ async function init() {
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
-    getHeaders = buildConsoleHeaders(cfg);
+    const defaults = resolveContentAdminDefaults();
+    getHeaders = buildConsoleHeaders({
+      userId: defaults.userId,
+      email: defaults.email,
+      name: defaults.name,
+      department: defaults.department,
+      roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
+      locale: currentLocale,
+    });
   } catch {
     getHeaders = {};
   }
