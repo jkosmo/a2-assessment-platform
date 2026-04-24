@@ -23,6 +23,7 @@ const profileDepartment = document.getElementById("profileDepartment");
 const profileRoles = document.getElementById("profileRoles");
 const profileConsent = document.getElementById("profileConsent");
 const modulesBody = document.getElementById("modulesBody");
+const coursesBody = document.getElementById("coursesBody");
 const viewDataBtn = document.getElementById("viewDataBtn");
 const downloadDataBtn = document.getElementById("downloadDataBtn");
 const requestDeletionBtn = document.getElementById("requestDeletionBtn");
@@ -201,6 +202,38 @@ function formatNumber(value, maxFractionDigits = 2) {
   }).format(value);
 }
 
+function localizeContentValue(value) {
+  if (!value) return "â€”";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return (
+            parsed[currentLocale] ??
+            parsed["en-GB"] ??
+            Object.values(parsed).find((entry) => typeof entry === "string" && entry.trim().length > 0) ??
+            "â€”"
+          );
+        }
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return (
+      value[currentLocale] ??
+      value["en-GB"] ??
+      Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0) ??
+      "â€”"
+    );
+  }
+  return "â€”";
+}
+
 async function runWithBusyButton(button, action) {
   if (!button || button.dataset.busy === "true") return;
   const wasDisabled = button.disabled;
@@ -282,6 +315,38 @@ function renderModules(body) {
       row.appendChild(td);
     }
     modulesBody.appendChild(row);
+  }
+}
+
+function renderCourses(body) {
+  const courses = Array.isArray(body?.completions) ? body.completions : [];
+  coursesBody.innerHTML = "";
+
+  if (courses.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = t("profile.courses.empty");
+    row.appendChild(cell);
+    coursesBody.appendChild(row);
+    return;
+  }
+
+  for (const course of courses) {
+    const row = document.createElement("tr");
+    const cells = [
+      { text: localizeContentValue(course.courseTitle ?? course.courseId) },
+      { text: formatDateTime(course.completedAt) },
+      { text: localizeContentValue(course.certificationLevel) },
+      { text: course.certificateId ?? "â€”" },
+    ];
+
+    for (const { text } of cells) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      row.appendChild(td);
+    }
+    coursesBody.appendChild(row);
   }
 }
 
@@ -432,11 +497,21 @@ async function loadProfileData() {
   }
 
   // Load completed modules (non-blocking — render empty state first, fill in on success)
-  try {
-    const body = await apiFetch("/api/modules/completed", headers);
-    renderModules(body);
-  } catch {
+  const [modulesResult, coursesResult] = await Promise.allSettled([
+    apiFetch("/api/modules/completed", headers),
+    apiFetch("/api/courses/completions", headers),
+  ]);
+
+  if (modulesResult.status === "fulfilled") {
+    renderModules(modulesResult.value);
+  } else {
     renderModules(null);
+  }
+
+  if (coursesResult.status === "fulfilled") {
+    renderCourses(coursesResult.value);
+  } else {
+    renderCourses(null);
   }
 }
 

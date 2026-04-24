@@ -25,6 +25,7 @@ export type AuditEntityType = NestedValue<typeof auditEntityTypes>;
 export const auditActions = {
   adminContent: {
     moduleCreated: "module_created",
+    moduleTitleUpdated: "module_title_updated",
     moduleDeleted: "module_deleted",
     moduleUnpublished: "module_unpublished",
     moduleArchived: "module_archived",
@@ -36,6 +37,7 @@ export const auditActions = {
   appeal: {
     created: "appeal_created",
     claimed: "appeal_claimed",
+    adminTakeover: "appeal_admin_takeover",
     resolutionDecisionCreated: "appeal_resolution_decision_created",
     resolved: "appeal_resolved",
     superseded: "appeal_superseded",
@@ -73,6 +75,7 @@ export const auditActions = {
   manualReview: {
     opened: "manual_review_opened",
     claimed: "manual_review_claimed",
+    adminTakeover: "manual_review_admin_takeover",
     overrideDecisionCreated: "manual_override_decision_created",
     resolved: "manual_review_resolved",
     superseded: "review_superseded",
@@ -95,6 +98,10 @@ export type AuditAction = NestedValue<typeof auditActions>;
 export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleCreated]: EventMetadata<{
     moduleId: string;
+  }>;
+  [auditActions.adminContent.moduleTitleUpdated]: EventMetadata<{
+    moduleId: string;
+    title: string;
   }>;
   [auditActions.adminContent.moduleDeleted]: EventMetadata<{
     moduleId: string;
@@ -128,6 +135,12 @@ export type AuditMetadataByAction = {
   [auditActions.appeal.claimed]: EventMetadata<{
     submissionId: string;
     appealStatus: string;
+    claimedAt?: string | null;
+  }>;
+  [auditActions.appeal.adminTakeover]: EventMetadata<{
+    submissionId: string;
+    previousHandlerId: string;
+    newHandlerId: string;
   }>;
   [auditActions.appeal.resolutionDecisionCreated]: EventMetadata<{
     submissionId: string;
@@ -223,6 +236,11 @@ export type AuditMetadataByAction = {
   [auditActions.manualReview.claimed]: EventMetadata<{
     submissionId: string;
     reviewStatus: string;
+  }>;
+  [auditActions.manualReview.adminTakeover]: EventMetadata<{
+    submissionId: string;
+    previousReviewerId: string;
+    newReviewerId: string;
   }>;
   [auditActions.manualReview.overrideDecisionCreated]: EventMetadata<{
     submissionId: string;

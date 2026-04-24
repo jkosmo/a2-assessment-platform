@@ -54,7 +54,6 @@ assessmentsRouter.get("/:submissionId", async (request, response) => {
     submissionId: submission.id,
     submissionStatus: submission.submissionStatus,
     latestJob: submission.assessmentJobs[0] ?? null,
-    latestEvaluation: submission.llmEvaluations[0] ?? null,
     latestDecision: submission.decisions[0] ?? null,
   });
 });

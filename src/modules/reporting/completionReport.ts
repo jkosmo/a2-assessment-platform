@@ -1,5 +1,6 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { normalizeFilters, round2 } from "./csvExport.js";
@@ -23,6 +24,19 @@ type PassRatesRow = {
   failCount: number;
   underReviewCount: number;
   passRate: number | null;
+};
+
+type CompletionLearnerRow = {
+  participantId: string;
+  participantName: string;
+  participantEmail: string;
+  participantDepartment: string | null;
+  moduleId: string;
+  moduleTitle: string;
+  status: string;
+  score: number | null;
+  submittedAt: string;
+  decidedAt: string | null;
 };
 
 export async function getCompletionReport(filters: ReportFilters) {
@@ -166,10 +180,83 @@ export async function getPassRatesReport(filters: ReportFilters) {
   };
 }
 
+export async function getCompletionLearnerReport(
+  filters: ReportFilters,
+  moduleId: string,
+  locale: SupportedLocale = "en-GB",
+) {
+  const where = {
+    moduleId,
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+  } as const;
+
+  const submissions = await reportingRepository.findSubmissionLearnersForModuleReport(where);
+  const latestByUser = new Map<string, (typeof submissions)[number]>();
+
+  for (const submission of submissions) {
+    if (!latestByUser.has(submission.user.id)) {
+      latestByUser.set(submission.user.id, submission);
+    }
+  }
+
+  const rows: CompletionLearnerRow[] = Array.from(latestByUser.values()).map((submission) => {
+    const latestDecision = submission.decisions[0] ?? null;
+    return {
+      participantId: submission.user.id,
+      participantName: submission.user.name,
+      participantEmail: submission.user.email,
+      participantDepartment: submission.user.department,
+      moduleId: submission.module.id,
+      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
+      status: deriveLearnerSubmissionStatus(submission.submissionStatus, latestDecision?.passFailTotal),
+      score: latestDecision?.totalScore ?? null,
+      submittedAt: submission.submittedAt.toISOString(),
+      decidedAt: latestDecision?.finalisedAt?.toISOString() ?? null,
+    };
+  });
+
+  return {
+    reportType: "completion-learners",
+    filters: normalizeFilters(filters),
+    selectedModuleId: moduleId,
+    totals: {
+      learners: rows.length,
+      passed: rows.filter((row) => row.status === "PASSED").length,
+      failed: rows.filter((row) => row.status === "FAILED").length,
+      underReview: rows.filter((row) => row.status === "UNDER_REVIEW").length,
+    },
+    rows,
+  };
+}
+
 function asSubmissionStatuses(input?: string[]) {
   if (!input || input.length === 0) {
     return [];
   }
   const valid = new Set<string>(Object.values(SubmissionStatus));
   return input.filter((item) => valid.has(item)) as SubmissionStatusType[];
+}
+
+function deriveLearnerSubmissionStatus(
+  submissionStatus: SubmissionStatusType,
+  passFailTotal: boolean | null | undefined,
+) {
+  if (passFailTotal === true) {
+    return "PASSED";
+  }
+  if (passFailTotal === false) {
+    return "FAILED";
+  }
+  if (submissionStatus === SubmissionStatus.UNDER_REVIEW) {
+    return "UNDER_REVIEW";
+  }
+  return submissionStatus;
 }

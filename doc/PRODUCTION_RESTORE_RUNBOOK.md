@@ -51,7 +51,6 @@ Current Azure Backup vaulted-backup objects:
 Current vaulted-backup policy intent:
 - weekly backup
 - default retention: `P3M` (3 months)
-
 ## Ownership and Approval Model
 
 Use these operational roles during recovery:
@@ -371,7 +370,6 @@ az dataprotection recovery-point list `
   --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-50c463e8-38b3-11f1-b542-80b6551ef4aa `
   -o table
 ```
-
 Expected operator steps:
 1. locate the protected PostgreSQL instance in Azure Backup
 2. choose the restore point

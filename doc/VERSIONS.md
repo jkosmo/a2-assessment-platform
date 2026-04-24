@@ -7,6 +7,502 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.0 - 2026-04-24
+
+release(pilot): pilotklar plattform med kontekstsensitiv hjelp og operativ deploykunnskap
+
+- public/static/workspace-help.js, public/static/workspace-help-content.js, public/static/shared.css: delt `?`-hjelp i toppbaren med kontekstsensitiv og lokalisert hjelp for sentrale deltaker-, operatør- og adminflater
+- public/participant.html, public/participant-completed.html, public/profile.html, public/review.html, public/calibration.html, public/results.html, public/admin-platform.html, public/admin-content*.html: hjelpelaget koblet inn på arbeidsflatene
+- public/static/workspace-help-content.js: ny språk- og begrepsvask slik at `nb` og `nn` bruker norske/nynorske begreper som matcher faktisk meny og UI, uten engelske fagord i hjelpetekstene
+- doc/roles/report-reader.md: ny rollebeskrivelse for rapportleser
+- scripts/azure/deploy-environment.ps1, doc/AZURE_ENVIRONMENTS.md: driftsnotis lagt inn om at grønn `/healthz` etter App Service deploy ikke alltid betyr at ny package er aktiv; `/version` skal verifiseres, og en enkel webapp-restart kan være nødvendig i staging
+- Epic `#259` og underissues `#362–#366` lukket som levert
+- Verifisert med `npx vitest run test/workspace-help-contracts.test.js test/admin-content-ui-contracts.test.js` og `npm run build`
+
+## 0.10.24 - 2026-04-24
+
+feat(help): kontekstsensitiv hjelp i arbeidsflatene + oppdatert rolledokumentasjon
+
+- public/static/workspace-help.js, public/static/workspace-help-content.js, public/static/shared.css: ny delt `?`-hjelp i toppbaren med modal dialog, arbeidsflatespesifikk hjelp og egen oversiktsvisning for hele lÃ¸sningen; tekstene fÃ¸lger valgt bruker-sprÃ¥k (`en-GB`, `nb`, `nn`)
+- public/participant.html, public/participant-completed.html, public/profile.html, public/review.html, public/calibration.html, public/results.html, public/admin-platform.html, public/admin-content*.html: hjelpelaget koblet inn pÃ¥ alle sentrale deltaker-, operatÃ¸r- og adminflater
+- doc/roles/report-reader.md: ny rollebeskrivelse for rapportleser
+- test/workspace-help-contracts.test.js: ny kontraktstest for at hjelpeskriptet er koblet inn og at alt hjelpeinnhold har lokalisert dekning
+- Verifisert med `npx vitest run test/workspace-help-contracts.test.js test/admin-content-ui-contracts.test.js` og `npm run build`
+
+## 0.10.23 - 2026-04-24
+
+fix(results/participant): hele rapportlinjer klikkbare + dynamisk lesehøyde i deltakerfelt
+
+- public/results.js: modul- og kursdrilldown aktiveres nå fra hele raden, ikke bare tittelfeltet; radene er også tastaturnavigerbare med `Enter`/`Space`
+- public/participant.js: når `Ditt svar` går over i lesemodus etter `Opprett innlevering`, tilpasses høyden nå til faktisk innhold i stedet for å bli stående i fast høyde
+- test/participant-console-config.test.ts: oppdatert kontraktdekning for ny lesehøyde-helper og radnavigasjon i `results.js`
+
+## 0.10.22 - 2026-04-24
+
+feat(results/participant): resultat-drilldown per rad + enklere deltakerflate
+
+- public/results.html, public/results.js, public/i18n/results-translations.js: modul- og kursradene i `Resultat` er nå klikkbare og åpner underliggende detaljtabeller med individuelle deltakere, status og skår; samme toppfiltre gjelder for både aggregat- og detaljvisning; kursdetaljene viser også moduler fullført, ikke bestått og under vurdering
+- src/routes/reports.ts, src/modules/reporting/completionReport.ts, src/repositories/reportingRepository.ts: nye drilldown-endepunkter `GET /api/reports/completion/details` og `GET /api/reports/courses/details` med filterstøtte og siste relevante deltakerstatus/skår
+- src/modules/course/courseReport.ts, src/modules/course/courseRepository.ts, src/modules/course/index.ts: kursrapportering utvidet med per-deltaker drilldown for publiserte kurs, inkludert kursstatus, modulutfall og gjennomsnittsskår
+- public/participant.html, public/participant.js: `Ditt svar`-feltet er gjort høyere; etter `Opprett innlevering` går besvarelsen over i lesemodus; autosave-/klarstatus, avkryssing og innleverings-ID skjules; deltaker ser ikke lenger assessor-orientert `guidanceText`
+- test/m2-reporting.test.ts, test/participant-console-config.test.ts, test/workspace-validation-accessibility.test.js: oppdatert dekning for nye rapportflater og deltakerkontrakter
+- Verifisert med `npm run build` og målrettede kontrakttester; DB-avhengig rapportintegrasjonstest kunne ikke fullføres lokalt fordi test-PostgreSQL ikke var tilgjengelig
+## 0.10.21 - 2026-04-21
+
+arch(wave4): parser-preflight, kalibreringskontrakt og redigeringskildekontrakt (#342, #343, #345)
+
+### #342 — Parser preflight og sikkerhet
+- src/modules/adminContent/sourceMaterialExtractionService.ts: to nye feilklasser (`SourceMaterialPolicyError`, `SourceMaterialTimeoutError`); magic bytes-sjekk; OOXML ZIP-preflight for docx/pptx/odt/odp/ods; 30s timeout for legacy doc/ppt via `Promise.race`
+- src/parserApp.ts: per-format kill switches (`PARSER_FORMAT_DISABLED_<FORMAT>=true`); strukturerte `parser_outcome`-logg-hendelser etter hvert jobb (status: accepted/policy_rejected/timeout/resource_limit_exceeded/parser_failed)
+- src/clients/parserWorkerClient.ts: håndterer `SourceMaterialPolicyError` og `SourceMaterialTimeoutError` i lokal fallback
+- doc/ops/PARSER_RUNBOOK.md: ny — kill switches, strukturerte hendelser, healthcheck, rotasjon av auth-nøkkel
+
+### #343 — Kalibreringsterskler: ett kanonisk kontrakt
+- public/admin-content-calibration.html, public/admin-content-advanced.html, public/calibration.html: fjernet fire ikke-fungerende felt (borderlineMin/Max, practicalMinPercent, mcqMinPercent) og band-preview; oppdatert subtitle
+- public/static/admin-content-calibration.js, public/admin-content.js, public/calibration.js: tilsvarende opprydding i variabeldeklarasjoner og funksjoner
+- test/m2-calibration-workspace.test.ts: ny integrasjonstest for snapshot→publish→snapshot rundtur med bekreftelse på at kun `totalMin` returneres
+
+### #345 — Felles redigeringskilde- og preview-kontrakt
+- public/static/admin-content-shell.js: importerer og bruker nå `deriveModuleStatusChains` fra `module-status-logic.js` (samme kilde som Advanced); fjernet manuell bundle-traversering i `updateStateRail()`
+- test/admin-content-state-rail.test.js: ny seksjon «shared editing-source contract» med tre kanoniske tilstandstester (working draft, saved draft, live)
+
+## 0.10.20 - 2026-04-20
+
+sec(infra): parser runtime isolation — kilde-material parsing i separat App Service uten DB/AI-hemmeligheter (#341)
+
+- src/parserApp.ts: ny Express-app (thin) med HMAC-SHA256 auth-middleware, in-memory jobbstore (TTL 10 min), `POST /parse` og `GET /parse/:jobId`
+- src/clients/parserWorkerClient.ts: ny — HMAC-signering, HTTP-klient; lokal fallback (in-process) når `PARSER_WORKER_URL` ikke er satt
+- src/config/env.ts: `PARSER_WORKER_URL` og `PARSER_WORKER_AUTH_KEY` (valgfrie)
+- src/routes/adminContent.ts: `POST /source-material/extract` returnerer nå `202 { jobId }`; ny `GET /source-material/extract/:jobId` poll-endepunkt
+- public/static/admin-content-shell.js: synkront kall erstattet med 30×1s poll-løkke
+- scripts/runtime/parserStartup.mjs: ny oppstartsscript for parser App Service (ingen DB-migrering)
+- infra/azure/main.bicep: ny `parserApp`-ressurs uten DATABASE_URL/OpenAI/ACS; `parserWorkerAuthKey`-parameter; KV-hemmelighet `PARSER-WORKER-AUTH-KEY`; `PARSER_WORKER_URL` + `PARSER_WORKER_AUTH_KEY` lagt til i webApp
+- test/m2-source-material-extract.test.ts: integrasjonstester for async extract-flyt
+
+## 0.10.19 - 2026-04-20
+
+sec(api): ressurseierskap, rapportscoping og revisjons-personvern (#337)
+
+- prisma/schema.prisma + migrering: `Module.createdById` (nullable) + `User.createdModules`-relasjon
+- src/routes/adminContent.ts: `assertModuleOwnership()` — SMO kan kun mutere egne moduler; ADMINISTRATOR har alltid tilgang; legacy-moduler (createdById=null) er admin-only
+- src/modules/adminContent/adminContentRepository.ts: ny `findModuleOwner()`-metode
+- src/modules/adminContent/adminContentCommands.ts: `createModule` setter `createdById` fra `actorId`
+- src/config/capabilities.ts: `SUBJECT_MATTER_OWNER` fjernet fra `reports`-kapabilitet (API-003)
+- src/services/auditService.ts: `actor.email` strippes fra revisjonslogg når kallerens rolle mangler `hasAuditReadAccess` (API-005)
+- test/m2-module-ownership.test.ts: to-SMO-isolasjonstest + legacy-modul-test
+- test/m2-audit-pipeline.test.ts: API-005-test (participant ser ikke actor.email; reviewer ser det)
+
+## 0.10.18 - 2026-04-20
+
+fix(infra): Azure secrets og nettverksherding — Key Vault, PostgreSQL IP-allowlist, RBAC (#334)
+
+- infra/azure/main.bicep: `postgresFirewallAllowAzure` (`0.0.0.0/0.0.0.0`) erstattet med `postgresFirewallRules`-loop drevet av ny `dbAllowedIpAddresses`-parameter
+- infra/azure/main.bicep: ny `keyVault`-ressurs (Standard SKU, RBAC-modus, soft-delete 7 dager)
+- infra/azure/main.bicep: KV-hemmeligheter `DATABASE-URL`, `AZURE-OPENAI-API-KEY` (betinget), `ACS-CONNECTION-STRING` (betinget) erstatter direkte parameter-verdier i app settings
+- infra/azure/main.bicep: `DATABASE_URL`, `AZURE_OPENAI_API_KEY`, `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING` i webApp og workerApp er nå KV-referanser (`@Microsoft.KeyVault(VaultName=...;SecretName=...)`)
+- infra/azure/main.bicep: `webAppKvRole` og `workerAppKvRole` rolle-tildelinger — `Key Vault Secrets User` for begge managed identities
+- infra/azure/main.bicep: `keyVaultName` lagt til outputs
+- infra/azure/deploy.sh: nytt deploy-script som henter App Service outbound IPs automatisk og sender dem som `dbAllowedIpAddresses`; inkluderer RBAC-audit-instruksjoner (INFRA-004)
+
+## 0.10.17 - 2026-04-19
+
+fix(security): bølge 2 pilot-klargjøring — deltaker-payload, admin-overtakelse, rutekartkart (#335, #336, #344)
+
+- src/modules/submission/submissionReadModels.ts: `toSubmissionResultView` fjerner `llmEvaluation` og `mcqAttempt` fra deltaker-responsen — rå evalueringssignaler er nå kun synlig internt; `participantGuidance` beholder all nødvendig kuratert informasjon (#335)
+- src/routes/assessments.ts: `GET /api/assessments/:submissionId` fjerner `latestEvaluation` fra deltaker-polling-respons (#335)
+- test/m1-core-flow.test.ts: oppdatert kontraktassertion — bekrefter at `llmEvaluation` og `mcqAttempt` er fraværende, `participantGuidance` er tilstede (#335)
+- test/unit/read-models.test.ts: ny kontraktsassertion bekrefter fravær av råfelt i `toSubmissionResultView` (#335)
+- src/modules/review/manualReviewService.ts: `claimManualReview` og `finalizeManualReviewOverride` får `isAdmin`-parameter; admin kan overta allerede tildelte saker med auditlogging av forrige eier (#336)
+- src/modules/appeal/appealService.ts: `claimAppeal` og `resolveAppeal` får `isAdmin`-parameter; samme mønster som review (#336)
+- src/routes/reviews.ts, src/routes/appeals.ts: leser `ADMINISTRATOR`-rolle fra `request.context.roles`, sender `isAdmin` til tjenestene (#336)
+- src/observability/auditEvents.ts: nye audit-handlinger `manualReview.adminTakeover` og `appeal.adminTakeover` med metadata for forrige og ny eier (#336)
+- doc/route-map.md: ny fil — pilot-rute/workspace-kart med kanoniske ruter, legacy-ruter (demarkert), og API-basistier (#344)
+
+## 0.10.16 - 2026-04-19
+
+fix(security): bølge 1 pilot-klargjøring — DB-push-fallback, kalibrering rollesjekk, LLM rate limit (#338, #339, #340)
+
+- infra/azure/main.bicep: PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK satt til 'false' for alle miljøer (var 'true' for stage) — forhindrer at db push-fallback omgår migrasjonshistorikk (#340)
+- public/static/admin-content-calibration.js: `hasCalibrationAccess()` leser nå faktiske brukerroller fra `/api/me` i stedet for statisk konfig-default `identityDefaults.roles`; `renderWorkspaceNavigation()` bruker samme kilde; `activeUserRoles` populeres i `init()` (#338)
+- src/middleware/rateLimiting.ts: ny `generateLimiter` (10 req/min per bruker) for LLM-endepunkter; `resetRateLimitState()` inkluderer ny store (#339)
+- src/routes/adminContent.ts: `generateLimiter` lagt til på alle 7 LLM-endepunkter (`/source-material/extract`, `/generate/module-draft`, `/generate/module-draft/revise`, `/generate/module-draft/localize`, `/generate/mcq`, `/generate/mcq/revise`, `/generate/mcq/localize`) (#339)
+- src/app.ts: `/healthz` fjerner versjonsnummer fra respons; `/version` og `/participant/config` får rate-limiting (#339)
+
+## 0.10.15 - 2026-04-19
+
+fix(samtale): direkteredigering flyttes til preview-panelet (#333)
+
+Erstatter steg-for-steg chat-skjema fra #332 med inline redigering direkte i forhåndsvisningspanelet. Alle tre felt (tittel, scenario, forventning) vises simultant som redigerbare elementer med samme visuelle stil som eksisterende preview-klasser. Locale-bar låses under redigering. Lokalisering og lagring er uendret.
+
+- public/admin-content.html: CSS for `.preview-pane--editing`, `.preview-edit-title`, `.preview-edit-textarea`, `.preview-edit-actions`
+- public/static/admin-content-shell.js: ny `enterPreviewEditMode()` — setter previewContent.innerHTML med redigerbare felt og Bekreft/Avbryt; `startDirectEditFlow()` delegerer til denne
+- public/i18n/admin-content-translations.js: nye nøkler `shell.directEdit.editingBadge` og `shell.directEdit.editingHint` for en-GB, nb, nn
+- test/admin-content-ui-contracts.test.js: 2 nye kontrakter (32 totalt)
+
+## 0.10.14 - 2026-04-18
+
+feat(samtale): direkteredigering av tittel, scenario og forventning med automatisk oversettelse (#332)
+
+- public/static/admin-content-shell.js: ny `startDirectEditFlow()` — tre sekvensielle pre-fylte skjema for tittel, scenario og forventning; `localizeDraftAcrossLocalesWithTitle()` oversetter alle tre felt til de to andre locale via eksisterende API; graceful degradering ved oversettelsesfeil
+- public/static/admin-content-shell.js: `logForm()` får valgfritt 6. argument `initialValue` for pre-fylling — eksisterende kall upåvirket
+- public/static/admin-content-shell.js: `saveDraftBundleInBackground()` sender PATCH /modules/:id/title når `sessionDraft.title` er et lokalisert objekt
+- public/static/admin-content-shell-state.js: `directEdit`-aksjon lagt til i begge aksjonsmodeller (`deriveShellModuleActionModel`, `deriveShellDraftReadyActionModel`)
+- public/i18n/admin-content-translations.js: nye `shell.directEdit.*`-nøkler for en-GB, nb, nn
+- src/modules/adminContent/adminContentSchemas.ts: `moduleDraftLocalizationBodySchema` får valgfritt `title`-felt; ny `moduleTitleUpdateBodySchema`
+- src/modules/adminContent/llmContentGenerationService.ts: `ModuleDraftLocalizationInput` og `ModuleDraftResult` utvides med `title?`; `buildModuleDraftLocalizationPrompts` inkluderer tittel i prompt og returformat
+- src/modules/adminContent/adminContentRepository.ts: ny `updateModuleTitle()`
+- src/modules/adminContent/adminContentCommands.ts: ny `updateModuleTitle()` med audit
+- src/observability/auditEvents.ts: ny audit-hendelse `moduleTitleUpdated`
+- src/routes/adminContent.ts: ny PATCH `/modules/:moduleId/title`-rute
+- test/admin-content-ui-contracts.test.js: 6 nye kontrakttester (30 totalt)
+
+## 0.10.13 - 2026-04-18
+
+fix: MSAL redirectUri — bruk /admin-content i stedet for / (rot-URL er ikke en HTML-side)
+
+- public/api-client.js: redirectUri endret fra origin+"/" til origin+"/admin-content"; rot-URL returnerer bare tekst ("a2-assessment-platform"), ingen JS laster, handleRedirectPromise() kjører aldri og auth-koden i URL-hash behandles ikke
+- scripts/azure/deploy-environment.ps1: SPA redirect URI oppdatert til https://$webAppName.azurewebsites.net/admin-content
+
+## 0.10.12 - 2026-04-18
+
+fix: Opprett ny modul — title sendt som plain string, ikke {en-GB:...}-objekt
+
+- public/static/admin-content-library.js: createAndNavigate sender `title` direkte som string i stedet for `{ "en-GB": title }`; localizedTextSchema aksepterer string|{en-GB,nb,nn} men partial objekt uten nb/nn gir 400 validation_error
+
+## 0.10.11 - 2026-04-18
+
+fix: row-action-btn min-height: 0 — global button{min-height:40px} ga ulik høyde på <button> og <a> i samme rad
+
+- public/admin-content-library.html: .row-action-btn får min-height: 0 (+ normalisert rekkefølge av properties)
+- public/admin-content-courses.html: .row-action-btn komplett rewrite til å matche library — la til width:auto, min-height:0, line-height:1.4, font-family:inherit, justify-content:center, box-sizing:border-box
+- test/admin-content-ui-contracts.test.js: ny kontraktstest verifiserer min-height:0 i begge filer
+
+## 0.10.10 - 2026-04-18
+
+fix: deploy-environment.ps1 avsluttes med exit 0 — PowerShell 7 propagerer $LASTEXITCODE fra native kommandoer som scriptets exit code
+
+- scripts/azure/deploy-environment.ps1: lagt til `exit 0` på slutten; deploy-scriptet kjørte vellykket (apper deployet, health checks OK) men returnerte exit code 1 fordi $LASTEXITCODE var 1 etter mislykket `az ad app show`-kall (fanget i try/catch), og PowerShell 7 propagerer $LASTEXITCODE ved scriptavslutning uten eksplisitt exit
+
+## 0.10.9 - 2026-04-18
+
+fix: deploy-environment.ps1 bruker az rest/Graph API for SPA redirect URI (az ad app update støtter ikke --spa-redirect-uris)
+
+- scripts/azure/deploy-environment.ps1: bytter fra `az ad app update --spa-redirect-uris` (ikke støttet) til `az ad app show` + `az rest PATCH graph.microsoft.com/v1.0/applications/<objectId>` med `{"spa":{"redirectUris":[...]}}` — samme mønster som setup-dev-tenant-auth.ps1 bruker for scopes. Feil gir advarsel, stopper ikke deploy.
+
+## 0.10.8 - 2026-04-18
+
+fix: deploy-environment.ps1 oppdaterer SPA redirect URI automatisk etter deploy
+
+- scripts/azure/deploy-environment.ps1: etter health-check, hvis AuthMode=entra og EntraClientId er satt, kjøres `az ad app update --id $EntraClientId --spa-redirect-uris https://$webAppName.azurewebsites.net/`. Feil gir advarsel med manuell kommando, men stopper ikke deploy. Eliminerer AADSTS50011 ved nye ruter uten manuelt Azure Portal-arbeid.
+- Komplementær til v0.10.7-fiksen (stabil redirectUri + sessionStorage restore i api-client.js).
+
+## 0.10.7 - 2026-04-18
+
+fix: MSAL redirect URI — use stable origin "/" + sessionStorage destination restore
+
+- public/api-client.js: redirectUri changed from window.location.origin + window.location.pathname to window.location.origin + "/"; before loginRedirect, current URL is saved to sessionStorage("auth_intended_url"); after handleRedirectPromise returns, URL is restored and sessionStorage entry cleared. Fixes AADSTS50011 for any new route that was never registered as a redirect URI in Azure AD (e.g. /admin-content/courses/new added in v0.10.3).
+- Azure AD action required: register https://a2-assessment-platform-stg-app-ci3vny.azurewebsites.net/ as a SPA redirect URI in app registration 1a4af641-f452-4761-8dff-1b2783929359.
+
+## 0.10.6 - 2026-04-18
+
+fix: library.js getHeaders plain-object bug + conv course flow spacing + combobox width (#330, #331)
+
+- public/static/admin-content-library.js: `let getHeaders = {}` → `let _headerValues = {}; function getHeaders() { return _headerValues; }` — same root cause as v0.10.2 Bug G; all POST calls (create module, archive, restore, duplicate) were silently becoming GETs; create-module dialog showed "Fikk ikke modul-ID." (#331)
+- public/admin-content-courses.html: added `.conv-step { display: flex; flex-direction: column; gap: var(--space-2) }` — convAfter* wrapper divs are nested inside .conv-flow, not direct flex children, so they didn't inherit the flow's gap; fixes no-spacing issue (#330)
+- public/admin-content-courses.html: added `.combobox-row button { width: auto; flex-shrink: 0 }` — same global button{width:100%} reset issue as v0.10.4; fixes collapsed module-search input (#330)
+- public/static/admin-content-courses.js: added `class="conv-step"` to all four convAfter* placeholder divs so the CSS rule applies
+- test/admin-content-ui-contracts.test.js: three new contract tests — combobox-row button width, conv-step flex layout, library.js getHeaders function
+
+## 0.10.5 - 2026-04-18
+
+test: UI contract tests for flex-button width overrides, getHeaders function contract, conversational flow CSS, moduleExport unwrap
+
+- test/admin-content-ui-contracts.test.js: new describe blocks for "courses conversational flow CSS" (flex container width overrides), "courses JS contracts" (getHeaders function, renderNewCourseConversational delegation, POST contract), "shell JS contracts" (moduleExport unwrap); also fixed two stale assertions: backToChatLink moved to advancedJs check, aria-label="Kursliste" moved to JS check, advPreviewContent replaces previewContent for advanced HTML
+- These tests would have caught: button{width:100%} override missing (v0.10.4), getHeaders plain object (v0.10.2 Bug G), bundle.moduleExport unwrap missing (v0.10.2 Bug B)
+
+## 0.10.4 - 2026-04-18
+
+fix: conv-input-area button width — global button{width:100%} override missing, input field collapsed
+
+- public/admin-content-courses.html: .conv-input-area button { width: auto; flex-shrink: 0 }; .conv-choice-btn { width: auto }; added min-width: 0 to input so flex-shrink works correctly
+
+## 0.10.3 - 2026-04-18
+
+feat: conversational new-course creation — replace locale-tab form for /courses/new (#329)
+
+- public/static/admin-content-courses.js: renderNewCourseConversational() — step-by-step chat flow: title (free-text input), cert level (choice buttons), optional module search (searchable combobox + reorder/remove list), then creates course via POST + PUT modules; renderDetailView(null) delegates to it
+- public/admin-content-courses.html: conversational flow CSS (conv-flow, conv-bot-msg, conv-user-bubble, conv-input-area, conv-choices, conv-choice-btn, conv-saving-indicator)
+- Edit view for existing courses (/courses/:id) is unchanged — form with locale tabs remains
+
+## 0.10.2 - 2026-04-18
+
+fix: 7 stage-testing bugs from v0.10.1 verification
+
+- Bug B: admin-content-shell.js: loadModule() unwrap bundle.moduleExport (API returns { moduleExport: {...} }, not the bundle directly) — root cause of empty preview pane and blank state rail values in Samtale
+- Bug C: admin-content-shell.js + admin-content.js: srLang now shows preview locale only (removed redundant "UI: {locale}" prefix — top menu already shows UI locale)
+- Bug D: auto-fixed by Bug B — state rail DU REDIGERER and LIVE NÅ now populate correctly once bundle.module is accessible
+- Bug E: admin-content.html: added GDPR/privacy warning (same as Avansert) above the workspace header
+- Bug F: auto-fixed by Bug B — state rail values now consistent between Samtale and Avansert
+- Bug G: admin-content-courses.js: getHeaders changed from plain object to function so apiFetch correctly separates headers from fetch options — POST/PUT/DELETE requests were silently converted to GET (body/method from 3rd param were lost), causing "Fikk ikke kurs-ID" on course creation
+- Bug A: admin-content-library.html: row-action-btn gets display:inline-flex + width:auto + text-decoration:none — buttons and anchor links in the same flex row now render identically
+
+## 0.10.1 - 2026-04-18
+
+fix: 8 stage-testing bugs from epic #328 verification
+
+- Bug #1: admin-content-library.html: filter button "Har upublisert draft" → "Har upublisert utkast"
+- Bug #2: adminContentQueries.ts: apply localizeContentText to certificationLevel in listLibraryModules(); admin-content-library.js: add "foundation" to CERT_LABELS, normalize to lowercase in certBadge()
+- Bug #3: admin-content-library.html: .row-actions add flex-wrap:wrap; .col-actions add min-width:260px
+- Bug #4: admin-content-library.js: sortable columns by Modulnavn and Sist endret with asc/desc toggle
+- Bug #5: admin-content-library.js: createAndNavigate() and renderLibrary() now navigate to new path-based URLs (/admin-content/module/:id/conversation|advanced)
+- Bug #6: admin-content-shell.js: badge text for loaded module with no versions changed from "badge.none" to "badge.shellOnly"
+- Bug #7: admin-content-courses.js: localizedText() now parses JSON-encoded strings for localized course titles
+- Bug #8: shared.css: added a.btn-primary/secondary/danger base styles so anchor-as-button renders correctly
+
+## 0.10.0 - 2026-04-18
+
+feat: admin content IA redesign complete — epic #328 ready for stage verification
+
+- All child issues implemented: #321 (module library), #322 (unified workspace), #323 (archive simplification), #324 (lifecycle action placement), #325 (courses workspace), #326 (calibration workspace), #327 (advanced editor simplification)
+- doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md: updated section 7 (transition routes replaced by live paths), status updated to reflect implementation complete
+
+## 0.9.101 - 2026-04-18
+
+feat: lifecycle action placement — library owns duplicate/archive, workspace owns publish/unpublish (#324)
+
+- public/static/admin-content-shell.js: removed duplicate, archive, and delete from showModuleActions() primary choices; module workspace shell now surfaces only generate, resume, editAdvanced, pickAnother, saveDraft, publish, unpublish — duplicate/archive/delete live in the library
+- public/admin-content-advanced.html: duplicate/delete already demoted to advancedToolsSection (<details>) by #327; archiveModuleBtn remains secondary in status section; publishFromCards and unpublishModuleBtn remain primary workspace actions
+
+## 0.9.100 - 2026-04-18
+
+feat: advanced editor simplification — module-context-driven, tools section demoted (#327)
+
+- public/admin-content-advanced.html: wrapped moduleStartModeTabs + import/manual/existing panels in <details id="advancedToolsSection"> (collapsed by default); added summary "Modulverktøy"; added CSS for details disclosure
+- public/admin-content.js: activateModuleStartMode() now opens advancedToolsSection before switching tabs; removed auto-open of tools section on init (no activateModuleStartMode call at boot); removed activateModuleStartMode("existing") when auto-loading module from path — advanced editor now opens directly in module context
+- public/i18n/admin-content-translations.js: added adminContent.tools.summary (en-GB/nb/nn)
+
+## 0.9.99 - 2026-04-18
+
+feat: archive simplification — library owns archive, remove archive section from advanced (#323)
+
+- public/admin-content-advanced.html: removed archiveLibrarySection card
+- public/admin-content.js: removed archiveSearchInput/archiveSearchBtn/archiveLibraryList DOM refs, loadArchiveLibrary() function, and archive search event listeners; archiveModuleBtn retained as secondary action in module status
+- public/static/admin-content-shell.js: removed "restore archived" from startIdle() and showModuleActions() primary choices; archived module status shown in chat on load via shell.module.archivedStatus
+- public/static/module-status-logic.js: archived badge/summary when module.archivedAt is set (badge.archived, summary.archived)
+- public/i18n/admin-content-translations.js: added adminContent.status.badge.archived + summary.archived (en-GB/nb/nn), shell.module.archivedStatus (en-GB/nb/nn)
+
+## 0.9.98 - 2026-04-18
+
+feat: unified module workspace — shared state rail + mode switch (#322)
+
+- public/admin-content.html: extended state rail (srPreview, srLang), replaced shell-header with module-workspace-header + mode switch, removed old advanced-link anchor
+- public/admin-content-advanced.html: same state rail extension + mode switch (Avansert active by default), removed back-to-chat link element
+- public/static/admin-content-shell.js: path-based moduleId from /admin-content/module/:id/conversation, openAdvancedEditor() uses /module/:id/advanced URL, replaced advancedEditorLink binding with modeSwitchAdvancedBtn, srPreview/srLang populated in updateStateRail()
+- public/admin-content.js: path-based moduleId from /admin-content/module/:id/advanced, srPreview/srLang in updateStateRail(), modeSwitchConversation button wired, navigateToConversation() uses /module/:id/conversation?resumeEditing=1
+- public/i18n/admin-content-translations.js: 7 new keys (stateRail.label.preview, stateRail.preview.workingDraft/published, stateRail.label.language, stateRail.language.format, workspace.mode.conversation/advanced) in en-GB, nb, nn
+
+## 0.9.97 - 2026-04-17
+
+feat: admin content IA redesign — module library, courses workspace, calibration workspace (#328)
+
+- public/admin-content-library.html + public/static/admin-content-library.js (Issue #321)
+  - Module library as primary entry at /admin-content
+  - Table with 6 cols: Modulnavn, Sertifiseringsnivå, Status, Brukt i kurs, Sist endret, Handlinger
+  - 5 filter tabs (Alle/Aktive/Upublisert draft/Publiserte/Arkiverte) + search
+  - Status badge priority: archived > unpublished_draft > published > ready
+  - Brukt i kurs: clickable count, opens popover with course names
+  - Row actions: Åpne i Samtale, Åpne i Avansert, Dupliser, Arkiver/Gjenopprett
+  - Client-side module duplicate (fetches export bundle, reconstructs)
+  - Opprett ny modul dialog with 2 CTAs (Samtale / Avansert)
+  - Empty state: "Ingen moduler ennå"
+- public/admin-content-courses.html + public/static/admin-content-courses.js (Issue #325)
+  - Courses workspace at /admin-content/courses, /courses/new, /courses/:courseId
+  - Course list: table with Tittel, Sertifiseringsnivå, Antall moduler, Sist endret, Handlinger
+  - Route detection: list vs. detail view in single HTML
+  - Empty state: "Ingen kurs ennå"
+  - Course detail: locale-faner (en-GB/nb/nn) for title/description
+  - Searchable combobox for module add (filters already-added modules)
+  - Move up / Move down buttons per module row (no drag-and-drop)
+  - Delete course confirmation dialog (modules not deleted)
+- public/admin-content-calibration.html + public/static/admin-content-calibration.js (Issue #326)
+  - Calibration workspace at /admin-content/calibration
+  - Role-gate: access denied state if user lacks calibration role (no redirect, no blank screen)
+  - Access denied: title "Ingen tilgang", explanation, link back to Moduler
+  - Deep-link with ?moduleId= prefills module filter and shows module badge
+  - Full calibration UI ported: filters, quality signals, thresholds, outcomes, anchors
+  - Publish thresholds via POST /api/calibration/workspace/publish-thresholds
+- src/app.ts: new routes for library, courses, calibration, module workspace targets
+- src/routes/adminContent.ts: GET /modules/library endpoint, DELETE guard (409 if used in courses)
+- src/routes/adminCourses.ts: DELETE /:courseId endpoint
+- src/modules/adminContent: listLibraryModules(), deriveLibraryStatus(), countModuleCourses()
+- src/modules/course: deleteCourse()
+- content-area-nav (Moduler | Kurs | Kalibrering) on all 3 new workspaces
+- Kalibrering nav hidden for users without calibration role
+
+## 0.9.96 - 2026-04-17
+
+feat: safe working-draft handoff between conversational shell and advanced editor (#316 / working-draft contract tests)
+
+## 0.9.95 - 2026-04-17
+
+feat: tier-based confirmation model — replaces window.confirm() with proper dialogs (#316)
+
+- admin-content-advanced.html: 3 new <dialog> elements
+  - #dialogSimpleConfirm: tier-1 confirm for unpublish / archive / import overwrite
+  - #dialogDeleteConfirm: tier-2 hard two-step for delete module (type-to-confirm)
+  - #dialogUnsavedHandoff: navigation guard when leaving with unsaved changes
+    — 3 choices: save + go back / go back without saving / cancel
+- admin-content.js: dialog helper functions showSimpleConfirm(), showDeleteConfirm(),
+  showUnsavedHandoffDialog() — all return Promises; event listeners cleaned up on close
+- handleDeleteSelectedModule() → showDeleteConfirm() (hard two-step)
+- handleUnpublishModule() → showSimpleConfirm() (tier-1)
+- handleArchiveModule() → showSimpleConfirm() (tier-1)
+- handleApplyImportDraft() → showSimpleConfirm() (tier-1)
+- initBackToChatHandoff(): async click handler; showUnsavedHandoffDialog() with save path
+  calling handleSaveContentBundle() before navigating; no-dirty path unchanged
+- Zero window.confirm() calls remain in admin-content.js
+- i18n: new confirm/unsaved keys added in all 5 locale slots (en-GB, nb, nn, late.nb, late.nn)
+- test/admin-content-translations.test.js: 11 new keys added to required-keys list
+
+## 0.9.94 - 2026-04-17
+
+feat: preview-paritet — delt preview-surface i advanced editor (#315)
+
+- New public/static/admin-content-preview.js: shared renderer exported as
+  buildPreviewHtml(data, {locale, t, tf}) and localizeValueForLocale(value, locale)
+- admin-content-shell.js refactored to import from shared module; renderPreview()
+  delegates to buildPreviewHtml(); ~100 lines of duplicated rendering removed
+- admin-content-advanced.html: dockable right-side preview panel
+  - #advWorkspaceLayout grid: 1fr | 380px when open; collapses to 1fr on narrow screens
+  - #advPreviewPane (hidden by default), #advPreviewLocaleBar, #advPreviewContent
+  - Toggle button (#advPreviewToggleBtn) in page header, aria-pressed wired
+  - All preview CSS (locale bar, MCQ items, text blocks, badges) inline in page
+- admin-content.js: initAdvancedPreview() wires toggle; renderAdvancedPreview()
+  reads live form field values (not saved state) so preview reflects current edits
+  renderAdvancedPreviewLocaleBar() matches shell locale-bar UX
+  Both renderModuleStatus() and renderContentCards() call renderAdvancedPreview()
+- 4 new i18n keys (advPreview.*) in all 5 locale slots: en-GB, nb, nn, lateOverrides.nb/.nn
+
+## 0.9.93 - 2026-04-17
+
+feat: safe working-draft handoff between conversational shell and advanced editor (#314)
+
+- New public/static/admin-content-handoff.js: writeHandoff/readAndClearHandoff via sessionStorage
+  (tab-scoped, survives page refresh, 10-min TTL, keyed by moduleId)
+- Shell → Advanced: openAdvancedEditor() checks sessionDraft before navigating
+  - If unsaved draft: shows 3-choice dialog (take draft / save first / discard)
+  - "Save first" uses saveDraftBundleInBackground({ afterSave }) new callback
+  - Always writes locale context to handoff for restoration in advanced
+- Advanced receives shell handoff: applyHandoffFromShell() runs after auto-load
+  - Populates taskText/guidanceText/mcqQuestions fields from handoff draft
+  - Marks versionDetails and mcq cards as dirty; shows toast
+- Advanced → Shell: initBackToChatHandoff() intercepts #backToChatLink click
+  - If dirtyCards: window.confirm() warning (partial-transfer caveat explained)
+  - Writes content field values + locale to handoff before navigating
+- Shell receives advanced handoff: applyHandoffDraft() in loadModule()
+  - Handoff draft wins over resumeEditing/createSessionDraftFromLoadedModule
+  - Locale from handoff applied to currentLocale/previewLocale
+- 6 new i18n keys (handoff.*) in all 5 locale slots: en-GB, nb, nn, lateOverrides.nb/.nn
+
+## 0.9.92 - 2026-04-17
+
+test: functional UI test coverage for admin-content shell and advanced editor (#318)
+
+- Extract deriveModuleStatusChains + findLinkedVersion to public/static/module-status-logic.js (pure, no DOM, testable from Node)
+- admin-content.js imports from module-status-logic.js; deriveModuleStatusView is now a locale wrapper
+- 23 new unit + structural tests in test/admin-content-state-rail.test.js:
+  - findLinkedVersion: 4 cases (null/empty, falsy id, match, no match)
+  - deriveModuleStatusChains: 7 cases (null, shell-only, draft-only, published, published+draft, linked rubric, technicalDetails)
+  - HTML structure: both pages have state rail element IDs + i18n keys + hidden attribute
+  - CSS smoke: all sr-badge modifier classes present in shared.css
+  - Call-site smoke: renderPreview/renderModuleStatus/renderContentCards each call updateStateRail()
+- Add admin-content-advanced.html to workspace-html-fallbacks.test.js (was missing)
+- Add doc/design/SHELL_ADVANCED_PARITY.md: feature parity checklist between shell and advanced editor
+
+## 0.9.91 - 2026-04-17
+
+feat: unified state rail in conversational shell and advanced editor (#313)
+
+- Add .state-rail and .sr-badge CSS to shared.css (published/saved-draft/working/unsaved)
+- Add #stateRail strip to admin-content.html and admin-content-advanced.html
+  - Starts hidden; revealed by JS when a module is selected
+  - Four fields: module name, editing state badge, live state badge, changes badge
+- admin-content-shell.js: add updateStateRail(); called at end of renderPreview()
+  - Reads sessionDraft, bundle.selectedConfiguration, bundle.versions for live version lookup
+- admin-content.js: add updateStateRail(); called at end of renderModuleStatus() and renderContentCards()
+  - Reads dirtyCards.size and deriveModuleStatusView() for badge derivation
+- Add 13 i18n keys (stateRail.*) to all locales: en-GB, nb, nn, lateOverrides
+- UX assessment saved to doc/design/UX_PRODUCT_ASSESSMENT_ADMIN_CONTENT_REDESIGN_2026-04-17.md
+
+## 0.9.80 - 2026-04-15
+
+ux: chatLog — robust generic re-translation of entire dialog on locale switch
+
+- Replace ad-hoc in-place DOM patching with a chatLog[] spec array
+- Every message (bot, user, form, module-choices) is stored as a re-renderable
+  spec with a lazy htmlFn so t() is called fresh on each replay
+- retranslateChat() clears the DOM and replays chatLog in full with current locale
+- Locale-switch handler calls retranslateChat() — no special-casing per message type
+- Progress messages use a slot pattern: logProgress() creates a pending entry,
+  logResolveSlot() fills it with the final content when async work completes
+- Forms: submitted forms are frozen (prompt + disabled), unsubmitted re-render live
+- Module-choices: module titles are verbatim data; Cancel button re-translates
+- Remove reRenderCurrentState() — superseded by retranslateChat()
+- Add shell.module.loaded i18n key (fixes hardcoded "er lastet" in nb/nn)
+
+## 0.9.79 - 2026-04-15
+
+ux: re-translate bot message bubbles on locale switch
+
+- pushBotMessage accepts optional messageKey; bubble gets data-message-key
+- pushTextInputForm / pushTextareaForm accept optional promptKey (5th param)
+- Locale handler iterates .chat-bubble[data-message-key] and sets textContent
+- showDraftReadyActions stores data-mcq-count for in-place re-interpolation
+- Covers: idle prompt, module actions, cert level, MCQ prompts, form labels
+
+## 0.9.78 - 2026-04-15
+
+ux: locale switch translates chat in-place without clearing history
+
+- All choice buttons, form inputs and submit buttons store data-label-key /
+  data-placeholder-key attributes so the locale handler can re-translate them
+- Choices use labelKey:"key" instead of label:t("key") so keys are available
+  at re-render time
+- Locale change handler iterates [data-label-key] and [data-placeholder-key]
+  elements; no chat history cleared, no page reload
+- pushTextInputForm / pushTextareaForm now take keys, not already-translated strings
+
+## 0.9.77 - 2026-04-15
+
+ux: locale switch translates chat in-place instead of resetting dialog
+
+- currentLocale changed from const to let so it can be updated without reload
+- reRenderCurrentState() clears chat and re-renders from current session state
+  (idle / picking-module / module-loaded / draft-pending / generating)
+- translatePageStaticText() sets h1 and "Advanced editor" link on load and on switch
+- Removes location.reload() from locale change handler — module context preserved
+
+## 0.9.76 - 2026-04-15
+
+feat: i18n all shell chat strings (#296 follow-up) — locale switch now affects full UI
+
+- All hardcoded Norwegian strings in admin-content-shell.js replaced with t()/tf() calls
+- Added shell.* translation keys to adminContentBase (en-GB), adminContentLateOverrides.nb, and .nn
+- tf() helper added for parameterised strings ({count}, {preview}, {versionNo})
+- Switching locale in top-bar dropdown now updates all chat messages, buttons, and prompts
+
+## 0.9.75 - 2026-04-15
+
+feat: Slice 2 (#296) — source-material intake and LLM draft creation via conversational shell
+
+- Guided new-module wizard: title → source material (textarea) → cert level → locale → create shell → generate
+- Non-blocking draft generation with AbortController; progress card + Abort button during generation
+- Accept/discard result pattern — existing draft state unchanged until user explicitly accepts
+- MCQ generation flow with same non-blocking pattern
+- `sessionDraft` state reflected in preview with "Ulagret utkast" badge
+- "Generer nytt innhold" action available from loaded-module state
+- Fix `apiFetch` calls in shell to use function form so identity headers are actually sent
+
 ## 0.9.74 - 2026-04-14
 
 ux: close #291, #300, and nav-badge half of #290

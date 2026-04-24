@@ -53,7 +53,7 @@ export async function getManualReviewWorkspaceView(reviewId: string, locale: str
   return workspace ? toManualReviewWorkspaceView(workspace, locale) : null;
 }
 
-export async function claimManualReview(reviewId: string, reviewerId: string) {
+export async function claimManualReview(reviewId: string, reviewerId: string, isAdmin = false) {
   const review = await manualReviewRepository.findManualReviewForClaim(reviewId);
   if (!review) {
     throw new NotFoundError("Manual review");
@@ -61,8 +61,18 @@ export async function claimManualReview(reviewId: string, reviewerId: string) {
   if (review.reviewStatus === ReviewStatus.RESOLVED || review.reviewStatus === ReviewStatus.SUPERSEDED) {
     throw new ConflictError("review_already_resolved", "Manual review is already resolved.");
   }
-  if (review.reviewerId && review.reviewerId !== reviewerId) {
-    throw new ConflictError("review_already_assigned", "Manual review is already assigned to another reviewer.");
+  const previousReviewerId = review.reviewerId;
+  if (previousReviewerId && previousReviewerId !== reviewerId) {
+    if (!isAdmin) {
+      throw new ConflictError("review_already_assigned", "Manual review is already assigned to another reviewer.");
+    }
+    await recordAuditEvent({
+      entityType: auditEntityTypes.manualReview,
+      entityId: reviewId,
+      action: auditActions.manualReview.adminTakeover,
+      actorId: reviewerId,
+      metadata: { submissionId: review.submissionId, previousReviewerId, newReviewerId: reviewerId },
+    });
   }
 
   const claimed = await manualReviewRepository.markManualReviewClaimed(reviewId, reviewerId, ReviewStatus.IN_REVIEW);
@@ -87,6 +97,7 @@ export async function finalizeManualReviewOverride(input: {
   passFailTotal: boolean;
   decisionReason: string;
   overrideReason: string;
+  isAdmin?: boolean;
 }) {
   const review = await manualReviewRepository.findManualReviewForOverride(input.reviewId);
   if (!review) {
@@ -96,7 +107,16 @@ export async function finalizeManualReviewOverride(input: {
     throw new ConflictError("review_already_resolved", "Manual review is already resolved.");
   }
   if (review.reviewerId && review.reviewerId !== input.reviewerId) {
-    throw new ConflictError("review_already_assigned", "Manual review is already assigned to another reviewer.");
+    if (!input.isAdmin) {
+      throw new ConflictError("review_already_assigned", "Manual review is already assigned to another reviewer.");
+    }
+    await recordAuditEvent({
+      entityType: auditEntityTypes.manualReview,
+      entityId: input.reviewId,
+      action: auditActions.manualReview.adminTakeover,
+      actorId: input.reviewerId,
+      metadata: { submissionId: review.submissionId, previousReviewerId: review.reviewerId, newReviewerId: input.reviewerId },
+    });
   }
 
   const latestDecision = review.submission.decisions[0];

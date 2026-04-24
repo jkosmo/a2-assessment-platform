@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMcqGenerationPrompts,
+  buildMcqLocalizationPrompts,
+  buildMcqRevisionPrompts,
   buildModuleDraftPrompts,
+  buildModuleDraftLocalizationPrompts,
+  buildModuleDraftRevisionPrompts,
+  extractMcqRevisionTargets,
+  hasMeaningfulMcqRevision,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
 describe("llm content generation prompts", () => {
@@ -10,6 +16,7 @@ describe("llm content generation prompts", () => {
       sourceMaterial: "Internal policy notes about safe handling of customer data.",
       certificationLevel: "intermediate",
       locale: "en-GB",
+      generationMode: "ordinary",
     });
 
     expect(userPrompt).toContain("The source material is for you only. The candidate will NOT see it.");
@@ -23,12 +30,162 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).not.toContain("based on the source material below.");
   });
 
+  it("includes generation mode guidance in module draft prompts", () => {
+    const { userPrompt } = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "intermediate",
+      locale: "en-GB",
+      generationMode: "thorough",
+    });
+
+    expect(userPrompt).toContain("Generation mode: thorough");
+    expect(userPrompt).toContain("Take a more thorough authoring pass");
+  });
+
+  it("uses certification level to calibrate module difficulty and guidance detail", () => {
+    const basicPrompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "basic",
+      locale: "en-GB",
+      generationMode: "ordinary",
+    }).userPrompt;
+
+    const advancedPrompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+    }).userPrompt;
+
+    expect(basicPrompt).toContain("Use the certification level as the primary difficulty control.");
+    expect(basicPrompt).toContain("guidanceText must stay high-level and candidate-safe");
+    expect(advancedPrompt).toContain("It may involve ambiguity, competing considerations, or nuanced application");
+    expect(advancedPrompt).toContain("must support high-quality responses without functioning as an answer key");
+  });
+
+  it("extracts explicit MCQ targets from compact option references", () => {
+    expect(extractMcqRevisionTargets("Endre alternativ 1C slik at det blir mer plausibelt.")).toEqual([
+      { questionIndex: 0, optionIndex: 2 },
+    ]);
+    expect(extractMcqRevisionTargets("Change option B in question 3.")).toEqual([
+      { questionIndex: 2, optionIndex: 1 },
+    ]);
+  });
+
+  it("treats targeted MCQ revisions as invalid when the named option is unchanged", () => {
+    const sourceQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    const revisedQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A revised salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    expect(
+      hasMeaningfulMcqRevision(sourceQuestions, revisedQuestions, "Endre alternativ 1C slik at det blir mer plausibelt."),
+    ).toBe(false);
+  });
+
+  it("treats targeted MCQ revisions as invalid when the named option is only cosmetically rephrased", () => {
+    const sourceQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    const revisedQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A slightly revised legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    expect(
+      hasMeaningfulMcqRevision(sourceQuestions, revisedQuestions, "Endre alternativ 1C slik at det blir mer plausibelt."),
+    ).toBe(false);
+  });
+
+  it("accepts targeted MCQ revisions when the named option is changed", () => {
+    const sourceQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    const revisedQuestions = [
+      {
+        stem: "What best describes solidarity action?",
+        options: ["A collective response", "A private complaint", "A coordinated workplace petition", "A salary bonus"],
+        correctAnswer: "A collective response",
+        rationale: "Solidarity action is collective rather than individual.",
+      },
+    ];
+
+    expect(
+      hasMeaningfulMcqRevision(sourceQuestions, revisedQuestions, "Endre alternativ 1C slik at det blir mer plausibelt."),
+    ).toBe(true);
+  });
+
+  it("builds module draft localization prompts for target language translation", () => {
+    const { userPrompt } = buildModuleDraftLocalizationPrompts({
+      taskText: "Scenario:\n\nWorkers are discussing collective action.",
+      guidanceText: "A strong answer should explain key principles.",
+      sourceLocale: "nb",
+      targetLocale: "en-GB",
+    });
+
+    expect(userPrompt).toContain("Translate the following certification module draft from Norwegian Bokm");
+    expect(userPrompt).toContain("to British English");
+    expect(userPrompt).toContain('If taskText starts with "Scenario:", preserve that label in the target language.');
+    expect(userPrompt).toContain('"taskText": "translated task text in British English"');
+  });
+
+  it("builds MCQ localization prompts that preserve option structure", () => {
+    const { userPrompt } = buildMcqLocalizationPrompts({
+      questions: [
+        {
+          stem: "Hva er solidaritet?",
+          options: ["Kollektiv handling", "Privat fordel", "Sanksjon", "Bonus"],
+          correctAnswer: "Kollektiv handling",
+          rationale: "Solidaritet handler om felles handling.",
+        },
+      ],
+      sourceLocale: "nb",
+      targetLocale: "nn",
+    });
+
+    expect(userPrompt).toContain("Translate the following multiple-choice questions from Norwegian Bokm");
+    expect(userPrompt).toContain("to Norwegian Nynorsk");
+    expect(userPrompt).toContain("Preserve the number of answer options for each question.");
+    expect(userPrompt).toContain("correctAnswer must match one of the translated options verbatim.");
+  });
+
   it("requires MCQs to be self-contained and not refer to hidden source material", () => {
     const { userPrompt } = buildMcqGenerationPrompts({
       sourceMaterial: "Reference notes about escalation thresholds and confidentiality duties.",
       certificationLevel: "advanced",
       locale: "en-GB",
+      generationMode: "ordinary",
       questionCount: 4,
+      optionCount: 4,
     });
 
     expect(userPrompt).toContain("The source material is for you only. The candidate will NOT see it.");
@@ -43,6 +200,76 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).not.toContain("based on the source material below.");
   });
 
+  it("includes generation mode guidance in MCQ prompts", () => {
+    const { userPrompt } = buildMcqGenerationPrompts({
+      sourceMaterial: "Reference notes about escalation thresholds and confidentiality duties.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "thorough",
+      questionCount: 4,
+      optionCount: 4,
+    });
+
+    expect(userPrompt).toContain("Generation mode: thorough");
+    expect(userPrompt).toContain("Take a more thorough authoring pass");
+  });
+
+  it("uses certification level to calibrate MCQ difficulty without hardcoding four options", () => {
+    const { userPrompt } = buildMcqGenerationPrompts({
+      sourceMaterial: "Reference notes about escalation thresholds and confidentiality duties.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      questionCount: 4,
+      optionCount: 5,
+    });
+
+    expect(userPrompt).toContain("Questions should test nuanced understanding and discrimination.");
+    expect(userPrompt).toContain("All 5 options in a question must be comparable in length and level of detail.");
+    expect(userPrompt).toContain("Review each set of 5 options before finalising");
+    expect(userPrompt).toContain("At intermediate and advanced levels, ensure at least one distractor is close enough to require real discrimination.");
+  });
+
+  it("builds draft revision prompts around an explicit change instruction", () => {
+    const { userPrompt } = buildModuleDraftRevisionPrompts({
+      taskText: "Scenario:\n\nA workplace conflict has escalated.\n\nExplain how mediation could help.",
+      guidanceText: "A strong answer should explain core mediation principles.",
+      instruction: "Make the scenario more concrete and add clearer expectations about evidence.",
+      locale: "en-GB",
+    });
+
+    expect(userPrompt).toContain("## Current draft");
+    expect(userPrompt).toContain("## Revision instruction");
+    expect(userPrompt).toContain("Make the scenario more concrete");
+    expect(userPrompt).toContain('If the task includes a scenario, keep it at the top of taskText labelled "Scenario:".');
+    expect(userPrompt).toContain('"includesScenario": true or false');
+  });
+
+  it("builds MCQ revision prompts that preserve count and option parity by default", () => {
+    const { userPrompt } = buildMcqRevisionPrompts({
+      questions: [
+        {
+          stem: "What best describes solidarity action?",
+          options: ["A collective response", "A private complaint", "A legal sanction", "A salary bonus"],
+          correctAnswer: "A collective response",
+          rationale: "Solidarity action is collective rather than individual.",
+        },
+      ],
+      instruction: "Make the distractors more plausible.",
+      locale: "en-GB",
+    });
+
+    expect(userPrompt).toContain("Preserve the number of questions unless the instruction clearly asks for a different count.");
+    expect(userPrompt).toContain("Preserve the number of answer options per question unless the instruction clearly asks for a different count.");
+    expect(userPrompt).toContain('If the instruction points to a specific question or option reference such as "question 3", "Q3", "3b", "option B in question 3", or "third alternative in question 3", apply the change to that exact target.');
+    expect(userPrompt).toContain("Target question count: 1");
+    expect(userPrompt).toContain("Target option count per question: 4");
+    expect(userPrompt).toContain("## Current questions (indexed review view)");
+    expect(userPrompt).toContain("Question 1");
+    expect(userPrompt).toContain("A. A collective response");
+    expect(userPrompt).toContain("Make the distractors more plausible.");
+  });
+
   // #245 — scenario generation decision
   describe("module draft scenario instructions (#245)", () => {
     it("instructs LLM to include scenario for situational/ethical content", () => {
@@ -50,6 +277,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Theory of leadership ethics.",
         certificationLevel: "intermediate",
         locale: "en-GB",
+        generationMode: "ordinary",
       });
 
       expect(userPrompt).toContain("Include a scenario in taskText when:");
@@ -63,6 +291,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Leadership frameworks.",
         certificationLevel: "advanced",
         locale: "nb",
+        generationMode: "ordinary",
       });
 
       expect(userPrompt).toContain('Place it at the very top of taskText, clearly labelled "Scenario:"');
@@ -74,6 +303,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Source.",
         certificationLevel: "basic",
         locale: "en-GB",
+        generationMode: "ordinary",
       });
 
       expect(userPrompt).toContain('"includesScenario": true or false');
@@ -84,6 +314,7 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Financial regulations.",
         certificationLevel: "advanced",
         locale: "nb",
+        generationMode: "thorough",
       });
 
       expect(userPrompt).toContain("Certification level: advanced");
@@ -98,7 +329,9 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Intro to biology.",
         certificationLevel: "basic",
         locale: "en-GB",
+        generationMode: "ordinary",
         questionCount: 3,
+        optionCount: 4,
       });
 
       expect(userPrompt).toContain("Certification level: basic");
@@ -111,7 +344,9 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Sociology theory.",
         certificationLevel: "intermediate",
         locale: "nb",
+        generationMode: "ordinary",
         questionCount: 4,
+        optionCount: 4,
       });
 
       expect(userPrompt).toContain("Certification level: intermediate");
@@ -124,7 +359,9 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Advanced contract law.",
         certificationLevel: "advanced",
         locale: "en-GB",
+        generationMode: "thorough",
         questionCount: 5,
+        optionCount: 4,
       });
 
       expect(userPrompt).toContain("Certification level: advanced");
@@ -133,9 +370,9 @@ describe("llm content generation prompts", () => {
     });
 
     it("distractor guidelines differ across levels", () => {
-      const basic = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "basic", locale: "en-GB", questionCount: 1 }).userPrompt;
-      const intermediate = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "intermediate", locale: "en-GB", questionCount: 1 }).userPrompt;
-      const advanced = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "advanced", locale: "en-GB", questionCount: 1 }).userPrompt;
+      const basic = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "basic", locale: "en-GB", generationMode: "ordinary", questionCount: 1, optionCount: 4 }).userPrompt;
+      const intermediate = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "intermediate", locale: "en-GB", generationMode: "ordinary", questionCount: 1, optionCount: 4 }).userPrompt;
+      const advanced = buildMcqGenerationPrompts({ sourceMaterial: "s", certificationLevel: "advanced", locale: "en-GB", generationMode: "thorough", questionCount: 1, optionCount: 4 }).userPrompt;
 
       // Each level has distinct guideline text
       expect(basic).not.toEqual(intermediate);
@@ -147,12 +384,28 @@ describe("llm content generation prompts", () => {
         sourceMaterial: "Any topic.",
         certificationLevel: "intermediate",
         locale: "en-GB",
+        generationMode: "ordinary",
         questionCount: 4,
+        optionCount: 5,
       });
 
       expect(userPrompt).toContain("## Option parity");
       expect(userPrompt).toContain("comparable in length and level of detail");
-      expect(userPrompt).toContain("Each question must have exactly 4 answer options");
+      expect(userPrompt).toContain("Each question must have exactly 5 answer options");
+    });
+
+    it("embeds the requested option count in the MCQ authoring prompt", () => {
+      const { userPrompt } = buildMcqGenerationPrompts({
+        sourceMaterial: "Any topic.",
+        certificationLevel: "intermediate",
+        locale: "en-GB",
+        generationMode: "ordinary",
+        questionCount: 4,
+        optionCount: 3,
+      });
+
+      expect(userPrompt).toContain("Generate 4 multiple-choice questions");
+      expect(userPrompt).toContain("Each question must have exactly 3 answer options");
     });
   });
 });

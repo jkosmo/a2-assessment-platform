@@ -4,6 +4,8 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
+import { NotFoundError } from "../../errors/AppError.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -83,6 +85,7 @@ export async function createModule(input: CreateModuleInput) {
     certificationLevel: input.certificationLevel,
     validFrom: input.validFrom,
     validTo: input.validTo,
+    createdById: input.actorId,
   });
 
   await recordAuditEvent({
@@ -99,6 +102,64 @@ export async function createModule(input: CreateModuleInput) {
     },
   });
 
+  return module;
+}
+
+function normalizeLocalizedTitleSeed(title: string | null | undefined): LocalizedTextObject {
+  const parsed = localizedTextCodec.parse(title);
+  if (parsed && typeof parsed === "object") {
+    return { ...parsed };
+  }
+
+  const fallback = typeof parsed === "string" ? parsed.trim() : "";
+  if (!fallback) {
+    return {};
+  }
+
+  return {
+    "en-GB": fallback,
+    nb: fallback,
+    nn: fallback,
+  };
+}
+
+function normalizeLocalizedTitlePatch(titlePatch: LocalizedText): LocalizedTextObject {
+  if (typeof titlePatch === "string") {
+    const normalized = titlePatch.trim();
+    if (!normalized) {
+      return {};
+    }
+    return {
+      "en-GB": normalized,
+      nb: normalized,
+      nn: normalized,
+    };
+  }
+
+  const normalizedEntries = Object.entries(titlePatch).filter(
+    ([, value]) => typeof value === "string" && value.trim().length > 0,
+  );
+  return Object.fromEntries(normalizedEntries) as LocalizedTextObject;
+}
+
+export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedText, actorId: string) {
+  const existingModule = await adminContentRepository.findModuleTitle(moduleId);
+  if (!existingModule) {
+    throw new NotFoundError("Module", "module_not_found", "Module not found.");
+  }
+
+  const title = localizedTextCodec.serialize({
+    ...normalizeLocalizedTitleSeed(existingModule.title),
+    ...normalizeLocalizedTitlePatch(titlePatch),
+  });
+  const module = await adminContentRepository.updateModuleTitle(moduleId, title);
+  await recordAuditEvent({
+    entityType: auditEntityTypes.module,
+    entityId: moduleId,
+    action: auditActions.adminContent.moduleTitleUpdated,
+    actorId,
+    metadata: { moduleId, title },
+  });
   return module;
 }
 

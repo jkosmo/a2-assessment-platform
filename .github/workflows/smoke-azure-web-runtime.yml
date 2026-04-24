@@ -1,0 +1,82 @@
+name: Smoke Azure Web Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: "GitHub environment to smoke-test"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - staging
+          - production
+      base_url:
+        description: "Optional explicit app URL (otherwise discover from Azure)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Azure login (OIDC)
+        if: ${{ inputs.base_url == '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve app URLs
+        id: resolve
+        shell: pwsh
+        run: |
+          $explicitBaseUrl = "${{ inputs.base_url }}".Trim()
+          if ($explicitBaseUrl) {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "web_app_url=$explicitBaseUrl"
+            exit 0
+          }
+
+          $appHost = az webapp list `
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            --query "[?contains(name, '-app-')].defaultHostName | [0]" `
+            -o tsv
+
+          if (-not $appHost) {
+            throw "Could not resolve app hostname in resource group ${{ vars.AZURE_RESOURCE_GROUP }}."
+          }
+
+          $workerHost = az webapp list `
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            --query "[?contains(name, '-worker-')].defaultHostName | [0]" `
+            -o tsv
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "web_app_url=https://$appHost"
+          if ($workerHost) {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "worker_app_url=https://$workerHost"
+          }
+
+      - name: Run smoke test
+        env:
+          SMOKE_BASE_URL: ${{ steps.resolve.outputs.web_app_url }}
+          SMOKE_WORKER_URL: ${{ steps.resolve.outputs.worker_app_url }}
+          SMOKE_EXPECT_AUTH_MODE: ${{ vars.AUTH_MODE }}
+          SMOKE_EXPECT_ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
+          SMOKE_EXPECT_ENTRA_CLIENT_ID: ${{ vars.ENTRA_CLIENT_ID }}
+          SMOKE_EXPECT_ENTRA_AUDIENCE: ${{ vars.ENTRA_AUDIENCE }}
+        run: node scripts/azure/smoke-web-runtime.mjs

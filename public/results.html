@@ -17,6 +17,11 @@
       th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
       tr:hover { background: var(--color-row-hover); }
       .export-row { display: flex; gap: var(--space-1); flex-wrap: wrap; margin-top: var(--space-1); }
+      .report-row-button { width: auto; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-blue); cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
+      .report-row-button:hover { color: var(--color-blue-strong); }
+      tr.is-selected { background: color-mix(in srgb, var(--color-blue) 8%, white); }
+      .detail-block { margin-top: var(--space-2); }
+      .detail-meta { margin-top: var(--space-1); color: var(--color-text-soft); }
     </style>
   </head>
   <body>
@@ -116,26 +121,26 @@
           <button id="exportCompletion" class="btn-secondary" data-i18n="results.export.completion">Export completion CSV</button>
           <button id="exportPassRates" class="btn-secondary" data-i18n="results.export.passRates">Export pass rates CSV</button>
         </div>
-      </section>
-
-      <section class="card">
-        <h2 data-i18n="results.participants.title">Participants per module</h2>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Participants per module">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col" data-i18n="results.participants.email">Email</th>
-                <th scope="col" data-i18n="results.participants.department">Department</th>
-                <th scope="col" data-i18n="results.participants.module">Module</th>
-                <th scope="col" data-i18n="results.participants.status">Status</th>
-                <th scope="col" data-i18n="results.participants.passedAt">Passed</th>
-              </tr>
-            </thead>
-            <tbody id="participantBody"></tbody>
-          </table>
-        </div>
-        <div class="export-row">
-          <button id="exportRecertification" class="btn-secondary" data-i18n="results.export.recertification">Export participant CSV</button>
+        <div class="detail-block">
+          <h3 data-i18n="results.participants.title">Learner details for selected module</h3>
+          <div id="moduleDetailMeta" class="small detail-meta" aria-live="polite" data-i18n="results.participants.placeholder">
+            Select a module row to see learner details.
+          </div>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Module learner detail">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="results.participants.name">Name</th>
+                  <th scope="col" data-i18n="results.participants.email">Email</th>
+                  <th scope="col" data-i18n="results.participants.department">Department</th>
+                  <th scope="col" data-i18n="results.participants.status">Status</th>
+                  <th scope="col" data-i18n="results.participants.score">Score</th>
+                  <th scope="col" data-i18n="results.participants.submittedAt">Submitted</th>
+                </tr>
+              </thead>
+              <tbody id="participantBody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -155,6 +160,28 @@
             <tbody id="courseReportBody"></tbody>
           </table>
         </div>
+        <div class="detail-block">
+          <h3 data-i18n="results.courses.detailTitle">Learner details for selected course</h3>
+          <div id="courseDetailMeta" class="small detail-meta" aria-live="polite" data-i18n="results.courses.placeholder">
+            Select a course row to see learner details.
+          </div>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Course learner detail">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="results.participants.name">Name</th>
+                  <th scope="col" data-i18n="results.participants.email">Email</th>
+                  <th scope="col" data-i18n="results.participants.department">Department</th>
+                  <th scope="col" data-i18n="results.courses.detail.status">Course status</th>
+                  <th scope="col" data-i18n="results.courses.detail.completedModules">Completed modules</th>
+                  <th scope="col" data-i18n="results.participants.score">Score</th>
+                  <th scope="col" data-i18n="results.courses.detail.latestActivityAt">Latest activity</th>
+                </tr>
+              </thead>
+              <tbody id="courseLearnerBody"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true" style="margin: var(--space-1) 0;"></div>
@@ -167,5 +194,6 @@
     </main>
     <script src="/static/i18n/results-translations.js" type="module"></script>
     <script src="/static/results.js" type="module"></script>
+    <script src="/static/workspace-help.js" type="module"></script>
   </body>
 </html>

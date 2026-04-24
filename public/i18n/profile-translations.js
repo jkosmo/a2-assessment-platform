@@ -57,6 +57,12 @@ export const translations = {
     "profile.modules.table.passFail": "Pass / fail",
     "profile.modules.value.pass": "Pass",
     "profile.modules.value.fail": "Fail",
+    "profile.section.courses": "Completed courses",
+    "profile.courses.empty": "No completed courses yet.",
+    "profile.courses.table.course": "Course",
+    "profile.courses.table.completedAt": "Completed",
+    "profile.courses.table.level": "Level",
+    "profile.courses.table.certificateId": "Certificate ID",
 
     // GDPR rights
     "profile.section.rights": "Your rights",
@@ -137,6 +143,12 @@ export const translations = {
     "profile.modules.table.passFail": "Bestått / ikke bestått",
     "profile.modules.value.pass": "Bestått",
     "profile.modules.value.fail": "Ikke bestått",
+    "profile.section.courses": "Fullførte kurs",
+    "profile.courses.empty": "Ingen fullførte kurs ennå.",
+    "profile.courses.table.course": "Kurs",
+    "profile.courses.table.completedAt": "Fullført",
+    "profile.courses.table.level": "Nivå",
+    "profile.courses.table.certificateId": "Bevis-ID",
 
     "profile.section.rights": "Dine rettigheter",
     "profile.rights.view": "Se mine data",
@@ -214,6 +226,12 @@ export const translations = {
     "profile.modules.table.passFail": "Bestått / ikkje bestått",
     "profile.modules.value.pass": "Bestått",
     "profile.modules.value.fail": "Ikkje bestått",
+    "profile.section.courses": "Fullførte kurs",
+    "profile.courses.empty": "Ingen fullførte kurs enno.",
+    "profile.courses.table.course": "Kurs",
+    "profile.courses.table.completedAt": "Fullført",
+    "profile.courses.table.level": "Nivå",
+    "profile.courses.table.certificateId": "Bevis-ID",
 
     "profile.section.rights": "Rettane dine",
     "profile.rights.view": "Sjå dataa mine",

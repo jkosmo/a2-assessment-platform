@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moduler – A2 Content</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      /* ── Content area nav ────────────────────────────────────────────────── */
+      .content-area-nav {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border-soft);
+        margin-bottom: var(--space-3);
+      }
+      .content-area-nav-link {
+        padding: 10px var(--space-2);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-meta);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        white-space: nowrap;
+      }
+      .content-area-nav-link:hover { color: var(--color-text); }
+      .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+
+      /* ── Library header ──────────────────────────────────────────────────── */
+      .library-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .library-header h1 { margin: 0; font-size: 22px; }
+
+      /* ── Toolbar ─────────────────────────────────────────────────────────── */
+      .library-toolbar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        margin-bottom: var(--space-2);
+      }
+      .library-search {
+        width: 100%;
+        max-width: 380px;
+        padding: 9px 12px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        font-size: 14px;
+        font-family: inherit;
+        background: #fff;
+        color: var(--color-text);
+        box-sizing: border-box;
+      }
+      .library-search:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+
+      .library-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+      .library-filter-btn {
+        padding: 5px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        border: 1px solid var(--color-border-soft);
+        border-radius: 999px;
+        background: var(--color-surface);
+        color: var(--color-meta);
+        cursor: pointer;
+      }
+      .library-filter-btn:hover { border-color: var(--color-link-hover-border); color: var(--color-text); }
+      .library-filter-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
+
+      /* ── Table ───────────────────────────────────────────────────────────── */
+      .library-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
+      .library-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        background: var(--color-surface);
+      }
+      .library-table th {
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-meta);
+        border-bottom: 1px solid var(--color-table-border);
+        white-space: nowrap;
+        background: var(--color-bg);
+      }
+      .library-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--color-table-border);
+        vertical-align: middle;
+      }
+      .library-table tr:last-child td { border-bottom: none; }
+      .library-table tr:hover td { background: var(--color-row-hover); }
+
+      .col-name { min-width: 180px; font-weight: 600; }
+      .col-level { white-space: nowrap; }
+      .col-status { white-space: nowrap; }
+      .col-courses { white-space: nowrap; }
+      .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+      .col-actions { white-space: nowrap; min-width: 260px; }
+
+      /* ── Sortable column headers ─────────────────────────────────────────── */
+      .library-table th.sortable { cursor: pointer; user-select: none; }
+      .library-table th.sortable:hover { color: var(--color-link-active); }
+      .sort-indicator { display: inline-block; margin-left: 4px; opacity: 0.4; font-style: normal; }
+      .library-table th.sort-asc .sort-indicator,
+      .library-table th.sort-desc .sort-indicator { opacity: 1; color: var(--color-link-active); }
+
+      /* ── Status badges ───────────────────────────────────────────────────── */
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .status-badge.archived { background: #f5f5f5; color: #666; }
+      .status-badge.unpublished_draft { background: #fff3db; color: #7a4b00; }
+      .status-badge.published { background: #e6f4ea; color: #12613a; }
+      .status-badge.ready { background: #edf1f7; color: #42526b; }
+
+      /* ── Cert level ──────────────────────────────────────────────────────── */
+      .cert-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--color-module-summary-bg);
+        border: 1px solid var(--color-module-summary-border);
+        color: var(--color-meta);
+        text-transform: capitalize;
+      }
+
+      /* ── Course count clickable ──────────────────────────────────────────── */
+      .course-count-btn {
+        background: none;
+        border: none;
+        padding: 2px 6px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 4px;
+        color: var(--color-link-active);
+        text-decoration: underline;
+      }
+      .course-count-btn:hover { background: var(--color-blue-light); }
+      .course-count-zero { color: var(--color-meta); font-size: 13px; }
+
+      /* ── Row actions ─────────────────────────────────────────────────────── */
+      .row-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+      .row-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
+        min-height: 0;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.4;
+        font-family: inherit;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-button);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        white-space: nowrap;
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
+      .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
+      .row-action-btn.destructive:hover { background: #fdf0ef; }
+
+      /* ── Empty state ─────────────────────────────────────────────────────── */
+      .library-empty {
+        text-align: center;
+        padding: var(--space-5) var(--space-3);
+        background: var(--color-surface);
+        border: 1px solid var(--color-table-wrap-border);
+        border-radius: var(--radius-card);
+      }
+      .library-empty-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
+      .library-empty-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+
+      /* ── Courses popover ─────────────────────────────────────────────────── */
+      .courses-popover {
+        position: fixed;
+        z-index: 200;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        box-shadow: 0 4px 20px rgba(0,0,0,.12);
+        padding: var(--space-1) var(--space-1);
+        min-width: 200px;
+        max-width: 320px;
+      }
+      .courses-popover-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin: 0 0 6px; }
+      .courses-popover-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+      .courses-popover-list li { font-size: 13px; color: var(--color-text); padding: 2px 0; }
+
+      /* ── Dialog ──────────────────────────────────────────────────────────── */
+      dialog {
+        border: none;
+        border-radius: var(--radius-card);
+        box-shadow: 0 8px 32px rgba(0,0,0,.18);
+        padding: var(--space-3);
+        max-width: 420px;
+        width: 100%;
+      }
+      dialog::backdrop { background: rgba(0,0,0,.4); }
+      .dialog-title { font-size: 18px; font-weight: 700; margin: 0 0 var(--space-2); }
+      .dialog-field { margin-bottom: var(--space-2); }
+      .dialog-field label { display: block; font-size: 13px; font-weight: 600; color: var(--color-meta); margin-bottom: 4px; }
+      .dialog-field input, .dialog-field select {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+      .dialog-field input:focus, .dialog-field select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      .dialog-actions { display: flex; flex-direction: column; gap: 8px; margin-top: var(--space-2); }
+      .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
+      .dialog-cancel:hover { background: var(--color-row-hover); }
+
+      /* ── Loading ─────────────────────────────────────────────────────────── */
+      .library-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
+
+      <div class="page-top-bar">
+        <nav id="workspaceNav" class="workspace-nav"></nav>
+        <div class="locale-picker">
+          <span id="appVersion" class="version-badge">…</span>
+          <label for="localeSelect" class="sr-only">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+        <a href="/admin-content" class="content-area-nav-link active" id="navModuler">Moduler</a>
+        <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs">Kurs</a>
+        <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden>Kalibrering</a>
+      </nav>
+
+      <div class="library-header">
+        <h1 id="libraryTitle">Moduler</h1>
+        <button id="createModuleBtn" class="btn btn-primary">Opprett ny modul</button>
+      </div>
+
+      <div class="library-toolbar">
+        <input
+          id="librarySearch"
+          type="search"
+          class="library-search"
+          placeholder="Søk på modulnavn eller modul-ID…"
+          aria-label="Søk i modulbiblioteket"
+        />
+        <div class="library-filters" role="group" aria-label="Filtrer moduler">
+          <button class="library-filter-btn active" data-filter="all">Alle</button>
+          <button class="library-filter-btn" data-filter="active">Aktive</button>
+          <button class="library-filter-btn" data-filter="unpublished_draft">Har upublisert utkast</button>
+          <button class="library-filter-btn" data-filter="published">Publiserte</button>
+          <button class="library-filter-btn" data-filter="archived">Arkiverte</button>
+        </div>
+      </div>
+
+      <div id="libraryContent">
+        <div class="library-loading">Laster moduler…</div>
+      </div>
+
+    </main>
+
+    <!-- Create module dialog -->
+    <dialog id="createModuleDialog" aria-labelledby="createDialogTitle">
+      <h2 class="dialog-title" id="createDialogTitle">Opprett ny modul</h2>
+      <form id="createModuleForm" method="dialog" novalidate>
+        <div class="dialog-field">
+          <label for="newModuleTitle">Modulnavn <span aria-hidden="true">*</span></label>
+          <input id="newModuleTitle" type="text" required autocomplete="off" />
+        </div>
+        <div class="dialog-field">
+          <label for="newModuleLevel">Sertifiseringsnivå <span aria-hidden="true">*</span></label>
+          <select id="newModuleLevel" required>
+            <option value="">– Velg nivå –</option>
+            <option value="basic">Basic</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+        </div>
+        <div id="createModuleError" class="error-text" hidden></div>
+        <div class="dialog-actions">
+          <button type="button" id="createOpenConversation" class="btn btn-primary" disabled>Opprett og åpne i Samtale</button>
+          <button type="button" id="createOpenAdvanced" class="btn btn-secondary" disabled>Opprett og åpne i Avansert</button>
+          <button type="button" class="dialog-cancel" id="createCancel">Avbryt</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Courses popover (inline, positioned by JS) -->
+    <div id="coursesPopover" class="courses-popover" hidden role="dialog" aria-label="Kurs som bruker modulen" aria-modal="false">
+      <p class="courses-popover-title">Brukt i kurs</p>
+      <ul id="coursesPopoverList" class="courses-popover-list"></ul>
+    </div>
+
+    <script type="module" src="/static/admin-content-library.js"></script>
+    <script type="module" src="/static/workspace-help.js"></script>
+  </body>
+</html>

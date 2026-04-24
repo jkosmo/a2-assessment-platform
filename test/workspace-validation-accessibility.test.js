@@ -26,6 +26,7 @@ describe("workspace validation accessibility", () => {
     // Accessibility: module selection and submission validation must remain wired up
     expect(participantHtml).toContain('aria-describedby="moduleSelectionHint"');
     expect(participantHtml).toContain('id="submissionValidationHint"');
+    expect(participantHtml).not.toContain('id="selectedModuleGuidanceText"');
 
     const reviewHtml = readFile("public/review.html");
     expect(reviewHtml).toContain('aria-describedby="resolveValidationMessage"');
@@ -38,14 +39,18 @@ describe("workspace validation accessibility", () => {
     // Course accordion mount point must exist for the participant course flow
     expect(participantHtml).toContain('id="courseAccordion"');
 
-    const adminContentHtml = readFile("public/admin-content.html");
-    // Course tab must exist in the admin content tab shell
-    expect(adminContentHtml).toContain('id="tabKurs"');
-    expect(adminContentHtml).toContain('id="coursesTab"');
+    // Course tab lives in the advanced editor (admin-content.html is the new conversational shell)
+    const adminContentAdvancedHtml = readFile("public/admin-content-advanced.html");
+    expect(adminContentAdvancedHtml).toContain('id="tabKurs"');
+    expect(adminContentAdvancedHtml).toContain('id="coursesTab"');
 
     const resultsHtml = readFile("public/results.html");
     // Course report body must be present in the results workspace
     expect(resultsHtml).toContain('id="courseReportBody"');
+    expect(resultsHtml).toContain('id="participantBody"');
+    expect(resultsHtml).toContain('id="courseLearnerBody"');
+    expect(resultsHtml).not.toContain('data-i18n="results.courses.detail.failedModules"');
+    expect(resultsHtml).not.toContain('data-i18n="results.courses.detail.underReviewModules"');
   });
 
   it("keeps runtime alert and invalid-field hooks for validation errors", () => {

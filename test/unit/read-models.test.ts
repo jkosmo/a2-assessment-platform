@@ -117,6 +117,9 @@ describe("module-owned read models", () => {
       recommendedOutcome: "manual_review",
       manualReviewReasonCode: "low_confidence",
     });
+    // Raw evaluation signals must not appear in participant-facing payload
+    expect("llmEvaluation" in result).toBe(false);
+    expect("mcqAttempt" in result).toBe(false);
   });
 
   it("builds a localized manual review workspace view with parsed response excerpts", () => {

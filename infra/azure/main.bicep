@@ -143,6 +143,12 @@ param queueBacklogAlertThreshold int = 5
 @description('Average response time threshold in seconds for latency alert.')
 param latencyAlertThresholdSeconds int = 3
 
+@description('Unhandled runtime error count threshold within the alert window.')
+param unhandledRuntimeErrorAlertThreshold int = 2
+
+@description('Notification failure count threshold within the alert window.')
+param notificationFailureAlertThreshold int = 1
+
 @description('Overdue appeal count threshold for escalation alert.')
 param appealOverdueAlertThreshold int = 1
 
@@ -168,20 +174,31 @@ param participantNotificationWebhookTimeoutMs int = 5000
 @description('Display name used as the sender name in ACS email notifications.')
 param acsEmailSenderDisplayName string = 'A2 Assessment Platform'
 
+@description('Allowed outbound IP address ranges for PostgreSQL firewall. Each element: { name: string, startIpAddress: string, endIpAddress: string }. Query from App Service outbound IPs before deploying.')
+param dbAllowedIpAddresses array = []
+
+@description('HMAC shared secret for service-to-service auth between web/worker apps and the parser worker. Must be a random 32-byte hex string.')
+@secure()
+param parserWorkerAuthKey string
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
 var webAppName = toLower('${appNamePrefix}-${envCode}-app-${suffix}')
 var workerAppName = toLower('${appNamePrefix}-${envCode}-worker-${suffix}')
+var parserAppName = toLower('${appNamePrefix}-${envCode}-parser-${suffix}')
 var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
 var postgresServerName = toLower('${appNamePrefix}-${envCode}-pg-${suffix}')
+var appServiceStartupTimeLimitSeconds = environmentName == 'production' ? '300' : '600'
 var createObservabilityActionGroup = !empty(observabilityAlertEmail)
+var createNotificationDeliveryAlert = participantNotificationChannel == 'acs_email' || participantNotificationChannel == 'webhook'
 var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')
 var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
 var createAcsEmail = participantNotificationChannel == 'acs_email'
 var postgresHost = '${postgresServerName}.postgres.database.azure.com'
+var keyVaultName = 'a2-${envCode}-kv-${suffix}'
 var postgresConnectionString = 'postgresql://${uriComponent(postgresAdministratorLogin)}:${uriComponent(postgresAdministratorPassword)}@${postgresHost}:5432/${postgresDatabaseName}?schema=public&sslmode=require'
 var llmFailureAlertQuery = '''
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
@@ -211,6 +228,28 @@ union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where maxOverdueAppeals >= __THRESHOLD__
 '''
 var appealOverdueAlertQuery = replace(appealOverdueAlertQueryTemplate, '__THRESHOLD__', string(appealOverdueAlertThreshold))
+var unhandledRuntimeErrorAlertQueryTemplate = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(5m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"unhandled_error"'
+    or raw has '"event":"unhandled_rejection"'
+    or raw has '"event":"uncaught_exception"'
+| summarize errorCount = count()
+| where errorCount >= __THRESHOLD__
+'''
+var unhandledRuntimeErrorAlertQuery = replace(unhandledRuntimeErrorAlertQueryTemplate, '__THRESHOLD__', string(unhandledRuntimeErrorAlertThreshold))
+var notificationFailureAlertQueryTemplate = '''
+union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
+| where TimeGenerated > ago(10m)
+| extend raw = coalesce(tostring(column_ifexists("ResultDescription", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Log_s", "")))
+| where raw has '"event":"participant_notification_failed"'
+    or raw has '"event":"participant_notification_pipeline_failed"'
+    or raw has '"event":"recertification_reminder_failed"'
+| summarize failureCount = count()
+| where failureCount >= __THRESHOLD__
+'''
+var notificationFailureAlertQuery = replace(notificationFailureAlertQueryTemplate, '__THRESHOLD__', string(notificationFailureAlertThreshold))
 
 resource acsEmailService 'Microsoft.Communication/emailServices@2023-04-01' = if (createAcsEmail) {
   name: acsEmailServiceName
@@ -349,12 +388,69 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
   }
 }
 
-resource postgresFirewallAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = {
-  parent: postgresServer
-  name: 'allow-azure-services'
+resource postgresFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = [
+  for ip in dbAllowedIpAddresses: {
+    parent: postgresServer
+    name: ip.name
+    properties: {
+      startIpAddress: ip.startIpAddress
+      endIpAddress: ip.endIpAddress
+    }
+  }
+]
+
+// ---------------------------------------------------------------------------
+// Key Vault — secrets storage (INFRA-002)
+// ---------------------------------------------------------------------------
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: keyVaultName
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
   properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
+    sku: { family: 'A', name: 'standard' }
+    tenantId: tenant().tenantId
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource kvSecretDatabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'DATABASE-URL'
+  properties: {
+    value: postgresConnectionString
+  }
+}
+
+resource kvSecretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(azureOpenAiApiKey)) {
+  parent: keyVault
+  name: 'AZURE-OPENAI-API-KEY'
+  properties: {
+    value: azureOpenAiApiKey
+  }
+}
+
+resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (createAcsEmail) {
+  parent: keyVault
+  name: 'ACS-CONNECTION-STRING'
+  properties: {
+    value: acsService.listKeys().primaryConnectionString
+  }
+}
+
+resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'PARSER-WORKER-AUTH-KEY'
+  properties: {
+    value: parserWorkerAuthKey
   }
 }
 
@@ -377,12 +473,17 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'NODE|22-lts'
       appCommandLine: 'node scripts/runtime/startup.mjs'
       alwaysOn: true
+      healthCheckPath: '/healthz'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
         {
           name: 'PROCESS_ROLE'
           value: 'web'
+        }
+        {
+          name: 'SKIP_MIGRATE'
+          value: environmentName == 'production' ? 'false' : 'true'
         }
         {
           name: 'NODE_ENV'
@@ -397,8 +498,16 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '8080'
         }
         {
+          name: 'WEBSITE_WARMUP_PATH'
+          value: '/healthz'
+        }
+        {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: appServiceStartupTimeLimitSeconds
+        }
+        {
           name: 'DATABASE_URL'
-          value: postgresConnectionString
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
         {
           name: 'AUTH_MODE'
@@ -438,7 +547,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_OPENAI_API_KEY'
-          value: azureOpenAiApiKey
+          value: !empty(azureOpenAiApiKey) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)' : ''
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -498,7 +607,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
-          value: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+          value: createAcsEmail ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ACS-CONNECTION-STRING)' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER'
@@ -514,7 +623,15 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK'
-          value: environmentName == 'production' ? 'false' : 'true'
+          value: 'false'
+        }
+        {
+          name: 'PARSER_WORKER_URL'
+          value: 'https://${parserApp.properties.defaultHostName}'
+        }
+        {
+          name: 'PARSER_WORKER_AUTH_KEY'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARSER-WORKER-AUTH-KEY)'
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
@@ -596,8 +713,12 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '8080'
         }
         {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: appServiceStartupTimeLimitSeconds
+        }
+        {
           name: 'DATABASE_URL'
-          value: postgresConnectionString
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
         {
           name: 'LLM_MODE'
@@ -613,7 +734,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_OPENAI_API_KEY'
-          value: azureOpenAiApiKey
+          value: !empty(azureOpenAiApiKey) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)' : ''
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -673,7 +794,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
-          value: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+          value: createAcsEmail ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ACS-CONNECTION-STRING)' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER'
@@ -717,6 +838,134 @@ resource workerAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
         enabled: true
       }
     ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parser worker App Service — no DB or AI secrets (INFRA-341)
+// ---------------------------------------------------------------------------
+
+resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: parserAppName
+  location: location
+  kind: 'app,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'NODE|22-lts'
+      appCommandLine: 'node scripts/runtime/parserStartup.mjs'
+      alwaysOn: true
+      healthCheckPath: '/health'
+      ftpsState: 'Disabled'
+      minTlsVersion: '1.2'
+      appSettings: [
+        {
+          name: 'APP_ROLE'
+          value: 'parser'
+        }
+        {
+          name: 'NODE_ENV'
+          value: environmentName == 'production' ? 'production' : 'development'
+        }
+        {
+          name: 'PORT'
+          value: '8080'
+        }
+        {
+          name: 'WEBSITES_PORT'
+          value: '8080'
+        }
+        {
+          name: 'WEBSITE_WARMUP_PATH'
+          value: '/health'
+        }
+        {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: appServiceStartupTimeLimitSeconds
+        }
+        {
+          name: 'PARSER_WORKER_AUTH_KEY'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARSER-WORKER-AUTH-KEY)'
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'false'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+      ]
+    }
+  }
+}
+
+resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: '${parserAppName}-diagnostics'
+  scope: parserApp
+  properties: {
+    workspaceId: logAnalyticsWorkspace.id
+    logs: [
+      {
+        category: 'AppServiceConsoleLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Key Vault RBAC — Key Vault Secrets User for both app identities (INFRA-002)
+// ---------------------------------------------------------------------------
+
+var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+
+resource webAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, webApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, workerApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource parserAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, parserApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: parserApp.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -900,10 +1149,132 @@ resource appealOverdueAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' 
   }
 }
 
+resource workerHealthAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-worker-health')
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    description: 'Worker app health check status indicates an unhealthy worker instance.'
+    severity: 1
+    enabled: true
+    scopes: [
+      workerApp.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'worker-health-check-status'
+          metricNamespace: 'Microsoft.Web/sites'
+          metricName: 'HealthCheckStatus'
+          operator: 'LessThan'
+          threshold: 1
+          timeAggregation: 'Average'
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: createObservabilityActionGroup
+      ? [
+          {
+            actionGroupId: observabilityActionGroup.id
+          }
+        ]
+      : []
+  }
+}
+
+resource unhandledRuntimeErrorAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = {
+  name: toLower('${appNamePrefix}-${envCode}-runtime-errors')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'Unhandled runtime errors detected'
+    description: 'Detects repeated unhandled runtime errors, rejections, or uncaught exceptions from runtime logs.'
+    severity: 1
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      allOf: [
+        {
+          query: unhandledRuntimeErrorAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
+resource notificationFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-08-01' = if (createNotificationDeliveryAlert) {
+  name: toLower('${appNamePrefix}-${envCode}-notification-failures')
+  location: location
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    displayName: 'Participant notification delivery failures detected'
+    description: 'Detects participant notification or recertification reminder delivery failures from runtime logs.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT10M'
+    windowSize: 'PT10M'
+    criteria: {
+      allOf: [
+        {
+          query: notificationFailureAlertQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: {
+      actionGroups: createObservabilityActionGroup ? [observabilityActionGroup.id] : []
+    }
+  }
+}
+
 output webAppName string = webApp.name
 output workerAppName string = workerApp.name
+output parserAppName string = parserApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
 output postgresServerName string = postgresServer.name
 output postgresDatabaseName string = postgresDatabase.name
+output keyVaultName string = keyVault.name

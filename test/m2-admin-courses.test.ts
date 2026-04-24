@@ -71,8 +71,9 @@ describe("Admin course management", () => {
       .send({
         title: {
           "en-GB": "Updated managed course",
-          nb: "Oppdatert administrert kurs",
-          nn: "Oppdatert administrert kurs",
+        },
+        description: {
+          "en-GB": "Updated description from the admin UI.",
         },
       });
     expect(updateCourseResponse.status).toBe(200);
@@ -129,6 +130,7 @@ describe("Admin course management", () => {
       id: courseId,
       moduleCount: 2,
     });
+    expect(listedCourse?.updatedAt).toEqual(expect.any(String));
 
     const auditEvents = await prisma.auditEvent.findMany({
       where: {

@@ -130,7 +130,7 @@ export async function getAppealWorkspaceView(appealId: string, locale: string) {
   return workspace ? toAppealWorkspaceView(workspace, locale) : null;
 }
 
-export async function claimAppeal(appealId: string, handlerId: string) {
+export async function claimAppeal(appealId: string, handlerId: string, isAdmin = false) {
   const appeal = await appealRepository.findAppealForClaim(appealId);
 
   if (!appeal) {
@@ -142,15 +142,25 @@ export async function claimAppeal(appealId: string, handlerId: string) {
       "This appeal is already resolved. Refresh the queue to view the latest status.",
     );
   }
+  const previousHandlerId = appeal.resolvedById;
   if (
     appeal.appealStatus === AppealStatus.IN_REVIEW &&
-    appeal.resolvedById &&
-    appeal.resolvedById !== handlerId
+    previousHandlerId &&
+    previousHandlerId !== handlerId
   ) {
-    throw new ConflictError(
-      "appeal_already_assigned",
-      "This appeal is already assigned to another handler. Refresh the queue and open another case.",
-    );
+    if (!isAdmin) {
+      throw new ConflictError(
+        "appeal_already_assigned",
+        "This appeal is already assigned to another handler. Refresh the queue and open another case.",
+      );
+    }
+    await recordAuditEvent({
+      entityType: auditEntityTypes.appeal,
+      entityId: appealId,
+      action: auditActions.appeal.adminTakeover,
+      actorId: handlerId,
+      metadata: { submissionId: appeal.submissionId, previousHandlerId, newHandlerId: handlerId },
+    });
   }
 
   const claimed = await appealRepository.markAppealInReview(appealId, handlerId, appeal.claimedAt);
@@ -190,6 +200,7 @@ export async function resolveAppeal(input: {
   passFailTotal: boolean;
   decisionReason: string;
   resolutionNote: string;
+  isAdmin?: boolean;
 }) {
   const appeal = await appealRepository.findAppealForResolution(input.appealId);
 
@@ -207,10 +218,19 @@ export async function resolveAppeal(input: {
     appeal.resolvedById &&
     appeal.resolvedById !== input.handlerId
   ) {
-    throw new ConflictError(
-      "appeal_already_assigned",
-      "This appeal is already assigned to another handler. Refresh the queue and open another case.",
-    );
+    if (!input.isAdmin) {
+      throw new ConflictError(
+        "appeal_already_assigned",
+        "This appeal is already assigned to another handler. Refresh the queue and open another case.",
+      );
+    }
+    await recordAuditEvent({
+      entityType: auditEntityTypes.appeal,
+      entityId: input.appealId,
+      action: auditActions.appeal.adminTakeover,
+      actorId: input.handlerId,
+      metadata: { submissionId: appeal.submissionId, previousHandlerId: appeal.resolvedById, newHandlerId: input.handlerId },
+    });
   }
 
   const latestDecision = appeal.submission.decisions[0];

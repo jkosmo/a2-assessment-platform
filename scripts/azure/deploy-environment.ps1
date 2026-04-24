@@ -49,7 +49,8 @@ param(
   [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
   [string]$AcsEmailSenderDisplayName = "A2 Assessment Platform",
   [string]$BudgetContactEmail = "",
-  [double]$MonthlyBudgetAmount = 30
+  [double]$MonthlyBudgetAmount = 30,
+  [string]$ParserWorkerAuthKey = ""
 )
 
 Set-StrictMode -Version Latest
@@ -57,6 +58,12 @@ $ErrorActionPreference = "Stop"
 
 if (-not $ResourceGroupName) {
   $ResourceGroupName = "rg-a2-assessment-$EnvironmentName"
+}
+
+if (-not $ParserWorkerAuthKey) {
+  $randomBytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+  $ParserWorkerAuthKey = ([System.BitConverter]::ToString($randomBytes)).Replace("-", "").ToLower()
+  Write-Host "Generated ParserWorkerAuthKey (store securely for future re-deployments)."
 }
 
 function Get-TempBasePath {
@@ -84,6 +91,33 @@ function Get-TempBasePath {
 function Assert-LastExitCode([string]$stepName) {
   if ($LASTEXITCODE -ne 0) {
     throw "$stepName failed with exit code $LASTEXITCODE."
+  }
+}
+
+function New-ZipArchiveFromDirectory([string]$sourceDirectory, [string]$zipPath) {
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+  $sourceRoot = [System.IO.Path]::GetFullPath($sourceDirectory)
+  $directorySeparator = [System.IO.Path]::DirectorySeparatorChar
+  if (-not $sourceRoot.EndsWith($directorySeparator)) {
+    $sourceRoot = "$sourceRoot$directorySeparator"
+  }
+  $zipFile = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::CreateNew)
+  try {
+    $archive = New-Object System.IO.Compression.ZipArchive($zipFile, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+    try {
+      $files = Get-ChildItem -LiteralPath $sourceRoot -Recurse -File
+      foreach ($file in $files) {
+        $relativePath = $file.FullName.Substring($sourceRoot.Length)
+        $entryName = $relativePath.Replace([System.IO.Path]::DirectorySeparatorChar, '/').Replace([System.IO.Path]::AltDirectorySeparatorChar, '/')
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+      }
+    } finally {
+      $archive.Dispose()
+    }
+  } finally {
+    $zipFile.Dispose()
   }
 }
 
@@ -157,6 +191,38 @@ az group create `
   --tags environment=$EnvironmentName costCenter=$CostCenter owner=$Owner | Out-Null
 Assert-LastExitCode "az group create"
 
+# Query App Service outbound IPs for PostgreSQL firewall allowlist (#334)
+$envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
+Write-Host "Querying App Service outbound IPs for PostgreSQL firewall allowlist..."
+
+$existingWebApp = (az webapp list -g $ResourceGroupName --query "[?contains(name,'${envCode}-app')].name" -o tsv 2>$null)
+$existingWorkerApp = (az webapp list -g $ResourceGroupName --query "[?contains(name,'${envCode}-worker')].name" -o tsv 2>$null)
+$existingWebApp = if ($existingWebApp) { ($existingWebApp -split "`n")[0].Trim() } else { "" }
+$existingWorkerApp = if ($existingWorkerApp) { ($existingWorkerApp -split "`n")[0].Trim() } else { "" }
+
+$dbAllowedIpAddresses = @()
+if ($existingWebApp -and $existingWorkerApp) {
+  Write-Host "Found App Services: $existingWebApp, $existingWorkerApp"
+  $webIps = (az webapp show -n $existingWebApp -g $ResourceGroupName --query "outboundIpAddresses" -o tsv).Split(",")
+  $workerIps = (az webapp show -n $existingWorkerApp -g $ResourceGroupName --query "outboundIpAddresses" -o tsv).Split(",")
+  $allIps = ($webIps + $workerIps) | Where-Object { $_ } | Sort-Object -Unique
+  $i = 0
+  foreach ($ip in $allIps) {
+    $dbAllowedIpAddresses += @{ name = "app-outbound-$i"; startIpAddress = $ip; endIpAddress = $ip }
+    $i++
+  }
+  Write-Host "Firewall rules: $i IPs"
+} else {
+  Write-Host "NOTE: App Services not yet deployed — dbAllowedIpAddresses will be empty on first deploy."
+}
+
+$ipParamsFile = Join-Path (Get-TempBasePath) "a2-ip-params-$EnvironmentName.json"
+@{
+  '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+  contentVersion = '1.0.0.0'
+  parameters     = @{ dbAllowedIpAddresses = @{ value = $dbAllowedIpAddresses } }
+} | ConvertTo-Json -Depth 10 | Set-Content -Path $ipParamsFile -Encoding UTF8
+
 if ($ParticipantNotificationChannel -eq "acs_email") {
   Write-Host "Checking Microsoft.Communication provider registration (required for acs_email channel)..."
   $providerState = (az provider show --namespace Microsoft.Communication --query "registrationState" -o tsv 2>$null)
@@ -227,11 +293,14 @@ $deployment = az deployment group create `
               participantNotificationWebhookUrl=$ParticipantNotificationWebhookUrl `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
+              parserWorkerAuthKey=$ParserWorkerAuthKey `
+  --parameters "@$ipParamsFile" `
   --query properties.outputs | ConvertFrom-Json
 Assert-LastExitCode "az deployment group create"
 
 $webAppName = $deployment.webAppName.value
 $workerAppName = $deployment.workerAppName.value
+$parserAppName = $deployment.parserAppName.value
 $postgresServerName = $deployment.postgresServerName.value
 $postgresDatabaseName = $deployment.postgresDatabaseName.value
 
@@ -240,6 +309,9 @@ if (-not $webAppName) {
 }
 if (-not $workerAppName) {
   throw "workerAppName output missing from deployment."
+}
+if (-not $parserAppName) {
+  throw "parserAppName output missing from deployment."
 }
 
 $tempBasePath = Get-TempBasePath
@@ -280,35 +352,150 @@ if ($IsLinux -or $IsMacOS) {
     Pop-Location
   }
 } else {
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  [System.IO.Compression.ZipFile]::CreateFromDirectory($tmpRoot, $zipPath)
+  New-ZipArchiveFromDirectory -sourceDirectory $tmpRoot -zipPath $zipPath
 }
 
-Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
+# Staging runs web, worker, and parser on the same small App Service plan.
+# Deploy the user-facing web app last so the plan can absorb worker/parser churn first.
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
+
+function Get-WebAppState {
+  param([string]$ResourceGroup, [string]$AppName)
+  try {
+    $state = (az webapp show --resource-group $ResourceGroup --name $AppName --query "state" -o tsv 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0) {
+      return $state
+    }
+  } catch {
+    # Best-effort diagnostics only.
+  }
+  return ""
+}
+
+function Test-HealthEndpoint {
+  param([string]$Url)
+  try {
+    $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10
+    return @{
+      Success = ($response.StatusCode -eq 200)
+      StatusCode = $response.StatusCode
+      Error = ""
+    }
+  } catch {
+    $statusCode = ""
+    try {
+      $statusCode = [int]$_.Exception.Response.StatusCode
+    } catch {
+      $statusCode = ""
+    }
+    return @{
+      Success = $false
+      StatusCode = $statusCode
+      Error = $_.Exception.Message
+    }
+  }
+}
 
 function Wait-Healthy {
-  param([string]$Url, [string]$Label)
-  $maxChecks = 30
-  $delaySeconds = 5
+  param(
+    [string]$Url,
+    [string]$Label,
+    [string]$AppName,
+    [string]$ResourceGroup
+  )
+
+  $phases = @(
+    @{ Name = "initial"; MaxChecks = 30; DelaySeconds = 5 },
+    @{ Name = "extended"; MaxChecks = 24; DelaySeconds = 10 }
+  )
+
   Write-Host "Validating deployment health endpoint: $Url"
-  for ($attempt = 1; $attempt -le $maxChecks; $attempt++) {
-    try {
-      $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10
-      if ($response.StatusCode -eq 200) {
-        Write-Host "$Label health check succeeded on attempt $attempt."
+  foreach ($phase in $phases) {
+    for ($attempt = 1; $attempt -le $phase.MaxChecks; $attempt++) {
+      $result = Test-HealthEndpoint -Url $Url
+      if ($result.Success) {
+        Write-Host "$Label health check succeeded during $($phase.Name) validation on attempt $attempt."
         return
       }
-    } catch {
-      Write-Host "$Label health check attempt $attempt/$maxChecks failed; retrying..."
+
+      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
+      if ($attempt -eq $phase.MaxChecks -and $phase.Name -eq "initial") {
+        $appState = Get-WebAppState -ResourceGroup $ResourceGroup -AppName $AppName
+        if ($appState) {
+          Write-Warning "$Label did not respond healthy during initial validation$statusSuffix. App Service state is '$appState'. Entering extended recovery window."
+        } else {
+          Write-Warning "$Label did not respond healthy during initial validation$statusSuffix. Entering extended recovery window."
+        }
+      } else {
+        Write-Host "$Label health check attempt $attempt/$($phase.MaxChecks) in $($phase.Name) validation failed$statusSuffix; retrying..."
+      }
+      Start-Sleep -Seconds $phase.DelaySeconds
     }
-    Start-Sleep -Seconds $delaySeconds
   }
-  throw "Deployment package published, but health endpoint check failed at $Url."
+
+  $finalState = Get-WebAppState -ResourceGroup $ResourceGroup -AppName $AppName
+  $finalStateSuffix = if ($finalState) { " Final App Service state: '$finalState'." } else { "" }
+  throw "Deployment package published, but health endpoint check failed at $Url.$finalStateSuffix"
 }
 
-Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
-Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App"
+function Wait-Stable {
+  param(
+    [string]$Url,
+    [string]$Label,
+    [int]$RequiredSuccesses = 6,
+    [int]$DelaySeconds = 10
+  )
+
+  Write-Host "Confirming $Label remains healthy after deployment..."
+  for ($attempt = 1; $attempt -le $RequiredSuccesses; $attempt++) {
+    $result = Test-HealthEndpoint -Url $Url
+    if (-not $result.Success) {
+      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
+      throw "$Label became unhealthy during post-deploy stability validation$statusSuffix at $Url"
+    }
+
+    Write-Host "$Label stability check $attempt/$RequiredSuccesses succeeded."
+    if ($attempt -lt $RequiredSuccesses) {
+      Start-Sleep -Seconds $DelaySeconds
+    }
+  }
+}
+
+# Important operational note for future agents/operators:
+# App Service has occasionally reported a healthy /healthz immediately after zip deploy while still
+# serving the previous package/version for a short period. A green deploy + green health endpoint is
+# therefore not enough on its own when validating a release. Always verify /version after deployment,
+# and if the old version still responds, perform a single web app restart before escalating.
+Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
+Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
+Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
+Wait-Stable -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
+
+if ($AuthMode -eq "entra" -and $EntraClientId) {
+  $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
+  Write-Host "Updating SPA redirect URI on Entra app registration $EntraClientId to: $spaRedirectUri"
+  try {
+    $appObjectId = (az ad app show --id $EntraClientId --query id -o tsv 2>&1).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $appObjectId) {
+      Write-Warning "Could not resolve app object ID for $EntraClientId (exit $LASTEXITCODE). Configure SPA redirect URI manually in the Azure portal."
+    } else {
+      $body = '{"spa":{"redirectUris":["' + $spaRedirectUri + '"]}}'
+      $result = az rest --method PATCH `
+        --uri "https://graph.microsoft.com/v1.0/applications/$appObjectId" `
+        --headers "Content-Type=application/json" `
+        --body $body 2>&1
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "SPA redirect URI updated."
+      } else {
+        Write-Warning "Could not update SPA redirect URI automatically (exit $LASTEXITCODE): $result. Configure manually in Azure portal."
+      }
+    }
+  } catch {
+    Write-Warning "Could not update SPA redirect URI automatically: $($_.Exception.Message). Configure manually in Azure portal."
+  }
+}
 
 if ($BudgetContactEmail) {
   & "$PSScriptRoot/configure-cost-guardrails.ps1" `
@@ -331,3 +518,5 @@ if ($env:GITHUB_OUTPUT) {
   Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_server_name=$postgresServerName"
   Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_database_name=$postgresDatabaseName"
 }
+
+exit 0

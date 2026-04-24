@@ -44,6 +44,13 @@
       .module-brief-section { display: grid; gap: calc(var(--space-1) * 0.5); }
       .module-brief-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--color-link-active); }
       .module-brief-text { white-space: pre-wrap; line-height: 1.5; color: var(--color-text); }
+      .submission-field-readonly {
+        background: var(--color-bg);
+        color: var(--color-text);
+        border-color: var(--color-border-soft);
+        resize: none;
+        cursor: default;
+      }
       .section-locked { background: var(--color-bg); border-color: var(--color-border-soft); }
       /* Course accordion */
       .course-accordion { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
@@ -146,10 +153,6 @@
           <div class="module-brief-label" data-i18n="submission.taskText">Assignment</div>
           <div id="selectedModuleTaskText" class="module-brief-text"></div>
         </div>
-        <div class="module-brief-section">
-          <div class="module-brief-label" data-i18n="submission.guidanceText">What good work should include</div>
-          <div id="selectedModuleGuidanceText" class="module-brief-text"></div>
-        </div>
       </div>
       <div id="submissionFields"></div>
       <div class="small" id="draftStatus" aria-live="polite" aria-atomic="true"></div>
@@ -206,5 +209,6 @@
     </main>
     <script src="/static/i18n/participant-translations.js" type="module"></script>
     <script src="/static/participant.js" type="module"></script>
+    <script src="/static/workspace-help.js" type="module"></script>
   </body>
   </html>

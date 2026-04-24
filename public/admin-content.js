@@ -13,6 +13,14 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { findLinkedVersion, deriveModuleStatusChains } from "/static/module-status-logic.js";
+import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
+import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import {
+  buildAdminContentConversationUrl,
+  resolveConversationModuleId,
+} from "/static/admin-content-handoff-routes.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -31,6 +39,7 @@ const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const rolesInput = document.getElementById("roles");
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
 const mockRolePresetContainer = document.getElementById("mockRolePresetContainer");
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
@@ -73,11 +82,15 @@ const moduleStatusDraft = document.getElementById("moduleStatusDraft");
 const moduleStatusPublishedAt = document.getElementById("moduleStatusPublishedAt");
 const moduleStatusCounts = document.getElementById("moduleStatusCounts");
 const moduleStatusDetails = document.getElementById("moduleStatusDetails");
+const stateRail = document.getElementById("stateRail");
+const srModuleName = document.getElementById("srModuleName");
+const srEditing = document.getElementById("srEditing");
+const srLive = document.getElementById("srLive");
+const srChanges = document.getElementById("srChanges");
+const srPreview = document.getElementById("srPreview");
+const srLang = document.getElementById("srLang");
 const unpublishModuleBtn = document.getElementById("unpublishModuleBtn");
 const archiveModuleBtn = document.getElementById("archiveModuleBtn");
-const archiveSearchInput = document.getElementById("archiveSearchInput");
-const archiveSearchBtn = document.getElementById("archiveSearchBtn");
-const archiveLibraryList = document.getElementById("archiveLibraryList");
 
 const importDraftFileInput = document.getElementById("importDraftFile");
 const importDraftJsonInput = document.getElementById("importDraftJson");
@@ -128,12 +141,6 @@ const calibrationOutcomesBody = document.getElementById("calibrationOutcomesBody
 const calibrationAnchorsBody = document.getElementById("calibrationAnchorsBody");
 const thresholdEditorSection = document.getElementById("thresholdEditorSection");
 const thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
-const thresholdPracticalMinPercentInput = document.getElementById("thresholdPracticalMinPercent");
-const thresholdMcqMinPercentInput = document.getElementById("thresholdMcqMinPercent");
-const thresholdBorderlineMinInput = document.getElementById("thresholdBorderlineMin");
-const thresholdBorderlineMaxInput = document.getElementById("thresholdBorderlineMax");
-const thresholdBandPreview = document.getElementById("thresholdBandPreview");
-const thresholdValidationError = document.getElementById("thresholdValidationError");
 const publishThresholdsButton = document.getElementById("publishThresholds");
 const thresholdPublishResult = document.getElementById("thresholdPublishResult");
 
@@ -446,6 +453,10 @@ let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let dirtyCards = new Set();
 let _dialogTriggerRef = null;
 
+// Advanced preview panel state
+let advPreviewLocale = null; // set to currentLocale on first open
+let advPreviewOpen = false;
+
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
   if (stored && supportedLocales.includes(stored)) {
@@ -471,6 +482,14 @@ function resolveInitialLocale() {
 
 function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;
+}
+
+function tf(key, vars = {}) {
+  let str = t(key);
+  for (const [name, value] of Object.entries(vars)) {
+    str = str.replace(`{${name}}`, String(value));
+  }
+  return str;
 }
 
 function setMessage(text, type = "info") {
@@ -636,6 +655,102 @@ function parseActionableErrorMessage(error) {
   return raw;
 }
 
+// ── Dialog helpers (tier-based confirmation model) ──────────────────────────
+
+/** Tier 1: simple confirm — single OK / Cancel choice. Returns Promise<boolean>. */
+function showSimpleConfirm(titleText, messageText, okLabel) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("dialogSimpleConfirm");
+    const titleEl = document.getElementById("dlgSimpleConfirmTitle");
+    const msgEl = document.getElementById("dlgSimpleConfirmMsg");
+    const okBtn = document.getElementById("dlgSimpleConfirmOk");
+    const cancelBtn = document.getElementById("dlgSimpleConfirmCancel");
+
+    titleEl.textContent = titleText;
+    msgEl.textContent = messageText;
+    okBtn.textContent = okLabel || t("adminContent.confirm.simple.confirmBtn");
+
+    const onOk = () => { cleanup(); dialog.close(); resolve(true); };
+    const onCancel = () => { cleanup(); dialog.close(); resolve(false); };
+    const onClose = () => { cleanup(); resolve(false); };
+
+    function cleanup() {
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+    }
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+  });
+}
+
+/** Tier 2: hard two-step — user must type the module name to enable delete. Returns Promise<boolean>. */
+function showDeleteConfirm(moduleLabel) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("dialogDeleteConfirm");
+    const msgEl = document.getElementById("dlgDeleteConfirmMsg");
+    const typeLabelEl = document.getElementById("dlgDeleteTypeLabel");
+    const typeInput = document.getElementById("dlgDeleteTypeConfirm");
+    const okBtn = document.getElementById("dlgDeleteConfirmOk");
+    const cancelBtn = document.getElementById("dlgDeleteConfirmCancel");
+
+    msgEl.textContent = t("adminContent.confirm.deleteModule").replace("{module}", moduleLabel);
+    typeLabelEl.textContent = t("adminContent.confirm.delete.typeLabel").replace("{module}", moduleLabel);
+    typeInput.value = "";
+    okBtn.disabled = true;
+
+    const onInput = () => { okBtn.disabled = typeInput.value.trim() !== moduleLabel; };
+    const onOk = () => { cleanup(); dialog.close(); resolve(true); };
+    const onCancel = () => { cleanup(); dialog.close(); resolve(false); };
+    const onClose = () => { cleanup(); resolve(false); };
+
+    function cleanup() {
+      typeInput.removeEventListener("input", onInput);
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+    }
+
+    typeInput.addEventListener("input", onInput);
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+    typeInput.focus();
+  });
+}
+
+/** Navigation guard: unsaved changes in advanced editor. Returns Promise<'save'|'discard'|'cancel'>. */
+function showUnsavedHandoffDialog() {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("dialogUnsavedHandoff");
+    const saveBtn = document.getElementById("dlgUnsavedSave");
+    const discardBtn = document.getElementById("dlgUnsavedDiscard");
+    const cancelBtn = document.getElementById("dlgUnsavedCancel");
+
+    const onSave = () => { cleanup(); dialog.close(); resolve("save"); };
+    const onDiscard = () => { cleanup(); dialog.close(); resolve("discard"); };
+    const onCancel = () => { cleanup(); dialog.close(); resolve("cancel"); };
+    const onClose = () => { cleanup(); resolve("cancel"); };
+
+    function cleanup() {
+      saveBtn.removeEventListener("click", onSave);
+      discardBtn.removeEventListener("click", onDiscard);
+      cancelBtn.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onClose);
+    }
+
+    saveBtn.addEventListener("click", onSave);
+    discardBtn.addEventListener("click", onDiscard);
+    cancelBtn.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+  });
+}
+
 function parseJsonField(value, fieldLabelKey) {
   try {
     return JSON.parse(value);
@@ -671,6 +786,21 @@ function parseLocalizedTextField(value, fieldLabelKey, options = { required: tru
 function parseLocalizedPreviewField(value, fieldLabelKey, options = { required: false }) {
   const parsed = parseLocalizedTextField(value, fieldLabelKey, options);
   return parsed ?? "";
+}
+
+function normalizeLocalizedTitlePatchValue(value, fieldLabelKey) {
+  const parsed = parseLocalizedTextField(value, fieldLabelKey, { required: false });
+  if (!parsed) {
+    return null;
+  }
+  if (typeof parsed === "string") {
+    return {
+      "en-GB": parsed,
+      nb: parsed,
+      nn: parsed,
+    };
+  }
+  return parsed;
 }
 
 function isLocalizedContentObject(value) {
@@ -826,7 +956,9 @@ function buildEditorSnapshotFromDraft(draft) {
     mcqQuestionsJson: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.questions, "")),
     moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
     moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
-    moduleVersionSubmissionSchema: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.submissionSchema, "")),
+    moduleVersionSubmissionSchema: normalizeSnapshotValue(
+      JSON.stringify(normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchema), null, 2),
+    ),
     moduleVersionAssessmentPolicy: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "")),
     moduleVersionRubricVersionId: "",
     moduleVersionPromptTemplateVersionId: "",
@@ -895,135 +1027,90 @@ function renderStatusChain(element, versions) {
   });
 }
 
-function findLinkedVersion(versions, id) {
-  if (!Array.isArray(versions) || !id) {
-    return null;
-  }
-
-  return versions.find((version) => version.id === id) ?? null;
-}
-
 function deriveModuleStatusView(moduleExport) {
-  if (!moduleExport?.module) {
-    return null;
-  }
+  const chains = deriveModuleStatusChains(moduleExport);
+  if (!chains) return null;
 
   const module = moduleExport.module;
-  const moduleVersions = moduleExport?.versions?.moduleVersions ?? [];
-  const rubricVersions = moduleExport?.versions?.rubricVersions ?? [];
-  const promptTemplateVersions = moduleExport?.versions?.promptTemplateVersions ?? [];
-  const mcqSetVersions = moduleExport?.versions?.mcqSetVersions ?? [];
-
-  const liveModuleVersion = module.activeVersionId
-    ? findLinkedVersion(moduleVersions, module.activeVersionId)
-    : null;
-  const latestModuleVersion = moduleVersions[0] ?? null;
-  const latestRubricVersion = rubricVersions[0] ?? null;
-  const latestPromptTemplateVersion = promptTemplateVersions[0] ?? null;
-  const latestMcqSetVersion = mcqSetVersions[0] ?? null;
-
-  const liveRubricVersion = liveModuleVersion
-    ? findLinkedVersion(rubricVersions, liveModuleVersion.rubricVersionId)
-    : null;
-  const livePromptTemplateVersion = liveModuleVersion
-    ? findLinkedVersion(promptTemplateVersions, liveModuleVersion.promptTemplateVersionId)
-    : null;
-  const liveMcqSetVersion = liveModuleVersion
-    ? findLinkedVersion(mcqSetVersions, liveModuleVersion.mcqSetVersionId)
-    : null;
-
-  const latestDraftModuleVersion = liveModuleVersion
-    ? latestModuleVersion && latestModuleVersion.id !== liveModuleVersion.id
-      ? latestModuleVersion
-      : null
-    : latestModuleVersion;
-  const latestDraftRubricVersion = latestDraftModuleVersion
-    ? findLinkedVersion(rubricVersions, latestDraftModuleVersion.rubricVersionId)
-    : null;
-  const latestDraftPromptTemplateVersion = latestDraftModuleVersion
-    ? findLinkedVersion(promptTemplateVersions, latestDraftModuleVersion.promptTemplateVersionId)
-    : null;
-  const latestDraftMcqSetVersion = latestDraftModuleVersion
-    ? findLinkedVersion(mcqSetVersions, latestDraftModuleVersion.mcqSetVersionId)
-    : null;
-
-  const hasLiveVersion = Boolean(liveModuleVersion);
-  const hasDraftVersion = Boolean(latestDraftModuleVersion);
-  const hasAnySavedVersions = Boolean(
-    latestModuleVersion || latestRubricVersion || latestPromptTemplateVersion || latestMcqSetVersion,
-  );
-
-  let badgeKey = "adminContent.status.badge.none";
-  let badgeClass = "shell";
-  let summaryKey = "adminContent.status.noneSummary";
-
-  if (hasLiveVersion && hasDraftVersion) {
-    badgeKey = "adminContent.status.badge.draft";
-    badgeClass = "draft";
-    summaryKey = "adminContent.status.summary.liveWithDraft";
-  } else if (hasLiveVersion) {
-    badgeKey = "adminContent.status.badge.live";
-    badgeClass = "live";
-    summaryKey = "adminContent.status.summary.liveOnly";
-  } else if (hasAnySavedVersions) {
-    badgeKey = "adminContent.status.badge.draftOnly";
-    badgeClass = "draft";
-    summaryKey = "adminContent.status.summary.draftOnly";
-  } else {
-    badgeKey = "adminContent.status.badge.shellOnly";
-    badgeClass = "shell";
-    summaryKey = "adminContent.status.summary.shellOnly";
-  }
-
-  const technicalDetails = {
-    moduleId: module.id,
-    activeVersionId: module.activeVersionId ?? null,
-    liveModuleVersionId: liveModuleVersion?.id ?? null,
-    latestModuleVersionId: latestModuleVersion?.id ?? null,
-    latestDraftModuleVersionId: latestDraftModuleVersion?.id ?? null,
-    liveRubricVersionId: liveRubricVersion?.id ?? null,
-    livePromptTemplateVersionId: livePromptTemplateVersion?.id ?? null,
-    liveMcqSetVersionId: liveMcqSetVersion?.id ?? null,
-    latestRubricVersionId: latestRubricVersion?.id ?? null,
-    latestPromptTemplateVersionId: latestPromptTemplateVersion?.id ?? null,
-    latestMcqSetVersionId: latestMcqSetVersion?.id ?? null,
-    exportSource: moduleExport?.selectedConfiguration?.source ?? null,
-  };
-
   return {
     title: localizeContentValue(module.title),
     description: localizeContentValue(module.description),
     certificationLevel: localizeContentValue(module.certificationLevel),
     validFrom: module.validFrom,
     validTo: module.validTo,
-    badgeKey,
-    badgeClass,
-    summaryKey,
-    liveChain: liveModuleVersion
-      ? [
-        { label: "Module", versionNo: liveModuleVersion.versionNo },
-        liveRubricVersion ? { label: "Rubric", versionNo: liveRubricVersion.versionNo } : null,
-        livePromptTemplateVersion ? { label: "Prompt", versionNo: livePromptTemplateVersion.versionNo } : null,
-        liveMcqSetVersion ? { label: "MCQ", versionNo: liveMcqSetVersion.versionNo } : null,
-      ].filter(Boolean)
-      : [],
-    latestDraftChain: latestDraftModuleVersion
-      ? [
-        { label: "Module", versionNo: latestDraftModuleVersion.versionNo },
-        latestDraftRubricVersion ? { label: "Rubric", versionNo: latestDraftRubricVersion.versionNo } : null,
-        latestDraftPromptTemplateVersion ? { label: "Prompt", versionNo: latestDraftPromptTemplateVersion.versionNo } : null,
-        latestDraftMcqSetVersion ? { label: "MCQ", versionNo: latestDraftMcqSetVersion.versionNo } : null,
-      ].filter(Boolean)
-      : [],
-    publishedAt: liveModuleVersion?.publishedAt ?? null,
-    versionsCountsChain: [
-      moduleVersions.length > 0 ? { label: "Module", versionNo: moduleVersions.length } : null,
-      rubricVersions.length > 0 ? { label: "Rubric", versionNo: rubricVersions.length } : null,
-      promptTemplateVersions.length > 0 ? { label: "Prompt", versionNo: promptTemplateVersions.length } : null,
-      mcqSetVersions.length > 0 ? { label: "MCQ", versionNo: mcqSetVersions.length } : null,
-    ].filter(Boolean),
-    technicalDetails,
+    ...chains,
   };
+}
+
+// ---------------------------------------------------------------------------
+// State rail
+// ---------------------------------------------------------------------------
+
+function makeSrBadge(modifier, text) {
+  return `<span class="sr-badge sr-badge--${modifier}">${escapeHtml(text)}</span>`;
+}
+
+function updateStateRail() {
+  if (!stateRail) return;
+  const hasModule = !!selectedModuleId && !!selectedModuleStatus;
+  stateRail.hidden = !hasModule;
+  if (!hasModule) return;
+
+  const view = deriveModuleStatusView(selectedModuleStatus);
+  if (!view) return;
+
+  const hasUnsaved = dirtyCards.size > 0;
+
+  if (srModuleName) {
+    srModuleName.textContent = view.title || selectedModuleId;
+  }
+
+  if (srEditing) {
+    if (hasUnsaved) {
+      srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
+    } else if (view.latestDraftChain.length > 0) {
+      srEditing.innerHTML = makeSrBadge(
+        "saved-draft",
+        tf("stateRail.editing.savedDraft", { versionNo: view.latestDraftChain[0].versionNo }),
+      );
+    } else if (view.liveChain.length > 0) {
+      srEditing.innerHTML = makeSrBadge(
+        "published",
+        tf("stateRail.editing.published", { versionNo: view.liveChain[0].versionNo }),
+      );
+    } else {
+      srEditing.innerHTML = `<span class="state-rail-value">—</span>`;
+    }
+  }
+
+  if (srLive) {
+    if (view.liveChain.length > 0) {
+      srLive.innerHTML = makeSrBadge(
+        "published",
+        tf("stateRail.live.published", { versionNo: view.liveChain[0].versionNo }),
+      );
+    } else {
+      srLive.innerHTML = `<span class="state-rail-value" style="color:var(--color-meta)">${escapeHtml(t("stateRail.live.none"))}</span>`;
+    }
+  }
+
+  if (srChanges) {
+    if (hasUnsaved) {
+      srChanges.innerHTML = makeSrBadge("unsaved", t("stateRail.changes.unsaved"));
+    } else {
+      srChanges.innerHTML = `<span class="state-rail-value" style="color:var(--color-success)">${escapeHtml(t("stateRail.changes.saved"))}</span>`;
+    }
+  }
+
+  if (srPreview) {
+    srPreview.innerHTML = hasUnsaved
+      ? makeSrBadge("unsaved", t("stateRail.preview.workingDraft"))
+      : `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
+  }
+
+  if (srLang) {
+    srLang.textContent = localeLabels[advPreviewLocale ?? currentLocale] ?? (advPreviewLocale ?? currentLocale);
+  }
 }
 
 function coerceModuleExportToImportDraft(payload) {
@@ -1121,7 +1208,11 @@ function applyImportDraftToForm(draft) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
-  moduleVersionSubmissionSchemaInput.value = formatEditorValue(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema, "");
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema),
+    null,
+    2,
+  );
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(draft?.moduleVersion?.assessmentPolicy, "");
   if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
 
@@ -1140,6 +1231,13 @@ function populateFormFromModuleExport(moduleExport) {
   const rubricVersion = selectedConfiguration.rubricVersion ?? null;
   const promptTemplateVersion = selectedConfiguration.promptTemplateVersion ?? null;
   const mcqSetVersion = selectedConfiguration.mcqSetVersion ?? null;
+  const module = moduleExport?.module ?? null;
+
+  moduleTitleInput.value = formatEditorValue(module?.title, "");
+  moduleDescriptionInput.value = formatEditorValue(module?.description, "");
+  moduleCertificationLevelInput.value = formatEditorValue(module?.certificationLevel, "");
+  moduleValidFromInput.value = typeof module?.validFrom === "string" ? module.validFrom : "";
+  moduleValidToInput.value = typeof module?.validTo === "string" ? module.validTo : "";
 
   rubricCriteriaJsonInput.value = formatEditorValue(rubricVersion?.criteria, "");
   rubricScalingRuleJsonInput.value = formatEditorValue(rubricVersion?.scalingRule, "");
@@ -1154,7 +1252,11 @@ function populateFormFromModuleExport(moduleExport) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
-  moduleVersionSubmissionSchemaInput.value = formatEditorValue(moduleVersion?.submissionSchema, "");
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField(moduleVersion?.submissionSchema),
+    null,
+    2,
+  );
   moduleVersionAssessmentPolicyInput.value = formatEditorValue(moduleVersion?.assessmentPolicy, "");
   if (!moduleVersionAssessmentPolicyInput.value.trim()) fillDefaultAssessmentPolicy();
   moduleVersionRubricVersionIdInput.value = rubricVersion?.id ?? "";
@@ -1198,9 +1300,7 @@ function buildParticipantPreviewPayload() {
         moduleVersionGuidanceTextInput.value,
         "adminContent.moduleVersion.guidanceText",
       ),
-      submissionSchema: moduleVersionSubmissionSchemaInput.value.trim()
-        ? parseJsonField(moduleVersionSubmissionSchemaInput.value.trim(), "adminContent.moduleVersion.submissionSchemaJson")
-        : null,
+      submissionSchema: normalizeSubmissionSchemaToSingleField(moduleVersionSubmissionSchemaInput.value.trim()),
       questions,
     },
   };
@@ -1293,47 +1393,17 @@ function renderWorkspaceNavigation() {
     return;
   }
 
-  const allItems = resolveWorkspaceNavigationItems(
+  const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-  ).filter((item) => item.visible);
-
-  const profileItem = allItems.find((item) => item.id === "profile");
-  const items = allItems.filter((item) => item.id !== "profile");
-
-  const localePicker = document.querySelector(".locale-picker");
-  if (localePicker && profileItem) {
-    localePicker.style.display = "flex";
-    localePicker.style.alignItems = "center";
-    localePicker.style.gap = "8px";
-    let profileLink = document.getElementById("profileNavLink");
-    if (!profileLink) {
-      profileLink = document.createElement("a");
-      profileLink.id = "profileNavLink";
-      localePicker.appendChild(profileLink);
-    }
-    profileLink.href = profileItem.path;
-    profileLink.textContent = t(profileItem.labelKey);
-    profileLink.className = profileItem.active ? "workspace-nav-link active" : "workspace-nav-link";
-  }
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  if (items.length === 0) {
-    return;
-  }
-
-  for (const item of items) {
-    const link = document.createElement("a");
-    link.href = item.path;
-    link.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    link.textContent = t(item.labelKey);
-    if (item.active) {
-      link.setAttribute("aria-current", "page");
-    }
-    workspaceNav.appendChild(link);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker,
+    items,
+    buildLabel: (item) => t(item.labelKey),
+  });
 }
 
 function getCurrentRoles() {
@@ -1369,6 +1439,9 @@ function activateModuleStartMode(mode) {
   if (!moduleStartModeTabs || !startModeImportTab || !startModeManualTab || !startModeExistingTab) {
     return;
   }
+
+  const toolsSection = document.getElementById("advancedToolsSection");
+  if (toolsSection) toolsSection.open = true;
 
   const normalizedMode = mode === "import" || mode === "manual" || mode === "existing" ? mode : "existing";
   activeModuleStartMode = normalizedMode;
@@ -1415,7 +1488,7 @@ function setDefaultFormValues() {
   mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
-  moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
   syncAllTextareaHeights();
   editorBaselineSnapshot = getEditorSnapshot();
@@ -1551,6 +1624,8 @@ function renderModuleStatus() {
     moduleStatusCounts.textContent = "-";
   }
   moduleStatusDetails.textContent = JSON.stringify(view.technicalDetails, null, 2);
+  updateStateRail();
+  renderAdvancedPreview();
 }
 
 function clearVersionFields() {
@@ -1564,7 +1639,7 @@ function clearVersionFields() {
   mcqQuestionsJsonInput.value = "";
   moduleVersionTaskTextInput.value = "";
   moduleVersionGuidanceTextInput.value = "";
-  moduleVersionSubmissionSchemaInput.value = "";
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
   moduleVersionRubricVersionIdInput.value = "";
   moduleVersionPromptTemplateVersionIdInput.value = "";
@@ -1577,6 +1652,7 @@ function setSelectedModule(nextModuleId, syncInput = true) {
   const nextId = typeof nextModuleId === "string" ? nextModuleId.trim() : "";
   const moduleChanged = nextId !== selectedModuleId;
   selectedModuleId = nextId;
+  updateBackToChatLink();
   if (syncInput) {
     selectedModuleIdInput.value = selectedModuleId;
   }
@@ -1759,7 +1835,11 @@ async function handleCreateModule(options = { silent: false }) {
   mcqQuestionsJsonInput.value = savedVersionFields.mcqQuestionsJson;
   moduleVersionTaskTextInput.value = savedVersionFields.moduleVersionTaskText;
   moduleVersionGuidanceTextInput.value = savedVersionFields.moduleVersionGuidanceText;
-  moduleVersionSubmissionSchemaInput.value = savedVersionFields.moduleVersionSubmissionSchema;
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField(savedVersionFields.moduleVersionSubmissionSchema),
+    null,
+    2,
+  );
   moduleVersionAssessmentPolicyInput.value = savedVersionFields.moduleVersionAssessmentPolicy;
   syncAllTextareaHeights();
   // Mark restored content as dirty (not yet saved as a version) and refresh cards.
@@ -1784,9 +1864,7 @@ async function handleDeleteSelectedModule() {
 
   const module = modules.find((item) => item.id === selectedModuleId) ?? null;
   const moduleLabel = module?.title ?? selectedModuleId;
-  const confirmed = window.confirm(
-    t("adminContent.confirm.deleteModule").replace("{module}", moduleLabel),
-  );
+  const confirmed = await showDeleteConfirm(moduleLabel);
   if (!confirmed) {
     return;
   }
@@ -1936,7 +2014,9 @@ async function handleCreateModuleVersion(options = { silent: false }) {
   const rawSubmissionSchema = moduleVersionSubmissionSchemaInput.value.trim();
   let submissionSchema;
   if (rawSubmissionSchema) {
-    submissionSchema = parseJsonField(rawSubmissionSchema, "adminContent.moduleVersion.submissionSchemaJson");
+    submissionSchema = normalizeSubmissionSchemaToSingleField(
+      parseJsonField(rawSubmissionSchema, "adminContent.moduleVersion.submissionSchemaJson"),
+    );
   }
   const rawAssessmentPolicy = moduleVersionAssessmentPolicyInput.value.trim();
   const assessmentPolicy = rawAssessmentPolicy
@@ -1971,7 +2051,38 @@ async function handleCreateModuleVersion(options = { silent: false }) {
   return body;
 }
 
+function isSelectedModuleContentUninitialized() {
+  return Boolean(selectedModuleId)
+    && dirtyCards.size === 0
+    && !moduleTitleInput.value.trim()
+    && !rubricCriteriaJsonInput.value.trim()
+    && !promptSystemPromptInput.value.trim()
+    && !mcqQuestionsJsonInput.value.trim()
+    && !moduleVersionTaskTextInput.value.trim();
+}
+
 async function handleSaveContentBundle() {
+  if (isSelectedModuleContentUninitialized()) {
+    await handleLoadSelectedModuleContent();
+  }
+
+  const moduleId = resolveModuleIdOrThrow();
+  const titlePatch = normalizeLocalizedTitlePatchValue(moduleTitleInput.value, "adminContent.module.name");
+  let titleBody = null;
+  if (titlePatch) {
+    titleBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, headers, {
+      method: "PATCH",
+      body: JSON.stringify({ title: titlePatch }),
+    });
+    const savedTitle = titleBody?.module?.title ?? titlePatch;
+    const selectedModule = modules.find((item) => item.id === moduleId);
+    if (selectedModule) {
+      selectedModule.title = localizeContentValue(savedTitle) || selectedModule.title;
+    }
+    renderModuleDropdown();
+    renderModuleMeta();
+  }
+
   const rubricBody = await handleCreateRubricVersion({ silent: true });
   const promptBody = await handleCreatePromptTemplateVersion({ silent: true });
   const mcqBody = await handleCreateMcqSetVersion({ silent: true });
@@ -1979,13 +2090,14 @@ async function handleSaveContentBundle() {
 
   setMessage(t("adminContent.message.bundleSaved"), "success");
   log({
+    module: titleBody.module,
     rubricVersion: rubricBody.rubricVersion,
     promptTemplateVersion: promptBody.promptTemplateVersion,
     mcqSetVersion: mcqBody.mcqSetVersion,
     moduleVersion: moduleVersionBody.moduleVersion,
   });
   await refreshSelectedModuleStatus();
-  for (const key of ["rubric", "prompt", "mcq", "versionDetails", "assessmentPolicy", "submissionSchema"]) {
+  for (const key of ["moduleDetails", "rubric", "prompt", "mcq", "versionDetails", "assessmentPolicy", "submissionSchema"]) {
     dirtyCards.delete(key);
   }
   renderContentCards();
@@ -2012,7 +2124,8 @@ async function handleUnpublishModule() {
   const moduleId = resolveModuleIdOrThrow();
   const module = modules.find((item) => item.id === moduleId) ?? null;
   const moduleLabel = module?.title ?? moduleId;
-  const confirmed = window.confirm(
+  const confirmed = await showSimpleConfirm(
+    t("adminContent.confirm.unpublish.title"),
     t("adminContent.confirm.unpublishModule").replace("{module}", moduleLabel),
   );
   if (!confirmed) {
@@ -2029,60 +2142,12 @@ async function handleUnpublishModule() {
   await refreshSelectedModuleStatus();
 }
 
-async function loadArchiveLibrary(search) {
-  archiveLibraryList.textContent = t("adminContent.archive.loading");
-  try {
-    const url = `/api/admin/content/modules/archive${search ? `?search=${encodeURIComponent(search)}` : ""}`;
-    const body = await apiFetch(url, headers);
-    const items = body.modules ?? [];
-    if (items.length === 0) {
-      archiveLibraryList.textContent = t("adminContent.archive.empty");
-      return;
-    }
-    archiveLibraryList.innerHTML = "";
-    for (const item of items) {
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:var(--space-1);padding:var(--space-1);border:1px solid var(--color-border-soft);border-radius:var(--radius-card);background:var(--color-surface);margin-bottom:calc(var(--space-1)*0.5)";
-
-      const info = document.createElement("div");
-      const archivedDate = item.archivedAt ? new Date(item.archivedAt).toLocaleDateString() : "-";
-      info.innerHTML = `<span style="font-weight:600">${item.title ?? item.id}</span> <span style="color:var(--color-meta);font-size:13px">${item.certificationLevel ?? ""} — ${t("adminContent.archive.archivedOn")} ${archivedDate}</span>`;
-
-      const restoreBtn = document.createElement("button");
-      restoreBtn.className = "btn-secondary";
-      restoreBtn.style.cssText = "width:auto;padding:4px 12px;font-size:13px;flex-shrink:0";
-      restoreBtn.textContent = t("adminContent.archive.restoreBtn");
-      restoreBtn.addEventListener("click", async () => {
-        await runWithBusyButton(restoreBtn, async () => {
-          try {
-            await apiFetch(
-              `/api/admin/content/modules/${encodeURIComponent(item.id)}/restore`,
-              headers,
-              { method: "POST", body: JSON.stringify({}) },
-            );
-            setMessage(t("adminContent.archive.restored").replace("{module}", item.title ?? item.id), "success");
-            await loadModules();
-            await loadArchiveLibrary(archiveSearchInput.value.trim());
-          } catch (error) {
-            setMessage(parseActionableErrorMessage(error), "error");
-          }
-        });
-      });
-
-      row.appendChild(info);
-      row.appendChild(restoreBtn);
-      archiveLibraryList.appendChild(row);
-    }
-  } catch (error) {
-    archiveLibraryList.textContent = parseActionableErrorMessage(error);
-  }
-}
-
 async function handleArchiveModule() {
   const moduleId = resolveModuleIdOrThrow();
   const module = modules.find((item) => item.id === moduleId) ?? null;
   const moduleLabel = module?.title ?? moduleId;
-  const confirmed = window.confirm(
+  const confirmed = await showSimpleConfirm(
+    t("adminContent.confirm.archive.title"),
     t("adminContent.confirm.archiveModule").replace("{module}", moduleLabel),
   );
   if (!confirmed) {
@@ -2110,7 +2175,10 @@ async function handleApplyImportDraft(rawValue) {
 
   const draft = normalizeImportDraftPayload(parsed);
   if (shouldConfirmImportOverwrite(draft)) {
-    const confirmed = window.confirm(t("adminContent.confirm.importOverwrite"));
+    const confirmed = await showSimpleConfirm(
+      t("adminContent.confirm.importOverwrite.title"),
+      t("adminContent.confirm.importOverwrite"),
+    );
     if (!confirmed) {
       setMessage(t("adminContent.message.importCancelled"));
       return;
@@ -2137,22 +2205,45 @@ async function handleApplyImportDraft(rawValue) {
 }
 
 function resolvePromptFields() {
-  const customJson = promptCustomFieldsInput.value.trim();
-  if (customJson) {
-    const parsed = JSON.parse(customJson);
-    return Array.isArray(parsed) ? parsed : Array.isArray(parsed?.fields) ? parsed.fields : [];
-  }
-  const fields = [];
-  if (promptFieldResponse.checked) {
-    fields.push({ id: "response", label: { "en-GB": "Your response", "nb": "Ditt svar", "nn": "Ditt svar" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
-  }
-  if (promptFieldReflection.checked) {
-    fields.push({ id: "reflection", label: { "en-GB": "Reflection", "nb": "Refleksjon", "nn": "Refleksjon" }, type: "textarea", required: true, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
-  }
-  if (promptFieldPromptExcerpt.checked) {
-    fields.push({ id: "promptExcerpt", label: { "en-GB": "Supporting material", "nb": "Støttemateriale", "nn": "Støttemateriell" }, type: "text", required: false, defaultValue: { "en-GB": "", "nb": "", "nn": "" } });
-  }
-  return fields;
+  return [buildDefaultSubmissionField()];
+}
+
+function buildDefaultSubmissionField(overrides = {}) {
+  return {
+    id: "response",
+    label: {
+      "en-GB": "Your response",
+      nb: "Ditt svar",
+      nn: "Ditt svar",
+      ...(typeof overrides.label === "object" && overrides.label !== null ? overrides.label : {}),
+    },
+    type: "textarea",
+    required: true,
+    ...(typeof overrides.placeholder === "object" && overrides.placeholder !== null
+      ? { placeholder: overrides.placeholder }
+      : {}),
+    ...(typeof overrides.defaultValue === "object" && overrides.defaultValue !== null
+      ? { defaultValue: overrides.defaultValue }
+      : {}),
+  };
+}
+
+function normalizeSubmissionSchemaToSingleField(input) {
+  const parsed = (() => {
+    if (!input) return {};
+    if (typeof input === "string") {
+      try {
+        return JSON.parse(input);
+      } catch {
+        return {};
+      }
+    }
+    return input;
+  })();
+
+  const fields = Array.isArray(parsed?.fields) ? parsed.fields : Array.isArray(parsed) ? parsed : [];
+  const firstField = fields[0] && typeof fields[0] === "object" ? fields[0] : {};
+  return { fields: [buildDefaultSubmissionField(firstField)] };
 }
 
 async function handleOpenParticipantPreview() {
@@ -2204,6 +2295,13 @@ function getJsonSummary(rawValue) {
   }
 }
 
+function getSubmissionSchemaSummary(rawValue) {
+  const schema = normalizeSubmissionSchemaToSingleField(rawValue);
+  const field = schema.fields?.[0] ?? buildDefaultSubmissionField();
+  const label = localizeContentValue(field.label);
+  return label ? `${t("adminContent.dialog.submissionSchema.singleFieldSummary")} — ${label}` : t("adminContent.dialog.submissionSchema.singleFieldSummary");
+}
+
 function setCardSummary(elementId, text) {
   const el = document.getElementById(elementId);
   if (!el) return;
@@ -2253,7 +2351,7 @@ function renderContentCards() {
   setCardUnsaved("contentCard_mcq_unsaved", dirtyCards.has("mcq"));
 
   // Innleveringsskjema
-  setCardSummary("contentCard_submissionSchema_summary", getJsonSummary(moduleVersionSubmissionSchemaInput.value));
+  setCardSummary("contentCard_submissionSchema_summary", getSubmissionSchemaSummary(moduleVersionSubmissionSchemaInput.value));
   setCardUnsaved("contentCard_submissionSchema_unsaved", dirtyCards.has("submissionSchema"));
 
   // Show/hide save button row
@@ -2265,6 +2363,9 @@ function renderContentCards() {
   if (publishFromCardsBtn) {
     publishFromCardsBtn.hidden = !publishModuleVersionIdInput.value.trim();
   }
+
+  updateStateRail();
+  renderAdvancedPreview();
 }
 
 // ── Assessment policy helper ───────────────────────────────────────────────────
@@ -2964,6 +3065,7 @@ function setActiveSsLocale(locale) {
 function createSubmissionFieldRow(field, idx) {
   const fId = `ssF_${_ssFieldCounter++}`;
   const locales = ["en-GB", "nb", "nn"];
+  const singleFieldMode = true;
 
   const row = document.createElement("div");
   row.className = "ss-field-row";
@@ -2972,13 +3074,16 @@ function createSubmissionFieldRow(field, idx) {
   header.className = "ss-field-header";
   const titleSpan = document.createElement("span");
   titleSpan.style.cssText = "font-size:12px;font-weight:700;color:var(--color-meta)";
-  titleSpan.textContent = `${t("adminContent.dialog.submissionSchema.fieldLabel") || "Field"} ${idx + 1}`;
+  titleSpan.textContent = singleFieldMode
+    ? (t("adminContent.dialog.submissionSchema.singleFieldTitle") || "Response field")
+    : `${t("adminContent.dialog.submissionSchema.fieldLabel") || "Field"} ${idx + 1}`;
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "ss-field-remove";
   removeBtn.setAttribute("aria-label", "Remove");
   removeBtn.textContent = "×";
   removeBtn.addEventListener("click", () => row.remove());
+  removeBtn.hidden = singleFieldMode;
   header.append(titleSpan, removeBtn);
   row.appendChild(header);
 
@@ -2991,21 +3096,23 @@ function createSubmissionFieldRow(field, idx) {
   const idInput = document.createElement("input");
   idInput.className = "ss-field-id";
   idInput.autocomplete = "off";
-  idInput.value = field?.id ?? "";
+  idInput.value = singleFieldMode ? "response" : (field?.id ?? "");
   idInput.placeholder = "response";
+  idInput.disabled = singleFieldMode;
   idWrap.append(idLabel, idInput);
   const typeWrap = document.createElement("div");
   const typeLabel = document.createElement("label");
   typeLabel.textContent = t("adminContent.dialog.submissionSchema.fieldType") || "Type";
   const typeSelect = document.createElement("select");
   typeSelect.className = "ss-field-type";
-  for (const opt of ["textarea", "text", "number"]) {
+  for (const opt of singleFieldMode ? ["textarea"] : ["textarea", "text", "number"]) {
     const o = document.createElement("option");
     o.value = opt;
     o.textContent = opt;
     if (field?.type === opt) o.selected = true;
     typeSelect.appendChild(o);
   }
+  typeSelect.disabled = singleFieldMode;
   typeWrap.append(typeLabel, typeSelect);
   idTypeRow.append(idWrap, typeWrap);
   row.appendChild(idTypeRow);
@@ -3017,7 +3124,8 @@ function createSubmissionFieldRow(field, idx) {
   const reqCheck = document.createElement("input");
   reqCheck.type = "checkbox";
   reqCheck.className = "ss-field-required";
-  reqCheck.checked = field?.required !== false;
+  reqCheck.checked = singleFieldMode ? true : field?.required !== false;
+  reqCheck.disabled = singleFieldMode;
   const reqSpan = document.createElement("span");
   reqSpan.textContent = t("adminContent.dialog.submissionSchema.fieldRequired") || "Required";
   reqLabel.append(reqCheck, reqSpan);
@@ -3089,14 +3197,10 @@ function openSubmissionSchemaDialog(triggerBtn) {
 
   const list = document.getElementById("dlgSS_fieldsList");
   list.innerHTML = "";
-  let schema = {};
-  try { schema = JSON.parse(moduleVersionSubmissionSchemaInput.value.trim() || "{}"); } catch { schema = {}; }
-  const fields = Array.isArray(schema?.fields) ? schema.fields : [];
-  if (fields.length === 0) {
-    list.appendChild(createSubmissionFieldRow({ id: "", type: "textarea", required: true }, 0));
-  } else {
-    fields.forEach((f, i) => list.appendChild(createSubmissionFieldRow(f, i)));
-  }
+  const schema = normalizeSubmissionSchemaToSingleField(moduleVersionSubmissionSchemaInput.value.trim());
+  list.appendChild(createSubmissionFieldRow(schema.fields[0], 0));
+  const addFieldBtn = document.getElementById("dlgSS_addField");
+  if (addFieldBtn) addFieldBtn.hidden = true;
 
   setActiveDialogLocaleTab(dialog, "en-GB");
   setActiveSsLocale("en-GB");
@@ -3109,13 +3213,13 @@ function applySubmissionSchemaDialog() {
   const fields = [];
 
   for (const row of document.querySelectorAll("#dlgSS_fieldsList .ss-field-row")) {
-    const id = row.querySelector(".ss-field-id")?.value.trim() ?? "";
+    const id = "response";
     if (!id) {
       setMessage(t("adminContent.dialog.submissionSchema.errorIdRequired") || "All fields must have an ID.", "error");
       return;
     }
-    const type = row.querySelector(".ss-field-type")?.value ?? "textarea";
-    const required = row.querySelector(".ss-field-required")?.checked ?? true;
+    const type = "textarea";
+    const required = true;
     const label = {};
     for (const locale of locales) {
       label[locale] = row.querySelector(`[data-locale="${locale}"] .ss-field-label`)?.value ?? "";
@@ -3140,7 +3244,11 @@ function applySubmissionSchemaDialog() {
     fields.push(fieldObj);
   }
 
-  moduleVersionSubmissionSchemaInput.value = fields.length > 0 ? JSON.stringify({ fields }, null, 2) : "";
+  moduleVersionSubmissionSchemaInput.value = JSON.stringify(
+    normalizeSubmissionSchemaToSingleField({ fields }),
+    null,
+    2,
+  );
   dirtyCards.add("submissionSchema");
   syncAllTextareaHeights();
   renderContentCards();
@@ -3265,10 +3373,10 @@ copyAuthoringPromptButton.addEventListener("click", () => {
   activateModuleStartMode("import");
   promptCertificationLevelSelect.value = "";
   promptMcqCountInput.value = "10";
-  promptCustomFieldsInput.value = "";
-  promptFieldResponse.checked = true;
-  promptFieldReflection.checked = true;
-  promptFieldPromptExcerpt.checked = true;
+  if (promptCustomFieldsInput) promptCustomFieldsInput.value = "";
+  if (promptFieldResponse) promptFieldResponse.checked = true;
+  if (promptFieldReflection) promptFieldReflection.checked = false;
+  if (promptFieldPromptExcerpt) promptFieldPromptExcerpt.checked = false;
   authoringPromptDialog.showModal();
 });
 
@@ -3322,16 +3430,6 @@ unpublishModuleBtn.addEventListener("click", async () => {
       log(message);
     }
   });
-});
-
-archiveSearchBtn.addEventListener("click", async () => {
-  await runWithBusyButton(archiveSearchBtn, async () => {
-    await loadArchiveLibrary(archiveSearchInput.value.trim());
-  });
-});
-
-archiveSearchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") archiveSearchBtn.click();
 });
 
 archiveModuleBtn.addEventListener("click", async () => {
@@ -3606,11 +3704,7 @@ document.getElementById("dialogSubmissionSchemaApply")?.addEventListener("click"
   applySubmissionSchemaDialog();
 });
 document.getElementById("dlgSS_addField")?.addEventListener("click", () => {
-  const list = document.getElementById("dlgSS_fieldsList");
-  const idx = list.querySelectorAll(".ss-field-row").length;
-  list.appendChild(createSubmissionFieldRow({ id: "", type: "textarea", required: true }, idx));
-  const activeTab = document.querySelector("#dialogSubmissionSchema .dialog-locale-tab.active");
-  setActiveSsLocale(activeTab?.dataset.localeTab ?? "en-GB");
+  // Advanced UI now standardises on one free-text submission field per module.
 });
 document.getElementById("dialogSubmissionSchema")?.addEventListener("click", (e) => {
   const tab = e.target.closest(".dialog-locale-tab");
@@ -3668,10 +3762,28 @@ document.getElementById("previewCardsBtn")?.addEventListener("click", async () =
 
 populateLocaleSelect();
 setLocale(currentLocale);
-activateModuleStartMode(activeModuleStartMode);
 setDefaultFormValues();
 loadVersion();
-loadParticipantConsoleConfig();
+loadParticipantConsoleConfig().then(async () => {
+  const pathModuleId = window.location.pathname.match(/\/admin-content\/module\/([^/]+)\//)?.[1] ?? null;
+  const autoModuleId = pathModuleId ?? new URLSearchParams(location.search).get("moduleId");
+  if (autoModuleId) {
+    try {
+      await loadModules();
+      if (modules.some((m) => m.id === autoModuleId)) {
+        setSelectedModule(autoModuleId);
+        await handleLoadSelectedModuleContent();
+        // Apply any working draft carried over from the conversational shell.
+        // Must run after populateFormFromModuleExport so it can override form fields.
+        applyHandoffFromShell(autoModuleId);
+      }
+    } catch {
+      // non-fatal – editor is still usable without auto-load
+    }
+  }
+});
+initBackToChatHandoff();
+initAdvancedPreview();
 renderModuleDropdown();
 renderModuleMeta();
 renderModuleStatus();
@@ -3797,82 +3909,206 @@ function populateCalibrationStatusOptions() {
   }
 }
 
-function validateThresholds(values) {
-  const { totalMin, borderlineMin, borderlineMax } = values;
-  if (borderlineMin > borderlineMax) {
-    return t("calibration.thresholds.error.borderlineMinGtMax");
+function getConversationUrl() {
+  const moduleId = resolveConversationModuleId({ selectedModuleId, search: location.search });
+  return buildAdminContentConversationUrl(moduleId, { resumeEditing: true });
+}
+
+function updateBackToChatLink() {
+  const link = document.getElementById("backToChatLink");
+  if (!link) return;
+  link.href = getConversationUrl();
+}
+
+function navigateToConversation() {
+  function doWriteHandoff() {
+    const moduleId = resolveConversationModuleId({ selectedModuleId, search: location.search }) || null;
+    let mcqQuestions = [];
+    try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+    writeHandoff({
+      moduleId,
+      source: "advanced",
+      draft: {
+        taskText: moduleVersionTaskTextInput?.value ?? "",
+        guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+        mcqQuestions,
+      },
+      locale: currentLocale,
+    });
   }
-  if (borderlineMax > totalMin) {
-    return t("calibration.thresholds.error.borderlineMaxGtTotalMin");
+
+  const dest = getConversationUrl();
+
+  if (dirtyCards.size === 0) {
+    doWriteHandoff();
+    location.href = dest;
+    return;
   }
-  return null;
+
+  showUnsavedHandoffDialog().then((choice) => {
+    if (choice === "cancel") return;
+    if (choice === "save") {
+      handleSaveContentBundle().then(() => {
+        doWriteHandoff();
+        location.href = dest;
+      }).catch((error) => {
+        setMessage(parseActionableErrorMessage(error), "error");
+      });
+      return;
+    }
+    doWriteHandoff();
+    location.href = dest;
+  });
+}
+
+function initBackToChatHandoff() {
+  const link = document.getElementById("backToChatLink");
+  if (link) {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      navigateToConversation();
+    });
+  }
+  const modeSwitchConversationBtn = document.getElementById("modeSwitchConversation");
+  if (modeSwitchConversationBtn) {
+    modeSwitchConversationBtn.addEventListener("click", navigateToConversation);
+  }
+}
+
+function applyHandoffFromShell(moduleId) {
+  const handoff = readAndClearHandoff(moduleId);
+  if (!handoff || handoff.source !== "shell" || !handoff.draft) return;
+
+  const { taskText, guidanceText, mcqQuestions } = handoff.draft;
+  if (!taskText && !guidanceText && !(mcqQuestions?.length > 0)) return;
+
+  if (moduleVersionTaskTextInput) {
+    moduleVersionTaskTextInput.value = formatEditorValue(taskText, "");
+    dirtyCards.add("versionDetails");
+  }
+  if (moduleVersionGuidanceTextInput) {
+    moduleVersionGuidanceTextInput.value = formatEditorValue(guidanceText, "");
+    dirtyCards.add("versionDetails");
+  }
+  if (mcqQuestionsJsonInput && Array.isArray(mcqQuestions) && mcqQuestions.length > 0) {
+    mcqQuestionsJsonInput.value = JSON.stringify(mcqQuestions, null, 2);
+    dirtyCards.add("mcq");
+  }
+
+  renderModuleStatus();
+  renderContentCards();
+  syncAllTextareaHeights();
+  showToast(t("handoff.draftRestored"), "info");
+}
+
+// ---------------------------------------------------------------------------
+// Advanced editor — participant preview panel
+// ---------------------------------------------------------------------------
+
+function initAdvancedPreview() {
+  const toggleBtn = document.getElementById("advPreviewToggleBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      advPreviewOpen = !advPreviewOpen;
+      if (advPreviewOpen && !advPreviewLocale) {
+        advPreviewLocale = currentLocale;
+      }
+      const layout = document.getElementById("advWorkspaceLayout");
+      const pane = document.getElementById("advPreviewPane");
+      if (layout) layout.classList.toggle("preview-open", advPreviewOpen);
+      if (pane) pane.hidden = !advPreviewOpen;
+      toggleBtn.classList.toggle("active", advPreviewOpen);
+      toggleBtn.setAttribute("aria-pressed", String(advPreviewOpen));
+      toggleBtn.textContent = advPreviewOpen
+        ? t("advPreview.toggle.close")
+        : t("advPreview.toggle.open");
+      if (advPreviewOpen) {
+        renderAdvancedPreviewLocaleBar();
+        renderAdvancedPreview();
+      }
+    });
+  }
+}
+
+function renderAdvancedPreviewLocaleBar() {
+  const bar = document.getElementById("advPreviewLocaleBar");
+  if (!bar || !advPreviewOpen) return;
+  const hasModule = !!selectedModuleId;
+  bar.classList.toggle("visible", hasModule);
+  bar.innerHTML = "";
+  if (!hasModule) return;
+
+  for (const loc of supportedLocales) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "preview-locale-btn" + (loc === advPreviewLocale ? " active" : "");
+    btn.textContent = localeLabels[loc] ?? loc;
+    btn.setAttribute("aria-pressed", String(loc === advPreviewLocale));
+    btn.addEventListener("click", () => {
+      advPreviewLocale = loc;
+      renderAdvancedPreviewLocaleBar();
+      renderAdvancedPreview();
+    });
+    bar.appendChild(btn);
+  }
+}
+
+function renderAdvancedPreview() {
+  const content = document.getElementById("advPreviewContent");
+  if (!content || !advPreviewOpen) return;
+  const locale = advPreviewLocale ?? currentLocale;
+  const opts = { locale, t, tf };
+
+  if (!selectedModuleId || !selectedModuleStatus) {
+    content.innerHTML = buildPreviewHtml({ emptyText: t("advPreview.empty") }, opts);
+    return;
+  }
+
+  const view = deriveModuleStatusView(selectedModuleStatus);
+  const hasUnsaved = dirtyCards.size > 0;
+
+  // Version chain: prefer live if editing live, else latest draft
+  const chain = view
+    ? (view.liveChain.length > 0 && !hasUnsaved ? view.liveChain : (view.latestDraftChain.length > 0 ? view.latestDraftChain : view.liveChain))
+    : [];
+  const versionChain = chain.map((e) => `${e.label} v${e.versionNo}`).join(" · ");
+
+  // Badge
+  const badgeClass = hasUnsaved ? "draft" : (view?.badgeClass ?? "shell");
+  const badgeText = hasUnsaved
+    ? t("shell.draft.unsavedBadge")
+    : t(view?.badgeKey ?? "adminContent.status.badge.none");
+
+  // Content from form fields (live values — what the user is currently editing)
+  let mcqQuestions = [];
+  try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+
+  content.innerHTML = buildPreviewHtml({
+    title: moduleTitleInput?.value ?? "",
+    description: moduleDescriptionInput?.value ?? "",
+    taskText: moduleVersionTaskTextInput?.value ?? "",
+    guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+    mcqQuestions,
+    versionChain,
+    badgeClass,
+    badgeText,
+  }, opts);
 }
 
 function getThresholdInputValues() {
-  return {
-    totalMin: Number(thresholdTotalMinInput?.value ?? 0),
-    practicalMinPercent: Number(thresholdPracticalMinPercentInput?.value ?? 0),
-    mcqMinPercent: Number(thresholdMcqMinPercentInput?.value ?? 0),
-    borderlineMin: Number(thresholdBorderlineMinInput?.value ?? 0),
-    borderlineMax: Number(thresholdBorderlineMaxInput?.value ?? 0),
-  };
-}
-
-function updateThresholdPreview() {
-  if (
-    !thresholdValidationError ||
-    !publishThresholdsButton ||
-    !thresholdBandPreview ||
-    !thresholdEditorSection ||
-    thresholdEditorSection.style.display === "none"
-  ) {
-    return;
-  }
-
-  const values = getThresholdInputValues();
-  const error = validateThresholds(values);
-
-  thresholdValidationError.textContent = error ?? "";
-  publishThresholdsButton.disabled = Boolean(error);
-
-  if (error) {
-    thresholdBandPreview.textContent = "";
-    return;
-  }
-
-  const preview = t("calibration.thresholds.preview.bands")
-    .replace("{redMax}", String(values.borderlineMin - 1))
-    .replace("{yellowMin}", String(values.borderlineMin))
-    .replace("{yellowMax}", String(values.borderlineMax))
-    .replace("{greenMin}", String(values.totalMin));
-  thresholdBandPreview.textContent = preview;
+  return { totalMin: Number(thresholdTotalMinInput?.value ?? 0) };
 }
 
 function renderThresholds(effectiveThresholds) {
-  if (
-    !thresholdEditorSection ||
-    !thresholdTotalMinInput ||
-    !thresholdPracticalMinPercentInput ||
-    !thresholdMcqMinPercentInput ||
-    !thresholdBorderlineMinInput ||
-    !thresholdBorderlineMaxInput ||
-    !thresholdPublishResult
-  ) {
-    return;
-  }
-
+  if (!thresholdEditorSection || !thresholdTotalMinInput || !thresholdPublishResult) return;
   thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
-  thresholdPracticalMinPercentInput.value = String(effectiveThresholds.practicalMinPercent);
-  thresholdMcqMinPercentInput.value = String(effectiveThresholds.mcqMinPercent);
-  thresholdBorderlineMinInput.value = String(effectiveThresholds.borderlineMin);
-  thresholdBorderlineMaxInput.value = String(effectiveThresholds.borderlineMax);
   thresholdPublishResult.textContent = t(
     effectiveThresholds.source === "module_policy"
       ? "calibration.thresholds.source.module"
       : "calibration.thresholds.source.global",
   );
   thresholdEditorSection.style.display = "";
-  updateThresholdPreview();
+  if (publishThresholdsButton) publishThresholdsButton.disabled = false;
 }
 
 function renderCalibrationWorkspace(body) {

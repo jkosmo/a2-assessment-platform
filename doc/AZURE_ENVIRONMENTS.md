@@ -132,6 +132,7 @@ Redeploy staging:
 2. Confirm the `deploy-staging` job completes.
 3. Verify the workflow logs include both `PostgreSQL server` and `PostgreSQL database` outputs.
 4. Verify `/healthz`, `/version`, and a minimal participant flow in staging.
+5. If `/healthz` is green but `/version` still shows the previous release, restart the staging web app once and re-check `/version` before treating the deploy as failed. This has happened intermittently on App Service even when the workflow deployed the correct package.
 
 Redeploy production:
 1. Trigger `.github/workflows/deploy-azure.yml` with `deploy_production=true` and the desired `ref`.

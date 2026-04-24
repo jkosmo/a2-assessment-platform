@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kurs – A2 Content</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      /* ── Content area nav ────────────────────────────────────────────────── */
+      .content-area-nav {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border-soft);
+        margin-bottom: var(--space-3);
+      }
+      .content-area-nav-link {
+        padding: 10px var(--space-2);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-meta);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        white-space: nowrap;
+      }
+      .content-area-nav-link:hover { color: var(--color-text); }
+      .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+
+      /* ── Page header ─────────────────────────────────────────────────────── */
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+        flex-wrap: wrap;
+      }
+      .page-header h1 { margin: 0; font-size: 22px; }
+
+      .page-header-back {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+      }
+      .back-link {
+        font-size: 13px;
+        color: var(--color-meta);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .back-link:hover { color: var(--color-text); }
+
+      /* ── Table ───────────────────────────────────────────────────────────── */
+      .courses-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
+      .courses-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        background: var(--color-surface);
+      }
+      .courses-table th {
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-meta);
+        border-bottom: 1px solid var(--color-table-border);
+        white-space: nowrap;
+        background: var(--color-bg);
+      }
+      .courses-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--color-table-border);
+        vertical-align: middle;
+      }
+      .courses-table tr:last-child td { border-bottom: none; }
+      .courses-table tr:hover td { background: var(--color-row-hover); }
+      .col-title { min-width: 200px; font-weight: 600; }
+      .col-level, .col-module-count, .col-updated { white-space: nowrap; }
+      .col-updated { color: var(--color-meta); font-size: 13px; }
+      .col-actions { white-space: nowrap; }
+
+      /* ── Cert badge ──────────────────────────────────────────────────────── */
+      .cert-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--color-module-summary-bg);
+        border: 1px solid var(--color-module-summary-border);
+        color: var(--color-meta);
+        text-transform: capitalize;
+      }
+
+      /* ── Row actions ─────────────────────────────────────────────────────── */
+      .row-actions { display: flex; gap: 4px; align-items: center; }
+      .row-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
+        min-height: 0;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.4;
+        font-family: inherit;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-button);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        white-space: nowrap;
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
+      .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
+      .row-action-btn.destructive:hover { background: #fdf0ef; }
+
+      /* ── Empty state ─────────────────────────────────────────────────────── */
+      .empty-state {
+        text-align: center;
+        padding: var(--space-5) var(--space-3);
+        background: var(--color-surface);
+        border: 1px solid var(--color-table-wrap-border);
+        border-radius: var(--radius-card);
+      }
+      .empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
+      .empty-state-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+
+      /* ── Detail layout ───────────────────────────────────────────────────── */
+      .detail-layout {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        max-width: 720px;
+      }
+
+      .detail-section {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        padding: var(--space-3);
+      }
+      .detail-section-title {
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 var(--space-2);
+        color: var(--color-text);
+      }
+
+      /* ── Locale tabs ─────────────────────────────────────────────────────── */
+      .locale-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border-soft);
+        margin-bottom: var(--space-2);
+      }
+      .locale-tab-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--color-meta);
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .locale-tab-btn:hover { color: var(--color-text); }
+      .locale-tab-btn.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+
+      .locale-tab-pane { display: none; }
+      .locale-tab-pane.active { display: block; }
+
+      /* ── Form fields ─────────────────────────────────────────────────────── */
+      .form-field { margin-bottom: var(--space-2); }
+      .form-field:last-child { margin-bottom: 0; }
+      .form-field label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--color-meta);
+        margin-bottom: 4px;
+      }
+      .form-field input, .form-field textarea, .form-field select {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+        background: #fff;
+        color: var(--color-text);
+      }
+      .form-field textarea { resize: vertical; min-height: 72px; }
+      .form-field input:focus, .form-field textarea:focus, .form-field select:focus {
+        outline: 2px solid var(--color-blue);
+        outline-offset: 1px;
+        border-color: transparent;
+      }
+      .required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
+
+      /* ── Module list ─────────────────────────────────────────────────────── */
+      .module-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-2); }
+      .module-list-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        background: var(--color-bg);
+        font-size: 14px;
+      }
+      .module-list-item-order {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--color-meta);
+        min-width: 20px;
+        text-align: right;
+      }
+      .module-list-item-title { flex: 1; font-weight: 500; }
+      .module-list-item-actions { display: flex; gap: 4px; }
+      .module-move-btn, .module-remove-btn {
+        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-button);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .module-move-btn:hover { background: var(--color-row-hover); }
+      .module-move-btn:disabled { opacity: 0.4; cursor: default; }
+      .module-remove-btn { color: var(--color-error); border-color: #f5c0bb; }
+      .module-remove-btn:hover { background: #fdf0ef; }
+
+      /* ── Combobox ────────────────────────────────────────────────────────── */
+      .combobox-row { display: flex; gap: 8px; align-items: flex-start; }
+      .combobox-wrap { position: relative; flex: 1; }
+      .combobox-input {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+        background: #fff;
+        color: var(--color-text);
+      }
+      .combobox-input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      .combobox-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        z-index: 100;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        box-shadow: 0 4px 16px rgba(0,0,0,.1);
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .combobox-option {
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        color: var(--color-text);
+      }
+      .combobox-option:hover, .combobox-option.selected { background: var(--color-blue-light); color: var(--color-link-active); }
+      .combobox-option-id { font-size: 11px; color: var(--color-meta); margin-left: 6px; }
+      .combobox-empty { padding: 8px 12px; font-size: 13px; color: var(--color-meta); font-style: italic; }
+
+      /* ── Form actions ────────────────────────────────────────────────────── */
+      .form-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .error-banner {
+        font-size: 13px;
+        color: var(--color-error);
+        background: #fdf0ef;
+        border: 1px solid #f5c0bb;
+        border-radius: var(--radius-card);
+        padding: 8px 12px;
+        margin-top: var(--space-1);
+      }
+
+      /* ── Dialog ──────────────────────────────────────────────────────────── */
+      dialog {
+        border: none;
+        border-radius: var(--radius-card);
+        box-shadow: 0 8px 32px rgba(0,0,0,.18);
+        padding: var(--space-3);
+        max-width: 420px;
+        width: 100%;
+      }
+      dialog::backdrop { background: rgba(0,0,0,.4); }
+      .dialog-title { font-size: 18px; font-weight: 700; margin: 0 0 var(--space-1); }
+      .dialog-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+      .dialog-actions { display: flex; gap: 8px; flex-direction: column; margin-top: var(--space-2); }
+      .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
+      .dialog-cancel:hover { background: var(--color-row-hover); }
+
+      /* ── Loading ─────────────────────────────────────────────────────────── */
+      .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
+
+      /* ── Conversational new-course flow ──────────────────────────────────── */
+      .conv-flow {
+        max-width: 600px;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .conv-bot-msg {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        padding: var(--space-2) var(--space-3);
+        font-size: 15px;
+        color: var(--color-text);
+        line-height: 1.5;
+      }
+      .conv-bot-msg p { margin: 0; }
+      .conv-bot-msg p + p { margin-top: 6px; }
+      .conv-user-bubble {
+        align-self: flex-end;
+        background: var(--color-blue-light, #e8f0fe);
+        color: var(--color-link-active);
+        border-radius: var(--radius-card);
+        padding: 8px var(--space-2);
+        font-size: 14px;
+        font-weight: 600;
+        max-width: 80%;
+      }
+      .conv-input-area {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .conv-input-area input {
+        flex: 1;
+        min-width: 0;
+        padding: 9px 12px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+        background: #fff;
+        color: var(--color-text);
+      }
+      .conv-input-area input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      .conv-input-area button { width: auto; flex-shrink: 0; }
+      .conv-choices {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 4px;
+      }
+      .conv-choice-btn {
+        width: auto;
+        padding: 8px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 2px solid var(--color-border-soft);
+        border-radius: var(--radius-button);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: border-color 0.12s, background 0.12s;
+      }
+      .conv-choice-btn:hover { border-color: var(--color-blue); color: var(--color-link-active); background: var(--color-blue-light, #e8f0fe); }
+      .conv-saving-indicator { font-size: 13px; color: var(--color-meta); font-style: italic; }
+      .conv-step { display: flex; flex-direction: column; gap: var(--space-2); }
+      .combobox-row button { width: auto; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
+
+      <div class="page-top-bar">
+        <nav id="workspaceNav" class="workspace-nav"></nav>
+        <div class="locale-picker">
+          <span id="appVersion" class="version-badge">…</span>
+          <label for="localeSelect" class="sr-only">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+        <a href="/admin-content" class="content-area-nav-link" id="navModuler">Moduler</a>
+        <a href="/admin-content/courses" class="content-area-nav-link active" id="navKurs">Kurs</a>
+        <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden>Kalibrering</a>
+      </nav>
+
+      <div id="pageContent">
+        <div class="page-loading">Laster…</div>
+      </div>
+
+    </main>
+
+    <!-- Delete course confirmation dialog -->
+    <dialog id="deleteDialog" aria-labelledby="deleteDialogTitle">
+      <h2 class="dialog-title" id="deleteDialogTitle">Slett kurs</h2>
+      <p class="dialog-text" id="deleteDialogText">Er du sikker på at du vil slette dette kurset? Modulene forblir i biblioteket uendret.</p>
+      <div class="dialog-actions">
+        <button type="button" id="deleteConfirmBtn" class="btn btn-danger">Slett kurs</button>
+        <button type="button" class="dialog-cancel" id="deleteCancelBtn">Avbryt</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="/static/admin-content-courses.js"></script>
+    <script type="module" src="/static/workspace-help.js"></script>
+  </body>
+</html>

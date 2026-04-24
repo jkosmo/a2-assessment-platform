@@ -62,8 +62,9 @@ appealsRouter.post("/:appealId/claim", async (request, response, next) => {
     return;
   }
 
+  const isAdmin = (request.context?.roles ?? []).includes("ADMINISTRATOR");
   try {
-    const appeal = await claimAppeal(request.params.appealId, userId);
+    const appeal = await claimAppeal(request.params.appealId, userId, isAdmin);
     response.json({ appeal });
   } catch (error) {
     next(error);
@@ -83,10 +84,12 @@ appealsRouter.post("/:appealId/resolve", async (request, response, next) => {
     return;
   }
 
+  const isAdmin = (request.context?.roles ?? []).includes("ADMINISTRATOR");
   try {
     const result = await resolveAppeal({
       appealId: request.params.appealId,
       handlerId: userId,
+      isAdmin,
       ...parsed.data,
     });
     response.json(result);

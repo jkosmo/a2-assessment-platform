@@ -32,12 +32,6 @@ const outcomesBody = document.getElementById("calibrationOutcomesBody");
 const anchorsBody = document.getElementById("calibrationAnchorsBody");
 const thresholdEditorSection = document.getElementById("thresholdEditorSection");
 const thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
-const thresholdPracticalMinPercentInput = document.getElementById("thresholdPracticalMinPercent");
-const thresholdMcqMinPercentInput = document.getElementById("thresholdMcqMinPercent");
-const thresholdBorderlineMinInput = document.getElementById("thresholdBorderlineMin");
-const thresholdBorderlineMaxInput = document.getElementById("thresholdBorderlineMax");
-const thresholdBandPreview = document.getElementById("thresholdBandPreview");
-const thresholdValidationError = document.getElementById("thresholdValidationError");
 const publishThresholdsButton = document.getElementById("publishThresholds");
 const thresholdPublishResult = document.getElementById("thresholdPublishResult");
 
@@ -401,79 +395,20 @@ function populateStatusOptions() {
   }
 }
 
-function validateThresholds(values) {
-  const { totalMin, practicalMinPercent, mcqMinPercent, borderlineMin, borderlineMax } = values;
-  if (borderlineMin > borderlineMax) {
-    return t("calibration.thresholds.error.borderlineMinGtMax");
-  }
-  if (borderlineMax > totalMin) {
-    return t("calibration.thresholds.error.borderlineMaxGtTotalMin");
-  }
-  return null;
-}
-
 function getThresholdInputValues() {
-  return {
-    totalMin: Number(thresholdTotalMinInput.value),
-    practicalMinPercent: Number(thresholdPracticalMinPercentInput.value),
-    mcqMinPercent: Number(thresholdMcqMinPercentInput.value),
-    borderlineMin: Number(thresholdBorderlineMinInput.value),
-    borderlineMax: Number(thresholdBorderlineMaxInput.value),
-  };
-}
-
-function updateThresholdPreview() {
-  const values = getThresholdInputValues();
-  const error = validateThresholds(values);
-
-  thresholdValidationError.textContent = error ?? "";
-  publishThresholdsButton.disabled = Boolean(error);
-
-  if (!error) {
-    const { totalMin, borderlineMin, borderlineMax } = values;
-    const previewKey = t("calibration.thresholds.preview.bands");
-    const preview = previewKey
-      .replace("{redMax}", String(borderlineMin - 1))
-      .replace("{yellowMin}", String(borderlineMin))
-      .replace("{yellowMax}", String(borderlineMax))
-      .replace("{greenMin}", String(totalMin));
-    thresholdBandPreview.textContent = preview;
-  } else {
-    thresholdBandPreview.textContent = "";
-  }
+  return { totalMin: Number(thresholdTotalMinInput.value) };
 }
 
 function renderThresholds(effectiveThresholds) {
-  if (!effectiveThresholds) {
-    return;
-  }
-
+  if (!effectiveThresholds) return;
   thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
-  thresholdPracticalMinPercentInput.value = String(effectiveThresholds.practicalMinPercent);
-  thresholdMcqMinPercentInput.value = String(effectiveThresholds.mcqMinPercent);
-  thresholdBorderlineMinInput.value = String(effectiveThresholds.borderlineMin);
-  thresholdBorderlineMaxInput.value = String(effectiveThresholds.borderlineMax);
-
   const sourceKey =
     effectiveThresholds.source === "module_policy"
       ? "calibration.thresholds.source.module"
       : "calibration.thresholds.source.global";
   thresholdPublishResult.textContent = t(sourceKey);
-
   thresholdEditorSection.style.display = "";
-  updateThresholdPreview();
-}
-
-for (const input of [
-  thresholdTotalMinInput,
-  thresholdPracticalMinPercentInput,
-  thresholdMcqMinPercentInput,
-  thresholdBorderlineMinInput,
-  thresholdBorderlineMaxInput,
-]) {
-  input.addEventListener("input", () => {
-    updateThresholdPreview();
-  });
+  publishThresholdsButton.disabled = false;
 }
 
 publishThresholdsButton.addEventListener("click", async () => {
@@ -485,11 +420,6 @@ publishThresholdsButton.addEventListener("click", async () => {
     }
 
     const values = getThresholdInputValues();
-    const error = validateThresholds(values);
-    if (error) {
-      thresholdPublishResult.textContent = error;
-      return;
-    }
 
     try {
       const body = await apiFetch("/api/calibration/workspace/publish-thresholds", {
@@ -498,14 +428,7 @@ publishThresholdsButton.addEventListener("click", async () => {
           ...headers(),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          moduleId,
-          totalMin: values.totalMin,
-          practicalMinPercent: values.practicalMinPercent,
-          mcqMinPercent: values.mcqMinPercent,
-          borderlineMin: values.borderlineMin,
-          borderlineMax: values.borderlineMax,
-        }),
+        body: JSON.stringify({ moduleId, totalMin: values.totalMin }),
       });
       thresholdPublishResult.textContent = t("calibration.thresholds.publishSuccess");
       log(body);

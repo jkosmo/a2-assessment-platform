@@ -32,7 +32,7 @@ const publicStaticPath = path.resolve(publicRootPath, "static");
 
 app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));
 
@@ -41,10 +41,10 @@ app.get("/", (_request, response) => {
 });
 
 app.get("/healthz", (_request, response) => {
-  response.json({ status: "ok", version: appVersion });
+  response.json({ status: "ok" });
 });
 
-app.get("/version", (_request, response) => {
+app.get("/version", generalApiLimiter, (_request, response) => {
   response.json({ app: appName, version: appVersion });
 });
 
@@ -56,8 +56,44 @@ app.get("/participant/completed", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant-completed.html"));
 });
 
-app.get("/admin-content", (_request, response) => {
+app.get("/admin-content", (request, response) => {
+  // Transition: if moduleId is present, serve the conversational shell (legacy route)
+  if (request.query.moduleId) {
+    response.sendFile(path.resolve(process.cwd(), "public", "admin-content.html"));
+  } else {
+    response.sendFile(path.resolve(process.cwd(), "public", "admin-content-library.html"));
+  }
+});
+
+app.get("/admin-content/advanced", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-advanced.html"));
+});
+
+// Module workspace target routes (Issue #322 — active after unified workspace is built)
+app.get("/admin-content/module/:moduleId/conversation", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content.html"));
+});
+
+app.get("/admin-content/module/:moduleId/advanced", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-advanced.html"));
+});
+
+// Courses workspace (Issue #325)
+app.get("/admin-content/courses", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-courses.html"));
+});
+
+app.get("/admin-content/courses/new", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-courses.html"));
+});
+
+app.get("/admin-content/courses/:courseId", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-courses.html"));
+});
+
+// Calibration workspace (Issue #326)
+app.get("/admin-content/calibration", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-calibration.html"));
 });
 
 app.get("/review", (_request, response) => {
@@ -72,7 +108,7 @@ app.get("/results", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "results.html"));
 });
 
-app.get("/participant/config", (_request, response) => {
+app.get("/participant/config", generalApiLimiter, (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });
 

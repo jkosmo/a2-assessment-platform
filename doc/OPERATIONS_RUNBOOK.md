@@ -14,6 +14,7 @@ Related documents:
 - [PRODUCTION_RESTORE_RUNBOOK.md](PRODUCTION_RESTORE_RUNBOOK.md)
 - [PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md](PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md)
 - [INCIDENTS.md](INCIDENTS.md)
+- [pilot/VERIFICATION_CHECKLIST.md](pilot/VERIFICATION_CHECKLIST.md)
 
 ## Production Deployment and Rollback
 
@@ -66,6 +67,19 @@ Recommended evidence to capture in the deploy record or incident notes:
 - web app URL and worker app URL
 - version response
 - whether LLM and notification smoke paths passed
+
+## Pre-pilot Verification Gate
+
+For a staged pilot candidate, run the dedicated checklist before treating a build as ready:
+- [pilot/VERIFICATION_CHECKLIST.md](pilot/VERIFICATION_CHECKLIST.md)
+
+The checklist is intentionally shorter than the full readiness material and focuses on:
+- Entra redirect sanity
+- admin-content library and mode transitions
+- course flow sanity
+- review and appeal route sanity
+- web and worker health
+- minimum alert baseline presence
 
 ### Rollback boundary
 

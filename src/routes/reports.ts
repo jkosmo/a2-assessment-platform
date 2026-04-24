@@ -7,6 +7,7 @@ import {
   getAnalyticsSemanticModel,
   getAnalyticsTrendsReport,
   getCompletionReport,
+  getCompletionLearnerReport,
   getMcqQualityReport,
   getManualReviewQueueReport,
   getPassRatesReport,
@@ -16,7 +17,7 @@ import {
   type ReportFilters,
 } from "../modules/reporting/index.js";
 import { runRecertificationReminderSchedule } from "../modules/certification/index.js";
-import { getCourseReport } from "../modules/course/index.js";
+import { getCourseLearnerReport, getCourseReport } from "../modules/course/index.js";
 
 const reportsRouter = Router();
 
@@ -27,6 +28,11 @@ const reportQuerySchema = z.object({
   dateFrom: z.string().trim().optional(),
   dateTo: z.string().trim().optional(),
   orgUnit: z.string().trim().min(1).optional(),
+});
+
+const detailQuerySchema = reportQuerySchema.extend({
+  selectedModuleId: z.string().trim().min(1).optional(),
+  selectedCourseId: z.string().trim().min(1).optional(),
 });
 
 const exportQuerySchema = reportQuerySchema.extend({
@@ -68,6 +74,26 @@ reportsRouter.get("/courses", async (request, response, next) => {
   }
 });
 
+reportsRouter.get("/courses/details", async (request, response, next) => {
+  const filters = parseReportFilters(request.query);
+  const parsed = detailQuerySchema.safeParse(request.query);
+  if (!filters || !parsed.success || !parsed.data.selectedCourseId) {
+    response.status(400).json({ error: "validation_error", message: "A selectedCourseId is required." });
+    return;
+  }
+
+  try {
+    const report = await getCourseLearnerReport(
+      parsed.data.selectedCourseId,
+      filters,
+      request.context?.locale ?? "nb",
+    );
+    response.json(report);
+  } catch (error) {
+    next(error);
+  }
+});
+
 reportsRouter.get("/completion", async (request, response) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
@@ -77,6 +103,26 @@ reportsRouter.get("/completion", async (request, response) => {
 
   const report = await getCompletionReport(filters);
   response.json(report);
+});
+
+reportsRouter.get("/completion/details", async (request, response, next) => {
+  const filters = parseReportFilters(request.query);
+  const parsed = detailQuerySchema.safeParse(request.query);
+  if (!filters || !parsed.success || !parsed.data.selectedModuleId) {
+    response.status(400).json({ error: "validation_error", message: "A selectedModuleId is required." });
+    return;
+  }
+
+  try {
+    const report = await getCompletionLearnerReport(
+      filters,
+      parsed.data.selectedModuleId,
+      request.context?.locale ?? "nb",
+    );
+    response.json(report);
+  } catch (error) {
+    next(error);
+  }
 });
 
 reportsRouter.get("/pass-rates", async (request, response) => {

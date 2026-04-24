@@ -8,6 +8,11 @@ export const localizedTextObjectSchema = z.object({
 });
 
 export const localizedTextSchema = z.union([z.string().trim().min(1), localizedTextObjectSchema]);
+export const localizedTextPatchObjectSchema = localizedTextObjectSchema.partial().refine(
+  (value) => Object.values(value).some((entry) => typeof entry === "string" && entry.trim().length > 0),
+  { message: "At least one locale value is required." },
+);
+export const localizedTextPatchSchema = z.union([z.string().trim().min(1), localizedTextPatchObjectSchema]);
 
 export function localizedTextIdentity(value: LocalizedText): string {
   if (typeof value === "string") {
@@ -22,6 +27,10 @@ export const moduleCreateBodySchema = z.object({
   certificationLevel: localizedTextSchema.optional(),
   validFrom: z.string().trim().optional(),
   validTo: z.string().trim().optional(),
+});
+
+export const moduleTitleUpdateBodySchema = z.object({
+  title: localizedTextPatchSchema,
 });
 
 export const rubricBodySchema = z.object({
@@ -107,10 +116,25 @@ export const benchmarkExampleVersionBodySchema = z.object({
 
 export const generationLocaleSchema = z.enum(["en-GB", "nb", "nn"]);
 export const certificationLevelSchema = z.enum(["basic", "intermediate", "advanced"]);
+export const generationModeSchema = z.enum(["ordinary", "thorough"]);
+
+export const sourceMaterialUploadBodySchema = z.object({
+  fileName: z.string().trim().min(1),
+  mimeType: z.string().trim().optional(),
+  contentBase64: z.string().trim().min(1),
+});
 
 export const moduleDraftGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
+  locale: generationLocaleSchema,
+  generationMode: generationModeSchema.default("ordinary"),
+});
+
+export const moduleDraftRevisionBodySchema = z.object({
+  taskText: z.string().trim().min(1),
+  guidanceText: z.string().trim().min(1),
+  instruction: z.string().trim().min(1),
   locale: generationLocaleSchema,
 });
 
@@ -118,7 +142,38 @@ export const mcqGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
+  generationMode: generationModeSchema.default("ordinary"),
   questionCount: z.number().int().min(1).max(20).default(10),
+  optionCount: z.number().int().min(2).max(6).default(4),
+});
+
+export const mcqRevisionBodySchema = z.object({
+  questions: z.array(mcqQuestionSchema).min(1),
+  instruction: z.string().trim().min(1),
+  locale: generationLocaleSchema,
+  questionCount: z.number().int().min(1).max(20).optional(),
+  optionCount: z.number().int().min(2).max(6).optional(),
+});
+
+export const moduleDraftLocalizationBodySchema = z.object({
+  taskText: z.string().trim().min(1),
+  guidanceText: z.string().trim().min(1),
+  title: z.string().trim().min(1).optional(),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
+});
+
+export const generatedMcqQuestionBodySchema = z.object({
+  stem: z.string().trim().min(1),
+  options: z.array(z.string().trim().min(1)).min(2).max(6),
+  correctAnswer: z.string().trim().min(1),
+  rationale: z.string().trim().min(1),
+});
+
+export const mcqLocalizationBodySchema = z.object({
+  questions: z.array(generatedMcqQuestionBodySchema).min(1),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
 });
 
 export function parseRequest<T>(schema: z.ZodType<T>, body: unknown): { data: T; error?: never } | { data?: never; error: z.ZodIssue[] } {

@@ -76,6 +76,8 @@ describe("M1 core flow", () => {
       .set(participantHeaders);
     expect(resultResponse.status).toBe(200);
     expect(resultResponse.body.decision).not.toBeNull();
-    expect(resultResponse.body.llmEvaluation).not.toBeNull();
+    expect(resultResponse.body.participantGuidance).toBeDefined();
+    expect(resultResponse.body.llmEvaluation).toBeUndefined();
+    expect(resultResponse.body.mcqAttempt).toBeUndefined();
   });
 });

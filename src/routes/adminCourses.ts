@@ -6,19 +6,22 @@ import {
   publishCourse,
   archiveCourse,
   setCourseModules,
+  deleteCourse,
   courseRepository,
 } from "../modules/course/index.js";
-import { localizedTextSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
 import { NotFoundError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
+import { generateLimiter } from "../middleware/rateLimiting.js";
 
 const adminCoursesRouter = Router();
 
 const courseBodySchema = z.object({
-  title: localizedTextSchema,
-  description: localizedTextSchema.optional(),
-  certificationLevel: localizedTextSchema.optional(),
+  title: localizedTextPatchSchema,
+  description: localizedTextPatchSchema.optional(),
+  certificationLevel: localizedTextPatchSchema.optional(),
 });
 
 const setCourseModulesBodySchema = z.object({
@@ -28,6 +31,15 @@ const setCourseModulesBodySchema = z.object({
       sortOrder: z.number().int().min(0),
     }),
   ),
+});
+
+const courseLocalizationBodySchema = z.object({
+  title: z.string().trim().min(1).optional(),
+  description: z.string().trim().min(1).optional(),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
+}).refine((value) => Boolean(value.title || value.description), {
+  message: "At least one field is required.",
 });
 
 adminCoursesRouter.post("/", async (request, response, next) => {
@@ -50,6 +62,29 @@ adminCoursesRouter.post("/", async (request, response, next) => {
   }
 });
 
+adminCoursesRouter.post("/localize-copy", generateLimiter, async (request, response, next) => {
+  const parsed = courseLocalizationBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+
+  try {
+    if (parsed.data.sourceLocale === parsed.data.targetLocale) {
+      response.json({
+        title: parsed.data.title,
+        description: parsed.data.description,
+      });
+      return;
+    }
+
+    const result = await localizeCourseCopy(parsed.data);
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminCoursesRouter.get("/", async (_request, response, next) => {
   try {
     const courses = await courseRepository.listCourses();
@@ -59,6 +94,7 @@ adminCoursesRouter.get("/", async (_request, response, next) => {
       description: c.description,
       certificationLevel: c.certificationLevel,
       moduleCount: c._count.modules,
+      updatedAt: c.updatedAt.toISOString(),
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
     }));
@@ -79,6 +115,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       title: course.title,
       description: course.description,
       certificationLevel: course.certificationLevel,
+      updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
       modules: course.modules.map((cm) => ({
@@ -141,6 +178,15 @@ adminCoursesRouter.post("/:courseId/archive", async (request, response, next) =>
   try {
     const course = await archiveCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.delete("/:courseId", async (request, response, next) => {
+  try {
+    await deleteCourse(request.params.courseId, request.context?.userId);
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

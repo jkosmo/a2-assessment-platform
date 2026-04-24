@@ -26,7 +26,7 @@ async function initMsal(entraConfig) {
     auth: {
       clientId: entraConfig.clientId,
       authority: entraConfig.authority,
-      redirectUri: window.location.origin + window.location.pathname,
+      redirectUri: window.location.origin + "/admin-content",
     },
     cache: {
       cacheLocation: "sessionStorage",
@@ -38,10 +38,22 @@ async function initMsal(entraConfig) {
 
   // Handle the token response after a redirect login
   const result = await msalInstance.handleRedirectPromise();
-  if (result) return; // Successfully returned from redirect
+  if (result) {
+    // Restore the page the user was on before being sent to login
+    const intended = sessionStorage.getItem("auth_intended_url");
+    if (intended) {
+      sessionStorage.removeItem("auth_intended_url");
+      if (intended !== window.location.href) {
+        window.location.replace(intended);
+        return;
+      }
+    }
+    return;
+  }
 
-  // If no account is present, trigger login
+  // If no account is present, save destination and trigger login
   if (msalInstance.getAllAccounts().length === 0) {
+    sessionStorage.setItem("auth_intended_url", window.location.href);
     await msalInstance.loginRedirect({ scopes: msalScopes });
     // Page will redirect — execution stops here
   }

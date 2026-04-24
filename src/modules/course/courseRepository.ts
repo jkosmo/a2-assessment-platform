@@ -210,6 +210,71 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         },
       }).then((rows) => rows.length);
     },
+
+    findLearnerSubmissionsForModules(
+      moduleIds: string[],
+      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
+    ) {
+      if (moduleIds.length === 0) {
+        return Promise.resolve([]);
+      }
+      return client.submission.findMany({
+        where: {
+          moduleId: { in: moduleIds },
+          ...buildSubmissionWhere(filters),
+        },
+        orderBy: [{ userId: "asc" }, { moduleId: "asc" }, { submittedAt: "desc" }],
+        select: {
+          userId: true,
+          moduleId: true,
+          submittedAt: true,
+          submissionStatus: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              department: true,
+            },
+          },
+          decisions: {
+            orderBy: { finalisedAt: "desc" },
+            take: 1,
+            select: {
+              totalScore: true,
+              passFailTotal: true,
+              finalisedAt: true,
+            },
+          },
+        },
+      });
+    },
+
+    findCourseCompletionsForLearnerReport(
+      courseId: string,
+      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
+    ) {
+      return client.courseCompletion.findMany({
+        where: {
+          courseId,
+          ...buildCompletionWhere(filters),
+        },
+        orderBy: [{ userId: "asc" }, { completedAt: "desc" }],
+        select: {
+          userId: true,
+          completedAt: true,
+          certificateId: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              department: true,
+            },
+          },
+        },
+      });
+    },
   };
 }
 

@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 
-type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion">;
+type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseModule">;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
@@ -16,6 +16,38 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
             select: {
               id: true,
               versionNo: true,
+            },
+          },
+        },
+      });
+    },
+
+    listLibraryModules() {
+      return client.module.findMany({
+        orderBy: { title: "asc" },
+        select: {
+          id: true,
+          title: true,
+          certificationLevel: true,
+          archivedAt: true,
+          updatedAt: true,
+          activeVersionId: true,
+          activeVersion: {
+            select: { id: true, versionNo: true },
+          },
+          versions: {
+            orderBy: { versionNo: "desc" },
+            take: 1,
+            select: { id: true, versionNo: true, publishedAt: true },
+          },
+          _count: {
+            select: { courseModules: true },
+          },
+          courseModules: {
+            select: {
+              course: {
+                select: { id: true, title: true },
+              },
             },
           },
         },
@@ -89,6 +121,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       certificationLevel?: string;
       validFrom?: Date;
       validTo?: Date;
+      createdById?: string;
     }) {
       return client.module.create({
         data,
@@ -101,6 +134,32 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           validTo: true,
           createdAt: true,
         },
+      });
+    },
+
+    findModuleOwner(moduleId: string) {
+      return client.module.findUnique({
+        where: { id: moduleId },
+        select: { id: true, createdById: true },
+      });
+    },
+
+    findModuleTitle(moduleId: string) {
+      return client.module.findUnique({
+        where: { id: moduleId },
+        select: { id: true, title: true },
+      });
+    },
+
+    async countModuleCourses(moduleId: string) {
+      return client.courseModule.count({ where: { moduleId } });
+    },
+
+    updateModuleTitle(moduleId: string, title: string) {
+      return client.module.update({
+        where: { id: moduleId },
+        data: { title },
+        select: { id: true, title: true },
       });
     },
 

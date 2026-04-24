@@ -103,6 +103,25 @@
           </div>
         </section>
 
+        <section class="card profile-section">
+          <h2 class="profile-section-title" data-i18n="profile.section.courses">Completed courses</h2>
+          <div id="coursesWrap">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="profile.courses.table.course">Course</th>
+                    <th data-i18n="profile.courses.table.completedAt">Completed</th>
+                    <th data-i18n="profile.courses.table.level">Level</th>
+                    <th data-i18n="profile.courses.table.certificateId">Certificate ID</th>
+                  </tr>
+                </thead>
+                <tbody id="coursesBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <!-- GDPR rights -->
         <section class="card profile-section">
           <h2 class="profile-section-title" data-i18n="profile.section.rights">Your rights</h2>
@@ -152,5 +171,6 @@
     </div>
 
     <script type="module" src="/static/profile.js"></script>
+    <script type="module" src="/static/workspace-help.js"></script>
   </body>
 </html>
