@@ -41,6 +41,42 @@ export function createReportingRepository(client: ReportingRepositoryClient = pr
       });
     },
 
+    findSubmissionLearnersForModuleReport(where: object) {
+      return client.submission.findMany({
+        where,
+        orderBy: [{ userId: "asc" }, { submittedAt: "desc" }],
+        select: {
+          id: true,
+          moduleId: true,
+          submissionStatus: true,
+          submittedAt: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              department: true,
+            },
+          },
+          module: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+          decisions: {
+            orderBy: { finalisedAt: "desc" },
+            take: 1,
+            select: {
+              totalScore: true,
+              passFailTotal: true,
+              finalisedAt: true,
+            },
+          },
+        },
+      });
+    },
+
     findManualReviewsForQueueReport(input: {
       statuses: ReviewStatusType[];
       moduleId?: string;

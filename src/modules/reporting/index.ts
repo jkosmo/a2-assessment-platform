@@ -5,6 +5,7 @@ export { toCsv } from "./csvExport.js";
 export {
   getCompletionReport,
   getPassRatesReport,
+  getCompletionLearnerReport,
 } from "./completionReport.js";
 
 export {

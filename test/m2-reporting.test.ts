@@ -18,6 +18,14 @@ const participantBHeaders = {
   "x-user-roles": "PARTICIPANT",
 };
 
+const participantCHeaders = {
+  "x-user-id": "report-participant-c",
+  "x-user-email": "report.participant.c@company.com",
+  "x-user-name": "Report Participant C",
+  "x-user-department": "Operations",
+  "x-user-roles": "PARTICIPANT",
+};
+
 const reportReaderHeaders = {
   "x-user-id": "report-reader-1",
   "x-user-email": "report.reader@company.com",
@@ -58,6 +66,32 @@ describe("MVP reporting endpoints", () => {
         response: "Contains sensitive client data snippets for manual routing.",
         reflection: "This should route to manual review due to sensitive data concerns.",
         promptExcerpt: "Assess policy risk and route for review if uncertain.",
+      },
+    });
+
+    const failedSubmissionId = await createSubmissionAndAssessment({
+      moduleId,
+      headers: participantCHeaders,
+      responseJson: {
+        response: "Short and incomplete answer with missing concepts.",
+        reflection: "This response should land below the pass threshold.",
+        promptExcerpt: "Answer briefly with weak coverage.",
+      },
+    });
+
+    const failedDecision = await prisma.assessmentDecision.findFirst({
+      where: { submissionId: failedSubmissionId },
+      orderBy: { finalisedAt: "desc" },
+      select: { id: true },
+    });
+    expect(failedDecision).toBeTruthy();
+
+    await prisma.assessmentDecision.update({
+      where: { id: failedDecision!.id },
+      data: {
+        passFailTotal: false,
+        totalScore: 0.41,
+        decisionReason: "Regression fixture adjusted to represent a failed learner.",
       },
     });
 
@@ -234,7 +268,7 @@ describe("MVP reporting endpoints", () => {
     expect(courseReportResponse.body.rows).toEqual([
       expect.objectContaining({
         courseId: reportingCourse.id,
-        enrolledParticipants: 2,
+        enrolledParticipants: 3,
         completedParticipants: 1,
       }),
     ]);
@@ -243,6 +277,54 @@ describe("MVP reporting endpoints", () => {
         moduleId,
       }),
     ]);
+
+    const completionLearnerResponse = await request(app)
+      .get(`/api/reports/completion/details?selectedModuleId=${encodeURIComponent(moduleId)}`)
+      .set(reportReaderHeaders);
+    expect(completionLearnerResponse.status).toBe(200);
+    expect(completionLearnerResponse.body.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          participantEmail: participantAHeaders["x-user-email"],
+          status: "PASSED",
+        }),
+        expect.objectContaining({
+          participantEmail: participantBHeaders["x-user-email"],
+          status: "UNDER_REVIEW",
+        }),
+        expect.objectContaining({
+          participantEmail: participantCHeaders["x-user-email"],
+          status: "FAILED",
+          score: 0.41,
+        }),
+      ]),
+    );
+
+    const courseLearnerResponse = await request(app)
+      .get(`/api/reports/courses/details?selectedCourseId=${encodeURIComponent(reportingCourse.id)}`)
+      .set(reportReaderHeaders);
+    expect(courseLearnerResponse.status).toBe(200);
+    expect(courseLearnerResponse.body.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          participantEmail: participantAHeaders["x-user-email"],
+          status: "COMPLETED",
+          completedModules: 1,
+          totalModules: 1,
+        }),
+        expect.objectContaining({
+          participantEmail: participantBHeaders["x-user-email"],
+          status: "IN_PROGRESS",
+          underReviewModules: 1,
+        }),
+        expect.objectContaining({
+          participantEmail: participantCHeaders["x-user-email"],
+          status: "IN_PROGRESS",
+          failedModules: 1,
+          score: 0.41,
+        }),
+      ]),
+    );
 
     const emptyWindowCourseReportResponse = await request(app)
       .get(`/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}&dateTo=2000-01-01`)

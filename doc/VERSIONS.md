@@ -7,6 +7,16 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.22 - 2026-04-24
+
+feat(results/participant): resultat-drilldown per rad + enklere deltakerflate
+
+- public/results.html, public/results.js, public/i18n/results-translations.js: modul- og kursradene i `Resultat` er nå klikkbare og åpner underliggende detaljtabeller med individuelle deltakere, status og skår; samme toppfiltre gjelder for både aggregat- og detaljvisning; kursdetaljene viser også moduler fullført, ikke bestått og under vurdering
+- src/routes/reports.ts, src/modules/reporting/completionReport.ts, src/repositories/reportingRepository.ts: nye drilldown-endepunkter `GET /api/reports/completion/details` og `GET /api/reports/courses/details` med filterstøtte og siste relevante deltakerstatus/skår
+- src/modules/course/courseReport.ts, src/modules/course/courseRepository.ts, src/modules/course/index.ts: kursrapportering utvidet med per-deltaker drilldown for publiserte kurs, inkludert kursstatus, modulutfall og gjennomsnittsskår
+- public/participant.html, public/participant.js: `Ditt svar`-feltet er gjort høyere; etter `Opprett innlevering` går besvarelsen over i lesemodus; autosave-/klarstatus, avkryssing og innleverings-ID skjules; deltaker ser ikke lenger assessor-orientert `guidanceText`
+- test/m2-reporting.test.ts, test/participant-console-config.test.ts, test/workspace-validation-accessibility.test.js: oppdatert dekning for nye rapportflater og deltakerkontrakter
+- Verifisert med `npm run build` og målrettede kontrakttester; DB-avhengig rapportintegrasjonstest kunne ikke fullføres lokalt fordi test-PostgreSQL ikke var tilgjengelig
 ## 0.10.21 - 2026-04-21
 
 arch(wave4): parser-preflight, kalibreringskontrakt og redigeringskildekontrakt (#342, #343, #345)

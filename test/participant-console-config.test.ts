@@ -154,9 +154,10 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain('id="passRateGrid"');
     expect(response.text).toContain('id="completionBody"');
     expect(response.text).toContain('id="participantBody"');
+    expect(response.text).toContain('id="moduleDetailMeta"');
     expect(response.text).toContain('id="filterCourseId"');
+    expect(response.text).toContain('id="courseLearnerBody"');
     expect(response.text).toContain('id="debugOutputSection"');
-    expect(response.text).toContain('id="exportRecertification"');
   });
 
   it("serves shared stylesheet and links it from all workspace pages", async () => {
@@ -198,7 +199,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="selectedModuleStatus"');
         expect(response.text).toContain('id="selectedModuleBrief"');
         expect(response.text).toContain('id="selectedModuleTaskText"');
-        expect(response.text).toContain('id="selectedModuleGuidanceText"');
+        expect(response.text).not.toContain('id="selectedModuleGuidanceText"');
         expect(response.text).toContain('id="draftBrowserNote"');
         expect(response.text).toContain('id="appealNextSteps"');
         expect(response.text).toContain('id="resultSummary" class="summary-stack"');
@@ -323,11 +324,17 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
     expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId)');
     expect(participantJsResponse.text).toContain('course-module-button');
+    expect(participantJsResponse.text).toContain("rows: 24");
+    expect(participantJsResponse.text).toContain("function applySubmissionReadMode()");
+    expect(participantJsResponse.text).toContain('submission-field-readonly');
 
     const resultsJsResponse = await request(app).get("/static/results.js");
     expect(resultsJsResponse.status).toBe(200);
     expect(resultsJsResponse.text).toContain('const filterCourseId = document.getElementById("filterCourseId")');
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses?${params}`, headers)');
+    expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/completion/details?${params}`, headers)');
+    expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
+    expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
 
     const adminContentJsResponse = await request(app).get("/static/admin-content.js");
     expect(adminContentJsResponse.status).toBe(200);

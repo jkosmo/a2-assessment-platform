@@ -29,8 +29,8 @@ const passRateGrid = document.getElementById("passRateGrid");
 const completionBody = document.getElementById("completionBody");
 const exportCompletionButton = document.getElementById("exportCompletion");
 const exportPassRatesButton = document.getElementById("exportPassRates");
-const exportRecertificationButton = document.getElementById("exportRecertification");
 const participantBody = document.getElementById("participantBody");
+const moduleDetailMeta = document.getElementById("moduleDetailMeta");
 
 let currentLocale = resolveInitialLocale();
 let participantRuntimeConfig = {
@@ -48,6 +48,8 @@ let participantRuntimeConfig = {
   },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+let selectedModuleRow = null;
+let selectedCourseRow = null;
 
 function resolveInitialLocale() {
   const stored = localStorage.getItem("participant.locale");
@@ -58,6 +60,10 @@ function resolveInitialLocale() {
 
 function t(key) {
   return translations[currentLocale]?.[key] ?? translations["en-GB"]?.[key] ?? key;
+}
+
+function tf(key, values = {}) {
+  return t(key).replace(/\{(\w+)\}/g, (_, token) => String(values[token] ?? ""));
 }
 
 function setMessage(text, type = "info") {
@@ -98,6 +104,26 @@ function buildFilterParams() {
 function pct(value) {
   if (value === null || value === undefined) return "—";
   return `${Math.round(value * 100)} %`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+  try {
+    return new Intl.DateTimeFormat(currentLocale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
+}
+
+function formatScore(value) {
+  if (typeof value !== "number") return "—";
+  return new Intl.NumberFormat(currentLocale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function localizeTitle(value) {
@@ -153,6 +179,9 @@ function renderCompletion(passRatesRows, completionRows) {
 
   const passRateByModule = new Map(passRatesRows.map((r) => [r.moduleId, r]));
   const rows = completionRows ?? [];
+  if (selectedModuleRow && !rows.some((row) => row.moduleId === selectedModuleRow.moduleId)) {
+    selectedModuleRow = null;
+  }
 
   if (rows.length === 0) {
     const tr = document.createElement("tr");
@@ -167,16 +196,38 @@ function renderCompletion(passRatesRows, completionRows) {
   for (const row of rows) {
     const pr = passRateByModule.get(row.moduleId);
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${localizeTitle(row.moduleTitle) || row.moduleId}</td>
-      <td>${row.totalSubmissions}</td>
-      <td>${row.completedSubmissions}</td>
-      <td>${row.underReviewSubmissions}</td>
-      <td>${pct(row.completionRate)}</td>
-      <td>${pr ? pr.passCount : "—"}</td>
-      <td>${pr ? pr.failCount : "—"}</td>
-      <td>${pr ? pct(pr.passRate) : "—"}</td>
-    `;
+    tr.className = selectedModuleRow?.moduleId === row.moduleId ? "is-selected" : "";
+
+    const titleCell = document.createElement("td");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "report-row-button";
+    button.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
+    button.setAttribute("aria-pressed", selectedModuleRow?.moduleId === row.moduleId ? "true" : "false");
+    button.addEventListener("click", async () => {
+      selectedModuleRow = {
+        moduleId: row.moduleId,
+        moduleTitle: localizeTitle(row.moduleTitle) || row.moduleId,
+      };
+      renderCompletion(passRatesRows, completionRows);
+      await loadModuleLearners();
+    });
+    titleCell.appendChild(button);
+
+    tr.appendChild(titleCell);
+    for (const value of [
+      row.totalSubmissions,
+      row.completedSubmissions,
+      row.underReviewSubmissions,
+      pct(row.completionRate),
+      pr ? pr.passCount : "—",
+      pr ? pr.failCount : "—",
+      pr ? pct(pr.passRate) : "—",
+    ]) {
+      const td = document.createElement("td");
+      td.textContent = String(value);
+      tr.appendChild(td);
+    }
     completionBody.appendChild(tr);
   }
 }
@@ -186,8 +237,10 @@ function renderParticipants(rows) {
   if (!rows || rows.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
-    td.textContent = t("results.participants.empty");
+    td.colSpan = 6;
+    td.textContent = selectedModuleRow
+      ? t("results.participants.empty")
+      : t("results.participants.placeholder");
     tr.appendChild(td);
     participantBody.appendChild(tr);
     return;
@@ -195,11 +248,12 @@ function renderParticipants(rows) {
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${row.participantEmail}</td>
-      <td>${row.participantDepartment ?? "—"}</td>
-      <td>${localizeTitle(row.moduleTitle) || row.moduleId}</td>
-      <td>${row.status}</td>
-      <td>${row.passedAt ? new Date(row.passedAt).toLocaleDateString(currentLocale) : "—"}</td>
+      <td>${escapeHtmlR(row.participantName ?? "—")}</td>
+      <td>${escapeHtmlR(row.participantEmail)}</td>
+      <td>${escapeHtmlR(row.participantDepartment ?? "—")}</td>
+      <td>${escapeHtmlR(formatStatus(row.status))}</td>
+      <td>${escapeHtmlR(formatScore(row.score))}</td>
+      <td>${escapeHtmlR(formatDateTime(row.submittedAt))}</td>
     `;
     participantBody.appendChild(tr);
   }
@@ -210,17 +264,21 @@ async function loadResults() {
   showLoading(loadResultsButton);
   setMessage("");
   try {
-    const [passRatesData, completionData, participantData] = await Promise.all([
+    const [passRatesData, completionData, courseData] = await Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
-      apiFetch(`/api/reports/recertification?${params}`, headers),
+      apiFetch(`/api/reports/courses?${params}`, headers),
     ]);
 
     renderPassRates(passRatesData.rows);
     renderCompletion(passRatesData.rows, completionData.rows);
-    renderParticipants(participantData.rows);
+    renderCourseReport(courseData.rows ?? []);
+    await Promise.all([
+      selectedModuleRow ? loadModuleLearners() : Promise.resolve(renderParticipants([])),
+      selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
+    ]);
     resultsMeta.textContent = t("results.filters.loaded");
-    log({ passRates: passRatesData, completion: completionData });
+    log({ passRates: passRatesData, completion: completionData, courses: courseData });
   } catch (error) {
     setMessage(error.message ?? "Error loading results.", "warning");
     log(error);
@@ -267,6 +325,12 @@ function applyTranslations() {
   for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
     const key = el.getAttribute("data-i18n-placeholder");
     if (key) el.placeholder = t(key);
+  }
+  if (!selectedModuleRow && moduleDetailMeta) {
+    moduleDetailMeta.textContent = t("results.participants.placeholder");
+  }
+  if (!selectedCourseRow && courseDetailMeta) {
+    courseDetailMeta.textContent = t("results.courses.placeholder");
   }
   renderWorkspaceNavigation();
 }
@@ -419,7 +483,6 @@ rolesInput.addEventListener("input", () => {
 loadResultsButton.addEventListener("click", () => loadResults());
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
 exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
-exportRecertificationButton.addEventListener("click", () => exportCsv("recertification"));
 
 loadMeButton?.addEventListener("click", async () => {
   try {
@@ -433,6 +496,8 @@ loadMeButton?.addEventListener("click", async () => {
 // --- Course report ---
 
 const courseReportBody = document.getElementById("courseReportBody");
+const courseLearnerBody = document.getElementById("courseLearnerBody");
+const courseDetailMeta = document.getElementById("courseDetailMeta");
 
 function escapeHtmlR(str) {
   return String(str ?? "")
@@ -444,6 +509,9 @@ function escapeHtmlR(str) {
 
 function renderCourseReport(rows) {
   courseReportBody.innerHTML = "";
+  if (selectedCourseRow && Array.isArray(rows) && !rows.some((row) => row.courseId === selectedCourseRow.courseId)) {
+    selectedCourseRow = null;
+  }
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td colspan="5" class="small">${escapeHtmlR(t("results.courses.empty"))}</td>`;
@@ -461,30 +529,119 @@ function renderCourseReport(rows) {
         }).join("<br>")
       : `<span class="small" style="color:var(--color-text-soft)">${escapeHtmlR(t("results.courses.noModules"))}</span>`;
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtmlR(row.courseTitle)}</td>
-      <td>${escapeHtmlR(row.enrolledParticipants)}</td>
-      <td>${escapeHtmlR(row.completedParticipants)}</td>
-      <td>${escapeHtmlR(rate)}</td>
-      <td style="font-size:11px">${moduleList}</td>
-    `;
+    tr.className = selectedCourseRow?.courseId === row.courseId ? "is-selected" : "";
+
+    const titleCell = document.createElement("td");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "report-row-button";
+    button.textContent = row.courseTitle;
+    button.setAttribute("aria-pressed", selectedCourseRow?.courseId === row.courseId ? "true" : "false");
+    button.addEventListener("click", async () => {
+      selectedCourseRow = {
+        courseId: row.courseId,
+        courseTitle: row.courseTitle,
+      };
+      renderCourseReport(rows);
+      await loadCourseLearners();
+    });
+    titleCell.appendChild(button);
+    tr.appendChild(titleCell);
+
+    for (const value of [
+      row.enrolledParticipants,
+      row.completedParticipants,
+      rate,
+    ]) {
+      const td = document.createElement("td");
+      td.textContent = String(value);
+      tr.appendChild(td);
+    }
+    const moduleCell = document.createElement("td");
+    moduleCell.style.fontSize = "11px";
+    moduleCell.innerHTML = moduleList;
+    tr.appendChild(moduleCell);
     courseReportBody.appendChild(tr);
   }
 }
 
-async function loadCourseReport() {
-  try {
-    const params = buildFilterParams();
-    const data = await apiFetch(`/api/reports/courses?${params}`, headers);
-    renderCourseReport(data.rows ?? []);
-  } catch {
-    renderCourseReport([]);
+function renderCourseLearners(rows) {
+  courseLearnerBody.innerHTML = "";
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="9" class="small">${escapeHtmlR(selectedCourseRow ? t("results.courses.detail.empty") : t("results.courses.placeholder"))}</td>`;
+    courseLearnerBody.appendChild(tr);
+    return;
+  }
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtmlR(row.participantName ?? "—")}</td>
+      <td>${escapeHtmlR(row.participantEmail)}</td>
+      <td>${escapeHtmlR(row.participantDepartment ?? "—")}</td>
+      <td>${escapeHtmlR(formatStatus(row.status))}</td>
+      <td>${escapeHtmlR(`${row.completedModules}/${row.totalModules}`)}</td>
+      <td>${escapeHtmlR(row.failedModules)}</td>
+      <td>${escapeHtmlR(row.underReviewModules)}</td>
+      <td>${escapeHtmlR(formatScore(row.score))}</td>
+      <td>${escapeHtmlR(formatDateTime(row.latestActivityAt))}</td>
+    `;
+    courseLearnerBody.appendChild(tr);
   }
 }
 
-loadResultsButton.addEventListener("click", () => loadCourseReport());
+async function loadModuleLearners() {
+  if (!selectedModuleRow) {
+    moduleDetailMeta.textContent = t("results.participants.placeholder");
+    renderParticipants([]);
+    return;
+  }
 
+  const params = buildFilterParams();
+  params.set("selectedModuleId", selectedModuleRow.moduleId);
+  try {
+    const data = await apiFetch(`/api/reports/completion/details?${params}`, headers);
+    moduleDetailMeta.textContent = tf("results.participants.selected", {
+      title: selectedModuleRow.moduleTitle,
+      count: data.rows?.length ?? 0,
+    });
+    renderParticipants(data.rows ?? []);
+  } catch (error) {
+    moduleDetailMeta.textContent = error.message ?? t("results.participants.empty");
+    renderParticipants([]);
+  }
+}
+
+async function loadCourseLearners() {
+  if (!selectedCourseRow) {
+    courseDetailMeta.textContent = t("results.courses.placeholder");
+    renderCourseLearners([]);
+    return;
+  }
+
+  const params = buildFilterParams();
+  params.set("selectedCourseId", selectedCourseRow.courseId);
+  try {
+    const data = await apiFetch(`/api/reports/courses/details?${params}`, headers);
+    courseDetailMeta.textContent = tf("results.courses.selected", {
+      title: selectedCourseRow.courseTitle,
+      count: data.rows?.length ?? 0,
+    });
+    renderCourseLearners(data.rows ?? []);
+  } catch (error) {
+    courseDetailMeta.textContent = error.message ?? t("results.courses.detail.empty");
+    renderCourseLearners([]);
+  }
+}
+
+function formatStatus(status) {
+  return t(`results.status.${status}`);
+}
+
+renderParticipants([]);
 renderCourseReport([]);
+renderCourseLearners([]);
 
 // Init
 if (debugOutputSection) debugOutputSection.hidden = new URLSearchParams(location.search).get("debug") !== "1";

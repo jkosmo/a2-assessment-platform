@@ -36,7 +36,6 @@ const selectedModuleDescription = document.getElementById("selectedModuleDescrip
 const selectedModuleStatus = document.getElementById("selectedModuleStatus");
 const selectedModuleBrief = document.getElementById("selectedModuleBrief");
 const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
-const selectedModuleGuidanceText = document.getElementById("selectedModuleGuidanceText");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 const appealIdLabel = document.getElementById("appealId");
@@ -44,6 +43,7 @@ const appVersionLabel = document.getElementById("appVersion");
 const resultSummary = document.getElementById("resultSummary");
 const historySummary = document.getElementById("historySummary");
 const draftStatus = document.getElementById("draftStatus");
+const draftBrowserNote = document.getElementById("draftBrowserNote");
 const loadMeButton = document.getElementById("loadMe");
 const loadModulesButton = document.getElementById("loadModules");
 const createSubmissionButton = document.getElementById("createSubmission");
@@ -71,6 +71,8 @@ const checkResultButton = document.getElementById("checkResult");
 const createAppealButton = document.getElementById("createAppeal");
 const resetSubmissionFlowButton = document.getElementById("resetSubmissionFlow");
 const historySection = document.getElementById("historySection");
+const submissionAckLabel = ackCheckbox?.closest("label") ?? null;
+const submissionIdRow = submissionIdLabel?.parentElement ?? null;
 
 const submissionValidationTargets = [
   { fieldElement: selectedModuleDisplay, hintElement: moduleSelectionHint },
@@ -141,7 +143,7 @@ const defaultFieldBindings = [
 ];
 
 const DEFAULT_SUBMISSION_FIELDS = [
-  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 8, required: true },
+  { id: "response", label: "Your answer", labelKey: "submission.rawText", type: "textarea", rows: 24, required: true },
 ];
 
 let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;
@@ -496,13 +498,32 @@ function getSubmissionFields(selectedModule) {
       id: f.id,
       label: f.label ?? f.id,
       type: f.type ?? "textarea",
-      rows: f.type === "text" ? 1 : 3,
+      rows: f.type === "text" ? 1 : 9,
       required: f.required ?? false,
       ...(f.defaultValue !== undefined && f.defaultValue !== "" && { defaultValue: f.defaultValue }),
       ...(f.placeholder !== undefined && f.placeholder !== "" && { placeholder: f.placeholder }),
     }));
   }
   return DEFAULT_SUBMISSION_FIELDS;
+}
+
+function applySubmissionReadMode() {
+  const readOnly = flowState.hasSubmission;
+  for (const el of submissionFieldsContainer.querySelectorAll("[data-field-id]")) {
+    el.readOnly = readOnly;
+    el.classList.toggle("submission-field-readonly", readOnly);
+    if (readOnly) {
+      el.setAttribute("aria-readonly", "true");
+    } else {
+      el.removeAttribute("aria-readonly");
+    }
+  }
+
+  if (draftStatus) draftStatus.hidden = readOnly;
+  if (draftBrowserNote) draftBrowserNote.hidden = readOnly;
+  if (submissionValidationHint) submissionValidationHint.hidden = readOnly;
+  if (submissionAckLabel) submissionAckLabel.hidden = readOnly;
+  if (submissionIdRow) submissionIdRow.hidden = readOnly;
 }
 
 function renderSubmissionFields(fields) {
@@ -521,6 +542,7 @@ function renderSubmissionFields(fields) {
     const textarea = document.createElement("textarea");
     textarea.setAttribute("data-field-id", field.id);
     textarea.rows = field.rows ?? 3;
+    textarea.className = "submission-field-input";
     if (field.placeholder) {
       textarea.placeholder = localizePreviewText(field.placeholder);
     }
@@ -554,6 +576,7 @@ function renderSubmissionFields(fields) {
     }
     submissionFieldsContainer.appendChild(wrapper);
   }
+  applySubmissionReadMode();
 }
 
 function renderSelectedModuleSummary() {
@@ -566,10 +589,9 @@ function renderSelectedModuleSummary() {
   selectedModuleStatus.textContent = statusSummary;
   selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
   selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
-  selectedModuleGuidanceText.textContent = selectedModule?.guidanceText ?? "";
   selectedModuleBrief.classList.toggle(
     "hidden",
-    !(selectedModule && (selectedModule.taskText || selectedModule.guidanceText)),
+    !(selectedModule && selectedModule.taskText),
   );
   renderSubmissionFields(getSubmissionFields(selectedModule));
   updateModuleSelectionVisibility(Boolean(selectedModule));
@@ -695,6 +717,7 @@ function updateCreateSubmissionAvailability() {
   const isBusy = createSubmissionButton.dataset.busy === "true";
   createSubmissionButton.disabled = isBusy || flowState.hasSubmission || !validation.valid;
   applySubmissionValidationFeedback(validation);
+  applySubmissionReadMode();
 }
 
 function hasMeaningfulStoredDraft(draft) {
@@ -999,6 +1022,7 @@ function renderFlowGating() {
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
   appealGateHint.textContent = t(gate.appealHintKey);
   renderAppealState();
+  applySubmissionReadMode();
 }
 
 function getFlowSettings() {

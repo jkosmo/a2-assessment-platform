@@ -26,6 +26,7 @@ describe("workspace validation accessibility", () => {
     // Accessibility: module selection and submission validation must remain wired up
     expect(participantHtml).toContain('aria-describedby="moduleSelectionHint"');
     expect(participantHtml).toContain('id="submissionValidationHint"');
+    expect(participantHtml).not.toContain('id="selectedModuleGuidanceText"');
 
     const reviewHtml = readFile("public/review.html");
     expect(reviewHtml).toContain('aria-describedby="resolveValidationMessage"');
@@ -46,6 +47,8 @@ describe("workspace validation accessibility", () => {
     const resultsHtml = readFile("public/results.html");
     // Course report body must be present in the results workspace
     expect(resultsHtml).toContain('id="courseReportBody"');
+    expect(resultsHtml).toContain('id="participantBody"');
+    expect(resultsHtml).toContain('id="courseLearnerBody"');
   });
 
   it("keeps runtime alert and invalid-field hooks for validation errors", () => {
