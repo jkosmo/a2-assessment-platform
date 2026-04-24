@@ -326,6 +326,7 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('course-module-button');
     expect(participantJsResponse.text).toContain("rows: 24");
     expect(participantJsResponse.text).toContain("function applySubmissionReadMode()");
+    expect(participantJsResponse.text).toContain("function syncSubmissionFieldReadHeight(textarea)");
     expect(participantJsResponse.text).toContain('submission-field-readonly');
 
     const resultsJsResponse = await request(app).get("/static/results.js");
@@ -335,6 +336,7 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/completion/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
+    expect(resultsJsResponse.text).toContain('tr.tabIndex = 0');
 
     const adminContentJsResponse = await request(app).get("/static/admin-content.js");
     expect(adminContentJsResponse.status).toBe(200);

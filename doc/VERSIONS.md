@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 0.10.23 - 2026-04-24
+
+fix(results/participant): hele rapportlinjer klikkbare + dynamisk lesehøyde i deltakerfelt
+
+- public/results.js: modul- og kursdrilldown aktiveres nå fra hele raden, ikke bare tittelfeltet; radene er også tastaturnavigerbare med `Enter`/`Space`
+- public/participant.js: når `Ditt svar` går over i lesemodus etter `Opprett innlevering`, tilpasses høyden nå til faktisk innhold i stedet for å bli stående i fast høyde
+- test/participant-console-config.test.ts: oppdatert kontraktdekning for ny lesehøyde-helper og radnavigasjon i `results.js`
+
 ## 0.10.22 - 2026-04-24
 
 feat(results/participant): resultat-drilldown per rad + enklere deltakerflate

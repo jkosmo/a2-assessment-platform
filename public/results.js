@@ -197,22 +197,39 @@ function renderCompletion(passRatesRows, completionRows) {
     const pr = passRateByModule.get(row.moduleId);
     const tr = document.createElement("tr");
     tr.className = selectedModuleRow?.moduleId === row.moduleId ? "is-selected" : "";
+    tr.style.cursor = "pointer";
+    tr.tabIndex = 0;
 
-    const titleCell = document.createElement("td");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "report-row-button";
-    button.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
-    button.setAttribute("aria-pressed", selectedModuleRow?.moduleId === row.moduleId ? "true" : "false");
-    button.addEventListener("click", async () => {
+    const activateRow = async () => {
       selectedModuleRow = {
         moduleId: row.moduleId,
         moduleTitle: localizeTitle(row.moduleTitle) || row.moduleId,
       };
       renderCompletion(passRatesRows, completionRows);
       await loadModuleLearners();
+    };
+
+    tr.addEventListener("click", () => {
+      void activateRow();
     });
-    titleCell.appendChild(button);
+    tr.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        void activateRow();
+      }
+    });
+
+    const titleCell = document.createElement("td");
+    const titleButton = document.createElement("button");
+    titleButton.type = "button";
+    titleButton.className = "report-row-button";
+    titleButton.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
+    titleButton.setAttribute("aria-pressed", selectedModuleRow?.moduleId === row.moduleId ? "true" : "false");
+    titleButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void activateRow();
+    });
+    titleCell.appendChild(titleButton);
 
     tr.appendChild(titleCell);
     for (const value of [
@@ -530,6 +547,27 @@ function renderCourseReport(rows) {
       : `<span class="small" style="color:var(--color-text-soft)">${escapeHtmlR(t("results.courses.noModules"))}</span>`;
     const tr = document.createElement("tr");
     tr.className = selectedCourseRow?.courseId === row.courseId ? "is-selected" : "";
+    tr.style.cursor = "pointer";
+    tr.tabIndex = 0;
+
+    const activateRow = async () => {
+      selectedCourseRow = {
+        courseId: row.courseId,
+        courseTitle: row.courseTitle,
+      };
+      renderCourseReport(rows);
+      await loadCourseLearners();
+    };
+
+    tr.addEventListener("click", () => {
+      void activateRow();
+    });
+    tr.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        void activateRow();
+      }
+    });
 
     const titleCell = document.createElement("td");
     const button = document.createElement("button");
@@ -537,13 +575,9 @@ function renderCourseReport(rows) {
     button.className = "report-row-button";
     button.textContent = row.courseTitle;
     button.setAttribute("aria-pressed", selectedCourseRow?.courseId === row.courseId ? "true" : "false");
-    button.addEventListener("click", async () => {
-      selectedCourseRow = {
-        courseId: row.courseId,
-        courseTitle: row.courseTitle,
-      };
-      renderCourseReport(rows);
-      await loadCourseLearners();
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void activateRow();
     });
     titleCell.appendChild(button);
     tr.appendChild(titleCell);

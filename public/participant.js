@@ -514,8 +514,11 @@ function applySubmissionReadMode() {
     el.classList.toggle("submission-field-readonly", readOnly);
     if (readOnly) {
       el.setAttribute("aria-readonly", "true");
+      syncSubmissionFieldReadHeight(el);
     } else {
       el.removeAttribute("aria-readonly");
+      el.style.height = "";
+      el.style.overflowY = "";
     }
   }
 
@@ -524,6 +527,15 @@ function applySubmissionReadMode() {
   if (submissionValidationHint) submissionValidationHint.hidden = readOnly;
   if (submissionAckLabel) submissionAckLabel.hidden = readOnly;
   if (submissionIdRow) submissionIdRow.hidden = readOnly;
+}
+
+function syncSubmissionFieldReadHeight(textarea) {
+  if (!textarea || textarea.tagName !== "TEXTAREA") {
+    return;
+  }
+  textarea.style.height = "auto";
+  textarea.style.overflowY = "hidden";
+  textarea.style.height = `${Math.max(textarea.scrollHeight, 48)}px`;
 }
 
 function renderSubmissionFields(fields) {
@@ -549,6 +561,11 @@ function renderSubmissionFields(fields) {
     if (preserved[field.id] !== undefined) {
       textarea.value = preserved[field.id];
     }
+    textarea.addEventListener("input", () => {
+      if (textarea.readOnly) {
+        syncSubmissionFieldReadHeight(textarea);
+      }
+    });
     wrapper.appendChild(label);
     wrapper.appendChild(textarea);
     if (field.required) {
