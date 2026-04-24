@@ -191,6 +191,7 @@ var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
 var postgresServerName = toLower('${appNamePrefix}-${envCode}-pg-${suffix}')
+var appServiceStartupTimeLimitSeconds = environmentName == 'production' ? '300' : '600'
 var createObservabilityActionGroup = !empty(observabilityAlertEmail)
 var createNotificationDeliveryAlert = participantNotificationChannel == 'acs_email' || participantNotificationChannel == 'webhook'
 var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')
@@ -501,6 +502,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '/healthz'
         }
         {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: appServiceStartupTimeLimitSeconds
+        }
+        {
           name: 'DATABASE_URL'
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
@@ -708,6 +713,10 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '8080'
         }
         {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: appServiceStartupTimeLimitSeconds
+        }
+        {
           name: 'DATABASE_URL'
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
@@ -878,6 +887,10 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'WEBSITE_WARMUP_PATH'
           value: '/health'
+        }
+        {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: appServiceStartupTimeLimitSeconds
         }
         {
           name: 'PARSER_WORKER_AUTH_KEY'
