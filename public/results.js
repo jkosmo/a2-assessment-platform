@@ -603,7 +603,7 @@ function renderCourseLearners(rows) {
   courseLearnerBody.innerHTML = "";
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="9" class="small">${escapeHtmlR(selectedCourseRow ? t("results.courses.detail.empty") : t("results.courses.placeholder"))}</td>`;
+    tr.innerHTML = `<td colspan="7" class="small">${escapeHtmlR(selectedCourseRow ? t("results.courses.detail.empty") : t("results.courses.placeholder"))}</td>`;
     courseLearnerBody.appendChild(tr);
     return;
   }
@@ -616,8 +616,6 @@ function renderCourseLearners(rows) {
       <td>${escapeHtmlR(row.participantDepartment ?? "—")}</td>
       <td>${escapeHtmlR(formatStatus(row.status))}</td>
       <td>${escapeHtmlR(`${row.completedModules}/${row.totalModules}`)}</td>
-      <td>${escapeHtmlR(row.failedModules)}</td>
-      <td>${escapeHtmlR(row.underReviewModules)}</td>
       <td>${escapeHtmlR(formatScore(row.score))}</td>
       <td>${escapeHtmlR(formatDateTime(row.latestActivityAt))}</td>
     `;

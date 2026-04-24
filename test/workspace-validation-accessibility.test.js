@@ -49,6 +49,8 @@ describe("workspace validation accessibility", () => {
     expect(resultsHtml).toContain('id="courseReportBody"');
     expect(resultsHtml).toContain('id="participantBody"');
     expect(resultsHtml).toContain('id="courseLearnerBody"');
+    expect(resultsHtml).not.toContain('data-i18n="results.courses.detail.failedModules"');
+    expect(resultsHtml).not.toContain('data-i18n="results.courses.detail.underReviewModules"');
   });
 
   it("keeps runtime alert and invalid-field hooks for validation errors", () => {

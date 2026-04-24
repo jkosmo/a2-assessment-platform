@@ -513,15 +513,26 @@ function applySubmissionReadMode() {
     el.readOnly = readOnly;
     el.classList.toggle("submission-field-readonly", readOnly);
     if (readOnly) {
+      if (!el.dataset.editRows) {
+        el.dataset.editRows = String(el.rows || 1);
+      }
+      el.rows = 1;
       el.setAttribute("aria-readonly", "true");
       syncSubmissionFieldReadHeight(el);
     } else {
+      if (el.dataset.editRows) {
+        el.rows = Number(el.dataset.editRows) || 1;
+      }
       el.removeAttribute("aria-readonly");
       el.style.height = "";
       el.style.overflowY = "";
     }
   }
 
+  if (ackCheckbox) {
+    ackCheckbox.disabled = readOnly;
+    ackCheckbox.hidden = readOnly;
+  }
   if (draftStatus) draftStatus.hidden = readOnly;
   if (draftBrowserNote) draftBrowserNote.hidden = readOnly;
   if (submissionValidationHint) submissionValidationHint.hidden = readOnly;

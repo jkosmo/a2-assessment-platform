@@ -328,6 +328,9 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain("function applySubmissionReadMode()");
     expect(participantJsResponse.text).toContain("function syncSubmissionFieldReadHeight(textarea)");
     expect(participantJsResponse.text).toContain('submission-field-readonly');
+    expect(participantJsResponse.text).toContain("ackCheckbox.disabled = readOnly");
+    expect(participantJsResponse.text).toContain("ackCheckbox.hidden = readOnly");
+    expect(participantJsResponse.text).toContain("el.rows = 1");
 
     const resultsJsResponse = await request(app).get("/static/results.js");
     expect(resultsJsResponse.status).toBe(200);
@@ -337,6 +340,9 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
     expect(resultsJsResponse.text).toContain('tr.tabIndex = 0');
+    expect(resultsJsResponse.text).toContain('colspan="7"');
+    expect(resultsJsResponse.text).not.toContain("row.failedModules");
+    expect(resultsJsResponse.text).not.toContain("row.underReviewModules");
 
     const adminContentJsResponse = await request(app).get("/static/admin-content.js");
     expect(adminContentJsResponse.status).toBe(200);
