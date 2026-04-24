@@ -337,6 +337,141 @@ button:focus-visible {
   margin-left: auto;
 }
 
+.workspace-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-link-active);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.workspace-help-trigger:hover,
+.workspace-help-trigger:focus-visible {
+  border-color: var(--color-link-active);
+  color: var(--color-link-active);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-link-active) 15%, white);
+  outline: none;
+}
+
+.workspace-help-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(88vh, 900px);
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-card);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+}
+
+.workspace-help-dialog::backdrop {
+  background: rgba(12, 24, 40, 0.38);
+}
+
+.workspace-help-shell {
+  display: grid;
+  gap: var(--space-2);
+  padding: calc(var(--space-2) * 1.25);
+}
+
+.workspace-help-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.workspace-help-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-link-active);
+}
+
+.workspace-help-title {
+  margin: 4px 0 0;
+  font-size: 24px;
+}
+
+.workspace-help-close {
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.workspace-help-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.workspace-help-tab {
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.workspace-help-tab.active {
+  background: var(--color-link-active);
+  border-color: var(--color-link-active);
+  color: #fff;
+}
+
+.workspace-help-body {
+  display: grid;
+  gap: var(--space-2);
+  overflow: auto;
+}
+
+.workspace-help-summary {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.workspace-help-section {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.workspace-help-section-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.workspace-help-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--color-text);
+}
+
+@media (max-width: 720px) {
+  .workspace-help-shell {
+    padding: var(--space-2);
+  }
+
+  .workspace-help-header {
+    flex-direction: column;
+  }
+}
+
 .locale-select-compact {
   width: auto;
   min-width: 70px;
