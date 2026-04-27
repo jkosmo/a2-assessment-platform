@@ -7,6 +7,12 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.6 - 2026-04-27
+
+fix(deploy): harden post-restart versjonskontroll i deploy-script
+
+- scripts/azure/deploy-environment.ps1: økt sleep etter restart (30→75s), økt timeout (10→30s), gjort post-restart-sjekk ikke-fatal (advarsel i stedet for feil) fordi helsesjekkene allerede bekrefter at appen kjører, utvidet catch til å fange alle unntakstyper (ikke bare System.Net.WebException)
+
 ## 1.0.5 - 2026-04-27
 
 fix(reporting/calibration/ownership): tre pre-eksisterende CI-feil fikset
