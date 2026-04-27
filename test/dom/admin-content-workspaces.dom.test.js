@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import fs from "node:fs";
 import path from "node:path";
 import { getByRole, getByText, queryAllByRole } from "@testing-library/dom";
