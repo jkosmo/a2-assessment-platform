@@ -569,6 +569,18 @@ async function init() {
     });
   });
 
+  // Localize cert level select options
+  if (newModuleLevel) {
+    const optMap = {
+      basic: t("adminContent.promptDialog.certificationLevelBasic"),
+      intermediate: t("adminContent.promptDialog.certificationLevelIntermediate"),
+      advanced: t("adminContent.promptDialog.certificationLevelAdvanced"),
+    };
+    newModuleLevel.querySelectorAll("option[value]").forEach(opt => {
+      if (optMap[opt.value]) opt.textContent = optMap[opt.value];
+    });
+  }
+
   // Create module
   createModuleBtn?.addEventListener("click", openCreateDialog);
   newModuleTitle?.addEventListener("input", validateCreateForm);

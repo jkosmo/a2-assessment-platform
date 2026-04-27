@@ -145,12 +145,6 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       requiredRoles: [AppRole.REVIEWER, AppRole.APPEAL_HANDLER, AppRole.ADMINISTRATOR],
     },
     {
-      id: "calibration",
-      path: "/calibration",
-      labelKey: "nav.calibration",
-      requiredRoles: [...calibrationAccessRoles],
-    },
-    {
       id: "admin-content",
       path: "/admin-content",
       labelKey: "nav.adminContent",

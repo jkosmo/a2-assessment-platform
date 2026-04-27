@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.7 - 2026-04-27
+
+fix(ui): fjern kalibrering fra toppmeny; lokaliser sertifiseringsnivå i opprettingsdialog; hopp over nivåspørsmål ved innholdsgenerering om nivå allerede er satt
+
+- src/config/capabilities.ts: fjernet kalibrering-innslag fra buildWorkspaceNavigationItems (kalibrering er tilgjengelig som fane under Innholdsforvaltning)
+- public/static/admin-content-library.js: sertifiseringsnivå-alternativer i opprettingsdialogen oversettes nå dynamisk via t() ved init i stedet for hardkodet engelsk
+- public/static/admin-content-shell.js: startGenerateDraftFlow sender nå bundle.module.certificationLevel til askForSourceMaterial; om nivået allerede er kjent hoppes certLevel-spørsmålet over
+
 ## 1.0.6 - 2026-04-27
 
 fix(deploy): harden post-restart versjonskontroll i deploy-script

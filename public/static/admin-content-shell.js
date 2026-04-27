@@ -2339,13 +2339,19 @@ function startNewModuleFlow() {
 // Source material → cert level → locale → generate
 // ---------------------------------------------------------------------------
 
-function askForSourceMaterial(moduleTitle, existingModuleId) {
+function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel) {
   logForm(
     "source-material",
     () => `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
     "shell.source.placeholder",
     "shell.action.next",
-    (sourceMaterial) => askForCertLevel(moduleTitle, existingModuleId, sourceMaterial),
+    (sourceMaterial) => {
+      if (knownCertLevel) {
+        askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, knownCertLevel, currentLocale);
+      } else {
+        askForCertLevel(moduleTitle, existingModuleId, sourceMaterial);
+      }
+    },
   );
 }
 
@@ -2451,7 +2457,7 @@ function showDraftReadyActions() {
 
 // Separate entry point for MCQ-only generation from the module actions menu
 function startGenerateDraftFlow() {
-  askForSourceMaterial(null, selectedModuleId);
+  askForSourceMaterial(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
 }
 
 function startGenerateMcqFlow() {
