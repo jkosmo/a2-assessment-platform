@@ -189,12 +189,12 @@ export async function getCourseLearnerReport(
       if (typeof latestDecision?.totalScore === "number") {
         scores.push(latestDecision.totalScore);
       }
-      if (latestDecision?.passFailTotal === true) {
+      if (latest.submissionStatus === "UNDER_REVIEW") {
+        underReviewModules += 1;
+      } else if (latestDecision?.passFailTotal === true) {
         passedModules += 1;
       } else if (latestDecision?.passFailTotal === false) {
         failedModules += 1;
-      } else if (latest.submissionStatus === "UNDER_REVIEW") {
-        underReviewModules += 1;
       }
     }
 

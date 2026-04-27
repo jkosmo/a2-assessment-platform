@@ -24,7 +24,7 @@ const adminHeaders = {
 
 const moduleBody = {
   title: { "en-GB": "Ownership Test Module", nb: "Eierskapstestmodul", nn: "Eigarskapstestmodul" },
-  description: { "en-GB": "Created for ownership isolation testing." },
+  description: { "en-GB": "Created for ownership isolation testing.", nb: "Opprettet for isolasjonstesting av eierskap.", nn: "Oppretta for isolasjonstesting av eigarskap." },
 };
 
 describe("API-002: Module ownership isolation for SUBJECT_MATTER_OWNER", () => {

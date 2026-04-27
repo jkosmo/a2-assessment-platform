@@ -7,6 +7,14 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.5 - 2026-04-27
+
+fix(reporting/calibration/ownership): tre pre-eksisterende CI-feil fikset
+
+- src/modules/course/courseReport.ts: identisk rekkefølge-bug som completionReport — UNDER_REVIEW-sjekk etter passFailTotal-sjekk; modul telt som FAILED i stedet for under vurdering i kursrapport
+- src/routes/calibration.ts: publish-thresholds returnerte 201 men API-kontrakt (og test) sier 200 (oppdatering, ikke opprettelse)
+- test/m2-module-ownership.test.ts: description-feltet manglet nb og nn; localizedTextObjectSchema krever alle tre locales ved opprettelse
+
 ## 1.0.4 - 2026-04-27
 
 fix(reporting/test): rett rekkefølge i statuskart for UNDER_REVIEW + fix testfeil for tittel-patch

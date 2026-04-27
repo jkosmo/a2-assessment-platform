@@ -116,7 +116,7 @@ calibrationRouter.post("/workspace/publish-thresholds", async (request, response
       totalMin: parsed.data.totalMin,
       actorId,
     });
-    response.status(201).json({ moduleVersion: published });
+    response.status(200).json({ moduleVersion: published });
   } catch (error) {
     next(error);
   }
