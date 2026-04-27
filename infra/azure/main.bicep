@@ -419,6 +419,23 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     softDeleteRetentionInDays: 7
     enablePurgeProtection: true
     publicNetworkAccess: 'Enabled'
+    accessPolicies: [
+      {
+        tenantId: tenant().tenantId
+        objectId: webApp.identity.principalId
+        permissions: { secrets: ['get'] }
+      }
+      {
+        tenantId: tenant().tenantId
+        objectId: workerApp.identity.principalId
+        permissions: { secrets: ['get'] }
+      }
+      {
+        tenantId: tenant().tenantId
+        objectId: parserApp.identity.principalId
+        permissions: { secrets: ['get'] }
+      }
+    ]
   }
 }
 
@@ -937,31 +954,8 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // Key Vault RBAC — Key Vault Secrets User for both app identities (INFRA-002)
 // ---------------------------------------------------------------------------
 
-// Access policies grant managed identities read access to Key Vault secrets.
-// Uses access policy mode (not RBAC) so the deploy SP only needs Contributor — no User Access Administrator required.
-resource kvAccessPolicies 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
-  parent: keyVault
-  name: 'add'
-  properties: {
-    accessPolicies: [
-      {
-        tenantId: tenant().tenantId
-        objectId: webApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-      {
-        tenantId: tenant().tenantId
-        objectId: workerApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-      {
-        tenantId: tenant().tenantId
-        objectId: parserApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-    ]
-  }
-}
+// Access policies are defined inline in the keyVault resource above (accessPolicies property).
+// Uses access policy mode instead of RBAC so the deploy SP only needs Contributor.
 
 resource observabilityActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = if (createObservabilityActionGroup) {
   name: observabilityActionGroupName
