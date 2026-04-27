@@ -347,12 +347,13 @@ describe("MVP admin content management and publication", () => {
   });
 
   it("merges partial title locale patches instead of rejecting or dropping other locales", async () => {
+    const originalEnGBTitle = `Patchable Module ${Date.now()}`;
     const createModuleResponse = await request(app)
       .post("/api/admin/content/modules")
       .set(adminHeaders)
       .send({
         title: {
-          "en-GB": `Patchable Module ${Date.now()}`,
+          "en-GB": originalEnGBTitle,
           nb: "Oppdaterbar modul",
           nn: "Oppdaterbar modul nynorsk",
         },
@@ -380,7 +381,7 @@ describe("MVP admin content management and publication", () => {
 
     expect(typeof parsedTitle).toBe("object");
     expect(parsedTitle).toMatchObject({
-      "en-GB": createModuleResponse.body.module.title["en-GB"],
+      "en-GB": originalEnGBTitle,
       nb: "Oppdatert modulnavn",
       nn: "Oppdaterbar modul nynorsk",
     });

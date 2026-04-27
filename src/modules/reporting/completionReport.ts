@@ -249,14 +249,14 @@ function deriveLearnerSubmissionStatus(
   submissionStatus: SubmissionStatusType,
   passFailTotal: boolean | null | undefined,
 ) {
+  if (submissionStatus === SubmissionStatus.UNDER_REVIEW) {
+    return "UNDER_REVIEW";
+  }
   if (passFailTotal === true) {
     return "PASSED";
   }
   if (passFailTotal === false) {
     return "FAILED";
-  }
-  if (submissionStatus === SubmissionStatus.UNDER_REVIEW) {
-    return "UNDER_REVIEW";
   }
   return submissionStatus;
 }

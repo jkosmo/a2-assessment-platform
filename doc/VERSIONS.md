@@ -7,6 +7,25 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.4 - 2026-04-27
+
+fix(reporting/test): rett rekkefølge i statuskart for UNDER_REVIEW + fix testfeil for tittel-patch
+
+- src/modules/reporting/completionReport.ts: `deriveLearnerSubmissionStatus` sjekket `passFailTotal === false` før UNDER_REVIEW — alle manuelle vurderinger ble feilrapportert som FAILED. Fikset rekkefølgen slik at submisjonsstatus trumfer AI-vedtak.
+- test/m2-admin-content-publication.test.ts: testen leste `body.module.title["en-GB"]` på en JSON-streng fra Prisma (returnerer `undefined`). Erstattet med lokal variabel satt ved opprettelse.
+
+## 1.0.3 - 2026-04-27
+
+fix(test): legg til jsdom-miljø for DOM-tester i CI
+
+- test/dom/admin-content-workspaces.dom.test.js: la til `// @vitest-environment jsdom` for å unngå `document is not defined` i CI-miljøet.
+
+## 1.0.2 - 2026-04-27
+
+fix(infra): flytt Key Vault access policies inline i vault-ressursen
+
+- infra/azure/main.bicep: access policies er nå definert direkte i `properties`-blokken på Key Vault-ressursen i stedet for som separat child-ressurs; dette er påkrevd når man bytter fra RBAC-modus.
+
 ## 1.0.1 - 2026-04-27
 
 fix(infra): bytt Key Vault fra RBAC til access policy-modus for produksjonsdeploy
