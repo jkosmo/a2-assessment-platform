@@ -414,7 +414,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   properties: {
     sku: { family: 'A', name: 'standard' }
     tenantId: tenant().tenantId
-    enableRbacAuthorization: true
+    enableRbacAuthorization: false
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     enablePurgeProtection: true
@@ -937,35 +937,29 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // Key Vault RBAC — Key Vault Secrets User for both app identities (INFRA-002)
 // ---------------------------------------------------------------------------
 
-var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
-
-resource webAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: keyVault
-  name: guid(keyVault.id, webApp.id, keyVaultSecretsUserRoleId)
+// Access policies grant managed identities read access to Key Vault secrets.
+// Uses access policy mode (not RBAC) so the deploy SP only needs Contributor — no User Access Administrator required.
+resource kvAccessPolicies 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+  parent: keyVault
+  name: 'add'
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
-    principalId: webApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource workerAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: keyVault
-  name: guid(keyVault.id, workerApp.id, keyVaultSecretsUserRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
-    principalId: workerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource parserAppKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: keyVault
-  name: guid(keyVault.id, parserApp.id, keyVaultSecretsUserRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
-    principalId: parserApp.identity.principalId
-    principalType: 'ServicePrincipal'
+    accessPolicies: [
+      {
+        tenantId: tenant().tenantId
+        objectId: webApp.identity.principalId
+        permissions: { secrets: ['get'] }
+      }
+      {
+        tenantId: tenant().tenantId
+        objectId: workerApp.identity.principalId
+        permissions: { secrets: ['get'] }
+      }
+      {
+        tenantId: tenant().tenantId
+        objectId: parserApp.identity.principalId
+        permissions: { secrets: ['get'] }
+      }
+    ]
   }
 }
 

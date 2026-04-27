@@ -7,6 +7,15 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.0.1 - 2026-04-27
+
+fix(infra): bytt Key Vault fra RBAC til access policy-modus for produksjonsdeploy
+
+- infra/azure/main.bicep: `enableRbacAuthorization: false`, byttet `roleAssignments`-ressurser med `Microsoft.KeyVault/vaults/accessPolicies`
+- scripts/azure/deploy-environment.ps1: automatisk `/version`-verifisering etter deploy med auto-restart ved versjonsmismatch
+- scripts/azure/bootstrap-sp-permissions.ps1: ny engangsskript for User Access Administrator-grant (dokumentasjonsformål)
+- Bakgrunn: GitHub Actions SP mangler `roleAssignments/write` i prod-tenanten; access policy-modus krever kun Contributor. Secrets forblir i Key Vault — INFRA-002-kravet er opprettholdt.
+
 ## 1.0.0 - 2026-04-24
 
 release(pilot): pilotklar plattform med kontekstsensitiv hjelp og operativ deploykunnskap

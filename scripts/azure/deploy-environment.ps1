@@ -463,15 +463,34 @@ function Wait-Stable {
   }
 }
 
-# Important operational note for future agents/operators:
 # App Service has occasionally reported a healthy /healthz immediately after zip deploy while still
-# serving the previous package/version for a short period. A green deploy + green health endpoint is
-# therefore not enough on its own when validating a release. Always verify /version after deployment,
-# and if the old version still responds, perform a single web app restart before escalating.
+# serving the previous package/version for a short period. We always verify /version to confirm
+# the new package is live, and restart once if it isn't.
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
 Wait-Stable -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
+
+$packageVersion = (Get-Content (Join-Path $PSScriptRoot '..\..\package.json') | ConvertFrom-Json).version
+Write-Host "Verifying deployed version is $packageVersion..."
+try {
+  $versionResponse = Invoke-RestMethod -Uri "https://$webAppName.azurewebsites.net/version" -TimeoutSec 10
+  $deployedVersion = $versionResponse.version
+  if ($deployedVersion -ne $packageVersion) {
+    Write-Warning "Version mismatch: expected $packageVersion but /version returned '$deployedVersion'. Restarting web app once..."
+    az webapp restart --name $webAppName --resource-group $ResourceGroupName | Out-Null
+    Start-Sleep -Seconds 30
+    $versionResponse = Invoke-RestMethod -Uri "https://$webAppName.azurewebsites.net/version" -TimeoutSec 10
+    if ($versionResponse.version -ne $packageVersion) {
+      throw "Version still wrong after restart: got '$($versionResponse.version)', expected '$packageVersion'"
+    }
+    Write-Host "Version confirmed after restart: $($versionResponse.version)"
+  } else {
+    Write-Host "Version confirmed: $deployedVersion"
+  }
+} catch [System.Net.WebException] {
+  Write-Warning "Could not verify /version endpoint: $($_.Exception.Message). Verify manually."
+}
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
