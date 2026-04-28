@@ -37,19 +37,26 @@ This is acceptable for low-cost staging validation, but not for production where
 - table-level CDC or a full event-sourced persistence redesign
 
 ## Current Production Decision
-Current decision updated: `2026-04-14`
+Current decision updated: `2026-04-28`
 
 The current production hardening track should prioritize backup and recovery posture over always-on availability.
 
 Accepted decision for the current phase:
-- production remains a non-critical internal application
-- backup retention, restore readiness, and recovery documentation should be improved now
+- production remains a non-critical internal application with negligible traffic
+- PostgreSQL SKU is `Standard_B1ms` (Burstable) — matches staging; cost-appropriate until real load justifies GeneralPurpose
+- backup retention set to 14 days — adequate for the current low-traffic operational window; reinstate 35 days when the service reaches a higher reliability posture
+- restore readiness and recovery documentation should continue to be improved
 - high availability is intentionally deferred
 
 Reasoning:
+- at negligible load, GeneralPurpose (D2ds_v5, ~$145/mnd) provides no reliability benefit over Burstable (B1ms, ~$15/mnd)
+- Burstable B1ms is appropriate while CPU demand is low; monitor credit balance in Azure Monitor as traffic grows
 - the current service does not yet justify the extra cost and operational complexity of HA
 - data recovery posture is the more immediate production need than automatic failover
+- SKU and retention should be revisited when traffic, SLA expectations, or external-user requirements change
 - HA can be revisited later if usage expands, external users are introduced, or uptime expectations change
+
+See `doc/AZURE_ENVIRONMENTS.md` (PostgreSQL SKU decision and scale-up path) for the exact scale-up criteria and procedure.
 
 Follow-up:
 - future HA enablement is tracked separately in `#307`

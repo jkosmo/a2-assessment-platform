@@ -277,6 +277,35 @@ Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. 
 - Optional monthly budget + alert via `configure-cost-guardrails.ps1`.
 - Budget setup requires suitable billing permissions.
 
+## PostgreSQL SKU decision and scale-up path
+
+### Current decision (updated: 2026-04-28)
+Production PostgreSQL is running on `Standard_B1ms` (Burstable tier), matching the staging profile.
+
+**Reason:** Traffic is not yet significant. The `Standard_D2ds_v5` (GeneralPurpose, 2 vCores) that was originally configured costs approximately 10× more per month (~$145 vs ~$15 in Norway East). At negligible load that difference is pure waste with no reliability benefit.
+
+**What was changed:**
+- `POSTGRES_SKU_NAME`: `Standard_D2ds_v5` → `Standard_B1ms`
+- `POSTGRES_SKU_TIER`: `GeneralPurpose` → `Burstable`
+- `POSTGRES_BACKUP_RETENTION_DAYS`: `35` → `14`
+
+Note: 14-day retention still satisfies the operational recovery window for the current service phase. The original 35-day value should be reinstated when the service moves to a higher reliability posture.
+
+### When to scale up
+Revisit the SKU if any of the following conditions are met:
+- Sustained CPU credit exhaustion visible in Azure Monitor (Burstable B1ms has a fixed credit budget)
+- P95 query latency increases unexpectedly under real load
+- Production handles externally-facing users or SLA commitments beyond internal use
+- HA or read-replica capability is required
+
+### How to scale up
+1. Update the GitHub `production` environment variables:
+   - `POSTGRES_SKU_NAME=Standard_D2ds_v5`
+   - `POSTGRES_SKU_TIER=GeneralPurpose`
+   - `POSTGRES_BACKUP_RETENTION_DAYS=35`
+2. Trigger a production deploy via workflow dispatch.
+3. Azure Flexible Server supports in-place compute tier changes with minimal downtime (brief connection interruption).
+
 ## Cost review runbook
 Run cost review at least monthly and after any SKU/config change.
 
