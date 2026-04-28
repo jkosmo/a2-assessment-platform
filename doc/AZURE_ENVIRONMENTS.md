@@ -1,5 +1,25 @@
 # Azure Environments Runbook
 
+## ⚠️ CRITICAL: PRODUCTION AND STAGING USE DIFFERENT AZURE TENANTS
+
+**DO NOT run `az` CLI commands against production resources without first switching to the production subscription. The local CLI defaults to the staging tenant. Querying without switching gives empty or wrong results and will mislead you.**
+
+| Environment | Azure Tenant ID | Subscription ID | Subscription Name |
+|-------------|-----------------|-----------------|-------------------|
+| **staging** | `c6e381fa-eb4b-42ba-b358-fe83e1166c40` | `df46af7a-1806-4bda-a24b-0b3c112bd261` | Betale for forbruk |
+| **production** | `a018856e-8cf2-4ec4-bbc8-ab18058027dc` | `5b3f760b-42d4-4d78-812c-c059278d1086` | Pay-As-You-Go (A-2) |
+
+Switch before querying production:
+```bash
+az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086
+# ... az commands ...
+az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261  # back to staging
+```
+
+Verify current tenant: `az account show --query "{subscription:id,tenantId:tenantId}" -o table`
+
+Also see `CLAUDE.md` at the repo root for the full context on this — including the ACS email provisioning delay (20–40 min) that can look like a hang.
+
 ## Scope
 Automated provisioning and deployment for:
 - `staging`
