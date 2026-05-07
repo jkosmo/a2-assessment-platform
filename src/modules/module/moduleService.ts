@@ -52,6 +52,7 @@ export async function listModules(
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
       guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+      candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
     }));
@@ -91,6 +92,7 @@ export async function listModules(
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
       guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+      candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
       participantStatus: latest
@@ -175,6 +177,7 @@ export async function getModuleById(
     description: localizeContentText(locale, module.description),
     taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
     guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+    candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
   };
 }
 
@@ -198,6 +201,7 @@ export async function getActiveModuleVersion(
     ...activeVersion,
     taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
     guidanceText: localizeContentText(locale, activeVersion.guidanceText),
+    candidateTaskConstraints: localizeContentText(locale, activeVersion.candidateTaskConstraints),
     submissionSchema: submissionSchemaCodec.parse(activeVersion.submissionSchemaJson),
     assessmentPolicy: assessmentPolicyCodec.parse(activeVersion.assessmentPolicyJson),
   };

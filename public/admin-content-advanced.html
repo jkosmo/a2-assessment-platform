@@ -551,8 +551,10 @@
         <summary data-i18n="adminContent.jsonFallback.versionDetails">Oppgavetekst, veiledning og vurderingspolicy — rå JSON (avansert)</summary>
         <div><label for="moduleVersionTaskText" data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
         <div class="small" data-i18n="adminContent.help.moduleTaskText">This is the assignment shown to participants before they submit.</div>
-        <div><label for="moduleVersionGuidanceText" data-i18n="adminContent.moduleVersion.guidanceText">What we expect in the submission</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
-        <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Describe what a good submission should contain. This is also sent to LLM as evaluation context.</div>
+        <div><label for="moduleVersionCandidateTaskConstraints" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="moduleVersionCandidateTaskConstraints" rows="2"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.moduleCandidateTaskConstraints">1–3 sentences visible to the candidate. Sets scope without giving away the answer.</div>
+        <div><label for="moduleVersionGuidanceText" data-i18n="adminContent.moduleVersion.guidanceText">Assessor scoring notes (hidden from candidate)</label><textarea id="moduleVersionGuidanceText" rows="2"></textarea></div>
+        <div class="small" data-i18n="adminContent.help.moduleGuidanceText">Hidden from the candidate. Used by the LLM as grading context only.</div>
         <div><label for="moduleVersionAssessmentPolicy" data-i18n="adminContent.moduleVersion.assessmentPolicyJson">Assessment policy (JSON, optional)</label><textarea id="moduleVersionAssessmentPolicy" rows="4"></textarea></div>
         <div class="small" data-i18n="adminContent.help.assessmentPolicyJson">Override scoring weights and pass threshold for this module version. Example: <code>{"scoring":{"practicalWeight":60,"mcqWeight":40},"passRules":{"totalMin":65}}</code></div>
       </details>
@@ -815,14 +817,17 @@
       </div>
       <div id="dlgVDPane_enGB" class="dialog-locale-pane active" role="tabpanel" data-locale-pane="en-GB">
         <div><label for="dlgVD_task_enGB" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_enGB" rows="4"></textarea></div>
+        <div><label for="dlgVD_constraints_enGB" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="dlgVD_constraints_enGB" rows="2"></textarea></div>
         <div><label for="dlgVD_guidance_enGB" data-i18n="adminContent.dialog.versionDetails.guidanceText">Guidance text</label><textarea id="dlgVD_guidance_enGB" rows="4"></textarea></div>
       </div>
       <div id="dlgVDPane_nb" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nb">
         <div><label for="dlgVD_task_nb" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_nb" rows="4"></textarea></div>
+        <div><label for="dlgVD_constraints_nb" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="dlgVD_constraints_nb" rows="2"></textarea></div>
         <div><label for="dlgVD_guidance_nb" data-i18n="adminContent.dialog.versionDetails.guidanceText">Guidance text</label><textarea id="dlgVD_guidance_nb" rows="4"></textarea></div>
       </div>
       <div id="dlgVDPane_nn" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nn">
         <div><label for="dlgVD_task_nn" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_nn" rows="4"></textarea></div>
+        <div><label for="dlgVD_constraints_nn" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="dlgVD_constraints_nn" rows="2"></textarea></div>
         <div><label for="dlgVD_guidance_nn" data-i18n="adminContent.dialog.versionDetails.guidanceText">Guidance text</label><textarea id="dlgVD_guidance_nn" rows="4"></textarea></div>
       </div>
       <div class="dialog-footer">

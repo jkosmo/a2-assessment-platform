@@ -20,6 +20,7 @@ export type ModuleDraftInput = {
 export type ModuleDraftResult = {
   taskText: string;
   guidanceText: string;
+  candidateTaskConstraints: string;
   title?: string;
   includesScenario: boolean;
 };
@@ -27,6 +28,7 @@ export type ModuleDraftResult = {
 export type ModuleDraftRevisionInput = {
   taskText: string;
   guidanceText: string;
+  candidateTaskConstraints?: string;
   instruction: string;
   locale: GenerationLocale;
 };
@@ -40,15 +42,25 @@ export type McqGenerationInput = {
   optionCount: number;
 };
 
+export type McqDistractorMetadata = {
+  option: string;
+  whyTempting: string;
+  whyWrongUnderStem: string;
+  wouldBeCorrectIf: string;
+};
+
 export type GeneratedMcqQuestion = {
   stem: string;
   options: string[];
   correctAnswer: string;
   rationale: string;
+  distractorMetadata?: McqDistractorMetadata[];
+  eliminationRisk?: "low" | "medium" | "high";
 };
 
 export type McqGenerationResult = {
   questions: GeneratedMcqQuestion[];
+  validationWarnings?: string[];
 };
 
 export type RevisableMcqQuestion = {
@@ -69,6 +81,7 @@ export type McqRevisionInput = {
 export type ModuleDraftLocalizationInput = {
   taskText: string;
   guidanceText: string;
+  candidateTaskConstraints?: string;
   title?: string;
   sourceLocale: GenerationLocale;
   targetLocale: GenerationLocale;
@@ -106,8 +119,16 @@ export type CourseCopyLocalizationResult = {
 const moduleDraftResponseCodec = z.object({
   taskText: z.string().min(1),
   guidanceText: z.string().min(1),
+  candidateTaskConstraints: z.string().default(""),
   title: z.string().min(1).optional(),
   includesScenario: z.boolean(),
+});
+
+const mcqDistractorMetadataCodec = z.object({
+  option: z.string(),
+  whyTempting: z.string(),
+  whyWrongUnderStem: z.string(),
+  wouldBeCorrectIf: z.string(),
 });
 
 const mcqGenerationResponseCodec = z.object({
@@ -118,6 +139,8 @@ const mcqGenerationResponseCodec = z.object({
         options: z.array(z.string().min(1)).min(2).max(6),
         correctAnswer: z.string().min(1),
         rationale: z.string().min(1),
+        distractorMetadata: z.array(mcqDistractorMetadataCodec).optional(),
+        eliminationRisk: z.enum(["low", "medium", "high"]).optional(),
       }),
     )
     .min(1),
@@ -142,20 +165,20 @@ const LOCALE_DISPLAY: Record<GenerationLocale, string> = {
 
 const DISTRACTOR_GUIDELINES: Record<CertificationLevel, string> = {
   basic:
-    "Distractors may be clearly incorrect but must be thematically related to the domain. The goal is basic recognition.",
+    "ALL options must be thematically plausible and relevant to the domain. A candidate with partial knowledge must pause before rejecting any option. Do not write throwaway distractors that are obviously wrong by category, length, or absurdity.",
   intermediate:
-    "Distractors must be plausible misconceptions or near-misses that a partially informed candidate might choose. Avoid obviously absurd or unrelated options.",
+    "ALL options must be plausible to a partially informed candidate. Every incorrect option must reflect a realistic misconception, wrong priority, or near-correct principle. It must be defensible if one condition in the stem were changed. Eliminate any option a candidate could reject without domain reasoning.",
   advanced:
-    "Distractors must represent common expert-level confusions, subtle definitional errors, or claims that are correct in a different context but wrong here. A well-prepared candidate should have to think carefully.",
+    "ALL options must be substantively plausible. Every distractor must represent a genuine expert-level confusion, subtle definitional error, or claim that is correct in a nearby but different context. The correct answer must not be identifiable by style, length, specificity, or qualifier patterns. A well-prepared candidate must reason carefully about each option.",
 };
 
 const MODULE_DRAFT_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
   basic:
-    "Keep the task approachable. Use plain language, a single clear situation when a scenario is needed, and avoid layered tensions or multiple competing sub-problems. guidanceText must stay high-level and candidate-safe: describe qualities of a strong answer without giving the candidate a near-complete answer outline.",
+    "Keep the task approachable. Use plain language, a single clear situation when a scenario is needed, and avoid layered tensions or multiple competing sub-problems. Maximum scenario complexity: 1 actor, 0 trade-offs, 2 required concepts. Expected answer: 100–200 words, 10 minutes.",
   intermediate:
-    "Aim for moderate complexity. The task may include one realistic tension or trade-off, but it must still be easy to parse on first read. guidanceText should indicate what good reasoning looks like without turning into a checklist the candidate can copy directly.",
+    "Aim for moderate complexity. The task may include one realistic tension or trade-off, but it must still be easy to parse on first read. Maximum scenario complexity: 2 actors, 1 trade-off, 3 required concepts. Expected answer: 250–450 words, 20 minutes.",
   advanced:
-    "Use a more demanding but still readable task. It may involve ambiguity, competing considerations, or nuanced application, but avoid unnecessary complication for its own sake. guidanceText must support high-quality responses without functioning as an answer key or revealing every major point the candidate should make.",
+    "Use a more demanding but still readable task. It may involve ambiguity, competing considerations, or nuanced application, but avoid unnecessary complication for its own sake. Maximum scenario complexity: 3 actors, 2 trade-offs, 4 required concepts. Expected answer: 400–700 words, 30 minutes.",
 };
 
 const MCQ_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
@@ -414,7 +437,7 @@ export function buildModuleDraftPrompts(input: ModuleDraftInput): {
   const systemPrompt =
     "You are a module content author for a professional certification platform. Return strict JSON only - no markdown, no commentary.";
 
-  const userPrompt = `Generate task text and guidance text for a certification module using the source material below as hidden author background only.
+  const userPrompt = `Generate a certification module draft using the source material below as hidden author background only.
 
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
@@ -423,16 +446,17 @@ Generation mode: ${input.generationMode}
 ## Authoring constraints
 
 - The source material is for you only. The candidate will NOT see it.
-- Write taskText and guidanceText so they are fully self-contained and usable on their own.
+- Write taskText so it is fully self-contained and usable on its own.
 - Do not mention "source material", "the text above", "the material", "the document", "the attachment", or equivalent wording.
 - Do not tell the candidate to read, review, use, cite, or refer to any unseen material.
 - Any facts, context, terminology, or scenario details needed by the candidate must be embedded directly in the generated task itself.
 - Use the certification level as the primary difficulty control.
 - ${MODULE_DRAFT_LEVEL_GUIDELINES[input.certificationLevel]}
 - ${GENERATION_MODE_GUIDELINES[input.generationMode].moduleDraft}
-- guidanceText is candidate-facing support, not assessor notes and not an answer key.
-- guidanceText must stay shorter and less specific than a marking rubric.
-- Describe what characterises a strong response at a high level; do not enumerate every concrete point the candidate should include.
+
+## Complexity budget (enforce strictly)
+
+Before finalising, verify that a candidate can start a reasonable answer using only taskText and candidateTaskConstraints, plus expected prerequisite knowledge for this certification level. Do not introduce scenario elements that are not necessary to test the learning objective.
 
 ## Scenario decision
 
@@ -441,17 +465,29 @@ A scenario is a short, realistic situation (4-8 sentences) that grounds the task
 Include a scenario in taskText when:
 - The module assesses situational analysis, ethical reasoning, professional judgement, or practical application of concepts
 - A concrete situation would let candidates demonstrate understanding beyond pure recall
-- The source material describes theory, frameworks, or principles that naturally apply to real situations
 
 Do NOT include a scenario when:
 - The task is primarily factual recall or text summarisation
-- The source material is itself the object of the task
 - A scenario would feel artificial or forced given the content
 
 If including a scenario:
 - Place it at the very top of taskText, clearly labelled "Scenario:" followed by a blank line
 - Keep it realistic, concise (4-8 sentences), and grounded in the facts from the source material without referring to that material
 - The task instruction below the scenario must direct the candidate to use the scenario as the basis for their response
+
+## Two separate output fields — do not mix their roles
+
+**candidateTaskConstraints** (visible to candidate):
+- 1–3 short sentences shown to the candidate alongside the task
+- Clarify expected answer format, reasoning type, and scope
+- Do NOT give away the answer, list expected points, or act as a scoring rubric
+- Example: "Answer with a short recommendation and justify it with the most important considerations from the scenario. State your assumptions clearly. You do not need to cover every possible measure."
+
+**guidanceText** (hidden from candidate — assessor use only):
+- Concrete scoring support for the assessor
+- Name the key points, trade-offs, and distinctions a strong response should cover
+- May be more specific than the task itself — the candidate will NOT see this
+- Include at least one note about what NOT to penalise if the task did not explicitly ask for it
 
 ## Source material (hidden author background)
 
@@ -462,7 +498,8 @@ ${input.sourceMaterial}
 Return a single JSON object:
 {
   "taskText": "full task text in ${LOCALE_DISPLAY[input.locale]}, including scenario at top if appropriate",
-  "guidanceText": "guidance for what a strong response contains, in ${LOCALE_DISPLAY[input.locale]}",
+  "candidateTaskConstraints": "1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.locale]}",
+  "guidanceText": "hidden assessor scoring support in ${LOCALE_DISPLAY[input.locale]}",
   "includesScenario": true or false
 }`;
 
@@ -490,11 +527,22 @@ Generation mode: ${input.generationMode}
 - Do not write stems, options, or rationales that assume the candidate can inspect the hidden source material.
 - If background facts are needed, incorporate them directly into the question stem.
 
-## Distractor quality
+## Mandatory distractor quality — applies to every question
 
 ${DISTRACTOR_GUIDELINES[input.certificationLevel]}
 ${MCQ_LEVEL_GUIDELINES[input.certificationLevel]}
 ${GENERATION_MODE_GUIDELINES[input.generationMode].mcq}
+
+Every option must be plausible to a partially informed candidate. Do not create throwaway distractors.
+
+For each incorrect option, all three of the following must be true:
+1. It reflects a realistic misconception, overgeneralisation, wrong priority, or nearby correct principle.
+2. It would be correct or defensible if one relevant condition in the stem were different.
+3. It cannot be eliminated without domain reasoning.
+
+The correct answer must be the best answer under the exact conditions in the stem, not the only answer that sounds professional.
+
+Reject and rewrite the question if any option is obviously wrong, irrelevant, too broad, too narrow, stylistically weaker, or categorically different from the correct answer.
 
 ## Option parity
 
@@ -505,8 +553,7 @@ Rules:
 - If the correct answer is a short phrase, keep all options short. If it is a full sentence, make all options full sentences of similar length.
 - Never pad distractors with vague filler words just to match length; instead, write distractors that are substantively comparable but wrong.
 - Review each set of ${input.optionCount} options before finalising: if any single option stands out in length or detail, rewrite it.
-- Avoid obviously wrong distractors, joke answers, or options that are noticeably more generic than the correct answer.
-- At intermediate and advanced levels, ensure at least one distractor is close enough to require real discrimination.
+- The correct answer must NOT have clearly more professional wording, more specific qualifiers, or a more "textbook" tone than the distractors.
 
 Each question must have exactly ${input.optionCount} answer options. The correctAnswer must be one of the options verbatim.
 Write all text in ${LOCALE_DISPLAY[input.locale]}.
@@ -517,14 +564,24 @@ ${input.sourceMaterial}
 
 ## Return format
 
-Return a single JSON object:
+Return a single JSON object. For each incorrect option, include distractorMetadata with whyTempting, whyWrongUnderStem, and wouldBeCorrectIf. Set eliminationRisk to "low" if all distractors require domain reasoning to reject, "medium" if one could be eliminated without reasoning, "high" if one or more can be eliminated by non-domain reasoning (length, category, absurdity).
+
 {
   "questions": [
     {
       "stem": "question text",
-      "options": ["option 1", "option 2", "option 3"],
+      "options": ["option 1", "option 2", "option 3", "option 4"],
       "correctAnswer": "option 1",
-      "rationale": "brief explanation of why the correct answer is right and why the distractors are wrong"
+      "rationale": "explanation of why the correct answer is right and why each distractor is wrong",
+      "distractorMetadata": [
+        {
+          "option": "option 2",
+          "whyTempting": "why a partially informed candidate might choose this",
+          "whyWrongUnderStem": "why it is wrong given the exact conditions in the stem",
+          "wouldBeCorrectIf": "which condition in the stem would need to change for this to be correct"
+        }
+      ],
+      "eliminationRisk": "low"
     }
   ]
 }`;
@@ -539,6 +596,10 @@ export function buildModuleDraftRevisionPrompts(input: ModuleDraftRevisionInput)
   const systemPrompt =
     "You are a module content editor for a professional certification platform. Revise the provided draft based on the user's change request. Return strict JSON only - no markdown, no commentary.";
 
+  const candidateConstraintsSection = input.candidateTaskConstraints
+    ? `\ncandidateTaskConstraints (visible to candidate):\n${input.candidateTaskConstraints}`
+    : "";
+
   const userPrompt = `Revise the following certification module draft based on the instruction below.
 
 Language: ${LOCALE_DISPLAY[input.locale]}
@@ -546,17 +607,20 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 ## Revision rules
 
 - Apply the requested change directly to the draft.
-- Keep the output self-contained for candidates.
+- Keep taskText self-contained for candidates.
 - Do not mention hidden source material or the editing process.
 - Preserve the overall structure unless the instruction clearly asks for structural changes.
 - If the task includes a scenario, keep it at the top of taskText labelled "Scenario:".
+- candidateTaskConstraints is visible to the candidate — keep it brief (1–3 sentences) and do not turn it into an answer outline.
+- guidanceText is hidden from the candidate — it is assessor-only scoring support.
 
 ## Current draft
 
 taskText:
 ${input.taskText}
+${candidateConstraintsSection}
 
-guidanceText:
+guidanceText (hidden assessor notes):
 ${input.guidanceText}
 
 ## Revision instruction
@@ -568,7 +632,8 @@ ${input.instruction}
 Return a single JSON object:
 {
   "taskText": "revised task text in ${LOCALE_DISPLAY[input.locale]}",
-  "guidanceText": "revised guidance text in ${LOCALE_DISPLAY[input.locale]}",
+  "candidateTaskConstraints": "revised 1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.locale]}",
+  "guidanceText": "revised hidden assessor scoring support in ${LOCALE_DISPLAY[input.locale]}",
   "includesScenario": true or false
 }`;
 
@@ -645,6 +710,10 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
     ? `\ntitle:\n${input.title}\n`
     : "";
 
+  const candidateConstraintsSection = input.candidateTaskConstraints
+    ? `\ncandidateTaskConstraints (visible to candidate):\n${input.candidateTaskConstraints}\n`
+    : "";
+
   const titleReturnField = input.title
     ? `\n  "title": "translated title in ${LOCALE_DISPLAY[input.targetLocale]}",`
     : "";
@@ -654,8 +723,10 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
 ## Translation rules
 
 - Preserve meaning, structure, tone and difficulty.
-- Keep the content fully self-contained for candidates.
+- Keep taskText fully self-contained for candidates.
 - If taskText starts with "Scenario:", preserve that label in the target language.
+- candidateTaskConstraints is visible to the candidate — translate faithfully and keep it brief (1–3 sentences).
+- guidanceText is hidden assessor-only content — translate faithfully and preserve all scoring details.
 - Do not add or remove assessment requirements.
 - Do not summarise.
 
@@ -663,8 +734,8 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
 ${titleSection}
 taskText:
 ${input.taskText}
-
-guidanceText:
+${candidateConstraintsSection}
+guidanceText (hidden assessor notes):
 ${input.guidanceText}
 
 ## Return format
@@ -672,7 +743,8 @@ ${input.guidanceText}
 Return a single JSON object:
 {${titleReturnField}
   "taskText": "translated task text in ${LOCALE_DISPLAY[input.targetLocale]}",
-  "guidanceText": "translated guidance text in ${LOCALE_DISPLAY[input.targetLocale]}",
+  "candidateTaskConstraints": "translated 1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.targetLocale]}",
+  "guidanceText": "translated hidden assessor scoring support in ${LOCALE_DISPLAY[input.targetLocale]}",
   "includesScenario": true or false
 }`;
 

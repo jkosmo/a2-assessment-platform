@@ -117,6 +117,7 @@ const mcqSetTitleInput = document.getElementById("mcqSetTitle");
 const mcqQuestionsJsonInput = document.getElementById("mcqQuestionsJson");
 
 const moduleVersionTaskTextInput = document.getElementById("moduleVersionTaskText");
+const moduleVersionCandidateTaskConstraintsInput = document.getElementById("moduleVersionCandidateTaskConstraints");
 const moduleVersionGuidanceTextInput = document.getElementById("moduleVersionGuidanceText");
 const moduleVersionSubmissionSchemaInput = document.getElementById("moduleVersionSubmissionSchema");
 const moduleVersionAssessmentPolicyInput = document.getElementById("moduleVersionAssessmentPolicy");
@@ -927,6 +928,7 @@ function getEditorSnapshot() {
     mcqSetTitle: normalizeSnapshotValue(mcqSetTitleInput.value),
     mcqQuestionsJson: normalizeSnapshotValue(mcqQuestionsJsonInput.value),
     moduleVersionTaskText: normalizeSnapshotValue(moduleVersionTaskTextInput.value),
+    moduleVersionCandidateTaskConstraints: normalizeSnapshotValue(moduleVersionCandidateTaskConstraintsInput?.value ?? ""),
     moduleVersionGuidanceText: normalizeSnapshotValue(moduleVersionGuidanceTextInput.value),
     moduleVersionSubmissionSchema: normalizeSnapshotValue(moduleVersionSubmissionSchemaInput.value),
     moduleVersionAssessmentPolicy: normalizeSnapshotValue(moduleVersionAssessmentPolicyInput.value),
@@ -955,6 +957,7 @@ function buildEditorSnapshotFromDraft(draft) {
     mcqSetTitle: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.title, "")),
     mcqQuestionsJson: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.questions, "")),
     moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
+    moduleVersionCandidateTaskConstraints: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.candidateTaskConstraints, "")),
     moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
     moduleVersionSubmissionSchema: normalizeSnapshotValue(
       JSON.stringify(normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchema), null, 2),
@@ -1207,6 +1210,7 @@ function applyImportDraftToForm(draft) {
   mcqQuestionsJsonInput.value = formatEditorValue(draft?.mcqSet?.questions, "[]");
 
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
+  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(draft?.moduleVersion?.candidateTaskConstraints, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema),
@@ -1251,6 +1255,7 @@ function populateFormFromModuleExport(moduleExport) {
   mcqQuestionsJsonInput.value = formatEditorValue(mcqSetVersion?.questions, "[]");
 
   moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
+  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(moduleVersion?.candidateTaskConstraints, "");
   moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(moduleVersion?.submissionSchema),
@@ -1296,6 +1301,10 @@ function buildParticipantPreviewPayload() {
       title: moduleTitle,
       description: parseLocalizedPreviewField(moduleDescriptionInput.value, "adminContent.module.description"),
       taskText,
+      candidateTaskConstraints: parseLocalizedPreviewField(
+        moduleVersionCandidateTaskConstraintsInput?.value ?? "",
+        "adminContent.moduleVersion.candidateTaskConstraints",
+      ),
       guidanceText: parseLocalizedPreviewField(
         moduleVersionGuidanceTextInput.value,
         "adminContent.moduleVersion.guidanceText",
@@ -1487,6 +1496,7 @@ function setDefaultFormValues() {
   promptExamplesJsonInput.value = formatJsonDefault("adminContent.defaults.examplesJson");
   mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
+  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = "";
   moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
@@ -1638,6 +1648,7 @@ function clearVersionFields() {
   mcqSetTitleInput.value = "";
   mcqQuestionsJsonInput.value = "";
   moduleVersionTaskTextInput.value = "";
+  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = "";
   moduleVersionGuidanceTextInput.value = "";
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
@@ -1807,6 +1818,7 @@ async function handleCreateModule(options = { silent: false }) {
     mcqSetTitle: mcqSetTitleInput.value,
     mcqQuestionsJson: mcqQuestionsJsonInput.value,
     moduleVersionTaskText: moduleVersionTaskTextInput.value,
+    moduleVersionCandidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
     moduleVersionGuidanceText: moduleVersionGuidanceTextInput.value,
     moduleVersionSubmissionSchema: moduleVersionSubmissionSchemaInput.value,
     moduleVersionAssessmentPolicy: moduleVersionAssessmentPolicyInput.value,
@@ -1834,6 +1846,7 @@ async function handleCreateModule(options = { silent: false }) {
   mcqSetTitleInput.value = savedVersionFields.mcqSetTitle;
   mcqQuestionsJsonInput.value = savedVersionFields.mcqQuestionsJson;
   moduleVersionTaskTextInput.value = savedVersionFields.moduleVersionTaskText;
+  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = savedVersionFields.moduleVersionCandidateTaskConstraints ?? "";
   moduleVersionGuidanceTextInput.value = savedVersionFields.moduleVersionGuidanceText;
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(savedVersionFields.moduleVersionSubmissionSchema),
@@ -2024,6 +2037,11 @@ async function handleCreateModuleVersion(options = { silent: false }) {
     : undefined;
   const payload = {
     taskText: parseLocalizedTextField(moduleVersionTaskTextInput.value, "adminContent.moduleVersion.taskText"),
+    candidateTaskConstraints: parseLocalizedTextField(
+      moduleVersionCandidateTaskConstraintsInput?.value ?? "",
+      "adminContent.moduleVersion.candidateTaskConstraints",
+      { required: false },
+    ),
     guidanceText: parseLocalizedTextField(
       moduleVersionGuidanceTextInput.value,
       "adminContent.moduleVersion.guidanceText",
@@ -2475,6 +2493,7 @@ function openVersionDetailsDialog(triggerBtn) {
   _dialogTriggerRef = triggerBtn ?? null;
 
   const parsedTask = parseLocalizedSafe(moduleVersionTaskTextInput.value);
+  const parsedConstraints = parseLocalizedSafe(moduleVersionCandidateTaskConstraintsInput?.value ?? "");
   const parsedGuidance = parseLocalizedSafe(moduleVersionGuidanceTextInput.value);
 
   for (const locale of ["en-GB", "nb", "nn"]) {
@@ -2484,8 +2503,10 @@ function openVersionDetailsDialog(triggerBtn) {
       return locale === "en-GB" ? (typeof parsed === "string" ? parsed : "") : "";
     };
     const taskEl = document.getElementById(`dlgVD_task_${sfx}`);
+    const constraintsEl = document.getElementById(`dlgVD_constraints_${sfx}`);
     const guidanceEl = document.getElementById(`dlgVD_guidance_${sfx}`);
     if (taskEl) taskEl.value = getString(parsedTask);
+    if (constraintsEl) constraintsEl.value = getString(parsedConstraints);
     if (guidanceEl) guidanceEl.value = getString(parsedGuidance);
   }
 
@@ -2498,14 +2519,16 @@ function openVersionDetailsDialog(triggerBtn) {
 function applyVersionDetailsDialog() {
   const dialog = document.getElementById("dialogVersionDetails");
 
-  const tasks = {}, guidances = {};
+  const tasks = {}, constraints = {}, guidances = {};
   for (const locale of ["en-GB", "nb", "nn"]) {
     const sfx = _localeToSuffix[locale];
     tasks[locale] = document.getElementById(`dlgVD_task_${sfx}`)?.value ?? "";
+    constraints[locale] = document.getElementById(`dlgVD_constraints_${sfx}`)?.value ?? "";
     guidances[locale] = document.getElementById(`dlgVD_guidance_${sfx}`)?.value ?? "";
   }
 
   moduleVersionTaskTextInput.value = formatEditorValue(tasks);
+  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(constraints);
   moduleVersionGuidanceTextInput.value = formatEditorValue(guidances);
 
   dirtyCards.add("versionDetails");
@@ -3930,6 +3953,7 @@ function navigateToConversation() {
       source: "advanced",
       draft: {
         taskText: moduleVersionTaskTextInput?.value ?? "",
+        candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
         guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
         mcqQuestions,
       },
@@ -3979,11 +4003,15 @@ function applyHandoffFromShell(moduleId) {
   const handoff = readAndClearHandoff(moduleId);
   if (!handoff || handoff.source !== "shell" || !handoff.draft) return;
 
-  const { taskText, guidanceText, mcqQuestions } = handoff.draft;
-  if (!taskText && !guidanceText && !(mcqQuestions?.length > 0)) return;
+  const { taskText, candidateTaskConstraints, guidanceText, mcqQuestions } = handoff.draft;
+  if (!taskText && !candidateTaskConstraints && !guidanceText && !(mcqQuestions?.length > 0)) return;
 
   if (moduleVersionTaskTextInput) {
     moduleVersionTaskTextInput.value = formatEditorValue(taskText, "");
+    dirtyCards.add("versionDetails");
+  }
+  if (moduleVersionCandidateTaskConstraintsInput && candidateTaskConstraints) {
+    moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(candidateTaskConstraints, "");
     dirtyCards.add("versionDetails");
   }
   if (moduleVersionGuidanceTextInput) {
@@ -4087,6 +4115,7 @@ function renderAdvancedPreview() {
     title: moduleTitleInput?.value ?? "",
     description: moduleDescriptionInput?.value ?? "",
     taskText: moduleVersionTaskTextInput?.value ?? "",
+    candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
     guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
     mcqQuestions,
     versionChain,

@@ -168,6 +168,7 @@ model ModuleVersion {
   versionNo                 Int
   taskText                  String
   guidanceText              String?
+  candidateTaskConstraints  String?
   rubricVersionId           String
   promptTemplateVersionId   String
   mcqSetVersionId           String

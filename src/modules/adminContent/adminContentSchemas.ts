@@ -100,6 +100,7 @@ export const assessmentPolicyBodySchema = z.object({
 export const moduleVersionBodySchema = z.object({
   taskText: localizedTextSchema,
   guidanceText: localizedTextSchema.optional(),
+  candidateTaskConstraints: localizedTextSchema.optional(),
   rubricVersionId: z.string().min(1),
   promptTemplateVersionId: z.string().min(1),
   mcqSetVersionId: z.string().min(1),
@@ -134,6 +135,7 @@ export const moduleDraftGenerationBodySchema = z.object({
 export const moduleDraftRevisionBodySchema = z.object({
   taskText: z.string().trim().min(1),
   guidanceText: z.string().trim().min(1),
+  candidateTaskConstraints: z.string().trim().optional(),
   instruction: z.string().trim().min(1),
   locale: generationLocaleSchema,
 });
@@ -158,6 +160,7 @@ export const mcqRevisionBodySchema = z.object({
 export const moduleDraftLocalizationBodySchema = z.object({
   taskText: z.string().trim().min(1),
   guidanceText: z.string().trim().min(1),
+  candidateTaskConstraints: z.string().trim().optional(),
   title: z.string().trim().min(1).optional(),
   sourceLocale: generationLocaleSchema,
   targetLocale: generationLocaleSchema,

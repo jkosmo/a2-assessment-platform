@@ -80,6 +80,9 @@ export async function getModuleContentBundle(moduleId: string) {
     versionNo: version.versionNo,
     taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
     guidanceText: decodeLocalizedText(version.guidanceText) ?? version.guidanceText,
+    candidateTaskConstraints: version.candidateTaskConstraints
+      ? (decodeLocalizedText(version.candidateTaskConstraints) ?? version.candidateTaskConstraints)
+      : undefined,
     submissionSchema: version.submissionSchemaJson ? safeParseJson(version.submissionSchemaJson) : null,
     assessmentPolicy: version.assessmentPolicyJson ? safeParseJson(version.assessmentPolicyJson) : null,
     rubricVersionId: version.rubricVersionId,

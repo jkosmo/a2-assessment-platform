@@ -93,7 +93,7 @@ describe("llmAssessmentService azure_openai adapter", () => {
     expect(payload.max_completion_tokens).toBeUndefined();
     const messages = payload.messages as Array<{ content: string }>;
     expect(messages[1].content).toContain("Participant assignment context:");
-    expect(messages[1].content).toContain("Expected submission content context:");
+    expect(messages[1].content).toContain("Assessor expected content (hidden from candidate");
     expect(messages[1].content).toContain("Scoring constraint:");
     expect(messages[1].content).toContain("Do not import requirements, criteria, or expectations from your own domain knowledge");
     expect(messages[1].content).toContain("evidence_sufficiency");

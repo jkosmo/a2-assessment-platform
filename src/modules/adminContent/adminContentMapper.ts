@@ -65,6 +65,7 @@ export function toCreateModuleVersionInput(data: ModuleVersionBody, moduleId: st
     moduleId,
     taskText: localizedTextCodec.serialize(data.taskText),
     guidanceText: data.guidanceText ? localizedTextCodec.serialize(data.guidanceText) : undefined,
+    candidateTaskConstraints: data.candidateTaskConstraints ? localizedTextCodec.serialize(data.candidateTaskConstraints) : undefined,
     rubricVersionId: data.rubricVersionId,
     promptTemplateVersionId: data.promptTemplateVersionId,
     mcqSetVersionId: data.mcqSetVersionId,

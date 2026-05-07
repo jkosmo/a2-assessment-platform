@@ -7,6 +7,24 @@ This document tracks release versions and what each version includes.
 - Every push to remote must include a version bump.
 - Every version bump must update this document.
 
+## 1.1.0 - 2026-05-07
+
+feat(content-quality): P0 difficulty-balance improvements — #369 #370 #371
+
+- prisma/schema.prisma: added `candidateTaskConstraints String?` to ModuleVersion
+- src/modules/adminContent/llmContentGenerationService.ts: split guidanceText into candidateTaskConstraints (visible, 1–3 sentences) + guidanceText (hidden assessor scoring notes); tightened MCQ prompt so ALL options must be plausible; added per-distractor metadata (whyTempting, whyWrongUnderStem, wouldBeCorrectIf, eliminationRisk) returned by generation LLM; added explicit complexity budgets per cert level
+- src/modules/adminContent/contentValidationService.ts: new file — pre-publish validation gate blocking on eliminationRisk:"high", warning on medium pattern, missing candidateTaskConstraints when guidanceText present, taskText too short
+- src/modules/assessment/llmAssessmentService.ts: relabelled guidanceText as "Assessor expected content (hidden from candidate)" in scoring prompt; added "do not penalise candidate for hidden expectations" constraint
+- src/modules/adminContent/adminContentSchemas.ts: candidateTaskConstraints added to moduleVersion, revision, and localization body schemas
+- src/modules/adminContent/adminContentMapper.ts, adminContentRepository.ts, adminContentCommands.ts, adminContentQueries.ts: full plumbing for candidateTaskConstraints through create/clone/query flow
+- src/modules/module/moduleService.ts, src/repositories/moduleRepository.ts: candidateTaskConstraints included in all module response shapes
+- src/routes/adminContent.ts: MCQ generation endpoint returns validation: { valid, issues } alongside questions
+- public/static/admin-content-shell.js: full candidateTaskConstraints support in session draft, preview, edit, save, duplicate, and localization flows
+- public/static/admin-content-preview.js: renders candidateTaskConstraints block between taskText and guidanceText
+- public/i18n/admin-content-translations.js: updated guidanceText label to "Assessor scoring notes (hidden from candidate)"; added candidateTaskConstraints key in en-GB/nb/nn
+- public/participant.html, public/participant.js: display candidateTaskConstraints to participant when present
+- public/i18n/participant-translations.js: added submission.candidateTaskConstraints key in en-GB/nb/nn
+
 ## 1.0.7 - 2026-04-27
 
 fix(ui): fjern kalibrering fra toppmeny; lokaliser sertifiseringsnivå i opprettingsdialog; hopp over nivåspørsmål ved innholdsgenerering om nivå allerede er satt

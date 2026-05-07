@@ -99,7 +99,8 @@ function renderPreviewMcqQuestions(questions, locale, t, tf) {
  *   title           – string or localized object
  *   description     – string or localized object (optional)
  *   taskText        – string or localized object (optional)
- *   guidanceText    – string or localized object (optional)
+ *   guidanceText    – string or localized object (optional, assessor-only)
+ *   candidateTaskConstraints – string or localized object (optional, visible to candidate)
  *   mcqQuestions    – array (optional)
  *   versionChain    – string, e.g. "Modul v2 · MCQ v1" (optional)
  *   badgeClass      – "live" | "draft" | "shell"
@@ -117,6 +118,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     description = "",
     taskText = "",
     guidanceText = "",
+    candidateTaskConstraints = "",
     mcqQuestions = [],
     versionChain = "",
     badgeClass = "shell",
@@ -132,6 +134,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
   const localizedDescription = localize(description);
   const localizedTask = localize(taskText);
   const localizedGuidance = localize(guidanceText);
+  const localizedCandidateConstraints = localize(candidateTaskConstraints);
   const mcqCount = Array.isArray(mcqQuestions) ? mcqQuestions.length : 0;
 
   const titleHtml = localizedTitle
@@ -146,6 +149,10 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
   const taskTextHtml = localizedTask
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.taskText"))}</div>
        <div class="preview-text-block">${escapeHtml(localizedTask)}</div>`
+    : "";
+  const candidateConstraintsHtml = localizedCandidateConstraints
+    ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.candidateTaskConstraints"))}</div>
+       <div class="preview-text-block preview-text-candidate-constraints">${escapeHtml(localizedCandidateConstraints)}</div>`
     : "";
   const guidanceTextHtml = localizedGuidance
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
@@ -164,6 +171,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ${descriptionHtml}
     ${versionChainHtml}
     ${taskTextHtml}
+    ${candidateConstraintsHtml}
     ${guidanceTextHtml}
     ${mcqCountHtml}
     ${mcqHtml}

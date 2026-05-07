@@ -36,6 +36,8 @@ const selectedModuleDescription = document.getElementById("selectedModuleDescrip
 const selectedModuleStatus = document.getElementById("selectedModuleStatus");
 const selectedModuleBrief = document.getElementById("selectedModuleBrief");
 const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
+const selectedModuleCandidateConstraintsSection = document.getElementById("selectedModuleCandidateConstraintsSection");
+const selectedModuleCandidateTaskConstraints = document.getElementById("selectedModuleCandidateTaskConstraints");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 const appealIdLabel = document.getElementById("appealId");
@@ -273,6 +275,7 @@ function buildPreviewModuleFromPayload(payload) {
     description: localizePreviewText(previewModule.description).trim(),
     taskText: localizePreviewText(previewModule.taskText).trim(),
     guidanceText: localizePreviewText(previewModule.guidanceText).trim(),
+    candidateTaskConstraints: localizePreviewText(previewModule.candidateTaskConstraints).trim(),
     previewQuestions: normalizePreviewQuestions(previewModule.questions),
     submissionSchema:
       previewModule.submissionSchema && typeof previewModule.submissionSchema === "object" && !Array.isArray(previewModule.submissionSchema)
@@ -617,6 +620,9 @@ function renderSelectedModuleSummary() {
   selectedModuleStatus.textContent = statusSummary;
   selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
   selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
+  const constraints = selectedModule?.candidateTaskConstraints ?? "";
+  if (selectedModuleCandidateTaskConstraints) selectedModuleCandidateTaskConstraints.textContent = constraints;
+  if (selectedModuleCandidateConstraintsSection) selectedModuleCandidateConstraintsSection.classList.toggle("hidden", !constraints);
   selectedModuleBrief.classList.toggle(
     "hidden",
     !(selectedModule && selectedModule.taskText),

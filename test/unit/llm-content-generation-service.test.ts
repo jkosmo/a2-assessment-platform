@@ -20,9 +20,7 @@ describe("llm content generation prompts", () => {
     });
 
     expect(userPrompt).toContain("The source material is for you only. The candidate will NOT see it.");
-    expect(userPrompt).toContain(
-      "Write taskText and guidanceText so they are fully self-contained and usable on their own.",
-    );
+    expect(userPrompt).toContain("Write taskText so it is fully self-contained and usable on its own.");
     expect(userPrompt).toContain('Do not mention "source material"');
     expect(userPrompt).toContain("must be embedded directly in the generated task itself.");
     expect(userPrompt).toContain("use the scenario as the basis for their response");
@@ -58,9 +56,9 @@ describe("llm content generation prompts", () => {
     }).userPrompt;
 
     expect(basicPrompt).toContain("Use the certification level as the primary difficulty control.");
-    expect(basicPrompt).toContain("guidanceText must stay high-level and candidate-safe");
+    expect(basicPrompt).toContain("Maximum scenario complexity: 1 actor");
     expect(advancedPrompt).toContain("It may involve ambiguity, competing considerations, or nuanced application");
-    expect(advancedPrompt).toContain("must support high-quality responses without functioning as an answer key");
+    expect(advancedPrompt).toContain("Maximum scenario complexity: 3 actors");
   });
 
   it("extracts explicit MCQ targets from compact option references", () => {
@@ -227,7 +225,7 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("Questions should test nuanced understanding and discrimination.");
     expect(userPrompt).toContain("All 5 options in a question must be comparable in length and level of detail.");
     expect(userPrompt).toContain("Review each set of 5 options before finalising");
-    expect(userPrompt).toContain("At intermediate and advanced levels, ensure at least one distractor is close enough to require real discrimination.");
+    expect(userPrompt).toContain("at least one distractor should be close enough that the candidate must reason carefully before choosing");
   });
 
   it("builds draft revision prompts around an explicit change instruction", () => {
@@ -335,8 +333,8 @@ describe("llm content generation prompts", () => {
       });
 
       expect(userPrompt).toContain("Certification level: basic");
-      expect(userPrompt).toContain("clearly incorrect but must be thematically related");
-      expect(userPrompt).toContain("basic recognition");
+      expect(userPrompt).toContain("thematically plausible and relevant to the domain");
+      expect(userPrompt).toContain("core recognition and basic understanding");
     });
 
     it("intermediate level: requires plausible misconceptions as distractors", () => {
@@ -350,8 +348,8 @@ describe("llm content generation prompts", () => {
       });
 
       expect(userPrompt).toContain("Certification level: intermediate");
-      expect(userPrompt).toContain("plausible misconceptions or near-misses");
-      expect(userPrompt).toContain("partially informed candidate");
+      expect(userPrompt).toContain("plausible to a partially informed candidate");
+      expect(userPrompt).toContain("realistic misconception, wrong priority, or near-correct principle");
     });
 
     it("advanced level: requires expert-level confusion distractors", () => {
@@ -365,8 +363,8 @@ describe("llm content generation prompts", () => {
       });
 
       expect(userPrompt).toContain("Certification level: advanced");
-      expect(userPrompt).toContain("common expert-level confusions");
-      expect(userPrompt).toContain("well-prepared candidate should have to think carefully");
+      expect(userPrompt).toContain("genuine expert-level confusion");
+      expect(userPrompt).toContain("A well-prepared candidate must reason carefully about each option");
     });
 
     it("distractor guidelines differ across levels", () => {

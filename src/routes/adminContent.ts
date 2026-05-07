@@ -44,6 +44,7 @@ import {
   reviseModuleDraft,
   reviseMcqQuestions,
 } from "../modules/adminContent/llmContentGenerationService.js";
+import { validateMcqDistractors } from "../modules/adminContent/contentValidationService.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -480,7 +481,14 @@ adminContentRouter.post("/generate/mcq", generateLimiter, async (request, respon
       questionCount: data.questionCount ?? 10,
       optionCount: data.optionCount ?? 4,
     });
-    response.json({ questions: result.questions });
+    const validation = validateMcqDistractors(result.questions);
+    response.json({
+      questions: result.questions,
+      validation: {
+        valid: validation.valid,
+        issues: validation.issues,
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "generation_failed", message });
