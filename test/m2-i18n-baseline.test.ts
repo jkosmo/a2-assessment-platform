@@ -428,7 +428,7 @@ describe("MVP i18n baseline", () => {
     const userMessage = parsedRequestBody.messages.find((message) => message.role === "user");
 
     expect(userMessage?.content).toContain("Participant assignment context:\nNorsk oppgavekontekst.");
-    expect(userMessage?.content).toContain("Expected submission content context:\nNorsk veiledningskontekst.");
+    expect(userMessage?.content).toContain("Assessor expected content (hidden from candidate — grading support only):\nNorsk veiledningskontekst.");
     expect(userMessage?.content).not.toContain("Complete the assignment in English.");
     expect(userMessage?.content).not.toContain("Include assurance notes in English.");
   });
