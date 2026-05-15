@@ -74,13 +74,6 @@ modulesRouter.get("/", async (request, response) => {
     participantFacing,
   });
 
-  // Sikkerhetsfiks: Fjern sensornotater fra responsen hvis det er deltaker-visning
-  if (participantFacing && Array.isArray(modules)) {
-    modules.forEach((m: any) => {
-      if (m.guidanceText) delete m.guidanceText;
-    });
-  }
-
   response.json({
     modules,
     filters: {
@@ -126,11 +119,6 @@ modulesRouter.get("/:moduleId", async (request, response) => {
     return;
   }
 
-  const isParticipantOnly = !roles.some((r) => r !== "PARTICIPANT");
-  if (isParticipantOnly && (module as any).guidanceText) {
-    delete (module as any).guidanceText;
-  }
-
   response.json({ module });
 });
 
@@ -145,11 +133,6 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
       .status(404)
       .json({ error: "not_found", message: t(locale, "module_not_found") });
     return;
-  }
-
-  const isParticipantOnly = !roles.some((r) => r !== "PARTICIPANT");
-  if (isParticipantOnly && (activeVersion as any).guidanceText) {
-    delete (activeVersion as any).guidanceText;
   }
 
   response.json({ activeVersion });
