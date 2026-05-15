@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-function buildRequest(headers: Record<string, string> = {}) {
+function buildRequest(
+  headers: Record<string, string> = {},
+  options: { method?: string; path?: string; originalUrl?: string; url?: string } = {},
+) {
   const normalized = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
   );
+  const path = options.path ?? "/";
 
   return {
+    method: options.method ?? "GET",
+    path,
+    originalUrl: options.originalUrl ?? path,
+    url: options.url ?? path,
     header(name: string) {
       return normalized[name.toLowerCase()];
     },
@@ -153,6 +161,60 @@ describe("authenticate middleware", () => {
     expect(syncEntraGroupRoles).not.toHaveBeenCalled();
     expect(getActiveRoles).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("allows pseudonymized users to reach the idempotent deletion endpoint", async () => {
+    const upsertUserFromPrincipal = vi.fn().mockResolvedValue({
+      id: "user-1",
+      activeStatus: false,
+      isAnonymized: true,
+    });
+    const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
+    const getActiveRoles = vi.fn().mockResolvedValue(["PARTICIPANT"]);
+
+    vi.doMock("../src/config/env.js", () => ({
+      env: {
+        AUTH_MODE: "mock",
+        ENTRA_TENANT_ID: undefined,
+        ENTRA_AUDIENCE: undefined,
+        DEFAULT_LOCALE: "en-GB",
+        MOCK_DEFAULT_USER_ID: "participant-1",
+        MOCK_DEFAULT_EMAIL: "participant@company.com",
+        MOCK_DEFAULT_NAME: "Platform Participant",
+        MOCK_DEFAULT_DEPARTMENT: "Consulting",
+      },
+    }));
+    vi.doMock("../src/repositories/userRepository.js", () => ({
+      upsertUserFromPrincipal,
+      syncEntraGroupRoles,
+      getActiveRoles,
+    }));
+
+    const { authenticate } = await import("../src/auth/authenticate.js");
+    const request = buildRequest(
+      {
+        "x-user-id": "participant-1",
+        "x-user-email": "participant@company.com",
+        "x-user-name": "Platform Participant",
+        "x-user-department": "Consulting",
+        "x-user-roles": "PARTICIPANT",
+      },
+      { method: "POST", path: "/me/deletion", originalUrl: "/api/me/deletion" },
+    );
+    const response = buildResponse();
+    const next = vi.fn();
+
+    await authenticate(request as never, response as never, next);
+
+    expect(response.status).not.toHaveBeenCalled();
+    expect(response.json).not.toHaveBeenCalled();
+    expect(syncEntraGroupRoles).not.toHaveBeenCalled();
+    expect(getActiveRoles).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+    expect(request.context).toMatchObject({
+      userId: "user-1",
+      roles: [],
+    });
   });
 
   it("returns 403 when login email is linked to a different external identity", async () => {

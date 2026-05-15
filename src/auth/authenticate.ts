@@ -49,6 +49,18 @@ function isIdentityReconciliationError(error: unknown): error is { code: string 
   );
 }
 
+function isIdempotentPseudonymizationRequest(request: Request): boolean {
+  if (request.method !== "POST") {
+    return false;
+  }
+
+  const paths = [request.path, request.url, request.originalUrl]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.split("?")[0]);
+
+  return paths.some((path) => path === "/me/deletion" || path === "/api/me/deletion");
+}
+
 function principalFromMockHeaders(request: Request): AuthPrincipal {
   const headerRoles = request.header("x-user-roles");
   const roleHints = headerRoles ? headerRoles.split(",") : [];
@@ -141,6 +153,19 @@ export async function authenticate(request: Request, response: Response, next: N
 
     // Sikkerhetsfiks: Hindre tilgang for brukere som er deaktivert via org-sync (#15)
     if (user.activeStatus === false) {
+      if (user.isAnonymized === true && isIdempotentPseudonymizationRequest(request)) {
+        const correlationId = request.context?.correlationId;
+        request.context = {
+          correlationId,
+          principal,
+          userId: user.id,
+          roles: [],
+          locale,
+        };
+        next();
+        return;
+      }
+
       console.warn(`Access denied for deactivated user: ${user.id}`);
       response.status(403).json({
         error: "forbidden",

@@ -114,7 +114,12 @@ describe("user repository", () => {
 
   it("does not reactivate inactive users when their external identity logs in", async () => {
     findUnique
-      .mockResolvedValueOnce({ id: "user-1", email: "participant@company.com", activeStatus: false })
+      .mockResolvedValueOnce({
+        id: "user-1",
+        email: "participant@company.com",
+        activeStatus: false,
+        isAnonymized: false,
+      })
       .mockResolvedValueOnce({ id: "user-1", externalId: "participant-1" });
     update.mockResolvedValueOnce({
       id: "user-1",
@@ -143,5 +148,34 @@ describe("user repository", () => {
       },
     });
     expect(result.activeStatus).toBe(false);
+  });
+
+  it("does not restore identifying fields for pseudonymized users", async () => {
+    findUnique
+      .mockResolvedValueOnce({
+        id: "user-1",
+        email: "pseudo-0000000000000000@deleted.invalid",
+        activeStatus: false,
+        isAnonymized: true,
+      })
+      .mockResolvedValueOnce(null);
+
+    const { upsertUserFromPrincipal } = await import("../../src/repositories/userRepository.js");
+
+    const result = await upsertUserFromPrincipal({
+      externalId: "participant-1",
+      email: "participant@company.com",
+      name: "Platform Participant",
+      department: "Consulting",
+      tokenRoles: ["PARTICIPANT"],
+    });
+
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      id: "user-1",
+      email: "pseudo-0000000000000000@deleted.invalid",
+      activeStatus: false,
+      isAnonymized: true,
+    });
   });
 });

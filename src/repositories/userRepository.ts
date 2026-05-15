@@ -28,7 +28,7 @@ export class IdentityReconciliationError extends Error {
 export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
   const existingByExternalId = await prisma.user.findUnique({
     where: { externalId: principal.externalId },
-    select: { id: true, email: true, activeStatus: true },
+    select: { id: true, email: true, activeStatus: true, isAnonymized: true },
   });
   const existingByEmail = await prisma.user.findUnique({
     where: { email: principal.email },
@@ -38,6 +38,10 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
   const now = new Date();
 
   if (existingByExternalId) {
+    if (existingByExternalId.isAnonymized) {
+      return existingByExternalId;
+    }
+
     const emailTakenByDifferentUser =
       existingByEmail && existingByEmail.id !== existingByExternalId.id;
 
