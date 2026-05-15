@@ -19,8 +19,15 @@ function Assert-LastExitCode([string]$stepName) {
 function Wait-ResourceDeleted([string]$resourceId, [string]$label) {
   $maxChecks = 24
   for ($attempt = 1; $attempt -le $maxChecks; $attempt++) {
-    az resource show --ids $resourceId --output none 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    $resourceExists = $true
+    try {
+      az resource show --ids $resourceId --output none 2>$null | Out-Null
+      $resourceExists = ($LASTEXITCODE -eq 0)
+    } catch {
+      $resourceExists = $false
+    }
+
+    if (-not $resourceExists) {
       Write-Host "$label is deleted."
       return
     }
