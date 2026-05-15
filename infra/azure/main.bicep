@@ -414,28 +414,11 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   properties: {
     sku: { family: 'A', name: 'standard' }
     tenantId: tenant().tenantId
-    enableRbacAuthorization: false
+    enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     enablePurgeProtection: true
     publicNetworkAccess: 'Enabled'
-    accessPolicies: [
-      {
-        tenantId: tenant().tenantId
-        objectId: webApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-      {
-        tenantId: tenant().tenantId
-        objectId: workerApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-      {
-        tenantId: tenant().tenantId
-        objectId: parserApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-    ]
   }
 }
 
@@ -954,8 +937,39 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // Key Vault RBAC — Key Vault Secrets User for both app identities (INFRA-002)
 // ---------------------------------------------------------------------------
 
-// Access policies are defined inline in the keyVault resource above (accessPolicies property).
-// Uses access policy mode instead of RBAC so the deploy SP only needs Contributor.
+resource kvSecretsUserRoleDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
+}
+
+resource webAppKvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, webApp.name, kvSecretsUserRoleDefinition.id)
+  scope: keyVault
+  properties: {
+    principalId: webApp.identity.principalId
+    roleDefinitionId: kvSecretsUserRoleDefinition.id
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppKvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, workerApp.name, kvSecretsUserRoleDefinition.id)
+  scope: keyVault
+  properties: {
+    principalId: workerApp.identity.principalId
+    roleDefinitionId: kvSecretsUserRoleDefinition.id
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource parserAppKvSecretAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kvSecretParserWorkerAuthKey.id, parserApp.name, kvSecretsUserRoleDefinition.id)
+  scope: kvSecretParserWorkerAuthKey
+  properties: {
+    principalId: parserApp.identity.principalId
+    roleDefinitionId: kvSecretsUserRoleDefinition.id
+    principalType: 'ServicePrincipal'
+  }
+}
 
 resource observabilityActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = if (createObservabilityActionGroup) {
   name: observabilityActionGroupName

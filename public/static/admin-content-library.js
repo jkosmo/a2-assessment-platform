@@ -109,14 +109,14 @@ const CERT_LABELS = {
 };
 
 function statusBadge(status) {
-  return `<span class="status-badge ${status}">${STATUS_LABELS[status] ?? status}</span>`;
+  return `<span class="status-badge ${escapeHtml(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>`;
 }
 
 function certBadge(level) {
   if (!level) return `<span class="cert-badge">—</span>`;
   const normalized = typeof level === "string" ? level.toLowerCase() : level;
   const label = CERT_LABELS[normalized] ?? CERT_LABELS[level] ?? level;
-  return `<span class="cert-badge">${label}</span>`;
+  return `<span class="cert-badge">${escapeHtml(label)}</span>`;
 }
 
 function escapeHtml(s) {

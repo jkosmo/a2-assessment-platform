@@ -29,6 +29,19 @@ assessmentsRouter.post("/:submissionId/run", assessmentRunLimiter, async (reques
     return;
   }
 
+  // Prevent re-running submissions that are already completed and passed, or are under review (#16)
+  if (submission.submissionStatus === "COMPLETED" && submission.decisions.length > 0 && submission.decisions[0].passFailTotal === true) {
+    response.status(409).json({
+      error: "conflict",
+      message: "This submission has already been completed and passed. Cannot re-run for recertification.",
+    });
+    return;
+  }
+  if (submission.submissionStatus === "UNDER_REVIEW") {
+    response.status(409).json({ error: "conflict", message: "This submission is currently under manual review. Cannot re-run." });
+    return;
+  }
+
   const job = await enqueueAssessmentJob(submission.id);
   if (parsed.data.sync) {
     await processSubmissionJobNow(submission.id);

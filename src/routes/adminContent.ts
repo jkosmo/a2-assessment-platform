@@ -171,8 +171,33 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
 });
 
 adminContentRouter.get("/modules/:moduleId/export", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const moduleExport = await getModuleContentBundle(request.params.moduleId);
+
+    // Sikkerhetsfiks: Fjern fasit og begrunnelser for SMO-rollen (#13)
+    if (!request.context?.roles?.includes("ADMINISTRATOR")) {
+      if (moduleExport.selectedConfiguration?.mcqSetVersion?.questions) {
+        moduleExport.selectedConfiguration.mcqSetVersion.questions.forEach((q: any) => {
+          delete q.correctAnswer;
+          delete q.rationale;
+        });
+      }
+      if (Array.isArray(moduleExport.versions?.mcqSetVersions)) {
+        moduleExport.versions.mcqSetVersions.forEach((v: any) => {
+          v.questions?.forEach((q: any) => {
+            delete q.correctAnswer;
+            delete q.rationale;
+          });
+        });
+      }
+    }
+
     response.json({ moduleExport });
   } catch (error) {
     response.status(404).json({ error: "module_export_failed", message: "Could not export module." });
@@ -186,7 +211,13 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, re
     return;
   }
 
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const rubricVersion = await createRubricVersion({
       moduleId: request.params.moduleId,
       criteria: data.criteria,
@@ -207,7 +238,13 @@ adminContentRouter.post("/modules/:moduleId/prompt-template-versions", async (re
     return;
   }
 
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const promptTemplateVersion = await createPromptTemplateVersion(
       toCreatePromptTemplateVersionInput(data, request.params.moduleId),
     );
@@ -224,7 +261,13 @@ adminContentRouter.post("/modules/:moduleId/mcq-set-versions", async (request, r
     return;
   }
 
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const mcqSetVersion = await createMcqSetVersion(
       toCreateMcqSetVersionInput(data, request.params.moduleId),
     );
@@ -241,7 +284,13 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
     return;
   }
 
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const moduleVersion = await createModuleVersion(
       toCreateModuleVersionInput(data, request.params.moduleId),
     );

@@ -101,6 +101,12 @@ export async function authenticate(request: Request, response: Response, next: N
     defaultLocale: env.DEFAULT_LOCALE,
   });
 
+  if (env.AUTH_MODE === "mock" && process.env.NODE_ENV === "production") {
+    console.error("CRITICAL SECURITY ERROR: Mock authentication is NOT allowed in production.");
+    response.status(500).json({ error: "internal_error", message: "Security configuration error." });
+    return;
+  }
+
   let principal: AuthPrincipal;
   try {
     principal =
@@ -123,6 +129,17 @@ export async function authenticate(request: Request, response: Response, next: N
 
   try {
     const user = await upsertUserFromPrincipal(principal);
+
+    // Sikkerhetsfiks: Hindre tilgang for brukere som er deaktivert via org-sync (#15)
+    if (user.activeStatus === false) {
+      console.warn(`Access denied for deactivated user: ${user.id}`);
+      response.status(403).json({
+        error: "forbidden",
+        message: "Your account has been deactivated.",
+      });
+      return;
+    }
+
     await syncEntraGroupRoles(user.id, principal);
     let roles = await getActiveRoles(user.id);
 

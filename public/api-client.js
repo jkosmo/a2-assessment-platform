@@ -11,7 +11,7 @@ async function loadMsalScript() {
     const s = document.createElement("script");
     s.src = "https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js";
     s.crossOrigin = "anonymous";
-    s.onload = resolve;
+s.onload = resolve;
     s.onerror = () => reject(new Error("Failed to load MSAL script."));
     document.head.appendChild(s);
   });

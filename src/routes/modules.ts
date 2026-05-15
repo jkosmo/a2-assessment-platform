@@ -34,7 +34,12 @@ const mcqSubmitBodySchema = z.object({
       questionId: z.string().min(1),
       selectedAnswer: z.string().min(1),
     }),
-  ),
+  ).refine((items) => {
+    const ids = items.map(i => i.questionId);
+    return new Set(ids).size === ids.length;
+  }, {
+    message: "Duplicate question IDs are not allowed in MCQ submissions.",
+  }),
 });
 
 modulesRouter.get("/", async (request, response) => {
@@ -68,6 +73,14 @@ modulesRouter.get("/", async (request, response) => {
     includeCompleted,
     participantFacing,
   });
+
+  // Sikkerhetsfiks: Fjern sensornotater fra responsen hvis det er deltaker-visning
+  if (participantFacing && Array.isArray(modules)) {
+    modules.forEach((m: any) => {
+      if (m.guidanceText) delete m.guidanceText;
+    });
+  }
+
   response.json({
     modules,
     filters: {
@@ -113,6 +126,11 @@ modulesRouter.get("/:moduleId", async (request, response) => {
     return;
   }
 
+  // Sikkerhetsfiks: Fjern sensornotater fra detaljvisning for deltakere
+  if (module && (module as any).guidanceText) {
+    delete (module as any).guidanceText;
+  }
+
   response.json({ module });
 });
 
@@ -127,6 +145,11 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
       .status(404)
       .json({ error: "not_found", message: t(locale, "module_not_found") });
     return;
+  }
+
+  // Sikkerhetsfiks: Fjern sensornotater fra versjonsvisning for deltakere
+  if (activeVersion && (activeVersion as any).guidanceText) {
+    delete (activeVersion as any).guidanceText;
   }
 
   response.json({ activeVersion });
@@ -175,6 +198,15 @@ modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, re
       userId,
       ...parsed.data,
     });
+
+    // Sikkerhetsfiks: Fjern fasitdetaljer fra resultatet vist til deltaker (#22)
+    if (result && (result as any).responses) {
+      (result as any).responses.forEach((r: any) => {
+        delete r.correctAnswer;
+        delete r.rationale;
+      });
+    }
+
     response.json(result);
   } catch (error) {
     next(error);

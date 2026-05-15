@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.1 - 2026-05-15
+
+fix(security): Critical security findings from Codex assessment (all 23 high-severity findings addressed)
+
+- **XSS Prevention:**
+  - `public/static/admin-content-library.js`: Ensured `certificationLevel` is HTML-escaped in `certBadge` function.
+  - `public/admin-content.js`: Ensured module titles and certification levels are HTML-escaped in archive list rendering.
+  - `public/static/admin-content-library.js`: Ensured `statusBadge` function HTML-escapes status values.
+- **Command Injection in GitHub Workflows:**
+  - `.github/workflows/activate-staging-app-layer.yml`: Manual inputs (`ref`) are now passed via environment variables to prevent shell injection.
+  - `.github/workflows/benchmark-models.yml`: Manual inputs (`repeat`, `models`, `cases`) are now passed via environment variables to prevent shell injection.
+  - `.github/workflows/deploy-azure.yml`: `npm ci` step moved before Azure login to prevent credential exposure during compromised package install.
+- **Authentication & Authorization Hardening:**
+  - `src/auth/authenticate.ts`: Disabled `AUTH_MODE=mock` in production environments.
+  - `src/auth/authenticate.ts`: Added check to deny access for deactivated users (`activeStatus: false`).
+  - `src/repositories/userRepository.ts`: Improved email-based identity reconciliation to prevent account takeover by conflicting `externalId`s.
+  - `infra/azure/main.bicep`: Default `authMode` for Azure deployments changed from `mock` to `entra`.
+- **Information Leakage & Data Integrity:**
+  - `src/routes/modules.ts`: Removed `guidanceText` from participant-facing API responses (`/api/modules`, `/:moduleId`, `/:moduleId/active-version`).
+  - `src/routes/modules.ts`: Removed `correctAnswer` and `rationale` from MCQ submission results for participants.
+  - `src/routes/modules.ts`: Added validation to prevent MCQ submissions with duplicate `questionId`s.
+  - `src/routes/adminContent.ts`: Implemented `assertModuleOwnership` to restrict `SUBJECT_MATTER_OWNER` role to only modify/export modules they own.
+  - `src/routes/adminContent.ts`: Removed `correctAnswer` and `rationale` from module export (`/api/admin/content/modules/:moduleId/export`) for non-ADMINISTRATOR roles.
+  - `src/modules/assessment/decisionService.ts`: Added sanity checks for LLM `rubric_total` and `practical_score_scaled` to prevent unbounded scores.
+  - `src/modules/assessment/decisionService.ts`: Enforced `mcqMinPercent` and `practicalMinPercent` gates in assessment decision logic.
+  - `src/routes/assessments.ts`: Prevented re-running of already completed and passed submissions, or submissions currently `UNDER_REVIEW`.
+- **Infrastructure Security:**
+  - `infra/azure/main.bicep`: Enabled `enableRbacAuthorization` for Key Vault and replaced inline `accessPolicies` with explicit `roleAssignments` for `Key Vault Secrets User`.
+  - `infra/azure/main.bicep`: Scoped `parserApp` Key Vault access to only `PARSER-WORKER-AUTH-KEY` secret.
+- **External Dependency Security:**
+  - `public/api-client.js`: Added `integrity` attribute to MSAL CDN script tag for Subresource Integrity (SRI).
+
+
+
 ## Versioning Rules
 - Use Semantic Versioning (`MAJOR.MINOR.PATCH`).
 - Every push to remote must include a version bump.

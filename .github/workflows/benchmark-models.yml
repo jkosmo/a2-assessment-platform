@@ -43,15 +43,18 @@ jobs:
       - name: Run benchmark
         run: |
           CASES_ARG=""
-          if [ -n "${{ inputs.cases }}" ]; then
-            CASES_ARG="--cases=${{ inputs.cases }}"
+          if [ -n "$INPUT_CASES" ]; then
+            CASES_ARG="--cases=$INPUT_CASES"
           fi
           npx tsx src/scripts/runModelComparisonBenchmark.ts \
-            --repeat=${{ inputs.repeat }} \
-            --models=${{ inputs.models }} \
+            --repeat="$INPUT_REPEAT" \
+            --models="$INPUT_MODELS" \
             --output=doc/benchmarks/model-comparison-$(date +%Y-%m-%d) \
             $CASES_ARG
         env:
+          INPUT_CASES: ${{ inputs.cases }}
+          INPUT_REPEAT: ${{ inputs.repeat }}
+          INPUT_MODELS: ${{ inputs.models }}
           LLM_MODE: azure_openai
           AZURE_OPENAI_DEPLOYMENT: benchmark-override
           AZURE_OPENAI_ENDPOINT: ${{ vars.BENCHMARK_AZURE_OPENAI_ENDPOINT }}
