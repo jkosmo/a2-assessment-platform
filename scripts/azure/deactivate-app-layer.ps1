@@ -39,6 +39,22 @@ function Wait-ResourceDeleted([string]$resourceId, [string]$label) {
   throw "$label still exists after waiting for deletion to complete."
 }
 
+function Invoke-AzResourceUpdateBestEffort([string]$resourceId, [string]$label) {
+  try {
+    az resource update --ids $resourceId --set properties.enabled=false --output none
+    Assert-LastExitCode "az resource update $label"
+    return
+  } catch {
+    $message = $_.Exception.Message
+    if ($message -like "*ResourceNotFound*") {
+      Write-Warning "$label could not be updated because its scoped resource is already gone. Continuing."
+      return
+    }
+
+    throw
+  }
+}
+
 if ($EnvironmentName -ne "staging") {
   throw "deactivate-app-layer.ps1 only supports the staging environment."
 }
@@ -65,14 +81,12 @@ $metricAlerts = @($resources | Where-Object { $_.type -ieq "Microsoft.Insights/m
 if ($DisableAlerts) {
   foreach ($rule in $scheduledQueryRules) {
     Write-Host "Disabling scheduled query rule: $($rule.name)"
-    az resource update --ids $rule.id --set properties.enabled=false --output none
-    Assert-LastExitCode "az resource update scheduled query rule $($rule.name)"
+    Invoke-AzResourceUpdateBestEffort -resourceId $rule.id -label "scheduled query rule $($rule.name)"
   }
 
   foreach ($alert in $metricAlerts) {
     Write-Host "Disabling metric alert: $($alert.name)"
-    az resource update --ids $alert.id --set properties.enabled=false --output none
-    Assert-LastExitCode "az resource update metric alert $($alert.name)"
+    Invoke-AzResourceUpdateBestEffort -resourceId $alert.id -label "metric alert $($alert.name)"
   }
 }
 
