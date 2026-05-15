@@ -56,6 +56,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# INCIDENT 2026-05-15: Windows zip (New-ZipArchiveFromDirectory / .NET ZipArchive) produces a
+# package that Azure App Service cannot mount as Run-From-Package. The container starts but
+# /home/site/wwwroot contains only hostingstart.html, causing "Application Error" on every request.
+# GitHub Actions (Linux) uses `zip -r` which creates a compatible archive.
+# => Deployments MUST run on Linux. Block here so the error is caught before the build starts.
+if (-not ($IsLinux -or $IsMacOS)) {
+  throw "deploy-environment.ps1 must run on Linux (e.g. GitHub Actions). " +
+        "Windows builds a .NET ZipArchive that Azure App Service cannot mount as Run-From-Package, " +
+        "resulting in an empty wwwroot and 'Application Error' for all users. " +
+        "Trigger a deploy via GitHub Actions workflow_dispatch instead."
+}
+
 if (-not $ResourceGroupName) {
   $ResourceGroupName = "rg-a2-assessment-$EnvironmentName"
 }

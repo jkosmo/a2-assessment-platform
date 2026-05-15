@@ -38,6 +38,18 @@ az account show --query "{subscription:id,tenantId:tenantId,name:name}" -o table
 
 `ENTRA_TENANT_ID` in GitHub environment variables is the **application authentication tenant** (for SSO login). The **Azure deployment tenant** is controlled by the `AZURE_TENANT_ID` **secret** in each GitHub environment. These happen to be the same values per environment, but they serve different purposes.
 
+### ⛔ NEVER RUN THE DEPLOY SCRIPT LOCALLY ON WINDOWS
+
+`scripts/azure/deploy-environment.ps1` **must only run on Linux** (i.e. GitHub Actions).
+
+**Why:** On Windows the script falls back to .NET `ZipArchive` to build the deployment package. The resulting zip is not mountable by Azure App Service's Run-From-Package mechanism. The container starts, but `/home/site/wwwroot` contains only `hostingstart.html` — every request returns "Application Error". The root cause is invisible in GitHub Actions logs because the deploy step itself reports success.
+
+**Symptom:** App shows "Application Error"; Kudu `ls /home/site/wwwroot/` returns only `hostingstart.html`; `/home/data/SitePackages/packagename.txt` points to the broken zip.
+
+**Fix:** Trigger deployment via `gh workflow run deploy-azure.yml --ref main -f deploy_production=true`. Never run the deploy script from a Windows shell, even for a "quick fix".
+
+The script now throws immediately if `$IsLinux` and `$IsMacOS` are both false.
+
 ### ACS EMAIL PROVISIONING IS SLOW
 
 Both staging and production have `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`. The `Microsoft.Communication/emailServices/domains` resource takes **20–40 minutes to provision** on first creation or recreation. This is NORMAL. Do not cancel deploys just because they run 30+ minutes — check the ARM deployment operations first:
