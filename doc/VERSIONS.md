@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.6 - 2026-05-15
+
+fix(infra): Write secrets JSON without UTF-8 BOM
+
+- `scripts/azure/deploy-environment.ps1`: Switch from `Out-File -Encoding utf8`
+  (which writes BOM in PS 5.1 and some PS 7.x) to
+  `[System.IO.File]::WriteAllText(..., UTF8Encoding($false))`. A BOM stored
+  in `AZURE_OPENAI_API_KEY` caused Node.js `fetch()` to reject the header value
+  (ByteString > 255), crashing every LLM generation request with 500.
+
 ## 1.1.5 - 2026-05-15
 
 fix(infra): Add accessPolicies: [] to Key Vault properties to fix staging deploy
