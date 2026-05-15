@@ -1,0 +1,59 @@
+name: Deactivate Staging App Layer
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DEACTIVATE_STAGING_APP_LAYER to confirm"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deactivate-staging-app-layer
+  cancel-in-progress: false
+
+jobs:
+  deactivate-staging-app-layer:
+    if: github.event.inputs.confirmation == 'DEACTIVATE_STAGING_APP_LAYER'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deactivate staging app layer
+        shell: pwsh
+        run: |
+          ./scripts/azure/deactivate-app-layer.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "staging" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            -DisableAlerts $true
+
+      - name: Summarize result
+        run: |
+          echo "Staging app layer deactivated." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preserved resources include PostgreSQL storage, Key Vault, Log Analytics, App Insights, and other non-App-Service assets in the staging resource group." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "PostgreSQL compute was stopped as part of the deactivation flow." >> "$GITHUB_STEP_SUMMARY"
+
+  confirmation-mismatch:
+    if: github.event.inputs.confirmation != 'DEACTIVATE_STAGING_APP_LAYER'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail on missing confirmation
+        run: |
+          echo "Confirmation text did not match DEACTIVATE_STAGING_APP_LAYER." >&2
+          exit 1

@@ -30,8 +30,12 @@ Each environment must use a dedicated resource group and be deployable via CI/CD
 ## Artifacts
 - Infrastructure template: `infra/azure/main.bicep`
 - Deployment script: `scripts/azure/deploy-environment.ps1`
+- App-layer deactivation script: `scripts/azure/deactivate-app-layer.ps1`
+- PostgreSQL compute state script: `scripts/azure/set-postgres-compute-state.ps1`
 - Cost guardrails script: `scripts/azure/configure-cost-guardrails.ps1`
 - CI/CD workflow: `.github/workflows/deploy-azure.yml`
+- App-layer activation workflow: `.github/workflows/activate-staging-app-layer.yml`
+- App-layer deactivation workflow: `.github/workflows/deactivate-staging-app-layer.yml`
 - Observability runbook: `doc/OBSERVABILITY_RUNBOOK.md`
 - Restore runbook: `doc/PRODUCTION_RESTORE_RUNBOOK.md`
 - Logical export runbook: `doc/PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md`
@@ -153,6 +157,31 @@ Redeploy staging:
 3. Verify the workflow logs include both `PostgreSQL server` and `PostgreSQL database` outputs.
 4. Verify `/healthz`, `/version`, and a minimal participant flow in staging.
 5. If `/healthz` is green but `/version` still shows the previous release, restart the staging web app once and re-check `/version` before treating the deploy as failed. This has happened intermittently on App Service even when the workflow deployed the correct package.
+
+## Staging app-layer pause / resume
+Use this mode when you want to remove staging App Service compute cost while preserving the staging database and supporting Azure resources.
+
+What deactivation does:
+- Deletes the staging web, worker, and parser App Services.
+- Deletes the staging App Service plan.
+- Disables staging metric alerts and scheduled query rules so they do not keep evaluating against a missing app layer.
+- Stops staging PostgreSQL compute while preserving PostgreSQL storage and database contents.
+- Preserves PostgreSQL, Key Vault, App Insights, Log Analytics, Communication Services, and other non-App-Service resources in the staging resource group.
+
+What activation does:
+- Starts staging PostgreSQL compute and waits for the server to become ready.
+- Re-runs the normal staging deployment path.
+- Recreates the App Service plan and the three staging apps.
+- Reapplies the Bicep-managed alert rules in their enabled state.
+- Rebuilds and deploys the selected Git ref, then runs the usual health checks.
+
+Workflows:
+1. Deactivate app layer: trigger `.github/workflows/deactivate-staging-app-layer.yml` and type `DEACTIVATE_STAGING_APP_LAYER` as confirmation.
+2. Activate app layer: trigger `.github/workflows/activate-staging-app-layer.yml` and optionally choose which `ref` to deploy.
+
+Operational note:
+- This is staging-only by design. The deactivation script refuses to run against production.
+- Activation time is similar to a normal staging redeploy because the plan and apps are recreated before the package deploy and health verification complete.
 
 Redeploy production:
 1. Trigger `.github/workflows/deploy-azure.yml` with `deploy_production=true` and the desired `ref`.

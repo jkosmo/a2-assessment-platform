@@ -1,0 +1,112 @@
+name: Activate Staging App Layer
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy into staging"
+        required: false
+        default: "main"
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: activate-staging-app-layer-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  activate-staging-app-layer:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start staging PostgreSQL compute
+        shell: pwsh
+        run: |
+          ./scripts/azure/set-postgres-compute-state.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "staging" `
+            -Action "start" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}"
+
+      - name: Activate staging app layer
+        shell: pwsh
+        run: |
+          ./scripts/azure/deploy-environment.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "staging" `
+            -Location "${{ vars.AZURE_LOCATION }}" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            -AppNamePrefix "${{ vars.AZURE_APP_NAME_PREFIX }}" `
+            -AppServiceSkuName "${{ vars.AZURE_APP_SERVICE_SKU }}" `
+            -CostCenter "${{ vars.AZURE_COST_CENTER }}" `
+            -Owner "${{ vars.AZURE_OWNER }}" `
+            -PostgresAdministratorLogin "${{ vars.POSTGRES_ADMIN_USERNAME || 'a2platformadmin' }}" `
+            -PostgresAdministratorPassword "${{ secrets.POSTGRES_ADMIN_PASSWORD }}" `
+            -PostgresDatabaseName "${{ vars.POSTGRES_DATABASE_NAME || 'a2assessment' }}" `
+            -PostgresVersion "${{ vars.POSTGRES_VERSION || '16' }}" `
+            -PostgresSkuName "${{ vars.POSTGRES_SKU_NAME || 'Standard_B1ms' }}" `
+            -PostgresSkuTier "${{ vars.POSTGRES_SKU_TIER || 'Burstable' }}" `
+            -PostgresStorageSizeGB "${{ vars.POSTGRES_STORAGE_SIZE_GB || '32' }}" `
+            -PostgresBackupRetentionDays "${{ vars.POSTGRES_BACKUP_RETENTION_DAYS || '7' }}" `
+            -PostgresGeoRedundantBackup "${{ vars.POSTGRES_GEO_REDUNDANT_BACKUP || 'Disabled' }}" `
+            -PostgresHighAvailabilityMode "${{ vars.POSTGRES_HIGH_AVAILABILITY_MODE || 'Disabled' }}" `
+            -AuthMode "${{ vars.AUTH_MODE }}" `
+            -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
+            -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
+            -EntraSyncGroupRoles "${{ vars.ENTRA_SYNC_GROUP_ROLES }}" `
+            -EntraGroupRoleMapJson '${{ vars.ENTRA_GROUP_ROLE_MAP_JSON }}' `
+            -LlmMode "${{ vars.LLM_MODE }}" `
+            -LlmStubModelName "${{ vars.LLM_STUB_MODEL_NAME }}" `
+            -AzureOpenAiEndpoint "${{ vars.AZURE_OPENAI_ENDPOINT }}" `
+            -AzureOpenAiApiKey "${{ secrets.AZURE_OPENAI_API_KEY }}" `
+            -AzureOpenAiDeployment "${{ vars.AZURE_OPENAI_DEPLOYMENT }}" `
+            -AzureOpenAiApiVersion "${{ vars.AZURE_OPENAI_API_VERSION || '2024-10-21' }}" `
+            -AzureOpenAiTimeoutMs "${{ vars.AZURE_OPENAI_TIMEOUT_MS || '120000' }}" `
+            -AzureOpenAiTemperature "${{ vars.AZURE_OPENAI_TEMPERATURE || '0' }}" `
+            -AzureOpenAiMaxTokens "${{ vars.AZURE_OPENAI_MAX_TOKENS || '1200' }}" `
+            -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
+            -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
+            -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
+            -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
+            -QueueBacklogAlertThreshold "${{ vars.QUEUE_BACKLOG_ALERT_THRESHOLD || '5' }}" `
+            -LatencyAlertThresholdSeconds "${{ vars.LATENCY_ALERT_THRESHOLD_SECONDS || '3' }}" `
+            -AppealOverdueAlertThreshold "${{ vars.APPEAL_OVERDUE_ALERT_THRESHOLD || '1' }}" `
+            -AppealSlaMonitorIntervalMs "${{ vars.APPEAL_SLA_MONITOR_INTERVAL_MS || '600000' }}" `
+            -ParticipantNotificationChannel "${{ vars.PARTICIPANT_NOTIFICATION_CHANNEL || 'log' }}" `
+            -ParticipantNotificationWebhookUrl "${{ secrets.PARTICIPANT_NOTIFICATION_WEBHOOK_URL }}" `
+            -ParticipantNotificationWebhookTimeoutMs "${{ vars.PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS || '5000' }}" `
+            -AcsEmailSenderDisplayName "${{ vars.ACS_EMAIL_SENDER_DISPLAY_NAME || 'A2 Assessment Platform' }}" `
+            -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
+            -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
+            -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}"
+
+      - name: Summarize result
+        run: |
+          echo "Staging app layer activated from ref: ${{ github.event.inputs.ref || github.ref }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "PostgreSQL compute was started before deploy, then the normal staging deployment recreated the App Service layer." >> "$GITHUB_STEP_SUMMARY"
