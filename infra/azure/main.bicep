@@ -71,7 +71,7 @@ param postgresHighAvailabilityMode string = 'Disabled'
   'mock'
   'entra'
 ])
-param authMode string = 'mock'
+param authMode string = 'entra'
 
 @description('Entra tenant id when authMode=entra.')
 param entraTenantId string = ''
@@ -414,8 +414,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   properties: {
     sku: { family: 'A', name: 'standard' }
     tenantId: tenant().tenantId
-    enableRbacAuthorization: false
-    accessPolicies: []
+    enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     enablePurgeProtection: environmentName == 'production' ? true : null
@@ -455,6 +454,14 @@ resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-
   }
 }
 
+resource kvSecretParticipantNotificationWebhookUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(participantNotificationWebhookUrl)) {
+  parent: keyVault
+  name: 'PARTICIPANT-NOTIFICATION-WEBHOOK-URL'
+  properties: {
+    value: participantNotificationWebhookUrl
+  }
+}
+
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   name: webAppName
   location: location
@@ -488,7 +495,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'NODE_ENV'
-          value: environmentName == 'production' ? 'production' : 'development'
+          value: 'production'
         }
         {
           name: 'PORT'
@@ -600,7 +607,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_URL'
-          value: participantNotificationWebhookUrl
+          value: !empty(participantNotificationWebhookUrl) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARTICIPANT-NOTIFICATION-WEBHOOK-URL)' : ''
         }
         {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
@@ -703,7 +710,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'NODE_ENV'
-          value: environmentName == 'production' ? 'production' : 'development'
+          value: 'production'
         }
         {
           name: 'PORT'
@@ -787,7 +794,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_URL'
-          value: participantNotificationWebhookUrl
+          value: !empty(participantNotificationWebhookUrl) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARTICIPANT-NOTIFICATION-WEBHOOK-URL)' : ''
         }
         {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
@@ -875,7 +882,7 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'NODE_ENV'
-          value: environmentName == 'production' ? 'production' : 'development'
+          value: 'production'
         }
         {
           name: 'PORT'
@@ -935,31 +942,108 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 }
 
 // ---------------------------------------------------------------------------
-// Key Vault access policies — get permission for all app managed identities
-// Uses access policies instead of RBAC so deploys only need Contributor role.
+// Key Vault RBAC - secret-scoped read access for managed identities
 // ---------------------------------------------------------------------------
 
-resource kvAccessPolicies 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
-  parent: keyVault
-  name: 'add'
+var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+
+resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: kvSecretDatabaseUrl
+  name: guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId)
   properties: {
-    accessPolicies: [
-      {
-        tenantId: tenant().tenantId
-        objectId: webApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-      {
-        tenantId: tenant().tenantId
-        objectId: workerApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-      {
-        tenantId: tenant().tenantId
-        objectId: parserApp.identity.principalId
-        permissions: { secrets: ['get'] }
-      }
-    ]
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: kvSecretDatabaseUrl
+  name: guid(kvSecretDatabaseUrl.id, workerApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource webAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(azureOpenAiApiKey)) {
+  scope: kvSecretOpenAiKey
+  name: guid(kvSecretOpenAiKey.id, webApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(azureOpenAiApiKey)) {
+  scope: kvSecretOpenAiKey
+  name: guid(kvSecretOpenAiKey.id, workerApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource webAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createAcsEmail) {
+  scope: kvSecretAcsConnection
+  name: guid(kvSecretAcsConnection.id, webApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createAcsEmail) {
+  scope: kvSecretAcsConnection
+  name: guid(kvSecretAcsConnection.id, workerApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource webAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(participantNotificationWebhookUrl)) {
+  scope: kvSecretParticipantNotificationWebhookUrl
+  name: guid(kvSecretParticipantNotificationWebhookUrl.id, webApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(participantNotificationWebhookUrl)) {
+  scope: kvSecretParticipantNotificationWebhookUrl
+  name: guid(kvSecretParticipantNotificationWebhookUrl.id, workerApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource webAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: kvSecretParserWorkerAuthKey
+  name: guid(kvSecretParserWorkerAuthKey.id, webApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource parserAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: kvSecretParserWorkerAuthKey
+  name: guid(kvSecretParserWorkerAuthKey.id, parserApp.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: parserApp.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 

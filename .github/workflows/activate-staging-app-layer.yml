@@ -2,30 +2,23 @@ name: Activate Staging App Layer
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "Git ref to deploy into staging"
-        required: false
-        default: "main"
-        type: string
 
 permissions:
   id-token: write
   contents: read
 
 concurrency:
-  group: activate-staging-app-layer-${{ github.event.inputs.ref || github.ref }}
+  group: activate-staging-app-layer-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   activate-staging-app-layer:
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment: staging
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -34,7 +27,25 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Build deployment package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_path="$RUNNER_TEMP/a2-assessment-staging.zip"
+          package_root="$RUNNER_TEMP/a2-assessment-package"
+          rm -rf "$package_root" "$package_path"
+          mkdir -p "$package_root"
+          git archive --format=tar HEAD | tar -x -C "$package_root"
+          cd "$package_root"
+          npm ci --ignore-scripts
+          npm run prisma:generate
+          npm run build
+          npm prune --omit=dev --ignore-scripts
+          zip -r -q "$package_path" .
+          echo "path=$package_path" >> "$GITHUB_OUTPUT"
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -74,7 +85,7 @@ jobs:
             -PostgresBackupRetentionDays "${{ vars.POSTGRES_BACKUP_RETENTION_DAYS || '7' }}" `
             -PostgresGeoRedundantBackup "${{ vars.POSTGRES_GEO_REDUNDANT_BACKUP || 'Disabled' }}" `
             -PostgresHighAvailabilityMode "${{ vars.POSTGRES_HIGH_AVAILABILITY_MODE || 'Disabled' }}" `
-            -AuthMode "${{ vars.AUTH_MODE }}" `
+            -AuthMode "${{ vars.AUTH_MODE || 'entra' }}" `
             -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
             -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
             -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
@@ -103,7 +114,8 @@ jobs:
             -AcsEmailSenderDisplayName "${{ vars.ACS_EMAIL_SENDER_DISPLAY_NAME || 'A2 Assessment Platform' }}" `
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
-            -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}"
+            -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}" `
+            -PackagePath "${{ steps.package.outputs.path }}"
 
       - name: Verify staging app layer
         shell: pwsh
@@ -158,4 +170,4 @@ jobs:
           echo "PostgreSQL compute was started before deploy, then the normal staging deployment recreated the App Service layer." >> "$GITHUB_STEP_SUMMARY"
           echo "Verification confirmed PostgreSQL, App Service, and alert resources were restored." >> "$GITHUB_STEP_SUMMARY"
         env:
-          DEPLOY_REF: ${{ github.event.inputs.ref || github.ref }}
+          DEPLOY_REF: ${{ github.ref }}

@@ -16,19 +16,32 @@ function isUniqueConstraintError(error: unknown): error is { code: string } {
   );
 }
 
+export class IdentityReconciliationError extends Error {
+  code = "identity_reconciliation_conflict";
+
+  constructor(message = "Email is already linked to a different external identity.") {
+    super(message);
+    this.name = "IdentityReconciliationError";
+  }
+}
+
 export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
   const existingByExternalId = await prisma.user.findUnique({
     where: { externalId: principal.externalId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, activeStatus: true, isAnonymized: true },
   });
   const existingByEmail = await prisma.user.findUnique({
     where: { email: principal.email },
-    select: { id: true },
+    select: { id: true, externalId: true },
   });
 
   const now = new Date();
 
   if (existingByExternalId) {
+    if (existingByExternalId.isAnonymized) {
+      return existingByExternalId;
+    }
+
     const emailTakenByDifferentUser =
       existingByEmail && existingByEmail.id !== existingByExternalId.id;
 
@@ -38,23 +51,24 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         ...(emailTakenByDifferentUser ? {} : { email: principal.email }),
         name: principal.name,
         department: principal.department,
-        activeStatus: true,
         lastLoginAt: now,
       },
     });
   }
 
   if (existingByEmail) {
-    return prisma.user.update({
-      where: { id: existingByEmail.id },
-      data: {
-        externalId: principal.externalId,
-        name: principal.name,
-        department: principal.department,
-        activeStatus: true,
-        lastLoginAt: now,
-      },
-    });
+    if (env.AUTH_MODE === "mock") {
+      return prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          externalId: principal.externalId,
+          name: principal.name,
+          department: principal.department,
+          lastLoginAt: now,
+        },
+      });
+    }
+    throw new IdentityReconciliationError();
   }
 
   try {
@@ -73,28 +87,42 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
       throw error;
     }
 
-    const createdDuringRace =
-      (await prisma.user.findUnique({
-        where: { externalId: principal.externalId },
-        select: { id: true },
-      })) ??
-      (await prisma.user.findUnique({
+    const createdByExternalId = await prisma.user.findUnique({
+      where: { externalId: principal.externalId },
+      select: { id: true },
+    });
+
+    if (!createdByExternalId) {
+      const createdByEmail = await prisma.user.findUnique({
         where: { email: principal.email },
         select: { id: true },
-      }));
-
-    if (!createdDuringRace) {
+      });
+      if (createdByEmail) {
+        if (env.AUTH_MODE === "mock") {
+          return prisma.user.update({
+            where: { id: createdByEmail.id },
+            data: {
+              externalId: principal.externalId,
+              email: principal.email,
+              name: principal.name,
+              department: principal.department,
+              lastLoginAt: now,
+            },
+          });
+        }
+        throw new IdentityReconciliationError();
+      }
       throw error;
     }
 
     return prisma.user.update({
-      where: { id: createdDuringRace.id },
+      where: { id: createdByExternalId.id },
       data: {
         externalId: principal.externalId,
         email: principal.email,
         name: principal.name,
         department: principal.department,
-        activeStatus: true,
+        lastLoginAt: now,
       },
     });
   }
