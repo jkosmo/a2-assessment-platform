@@ -121,7 +121,7 @@ const moduleDraftResponseCodec = z.object({
   guidanceText: z.string().min(1),
   candidateTaskConstraints: z.string().default(""),
   title: z.string().min(1).optional(),
-  includesScenario: z.boolean(),
+  includesScenario: z.boolean().default(false),
 });
 
 const mcqDistractorMetadataCodec = z.object({

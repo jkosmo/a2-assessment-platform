@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.3 - 2026-05-15
+
+fix: Default includesScenario to false when LLM omits it from module draft response
+
+- `src/modules/adminContent/llmContentGenerationService.ts`: Changed
+  `z.boolean()` to `z.boolean().default(false)` so validation does not
+  reject responses from models that omit the field. The value is
+  frontend metadata only — no downstream logic depends on it.
+
 ## 1.1.2 - 2026-05-15
 
 fix(infra): Inject resolved secrets after zip deploy to fix KV RBAC propagation race
