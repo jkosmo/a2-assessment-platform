@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.4 - 2026-05-15
+
+fix(infra): Switch KV to access policies; restrict production deploy to manual dispatch
+
+- `infra/azure/main.bicep`: Changed `enableRbacAuthorization: false` and replaced
+  RBAC role assignment resources with `Microsoft.KeyVault/vaults/accessPolicies` so
+  deploys only require Contributor (no `roleAssignments/write` needed).
+- `.github/workflows/deploy-azure.yml`: Removed `github.event_name == 'push'` from
+  `deploy-production` condition — production now only deploys via manual
+  `workflow_dispatch` with `deploy_production=true`.
+
 ## 1.1.3 - 2026-05-15
 
 fix: Default includesScenario to false when LLM omits it from module draft response
