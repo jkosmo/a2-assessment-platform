@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.7 - 2026-05-15
+
+fix(llm): Scale max_completion_tokens with MCQ question×option count
+
+- `src/modules/adminContent/llmContentGenerationService.ts`: `callLlm()` now
+  accepts an optional `maxTokens` parameter (default 4000). `generateMcqQuestions()`
+  computes `Math.max(4000, questionCount * optionCount * 200)` — e.g. 10×5
+  gets 10 000 tokens, preventing JSON truncation mid-question. The previous
+  hardcoded 4000 was too low for large MCQ sets with verbose `distractorMetadata`.
+
 ## 1.1.6 - 2026-05-15
 
 fix(infra): Write secrets JSON without UTF-8 BOM

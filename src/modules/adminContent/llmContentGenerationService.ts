@@ -837,7 +837,7 @@ ${returnFields.join(",\n")}
   return { systemPrompt, userPrompt };
 }
 
-async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknown> {
+async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 4000): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
   }
@@ -849,7 +849,7 @@ async function callLlm(systemPrompt: string, userPrompt: string): Promise<unknow
       { role: "user", content: userPrompt },
     ],
     temperature: 0.4,
-    max_completion_tokens: 4000,
+    max_completion_tokens: maxTokens,
   };
 
   const response = await fetch(url, {
@@ -904,7 +904,10 @@ export async function generateModuleDraft(input: ModuleDraftInput): Promise<Modu
 export async function generateMcqQuestions(input: McqGenerationInput): Promise<McqGenerationResult> {
   const { systemPrompt, userPrompt } = buildMcqGenerationPrompts(input);
 
-  const raw = await callLlm(systemPrompt, userPrompt);
+  // Each question with distractorMetadata (3 verbose fields per distractor) needs ~800 tokens.
+  // Floor at 4000 so single-question calls don't under-allocate.
+  const maxTokens = Math.max(4000, input.questionCount * input.optionCount * 200);
+  const raw = await callLlm(systemPrompt, userPrompt, maxTokens);
   const parsed = mcqGenerationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`MCQ generation LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
