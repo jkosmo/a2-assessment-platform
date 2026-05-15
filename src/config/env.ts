@@ -78,6 +78,14 @@ if (!parsed.success) {
 }
 
 const env = parsed.data;
+const isAzureAppServiceRuntime = Boolean(process.env.WEBSITE_SITE_NAME || process.env.WEBSITE_INSTANCE_ID);
+const isMockAuthRuntimeAllowed =
+  env.NODE_ENV === "test" || (env.NODE_ENV === "development" && !isAzureAppServiceRuntime);
+
+if (env.AUTH_MODE === "mock" && !isMockAuthRuntimeAllowed) {
+  console.error("AUTH_MODE=mock is only allowed for local development and automated tests.");
+  process.exit(1);
+}
 
 if (env.AUTH_MODE === "entra" && (!env.ENTRA_TENANT_ID || !env.ENTRA_CLIENT_ID || !env.ENTRA_AUDIENCE)) {
   console.error("ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_AUDIENCE are required when AUTH_MODE=entra");
@@ -114,4 +122,4 @@ if (env.PARSER_WORKER_URL && !env.PARSER_WORKER_AUTH_KEY) {
   process.exit(1);
 }
 
-export { env };
+export { env, isMockAuthRuntimeAllowed };

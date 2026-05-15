@@ -109,6 +109,101 @@ describe("authenticate middleware", () => {
     });
   });
 
+  it("blocks inactive users before role evaluation", async () => {
+    const upsertUserFromPrincipal = vi.fn().mockResolvedValue({ id: "user-1", activeStatus: false });
+    const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
+    const getActiveRoles = vi.fn().mockResolvedValue(["PARTICIPANT"]);
+
+    vi.doMock("../src/config/env.js", () => ({
+      env: {
+        AUTH_MODE: "mock",
+        ENTRA_TENANT_ID: undefined,
+        ENTRA_AUDIENCE: undefined,
+        DEFAULT_LOCALE: "en-GB",
+        MOCK_DEFAULT_USER_ID: "participant-1",
+        MOCK_DEFAULT_EMAIL: "participant@company.com",
+        MOCK_DEFAULT_NAME: "Platform Participant",
+        MOCK_DEFAULT_DEPARTMENT: "Consulting",
+      },
+    }));
+    vi.doMock("../src/repositories/userRepository.js", () => ({
+      upsertUserFromPrincipal,
+      syncEntraGroupRoles,
+      getActiveRoles,
+    }));
+
+    const { authenticate } = await import("../src/auth/authenticate.js");
+    const request = buildRequest({
+      "x-user-id": "participant-1",
+      "x-user-email": "participant@company.com",
+      "x-user-name": "Platform Participant",
+      "x-user-department": "Consulting",
+      "x-user-roles": "PARTICIPANT",
+    });
+    const response = buildResponse();
+    const next = vi.fn();
+
+    await authenticate(request as never, response as never, next);
+
+    expect(response.status).toHaveBeenCalledWith(403);
+    expect(response.json).toHaveBeenCalledWith({
+      error: "forbidden",
+      message: "Your account has been deactivated.",
+    });
+    expect(syncEntraGroupRoles).not.toHaveBeenCalled();
+    expect(getActiveRoles).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when login email is linked to a different external identity", async () => {
+    const conflict = Object.assign(new Error("Email is already linked."), {
+      code: "identity_reconciliation_conflict",
+    });
+    const upsertUserFromPrincipal = vi.fn().mockRejectedValue(conflict);
+    const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
+    const getActiveRoles = vi.fn().mockResolvedValue(["PARTICIPANT"]);
+
+    vi.doMock("../src/config/env.js", () => ({
+      env: {
+        AUTH_MODE: "mock",
+        ENTRA_TENANT_ID: undefined,
+        ENTRA_AUDIENCE: undefined,
+        DEFAULT_LOCALE: "en-GB",
+        MOCK_DEFAULT_USER_ID: "participant-1",
+        MOCK_DEFAULT_EMAIL: "participant@company.com",
+        MOCK_DEFAULT_NAME: "Platform Participant",
+        MOCK_DEFAULT_DEPARTMENT: "Consulting",
+      },
+    }));
+    vi.doMock("../src/repositories/userRepository.js", () => ({
+      upsertUserFromPrincipal,
+      syncEntraGroupRoles,
+      getActiveRoles,
+    }));
+
+    const { authenticate } = await import("../src/auth/authenticate.js");
+    const request = buildRequest({
+      "x-user-id": "attacker-external-id",
+      "x-user-email": "participant@company.com",
+      "x-user-name": "Platform Participant",
+      "x-user-department": "Consulting",
+      "x-user-roles": "PARTICIPANT",
+    });
+    const response = buildResponse();
+    const next = vi.fn();
+
+    await authenticate(request as never, response as never, next);
+
+    expect(response.status).toHaveBeenCalledWith(403);
+    expect(response.json).toHaveBeenCalledWith({
+      error: "identity_conflict",
+      message: "This email is already linked to a different identity.",
+    });
+    expect(syncEntraGroupRoles).not.toHaveBeenCalled();
+    expect(getActiveRoles).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("merges Entra JWT token roles with DB-assigned roles in Entra mode", async () => {
     const upsertUserFromPrincipal = vi.fn().mockResolvedValue({ id: "user-1" });
     const syncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);

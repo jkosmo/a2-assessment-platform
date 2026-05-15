@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { env } from "./env.js";
+import { env, isMockAuthRuntimeAllowed } from "./env.js";
 import { buildWorkspaceNavigationItems, type WorkspaceNavigationItem } from "./capabilities.js";
 
 const mockRoleSchema = z.enum([
@@ -125,11 +125,12 @@ function getParticipantConsoleConfig(): ParticipantConsoleConfig {
 
 export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeConfig {
   const config = getParticipantConsoleConfig();
+  const mockRoleSwitchEnabled = env.AUTH_MODE === "mock" && isMockAuthRuntimeAllowed;
   return {
     authMode: env.AUTH_MODE,
     debugMode: resolveParticipantConsoleDebugMode(),
-    mockRoleSwitchEnabled: env.AUTH_MODE === "mock",
-    mockRolePresets: config.mockRolePresets,
+    mockRoleSwitchEnabled,
+    mockRolePresets: mockRoleSwitchEnabled ? config.mockRolePresets : [],
     navigation: {
       // calibrationWorkspace.accessRoles is the runtime override for calibration access — see capabilities.ts
       items: buildWorkspaceNavigationItems(config.calibrationWorkspace.accessRoles),
@@ -139,7 +140,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     manualReviewWorkspace: config.manualReviewWorkspace,
     flow: config.flow,
     calibrationWorkspace: config.calibrationWorkspace,
-    identityDefaults: config.identityDefaults,
+    identityDefaults: mockRoleSwitchEnabled ? config.identityDefaults : undefined,
     entra:
       env.AUTH_MODE === "entra" && env.ENTRA_CLIENT_ID && env.ENTRA_TENANT_ID && env.ENTRA_AUDIENCE
         ? {

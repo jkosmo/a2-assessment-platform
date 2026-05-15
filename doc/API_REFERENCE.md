@@ -1,6 +1,6 @@
 # API Reference
 
-All `/api/*` routes require authentication. In `AUTH_MODE=mock`, use the `x-user-roles` header to set roles. In `AUTH_MODE=entra`, a valid JWT is required.
+All `/api/*` routes require authentication. In local/test `AUTH_MODE=mock`, use the `x-user-roles` header to set roles. Shared Azure environments must use `AUTH_MODE=entra`, where a valid JWT is required and mock identity headers are ignored.
 
 ## Source of truth
 

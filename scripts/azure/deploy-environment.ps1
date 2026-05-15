@@ -21,7 +21,7 @@ param(
   [int]$PostgresBackupRetentionDays = 7,
   [string]$PostgresGeoRedundantBackup = "Disabled",
   [string]$PostgresHighAvailabilityMode = "Disabled",
-  [string]$AuthMode = "mock",
+  [string]$AuthMode = "entra",
   [string]$EntraTenantId = "",
   [string]$EntraClientId = "",
   [string]$EntraAudience = "",
@@ -50,7 +50,8 @@ param(
   [string]$AcsEmailSenderDisplayName = "A2 Assessment Platform",
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30,
-  [string]$ParserWorkerAuthKey = ""
+  [string]$ParserWorkerAuthKey = "",
+  [string]$PackagePath = ""
 )
 
 Set-StrictMode -Version Latest
@@ -70,6 +71,18 @@ if (-not ($IsLinux -or $IsMacOS)) {
 
 if (-not $ResourceGroupName) {
   $ResourceGroupName = "rg-a2-assessment-$EnvironmentName"
+}
+
+if ([string]::IsNullOrWhiteSpace($AuthMode)) {
+  $AuthMode = "entra"
+}
+
+if (@("staging", "production") -contains $EnvironmentName -and $AuthMode -eq "mock") {
+  throw "AUTH_MODE=mock is not allowed for shared Azure environments. Configure Entra settings and deploy with -AuthMode entra."
+}
+
+if ($AuthMode -eq "entra" -and ([string]::IsNullOrWhiteSpace($EntraTenantId) -or [string]::IsNullOrWhiteSpace($EntraClientId) -or [string]::IsNullOrWhiteSpace($EntraAudience))) {
+  throw "ENTRA_TENANT_ID, ENTRA_CLIENT_ID, and ENTRA_AUDIENCE are required when -AuthMode entra."
 }
 
 if (-not $ParserWorkerAuthKey) {
@@ -152,6 +165,12 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
     }
   }
   throw "az webapp deploy to $AppName failed after $maxAttempts attempts."
+}
+
+function Restart-WebAppForKeyVaultReferences([string]$ResourceGroup, [string]$AppName) {
+  Write-Host "Restarting $AppName to refresh Key Vault references..."
+  az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
+  Assert-LastExitCode "restart $AppName"
 }
 
 function Copy-DeploymentSources([string]$destinationRoot) {
@@ -327,44 +346,52 @@ if (-not $parserAppName) {
 }
 
 $tempBasePath = Get-TempBasePath
-$tmpRoot = Join-Path $tempBasePath "a2-assessment-deploy-$EnvironmentName"
-if (Test-Path $tmpRoot) {
-  Remove-Item $tmpRoot -Recurse -Force
-}
-New-Item -Path $tmpRoot -ItemType Directory | Out-Null
+if ($PackagePath) {
+  $zipPath = [System.IO.Path]::GetFullPath($PackagePath)
+  if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
+    throw "PackagePath does not exist: $zipPath"
+  }
+  Write-Host "Using prebuilt deployment package: $zipPath"
+} else {
+  $tmpRoot = Join-Path $tempBasePath "a2-assessment-deploy-$EnvironmentName"
+  if (Test-Path $tmpRoot) {
+    Remove-Item $tmpRoot -Recurse -Force
+  }
+  New-Item -Path $tmpRoot -ItemType Directory | Out-Null
 
-Copy-DeploymentSources -destinationRoot $tmpRoot
+  Copy-DeploymentSources -destinationRoot $tmpRoot
 
-Push-Location $tmpRoot
-try {
-  Write-Host "Building deployment artifact in: $tmpRoot"
-  npm ci
-  Assert-LastExitCode "npm ci"
-  npm run prisma:generate
-  Assert-LastExitCode "npm run prisma:generate"
-  npm run build
-  Assert-LastExitCode "npm run build"
-  npm prune --omit=dev
-  Assert-LastExitCode "npm prune --omit=dev"
-} finally {
-  Pop-Location
-}
-
-$zipPath = Join-Path $tempBasePath "a2-assessment-$EnvironmentName.zip"
-if (Test-Path $zipPath) {
-  Remove-Item $zipPath -Force
-}
-
-if ($IsLinux -or $IsMacOS) {
   Push-Location $tmpRoot
   try {
-    zip -r -q $zipPath .
-    Assert-LastExitCode "zip package"
+    Write-Host "Building deployment artifact in: $tmpRoot"
+    npm ci --ignore-scripts
+    Assert-LastExitCode "npm ci --ignore-scripts"
+    npm run prisma:generate
+    Assert-LastExitCode "npm run prisma:generate"
+    npm run build
+    Assert-LastExitCode "npm run build"
+    npm prune --omit=dev --ignore-scripts
+    Assert-LastExitCode "npm prune --omit=dev --ignore-scripts"
   } finally {
     Pop-Location
   }
-} else {
-  New-ZipArchiveFromDirectory -sourceDirectory $tmpRoot -zipPath $zipPath
+
+  $zipPath = Join-Path $tempBasePath "a2-assessment-$EnvironmentName.zip"
+  if (Test-Path $zipPath) {
+    Remove-Item $zipPath -Force
+  }
+
+  if ($IsLinux -or $IsMacOS) {
+    Push-Location $tmpRoot
+    try {
+      zip -r -q $zipPath .
+      Assert-LastExitCode "zip package"
+    } finally {
+      Pop-Location
+    }
+  } else {
+    New-ZipArchiveFromDirectory -sourceDirectory $tmpRoot -zipPath $zipPath
+  }
 }
 
 # Staging runs web, worker, and parser on the same small App Service plan.
@@ -373,59 +400,14 @@ Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -Z
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 
-# Key Vault RBAC role assignments for managed identities take 30–120 s to propagate after
-# the Bicep deployment completes. If the app starts before propagation finishes, the KV
-# references in app settings resolve to the raw reference string instead of the secret
-# value, causing 500 errors on any database or OpenAI call.
-# Fix: inject the resolved values directly as app settings after zip deploy. The app
-# restarts once more (settings change triggers restart), and starts with correct values.
-Write-Host "Resolving secrets and injecting directly into app settings (KV RBAC propagation fix)..."
-
-$encodedPgPassword = [Uri]::EscapeDataString($PostgresAdministratorPassword)
-$resolvedDatabaseUrl = "postgresql://${PostgresAdministratorLogin}:${encodedPgPassword}@${postgresServerName}.postgres.database.azure.com:5432/${postgresDatabaseName}?schema=public&sslmode=require"
-
-$acsResourceName = (az resource list `
-  --resource-group $ResourceGroupName `
-  --resource-type "Microsoft.Communication/communicationServices" `
-  --query "[0].name" -o tsv 2>$null).Trim()
-$resolvedAcsConn = ""
-if ($acsResourceName) {
-  $resolvedAcsConn = (az communication list-key `
-    --name $acsResourceName `
-    --resource-group $ResourceGroupName `
-    --query "primaryConnectionString" -o tsv 2>$null).Trim()
-}
-
-$sharedSecrets = [System.Collections.Generic.List[hashtable]]::new()
-$sharedSecrets.Add(@{ name = "DATABASE_URL"; value = $resolvedDatabaseUrl; slotSetting = $false })
-if (-not [string]::IsNullOrEmpty($AzureOpenAiApiKey)) {
-  $sharedSecrets.Add(@{ name = "AZURE_OPENAI_API_KEY"; value = $AzureOpenAiApiKey; slotSetting = $false })
-}
-if (-not [string]::IsNullOrEmpty($resolvedAcsConn)) {
-  $sharedSecrets.Add(@{ name = "AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING"; value = $resolvedAcsConn; slotSetting = $false })
-}
-$sharedSecrets.Add(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false })
-
-$sharedSecretsFile = Join-Path $tempBasePath "resolved-secrets.json"
-# Use UTF-8 without BOM. Out-File -Encoding utf8 writes BOM in PowerShell 5.1 and some 7.x
-# versions, which causes az CLI to store BOM as the first character of secret values.
-# BOM (U+FEFF) in e.g. AZURE_OPENAI_API_KEY breaks Node.js fetch() header validation
-# (ByteString restriction) and causes 500 errors on every LLM generation request.
-[System.IO.File]::WriteAllText($sharedSecretsFile, ($sharedSecrets | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
-
-az webapp config appsettings set --name $webAppName --resource-group $ResourceGroupName --settings "@$sharedSecretsFile" | Out-Null
-Assert-LastExitCode "inject secrets into web app"
-az webapp config appsettings set --name $workerAppName --resource-group $ResourceGroupName --settings "@$sharedSecretsFile" | Out-Null
-Assert-LastExitCode "inject secrets into worker app"
-
-$parserSecretsFile = Join-Path $tempBasePath "parser-resolved-secrets.json"
-[System.IO.File]::WriteAllText($parserSecretsFile, (@(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false }) | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
-az webapp config appsettings set --name $parserAppName --resource-group $ResourceGroupName --settings "@$parserSecretsFile" | Out-Null
-Assert-LastExitCode "inject secrets into parser app"
-
-Remove-Item $sharedSecretsFile -ErrorAction SilentlyContinue
-Remove-Item $parserSecretsFile -ErrorAction SilentlyContinue
-Write-Host "Secrets injected. Apps restarting with resolved values."
+# Key Vault RBAC role assignments for managed identities can take 30-120 s to
+# propagate. Keep App Service settings as Key Vault references and refresh the
+# apps after propagation instead of writing raw secret values into app settings.
+Write-Host "Waiting for Key Vault RBAC propagation before refreshing app runtimes..."
+Start-Sleep -Seconds 90
+Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $workerAppName
+Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $parserAppName
+Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $webAppName
 
 function Get-WebAppState {
   param([string]$ResourceGroup, [string]$AppName)

@@ -40,6 +40,15 @@ function parseRoleNames(input: string[] | undefined): AppRole[] {
     .filter((role) => valid.has(role)) as AppRole[];
 }
 
+function isIdentityReconciliationError(error: unknown): error is { code: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "identity_reconciliation_conflict"
+  );
+}
+
 function principalFromMockHeaders(request: Request): AuthPrincipal {
   const headerRoles = request.header("x-user-roles");
   const roleHints = headerRoles ? headerRoles.split(",") : [];
@@ -174,6 +183,15 @@ export async function authenticate(request: Request, response: Response, next: N
 
     next();
   } catch (error) {
+    if (isIdentityReconciliationError(error)) {
+      console.warn("Blocked login because the email is already linked to a different external identity.");
+      response.status(403).json({
+        error: "identity_conflict",
+        message: "This email is already linked to a different identity.",
+      });
+      return;
+    }
+
     console.error("Authentication backend failed.", error);
     next(new AppError("internal_error", 500, "Internal server error."));
   }

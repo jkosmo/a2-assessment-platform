@@ -33,9 +33,8 @@ afterEach(() => {
 });
 
 describe("user repository", () => {
-  it("recovers from a concurrent create on email/externalId collision", async () => {
+  it("recovers from a concurrent create on externalId collision without reactivating the user", async () => {
     findUnique
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: "user-1" });
@@ -64,7 +63,7 @@ describe("user repository", () => {
         email: "participant@company.com",
         name: "Platform Participant",
         department: "Consulting",
-        activeStatus: true,
+        lastLoginAt: expect.any(Date),
       },
     });
     expect(result).toEqual({
@@ -89,5 +88,60 @@ describe("user repository", () => {
         tokenRoles: ["PARTICIPANT"],
       }),
     ).rejects.toThrow("disk I/O error");
+  });
+
+  it("does not link a new external identity to an existing email during login", async () => {
+    findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "existing-user", externalId: "original-external-id" });
+
+    const { upsertUserFromPrincipal } = await import("../../src/repositories/userRepository.js");
+
+    await expect(
+      upsertUserFromPrincipal({
+        externalId: "attacker-external-id",
+        email: "participant@company.com",
+        name: "Platform Participant",
+        department: "Consulting",
+        tokenRoles: ["PARTICIPANT"],
+      }),
+    ).rejects.toMatchObject({
+      code: "identity_reconciliation_conflict",
+    });
+
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("does not reactivate inactive users when their external identity logs in", async () => {
+    findUnique
+      .mockResolvedValueOnce({ id: "user-1", email: "participant@company.com", activeStatus: false })
+      .mockResolvedValueOnce({ id: "user-1", externalId: "participant-1" });
+    update.mockResolvedValueOnce({
+      id: "user-1",
+      externalId: "participant-1",
+      email: "participant@company.com",
+      activeStatus: false,
+    });
+
+    const { upsertUserFromPrincipal } = await import("../../src/repositories/userRepository.js");
+
+    const result = await upsertUserFromPrincipal({
+      externalId: "participant-1",
+      email: "participant@company.com",
+      name: "Platform Participant",
+      department: "Consulting",
+      tokenRoles: ["PARTICIPANT"],
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: {
+        email: "participant@company.com",
+        name: "Platform Participant",
+        department: "Consulting",
+        lastLoginAt: expect.any(Date),
+      },
+    });
+    expect(result.activeStatus).toBe(false);
   });
 });

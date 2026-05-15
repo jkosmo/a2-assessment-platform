@@ -7,9 +7,10 @@ param(
 )
 
 # Run once by a subscription Owner/Admin before the first production deploy.
-# Grants the GitHub Actions service principal User Access Administrator on the
-# production resource group so that Bicep roleAssignments/write succeeds during
-# Key Vault managed-identity role assignment creation.
+# Grants the GitHub Actions service principal Role Based Access Control
+# Administrator on the production resource group so Bicep roleAssignments/write
+# succeeds during Key Vault managed-identity role assignment creation without
+# granting broader User Access Administrator permissions.
 #
 # This step cannot be performed by the deploy workflow itself because the SP
 # lacks roleAssignments/write until after this script runs.
@@ -17,7 +18,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$userAccessAdminRoleId = "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9"
+$rbacAdministratorRoleId = "f1a07417-d97a-45cb-824c-7a7467783830"
 
 Write-Host "Authenticating to tenant $TenantId..."
 az login --use-device-code --tenant $TenantId
@@ -47,10 +48,10 @@ if (-not $rgId) { throw "Could not retrieve resource group ID" }
 
 $assignmentGuid = (node -e "const {randomUUID}=require('crypto');console.log(randomUUID())").Trim()
 
-Write-Host "Granting User Access Administrator to SP $ServicePrincipalObjectId on $ResourceGroupName..."
+Write-Host "Granting Role Based Access Control Administrator to SP $ServicePrincipalObjectId on $ResourceGroupName..."
 $body = @{
   properties = @{
-    roleDefinitionId = "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$userAccessAdminRoleId"
+    roleDefinitionId = "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$rbacAdministratorRoleId"
     principalId      = $ServicePrincipalObjectId
     principalType    = "ServicePrincipal"
   }
@@ -73,5 +74,5 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "Bootstrap complete. GitHub Actions SP $ServicePrincipalObjectId now has"
-Write-Host "User Access Administrator on resource group $ResourceGroupName."
+Write-Host "Role Based Access Control Administrator on resource group $ResourceGroupName."
 Write-Host "You can now trigger the production deploy workflow."
