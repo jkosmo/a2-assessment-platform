@@ -415,6 +415,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     sku: { family: 'A', name: 'standard' }
     tenantId: tenant().tenantId
     enableRbacAuthorization: false
+    accessPolicies: []
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     enablePurgeProtection: environmentName == 'production' ? true : null

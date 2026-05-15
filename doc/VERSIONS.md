@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.5 - 2026-05-15
+
+fix(infra): Add accessPolicies: [] to Key Vault properties to fix staging deploy
+
+- `infra/azure/main.bicep`: ARM requires `accessPolicies` property when
+  `enableRbacAuthorization: false`, even if initially empty. Without it,
+  ARM returns `"The parameter accessPolicies is not specified."` and rejects
+  the deployment. The `kvAccessPolicies` child resource still handles the
+  actual policy assignments.
+
 ## 1.1.4 - 2026-05-15
 
 fix(infra): Switch KV to access policies; restrict production deploy to manual dispatch
