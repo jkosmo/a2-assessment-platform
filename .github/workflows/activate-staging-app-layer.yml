@@ -105,8 +105,55 @@ jobs:
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
             -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}"
 
+      - name: Verify staging app layer
+        shell: pwsh
+        run: |
+          $resourceGroup = "${{ vars.AZURE_RESOURCE_GROUP }}"
+          $postgresServerState = (az postgres flexible-server list `
+            --resource-group $resourceGroup `
+            --query "[?tags.environment=='staging'].state | [0]" `
+            --output tsv).Trim()
+          if ($postgresServerState -ne "Ready") {
+            throw "Expected staging PostgreSQL server to be Ready, but found '$postgresServerState'."
+          }
+
+          $webAppCount = [int](az webapp list `
+            --resource-group $resourceGroup `
+            --query "length(@)" `
+            --output tsv)
+          if ($webAppCount -lt 3) {
+            throw "Expected at least 3 staging web apps after activation, but found $webAppCount."
+          }
+
+          $planCount = [int](az appservice plan list `
+            --resource-group $resourceGroup `
+            --query "length(@)" `
+            --output tsv)
+          if ($planCount -lt 1) {
+            throw "Expected an App Service plan after activation, but none was found."
+          }
+
+          $disabledScheduledQueryRuleCount = [int](az resource list `
+            --resource-group $resourceGroup `
+            --resource-type Microsoft.Insights/scheduledQueryRules `
+            --query "[?properties.enabled!=\`true\`] | length(@)" `
+            --output tsv)
+          if ($disabledScheduledQueryRuleCount -ne 0) {
+            throw "Expected all scheduled query rules to be enabled after activation, but found $disabledScheduledQueryRuleCount disabled."
+          }
+
+          $metricAlertCount = [int](az resource list `
+            --resource-group $resourceGroup `
+            --resource-type Microsoft.Insights/metricAlerts `
+            --query "length(@)" `
+            --output tsv)
+          if ($metricAlertCount -lt 2) {
+            throw "Expected metric alerts to be recreated after activation, but found $metricAlertCount."
+          }
+
       - name: Summarize result
         run: |
           echo "Staging app layer activated from ref: ${{ github.event.inputs.ref || github.ref }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "PostgreSQL compute was started before deploy, then the normal staging deployment recreated the App Service layer." >> "$GITHUB_STEP_SUMMARY"
+          echo "Verification confirmed PostgreSQL, App Service, and alert resources were restored." >> "$GITHUB_STEP_SUMMARY"
