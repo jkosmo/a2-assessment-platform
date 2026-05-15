@@ -40,7 +40,9 @@ function Wait-ResourceDeleted([string]$resourceId, [string]$label) {
 }
 
 function Invoke-AzResourceUpdateBestEffort([string]$resourceId, [string]$label) {
-  $result = az resource update --ids $resourceId --set properties.enabled=false --output none 2>&1
+  $escapedResourceId = $resourceId.Replace('"', '\"')
+  $command = "az resource update --ids ""$escapedResourceId"" --set properties.enabled=false --output none"
+  $result = cmd /d /c $command 2>&1
   if ($LASTEXITCODE -eq 0) {
     return
   }
