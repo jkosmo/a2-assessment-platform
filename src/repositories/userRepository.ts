@@ -53,6 +53,17 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
   }
 
   if (existingByEmail) {
+    if (env.AUTH_MODE === "mock") {
+      return prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          externalId: principal.externalId,
+          name: principal.name,
+          department: principal.department,
+          lastLoginAt: now,
+        },
+      });
+    }
     throw new IdentityReconciliationError();
   }
 
@@ -83,6 +94,18 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         select: { id: true },
       });
       if (createdByEmail) {
+        if (env.AUTH_MODE === "mock") {
+          return prisma.user.update({
+            where: { id: createdByEmail.id },
+            data: {
+              externalId: principal.externalId,
+              email: principal.email,
+              name: principal.name,
+              department: principal.department,
+              lastLoginAt: now,
+            },
+          });
+        }
         throw new IdentityReconciliationError();
       }
       throw error;
