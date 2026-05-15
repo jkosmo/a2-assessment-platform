@@ -407,7 +407,11 @@ if (-not [string]::IsNullOrEmpty($resolvedAcsConn)) {
 $sharedSecrets.Add(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false })
 
 $sharedSecretsFile = Join-Path $tempBasePath "resolved-secrets.json"
-$sharedSecrets | ConvertTo-Json | Out-File -FilePath $sharedSecretsFile -Encoding utf8
+# Use UTF-8 without BOM. Out-File -Encoding utf8 writes BOM in PowerShell 5.1 and some 7.x
+# versions, which causes az CLI to store BOM as the first character of secret values.
+# BOM (U+FEFF) in e.g. AZURE_OPENAI_API_KEY breaks Node.js fetch() header validation
+# (ByteString restriction) and causes 500 errors on every LLM generation request.
+[System.IO.File]::WriteAllText($sharedSecretsFile, ($sharedSecrets | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
 
 az webapp config appsettings set --name $webAppName --resource-group $ResourceGroupName --settings "@$sharedSecretsFile" | Out-Null
 Assert-LastExitCode "inject secrets into web app"
@@ -415,7 +419,7 @@ az webapp config appsettings set --name $workerAppName --resource-group $Resourc
 Assert-LastExitCode "inject secrets into worker app"
 
 $parserSecretsFile = Join-Path $tempBasePath "parser-resolved-secrets.json"
-@(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false }) | ConvertTo-Json | Out-File -FilePath $parserSecretsFile -Encoding utf8
+[System.IO.File]::WriteAllText($parserSecretsFile, (@(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false }) | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
 az webapp config appsettings set --name $parserAppName --resource-group $ResourceGroupName --settings "@$parserSecretsFile" | Out-Null
 Assert-LastExitCode "inject secrets into parser app"
 
