@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.2 - 2026-05-15
+
+fix(infra): Inject resolved secrets after zip deploy to fix KV RBAC propagation race
+
+- `scripts/azure/deploy-environment.ps1`: After zip deploy, construct DATABASE_URL from
+  deploy parameters and read ACS connection string via `az communication list-key`, then
+  write all resolved secret values directly as app settings. This ensures the app restarts
+  with correct values even when Key Vault RBAC role assignments haven't fully propagated
+  to the managed identity yet (typical window: 30–120 s after Bicep deployment).
+
 ## 1.1.1 - 2026-05-15
 
 fix(security): Critical security findings from Codex assessment (all 23 high-severity findings addressed)

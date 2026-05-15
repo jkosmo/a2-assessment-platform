@@ -361,6 +361,56 @@ Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -Z
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 
+# Key Vault RBAC role assignments for managed identities take 30–120 s to propagate after
+# the Bicep deployment completes. If the app starts before propagation finishes, the KV
+# references in app settings resolve to the raw reference string instead of the secret
+# value, causing 500 errors on any database or OpenAI call.
+# Fix: inject the resolved values directly as app settings after zip deploy. The app
+# restarts once more (settings change triggers restart), and starts with correct values.
+Write-Host "Resolving secrets and injecting directly into app settings (KV RBAC propagation fix)..."
+
+$encodedPgPassword = [Uri]::EscapeDataString($PostgresAdministratorPassword)
+$resolvedDatabaseUrl = "postgresql://${PostgresAdministratorLogin}:${encodedPgPassword}@${postgresServerName}.postgres.database.azure.com:5432/${postgresDatabaseName}?schema=public&sslmode=require"
+
+$acsResourceName = (az resource list `
+  --resource-group $ResourceGroupName `
+  --resource-type "Microsoft.Communication/communicationServices" `
+  --query "[0].name" -o tsv 2>$null).Trim()
+$resolvedAcsConn = ""
+if ($acsResourceName) {
+  $resolvedAcsConn = (az communication list-key `
+    --name $acsResourceName `
+    --resource-group $ResourceGroupName `
+    --query "primaryConnectionString" -o tsv 2>$null).Trim()
+}
+
+$sharedSecrets = [System.Collections.Generic.List[hashtable]]::new()
+$sharedSecrets.Add(@{ name = "DATABASE_URL"; value = $resolvedDatabaseUrl; slotSetting = $false })
+if (-not [string]::IsNullOrEmpty($AzureOpenAiApiKey)) {
+  $sharedSecrets.Add(@{ name = "AZURE_OPENAI_API_KEY"; value = $AzureOpenAiApiKey; slotSetting = $false })
+}
+if (-not [string]::IsNullOrEmpty($resolvedAcsConn)) {
+  $sharedSecrets.Add(@{ name = "AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING"; value = $resolvedAcsConn; slotSetting = $false })
+}
+$sharedSecrets.Add(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false })
+
+$sharedSecretsFile = Join-Path $tempBasePath "resolved-secrets.json"
+$sharedSecrets | ConvertTo-Json | Out-File -FilePath $sharedSecretsFile -Encoding utf8
+
+az webapp config appsettings set --name $webAppName --resource-group $ResourceGroupName --settings "@$sharedSecretsFile" | Out-Null
+Assert-LastExitCode "inject secrets into web app"
+az webapp config appsettings set --name $workerAppName --resource-group $ResourceGroupName --settings "@$sharedSecretsFile" | Out-Null
+Assert-LastExitCode "inject secrets into worker app"
+
+$parserSecretsFile = Join-Path $tempBasePath "parser-resolved-secrets.json"
+@(@{ name = "PARSER_WORKER_AUTH_KEY"; value = $ParserWorkerAuthKey; slotSetting = $false }) | ConvertTo-Json | Out-File -FilePath $parserSecretsFile -Encoding utf8
+az webapp config appsettings set --name $parserAppName --resource-group $ResourceGroupName --settings "@$parserSecretsFile" | Out-Null
+Assert-LastExitCode "inject secrets into parser app"
+
+Remove-Item $sharedSecretsFile -ErrorAction SilentlyContinue
+Remove-Item $parserSecretsFile -ErrorAction SilentlyContinue
+Write-Host "Secrets injected. Apps restarting with resolved values."
+
 function Get-WebAppState {
   param([string]$ResourceGroup, [string]$AppName)
   try {
