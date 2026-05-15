@@ -126,8 +126,8 @@ modulesRouter.get("/:moduleId", async (request, response) => {
     return;
   }
 
-  // Sikkerhetsfiks: Fjern sensornotater fra detaljvisning for deltakere
-  if (module && (module as any).guidanceText) {
+  const isParticipantOnly = !roles.some((r) => r !== "PARTICIPANT");
+  if (isParticipantOnly && (module as any).guidanceText) {
     delete (module as any).guidanceText;
   }
 
@@ -147,8 +147,8 @@ modulesRouter.get("/:moduleId/active-version", async (request, response) => {
     return;
   }
 
-  // Sikkerhetsfiks: Fjern sensornotater fra versjonsvisning for deltakere
-  if (activeVersion && (activeVersion as any).guidanceText) {
+  const isParticipantOnly = !roles.some((r) => r !== "PARTICIPANT");
+  if (isParticipantOnly && (activeVersion as any).guidanceText) {
     delete (activeVersion as any).guidanceText;
   }
 
