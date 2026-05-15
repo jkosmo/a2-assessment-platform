@@ -152,9 +152,10 @@ jobs:
           }
 
       - name: Summarize result
-        run: echo "Staging app layer activated from ref: $DEPLOY_REF" >> "$GITHUB_STEP_SUMMARY"
-        env:
-          DEPLOY_REF: ${{ github.event.inputs.ref || github.ref }}
+        run: |
+          echo "Staging app layer activated from ref: $DEPLOY_REF" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "PostgreSQL compute was started before deploy, then the normal staging deployment recreated the App Service layer." >> "$GITHUB_STEP_SUMMARY"
           echo "Verification confirmed PostgreSQL, App Service, and alert resources were restored." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          DEPLOY_REF: ${{ github.event.inputs.ref || github.ref }}
