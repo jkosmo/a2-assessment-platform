@@ -105,15 +105,12 @@ jobs:
             -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}"
 
   deploy-production:
-    # Runs on push to main (direct production deploy, no staging dependency),
-    # OR on workflow_dispatch when deploy_production=true AND staging succeeded.
+    # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded.
+    # Production never deploys automatically on push to main.
     if: |
-      always() && (
-        github.event_name == 'push' ||
-        (github.event_name == 'workflow_dispatch' &&
-         github.event.inputs.deploy_production == 'true' &&
-         needs.deploy-staging.result == 'success')
-      )
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.deploy_production == 'true' &&
+      needs.deploy-staging.result == 'success'
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
