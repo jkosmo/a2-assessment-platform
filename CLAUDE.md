@@ -67,3 +67,40 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 - Always bump `package.json` version and `doc/VERSIONS.md` in the same commit as code changes.
 - Create GitHub issue → specify/plan → implement → test → document, in that order.
 - Deploy cadence: staging deploys on push to `main`; production requires manual `workflow_dispatch` with `deploy_production=true`.
+
+## AI delegation workflow (Claude orchestrates, Codex/Gemini drafts)
+
+Use `scripts/ai-draft.ps1` to delegate implementation to Codex or Gemini, then Claude QAs.
+
+### When to delegate
+
+| Task size | Action |
+|-----------|--------|
+| < ~50 lines, single file | Claude handles directly |
+| 50–300 lines, well-specified | Delegate with `Tier=medium` |
+| Large feature / multi-file | Delegate with `Tier=complex` |
+| Security-critical, auth, infra | Delegate with `Tier=security` (but raise scrutiny in QA) |
+
+### Model selection matrix
+
+| Tier | Codex model | Codex effort | Gemini model |
+|------|-------------|--------------|--------------|
+| simple | o4-mini | low | gemini-2.5-flash |
+| medium | o4-mini | high | gemini-2.5-flash |
+| complex | o3 | medium | gemini-2.5-pro |
+| security | o3 | xhigh | gemini-2.5-pro |
+
+**Agent auto-selection:** Codex for simple/medium (precise file edits, sandbox protection).
+Gemini for complex/security (larger context window helps with multi-file analysis).
+
+### Mandatory QA checklist after delegation
+
+After `ai-draft.ps1` finishes, Claude MUST:
+
+1. `git diff HEAD` — read the full diff, verify logic and intent
+2. `npx tsc --noEmit` — must be zero errors before proceeding
+3. `npx vitest run test/unit/` — no new failures allowed
+4. Check specifically for: fabricated constants/hashes, broken YAML in workflows, missing required config flags (e.g. `enableRbacAuthorization`), enum values that don't exist in schema
+5. Verify `package.json` and `doc/VERSIONS.md` were bumped
+
+Only after QA passes: commit, push, trigger CI/CD.
