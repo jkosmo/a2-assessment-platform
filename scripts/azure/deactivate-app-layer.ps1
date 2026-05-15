@@ -40,19 +40,18 @@ function Wait-ResourceDeleted([string]$resourceId, [string]$label) {
 }
 
 function Invoke-AzResourceUpdateBestEffort([string]$resourceId, [string]$label) {
-  try {
-    az resource update --ids $resourceId --set properties.enabled=false --output none
-    Assert-LastExitCode "az resource update $label"
+  $result = az resource update --ids $resourceId --set properties.enabled=false --output none 2>&1
+  if ($LASTEXITCODE -eq 0) {
     return
-  } catch {
-    $message = $_.Exception.Message
-    if ($message -like "*ResourceNotFound*") {
-      Write-Warning "$label could not be updated because its scoped resource is already gone. Continuing."
-      return
-    }
-
-    throw
   }
+
+  $message = ($result | Out-String)
+  if ($message -like "*ResourceNotFound*") {
+    Write-Warning "$label could not be updated because its scoped resource is already gone. Continuing."
+    return
+  }
+
+  throw "az resource update $label failed: $message"
 }
 
 if ($EnvironmentName -ne "staging") {
