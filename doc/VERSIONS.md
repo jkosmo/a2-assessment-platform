@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.23 - 2026-05-16
+
+fix(infra): tie enableRbacAuthorization to skipRoleAssignments to unblock production deploy
+
+When `skipRoleAssignments=true`, `enableRbacAuthorization` is set to `false` (preserving
+the existing state on production KV). Changing the KV permission model from Access Policy
+to RBAC requires `Microsoft.Authorization/roleAssignments/write` — the same permission the
+production deploy SP lacks. Keeping `enableRbacAuthorization=false` makes the KV resource
+idempotent for the current production state and lets the deploy proceed.
+
+Full RBAC migration (setting `enableRbacAuthorization=true` + all role assignments) will
+happen together when #404 is resolved next week.
+
+- `infra/azure/main.bicep`: `enableRbacAuthorization: !skipRoleAssignments`
+
 ## 1.1.22 - 2026-05-16
 
 fix(infra): add skipRoleAssignments parameter to unblock production deploy (#404)
