@@ -491,6 +491,8 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
 type PublishThresholdsInput = {
   moduleId: string;
   totalMin: number;
+  mcqMinPercent?: number;
+  practicalMinPercent?: number;
   actorId: string;
 };
 
@@ -509,12 +511,20 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
 
   const existingPolicy: ModuleAssessmentPolicy = assessmentPolicyCodec.parse(sourceVersion.assessmentPolicyJson) ?? {};
 
+  const newPassRules: ModuleAssessmentPolicy["passRules"] = {
+    ...(existingPolicy.passRules ?? {}),
+    totalMin: input.totalMin,
+  };
+  if (input.mcqMinPercent !== undefined) {
+    newPassRules.mcqMinPercent = input.mcqMinPercent;
+  }
+  if (input.practicalMinPercent !== undefined) {
+    newPassRules.practicalMinPercent = input.practicalMinPercent;
+  }
+
   const newPolicy: ModuleAssessmentPolicy = {
     ...existingPolicy,
-    passRules: {
-      ...(existingPolicy.passRules ?? {}),
-      totalMin: input.totalMin,
-    },
+    passRules: newPassRules,
   };
 
   const versionNo = await getNextVersionNo("module", input.moduleId);
@@ -549,6 +559,8 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       versionNo: newVersion.versionNo,
       sourceVersionId: sourceVersion.id,
       totalMin: input.totalMin,
+      mcqMinPercent: input.mcqMinPercent ?? null,
+      practicalMinPercent: input.practicalMinPercent ?? null,
       publishedAt: published.publishedAt?.toISOString() ?? null,
     },
   });

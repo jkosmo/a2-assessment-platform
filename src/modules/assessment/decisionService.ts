@@ -82,10 +82,20 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   const totalScore = Number((effectivePracticalScaledScore + effectiveMcqScaledScore).toFixed(2));
   const practicalPercent = rubricMaxTotal > 0 ? (recomputedRubricTotal / rubricMaxTotal) * 100 : null;
 
+  const mcqMinPercent = input.assessmentPolicy?.passRules?.mcqMinPercent ?? null;
+  const practicalMinPercent = input.assessmentPolicy?.passRules?.practicalMinPercent ?? null;
+
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
   const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
 
-  const passesThresholds = totalScore >= totalMin && !hasOpenRedFlag;
+  const mcqGatePasses = mcqMinPercent === null || input.mcqPercentScore >= mcqMinPercent;
+  const practicalGatePasses =
+    practicalMinPercent === null ||
+    (practicalPercent !== null && practicalPercent >= practicalMinPercent);
+
+  const passesThresholds =
+    totalScore >= totalMin && !hasOpenRedFlag && mcqGatePasses && practicalGatePasses;
+
   const llmRecommendsManualReview = recommendsManualReview(input.llmResult);
 
   const autoFailForInsufficientEvidence =
@@ -100,6 +110,12 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     hasOpenRedFlag ||
     (llmRecommendsManualReview && !autoFailForInsufficientEvidence);
 
+  const componentFailReason = !mcqGatePasses
+    ? "Automatic fail: MCQ score below required minimum."
+    : !practicalGatePasses
+      ? "Automatic fail: practical score below required minimum."
+      : null;
+
   const decisionReason = needsManualReview
     ? input.forceManualReviewReason ??
       (totalsInconsistent
@@ -109,7 +125,7 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
       ? "Automatic fail due to insufficient submission evidence."
       : passesThresholds
         ? "Automatic pass by threshold rules."
-        : "Automatic fail by threshold rules.";
+        : componentFailReason ?? "Automatic fail by threshold rules.";
 
   return {
     totalScore,

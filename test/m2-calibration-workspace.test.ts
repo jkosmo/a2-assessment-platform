@@ -81,7 +81,7 @@ describe("Calibration workspace Phase A", () => {
     });
     expect(module).toBeTruthy();
 
-    // 1. Snapshot shape: only totalMin + source in effectiveThresholds
+    // 1. Snapshot shape: effectiveThresholds has known fields; component minimums default to null
     const snap1 = await request(app)
       .get(`/api/calibration/workspace?moduleId=${encodeURIComponent(module!.id)}&limit=1`)
       .set(subjectMatterOwnerHeaders);
@@ -89,8 +89,8 @@ describe("Calibration workspace Phase A", () => {
     const thresholds = snap1.body.effectiveThresholds;
     expect(thresholds).toHaveProperty("totalMin");
     expect(thresholds).toHaveProperty("source");
-    expect(thresholds).not.toHaveProperty("practicalMinPercent");
-    expect(thresholds).not.toHaveProperty("mcqMinPercent");
+    expect(thresholds).toHaveProperty("mcqMinPercent", null);
+    expect(thresholds).toHaveProperty("practicalMinPercent", null);
     expect(thresholds).not.toHaveProperty("borderlineMin");
     expect(thresholds).not.toHaveProperty("borderlineMax");
 
