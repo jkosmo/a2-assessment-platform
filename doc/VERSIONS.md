@@ -2,6 +2,13 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.17 - 2026-05-16
+
+feat(ops/reporting): split authoring/assessment model config + per-level MCQ quality thresholds (#375, #377)
+
+- **#375 — Split LLM model config**: `env.ts` now accepts `AZURE_OPENAI_AUTHORING_DEPLOYMENT` and `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` (both optional, fall back to `AZURE_OPENAI_DEPLOYMENT`). `AZURE_OPENAI_AUTHORING_TEMPERATURE` (default 0.4) and `AZURE_OPENAI_ASSESSMENT_TEMPERATURE` (default: falls back to `AZURE_OPENAI_TEMPERATURE`) allow independent tuning. `llmContentGenerationService` uses authoring config; `llmAssessmentService` uses assessment config.
+- **#377 — Per-level MCQ difficulty thresholds**: `assessment-rules.json` adds `difficultyMaxByLevel` (basic: 0.90, intermediate: 0.85, advanced: 0.80) and `distractorPickRateMin: 0.05`. `getMcqQualityReport` looks up the level-specific threshold per question and flags `RARELY_CHOSEN_DISTRACTOR` when any distractor is chosen < 5% of attempts (with sufficient sample). Each row now includes `certificationLevel`, `difficultyMaxThreshold`, and `distractorUsage` (per-option pick counts and rates).
+
 ## 1.1.16 - 2026-05-16
 
 feat(content): rename guidanceText→assessorExpectedContent, add complexity budget, static validation, answerability check (#369, #371, #373, #374)

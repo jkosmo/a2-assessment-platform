@@ -43,10 +43,10 @@ export async function evaluatePracticalWithLlm(input: AssessmentContext): Promis
     return evaluatePracticalWithAzureOpenAi(input, {
       endpoint: env.AZURE_OPENAI_ENDPOINT ?? "",
       apiKey: env.AZURE_OPENAI_API_KEY ?? "",
-      deployment: env.AZURE_OPENAI_DEPLOYMENT ?? "",
+      deployment: env.AZURE_OPENAI_ASSESSMENT_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT ?? "",
       apiVersion: env.AZURE_OPENAI_API_VERSION,
       timeoutMs: env.AZURE_OPENAI_TIMEOUT_MS,
-      temperature: env.AZURE_OPENAI_TEMPERATURE,
+      temperature: env.AZURE_OPENAI_ASSESSMENT_TEMPERATURE ?? env.AZURE_OPENAI_TEMPERATURE,
       maxTokens: env.AZURE_OPENAI_MAX_TOKENS,
       tokenLimitParameter: env.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER,
     });

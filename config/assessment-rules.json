@@ -73,7 +73,13 @@
     "minAttemptCount": 5,
     "difficultyMin": 0.2,
     "difficultyMax": 0.9,
-    "discriminationMin": 0.1
+    "difficultyMaxByLevel": {
+      "basic": 0.90,
+      "intermediate": 0.85,
+      "advanced": 0.80
+    },
+    "discriminationMin": 0.1,
+    "distractorPickRateMin": 0.05
   },
   "sensitiveData": {
     "enabledByDefault": false,

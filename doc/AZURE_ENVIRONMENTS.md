@@ -110,10 +110,14 @@ For each environment, define variables/secrets used by workflow:
 - `LLM_MODE`
 - `LLM_STUB_MODEL_NAME`
 - `AZURE_OPENAI_ENDPOINT`
-- `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_OPENAI_DEPLOYMENT` (base deployment — used by both authoring and assessment if specific ones are not set)
+- `AZURE_OPENAI_AUTHORING_DEPLOYMENT` (optional — overrides `AZURE_OPENAI_DEPLOYMENT` for module-draft and MCQ generation)
+- `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` (optional — overrides `AZURE_OPENAI_DEPLOYMENT` for practical assessment scoring)
 - `AZURE_OPENAI_API_VERSION` (optional, default `2024-10-21`)
 - `AZURE_OPENAI_TIMEOUT_MS` (optional, default `120000`)
-- `AZURE_OPENAI_TEMPERATURE` (optional, default `0`)
+- `AZURE_OPENAI_TEMPERATURE` (optional, default `0` — base temperature, used as assessment fallback)
+- `AZURE_OPENAI_AUTHORING_TEMPERATURE` (optional, default `0.4` — creative temperature for content generation)
+- `AZURE_OPENAI_ASSESSMENT_TEMPERATURE` (optional, default: falls back to `AZURE_OPENAI_TEMPERATURE`)
 - `AZURE_OPENAI_MAX_TOKENS` (optional, default `1200`)
 - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` (optional, `max_tokens` | `max_completion_tokens` | `auto`, default `auto`)
 - `DEFAULT_LOCALE` (optional, default `en-GB`)
@@ -258,9 +262,12 @@ Use environment variables to switch model cost/quality profile without code chan
 
 ### Recommended staging profile (`gpt-5-nano`)
 - `LLM_MODE=azure_openai`
-- `AZURE_OPENAI_DEPLOYMENT=a2-assessment-stage-gpt-5-nano` (or your staging deployment name)
+- `AZURE_OPENAI_DEPLOYMENT=a2-assessment-stage-gpt-5-nano` (base fallback)
+- `AZURE_OPENAI_AUTHORING_DEPLOYMENT=a2-assessment-stage-gpt-5-nano` (or a creative model)
+- `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT=a2-assessment-stage-gpt-5-nano` (or a deterministic model)
 - `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER=auto`
 - `AZURE_OPENAI_TEMPERATURE=1`
+- `AZURE_OPENAI_AUTHORING_TEMPERATURE=0.4`
 - `AZURE_OPENAI_MAX_TOKENS=4000`
 - `AZURE_OPENAI_TIMEOUT_MS=45000`
 

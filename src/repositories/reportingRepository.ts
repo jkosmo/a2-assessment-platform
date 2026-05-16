@@ -194,14 +194,18 @@ export function createReportingRepository(client: ReportingRepositoryClient = pr
         select: {
           questionId: true,
           isCorrect: true,
+          selectedAnswer: true,
           question: {
             select: {
               id: true,
               stem: true,
+              optionsJson: true,
+              correctAnswer: true,
               module: {
                 select: {
                   id: true,
                   title: true,
+                  certificationLevel: true,
                 },
               },
             },

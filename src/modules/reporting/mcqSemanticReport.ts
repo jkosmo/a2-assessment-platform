@@ -6,17 +6,28 @@ import { reportingRepository } from "../../repositories/reportingRepository.js";
 import { normalizeFilters, round2 } from "./csvExport.js";
 import type { ReportFilters } from "./types.js";
 
+type DistractorStat = {
+  option: string;
+  pickCount: number;
+  pickRate: number;
+  isCorrect: boolean;
+  flaggedRarelyChosen: boolean;
+};
+
 type McqQualityRow = {
   moduleId: string;
   moduleTitle: string;
+  certificationLevel: string | null;
   questionId: string;
   questionStem: string;
   attemptCount: number;
   correctCount: number;
   difficulty: number | null;
+  difficultyMaxThreshold: number;
   discrimination: number | null;
   flaggedLowQuality: boolean;
   qualityFlags: string;
+  distractorUsage: DistractorStat[];
 };
 
 type AnalyticsTrendRow = {
@@ -70,8 +81,12 @@ export async function getMcqQualityReport(filters: ReportFilters) {
   const perQuestion = new Map<string, {
     moduleId: string;
     moduleTitle: string;
+    certificationLevel: string | null;
     questionId: string;
     questionStem: string;
+    optionsJson: string;
+    correctAnswer: string;
+    selectedAnswerCounts: Map<string, number>;
     responses: Array<{ isCorrect: boolean; attemptScore: number | null }>;
   }>();
 
@@ -79,8 +94,12 @@ export async function getMcqQualityReport(filters: ReportFilters) {
     const existing = perQuestion.get(response.questionId) ?? {
       moduleId: response.question.module.id,
       moduleTitle: localizeContentText("en-GB", response.question.module.title) ?? response.question.module.title,
+      certificationLevel: response.question.module.certificationLevel ?? null,
       questionId: response.question.id,
       questionStem: response.question.stem,
+      optionsJson: response.question.optionsJson,
+      correctAnswer: response.question.correctAnswer,
+      selectedAnswerCounts: new Map<string, number>(),
       responses: [],
     };
 
@@ -88,6 +107,10 @@ export async function getMcqQualityReport(filters: ReportFilters) {
       isCorrect: response.isCorrect,
       attemptScore: typeof response.mcqAttempt.percentScore === "number" ? response.mcqAttempt.percentScore : null,
     });
+    existing.selectedAnswerCounts.set(
+      response.selectedAnswer,
+      (existing.selectedAnswerCounts.get(response.selectedAnswer) ?? 0) + 1,
+    );
     perQuestion.set(response.questionId, existing);
   }
 
@@ -95,6 +118,10 @@ export async function getMcqQualityReport(filters: ReportFilters) {
     const attemptCount = entry.responses.length;
     const correctCount = entry.responses.filter((value) => value.isCorrect).length;
     const difficulty = attemptCount > 0 ? round2(correctCount / attemptCount) : null;
+
+    const level = entry.certificationLevel ?? "";
+    const difficultyMaxThreshold =
+      rules.mcqQuality.difficultyMaxByLevel[level] ?? rules.mcqQuality.difficultyMax;
 
     const scoresForDiscrimination = entry.responses
       .filter((value) => typeof value.attemptScore === "number")
@@ -107,7 +134,7 @@ export async function getMcqQualityReport(filters: ReportFilters) {
     if (difficulty !== null && difficulty < rules.mcqQuality.difficultyMin) {
       qualityFlags.push("TOO_DIFFICULT");
     }
-    if (difficulty !== null && difficulty > rules.mcqQuality.difficultyMax) {
+    if (difficulty !== null && difficulty > difficultyMaxThreshold) {
       qualityFlags.push("TOO_EASY");
     }
 
@@ -121,17 +148,44 @@ export async function getMcqQualityReport(filters: ReportFilters) {
       qualityFlags.push("INSUFFICIENT_SAMPLE");
     }
 
+    let distractorUsage: DistractorStat[] = [];
+    try {
+      const options: unknown[] = JSON.parse(entry.optionsJson);
+      if (Array.isArray(options) && attemptCount > 0) {
+        distractorUsage = options.map((opt) => {
+          const option = typeof opt === "string" ? opt : String(opt);
+          const pickCount = entry.selectedAnswerCounts.get(option) ?? 0;
+          const pickRate = round2(pickCount / attemptCount);
+          const isCorrect = option === entry.correctAnswer;
+          // A distractor is rarely chosen if it's not the correct answer and pick rate < threshold
+          const flaggedRarelyChosen =
+            !isCorrect &&
+            attemptCount >= rules.mcqQuality.minAttemptCount &&
+            pickRate < rules.mcqQuality.distractorPickRateMin;
+          return { option, pickCount, pickRate, isCorrect, flaggedRarelyChosen };
+        });
+        if (distractorUsage.some((d) => d.flaggedRarelyChosen)) {
+          qualityFlags.push("RARELY_CHOSEN_DISTRACTOR");
+        }
+      }
+    } catch {
+      // malformed optionsJson — skip distractor stats
+    }
+
     return {
       moduleId: entry.moduleId,
       moduleTitle: entry.moduleTitle,
+      certificationLevel: entry.certificationLevel,
       questionId: entry.questionId,
       questionStem: entry.questionStem,
       attemptCount,
       correctCount,
       difficulty,
+      difficultyMaxThreshold,
       discrimination,
       flaggedLowQuality: qualityFlags.length > 0,
       qualityFlags: qualityFlags.join("|"),
+      distractorUsage,
     };
   });
 
@@ -156,7 +210,9 @@ export async function getMcqQualityReport(filters: ReportFilters) {
       minAttemptCount: rules.mcqQuality.minAttemptCount,
       difficultyMin: rules.mcqQuality.difficultyMin,
       difficultyMax: rules.mcqQuality.difficultyMax,
+      difficultyMaxByLevel: rules.mcqQuality.difficultyMaxByLevel,
       discriminationMin: rules.mcqQuality.discriminationMin,
+      distractorPickRateMin: rules.mcqQuality.distractorPickRateMin,
     },
     totals: {
       questionCount: filteredRows.length,
@@ -165,6 +221,9 @@ export async function getMcqQualityReport(filters: ReportFilters) {
       tooEasyCount: filteredRows.filter((row) => row.qualityFlags.includes("TOO_EASY")).length,
       lowDiscriminationCount: filteredRows.filter((row) => row.qualityFlags.includes("LOW_DISCRIMINATION")).length,
       insufficientSampleCount: filteredRows.filter((row) => row.qualityFlags.includes("INSUFFICIENT_SAMPLE")).length,
+      rarelyChosenDistractorCount: filteredRows.filter((row) =>
+        row.qualityFlags.includes("RARELY_CHOSEN_DISTRACTOR"),
+      ).length,
     },
     rows: filteredRows,
   };

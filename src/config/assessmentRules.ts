@@ -36,13 +36,17 @@ export const rulesSchema = z.object({
       minAttemptCount: z.number().int().positive().default(5),
       difficultyMin: z.number().min(0).max(1).default(0.2),
       difficultyMax: z.number().min(0).max(1).default(0.9),
+      difficultyMaxByLevel: z.record(z.string(), z.number().min(0).max(1)).default({}),
       discriminationMin: z.number().min(-1).max(1).default(0.1),
+      distractorPickRateMin: z.number().min(0).max(1).default(0.05),
     })
     .default({
       minAttemptCount: 5,
       difficultyMin: 0.2,
       difficultyMax: 0.9,
+      difficultyMaxByLevel: {},
       discriminationMin: 0.1,
+      distractorPickRateMin: 0.05,
     }),
   sensitiveData: z
     .object({

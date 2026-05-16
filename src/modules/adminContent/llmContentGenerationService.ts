@@ -434,7 +434,7 @@ export function hasMeaningfulMcqRevision(
 
 function buildUrl(): string {
   const endpoint = (env.AZURE_OPENAI_ENDPOINT ?? "").trim().replace(/\/+$/, "");
-  const deployment = env.AZURE_OPENAI_DEPLOYMENT ?? "";
+  const deployment = env.AZURE_OPENAI_AUTHORING_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT ?? "";
   const apiVersion = env.AZURE_OPENAI_API_VERSION;
   return `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
 }
@@ -864,7 +864,7 @@ async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 400
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    temperature: 0.4,
+    temperature: env.AZURE_OPENAI_AUTHORING_TEMPERATURE ?? 0.4,
     max_completion_tokens: maxTokens,
   };
 
