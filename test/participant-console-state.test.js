@@ -51,7 +51,7 @@ describe("participant console state helpers", () => {
     const models = buildModuleCardViewModels(
       [
         { id: "m1", title: "Foundations", taskText: "Task 1", participantStatus: { latestStatus: "COMPLETED" } },
-        { id: "m2", title: "Governance", guidanceText: "Guide 2" },
+        { id: "m2", title: "Governance", assessorExpectedContent: "Guide 2" },
       ],
       "m2",
     );
@@ -60,7 +60,7 @@ describe("participant console state helpers", () => {
       {
         id: "m2",
         title: "Governance",
-        guidanceText: "Guide 2",
+        assessorExpectedContent: "Guide 2",
         selected: true,
         completed: false,
         latestStatus: "",
@@ -80,7 +80,7 @@ describe("participant console state helpers", () => {
   it("resolves selected module by id for human-readable summary", () => {
     const selected = resolveSelectedModule(
       [
-        { id: "m1", title: "Foundations", taskText: "Task 1", guidanceText: "Guide 1" },
+        { id: "m1", title: "Foundations", taskText: "Task 1", assessorExpectedContent: "Guide 1" },
         { id: "m2", title: "Governance" },
       ],
       "m1",
@@ -90,7 +90,7 @@ describe("participant console state helpers", () => {
       id: "m1",
       title: "Foundations",
       taskText: "Task 1",
-      guidanceText: "Guide 1",
+      assessorExpectedContent: "Guide 1",
       selected: true,
       completed: false,
       latestStatus: "",

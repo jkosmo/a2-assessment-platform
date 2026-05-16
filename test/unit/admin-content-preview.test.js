@@ -3,7 +3,7 @@ import { buildPreviewHtml, localizeValueForLocale } from "../../public/static/ad
 
 const translations = {
   "adminContent.moduleVersion.taskText": "Task text",
-  "adminContent.moduleVersion.guidanceText": "Guidance",
+  "adminContent.moduleVersion.assessorExpectedContent": "Guidance",
   "shell.mcq.countLabel": "{count} MCQ questions",
   "shell.preview.mcqSection": "Multiple choice questions",
   "shell.preview.questionNumber": "Question {number}",
@@ -71,7 +71,7 @@ describe("admin content preview helpers", () => {
           title: { "en-GB": "Trade unions", nb: "Fagforeninger" },
           description: { "en-GB": "Module description", nb: "Modulbeskrivelse" },
           taskText: { "en-GB": "Explain the concept.", nb: "Forklar begrepet." },
-          guidanceText: { "en-GB": "Keep it concise.", nb: "Hold det kort." },
+          assessorExpectedContent: { "en-GB": "Keep it concise.", nb: "Hold det kort." },
           mcqQuestions: [
             {
               stem: { "en-GB": "What is the goal?", nb: "Hva er malet?" },

@@ -43,7 +43,7 @@ describe("Participant completed modules and available list filtering", () => {
         moduleId: module.id,
         versionNo: 1,
         taskText: "Completed module test task.",
-        guidanceText: "Completed module test guidance.",
+        assessorExpectedContent: "Completed module test guidance.",
         rubricVersionId: sourceModuleVersion!.rubricVersionId,
         promptTemplateVersionId: sourceModuleVersion!.promptTemplateVersionId,
         mcqSetVersionId: sourceModuleVersion!.mcqSetVersionId,

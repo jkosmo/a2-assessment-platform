@@ -192,7 +192,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               id: true,
               versionNo: true,
               taskText: true,
-              guidanceText: true,
+              assessorExpectedContent: true,
               candidateTaskConstraints: true,
               submissionSchemaJson: true,
               assessmentPolicyJson: true,
@@ -399,7 +399,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       moduleId: string;
       versionNo: number;
       taskText: string;
-      guidanceText?: string;
+      assessorExpectedContent?: string;
       candidateTaskConstraints?: string;
       rubricVersionId: string;
       promptTemplateVersionId: string;
@@ -414,7 +414,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           moduleId: true,
           versionNo: true,
           taskText: true,
-          guidanceText: true,
+          assessorExpectedContent: true,
           candidateTaskConstraints: true,
           submissionSchemaJson: true,
           assessmentPolicyJson: true,
@@ -454,7 +454,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           id: true,
           moduleId: true,
           taskText: true,
-          guidanceText: true,
+          assessorExpectedContent: true,
           candidateTaskConstraints: true,
           rubricVersionId: true,
           promptTemplateVersionId: true,

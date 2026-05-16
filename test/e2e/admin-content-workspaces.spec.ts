@@ -87,7 +87,7 @@ function buildMockModuleExport({
   title,
   certificationLevel = "basic",
   taskText = localizedText("Scenario text"),
-  guidanceText = localizedText("Strong answers should explain the main concepts."),
+  assessorExpectedContent = localizedText("Strong answers should explain the main concepts."),
   mcqQuestions = [],
   activeVersionId = null,
   moduleVersionId = null,
@@ -96,7 +96,7 @@ function buildMockModuleExport({
   title: string;
   certificationLevel?: string;
   taskText?: Record<string, string>;
-  guidanceText?: Record<string, string>;
+  assessorExpectedContent?: Record<string, string>;
   mcqQuestions?: Array<{
     stem: Record<string, string>;
     options: Record<string, string>[];
@@ -111,7 +111,7 @@ function buildMockModuleExport({
         id: moduleVersionId,
         versionNo: 1,
         taskText,
-        guidanceText,
+        assessorExpectedContent,
         submissionSchema: {
           fields: [
             {
@@ -349,7 +349,7 @@ async function mockCommonApis(page: Page, {
     const body = route.request().postDataJSON() as {
       title?: string;
       taskText?: string;
-      guidanceText?: string;
+      assessorExpectedContent?: string;
       sourceLocale?: string;
       targetLocale?: string;
     };
@@ -361,7 +361,7 @@ async function mockCommonApis(page: Page, {
       body: JSON.stringify({
         title: body.title ? `${body.title} [${suffix}]` : undefined,
         taskText: `${body.taskText ?? ""} [${suffix}]`,
-        guidanceText: `${body.guidanceText ?? ""} [${suffix}]`,
+        assessorExpectedContent: `${body.assessorExpectedContent ?? ""} [${suffix}]`,
       }),
     });
   });
@@ -425,7 +425,7 @@ async function mockCommonApis(page: Page, {
       contentType: "application/json",
       body: JSON.stringify({
         taskText: `Scenario for ${body.certificationLevel ?? "basic"} / ${body.generationMode ?? "ordinary"}`,
-        guidanceText: "A strong response should explain the core concepts clearly.",
+        assessorExpectedContent: "A strong response should explain the core concepts clearly.",
       }),
     });
   });
@@ -582,7 +582,7 @@ async function mockCommonApis(page: Page, {
     }
     const body = route.request().postDataJSON() as {
       taskText?: Record<string, string>;
-      guidanceText?: Record<string, string>;
+      assessorExpectedContent?: Record<string, string>;
       submissionSchema?: unknown;
       rubricVersionId?: string;
       promptTemplateVersionId?: string;
@@ -592,7 +592,7 @@ async function mockCommonApis(page: Page, {
       id: `${moduleId}-version-1`,
       versionNo: 1,
       taskText: body.taskText ?? localizedText("Scenario text"),
-      guidanceText: body.guidanceText ?? localizedText("Guidance text"),
+      assessorExpectedContent: body.assessorExpectedContent ?? localizedText("Guidance text"),
       submissionSchema: body.submissionSchema ?? { fields: [] },
       rubricVersionId: body.rubricVersionId ?? moduleExport.selectedConfiguration.rubricVersion?.id ?? null,
       promptTemplateVersionId: body.promptTemplateVersionId ?? moduleExport.selectedConfiguration.promptTemplateVersion?.id ?? null,
@@ -1060,7 +1060,7 @@ test.describe("admin content browser coverage", () => {
             nb: "Norsk scenario",
             nn: "Nynorsk scenario",
           },
-          guidanceText: {
+          assessorExpectedContent: {
             "en-GB": "English guidance",
             nb: "Norsk veiledning",
             nn: "Nynorsk rettleiing",
@@ -1131,7 +1131,7 @@ test.describe("admin content browser coverage", () => {
             nb: "Norsk scenario",
             nn: "Nynorsk scenario",
           },
-          guidanceText: {
+          assessorExpectedContent: {
             "en-GB": "English guidance",
             nb: "Norsk veiledning",
             nn: "Nynorsk rettleiing",
@@ -1197,7 +1197,7 @@ test.describe("admin content browser coverage", () => {
             nb: "Norsk scenario",
             nn: "Nynorsk scenario",
           },
-          guidanceText: {
+          assessorExpectedContent: {
             "en-GB": "English guidance",
             nb: "Norsk veiledning",
             nn: "Nynorsk rettleiing",
@@ -1249,7 +1249,7 @@ test.describe("admin content browser coverage", () => {
             nb: "Norsk scenario",
             nn: "Nynorsk scenario",
           },
-          guidanceText: {
+          assessorExpectedContent: {
             "en-GB": "English guidance",
             nb: "Norsk veiledning",
             nn: "Nynorsk rettleiing",

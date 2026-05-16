@@ -79,7 +79,7 @@ export async function getModuleContentBundle(moduleId: string) {
     id: version.id,
     versionNo: version.versionNo,
     taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
-    guidanceText: decodeLocalizedText(version.guidanceText) ?? version.guidanceText,
+    assessorExpectedContent: decodeLocalizedText(version.assessorExpectedContent) ?? version.assessorExpectedContent,
     candidateTaskConstraints: version.candidateTaskConstraints
       ? (decodeLocalizedText(version.candidateTaskConstraints) ?? version.candidateTaskConstraints)
       : undefined,

@@ -12,7 +12,7 @@
  *   {
  *     moduleId:     string,
  *     source:       "shell" | "advanced",
- *     draft:        { taskText, candidateTaskConstraints, guidanceText, mcqQuestions } | null,
+ *     draft:        { taskText, candidateTaskConstraints, assessorExpectedContent, mcqQuestions } | null,
  *     locale:       string,      // UI language at time of write
  *     previewLocale: string,     // preview locale at time of write (shell only)
  *     timestamp:    number,      // Date.now() at write time

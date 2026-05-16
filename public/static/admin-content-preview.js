@@ -99,7 +99,7 @@ function renderPreviewMcqQuestions(questions, locale, t, tf) {
  *   title           – string or localized object
  *   description     – string or localized object (optional)
  *   taskText        – string or localized object (optional)
- *   guidanceText    – string or localized object (optional, assessor-only)
+ *   assessorExpectedContent    – string or localized object (optional, assessor-only)
  *   candidateTaskConstraints – string or localized object (optional, visible to candidate)
  *   mcqQuestions    – array (optional)
  *   versionChain    – string, e.g. "Modul v2 · MCQ v1" (optional)
@@ -117,7 +117,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     title = "",
     description = "",
     taskText = "",
-    guidanceText = "",
+    assessorExpectedContent = "",
     candidateTaskConstraints = "",
     mcqQuestions = [],
     versionChain = "",
@@ -133,7 +133,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
   const localizedTitle = localize(title);
   const localizedDescription = localize(description);
   const localizedTask = localize(taskText);
-  const localizedGuidance = localize(guidanceText);
+  const localizedGuidance = localize(assessorExpectedContent);
   const localizedCandidateConstraints = localize(candidateTaskConstraints);
   const mcqCount = Array.isArray(mcqQuestions) ? mcqQuestions.length : 0;
 
@@ -154,8 +154,8 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.candidateTaskConstraints"))}</div>
        <div class="preview-text-block preview-text-candidate-constraints">${escapeHtml(localizedCandidateConstraints)}</div>`
     : "";
-  const guidanceTextHtml = localizedGuidance
-    ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.guidanceText"))}</div>
+  const assessorExpectedContentHtml = localizedGuidance
+    ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.assessorExpectedContent"))}</div>
        <div class="preview-text-block preview-text-secondary">${escapeHtml(localizedGuidance)}</div>`
     : "";
   const mcqCountHtml = mcqCount > 0
@@ -172,7 +172,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ${versionChainHtml}
     ${taskTextHtml}
     ${candidateConstraintsHtml}
-    ${guidanceTextHtml}
+    ${assessorExpectedContentHtml}
     ${mcqCountHtml}
     ${mcqHtml}
   `.trim();

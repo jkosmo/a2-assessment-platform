@@ -19,7 +19,7 @@ export type ModuleDraftInput = {
 
 export type ModuleDraftResult = {
   taskText: string;
-  guidanceText: string;
+  assessorExpectedContent: string;
   candidateTaskConstraints: string;
   title?: string;
   includesScenario: boolean;
@@ -27,7 +27,7 @@ export type ModuleDraftResult = {
 
 export type ModuleDraftRevisionInput = {
   taskText: string;
-  guidanceText: string;
+  assessorExpectedContent: string;
   candidateTaskConstraints?: string;
   instruction: string;
   locale: GenerationLocale;
@@ -80,7 +80,7 @@ export type McqRevisionInput = {
 
 export type ModuleDraftLocalizationInput = {
   taskText: string;
-  guidanceText: string;
+  assessorExpectedContent: string;
   candidateTaskConstraints?: string;
   title?: string;
   sourceLocale: GenerationLocale;
@@ -118,7 +118,7 @@ export type CourseCopyLocalizationResult = {
 
 const moduleDraftResponseCodec = z.object({
   taskText: z.string().min(1),
-  guidanceText: z.string().min(1),
+  assessorExpectedContent: z.string().min(1),
   candidateTaskConstraints: z.string().default(""),
   title: z.string().min(1).optional(),
   includesScenario: z.boolean().default(false),
@@ -179,6 +179,15 @@ const MODULE_DRAFT_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
     "Aim for moderate complexity. The task may include one realistic tension or trade-off, but it must still be easy to parse on first read. Maximum scenario complexity: 2 actors, 1 trade-off, 3 required concepts. Expected answer: 250–450 words, 20 minutes.",
   advanced:
     "Use a more demanding but still readable task. It may involve ambiguity, competing considerations, or nuanced application, but avoid unnecessary complication for its own sake. Maximum scenario complexity: 3 actors, 2 trade-offs, 4 required concepts. Expected answer: 400–700 words, 30 minutes.",
+};
+
+export const COMPLEXITY_BUDGET: Record<
+  CertificationLevel,
+  { actorsMax: number; conceptsMax: number; tradeoffsMax: number; minWords: number; maxWords: number; timeBudgetMinutes: number }
+> = {
+  basic:        { actorsMax: 1, conceptsMax: 2, tradeoffsMax: 0, minWords: 100, maxWords: 200, timeBudgetMinutes: 10 },
+  intermediate: { actorsMax: 2, conceptsMax: 3, tradeoffsMax: 1, minWords: 250, maxWords: 450, timeBudgetMinutes: 20 },
+  advanced:     { actorsMax: 3, conceptsMax: 4, tradeoffsMax: 2, minWords: 400, maxWords: 700, timeBudgetMinutes: 30 },
 };
 
 const MCQ_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
@@ -456,6 +465,13 @@ Generation mode: ${input.generationMode}
 
 ## Complexity budget (enforce strictly)
 
+Respect these limits for ${input.certificationLevel} level:
+- Maximum actors in scenario: ${COMPLEXITY_BUDGET[input.certificationLevel].actorsMax}
+- Maximum distinct concepts required: ${COMPLEXITY_BUDGET[input.certificationLevel].conceptsMax}
+- Maximum trade-offs or dilemmas: ${COMPLEXITY_BUDGET[input.certificationLevel].tradeoffsMax}
+- Expected answer length: ${COMPLEXITY_BUDGET[input.certificationLevel].minWords}–${COMPLEXITY_BUDGET[input.certificationLevel].maxWords} words
+- Expected completion time: ${COMPLEXITY_BUDGET[input.certificationLevel].timeBudgetMinutes} minutes
+
 Before finalising, verify that a candidate can start a reasonable answer using only taskText and candidateTaskConstraints, plus expected prerequisite knowledge for this certification level. Do not introduce scenario elements that are not necessary to test the learning objective.
 
 ## Scenario decision
@@ -483,7 +499,7 @@ If including a scenario:
 - Do NOT give away the answer, list expected points, or act as a scoring rubric
 - Example: "Answer with a short recommendation and justify it with the most important considerations from the scenario. State your assumptions clearly. You do not need to cover every possible measure."
 
-**guidanceText** (hidden from candidate — assessor use only):
+**assessorExpectedContent** (hidden from candidate — assessor use only):
 - Concrete scoring support for the assessor
 - Name the key points, trade-offs, and distinctions a strong response should cover
 - May be more specific than the task itself — the candidate will NOT see this
@@ -499,7 +515,7 @@ Return a single JSON object:
 {
   "taskText": "full task text in ${LOCALE_DISPLAY[input.locale]}, including scenario at top if appropriate",
   "candidateTaskConstraints": "1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.locale]}",
-  "guidanceText": "hidden assessor scoring support in ${LOCALE_DISPLAY[input.locale]}",
+  "assessorExpectedContent": "hidden assessor scoring support in ${LOCALE_DISPLAY[input.locale]}",
   "includesScenario": true or false
 }`;
 
@@ -612,7 +628,7 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 - Preserve the overall structure unless the instruction clearly asks for structural changes.
 - If the task includes a scenario, keep it at the top of taskText labelled "Scenario:".
 - candidateTaskConstraints is visible to the candidate — keep it brief (1–3 sentences) and do not turn it into an answer outline.
-- guidanceText is hidden from the candidate — it is assessor-only scoring support.
+- assessorExpectedContent is hidden from the candidate — it is assessor-only scoring support.
 
 ## Current draft
 
@@ -620,8 +636,8 @@ taskText:
 ${input.taskText}
 ${candidateConstraintsSection}
 
-guidanceText (hidden assessor notes):
-${input.guidanceText}
+assessorExpectedContent (hidden assessor notes):
+${input.assessorExpectedContent}
 
 ## Revision instruction
 
@@ -633,7 +649,7 @@ Return a single JSON object:
 {
   "taskText": "revised task text in ${LOCALE_DISPLAY[input.locale]}",
   "candidateTaskConstraints": "revised 1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.locale]}",
-  "guidanceText": "revised hidden assessor scoring support in ${LOCALE_DISPLAY[input.locale]}",
+  "assessorExpectedContent": "revised hidden assessor scoring support in ${LOCALE_DISPLAY[input.locale]}",
   "includesScenario": true or false
 }`;
 
@@ -726,7 +742,7 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
 - Keep taskText fully self-contained for candidates.
 - If taskText starts with "Scenario:", preserve that label in the target language.
 - candidateTaskConstraints is visible to the candidate — translate faithfully and keep it brief (1–3 sentences).
-- guidanceText is hidden assessor-only content — translate faithfully and preserve all scoring details.
+- assessorExpectedContent is hidden assessor-only content — translate faithfully and preserve all scoring details.
 - Do not add or remove assessment requirements.
 - Do not summarise.
 
@@ -735,8 +751,8 @@ ${titleSection}
 taskText:
 ${input.taskText}
 ${candidateConstraintsSection}
-guidanceText (hidden assessor notes):
-${input.guidanceText}
+assessorExpectedContent (hidden assessor notes):
+${input.assessorExpectedContent}
 
 ## Return format
 
@@ -744,7 +760,7 @@ Return a single JSON object:
 {${titleReturnField}
   "taskText": "translated task text in ${LOCALE_DISPLAY[input.targetLocale]}",
   "candidateTaskConstraints": "translated 1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.targetLocale]}",
-  "guidanceText": "translated hidden assessor scoring support in ${LOCALE_DISPLAY[input.targetLocale]}",
+  "assessorExpectedContent": "translated hidden assessor scoring support in ${LOCALE_DISPLAY[input.targetLocale]}",
   "includesScenario": true or false
 }`;
 
@@ -984,6 +1000,93 @@ export async function localizeMcqQuestions(input: McqLocalizationInput): Promise
     throw new Error(`MCQ localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
+}
+
+// ---------------------------------------------------------------------------
+// Scenario answerability check (#374)
+// ---------------------------------------------------------------------------
+
+export type ScenarioAnswerabilityInput = {
+  taskText: string;
+  candidateTaskConstraints: string | undefined | null;
+  assessorExpectedContent: string | undefined | null;
+  certificationLevel: CertificationLevel;
+};
+
+export type ScenarioAnswerabilityResult = {
+  answerableWithoutHiddenInfo: boolean;
+  minimalPassingAnswerWordCount: number;
+  hiddenExpectationFlags: string[];
+  warnings: string[];
+};
+
+const scenarioAnswerabilityResponseCodec = z.object({
+  answerableWithoutHiddenInfo: z.boolean(),
+  minimalPassingAnswerWordCount: z.number().int().nonnegative(),
+  hiddenExpectationFlags: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+
+function buildScenarioAnswerabilityPrompts(input: ScenarioAnswerabilityInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a quality control system for a professional certification platform. Return strict JSON only - no markdown, no commentary.";
+
+  const constraintsSection = input.candidateTaskConstraints?.trim()
+    ? `\ncandidate task constraints (visible to candidate):\n${input.candidateTaskConstraints.trim()}`
+    : "";
+
+  const assessorSection = input.assessorExpectedContent?.trim()
+    ? `\nassessor expected content (hidden from candidate):\n${input.assessorExpectedContent.trim()}`
+    : "";
+
+  const budget = COMPLEXITY_BUDGET[input.certificationLevel];
+
+  const userPrompt = `Check if a candidate can answer the following task using only the information visible to them.
+
+## Task (visible to candidate)
+${input.taskText.trim()}${constraintsSection}
+
+## Certification level: ${input.certificationLevel}
+## Expected answer length: ${budget.minWords}–${budget.maxWords} words
+${assessorSection}
+
+## Instructions
+1. Without consulting the assessor expected content, write the shortest answer that would deserve a passing mark at this certification level.
+2. Count its approximate word count.
+3. Check whether the assessor expected content contains expectations not reasonably derivable from the visible task and standard prerequisites for this certification level.
+4. Flag each hidden expectation.
+
+## Return format
+{
+  "answerableWithoutHiddenInfo": true if a well-prepared candidate can give a passing answer using only the visible task, false if they would need information absent from the visible task,
+  "minimalPassingAnswerWordCount": approximate word count of the minimal passing answer,
+  "hiddenExpectationFlags": ["description of each expectation in assessorExpectedContent not implied by the visible task — leave empty array if none"],
+  "warnings": ["any other concerns about task quality — leave empty array if none"]
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+export async function checkScenarioAnswerability(
+  input: ScenarioAnswerabilityInput,
+): Promise<ScenarioAnswerabilityResult> {
+  if (env.LLM_MODE !== "azure_openai") {
+    return { answerableWithoutHiddenInfo: true, minimalPassingAnswerWordCount: 0, hiddenExpectationFlags: [], warnings: [] };
+  }
+  const { systemPrompt, userPrompt } = buildScenarioAnswerabilityPrompts(input);
+  try {
+    const raw = await callLlm(systemPrompt, userPrompt, 1500);
+    const parsed = scenarioAnswerabilityResponseCodec.safeParse(raw);
+    if (!parsed.success) {
+      return { answerableWithoutHiddenInfo: true, minimalPassingAnswerWordCount: 0, hiddenExpectationFlags: [], warnings: [`Answerability check returned unexpected format.`] };
+    }
+    return parsed.data;
+  } catch {
+    return { answerableWithoutHiddenInfo: true, minimalPassingAnswerWordCount: 0, hiddenExpectationFlags: [], warnings: [`Answerability check could not be completed.`] };
+  }
 }
 
 export async function localizeCourseCopy(input: CourseCopyLocalizationInput): Promise<CourseCopyLocalizationResult> {

@@ -21,7 +21,7 @@ export function createCalibrationRepository(client: CalibrationRepositoryClient 
               promptTemplateVersionId: true,
               mcqSetVersionId: true,
               taskText: true,
-              guidanceText: true,
+              assessorExpectedContent: true,
               submissionSchemaJson: true,
             },
           },

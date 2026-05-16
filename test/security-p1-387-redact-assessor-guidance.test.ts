@@ -22,10 +22,10 @@ describe("[Security P1 #387] Assessor guidance redaction from participant module
   beforeAll(async () => {
     const mod = await prisma.module.findFirst({
       where: { activeVersionId: { not: null } },
-      include: { activeVersion: { select: { guidanceText: true } } },
+      include: { activeVersion: { select: { assessorExpectedContent: true } } },
     });
-    if (!mod || !mod.activeVersion?.guidanceText) {
-      throw new Error("No seed module with guidanceText found — check seedCore.ts.");
+    if (!mod || !mod.activeVersion?.assessorExpectedContent) {
+      throw new Error("No seed module with assessorExpectedContent found — check seedCore.ts.");
     }
     moduleId = mod.id;
   });
@@ -34,33 +34,33 @@ describe("[Security P1 #387] Assessor guidance redaction from participant module
     await prisma.$disconnect();
   });
 
-  it("GET /api/modules — participant response never includes guidanceText", async () => {
+  it("GET /api/modules — participant response never includes assessorExpectedContent", async () => {
     const res = await request(app)
       .get("/api/modules?includeCompleted=true")
       .set(participantHeaders);
     expect(res.status).toBe(200);
     for (const mod of res.body.modules as Record<string, unknown>[]) {
-      expect(mod).not.toHaveProperty("guidanceText");
+      expect(mod).not.toHaveProperty("assessorExpectedContent");
     }
   });
 
-  it("GET /api/modules/:id — participant response never includes guidanceText", async () => {
+  it("GET /api/modules/:id — participant response never includes assessorExpectedContent", async () => {
     const res = await request(app)
       .get(`/api/modules/${moduleId}`)
       .set(participantHeaders);
     expect(res.status).toBe(200);
-    expect(res.body.module).not.toHaveProperty("guidanceText");
+    expect(res.body.module).not.toHaveProperty("assessorExpectedContent");
   });
 
-  it("GET /api/modules/:id/active-version — participant response never includes guidanceText", async () => {
+  it("GET /api/modules/:id/active-version — participant response never includes assessorExpectedContent", async () => {
     const res = await request(app)
       .get(`/api/modules/${moduleId}/active-version`)
       .set(participantHeaders);
     expect(res.status).toBe(200);
-    expect(res.body.activeVersion).not.toHaveProperty("guidanceText");
+    expect(res.body.activeVersion).not.toHaveProperty("assessorExpectedContent");
   });
 
-  it("GET /api/modules?adminFacing=true — admin/assessor response includes guidanceText", async () => {
+  it("GET /api/modules?adminFacing=true — admin/assessor response includes assessorExpectedContent", async () => {
     const res = await request(app)
       .get("/api/modules?adminFacing=true&includeCompleted=true")
       .set(adminHeaders);
@@ -69,6 +69,6 @@ describe("[Security P1 #387] Assessor guidance redaction from participant module
       (m) => m.id === moduleId,
     );
     expect(targetModule).toBeDefined();
-    expect(targetModule).toHaveProperty("guidanceText");
+    expect(targetModule).toHaveProperty("assessorExpectedContent");
   });
 });

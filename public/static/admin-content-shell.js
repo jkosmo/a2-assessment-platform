@@ -81,7 +81,7 @@ let previewLocale = currentLocale;
 let generationAbort = null; // AbortController for active generation
 
 // Draft state — sessionDraft mirrors what will be saved; null until user accepts a generated result
-let sessionDraft = null; // { taskText, guidanceText, candidateTaskConstraints, mcqQuestions: [] }
+let sessionDraft = null; // { taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions: [] }
 let previewDraft = null; // review candidate shown in preview before accept
 let latestSavedModuleVersionId = null;
 
@@ -727,7 +727,7 @@ function renderPreview() {
       title: mod.title,
       description: mod.description,
       taskText: hasDraft ? activeDraft.taskText : (cfg.moduleVersion?.taskText ?? ""),
-      guidanceText: hasDraft ? activeDraft.guidanceText : (cfg.moduleVersion?.guidanceText ?? ""),
+      assessorExpectedContent: hasDraft ? activeDraft.assessorExpectedContent : (cfg.moduleVersion?.assessorExpectedContent ?? ""),
       candidateTaskConstraints: hasDraft ? activeDraft.candidateTaskConstraints : (cfg.moduleVersion?.candidateTaskConstraints ?? ""),
       mcqQuestions: hasDraft ? (activeDraft.mcqQuestions ?? []) : (cfg.mcqSetVersion?.questions ?? []),
       versionChain: versionChainParts.join(" · "),
@@ -742,7 +742,7 @@ function renderPreview() {
     previewContent.innerHTML = buildPreviewHtml({
       title: activeDraft.title || t("shell.newModule.defaultTitle"),
       taskText: activeDraft.taskText ?? "",
-      guidanceText: activeDraft.guidanceText ?? "",
+      assessorExpectedContent: activeDraft.assessorExpectedContent ?? "",
       candidateTaskConstraints: activeDraft.candidateTaskConstraints ?? "",
       mcqQuestions: activeDraft.mcqQuestions ?? [],
       badgeClass: "draft",
@@ -834,11 +834,11 @@ function buildPreviewCandidate(patch) {
       ?? sessionDraft?.taskText
       ?? bundle?.selectedConfiguration?.moduleVersion?.taskText
       ?? "",
-    guidanceText:
-      patch.guidanceText
-      ?? baseDraft.guidanceText
-      ?? sessionDraft?.guidanceText
-      ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText
+    assessorExpectedContent:
+      patch.assessorExpectedContent
+      ?? baseDraft.assessorExpectedContent
+      ?? sessionDraft?.assessorExpectedContent
+      ?? bundle?.selectedConfiguration?.moduleVersion?.assessorExpectedContent
       ?? "",
     candidateTaskConstraints:
       patch.candidateTaskConstraints
@@ -910,10 +910,10 @@ function normalizeModuleTitlePatch(title) {
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
-async function localizeDraftAcrossLocales(taskText, guidanceText, sourceLocale, candidateTaskConstraints) {
+async function localizeDraftAcrossLocales(taskText, assessorExpectedContent, sourceLocale, candidateTaskConstraints) {
   const localized = {
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
-    guidanceText: buildLocalizedTextMap(sourceLocale, guidanceText),
+    assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
   };
 
@@ -924,23 +924,23 @@ async function localizeDraftAcrossLocales(taskText, guidanceText, sourceLocale, 
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ taskText, guidanceText, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
+        body: JSON.stringify({ taskText, assessorExpectedContent, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
       },
     );
     const draft = result?.draft ?? result;
     localized.taskText[targetLocale] = draft?.taskText ?? taskText;
-    localized.guidanceText[targetLocale] = draft?.guidanceText ?? guidanceText;
+    localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
     localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
   }
 
   return localized;
 }
 
-async function localizeDraftAcrossLocalesWithTitle(title, taskText, guidanceText, sourceLocale, candidateTaskConstraints) {
+async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpectedContent, sourceLocale, candidateTaskConstraints) {
   const localized = {
     title: buildLocalizedTextMap(sourceLocale, title),
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
-    guidanceText: buildLocalizedTextMap(sourceLocale, guidanceText),
+    assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
   };
 
@@ -953,7 +953,7 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, guidanceText
         getHeaders,
         {
           method: "POST",
-          body: JSON.stringify({ title, taskText, guidanceText, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
+          body: JSON.stringify({ title, taskText, assessorExpectedContent, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
         },
       );
     } catch {
@@ -963,7 +963,7 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, guidanceText
     const draft = result?.draft ?? result;
     localized.title[targetLocale] = draft?.title ?? title;
     localized.taskText[targetLocale] = draft?.taskText ?? taskText;
-    localized.guidanceText[targetLocale] = draft?.guidanceText ?? guidanceText;
+    localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
     localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
   }
 
@@ -1087,13 +1087,13 @@ function resolveMcqTitlePayload() {
 
 function resolveDraftForSave() {
   const taskText = sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "";
-  const guidanceText = sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "";
+  const assessorExpectedContent = sessionDraft?.assessorExpectedContent ?? bundle?.selectedConfiguration?.moduleVersion?.assessorExpectedContent ?? "";
   const candidateTaskConstraints = sessionDraft?.candidateTaskConstraints ?? bundle?.selectedConfiguration?.moduleVersion?.candidateTaskConstraints ?? "";
   const mcqQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
 
-  return { taskText, guidanceText, candidateTaskConstraints, mcqQuestions };
+  return { taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions };
 }
 
 function resolveCurrentDraftSnapshot(locale = (previewLocale ?? currentLocale)) {
@@ -1105,8 +1105,8 @@ function resolveCurrentDraftSnapshot(locale = (previewLocale ?? currentLocale)) 
       sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "",
       locale,
     ),
-    guidanceText: localizeValueForLocale(
-      sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "",
+    assessorExpectedContent: localizeValueForLocale(
+      sessionDraft?.assessorExpectedContent ?? bundle?.selectedConfiguration?.moduleVersion?.assessorExpectedContent ?? "",
       locale,
     ),
     candidateTaskConstraints: localizeValueForLocale(
@@ -1137,7 +1137,7 @@ function createSessionDraftFromLoadedModule() {
   sessionDraft = buildPreviewCandidate({
     title: moduleTitle,
     taskText: moduleVersion?.taskText ?? "",
-    guidanceText: moduleVersion?.guidanceText ?? "",
+    assessorExpectedContent: moduleVersion?.assessorExpectedContent ?? "",
     candidateTaskConstraints: moduleVersion?.candidateTaskConstraints ?? "",
     mcqQuestions,
   });
@@ -1149,13 +1149,13 @@ function createSessionDraftFromLoadedModule() {
 }
 
 function applyHandoffDraft(draft) {
-  if (!draft?.taskText && !draft?.guidanceText && !draft?.candidateTaskConstraints && !(draft?.mcqQuestions?.length > 0)) {
+  if (!draft?.taskText && !draft?.assessorExpectedContent && !draft?.candidateTaskConstraints && !(draft?.mcqQuestions?.length > 0)) {
     return false;
   }
   sessionDraft = buildPreviewCandidate({
     title: bundle?.module?.title ?? "",
     taskText: draft.taskText ?? "",
-    guidanceText: draft.guidanceText ?? "",
+    assessorExpectedContent: draft.assessorExpectedContent ?? "",
     candidateTaskConstraints: draft.candidateTaskConstraints ?? "",
     mcqQuestions: draft.mcqQuestions ?? [],
   });
@@ -1216,8 +1216,8 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.guidanceText, locale, draft.candidateTaskConstraints);
-  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, guidanceText: localizedDraft.guidanceText, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
+  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, locale, draft.candidateTaskConstraints);
+  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
   clearPreviewCandidate();
   scrollPreviewToTop();
   logResolveSlot(
@@ -1289,7 +1289,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
         method: "POST",
         body: JSON.stringify({
           taskText: localizeValueForLocale(sessionDraft?.taskText ?? "", currentLocale),
-          guidanceText: localizeValueForLocale(sessionDraft?.guidanceText ?? "", currentLocale),
+          assessorExpectedContent: localizeValueForLocale(sessionDraft?.assessorExpectedContent ?? "", currentLocale),
           candidateTaskConstraints: localizeValueForLocale(sessionDraft?.candidateTaskConstraints ?? "", currentLocale),
           instruction,
           locale: currentLocale,
@@ -1316,8 +1316,8 @@ async function reviseDraftInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.guidanceText, currentLocale, draft.candidateTaskConstraints);
-  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, guidanceText: localizedDraft.guidanceText, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
+  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, currentLocale, draft.candidateTaskConstraints);
+  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
   clearPreviewCandidate();
   scrollPreviewToTop();
   logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`);
@@ -1388,14 +1388,14 @@ async function applyStructuredTitleEditInBackground(newTitle) {
     const localizedDraft = await localizeDraftAcrossLocalesWithTitle(
       newTitle,
       snapshot.taskText,
-      snapshot.guidanceText,
+      snapshot.assessorExpectedContent,
       snapshot.sourceLocale,
       snapshot.candidateTaskConstraints,
     );
     commitSessionDraftPatch({
       title: localizedDraft.title,
       taskText: localizedDraft.taskText,
-      guidanceText: localizedDraft.guidanceText,
+      assessorExpectedContent: localizedDraft.assessorExpectedContent,
       candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
     });
     logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`);
@@ -1418,7 +1418,7 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
       ? await localizeDraftAcrossLocalesWithTitle(
         snapshot.title,
         snapshot.taskText,
-        snapshot.guidanceText,
+        snapshot.assessorExpectedContent,
         snapshot.sourceLocale,
         snapshot.candidateTaskConstraints,
       )
@@ -1431,7 +1431,7 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
     if (localizedDraft) {
       patch.title = localizedDraft.title;
       patch.taskText = localizedDraft.taskText;
-      patch.guidanceText = localizedDraft.guidanceText;
+      patch.assessorExpectedContent = localizedDraft.assessorExpectedContent;
       patch.candidateTaskConstraints = localizedDraft.candidateTaskConstraints;
     }
     if (localizedMcq) {
@@ -1456,7 +1456,7 @@ async function saveDraftBundleInBackground(options = {}) {
     return;
   }
 
-  const { taskText, guidanceText, candidateTaskConstraints, mcqQuestions } = resolveDraftForSave();
+  const { taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions } = resolveDraftForSave();
   if (!localizeValueForLocale(taskText, currentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"));
     return;
@@ -1503,7 +1503,7 @@ async function saveDraftBundleInBackground(options = {}) {
       method: "POST",
       body: JSON.stringify({
         taskText: translateLocalizedText(taskText),
-        guidanceText: translateLocalizedText(guidanceText),
+        assessorExpectedContent: translateLocalizedText(assessorExpectedContent),
         candidateTaskConstraints: translateLocalizedText(candidateTaskConstraints) || undefined,
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
@@ -1762,7 +1762,7 @@ async function duplicateCurrentModuleInBackground() {
         method: "POST",
         body: JSON.stringify({
           taskText: sourceConfig.moduleVersion.taskText,
-          guidanceText: sourceConfig.moduleVersion.guidanceText,
+          assessorExpectedContent: sourceConfig.moduleVersion.assessorExpectedContent,
           candidateTaskConstraints: sourceConfig.moduleVersion.candidateTaskConstraints || undefined,
           rubricVersionId: rubricVersion?.rubricVersion?.id,
           promptTemplateVersionId: promptTemplateVersion?.promptTemplateVersion?.id,
@@ -1966,7 +1966,7 @@ async function loadModule(moduleId, options = {}) {
 
 function detectRevisionTargets(instruction) {
   return detectShellRevisionTargets(instruction, {
-    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.guidanceText),
+    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.assessorExpectedContent),
     hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
   });
 }
@@ -1992,7 +1992,7 @@ function describeStructuredEditIntent(intent) {
 
 async function runUnifiedRevision(instruction) {
   const intent = classifyShellEditInstruction(instruction, {
-    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.guidanceText),
+    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.assessorExpectedContent),
     hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
     hasSelectedModule: !!(selectedModuleId || sessionDraft?.title || bundle?.module?.title),
   });
@@ -2049,7 +2049,7 @@ async function runUnifiedRevision(instruction) {
 }
 
 function startUnifiedRevisionFlow() {
-  if (!sessionDraft?.taskText && !sessionDraft?.guidanceText && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
+  if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
     logBot(() => t("shell.revision.unavailable"));
     return;
   }
@@ -2075,7 +2075,7 @@ function enterPreviewEditMode() {
     editingLocale,
   );
   const currentGuidanceText = localizeValueForLocale(
-    sessionDraft?.guidanceText ?? bundle?.selectedConfiguration?.moduleVersion?.guidanceText ?? "",
+    sessionDraft?.assessorExpectedContent ?? bundle?.selectedConfiguration?.moduleVersion?.assessorExpectedContent ?? "",
     editingLocale,
   );
   const currentCandidateTaskConstraints = localizeValueForLocale(
@@ -2095,7 +2095,7 @@ function enterPreviewEditMode() {
   const escapedCandidateConstraints = escapeHtml(currentCandidateTaskConstraints);
   const labelTask = escapeHtml(t("adminContent.moduleVersion.taskText"));
   const labelCandidateConstraints = escapeHtml(t("adminContent.moduleVersion.candidateTaskConstraints"));
-  const labelGuidance = escapeHtml(t("adminContent.moduleVersion.guidanceText"));
+  const labelGuidance = escapeHtml(t("adminContent.moduleVersion.assessorExpectedContent"));
   const mcqSectionLabel = escapeHtml(t("shell.preview.mcqSection"));
   const optionsLabel = escapeHtml(t("adminContent.dialog.mcq.options"));
   const correctAnswerLabel = escapeHtml(t("shell.preview.correctAnswer"));
@@ -2237,7 +2237,7 @@ function enterPreviewEditMode() {
         sessionDraft = buildPreviewCandidate({
           title: localizedDraft.title,
           taskText: localizedDraft.taskText,
-          guidanceText: localizedDraft.guidanceText,
+          assessorExpectedContent: localizedDraft.assessorExpectedContent,
           candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
           mcqQuestions: localizedMcqQuestions,
         });
@@ -2251,7 +2251,7 @@ function enterPreviewEditMode() {
         sessionDraft = buildPreviewCandidate({
           title: buildLocalizedTextMap(editingLocale, newTitle),
           taskText: buildLocalizedTextMap(editingLocale, newTaskText),
-          guidanceText: buildLocalizedTextMap(editingLocale, newGuidanceText),
+          assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
           candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
           mcqQuestions: buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
         });
@@ -2317,7 +2317,7 @@ function openAdvancedEditor(moduleId) {
   const url = buildAdminContentAdvancedUrl(moduleId);
   const hasUnsavedDraft =
     !!sessionDraft &&
-    !!(sessionDraft.taskText || sessionDraft.guidanceText || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
+    !!(sessionDraft.taskText || sessionDraft.assessorExpectedContent || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
 
   if (!hasUnsavedDraft) {
     // No unsaved work — carry locale context only so the advanced editor can restore it
@@ -2457,7 +2457,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
     `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
   );
 
-  sessionDraft = { title: moduleTitle, taskText: "", guidanceText: "", candidateTaskConstraints: "", mcqQuestions: [] };
+  sessionDraft = { title: moduleTitle, taskText: "", assessorExpectedContent: "", candidateTaskConstraints: "", mcqQuestions: [] };
   renderPreview();
 
   generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {

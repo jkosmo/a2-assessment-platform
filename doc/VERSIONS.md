@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.16 - 2026-05-16
+
+feat(content): rename guidanceText→assessorExpectedContent, add complexity budget, static validation, answerability check (#369, #371, #373, #374)
+
+- **Schema rename** (`prisma/schema.prisma`, migration `20260516000001`): `ModuleVersion.guidanceText` → `assessorExpectedContent`; Prisma client regenerated; all source files, tests, and public JS updated.
+- **#371 — Static pre-publish validation** (`contentValidationService.ts`): `validateScenarioDraft()` blocks publish when `assessorExpectedContent` is empty/null; warns on missing `candidateTaskConstraints`, too-long constraints (>300 chars), or short `taskText` (<50 chars). Route `/generate/module-draft` returns `{ draft, validation }`.
+- **#373 — Complexity budget** (`llmContentGenerationService.ts`): Exported `COMPLEXITY_BUDGET` constants per certification level (`basic`/`intermediate`/`advanced`) injected into module-draft generation prompt.
+- **#374 — LLM answerability check** (`llmContentGenerationService.ts`): `checkScenarioAnswerability()` calls LLM with task text only (no assessor content), returns warning flags; skipped in stub mode and on any error — never blocking.
+- **#370 closed as already done**: MCQ plausibility requirements already present in prompt; `eliminationRisk`/`distractorMetadata` in codec; blocking MCQ distractor validation wired to adminContent route.
+
 ## 1.1.15 - 2026-05-16
 
 feat(infra): harden production backup with isolated vault and daily policy (#402)

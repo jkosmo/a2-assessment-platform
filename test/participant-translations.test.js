@@ -16,7 +16,7 @@ describe("participant translation resources", () => {
     const requiredKeys = [
       "assessment.auto.elapsedLabel",
       "submission.taskText",
-      "submission.guidanceText",
+      "submission.assessorExpectedContent",
       "preview.title",
       "preview.description",
       "preview.assessmentUnavailable",

@@ -10,7 +10,7 @@ type SeedModuleInput = {
   description: string;
   certificationLevel: string;
   taskText: string;
-  guidanceText: string;
+  assessorExpectedContent: string;
   promptSystem: string;
   promptTemplate: string;
   promptExample: string;
@@ -94,7 +94,7 @@ export async function runSeed(prisma: any) {
     description: "M0 seeded module for development and integration testing.",
     certificationLevel: "foundation",
     taskText: "Complete the assignment and submit your response.",
-    guidanceText: "Include concrete examples and reasoning that support your answer.",
+    assessorExpectedContent: "Include concrete examples and reasoning that support your answer.",
     promptSystem: "You are an assessment assistant. Return strict JSON only.",
     promptTemplate: "Evaluate submission against rubric and provide criterion rationales.",
     promptExample: "Strong response with clear iteration evidence.",
@@ -131,7 +131,7 @@ export async function runSeed(prisma: any) {
     description: "Second seeded module for multi-module flow testing and UX verification.",
     certificationLevel: "foundation",
     taskText: "Assess governance risks and document a practical mitigation approach.",
-    guidanceText: "Describe concrete controls, owners, and follow-up actions.",
+    assessorExpectedContent: "Describe concrete controls, owners, and follow-up actions.",
     promptSystem: "You are an assessment assistant focused on governance and risk quality.",
     promptTemplate: "Evaluate governance submission against rubric and return strict JSON.",
     promptExample: "Strong response identifies risk, mitigation, owner, and monitoring cadence.",
@@ -252,7 +252,7 @@ async function createSeedModuleBundle(prisma: any, adminId: string, now: Date, i
       moduleId: module.id,
       versionNo: 1,
       taskText: input.taskText,
-      guidanceText: input.guidanceText,
+      assessorExpectedContent: input.assessorExpectedContent,
       rubricVersionId: rubric.id,
       promptTemplateVersionId: prompt.id,
       mcqSetVersionId: mcqSet.id,

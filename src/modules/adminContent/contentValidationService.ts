@@ -79,15 +79,15 @@ export function validateMcqDistractors(questions: GeneratedMcqQuestion[]): McqVa
 export function validateModuleDraft(
   taskText: string,
   candidateTaskConstraints: string | undefined | null,
-  guidanceText: string | undefined | null,
+  assessorExpectedContent: string | undefined | null,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
-  if (guidanceText && guidanceText.trim().length > 0 && (!candidateTaskConstraints || candidateTaskConstraints.trim().length === 0)) {
+  if (assessorExpectedContent && assessorExpectedContent.trim().length > 0 && (!candidateTaskConstraints || candidateTaskConstraints.trim().length === 0)) {
     issues.push({
       severity: "warning",
       code: "MISSING_CANDIDATE_TASK_CONSTRAINTS",
-      message: "Assessor content (guidanceText) is set but candidateTaskConstraints is empty. Candidates will only see the task text with no scope guidance.",
+      message: "Assessor content (assessorExpectedContent) is set but candidateTaskConstraints is empty. Candidates will only see the task text with no scope guidance.",
     });
   }
 
@@ -108,4 +108,28 @@ export function validateModuleDraft(
   }
 
   return issues;
+}
+
+export type ScenarioValidationResult = {
+  valid: boolean;
+  issues: ValidationIssue[];
+};
+
+export function validateScenarioDraft(
+  taskText: string,
+  candidateTaskConstraints: string | undefined | null,
+  assessorExpectedContent: string | undefined | null,
+): ScenarioValidationResult {
+  const issues: ValidationIssue[] = validateModuleDraft(taskText, candidateTaskConstraints, assessorExpectedContent);
+
+  if (!assessorExpectedContent || assessorExpectedContent.trim().length === 0) {
+    issues.push({
+      severity: "blocking",
+      code: "MISSING_ASSESSOR_EXPECTED_CONTENT",
+      message: "assessorExpectedContent is required. It must describe what a strong response contains so assessors have grading support.",
+    });
+  }
+
+  const hasBlockingIssues = issues.some((issue) => issue.severity === "blocking");
+  return { valid: !hasBlockingIssues, issues };
 }

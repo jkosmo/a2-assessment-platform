@@ -43,8 +43,9 @@ import {
   generateMcqQuestions,
   reviseModuleDraft,
   reviseMcqQuestions,
+  checkScenarioAnswerability,
 } from "../modules/adminContent/llmContentGenerationService.js";
-import { validateMcqDistractors } from "../modules/adminContent/contentValidationService.js";
+import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -487,7 +488,31 @@ adminContentRouter.post("/generate/module-draft", generateLimiter, async (reques
       ...data,
       generationMode: data.generationMode ?? "ordinary",
     });
-    response.json({ draft });
+    const scenarioValidation = validateScenarioDraft(
+      draft.taskText,
+      draft.candidateTaskConstraints,
+      draft.assessorExpectedContent,
+    );
+    const answerability = await checkScenarioAnswerability({
+      taskText: draft.taskText,
+      candidateTaskConstraints: draft.candidateTaskConstraints,
+      assessorExpectedContent: draft.assessorExpectedContent,
+      certificationLevel: data.certificationLevel,
+    });
+    const answerabilityIssues = answerability.warnings.map((w) => ({ severity: "warning" as const, code: "ANSWERABILITY_WARNING", message: w }));
+    if (!answerability.answerableWithoutHiddenInfo) {
+      answerabilityIssues.push({ severity: "warning" as const, code: "SCENARIO_NOT_SELF_CONTAINED", message: "Scenario may not be answerable from visible task alone. Review candidateTaskConstraints and taskText." });
+    }
+    if (answerability.hiddenExpectationFlags.length > 1) {
+      answerabilityIssues.push({ severity: "warning" as const, code: "HIDDEN_EXPECTATIONS", message: `${answerability.hiddenExpectationFlags.length} expectations in assessorExpectedContent may not be derivable from visible task: ${answerability.hiddenExpectationFlags.join("; ")}` });
+    }
+    response.json({
+      draft,
+      validation: {
+        valid: scenarioValidation.valid,
+        issues: [...scenarioValidation.issues, ...answerabilityIssues],
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "generation_failed", message });

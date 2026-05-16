@@ -118,7 +118,7 @@ const mcqQuestionsJsonInput = document.getElementById("mcqQuestionsJson");
 
 const moduleVersionTaskTextInput = document.getElementById("moduleVersionTaskText");
 const moduleVersionCandidateTaskConstraintsInput = document.getElementById("moduleVersionCandidateTaskConstraints");
-const moduleVersionGuidanceTextInput = document.getElementById("moduleVersionGuidanceText");
+const moduleVersionAssessorExpectedContentInput = document.getElementById("moduleVersionAssessorExpectedContent");
 const moduleVersionSubmissionSchemaInput = document.getElementById("moduleVersionSubmissionSchema");
 const moduleVersionAssessmentPolicyInput = document.getElementById("moduleVersionAssessmentPolicy");
 const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersionRubricVersionId");
@@ -167,7 +167,7 @@ function buildAuthoringPrompt(mcqCount, fields, certificationLevel = null) {
     ? `,\n    "submissionSchemaJson": ${JSON.stringify({ fields: fieldsWithPlaceholder }, null, 4).split("\n").join("\n    ")}`
     : "";
   const levelNote = certificationLevel
-    ? `\n- module.certificationLevel is fixed to "${certificationLevel}". Use this verbatim for all locales unless a locale-specific translation is clearly appropriate. Calibrate task complexity, MCQ distractor difficulty, and guidanceText depth to match a ${certificationLevel} certification level.`
+    ? `\n- module.certificationLevel is fixed to "${certificationLevel}". Use this verbatim for all locales unless a locale-specific translation is clearly appropriate. Calibrate task complexity, MCQ distractor difficulty, and assessorExpectedContent depth to match a ${certificationLevel} certification level.`
     : "";
   const certificationLevelValue = certificationLevel
     ? `{"en-GB": "${certificationLevel}", "nb": "${certificationLevel}", "nn": "${certificationLevel}"}`
@@ -199,7 +199,7 @@ Requirements:
   - promptTemplate.userPromptTemplate
   - mcqSet.title
   - moduleVersion.taskText
-  - moduleVersion.guidanceText
+  - moduleVersion.assessorExpectedContent
 - MCQ question fields may also use locale objects when participant-facing text must be translated.
 - Keep systemPrompt and userPromptTemplate concise and production-oriented.
 - MCQ questions must include:
@@ -211,7 +211,7 @@ Requirements:
 - All 4 options in each question must be comparable in length and level of detail. A candidate must not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others. If the correct answer contains a qualifier or clause, all distractors must too. Never pad distractors with vague filler — write substantively comparable but wrong alternatives.
 - rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
 - moduleVersion.taskText must ask the participant to explain, compare, or interpret specific concepts. All concepts, definitions, terminology, and context the participant needs must be embedded directly in taskText — the participant has no access to the source material or any external document. Do not require application to a fictional or external example unless the source explicitly supports that framing.
-- moduleVersion.guidanceText must describe what a strong response contains. Write as if the participant has only seen taskText — never reference the source material in guidanceText.
+- moduleVersion.assessorExpectedContent must describe what a strong response contains. Write as if the participant has only seen taskText — never reference the source material in assessorExpectedContent.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
 - Generate exactly ${mcqCount} MCQ question${mcqCount !== 1 ? "s" : ""} in mcqSet.questions.${schemaNote}${levelNote}
 
@@ -225,10 +225,10 @@ Grounding constraints (for you as author — the source material is never shared
 - Do not import external theory, pedagogical formats, or generic assessment patterns unless explicitly supported by the source.
 - Do not introduce scenario-based, case-based, or role-based tasks unless the source itself supports that framing.
 - Do not introduce nouns such as "scenario", "case", "situation", or "applied example" unless they appear in the source.
-- Every substantive concept in taskText, guidanceText, promptTemplate, and MCQ rationales must be traceable to the source material.
+- Every substantive concept in taskText, assessorExpectedContent, promptTemplate, and MCQ rationales must be traceable to the source material.
 - If a useful assessment device is not source-grounded, leave it out rather than inventing supporting context.
 
-Self-containment rule (applies to all participant-facing output fields — taskText, guidanceText, MCQ stems, options, rationales):
+Self-containment rule (applies to all participant-facing output fields — taskText, assessorExpectedContent, MCQ stems, options, rationales):
 - The participant has no access to the source material. Every field must stand alone.
 - Never use phrases such as "as described in the text", "according to the source", "from the reading", "as outlined above", "based on the material", "as stated in", "the text argues", "the author claims", or any wording that implies the participant can consult an unseen document.
 - If a term or concept needs context for the participant, define or explain it inline within the relevant field.
@@ -285,7 +285,7 @@ Return JSON in this exact shape:
       "nb": "",
       "nn": ""
     },
-    "guidanceText": {
+    "assessorExpectedContent": {
       "en-GB": "",
       "nb": "",
       "nn": ""
@@ -325,7 +325,7 @@ Requirements:
   - promptTemplate.userPromptTemplate
   - mcqSet.title
   - moduleVersion.taskText
-  - moduleVersion.guidanceText
+  - moduleVersion.assessorExpectedContent
 - MCQ question fields may also use locale objects when participant-facing text must be translated.
 - Keep systemPrompt and userPromptTemplate concise and production-oriented.
 - MCQ questions must include:
@@ -336,7 +336,7 @@ Requirements:
 - correctAnswer must match one of the options exactly.
 - rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
 - moduleVersion.taskText must describe the participant assignment clearly.
-- moduleVersion.guidanceText must describe what a good submission should include.
+- moduleVersion.assessorExpectedContent must describe what a good submission should include.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
 
 Return JSON in this exact shape:
@@ -402,7 +402,7 @@ Return JSON in this exact shape:
       "nb": "",
       "nn": ""
     },
-    "guidanceText": {
+    "assessorExpectedContent": {
       "en-GB": "",
       "nb": "",
       "nn": ""
@@ -929,7 +929,7 @@ function getEditorSnapshot() {
     mcqQuestionsJson: normalizeSnapshotValue(mcqQuestionsJsonInput.value),
     moduleVersionTaskText: normalizeSnapshotValue(moduleVersionTaskTextInput.value),
     moduleVersionCandidateTaskConstraints: normalizeSnapshotValue(moduleVersionCandidateTaskConstraintsInput?.value ?? ""),
-    moduleVersionGuidanceText: normalizeSnapshotValue(moduleVersionGuidanceTextInput.value),
+    moduleVersionAssessorExpectedContent: normalizeSnapshotValue(moduleVersionAssessorExpectedContentInput.value),
     moduleVersionSubmissionSchema: normalizeSnapshotValue(moduleVersionSubmissionSchemaInput.value),
     moduleVersionAssessmentPolicy: normalizeSnapshotValue(moduleVersionAssessmentPolicyInput.value),
     moduleVersionRubricVersionId: normalizeSnapshotValue(moduleVersionRubricVersionIdInput.value),
@@ -958,7 +958,7 @@ function buildEditorSnapshotFromDraft(draft) {
     mcqQuestionsJson: normalizeSnapshotValue(formatEditorValue(draft?.mcqSet?.questions, "")),
     moduleVersionTaskText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.taskText, "")),
     moduleVersionCandidateTaskConstraints: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.candidateTaskConstraints, "")),
-    moduleVersionGuidanceText: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.guidanceText, "")),
+    moduleVersionAssessorExpectedContent: normalizeSnapshotValue(formatEditorValue(draft?.moduleVersion?.assessorExpectedContent, "")),
     moduleVersionSubmissionSchema: normalizeSnapshotValue(
       JSON.stringify(normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchema), null, 2),
     ),
@@ -1143,7 +1143,7 @@ function coerceModuleExportToImportDraft(payload) {
     },
     moduleVersion: {
       taskText: selectedConfiguration?.moduleVersion?.taskText ?? "",
-      guidanceText: selectedConfiguration?.moduleVersion?.guidanceText ?? "",
+      assessorExpectedContent: selectedConfiguration?.moduleVersion?.assessorExpectedContent ?? "",
     },
   };
 }
@@ -1211,7 +1211,7 @@ function applyImportDraftToForm(draft) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
   if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(draft?.moduleVersion?.candidateTaskConstraints, "");
-  moduleVersionGuidanceTextInput.value = formatEditorValue(draft?.moduleVersion?.guidanceText, "");
+  moduleVersionAssessorExpectedContentInput.value = formatEditorValue(draft?.moduleVersion?.assessorExpectedContent, "");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema),
     null,
@@ -1256,7 +1256,7 @@ function populateFormFromModuleExport(moduleExport) {
 
   moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
   if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(moduleVersion?.candidateTaskConstraints, "");
-  moduleVersionGuidanceTextInput.value = formatEditorValue(moduleVersion?.guidanceText, "");
+  moduleVersionAssessorExpectedContentInput.value = formatEditorValue(moduleVersion?.assessorExpectedContent, "");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(moduleVersion?.submissionSchema),
     null,
@@ -1305,9 +1305,9 @@ function buildParticipantPreviewPayload() {
         moduleVersionCandidateTaskConstraintsInput?.value ?? "",
         "adminContent.moduleVersion.candidateTaskConstraints",
       ),
-      guidanceText: parseLocalizedPreviewField(
-        moduleVersionGuidanceTextInput.value,
-        "adminContent.moduleVersion.guidanceText",
+      assessorExpectedContent: parseLocalizedPreviewField(
+        moduleVersionAssessorExpectedContentInput.value,
+        "adminContent.moduleVersion.assessorExpectedContent",
       ),
       submissionSchema: normalizeSubmissionSchemaToSingleField(moduleVersionSubmissionSchemaInput.value.trim()),
       questions,
@@ -1497,7 +1497,7 @@ function setDefaultFormValues() {
   mcqQuestionsJsonInput.value = formatJsonDefault("adminContent.defaults.questionsJson");
   moduleVersionTaskTextInput.value = t("adminContent.defaults.taskText");
   if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = "";
-  moduleVersionGuidanceTextInput.value = t("adminContent.defaults.guidanceText");
+  moduleVersionAssessorExpectedContentInput.value = t("adminContent.defaults.assessorExpectedContent");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
   syncAllTextareaHeights();
@@ -1522,7 +1522,7 @@ function normalizeModuleSummary(module) {
     title,
     description: localizeContentValue(module.description),
     taskText: typeof module.taskText === "string" ? module.taskText : "",
-    guidanceText: typeof module.guidanceText === "string" ? module.guidanceText : "",
+    assessorExpectedContent: typeof module.assessorExpectedContent === "string" ? module.assessorExpectedContent : "",
     activeVersionId: typeof module.activeVersion?.id === "string" ? module.activeVersion.id : "",
     activeVersionNo: Number.isFinite(module.activeVersion?.versionNo) ? module.activeVersion.versionNo : null,
   };
@@ -1649,7 +1649,7 @@ function clearVersionFields() {
   mcqQuestionsJsonInput.value = "";
   moduleVersionTaskTextInput.value = "";
   if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = "";
-  moduleVersionGuidanceTextInput.value = "";
+  moduleVersionAssessorExpectedContentInput.value = "";
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(normalizeSubmissionSchemaToSingleField(), null, 2);
   moduleVersionAssessmentPolicyInput.value = "";
   moduleVersionRubricVersionIdInput.value = "";
@@ -1819,7 +1819,7 @@ async function handleCreateModule(options = { silent: false }) {
     mcqQuestionsJson: mcqQuestionsJsonInput.value,
     moduleVersionTaskText: moduleVersionTaskTextInput.value,
     moduleVersionCandidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
-    moduleVersionGuidanceText: moduleVersionGuidanceTextInput.value,
+    moduleVersionAssessorExpectedContent: moduleVersionAssessorExpectedContentInput.value,
     moduleVersionSubmissionSchema: moduleVersionSubmissionSchemaInput.value,
     moduleVersionAssessmentPolicy: moduleVersionAssessmentPolicyInput.value,
   };
@@ -1847,7 +1847,7 @@ async function handleCreateModule(options = { silent: false }) {
   mcqQuestionsJsonInput.value = savedVersionFields.mcqQuestionsJson;
   moduleVersionTaskTextInput.value = savedVersionFields.moduleVersionTaskText;
   if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = savedVersionFields.moduleVersionCandidateTaskConstraints ?? "";
-  moduleVersionGuidanceTextInput.value = savedVersionFields.moduleVersionGuidanceText;
+  moduleVersionAssessorExpectedContentInput.value = savedVersionFields.moduleVersionAssessorExpectedContent;
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(savedVersionFields.moduleVersionSubmissionSchema),
     null,
@@ -2042,9 +2042,9 @@ async function handleCreateModuleVersion(options = { silent: false }) {
       "adminContent.moduleVersion.candidateTaskConstraints",
       { required: false },
     ),
-    guidanceText: parseLocalizedTextField(
-      moduleVersionGuidanceTextInput.value,
-      "adminContent.moduleVersion.guidanceText",
+    assessorExpectedContent: parseLocalizedTextField(
+      moduleVersionAssessorExpectedContentInput.value,
+      "adminContent.moduleVersion.assessorExpectedContent",
       { required: false },
     ),
     rubricVersionId: moduleVersionRubricVersionIdInput.value.trim(),
@@ -2494,7 +2494,7 @@ function openVersionDetailsDialog(triggerBtn) {
 
   const parsedTask = parseLocalizedSafe(moduleVersionTaskTextInput.value);
   const parsedConstraints = parseLocalizedSafe(moduleVersionCandidateTaskConstraintsInput?.value ?? "");
-  const parsedGuidance = parseLocalizedSafe(moduleVersionGuidanceTextInput.value);
+  const parsedGuidance = parseLocalizedSafe(moduleVersionAssessorExpectedContentInput.value);
 
   for (const locale of ["en-GB", "nb", "nn"]) {
     const sfx = _localeToSuffix[locale];
@@ -2529,7 +2529,7 @@ function applyVersionDetailsDialog() {
 
   moduleVersionTaskTextInput.value = formatEditorValue(tasks);
   if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(constraints);
-  moduleVersionGuidanceTextInput.value = formatEditorValue(guidances);
+  moduleVersionAssessorExpectedContentInput.value = formatEditorValue(guidances);
 
   dirtyCards.add("versionDetails");
   syncAllTextareaHeights();
@@ -3954,7 +3954,7 @@ function navigateToConversation() {
       draft: {
         taskText: moduleVersionTaskTextInput?.value ?? "",
         candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
-        guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+        assessorExpectedContent: moduleVersionAssessorExpectedContentInput?.value ?? "",
         mcqQuestions,
       },
       locale: currentLocale,
@@ -4003,8 +4003,8 @@ function applyHandoffFromShell(moduleId) {
   const handoff = readAndClearHandoff(moduleId);
   if (!handoff || handoff.source !== "shell" || !handoff.draft) return;
 
-  const { taskText, candidateTaskConstraints, guidanceText, mcqQuestions } = handoff.draft;
-  if (!taskText && !candidateTaskConstraints && !guidanceText && !(mcqQuestions?.length > 0)) return;
+  const { taskText, candidateTaskConstraints, assessorExpectedContent, mcqQuestions } = handoff.draft;
+  if (!taskText && !candidateTaskConstraints && !assessorExpectedContent && !(mcqQuestions?.length > 0)) return;
 
   if (moduleVersionTaskTextInput) {
     moduleVersionTaskTextInput.value = formatEditorValue(taskText, "");
@@ -4014,8 +4014,8 @@ function applyHandoffFromShell(moduleId) {
     moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(candidateTaskConstraints, "");
     dirtyCards.add("versionDetails");
   }
-  if (moduleVersionGuidanceTextInput) {
-    moduleVersionGuidanceTextInput.value = formatEditorValue(guidanceText, "");
+  if (moduleVersionAssessorExpectedContentInput) {
+    moduleVersionAssessorExpectedContentInput.value = formatEditorValue(assessorExpectedContent, "");
     dirtyCards.add("versionDetails");
   }
   if (mcqQuestionsJsonInput && Array.isArray(mcqQuestions) && mcqQuestions.length > 0) {
@@ -4116,7 +4116,7 @@ function renderAdvancedPreview() {
     description: moduleDescriptionInput?.value ?? "",
     taskText: moduleVersionTaskTextInput?.value ?? "",
     candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
-    guidanceText: moduleVersionGuidanceTextInput?.value ?? "",
+    assessorExpectedContent: moduleVersionAssessorExpectedContentInput?.value ?? "",
     mcqQuestions,
     versionChain,
     badgeClass,

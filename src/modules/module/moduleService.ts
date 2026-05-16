@@ -52,7 +52,7 @@ export async function listModules(
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
-      ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText) }),
+      ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
       candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
@@ -92,7 +92,7 @@ export async function listModules(
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
-      ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText) }),
+      ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
       candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
@@ -178,7 +178,7 @@ export async function getModuleById(
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
     taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
-    ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText) }),
+    ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
     candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
   };
 }
@@ -200,11 +200,11 @@ export async function getActiveModuleVersion(
     return null;
   }
 
-  const { guidanceText: _gt, ...activeVersionBase } = activeVersion;
+  const { assessorExpectedContent: _gt, ...activeVersionBase } = activeVersion;
   return {
     ...activeVersionBase,
     taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
-    ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, activeVersion.guidanceText) }),
+    ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, activeVersion.assessorExpectedContent) }),
     candidateTaskConstraints: localizeContentText(locale, activeVersion.candidateTaskConstraints),
     submissionSchema: submissionSchemaCodec.parse(activeVersion.submissionSchemaJson),
     assessmentPolicy: assessmentPolicyCodec.parse(activeVersion.assessmentPolicyJson),

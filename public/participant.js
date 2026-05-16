@@ -274,7 +274,7 @@ function buildPreviewModuleFromPayload(payload) {
     title,
     description: localizePreviewText(previewModule.description).trim(),
     taskText: localizePreviewText(previewModule.taskText).trim(),
-    guidanceText: localizePreviewText(previewModule.guidanceText).trim(),
+    assessorExpectedContent: localizePreviewText(previewModule.assessorExpectedContent).trim(),
     candidateTaskConstraints: localizePreviewText(previewModule.candidateTaskConstraints).trim(),
     previewQuestions: normalizePreviewQuestions(previewModule.questions),
     submissionSchema:

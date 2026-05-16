@@ -129,7 +129,7 @@ describe("AssessmentInputFactory", () => {
           assessmentPolicyJson: null,
           submissionSchemaJson: null,
           taskText: "Task text",
-          guidanceText: "Guidance text",
+          assessorExpectedContent: "Guidance text",
           promptTemplateVersion: {
             systemPrompt: "system",
             userPromptTemplate: "template",
@@ -164,7 +164,7 @@ describe("AssessmentInputFactory", () => {
           assessmentPolicyJson: JSON.stringify(policy),
           submissionSchemaJson: null,
           taskText: "Task",
-          guidanceText: null,
+          assessorExpectedContent: null,
           promptTemplateVersion: { systemPrompt: "", userPromptTemplate: "", examplesJson: "" },
           rubricVersion: {
             criteriaJson: JSON.stringify({ crit: "0-4" }),

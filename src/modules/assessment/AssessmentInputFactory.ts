@@ -32,7 +32,7 @@ type SubmissionVersionShape = {
   assessmentPolicyJson: string | null;
   submissionSchemaJson?: string | null;
   taskText: string;
-  guidanceText?: string | null;
+  assessorExpectedContent?: string | null;
   promptTemplateVersion: {
     systemPrompt: string;
     userPromptTemplate: string;
@@ -74,7 +74,7 @@ export function buildAssessmentInputContext(
     localizeContentText(submissionLocale, submission.moduleVersion.taskText) ??
     submission.moduleVersion.taskText;
   const moduleGuidanceText =
-    localizeContentText(submissionLocale, submission.moduleVersion.guidanceText ?? "") ?? undefined;
+    localizeContentText(submissionLocale, submission.moduleVersion.assessorExpectedContent ?? "") ?? undefined;
 
   return {
     rubricCriteriaIds,

@@ -423,7 +423,7 @@ async function createPublishedModule(title: string) {
       moduleId: module.id,
       versionNo: 1,
       taskText: `${title} task text`,
-      guidanceText: `${title} guidance text`,
+      assessorExpectedContent: `${title} guidance text`,
       rubricVersionId: sourceModuleVersion!.rubricVersionId,
       promptTemplateVersionId: sourceModuleVersion!.promptTemplateVersionId,
       mcqSetVersionId: mcqSetVersion.id,

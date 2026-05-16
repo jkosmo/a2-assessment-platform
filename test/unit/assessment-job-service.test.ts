@@ -84,7 +84,7 @@ function buildSubmissionFixture() {
       rubricVersionId: "rubric-version-1",
       promptTemplateVersionId: "prompt-version-1",
       taskText: "Task text",
-      guidanceText: "Guidance text",
+      assessorExpectedContent: "Guidance text",
       assessmentPolicyJson: null,
       submissionSchemaJson: null,
       module: {

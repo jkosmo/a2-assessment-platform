@@ -145,7 +145,7 @@ describe("llm content generation prompts", () => {
   it("builds module draft localization prompts for target language translation", () => {
     const { userPrompt } = buildModuleDraftLocalizationPrompts({
       taskText: "Scenario:\n\nWorkers are discussing collective action.",
-      guidanceText: "A strong answer should explain key principles.",
+      assessorExpectedContent: "A strong answer should explain key principles.",
       sourceLocale: "nb",
       targetLocale: "en-GB",
     });
@@ -231,7 +231,7 @@ describe("llm content generation prompts", () => {
   it("builds draft revision prompts around an explicit change instruction", () => {
     const { userPrompt } = buildModuleDraftRevisionPrompts({
       taskText: "Scenario:\n\nA workplace conflict has escalated.\n\nExplain how mediation could help.",
-      guidanceText: "A strong answer should explain core mediation principles.",
+      assessorExpectedContent: "A strong answer should explain core mediation principles.",
       instruction: "Make the scenario more concrete and add clearer expectations about evidence.",
       locale: "en-GB",
     });

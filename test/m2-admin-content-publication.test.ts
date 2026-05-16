@@ -144,7 +144,7 @@ describe("MVP admin content management and publication", () => {
           nb: "Lever praktisk refleksjon med dokumentert iterasjon og QA-kontroller.",
           nn: "Lever praktisk refleksjon med dokumentert iterasjon og QA-kontrollar.",
         },
-        guidanceText: {
+        assessorExpectedContent: {
           "en-GB": "Keep references to prompt evolution and validation checks.",
           nb: "Beskriv forventet svar med tydelige valideringskontroller.",
           nn: "Skildra forventa svar med tydelege valideringskontrollar.",
@@ -194,7 +194,7 @@ describe("MVP admin content management and publication", () => {
       .set(adminHeaders)
       .send({
         taskText: "Submit practical reflection with benchmark-anchored quality expectations.",
-        guidanceText: "Use benchmark examples to calibrate scoring consistency.",
+        assessorExpectedContent: "Use benchmark examples to calibrate scoring consistency.",
         rubricVersionId,
         promptTemplateVersionId: benchmarkPromptTemplateVersionId,
         mcqSetVersionId,
@@ -594,7 +594,7 @@ describe("MVP admin content management and publication", () => {
           nb: "Fullfør synlighetspubliseringsoppgaven.",
           nn: "Fullfør synlegheitspubliseringsoppgåva.",
         },
-        guidanceText: {
+        assessorExpectedContent: {
           "en-GB": "Describe controls and expected outcome.",
           nb: "Beskriv kontroller og forventet resultat.",
           nn: "Skildra kontrollar og venta resultat.",
