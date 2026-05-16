@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.8 - 2026-05-16
+
+fix(deploy): refresh OIDC during long ARM deployments
+
+- `scripts/azure/deploy-environment.ps1`: Switch `az deployment group create` to
+  `--no-wait` and poll provisioning state with `Wait-GroupDeployment`. Each poll
+  iteration calls `Refresh-AzureCliOidcLogin` which fetches a fresh GitHub OIDC
+  JWT and re-authenticates via `az login --federated-token`, preventing
+  `AADSTS700024` token expiry on deployments longer than ~10 minutes (e.g. when
+  ACS email domain provisioning is included).
+- Added `Refresh-AzureCliOidcLogin` calls before webapp deploy, restart,
+  and Entra SPA redirect URI update steps.
+- `AzureFederatedClientId` and `AzureFederatedTenantId` params added; workflow
+  passes existing `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` secrets.
+
 ## 1.1.7 - 2026-05-15
 
 fix(llm): Scale max_completion_tokens with MCQ question×option count
