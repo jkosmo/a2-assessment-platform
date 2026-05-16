@@ -42,7 +42,8 @@ export async function listModules(
   options: ListModulesOptions = {},
 ) {
   const now = new Date();
-  const adminRead = options.participantFacing ? false : hasAdminRead(roles);
+  const participantFacing = options.participantFacing ?? false;
+  const adminRead = participantFacing ? false : hasAdminRead(roles);
   const modules = await queryModules(adminRead, now);
 
   if (!userId) {
@@ -51,7 +52,7 @@ export async function listModules(
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
-      guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+      ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText) }),
       candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
@@ -91,7 +92,7 @@ export async function listModules(
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
-      guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+      ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText) }),
       candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
@@ -164,7 +165,8 @@ export async function getModuleById(
   options: { participantFacing?: boolean } = {},
 ) {
   const now = new Date();
-  const adminRead = options.participantFacing ? false : hasAdminRead(roles);
+  const participantFacing = options.participantFacing ?? false;
+  const adminRead = participantFacing ? false : hasAdminRead(roles);
   const module = await queryModuleById(moduleId, adminRead, now);
 
   if (!module) {
@@ -176,7 +178,7 @@ export async function getModuleById(
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
     taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
-    guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText),
+    ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, module.activeVersion?.guidanceText) }),
     candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
   };
 }
@@ -187,6 +189,7 @@ export async function getActiveModuleVersion(
   locale: SupportedLocale = "en-GB",
   options: { participantFacing?: boolean } = {},
 ) {
+  const participantFacing = options.participantFacing ?? false;
   const module = await getModuleById(moduleId, roles, locale, options);
   if (!module?.activeVersion) {
     return null;
@@ -200,7 +203,7 @@ export async function getActiveModuleVersion(
   return {
     ...activeVersion,
     taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
-    guidanceText: localizeContentText(locale, activeVersion.guidanceText),
+    ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, activeVersion.guidanceText) }),
     candidateTaskConstraints: localizeContentText(locale, activeVersion.candidateTaskConstraints),
     submissionSchema: submissionSchemaCodec.parse(activeVersion.submissionSchemaJson),
     assessmentPolicy: assessmentPolicyCodec.parse(activeVersion.assessmentPolicyJson),
