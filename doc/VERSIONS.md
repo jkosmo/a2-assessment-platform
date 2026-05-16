@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.11 - 2026-05-16
+
+fix(security): type-safe MCQ answer key redaction on module export for SMOs
+
+- `src/routes/adminContent.ts`: Replaced `any`-typed in-place deletion with a
+  typed `redactMcqAnswerKeys` helper that uses destructuring to omit
+  `correctAnswer` and `rationale` from all MCQ questions in both
+  `selectedConfiguration.mcqSetVersion` and `versions.mcqSetVersions`. Admin
+  exports are unaffected. Also propagates `AppError` through the catch handler
+  so 403/404 responses from ownership checks are returned correctly.
+- `test/security-p1-392-smo-export-scope.test.ts`: Integration tests verifying
+  SMO-B cannot export SMO-A's module (403), SMO exports omit answer keys, and
+  admin exports retain full question data.
+
 ## 1.1.10 - 2026-05-16
 
 fix(security): harden XSS attack surface in admin content UI
