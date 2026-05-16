@@ -46,6 +46,7 @@ vi.mock("../../src/services/auditService.js", () => ({
 describe("mcq service — submitMcqAttempt", () => {
   const baseSubmission = {
     id: "submission-1",
+    submissionStatus: "SUBMITTED" as const,
     moduleVersion: { mcqSetVersionId: "mcq-set-1" },
   };
   const baseAttempt = {
@@ -202,6 +203,93 @@ describe("mcq service — submitMcqAttempt", () => {
       }),
     );
   });
+
+  it.each(["SCORED", "COMPLETED", "UNDER_REVIEW", "REJECTED"] as const)(
+    "throws when submission status is terminal (%s)",
+    async (status) => {
+      findSubmissionForModuleMcq.mockResolvedValue({ ...baseSubmission, submissionStatus: status });
+
+      const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+
+      await expect(
+        submitMcqAttempt({
+          moduleId: "module-1",
+          submissionId: "submission-1",
+          attemptId: "attempt-1",
+          userId: "user-1",
+          responses: [{ questionId: "q-1", selectedAnswer: "4" }],
+        }),
+      ).rejects.toThrow("MCQ cannot be submitted: assessment is already completed or under review.");
+    },
+  );
+});
+
+describe("mcq service — startMcqAttempt lifecycle guards", () => {
+  beforeEach(() => {
+    findSubmissionForModuleMcq.mockReset();
+    findOpenAttemptForSubmission.mockReset();
+    createAttempt.mockReset();
+    findActiveQuestionsForSet.mockReset();
+  });
+
+  it.each(["SCORED", "COMPLETED", "UNDER_REVIEW", "REJECTED"] as const)(
+    "throws when submission status is terminal (%s)",
+    async (status) => {
+      findSubmissionForModuleMcq.mockResolvedValue({
+        id: "submission-1",
+        submissionStatus: status,
+        moduleVersion: { mcqSetVersionId: "mcq-set-1" },
+      });
+
+      const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+
+      await expect(
+        startMcqAttempt("module-1", "submission-1", "user-1"),
+      ).rejects.toThrow("MCQ attempt cannot be started: assessment is already completed or under review.");
+    },
+  );
+
+  it("throws when submission is PROCESSING and no open attempt exists", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue({
+      id: "submission-1",
+      submissionStatus: "PROCESSING",
+      moduleVersion: { mcqSetVersionId: "mcq-set-1" },
+    });
+    findOpenAttemptForSubmission.mockResolvedValue(null);
+
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+
+    await expect(
+      startMcqAttempt("module-1", "submission-1", "user-1"),
+    ).rejects.toThrow("MCQ attempt cannot be started: submission has already been processed.");
+  });
+
+  it("allows resuming an open attempt when submission is PROCESSING", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue({
+      id: "submission-1",
+      submissionStatus: "PROCESSING",
+      moduleVersion: { mcqSetVersionId: "mcq-set-1" },
+    });
+    findOpenAttemptForSubmission.mockResolvedValue({
+      id: "attempt-1",
+      mcqSetVersionId: "mcq-set-1",
+    });
+    findActiveQuestionsForSet.mockResolvedValue([
+      {
+        id: "q-1",
+        stem: "What is 2+2?",
+        optionsJson: JSON.stringify(["3", "4", "5"]),
+        correctAnswer: "4",
+        active: true,
+      },
+    ]);
+
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+    const result = await startMcqAttempt("module-1", "submission-1", "user-1");
+
+    expect(result.attemptId).toBe("attempt-1");
+    expect(result.questions).toHaveLength(1);
+  });
 });
 
 describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
@@ -215,6 +303,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
   it("returns the same number of options as stored for each question", async () => {
     findSubmissionForModuleMcq.mockResolvedValue({
       id: "submission-1",
+      submissionStatus: "SUBMITTED",
       moduleVersion: { mcqSetVersionId: "mcq-set-1" },
     });
     findOpenAttemptForSubmission.mockResolvedValue({
@@ -253,6 +342,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
 
     findSubmissionForModuleMcq.mockResolvedValue({
       id: "submission-1",
+      submissionStatus: "SUBMITTED",
       moduleVersion: { mcqSetVersionId: "mcq-set-1" },
     });
     findOpenAttemptForSubmission.mockResolvedValue({
@@ -284,6 +374,7 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
 
     findSubmissionForModuleMcq.mockResolvedValue({
       id: "submission-1",
+      submissionStatus: "SUBMITTED",
       moduleVersion: { mcqSetVersionId: "mcq-set-1" },
     });
     findOpenAttemptForSubmission.mockResolvedValue({

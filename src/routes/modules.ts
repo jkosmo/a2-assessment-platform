@@ -181,15 +181,6 @@ modulesRouter.post("/:moduleId/mcq/submit", mcqSubmitLimiter, async (request, re
       userId,
       ...parsed.data,
     });
-
-    // Sikkerhetsfiks: Fjern fasitdetaljer fra resultatet vist til deltaker (#22)
-    if (result && (result as any).responses) {
-      (result as any).responses.forEach((r: any) => {
-        delete r.correctAnswer;
-        delete r.rationale;
-      });
-    }
-
     response.json(result);
   } catch (error) {
     next(error);

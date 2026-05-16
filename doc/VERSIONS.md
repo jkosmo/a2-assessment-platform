@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.12 - 2026-05-16
+
+fix(security): prevent MCQ submission lifecycle abuse and old-submission renewal
+
+- `src/modules/assessment/mcqService.ts`: Gate `startMcqAttempt` and
+  `submitMcqAttempt` on submission status. Both throw if status is SCORED,
+  COMPLETED, UNDER_REVIEW, or REJECTED. `startMcqAttempt` additionally throws
+  if status is PROCESSING and no open attempt exists, preventing MCQ restart
+  after the previous attempt was already scored. Allows resuming an existing
+  open attempt when status is PROCESSING.
+- `src/routes/modules.ts`: Removed dead code branch that tried to delete
+  `correctAnswer`/`rationale` from a `responses` field that never exists in
+  the `submitMcqAttempt` return value.
+- `test/unit/mcq-service.test.ts`: Added parameterized tests for all four
+  terminal statuses on both start and submit; added PROCESSING-without-open-attempt
+  rejection; added PROCESSING-with-open-attempt resume test.
+
 ## 1.1.11 - 2026-05-16
 
 fix(security): type-safe MCQ answer key redaction on module export for SMOs
