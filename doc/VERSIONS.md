@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.22 - 2026-05-16
+
+fix(infra): add skipRoleAssignments parameter to unblock production deploy (#404)
+
+Adds `skipRoleAssignments bool = false` Bicep parameter. When `true`, all 10 Key Vault
+secret role assignments are skipped — existing assignments are preserved, missing ones
+are not created. Controlled via `SKIP_ROLE_ASSIGNMENTS` GitHub environment variable.
+
+Workaround for production deploy failure where the OIDC SP has `Contributor` but not
+`User Access Administrator` (assigned after environment recreation in May 2026).
+Set `SKIP_ROLE_ASSIGNMENTS=true` in the production GitHub environment until #404 is
+resolved next week.
+
+- `infra/azure/main.bicep`: `skipRoleAssignments` param + all 10 role assignments
+  wrapped in `if (!skipRoleAssignments [&& <existing condition>])`
+- `scripts/azure/deploy-environment.ps1`: `-SkipRoleAssignments` bool param
+- `.github/workflows/deploy-azure.yml`: passes `vars.SKIP_ROLE_ASSIGNMENTS == 'true'`
+- `.github/workflows/activate-staging-app-layer.yml`: same
+
 ## 1.1.21 - 2026-05-16
 
 fix(content): use max_tokens for LLM content generation (MCQ truncation fix)

@@ -38,6 +38,7 @@ param(
   [int]$AzureOpenAiMaxTokens = 1200,
   [string]$AzureOpenAiTokenLimitParameter = "auto",
   [string]$AzureOpenAiAuthoringTokenLimitParameter = "",
+  [bool]$SkipRoleAssignments = $false,
   [int]$AssessmentJobPollIntervalMs = 4000,
   [int]$AssessmentJobMaxAttempts = 3,
   [string]$ObservabilityAlertEmail = "",
@@ -448,6 +449,7 @@ az deployment group create `
               azureOpenAiMaxTokens=$AzureOpenAiMaxTokens `
               azureOpenAiTokenLimitParameter=$AzureOpenAiTokenLimitParameter `
               azureOpenAiAuthoringTokenLimitParameter=$AzureOpenAiAuthoringTokenLimitParameter `
+              skipRoleAssignments=$SkipRoleAssignments `
               assessmentJobPollIntervalMs=$AssessmentJobPollIntervalMs `
               assessmentJobMaxAttempts=$AssessmentJobMaxAttempts `
               observabilityAlertEmail=$ObservabilityAlertEmail `

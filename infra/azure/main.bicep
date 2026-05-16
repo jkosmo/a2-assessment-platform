@@ -137,6 +137,9 @@ param azureOpenAiTokenLimitParameter string = 'auto'
 ])
 param azureOpenAiAuthoringTokenLimitParameter string = ''
 
+@description('Skip Key Vault secret role assignments. Set to true when the deployment SP lacks roleAssignments/write (e.g. has Contributor but not Owner). Existing assignments are preserved; missing ones will not be created. Default false.')
+param skipRoleAssignments bool = false
+
 @description('Assessment worker polling interval in milliseconds.')
 param assessmentJobPollIntervalMs int = 4000
 
@@ -984,7 +987,7 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 
-resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretDatabaseUrl
   name: guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -994,7 +997,7 @@ resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@202
   }
 }
 
-resource workerAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource workerAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretDatabaseUrl
   name: guid(kvSecretDatabaseUrl.id, workerApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1004,7 +1007,7 @@ resource workerAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@
   }
 }
 
-resource webAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(azureOpenAiApiKey)) {
+resource webAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(azureOpenAiApiKey)) {
   scope: kvSecretOpenAiKey
   name: guid(kvSecretOpenAiKey.id, webApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1014,7 +1017,7 @@ resource webAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-resource workerAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(azureOpenAiApiKey)) {
+resource workerAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(azureOpenAiApiKey)) {
   scope: kvSecretOpenAiKey
   name: guid(kvSecretOpenAiKey.id, workerApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1024,7 +1027,7 @@ resource workerAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
-resource webAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createAcsEmail) {
+resource webAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && createAcsEmail) {
   scope: kvSecretAcsConnection
   name: guid(kvSecretAcsConnection.id, webApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1034,7 +1037,7 @@ resource webAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
-resource workerAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createAcsEmail) {
+resource workerAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && createAcsEmail) {
   scope: kvSecretAcsConnection
   name: guid(kvSecretAcsConnection.id, workerApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1044,7 +1047,7 @@ resource workerAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-resource webAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(participantNotificationWebhookUrl)) {
+resource webAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(participantNotificationWebhookUrl)) {
   scope: kvSecretParticipantNotificationWebhookUrl
   name: guid(kvSecretParticipantNotificationWebhookUrl.id, webApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1054,7 +1057,7 @@ resource webAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssi
   }
 }
 
-resource workerAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(participantNotificationWebhookUrl)) {
+resource workerAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(participantNotificationWebhookUrl)) {
   scope: kvSecretParticipantNotificationWebhookUrl
   name: guid(kvSecretParticipantNotificationWebhookUrl.id, workerApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1064,7 +1067,7 @@ resource workerAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleA
   }
 }
 
-resource webAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource webAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretParserWorkerAuthKey
   name: guid(kvSecretParserWorkerAuthKey.id, webApp.id, keyVaultSecretsUserRoleId)
   properties: {
@@ -1074,7 +1077,7 @@ resource webAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
-resource parserAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource parserAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretParserWorkerAuthKey
   name: guid(kvSecretParserWorkerAuthKey.id, parserApp.id, keyVaultSecretsUserRoleId)
   properties: {
