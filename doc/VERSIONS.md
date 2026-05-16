@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.20 - 2026-05-16
+
+fix(infra): add AUTH_MODE and ENTRA settings to worker app Bicep config
+
+Root cause of staging deploy failures since v1.1.7 (commit 6959683): `env.ts` now calls
+`process.exit(1)` when `AUTH_MODE=mock` runs on Azure App Service. The worker app's Bicep
+config never included `AUTH_MODE`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, or `ENTRA_AUDIENCE`
+settings (only the web app had them), so the worker defaulted to `AUTH_MODE=mock` and crashed
+on every startup.
+
+- `infra/azure/main.bicep`: added `AUTH_MODE`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`,
+  `ENTRA_AUDIENCE` to the worker app `appSettings` block (mirrors web app config).
+- Staging immediate fix: same four settings added manually via `az webapp config appsettings set`;
+  pending migrations `20260516000001` and `20260516000002` applied directly against staging DB.
+
 ## 1.1.19 - 2026-05-16
 
 feat(content): assessment blueprint step + generation benchmark (#372, #376)

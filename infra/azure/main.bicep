@@ -733,6 +733,22 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
         {
+          name: 'AUTH_MODE'
+          value: authMode
+        }
+        {
+          name: 'ENTRA_TENANT_ID'
+          value: entraTenantId
+        }
+        {
+          name: 'ENTRA_CLIENT_ID'
+          value: entraClientId
+        }
+        {
+          name: 'ENTRA_AUDIENCE'
+          value: entraAudience
+        }
+        {
           name: 'LLM_MODE'
           value: llmMode
         }
