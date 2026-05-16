@@ -2,6 +2,12 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.26 - 2026-05-16
+
+fix(infra): restore enableRbacAuthorization: true on Key Vault — decoupled from skipRoleAssignments
+
+- `infra/azure/main.bicep`: reverts 5c37383 which incorrectly set `enableRbacAuthorization: !skipRoleAssignments`. When prod runs with `SkipRoleAssignments=true` this switched the KV to access-policies mode and ARM rejected the update with "accessPolicies is not specified". `skipRoleAssignments` only controls whether role assignment resources are created — it must not toggle the KV auth model.
+
 ## 1.1.25 - 2026-05-16
 
 fix(infra): keep deploy-time optimisations but avoid hanging parallel ZIP jobs (#407, #409)
