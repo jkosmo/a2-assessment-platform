@@ -38,7 +38,7 @@ param(
   [int]$AzureOpenAiMaxTokens = 1200,
   [string]$AzureOpenAiTokenLimitParameter = "auto",
   [string]$AzureOpenAiAuthoringTokenLimitParameter = "",
-  [bool]$SkipRoleAssignments = $false,
+  [string]$SkipRoleAssignments = "false",
   [int]$AssessmentJobPollIntervalMs = 4000,
   [int]$AssessmentJobMaxAttempts = 3,
   [string]$ObservabilityAlertEmail = "",
