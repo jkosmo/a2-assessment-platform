@@ -28,6 +28,7 @@ type BuildDecisionInput = {
   forceManualReviewReason?: string;
   assessmentPolicy?: ModuleAssessmentPolicy | null;
   rubricMaxTotal?: number;
+  rubricCriteriaIds?: string[];
 };
 
 export type ResolvedAssessmentDecision = {
@@ -43,25 +44,43 @@ export type ResolvedAssessmentDecision = {
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds"
 >;
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
   const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
-
-  const practicalScoreScaled = input.llmResult.practical_score_scaled;
-  const effectivePracticalScaledScore = input.assessmentPolicy?.scoring?.practicalWeight != null
-    ? (practicalScoreScaled / rules.weights.practicalMaxScore) * input.assessmentPolicy.scoring.practicalWeight
-    : practicalScoreScaled;
-  const effectiveMcqScaledScore = input.assessmentPolicy?.scoring?.mcqWeight != null
-    ? (input.mcqPercentScore / 100) * input.assessmentPolicy.scoring.mcqWeight
-    : input.mcqScaledScore;
-  const totalScore = Number((effectivePracticalScaledScore + effectiveMcqScaledScore).toFixed(2));
   const rubricMaxTotal = input.rubricMaxTotal ?? 20;
-  const practicalPercent = rubricMaxTotal > 0
-    ? (input.llmResult.rubric_total / rubricMaxTotal) * 100
-    : null;
+
+  // Recompute rubric total server-side: filter to known criteria (if provided),
+  // clamp each score to [0,4], then sum. Never trust LLM-reported totals.
+  const knownCriteriaIds = input.rubricCriteriaIds ?? [];
+  const rawScores = input.llmResult.rubric_scores;
+  const validatedScores =
+    knownCriteriaIds.length > 0
+      ? Object.fromEntries(
+          knownCriteriaIds.map((id) => [id, Math.max(0, Math.min(4, rawScores[id] ?? 0))]),
+        )
+      : Object.fromEntries(
+          Object.entries(rawScores).map(([id, score]) => [id, Math.max(0, Math.min(4, score))]),
+        );
+
+  const recomputedRubricTotal = Object.values(validatedScores).reduce((sum, s) => sum + s, 0);
+  const totalsInconsistent = recomputedRubricTotal !== input.llmResult.rubric_total;
+
+  const recomputedPracticalScoreScaled =
+    rubricMaxTotal > 0 ? Number(((recomputedRubricTotal / rubricMaxTotal) * 70).toFixed(2)) : 0;
+
+  const effectivePracticalScaledScore =
+    input.assessmentPolicy?.scoring?.practicalWeight != null
+      ? (recomputedPracticalScoreScaled / rules.weights.practicalMaxScore) * input.assessmentPolicy.scoring.practicalWeight
+      : recomputedPracticalScoreScaled;
+  const effectiveMcqScaledScore =
+    input.assessmentPolicy?.scoring?.mcqWeight != null
+      ? (input.mcqPercentScore / 100) * input.assessmentPolicy.scoring.mcqWeight
+      : input.mcqScaledScore;
+  const totalScore = Number((effectivePracticalScaledScore + effectiveMcqScaledScore).toFixed(2));
+  const practicalPercent = rubricMaxTotal > 0 ? (recomputedRubricTotal / rubricMaxTotal) * 100 : null;
 
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
   const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
@@ -77,12 +96,15 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
   const needsManualReview =
     Boolean(input.forceManualReviewReason) ||
+    totalsInconsistent ||
     hasOpenRedFlag ||
     (llmRecommendsManualReview && !autoFailForInsufficientEvidence);
 
   const decisionReason = needsManualReview
     ? input.forceManualReviewReason ??
-      "Automatically routed to manual review due to red flag / confidence / borderline rule."
+      (totalsInconsistent
+        ? "LLM score inconsistency detected — routed to manual review."
+        : "Automatically routed to manual review due to red flag / confidence / borderline rule.")
     : autoFailForInsufficientEvidence
       ? "Automatic fail due to insufficient submission evidence."
       : passesThresholds

@@ -58,6 +58,7 @@ const BASE_INPUT = {
   forceManualReviewReason: undefined,
   assessmentPolicy: null,
   rubricMaxTotal: 20,
+  rubricCriteriaIds: ["crit_a"],
   moduleTitle: "Test Module",
   submissionLocale: "en-GB" as const,
   submittedAt: new Date("2026-03-20T10:00:00Z"),
