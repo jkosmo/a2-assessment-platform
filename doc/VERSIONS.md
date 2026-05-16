@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.13 - 2026-05-16
+
+fix(security): recompute LLM assessment scores server-side to prevent prompt injection
+
+- `src/codecs/llmResponseCodec.ts`: Added `.max(4)` bound to `rubric_scores`
+  values — the codec now rejects any score above 4 at parse time.
+- `src/modules/assessment/decisionService.ts`: `resolveAssessmentDecision` now
+  accepts `rubricCriteriaIds` and recomputes `rubric_total` and
+  `practical_score_scaled` server-side instead of trusting LLM-supplied values.
+  Scores are filtered to known criterion IDs (unknown keys discarded), clamped to
+  [0,4], summed, and used to derive the scaled practical score. If the server
+  total differs from the LLM self-reported total (`totalsInconsistent`), the
+  submission is routed to manual review.
+- `src/modules/assessment/AssessmentDecisionApplicationService.ts`: Added
+  `rubricCriteriaIds: string[]` to `ApplyDecisionInput` and threads it through to
+  `createAssessmentDecision`.
+- `src/modules/assessment/assessmentJobService.ts`: Passes
+  `inputContext.rubricCriteriaIds` (already resolved from the rubric config) to
+  `applyAssessmentDecision`.
+- `test/unit/assessment-decision-application-service.test.ts`: Added
+  `rubricCriteriaIds` to the test base input to match the updated type.
+
 ## 1.1.12 - 2026-05-16
 
 fix(security): prevent MCQ submission lifecycle abuse and old-submission renewal

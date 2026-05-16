@@ -91,10 +91,10 @@ describe("module-owned read models", () => {
           confidenceNote: "Low confidence",
           responseJson: JSON.stringify({
             module_id: "module-1",
-            rubric_scores: { evidence: 8 },
+            rubric_scores: { evidence: 2 },
             pass_fail_practical: false,
             practical_score_scaled: 40,
-            rubric_total: 8,
+            rubric_total: 2,
             red_flags: [],
             manual_review_recommended: true,
             confidence_note: "Low confidence",

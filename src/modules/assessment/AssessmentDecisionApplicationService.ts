@@ -23,6 +23,7 @@ type ApplyDecisionInput = {
   forceManualReviewReason: string | undefined;
   assessmentPolicy: ModuleAssessmentPolicy | null;
   rubricMaxTotal: number;
+  rubricCriteriaIds: string[];
   /** Localized module title text (may be a raw localization JSON string). */
   moduleTitle: string;
   submissionLocale: SupportedLocale;
@@ -53,6 +54,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     forceManualReviewReason: input.forceManualReviewReason,
     assessmentPolicy: input.assessmentPolicy,
     rubricMaxTotal: input.rubricMaxTotal,
+    rubricCriteriaIds: input.rubricCriteriaIds,
   });
 
   if (!decisionResult.needsManualReview) {

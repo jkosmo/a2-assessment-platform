@@ -80,6 +80,7 @@ async function runAssessment(jobId: string) {
     forceManualReviewReason,
     assessmentPolicy: inputContext.assessmentPolicy,
     rubricMaxTotal: inputContext.rubricMaxTotal,
+    rubricCriteriaIds: inputContext.rubricCriteriaIds,
     moduleTitle: submission.moduleVersion.module.title,
     submissionLocale,
     submittedAt: submission.submittedAt,

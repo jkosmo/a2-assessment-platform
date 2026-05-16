@@ -14,7 +14,7 @@ const manualReviewReasonCodeSchema = z.enum([
 
 export const llmResponseSchema = z.object({
   module_id: z.string(),
-  rubric_scores: z.record(z.number().int().min(0)),
+  rubric_scores: z.record(z.number().int().min(0).max(4)),
   rubric_total: z.number().int().min(0),
   practical_score_scaled: z.number().min(0).max(70),
   pass_fail_practical: z.boolean(),
