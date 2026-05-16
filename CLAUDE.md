@@ -116,3 +116,44 @@ After `ai-draft.ps1` finishes, Claude MUST:
 5. Verify `package.json` and `doc/VERSIONS.md` were bumped
 
 Only after QA passes: commit, push, trigger CI/CD.
+
+### Additional QA for infra changes (Bicep / PowerShell / GitHub Actions)
+
+For any change touching `infra/`, `scripts/azure/`, or `.github/workflows/`, Claude MUST also verify:
+
+**Permission and identity**
+- Does this change `enableRbacAuthorization` on Key Vault? It must always be `true`, never coupled to a deploy flag.
+- Are role assignment GUIDs seeded on `principalId`, not `App.id` or other mutable values?
+- If App Services are deleted and recreated, do the managed identities still have KV access?
+
+**ARM dependency chain**
+- If a Bicep resource is made conditional (`= if (condition)`), do all child resources have explicit `dependsOn` on that resource?
+- If switching a child resource's `parent:` from a deployed resource to an `existing` reference, is ARM ordering still guaranteed?
+
+**Secret and credential sync**
+- If a KV secret (e.g. `DATABASE-URL`) is updated, is the underlying resource (e.g. PostgreSQL) also updated with the same credential — or is the skip path explicitly handled to reuse the existing credential?
+
+**Production safety**
+- Does the change behave correctly with `SKIP_ROLE_ASSIGNMENTS=true` (current prod workaround)?
+- Does the change behave correctly after `SKIP_ROLE_ASSIGNMENTS` is removed (#404)?
+- Do prod-destructive scripts assert the correct subscription before acting?
+
+**ARM validation gap**
+- A green ARM deploy does NOT prove runtime correctness. Verify MSI sidecar, KV reference resolution, and `/healthz` on staging before promoting to prod.
+
+---
+
+## ⛔ Infra hard invariants — NEVER violate
+
+These rules exist because their violation caused or worsened the May 2026 production incident.
+
+1. **Never** change `enableRbacAuthorization` based on `skipRoleAssignments` or any deploy flag. Key Vault must always use RBAC authorization.
+2. **Never** make production deployability depend on deleting or recreating managed identities.
+3. **Never** update a credential secret (e.g. `DATABASE-URL`) unless the underlying resource (e.g. PostgreSQL server) is updated with the same credential in the same deploy — or the existing credential is explicitly read and reused.
+4. **Never** make a Bicep resource conditional (`= if (condition)`) without adding `dependsOn: [conditionalResource]` to all child resources that previously used it as `parent:`.
+5. **Never** switch a child resource's `parent:` from a deployed resource to an `existing` reference without verifying ARM ordering is preserved via `dependsOn`.
+6. **Never** suppress `az role assignment` failures in production.
+7. **Never** treat successful ARM validation or a green deploy step as proof of runtime correctness — always verify `/healthz` and smoke test.
+8. **Never** run prod-destructive scripts without first asserting the correct subscription (`az account show`) and resource group.
+9. **Always** include rollback notes for infra changes in the PR description.
+10. **Always** verify staging `/healthz` is healthy before triggering a production deploy.
