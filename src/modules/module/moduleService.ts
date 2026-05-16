@@ -200,8 +200,9 @@ export async function getActiveModuleVersion(
     return null;
   }
 
+  const { guidanceText: _gt, ...activeVersionBase } = activeVersion;
   return {
-    ...activeVersion,
+    ...activeVersionBase,
     taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
     ...(participantFacing ? {} : { guidanceText: localizeContentText(locale, activeVersion.guidanceText) }),
     candidateTaskConstraints: localizeContentText(locale, activeVersion.candidateTaskConstraints),
