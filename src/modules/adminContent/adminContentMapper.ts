@@ -66,6 +66,7 @@ export function toCreateModuleVersionInput(data: ModuleVersionBody, moduleId: st
     taskText: localizedTextCodec.serialize(data.taskText),
     assessorExpectedContent: data.assessorExpectedContent ? localizedTextCodec.serialize(data.assessorExpectedContent) : undefined,
     candidateTaskConstraints: data.candidateTaskConstraints ? localizedTextCodec.serialize(data.candidateTaskConstraints) : undefined,
+    assessmentBlueprint: data.assessmentBlueprint ?? undefined,
     rubricVersionId: data.rubricVersionId,
     promptTemplateVersionId: data.promptTemplateVersionId,
     mcqSetVersionId: data.mcqSetVersionId,

@@ -26,6 +26,7 @@ import {
   mcqSetBodySchema,
   moduleVersionBodySchema,
   benchmarkExampleVersionBodySchema,
+  blueprintGenerationBodySchema,
   moduleDraftGenerationBodySchema,
   moduleDraftLocalizationBodySchema,
   moduleDraftRevisionBodySchema,
@@ -37,6 +38,7 @@ import {
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
 import {
+  generateAssessmentBlueprint,
   generateModuleDraft,
   localizeModuleDraft,
   localizeMcqQuestions,
@@ -473,6 +475,22 @@ adminContentRouter.get("/source-material/extract/:jobId", generateLimiter, async
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "source_material_extract_failed", message });
+  }
+});
+
+adminContentRouter.post("/generate/blueprint", generateLimiter, async (request, response) => {
+  const { data, error } = parseRequest(blueprintGenerationBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const blueprint = await generateAssessmentBlueprint(data);
+    response.json({ blueprint });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
   }
 });
 

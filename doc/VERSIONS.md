@@ -2,6 +2,13 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.19 - 2026-05-16
+
+feat(content): assessment blueprint step + generation benchmark (#372, #376)
+
+- **#372 — Assessment blueprint**: New `assessmentBlueprint String?` column on `ModuleVersion` (migration `20260516000002`). `buildBlueprintPrompts()` + `generateAssessmentBlueprint()` in `llmContentGenerationService.ts` analyse source material and return learning objectives, key topics, complexity budget, and MCQ profile. New route `POST /api/admin/content/generate/blueprint`. Shell generation flow now includes a blueprint confirmation step (accept/skip) before generating the module draft; accepted blueprint JSON is stored on `sessionDraft.assessmentBlueprint` and persisted with the module version. i18n keys added for all three locales.
+- **#376 — Generation benchmark**: `scripts/run-generation-benchmark.mjs` runs blueprint + module-draft + MCQ generation against a fixed governance test case; reports duration and validation result per step. Usage: `dotenv -e .env.postgres.local -- node scripts/run-generation-benchmark.mjs [--level advanced] [--locale nb]`.
+
 ## 1.1.18 - 2026-05-16
 
 fix(infra): prevent PostgreSQL firewall rule ARM hang on staging deploys

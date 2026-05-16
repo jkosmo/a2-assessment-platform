@@ -1089,11 +1089,12 @@ function resolveDraftForSave() {
   const taskText = sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "";
   const assessorExpectedContent = sessionDraft?.assessorExpectedContent ?? bundle?.selectedConfiguration?.moduleVersion?.assessorExpectedContent ?? "";
   const candidateTaskConstraints = sessionDraft?.candidateTaskConstraints ?? bundle?.selectedConfiguration?.moduleVersion?.candidateTaskConstraints ?? "";
+  const assessmentBlueprint = sessionDraft?.assessmentBlueprint ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint ?? undefined;
   const mcqQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
 
-  return { taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions };
+  return { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions };
 }
 
 function resolveCurrentDraftSnapshot(locale = (previewLocale ?? currentLocale)) {
@@ -1181,7 +1182,7 @@ function startGeneration() {
   return generationAbort;
 }
 
-async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept) {
+async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint = null) {
   const abort = startGeneration();
   const slot = logProgress("shell.generating.draftProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -1207,7 +1208,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
     }
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept) },
+      { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint) },
     ]);
     return;
   }
@@ -1218,6 +1219,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, locale, draft.candidateTaskConstraints);
   sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
+  if (blueprint) sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
   clearPreviewCandidate();
   scrollPreviewToTop();
   logResolveSlot(
@@ -1456,7 +1458,7 @@ async function saveDraftBundleInBackground(options = {}) {
     return;
   }
 
-  const { taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions } = resolveDraftForSave();
+  const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions } = resolveDraftForSave();
   if (!localizeValueForLocale(taskText, currentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"));
     return;
@@ -1505,6 +1507,7 @@ async function saveDraftBundleInBackground(options = {}) {
         taskText: translateLocalizedText(taskText),
         assessorExpectedContent: translateLocalizedText(assessorExpectedContent),
         candidateTaskConstraints: translateLocalizedText(candidateTaskConstraints) || undefined,
+        assessmentBlueprint: assessmentBlueprint || undefined,
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
         mcqSetVersionId: mcqBody?.mcqSetVersion?.id,
@@ -2403,12 +2406,68 @@ function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
 
 function askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale) {
   logBot(() => t("shell.generationMode.prompt"), [
-    { labelKey: "shell.generationMode.ordinary", action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "ordinary") },
-    { labelKey: "shell.generationMode.thorough", action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "thorough") },
+    { labelKey: "shell.generationMode.ordinary", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "ordinary") },
+    { labelKey: "shell.generationMode.thorough", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "thorough") },
   ]);
 }
 
-async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode) {
+async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode) {
+  const abort = startGeneration();
+  const slot = logProgress("shell.blueprint.progress");
+  slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
+
+  let blueprintResult = null;
+  try {
+    blueprintResult = await apiFetch(
+      "/api/admin/content/generate/blueprint",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale }),
+        signal: abort.signal,
+      },
+    );
+  } catch (err) {
+    generationAbort = null;
+    sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
+    if (err?.name === "AbortError" || String(err).includes("abort")) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.aborted")));
+      return;
+    }
+    logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.errorFallback")));
+    confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null);
+    return;
+  }
+
+  generationAbort = null;
+  sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
+
+  const bp = blueprintResult?.blueprint;
+  const objectives = (bp?.learningObjectives ?? []).map(o => `<li>${escapeHtml(o)}</li>`).join("");
+  const topics = (bp?.keyTopics ?? []).slice(0, 5).map(k => `<li>${escapeHtml(k)}</li>`).join("");
+  const mcqCount = bp?.mcqProfile?.suggestedCount ?? "–";
+  const notes = bp?.notes ? `<p style="margin:6px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(bp.notes)}</p>` : "";
+  const blueprintJson = bp ? JSON.stringify(bp) : null;
+
+  logResolveSlot(
+    slot,
+    () => `<strong>${escapeHtml(t("shell.blueprint.ready"))}</strong>
+      <div style="margin:8px 0 0;font-size:13px">
+        <p style="margin:0 0 4px;font-weight:600">${escapeHtml(t("shell.blueprint.objectives"))}</p>
+        <ul style="margin:0 0 8px;padding-left:18px">${objectives}</ul>
+        <p style="margin:0 0 4px;font-weight:600">${escapeHtml(t("shell.blueprint.keyTopics"))}</p>
+        <ul style="margin:0 0 8px;padding-left:18px">${topics}</ul>
+        <p style="margin:0 0 4px"><strong>${escapeHtml(t("shell.blueprint.mcqSuggestion"))}</strong> ${escapeHtml(String(mcqCount))}</p>
+        ${notes}
+      </div>`,
+    [
+      { labelKey: "shell.blueprint.accept", action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprintJson) },
+      { labelKey: "shell.blueprint.skip",   action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null) },
+    ],
+  );
+}
+
+async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null) {
   if (existingModuleId) {
     const capturedTitle = localizeValue(bundle?.module?.title) || existingModuleId;
     const levelKey = `shell.certLevel.${certLevel}`;
@@ -2419,7 +2478,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
     );
     generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
       askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
-    });
+    }, blueprint);
     return;
   }
 
@@ -2443,7 +2502,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
         { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content/advanced"; } },
-        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode) },
+        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],
     );
@@ -2457,12 +2516,12 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
     `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
   );
 
-  sessionDraft = { title: moduleTitle, taskText: "", assessorExpectedContent: "", candidateTaskConstraints: "", mcqQuestions: [] };
+  sessionDraft = { title: moduleTitle, taskText: "", assessorExpectedContent: "", candidateTaskConstraints: "", assessmentBlueprint: blueprint ?? undefined, mcqQuestions: [] };
   renderPreview();
 
   generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
     askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
-  });
+  }, blueprint);
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {

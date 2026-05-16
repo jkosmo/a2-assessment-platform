@@ -40,6 +40,7 @@ type CreateModuleVersionInput = {
   taskText: string;
   assessorExpectedContent?: string;
   candidateTaskConstraints?: string;
+  assessmentBlueprint?: string;
   rubricVersionId: string;
   promptTemplateVersionId: string;
   mcqSetVersionId: string;
@@ -302,6 +303,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     taskText: input.taskText,
     assessorExpectedContent: input.assessorExpectedContent,
     candidateTaskConstraints: input.candidateTaskConstraints,
+    assessmentBlueprint: input.assessmentBlueprint,
     rubricVersionId: input.rubricVersionId,
     promptTemplateVersionId: input.promptTemplateVersionId,
     mcqSetVersionId: input.mcqSetVersionId,
@@ -538,6 +540,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       taskText: sourceVersion.taskText,
       assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
       candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,
+      assessmentBlueprint: sourceVersion.assessmentBlueprint ?? undefined,
       rubricVersionId: sourceVersion.rubricVersionId,
       promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
       mcqSetVersionId: sourceVersion.mcqSetVersionId,

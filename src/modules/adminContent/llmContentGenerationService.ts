@@ -112,6 +112,27 @@ export type CourseCopyLocalizationResult = {
   description?: string;
 };
 
+export type BlueprintInput = {
+  sourceMaterial: string;
+  certificationLevel: CertificationLevel;
+  locale: GenerationLocale;
+};
+
+export type AssessmentBlueprint = {
+  learningObjectives: string[];
+  keyTopics: string[];
+  complexityBudget: {
+    actors: number;
+    concepts: number;
+    tradeoffs: number;
+  };
+  mcqProfile: {
+    suggestedCount: number;
+    topicDistribution: Record<string, number>;
+  };
+  notes: string;
+};
+
 // ---------------------------------------------------------------------------
 // Response codecs
 // ---------------------------------------------------------------------------
@@ -151,6 +172,21 @@ const courseCopyLocalizationResponseCodec = z.object({
   description: z.string().optional(),
 }).refine((value) => Boolean(value.title || value.description), {
   message: "At least one localized field is required.",
+});
+
+const assessmentBlueprintResponseCodec = z.object({
+  learningObjectives: z.array(z.string().min(1)).min(1),
+  keyTopics: z.array(z.string().min(1)).min(1),
+  complexityBudget: z.object({
+    actors: z.number().int().nonnegative(),
+    concepts: z.number().int().nonnegative(),
+    tradeoffs: z.number().int().nonnegative(),
+  }),
+  mcqProfile: z.object({
+    suggestedCount: z.number().int().min(1),
+    topicDistribution: z.record(z.string(), z.number().min(0).max(1)),
+  }),
+  notes: z.string().default(""),
 });
 
 // ---------------------------------------------------------------------------
@@ -853,6 +889,52 @@ ${returnFields.join(",\n")}
   return { systemPrompt, userPrompt };
 }
 
+export function buildBlueprintPrompts(input: BlueprintInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a certification content architect. Analyse the provided source material and return a structured assessment blueprint as strict JSON only - no markdown, no commentary.";
+
+  const budget = COMPLEXITY_BUDGET[input.certificationLevel];
+
+  const userPrompt = `Analyse the source material below and produce an assessment blueprint for a ${input.certificationLevel}-level certification module.
+
+Language for labels: ${LOCALE_DISPLAY[input.locale]}
+
+## Complexity limits for ${input.certificationLevel} level
+
+- Maximum actors in scenario: ${budget.actorsMax}
+- Maximum distinct concepts required: ${budget.conceptsMax}
+- Maximum trade-offs or dilemmas: ${budget.tradeoffsMax}
+- Expected answer length: ${budget.minWords}–${budget.maxWords} words
+- Expected completion time: ${budget.timeBudgetMinutes} minutes
+
+## Source material (hidden author background)
+
+${input.sourceMaterial}
+
+## Return format
+
+Return a single JSON object:
+{
+  "learningObjectives": ["1-4 specific, measurable learning objectives the assessment should test"],
+  "keyTopics": ["3-8 key topics or concepts covered by the source material"],
+  "complexityBudget": {
+    "actors": number — recommended actor count for scenario (≤ ${budget.actorsMax}),
+    "concepts": number — recommended distinct concepts to test (≤ ${budget.conceptsMax}),
+    "tradeoffs": number — recommended trade-offs or dilemmas (≤ ${budget.tradeoffsMax})
+  },
+  "mcqProfile": {
+    "suggestedCount": number — recommended number of MCQ questions (5-15),
+    "topicDistribution": { "topic": fractional weight, ... } — keys are topic labels, values sum to 1.0
+  },
+  "notes": "brief author notes on how to use this material for assessment, potential pitfalls, or caveats"
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
 async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 4000): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
@@ -1096,6 +1178,20 @@ export async function localizeCourseCopy(input: CourseCopyLocalizationInput): Pr
   const parsed = courseCopyLocalizationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`Course copy localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+// ---------------------------------------------------------------------------
+// Assessment blueprint generation (#372)
+// ---------------------------------------------------------------------------
+
+export async function generateAssessmentBlueprint(input: BlueprintInput): Promise<AssessmentBlueprint> {
+  const { systemPrompt, userPrompt } = buildBlueprintPrompts(input);
+  const raw = await callLlm(systemPrompt, userPrompt, 2000);
+  const parsed = assessmentBlueprintResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Assessment blueprint LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
 }

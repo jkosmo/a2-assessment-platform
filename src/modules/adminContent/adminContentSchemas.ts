@@ -111,6 +111,7 @@ export const moduleVersionBodySchema = z.object({
   taskText: localizedTextSchema,
   assessorExpectedContent: localizedTextSchema.optional(),
   candidateTaskConstraints: localizedTextSchema.optional(),
+  assessmentBlueprint: z.string().trim().optional(),
   rubricVersionId: z.string().min(1),
   promptTemplateVersionId: z.string().min(1),
   mcqSetVersionId: z.string().min(1),
@@ -133,6 +134,12 @@ export const sourceMaterialUploadBodySchema = z.object({
   fileName: z.string().trim().min(1),
   mimeType: z.string().trim().optional(),
   contentBase64: z.string().trim().min(1),
+});
+
+export const blueprintGenerationBodySchema = z.object({
+  sourceMaterial: z.string().trim().min(1),
+  certificationLevel: certificationLevelSchema,
+  locale: generationLocaleSchema,
 });
 
 export const moduleDraftGenerationBodySchema = z.object({
