@@ -51,11 +51,15 @@ param(
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30,
   [string]$ParserWorkerAuthKey = "",
-  [string]$PackagePath = ""
+  [string]$PackagePath = "",
+  [string]$AzureFederatedClientId = "",
+  [string]$AzureFederatedTenantId = "",
+  [int]$DeploymentPollIntervalSeconds = 30
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$script:lastAzureOidcRefreshAt = $null
 
 # INCIDENT 2026-05-15: Windows zip (New-ZipArchiveFromDirectory / .NET ZipArchive) produces a
 # package that Azure App Service cannot mount as Run-From-Package. The container starts but
@@ -119,6 +123,82 @@ function Assert-LastExitCode([string]$stepName) {
   }
 }
 
+function Refresh-AzureCliOidcLogin([string]$reason = "") {
+  if (
+    [string]::IsNullOrWhiteSpace($AzureFederatedClientId) -or
+    [string]::IsNullOrWhiteSpace($AzureFederatedTenantId) -or
+    [string]::IsNullOrWhiteSpace($env:ACTIONS_ID_TOKEN_REQUEST_URL) -or
+    [string]::IsNullOrWhiteSpace($env:ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+  ) {
+    return
+  }
+
+  $now = Get-Date
+  if ($script:lastAzureOidcRefreshAt -and ($now - $script:lastAzureOidcRefreshAt).TotalSeconds -lt 240) {
+    return
+  }
+
+  $audience = "api://AzureADTokenExchange"
+  $requestUri = "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=$([System.Uri]::EscapeDataString($audience))"
+  $message = if ($reason) { "Refreshing Azure CLI OIDC login: $reason" } else { "Refreshing Azure CLI OIDC login." }
+  Write-Host $message
+
+  $tokenResponse = Invoke-RestMethod `
+    -Uri $requestUri `
+    -Headers @{ Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }
+
+  if ([string]::IsNullOrWhiteSpace($tokenResponse.value)) {
+    throw "GitHub OIDC token endpoint returned an empty token."
+  }
+
+  az login `
+    --service-principal `
+    --username $AzureFederatedClientId `
+    --tenant $AzureFederatedTenantId `
+    --federated-token $tokenResponse.value `
+    --allow-no-subscriptions | Out-Null
+  Assert-LastExitCode "az login OIDC refresh"
+
+  az account set --subscription $SubscriptionId
+  Assert-LastExitCode "az account set after OIDC refresh"
+  $script:lastAzureOidcRefreshAt = Get-Date
+}
+
+function Wait-GroupDeployment([string]$ResourceGroup, [string]$DeploymentName) {
+  $terminalStates = @("Succeeded", "Failed", "Canceled")
+  $pollInterval = [Math]::Max(10, $DeploymentPollIntervalSeconds)
+
+  while ($true) {
+    Start-Sleep -Seconds $pollInterval
+    Refresh-AzureCliOidcLogin "polling ARM deployment $DeploymentName"
+
+    $state = (az deployment group show `
+      --resource-group $ResourceGroup `
+      --name $DeploymentName `
+      --query "properties.provisioningState" `
+      -o tsv 2>$null)
+
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($state)) {
+      Write-Host "Deployment $DeploymentName is not readable yet; polling again in ${pollInterval}s."
+      continue
+    }
+
+    Write-Host "Deployment $DeploymentName provisioningState=$state"
+    if ($terminalStates -contains $state) {
+      if ($state -ne "Succeeded") {
+        Write-Host "Failed deployment operations:"
+        az deployment operation group list `
+          --resource-group $ResourceGroup `
+          --name $DeploymentName `
+          --query "[?properties.provisioningState=='Failed'].{operationId:operationId,status:properties.provisioningState,statusMessage:properties.statusMessage}" `
+          -o json 2>$null | Write-Host
+        throw "ARM deployment $DeploymentName ended with provisioningState=$state."
+      }
+      return
+    }
+  }
+}
+
 function New-ZipArchiveFromDirectory([string]$sourceDirectory, [string]$zipPath) {
   Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -150,6 +230,7 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
   $maxAttempts = 5
   $delaySeconds = 15
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Refresh-AzureCliOidcLogin "deploying app package to $AppName"
     Write-Host "Deploying app package to $AppName (attempt $attempt/$maxAttempts)..."
     az webapp deploy `
       --resource-group $ResourceGroup `
@@ -168,6 +249,7 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
 }
 
 function Restart-WebAppForKeyVaultReferences([string]$ResourceGroup, [string]$AppName) {
+  Refresh-AzureCliOidcLogin "restarting $AppName"
   Write-Host "Restarting $AppName to refresh Key Vault references..."
   az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
   Assert-LastExitCode "restart $AppName"
@@ -244,7 +326,7 @@ if ($existingWebApp -and $existingWorkerApp) {
   }
   Write-Host "Firewall rules: $i IPs"
 } else {
-  Write-Host "NOTE: App Services not yet deployed — dbAllowedIpAddresses will be empty on first deploy."
+  Write-Host "NOTE: App Services not yet deployed; dbAllowedIpAddresses will be empty on first deploy."
 }
 
 $ipParamsFile = Join-Path (Get-TempBasePath) "a2-ip-params-$EnvironmentName.json"
@@ -277,7 +359,7 @@ if ($EntraSyncGroupRoles.ToLowerInvariant() -eq "true") {
   $entraSyncGroupRolesBool = $true
 }
 
-$deployment = az deployment group create `
+az deployment group create `
   --resource-group $ResourceGroupName `
   --name $deploymentName `
   --template-file infra/azure/main.bicep `
@@ -326,8 +408,17 @@ $deployment = az deployment group create `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
               parserWorkerAuthKey=$ParserWorkerAuthKey `
   --parameters "@$ipParamsFile" `
-  --query properties.outputs | ConvertFrom-Json
+  --no-wait | Out-Null
 Assert-LastExitCode "az deployment group create"
+
+Wait-GroupDeployment $ResourceGroupName $deploymentName
+Refresh-AzureCliOidcLogin "reading ARM deployment outputs"
+
+$deployment = az deployment group show `
+  --resource-group $ResourceGroupName `
+  --name $deploymentName `
+  --query properties.outputs | ConvertFrom-Json
+Assert-LastExitCode "az deployment group show"
 
 $webAppName = $deployment.webAppName.value
 $workerAppName = $deployment.workerAppName.value
@@ -485,7 +576,7 @@ function Wait-Healthy {
 
   $finalState = Get-WebAppState -ResourceGroup $ResourceGroup -AppName $AppName
   $finalStateSuffix = if ($finalState) { " Final App Service state: '$finalState'." } else { "" }
-  throw "Deployment package published, but health endpoint check failed at $Url.$finalStateSuffix"
+  throw "Deployment package published, but health endpoint check failed at ${Url}${finalStateSuffix}"
 }
 
 function Wait-Stable {
@@ -531,12 +622,12 @@ try {
     try {
       $versionResponse = Invoke-RestMethod -Uri "https://$webAppName.azurewebsites.net/version" -TimeoutSec 30
       if ($versionResponse.version -ne $packageVersion) {
-        Write-Warning "Version still '$($versionResponse.version)' after restart (expected '$packageVersion'). App is healthy — verify /version manually."
+        Write-Warning "Version still '$($versionResponse.version)' after restart (expected '$packageVersion'). App is healthy; verify /version manually."
       } else {
         Write-Host "Version confirmed after restart: $($versionResponse.version)"
       }
     } catch {
-      Write-Warning "Could not reach /version after restart: $($_.Exception.Message). App passed health checks — verify /version manually."
+      Write-Warning "Could not reach /version after restart: $($_.Exception.Message). App passed health checks; verify /version manually."
     }
   } else {
     Write-Host "Version confirmed: $deployedVersion"
@@ -546,6 +637,7 @@ try {
 }
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
+  Refresh-AzureCliOidcLogin "updating Entra SPA redirect URI"
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
   Write-Host "Updating SPA redirect URI on Entra app registration $EntraClientId to: $spaRedirectUri"
   try {
