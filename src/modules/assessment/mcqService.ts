@@ -12,6 +12,13 @@ import {
   matchesLocalizedContentVariant,
 } from "../../i18n/content.js";
 
+const TERMINAL_SUBMISSION_STATUSES: ReadonlySet<(typeof SubmissionStatus)[keyof typeof SubmissionStatus]> = new Set([
+  SubmissionStatus.SCORED,
+  SubmissionStatus.COMPLETED,
+  SubmissionStatus.UNDER_REVIEW,
+  SubmissionStatus.REJECTED,
+]);
+
 export async function startMcqAttempt(
   moduleId: string,
   submissionId: string,
@@ -24,9 +31,16 @@ export async function startMcqAttempt(
     throw new Error("Submission not found for module.");
   }
 
+  if (TERMINAL_SUBMISSION_STATUSES.has(submission.submissionStatus)) {
+    throw new Error("MCQ attempt cannot be started: assessment is already completed or under review.");
+  }
+
   let attempt = await mcqRepository.findOpenAttemptForSubmission(submission.id);
 
   if (!attempt) {
+    if (submission.submissionStatus === SubmissionStatus.PROCESSING) {
+      throw new Error("MCQ attempt cannot be started: submission has already been processed.");
+    }
     attempt = await mcqRepository.createAttempt({
       submissionId: submission.id,
       mcqSetVersionId: submission.moduleVersion.mcqSetVersionId,
@@ -59,6 +73,10 @@ export async function submitMcqAttempt(input: {
   const submission = await mcqRepository.findSubmissionForModuleMcq(input.submissionId, input.userId, input.moduleId);
   if (!submission) {
     throw new Error("Submission not found for module.");
+  }
+
+  if (TERMINAL_SUBMISSION_STATUSES.has(submission.submissionStatus)) {
+    throw new Error("MCQ cannot be submitted: assessment is already completed or under review.");
   }
 
   const attempt = await mcqRepository.findAttemptForSubmission(input.attemptId, submission.id);
