@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.25 - 2026-05-16
+
+fix(infra): keep deploy-time optimisations but avoid hanging parallel ZIP jobs (#407, #409)
+
+- `scripts/azure/deploy-environment.ps1`: keeps the PostgreSQL firewall pre-flight
+  skip from 1.1.24, which avoids redundant ARM firewall updates when existing rules
+  already cover the current App Service outbound IPs.
+- `scripts/azure/deploy-environment.ps1`: keeps Key Vault reference polling instead
+  of the fixed 90-second wait.
+- `scripts/azure/deploy-environment.ps1`: reverts the parallel ZIP upload path after
+  GitHub Actions showed a non-deterministic child-job hang; sequential uploads now use
+  an explicit Azure CLI deploy timeout.
+
 ## 1.1.24 - 2026-05-16
 
 fix(infra): shorten staging deploy path and avoid redundant PostgreSQL firewall ARM hangs (#407, #408, #409)

@@ -241,7 +241,8 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
       --src-path $ZipPath `
       --type zip `
       --track-status false `
-      --restart true | Out-Null
+      --restart true `
+      --timeout 600000 | Out-Null
     if ($LASTEXITCODE -eq 0) { return }
     if ($attempt -lt $maxAttempts) {
       Write-Host "Deploy attempt $attempt failed (exit $LASTEXITCODE); retrying in ${delaySeconds}s..."
@@ -249,96 +250,6 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
     }
   }
   throw "az webapp deploy to $AppName failed after $maxAttempts attempts."
-}
-
-function Invoke-WebAppDeployBatch([string]$ResourceGroup, [array]$Deployments, [string]$ZipPath) {
-  Refresh-AzureCliOidcLogin "deploying app packages in parallel"
-
-  $appList = ($Deployments | ForEach-Object { $_.AppName }) -join ", "
-  Write-Host "Deploying app packages in parallel: $appList"
-
-  $jobs = @()
-  foreach ($deployment in $Deployments) {
-    $appName = [string]$deployment.AppName
-    $label = [string]$deployment.Label
-    $jobs += Start-Job -Name "deploy-$label" -ScriptBlock {
-      param(
-        [string]$ResourceGroup,
-        [string]$AppName,
-        [string]$ZipPath,
-        [string]$Label
-      )
-
-      $maxAttempts = 5
-      $delaySeconds = 15
-      $lastExitCode = 0
-
-      for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-        Write-Output "[$Label] Deploying app package to $AppName (attempt $attempt/$maxAttempts)..."
-        az webapp deploy `
-          --resource-group $ResourceGroup `
-          --name $AppName `
-          --src-path $ZipPath `
-          --type zip `
-          --track-status false `
-          --restart true 2>&1 | ForEach-Object { Write-Output "[$Label] $_" }
-
-        $lastExitCode = $LASTEXITCODE
-        if ($lastExitCode -eq 0) {
-          Write-Output "[$Label] Deployment succeeded."
-          return [pscustomobject]@{
-            Label = $Label
-            AppName = $AppName
-            Success = $true
-            ExitCode = 0
-          }
-        }
-
-        if ($attempt -lt $maxAttempts) {
-          Write-Output "[$Label] Deploy attempt $attempt failed (exit $lastExitCode); retrying in ${delaySeconds}s..."
-          Start-Sleep -Seconds $delaySeconds
-        }
-      }
-
-      [pscustomobject]@{
-        Label = $Label
-        AppName = $AppName
-        Success = $false
-        ExitCode = $lastExitCode
-      }
-    } -ArgumentList $ResourceGroup, $appName, $ZipPath, $label
-  }
-
-  Wait-Job -Job $jobs | Out-Null
-
-  $results = @()
-  $failedJobs = @()
-  try {
-    foreach ($job in $jobs) {
-      $jobOutput = Receive-Job -Job $job
-      foreach ($item in $jobOutput) {
-        if ($item.PSObject.Properties.Name -contains "Success" -and $item.PSObject.Properties.Name -contains "AppName") {
-          $results += $item
-        } else {
-          Write-Host $item
-        }
-      }
-
-      if ($job.State -ne "Completed") {
-        $failedJobs += $job.Name
-      }
-    }
-  } finally {
-    Remove-Job -Job $jobs -Force
-  }
-
-  $failedDeployments = @($results | Where-Object { -not $_.Success })
-  if ($failedJobs.Count -gt 0 -or $failedDeployments.Count -gt 0 -or $results.Count -ne $Deployments.Count) {
-    $failedNames = @()
-    $failedNames += $failedJobs
-    $failedNames += ($failedDeployments | ForEach-Object { "$($_.Label) (exit $($_.ExitCode))" })
-    throw "One or more app package deployments failed: $($failedNames -join ', ')"
-  }
 }
 
 function Restart-WebAppForKeyVaultReferences([string]$ResourceGroup, [string]$AppName) {
@@ -710,13 +621,9 @@ if ($PackagePath) {
   }
 }
 
-# Web, worker, and parser packages are independent; upload them in parallel to
-# avoid paying the Kudu warmup/upload cost three times in series.
-Invoke-WebAppDeployBatch -ResourceGroup $ResourceGroupName -ZipPath $zipPath -Deployments @(
-  @{ Label = "worker"; AppName = $workerAppName },
-  @{ Label = "parser"; AppName = $parserAppName },
-  @{ Label = "web"; AppName = $webAppName }
-)
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 
 # Key Vault RBAC role assignments for managed identities can take 30-120 s to
 # propagate. Keep App Service settings as Key Vault references and refresh the
