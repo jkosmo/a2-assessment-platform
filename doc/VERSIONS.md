@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.15 - 2026-05-16
+
+feat(infra): harden production backup with isolated vault and daily policy (#402)
+
+- `infra/azure/backup-vault.bicep`: New Bicep module that deploys an Azure Backup
+  vault in a dedicated resource group (`rg-a2-assessment-backup`) isolated from the
+  main application resource group. Uses `LocallyRedundant` storage, `AlwaysOn`
+  soft-delete (14-day retention), and a daily full backup policy (`P1D`) with 3-month
+  vault retention. Vault naming follows the same `${appNamePrefix}-${envCode}-bkv-${suffix}`
+  convention as main.bicep resources.
+- `scripts/azure/deploy-environment.ps1`: Added `-BackupVaultResourceGroup` param
+  (default `rg-a2-assessment-backup`). For production deploys: (1) triggers an
+  on-demand backup on any existing vault before the ARM deployment (non-blocking
+  warning on failure); (2) after deployment, creates the backup RG, deploys the
+  vault Bicep, assigns `Reader` and `PostgreSQL Flexible Server Long Term Retention
+  Backup Role` roles to the vault MSI on the PostgreSQL server, and registers the
+  server as a backup instance if not already present.
+- `.github/workflows/deploy-azure.yml`: Production deploy default for
+  `POSTGRES_BACKUP_RETENTION_DAYS` raised from `7` to `14`; passes
+  `-BackupVaultResourceGroup` to the deploy script.
+
 ## 1.1.14 - 2026-05-16
 
 fix(security): enforce MCQ and practical component pass gates in assessment decisions

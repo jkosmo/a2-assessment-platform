@@ -54,7 +54,8 @@ param(
   [string]$PackagePath = "",
   [string]$AzureFederatedClientId = "",
   [string]$AzureFederatedTenantId = "",
-  [int]$DeploymentPollIntervalSeconds = 30
+  [int]$DeploymentPollIntervalSeconds = 30,
+  [string]$BackupVaultResourceGroup = "rg-a2-assessment-backup"
 )
 
 Set-StrictMode -Version Latest
@@ -349,6 +350,35 @@ if ($ParticipantNotificationChannel -eq "acs_email") {
     } else {
       Write-Host "Registration initiated. If deploy fails, wait a few minutes for registration to complete and redeploy."
     }
+  }
+}
+
+# Production: trigger pre-deploy backup on any existing vault before changing infra.
+# This is best-effort — a failure here is logged as a warning and does not abort the deploy.
+if ($EnvironmentName -eq "production") {
+  Write-Host "Checking for existing backup vault in $ResourceGroupName (pre-deploy snapshot)..."
+  $preDeployVaultName = (az dataprotection backup-vault list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+  if ($preDeployVaultName -and $preDeployVaultName.Trim()) {
+    $preDeployVaultName = $preDeployVaultName.Trim()
+    $preDeployInstance = (az dataprotection backup-instance list --vault-name $preDeployVaultName --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+    if ($preDeployInstance -and $preDeployInstance.Trim()) {
+      $preDeployInstance = $preDeployInstance.Trim()
+      Write-Host "Triggering pre-deploy backup: vault='$preDeployVaultName' instance='$preDeployInstance'..."
+      $adhocOut = (az dataprotection backup-instance adhoc-backup `
+        --vault-name $preDeployVaultName `
+        --resource-group $ResourceGroupName `
+        --backup-instance-name $preDeployInstance `
+        --rule-name BackupDaily 2>&1)
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "Pre-deploy backup triggered successfully (runs asynchronously)."
+      } else {
+        Write-Warning "Pre-deploy backup trigger failed (non-blocking): $adhocOut"
+      }
+    } else {
+      Write-Host "No backup instances registered in vault '$preDeployVaultName'; skipping pre-deploy snapshot."
+    }
+  } else {
+    Write-Host "No existing backup vault found in $ResourceGroupName; skipping pre-deploy snapshot."
   }
 }
 
@@ -658,6 +688,85 @@ if ($AuthMode -eq "entra" -and $EntraClientId) {
     }
   } catch {
     Write-Warning "Could not update SPA redirect URI automatically: $($_.Exception.Message). Configure manually in Azure portal."
+  }
+}
+
+# Production: ensure backup vault exists in isolated resource group that survives
+# teardown of the main application resource group.
+if ($EnvironmentName -eq "production") {
+  Refresh-AzureCliOidcLogin "deploying backup vault"
+  Write-Host "Ensuring backup vault resource group '$BackupVaultResourceGroup' exists..."
+  az group create `
+    --name $BackupVaultResourceGroup `
+    --location $Location `
+    --tags environment=$EnvironmentName costCenter=$CostCenter owner=$Owner | Out-Null
+  Assert-LastExitCode "az group create (backup vault RG)"
+
+  $pgSuffix = ($postgresServerName -split "-")[-1]
+  Write-Host "Deploying backup vault (suffix=$pgSuffix) to $BackupVaultResourceGroup..."
+  $vaultDeployName = "a2-backup-vault-$EnvironmentName-$(Get-Date -Format 'yyyyMMddHHmmss')"
+  az deployment group create `
+    --resource-group $BackupVaultResourceGroup `
+    --name $vaultDeployName `
+    --template-file "$PSScriptRoot/../../infra/azure/backup-vault.bicep" `
+    --parameters environmentName=$EnvironmentName suffix=$pgSuffix location=$Location costCenter=$CostCenter owner=$Owner | Out-Null
+  Assert-LastExitCode "backup vault deployment"
+
+  $vaultDeployment = az deployment group show `
+    --resource-group $BackupVaultResourceGroup `
+    --name $vaultDeployName `
+    --query properties.outputs | ConvertFrom-Json
+  Assert-LastExitCode "az deployment group show (backup vault)"
+
+  $backupVaultName = $vaultDeployment.vaultName.value
+  $vaultPrincipalId = $vaultDeployment.vaultPrincipalId.value
+  $backupPolicyId = $vaultDeployment.policyId.value
+
+  $pgServerId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$postgresServerName"
+  Write-Host "Assigning backup roles to vault MSI $vaultPrincipalId on $postgresServerName..."
+  # Role assignments are idempotent; suppress "already exists" warnings.
+  az role assignment create --role "Reader" --assignee $vaultPrincipalId --scope $pgServerId 2>&1 | Out-Null
+  az role assignment create `
+    --role "PostgreSQL Flexible Server Long Term Retention Backup Role" `
+    --assignee $vaultPrincipalId `
+    --scope $pgServerId 2>&1 | Out-Null
+  Write-Host "Backup role assignments applied."
+
+  $existingBkpInstance = (az dataprotection backup-instance list `
+    --vault-name $backupVaultName `
+    --resource-group $BackupVaultResourceGroup `
+    --query "[?properties.dataSourceInfo.resourceName=='$postgresServerName'].name" `
+    -o tsv 2>$null)
+  if (-not ($existingBkpInstance -and $existingBkpInstance.Trim())) {
+    Write-Host "Registering PostgreSQL server '$postgresServerName' as backup instance in vault '$backupVaultName'..."
+    $instanceJson = @{
+      properties = @{
+        dataSourceInfo = @{
+          datasourceType   = "Microsoft.DBforPostgreSQL/flexibleServers"
+          objectType       = "Datasource"
+          resourceID       = $pgServerId
+          resourceLocation = $Location
+          resourceName     = $postgresServerName
+          resourceType     = "Microsoft.DBforPostgreSQL/flexibleServers"
+          resourceUri      = ""
+        }
+        policyInfo = @{ policyId = $backupPolicyId }
+        objectType = "BackupInstance"
+      }
+    } | ConvertTo-Json -Depth 10
+    $instanceJsonPath = Join-Path (Get-TempBasePath) "a2-backup-instance-$EnvironmentName.json"
+    [System.IO.File]::WriteAllText($instanceJsonPath, $instanceJson, [System.Text.Encoding]::UTF8)
+    az dataprotection backup-instance create `
+      --vault-name $backupVaultName `
+      --resource-group $BackupVaultResourceGroup `
+      --backup-instance "@$instanceJsonPath" 2>&1 | Write-Host
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "Backup instance registered."
+    } else {
+      Write-Warning "Backup instance registration failed — run az dataprotection backup-instance create manually. See doc/PRODUCTION_RESTORE_RUNBOOK.md."
+    }
+  } else {
+    Write-Host "Backup instance already registered: $($existingBkpInstance.Trim())"
   }
 }
 

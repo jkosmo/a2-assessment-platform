@@ -62,13 +62,14 @@ Current baseline note:
 - Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
 - Current production decision: prioritize backup/recovery hardening ahead of PostgreSQL HA; HA is intentionally deferred while the service remains a non-critical internal application.
 - Current production PostgreSQL profile should be represented explicitly in environment variables/IaC rather than portal-only drift.
-- Current production also has a manually provisioned Azure Backup vault for PostgreSQL vaulted backup; this is an active protection layer but is not yet codified in repo IaC.
+- Production Azure Backup vault is now codified in `infra/azure/backup-vault.bicep` and deployed to the isolated resource group `rg-a2-assessment-backup` (separate from `rg-a2-assessment-production` so it survives app infra teardown). The vault uses a daily backup policy (`P1D`) with 3-month retention and `LocallyRedundant` storage.
 - Current production logical pre-change exports use storage account `a2prdrestorehea5kl` and container `logical-exports`; this is an operator-run fallback path, not an automatic backup layer.
 - `PROCESS_ROLE`, `PORT`, and `DATABASE_URL` are platform-managed at deploy/runtime and are not expected as user-managed GitHub Environment variables.
 
 ## Environment separation
 - Staging resource group example: `rg-a2-assessment-staging`
 - Production resource group example: `rg-a2-assessment-production`
+- Production backup vault resource group: `rg-a2-assessment-backup` (persistent; not torn down with app infra)
 - No shared resource group between environments.
 
 ## GitHub setup requirements
