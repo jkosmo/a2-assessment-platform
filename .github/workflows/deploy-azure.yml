@@ -115,7 +115,9 @@ jobs:
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
             -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}" `
-            -PackagePath "${{ steps.package.outputs.path }}"
+            -PackagePath "${{ steps.package.outputs.path }}" `
+            -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
+            -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}"
 
   deploy-production:
     # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded.
@@ -217,4 +219,6 @@ jobs:
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
             -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}" `
-            -PackagePath "${{ steps.package.outputs.path }}"
+            -PackagePath "${{ steps.package.outputs.path }}" `
+            -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
+            -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}"
