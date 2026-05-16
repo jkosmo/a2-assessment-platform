@@ -37,6 +37,7 @@ param(
   [string]$AzureOpenAiTemperature = "0",
   [int]$AzureOpenAiMaxTokens = 1200,
   [string]$AzureOpenAiTokenLimitParameter = "auto",
+  [string]$AzureOpenAiAuthoringTokenLimitParameter = "",
   [int]$AssessmentJobPollIntervalMs = 4000,
   [int]$AssessmentJobMaxAttempts = 3,
   [string]$ObservabilityAlertEmail = "",
@@ -446,6 +447,7 @@ az deployment group create `
               azureOpenAiTemperature=$AzureOpenAiTemperature `
               azureOpenAiMaxTokens=$AzureOpenAiMaxTokens `
               azureOpenAiTokenLimitParameter=$AzureOpenAiTokenLimitParameter `
+              azureOpenAiAuthoringTokenLimitParameter=$AzureOpenAiAuthoringTokenLimitParameter `
               assessmentJobPollIntervalMs=$AssessmentJobPollIntervalMs `
               assessmentJobMaxAttempts=$AssessmentJobMaxAttempts `
               observabilityAlertEmail=$ObservabilityAlertEmail `

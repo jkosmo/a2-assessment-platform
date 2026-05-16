@@ -128,6 +128,15 @@ param azureOpenAiMaxTokens int = 1200
 ])
 param azureOpenAiTokenLimitParameter string = 'auto'
 
+@description('Token limit parameter for the authoring model. Overrides azureOpenAiTokenLimitParameter for content generation. Set to max_completion_tokens when using a reasoning model (o3/o4) for authoring.')
+@allowed([
+  'max_tokens'
+  'max_completion_tokens'
+  'auto'
+  ''
+])
+param azureOpenAiAuthoringTokenLimitParameter string = ''
+
 @description('Assessment worker polling interval in milliseconds.')
 param assessmentJobPollIntervalMs int = 4000
 
@@ -586,6 +595,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: azureOpenAiTokenLimitParameter
         }
         {
+          name: 'AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER'
+          value: azureOpenAiAuthoringTokenLimitParameter
+        }
+        {
           name: 'ASSESSMENT_RULES_FILE'
           value: 'config/assessment-rules.json'
         }
@@ -787,6 +800,10 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_TOKEN_LIMIT_PARAMETER'
           value: azureOpenAiTokenLimitParameter
+        }
+        {
+          name: 'AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER'
+          value: azureOpenAiAuthoringTokenLimitParameter
         }
         {
           name: 'ASSESSMENT_RULES_FILE'

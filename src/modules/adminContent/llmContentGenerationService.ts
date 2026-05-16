@@ -941,13 +941,12 @@ async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 400
   }
 
   const url = buildUrl();
-  // Use max_tokens (universally supported for chat completion models) unless explicitly configured
-  // for max_completion_tokens (required for reasoning models). Mirrors the token parameter logic
-  // in llmAssessmentService.ts but without retry — authoring always uses a chat completion model.
-  const tokenParam =
-    env.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER === "max_completion_tokens"
-      ? "max_completion_tokens"
-      : "max_tokens";
+  // Resolve token parameter: authoring-specific setting overrides the shared setting.
+  // Use max_tokens by default (chat completion models); set AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER
+  // to max_completion_tokens when the authoring deployment is a reasoning model (o3/o4-series).
+  const tokenLimitPref =
+    env.AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER ?? env.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER;
+  const tokenParam = tokenLimitPref === "max_completion_tokens" ? "max_completion_tokens" : "max_tokens";
   const body = {
     messages: [
       { role: "system", content: systemPrompt },
