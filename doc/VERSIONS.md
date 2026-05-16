@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.21 - 2026-05-16
+
+fix(content): use max_tokens for LLM content generation (MCQ truncation fix)
+
+Root cause of MCQ generation truncation on production: `callLlm` in `llmContentGenerationService.ts`
+hardcoded `max_completion_tokens`, which is the parameter for reasoning models (o-series). For chat
+completion models (gpt-4.1-mini, gpt-4o), the correct parameter is `max_tokens`. When the parameter
+was silently ignored by the API, output was truncated at an extremely low default.
+
+- `src/modules/adminContent/llmContentGenerationService.ts`: `callLlm` now respects
+  `AZURE_OPENAI_TOKEN_LIMIT_PARAMETER` — uses `max_tokens` unless explicitly set to
+  `max_completion_tokens`. Adds `finish_reason=length` detection with a clear error message.
+
 ## 1.1.20 - 2026-05-16
 
 fix(infra): add AUTH_MODE and ENTRA settings to worker app Bicep config

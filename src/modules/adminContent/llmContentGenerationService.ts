@@ -941,13 +941,20 @@ async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 400
   }
 
   const url = buildUrl();
+  // Use max_tokens (universally supported for chat completion models) unless explicitly configured
+  // for max_completion_tokens (required for reasoning models). Mirrors the token parameter logic
+  // in llmAssessmentService.ts but without retry — authoring always uses a chat completion model.
+  const tokenParam =
+    env.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER === "max_completion_tokens"
+      ? "max_completion_tokens"
+      : "max_tokens";
   const body = {
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
     temperature: env.AZURE_OPENAI_AUTHORING_TEMPERATURE ?? 0.4,
-    max_completion_tokens: maxTokens,
+    [tokenParam]: maxTokens,
   };
 
   const response = await fetch(url, {
@@ -964,8 +971,17 @@ async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 400
     throw new Error(`Azure OpenAI generation failed (${response.status}): ${text.slice(0, 200)}`);
   }
 
-  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = payload.choices?.[0]?.message?.content ?? "";
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+  };
+  const choice = payload.choices?.[0];
+  if (choice?.finish_reason === "length") {
+    throw new Error(
+      `LLM output truncated (finish_reason=length, tokenParam=${tokenParam}, maxTokens=${maxTokens}). ` +
+        `Increase AZURE_OPENAI_MAX_TOKENS or reduce the request size.`,
+    );
+  }
+  const content = choice?.message?.content ?? "";
   const unfenced = content
     .trim()
     .replace(/^```json\s*/i, "")
