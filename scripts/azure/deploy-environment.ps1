@@ -437,7 +437,7 @@ if ($existingWebApp -and $existingWorkerApp) {
   $skipPostgresUpdate = $false
   if ($existingPgServer) {
     $pgJson = az rest --method GET `
-      --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$existingPgServer?api-version=2023-12-01-preview" `
+      --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/${existingPgServer}?api-version=2023-12-01-preview" `
       -o json 2>$null
     if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($pgJson)) {
       $pg = $pgJson | ConvertFrom-Json
