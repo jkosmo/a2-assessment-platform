@@ -2,6 +2,12 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.29 - 2026-05-16
+
+fix(infra): restore KV secret ARM dependency chain broken by parent: keyVaultRef (v1.1.29)
+
+- `infra/azure/main.bicep`: switching secrets to `parent: keyVaultRef` (existing) broke the ARM dependency chain — secrets were written in parallel with the vault update, making KV briefly unavailable and crashing the MSI sidecar on staging. Added `dependsOn: [keyVault]` to all five KV secrets; ARM ignores this dependency in prod where `keyVault` is conditional/skipped.
+
 ## 1.1.28 - 2026-05-16
 
 fix(infra): skip Key Vault ARM update when SP lacks Owner; fix backup rule-name (v1.1.28)

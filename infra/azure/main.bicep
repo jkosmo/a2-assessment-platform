@@ -462,6 +462,7 @@ resource kvSecretDatabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   properties: {
     value: postgresConnectionString
   }
+  dependsOn: [keyVault]
 }
 
 resource kvSecretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(azureOpenAiApiKey)) {
@@ -470,6 +471,7 @@ resource kvSecretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (
   properties: {
     value: azureOpenAiApiKey
   }
+  dependsOn: [keyVault]
 }
 
 resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (createAcsEmail) {
@@ -478,6 +480,7 @@ resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   properties: {
     value: acsService.listKeys().primaryConnectionString
   }
+  dependsOn: [keyVault]
 }
 
 resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
@@ -486,6 +489,7 @@ resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-
   properties: {
     value: parserWorkerAuthKey
   }
+  dependsOn: [keyVault]
 }
 
 resource kvSecretParticipantNotificationWebhookUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(participantNotificationWebhookUrl)) {
@@ -494,6 +498,7 @@ resource kvSecretParticipantNotificationWebhookUrl 'Microsoft.KeyVault/vaults/se
   properties: {
     value: participantNotificationWebhookUrl
   }
+  dependsOn: [keyVault]
 }
 
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
