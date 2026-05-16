@@ -170,6 +170,28 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
   }
 });
 
+type McqSetVersionBundle = Awaited<ReturnType<typeof getModuleContentBundle>>["versions"]["mcqSetVersions"][number];
+
+function redactMcqAnswerKeys(bundle: Awaited<ReturnType<typeof getModuleContentBundle>>) {
+  const stripAnswers = (v: McqSetVersionBundle) => ({
+    ...v,
+    questions: v.questions.map(({ correctAnswer: _c, rationale: _r, ...rest }) => rest),
+  });
+  return {
+    ...bundle,
+    selectedConfiguration: {
+      ...bundle.selectedConfiguration,
+      mcqSetVersion: bundle.selectedConfiguration.mcqSetVersion
+        ? stripAnswers(bundle.selectedConfiguration.mcqSetVersion)
+        : null,
+    },
+    versions: {
+      ...bundle.versions,
+      mcqSetVersions: bundle.versions.mcqSetVersions.map(stripAnswers),
+    },
+  };
+}
+
 adminContentRouter.get("/modules/:moduleId/export", async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
@@ -178,28 +200,16 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
   }
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    const moduleExport = await getModuleContentBundle(request.params.moduleId);
-
-    // Sikkerhetsfiks: Fjern fasit og begrunnelser for SMO-rollen (#13)
-    if (!request.context?.roles?.includes("ADMINISTRATOR")) {
-      if (moduleExport.selectedConfiguration?.mcqSetVersion?.questions) {
-        moduleExport.selectedConfiguration.mcqSetVersion.questions.forEach((q: any) => {
-          delete q.correctAnswer;
-          delete q.rationale;
-        });
-      }
-      if (Array.isArray(moduleExport.versions?.mcqSetVersions)) {
-        moduleExport.versions.mcqSetVersions.forEach((v: any) => {
-          v.questions?.forEach((q: any) => {
-            delete q.correctAnswer;
-            delete q.rationale;
-          });
-        });
-      }
-    }
-
+    const bundle = await getModuleContentBundle(request.params.moduleId);
+    const moduleExport = request.context?.roles?.includes("ADMINISTRATOR")
+      ? bundle
+      : redactMcqAnswerKeys(bundle);
     response.json({ moduleExport });
   } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     response.status(404).json({ error: "module_export_failed", message: "Could not export module." });
   }
 });
