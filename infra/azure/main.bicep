@@ -428,7 +428,11 @@ resource postgresFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewa
 // Key Vault — secrets storage (INFRA-002)
 // ---------------------------------------------------------------------------
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+// Only deploy the vault resource when the SP has Owner-level permissions (skipRoleAssignments=false).
+// Setting enableRbacAuthorization requires Microsoft.Authorization/roleAssignments/write, which
+// Contributor-only SPs (production) do not have. The vault is already correctly configured from
+// initial provisioning; secrets are updated via keyVaultRef regardless.
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = if (!skipRoleAssignments) {
   name: keyVaultName
   location: location
   tags: {
@@ -447,8 +451,13 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
+// Always-present reference so secrets and outputs resolve regardless of skipRoleAssignments.
+resource keyVaultRef 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
+}
+
 resource kvSecretDatabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
+  parent: keyVaultRef
   name: 'DATABASE-URL'
   properties: {
     value: postgresConnectionString
@@ -456,7 +465,7 @@ resource kvSecretDatabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
 }
 
 resource kvSecretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(azureOpenAiApiKey)) {
-  parent: keyVault
+  parent: keyVaultRef
   name: 'AZURE-OPENAI-API-KEY'
   properties: {
     value: azureOpenAiApiKey
@@ -464,7 +473,7 @@ resource kvSecretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (
 }
 
 resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (createAcsEmail) {
-  parent: keyVault
+  parent: keyVaultRef
   name: 'ACS-CONNECTION-STRING'
   properties: {
     value: acsService.listKeys().primaryConnectionString
@@ -472,7 +481,7 @@ resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
 }
 
 resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
+  parent: keyVaultRef
   name: 'PARSER-WORKER-AUTH-KEY'
   properties: {
     value: parserWorkerAuthKey
@@ -480,7 +489,7 @@ resource kvSecretParserWorkerAuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-
 }
 
 resource kvSecretParticipantNotificationWebhookUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(participantNotificationWebhookUrl)) {
-  parent: keyVault
+  parent: keyVaultRef
   name: 'PARTICIPANT-NOTIFICATION-WEBHOOK-URL'
   properties: {
     value: participantNotificationWebhookUrl
@@ -1404,4 +1413,4 @@ output appInsightsConnectionString string = appInsights.properties.ConnectionStr
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
 output postgresServerName string = postgresServerRef.name
 output postgresDatabaseName string = postgresDatabaseName
-output keyVaultName string = keyVault.name
+output keyVaultName string = keyVaultRef.name

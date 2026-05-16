@@ -494,12 +494,15 @@ if ($EnvironmentName -eq "production") {
     $preDeployInstance = (az dataprotection backup-instance list --vault-name $preDeployVaultName --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
     if ($preDeployInstance -and $preDeployInstance.Trim()) {
       $preDeployInstance = $preDeployInstance.Trim()
-      Write-Host "Triggering pre-deploy backup: vault='$preDeployVaultName' instance='$preDeployInstance'..."
+      $preDeployRuleName = (az dataprotection backup-policy list --vault-name $preDeployVaultName --resource-group $ResourceGroupName --query "[0].properties.policyRules[?objectType=='AzureRetentionRule'].name | [0]" -o tsv 2>$null)
+      if (-not $preDeployRuleName -or -not $preDeployRuleName.Trim()) { $preDeployRuleName = "BackupDaily" }
+      $preDeployRuleName = $preDeployRuleName.Trim()
+      Write-Host "Triggering pre-deploy backup: vault='$preDeployVaultName' instance='$preDeployInstance' rule='$preDeployRuleName'..."
       $adhocOut = (az dataprotection backup-instance adhoc-backup `
         --vault-name $preDeployVaultName `
         --resource-group $ResourceGroupName `
         --backup-instance-name $preDeployInstance `
-        --rule-name BackupDaily 2>&1)
+        --rule-name $preDeployRuleName 2>&1)
       if ($LASTEXITCODE -eq 0) {
         Write-Host "Pre-deploy backup triggered successfully (runs asynchronously)."
       } else {

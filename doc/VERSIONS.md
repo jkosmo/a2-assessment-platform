@@ -2,6 +2,13 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.28 - 2026-05-16
+
+fix(infra): skip Key Vault ARM update when SP lacks Owner; fix backup rule-name (v1.1.28)
+
+- `infra/azure/main.bicep`: make `keyVault` resource conditional on `!skipRoleAssignments`. Setting `enableRbacAuthorization` requires `Microsoft.Authorization/roleAssignments/write` (Owner), which the production SP (Contributor) does not have. Adds `keyVaultRef existing` so secrets and outputs always resolve. All KV secrets now use `parent: keyVaultRef`.
+- `scripts/azure/deploy-environment.ps1`: resolve backup policy rule name dynamically from the vault policy instead of hardcoding `BackupDaily`, fixing the non-blocking `UserErrorInvalidRequestParameter` warning on pre-deploy backup.
+
 ## 1.1.27 - 2026-05-16
 
 fix(infra): skip PostgreSQL ARM update when server properties unchanged (v1.1.27)
