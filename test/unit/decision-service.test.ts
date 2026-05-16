@@ -33,6 +33,9 @@ vi.mock("../../src/modules/certification/index.js", () => ({
   upsertRecertificationStatusFromDecision,
 }));
 
+// Default rubric_scores: 5 criteria summing to 14 — must equal rubric_total to avoid
+// triggering the totalsInconsistent manual-review path.
+// With rubricMaxTotal=20 (default): recomputedPractical=(14/20)*70=49; total with mcqScaled=30 → 79.
 function buildLlmResult(overrides: Partial<LlmStructuredAssessment> = {}): LlmStructuredAssessment {
   return {
     module_id: "module-1",
@@ -43,8 +46,8 @@ function buildLlmResult(overrides: Partial<LlmStructuredAssessment> = {}): LlmSt
       human_quality_assurance: 3,
       responsible_use: 3,
     },
-    rubric_total: 12,
-    practical_score_scaled: 45,
+    rubric_total: 14,
+    practical_score_scaled: 49,
     pass_fail_practical: true,
     criterion_rationales: {
       relevance_for_case: "ok",
@@ -97,7 +100,7 @@ describe("decision service", () => {
     expect(assessmentDecisionCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         decisionType: DecisionType.AUTOMATIC,
-        totalScore: 75,
+        totalScore: 79,
         passFailTotal: true,
         decisionReason: "Automatic pass by threshold rules.",
       }),
@@ -207,6 +210,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 1, human_quality_assurance: 0, responsible_use: 0 },
         rubric_total: 1,
         practical_score_scaled: 3.5,
         pass_fail_practical: false,
@@ -270,6 +274,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 1, human_quality_assurance: 0, responsible_use: 0 },
         rubric_total: 1,
         practical_score_scaled: 3.5,
         pass_fail_practical: false,
@@ -315,6 +320,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
         rubric_total: 0,
         practical_score_scaled: 0,
         pass_fail_practical: false,
@@ -369,6 +375,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
         rubric_total: 0,
         practical_score_scaled: 0,
         pass_fail_practical: false,
@@ -418,6 +425,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 1, quality_and_utility: 1, iteration_and_improvement: 1, human_quality_assurance: 2, responsible_use: 1 },
         rubric_total: 6,
         practical_score_scaled: 21,
         pass_fail_practical: false,
@@ -465,6 +473,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 1, quality_and_utility: 1, iteration_and_improvement: 1, human_quality_assurance: 2, responsible_use: 1 },
         rubric_total: 6,
         practical_score_scaled: 21,
         pass_fail_practical: false,
@@ -490,44 +499,58 @@ describe("decision service", () => {
 
   describe("assessmentPolicy scoring weights", () => {
     it("recalculates MCQ score from mcqPercentScore when scoring.mcqWeight is set", async () => {
-      // mcqPercentScore=80, mcqWeight=40 → effectiveMcqScaledScore = (80/100)*40 = 32
-      // practical_score_scaled=45, no practicalWeight → effectivePracticalScaledScore=45
-      // totalScore = 45 + 32 = 77
+      // sum=12, rubricMaxTotal=20: recomputedPractical=(12/20)*70=42; no practicalWeight → effectivePractical=42
+      // mcqPercentScore=80, mcqWeight=40 → effectiveMcq=(80/100)*40=32
+      // totalScore = 42+32 = 74 (passes 70)
+      // Without weight override: mcqScaledScore=24, total=42+24=66 (would fail)
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
-        mcqScaledScore: 24, // would give 45+24=69 without weight override (fail)
+        mcqScaledScore: 24,
         mcqPercentScore: 80,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 3, quality_and_utility: 3, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 12,
+          practical_score_scaled: 42,
+        }),
         assessmentPolicy: { scoring: { mcqWeight: 40 } },
       });
-      expect(result.totalScore).toBe(77);
+      expect(result.totalScore).toBe(74);
       expect(result.passesThresholds).toBe(true);
     });
 
     it("rescales practical score from practical_score_scaled / practicalMaxScore when scoring.practicalWeight is set", async () => {
-      // practicalMaxScore=70, practical_score_scaled=35, practicalWeight=60
-      // effectivePracticalScaledScore = (35/70)*60 = 30
-      // mcqScaledScore=30, no mcqWeight → effectiveMcqScaledScore=30
-      // totalScore = 30 + 30 = 60
+      // sum=10, rubricMaxTotal=20: recomputedPractical=(10/20)*70=35
+      // practicalWeight=60 → effectivePractical=(35/70)*60=30
+      // mcqScaledScore=30, no mcqWeight → effectiveMcq=30
+      // totalScore = 30+30 = 60
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 35, rubric_total: 10 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 2, quality_and_utility: 2, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 10,
+          practical_score_scaled: 35,
+        }),
         assessmentPolicy: { scoring: { practicalWeight: 60 } },
       });
       expect(result.totalScore).toBe(60);
     });
 
     it("applies both practicalWeight and mcqWeight together", async () => {
-      // practicalMaxScore=70, practical_score_scaled=70, practicalWeight=60 → effectivePractical=(70/70)*60=60
+      // sum=20, rubricMaxTotal=20: recomputedPractical=(20/20)*70=70
+      // practicalWeight=60 → effectivePractical=(70/70)*60=60
       // mcqPercentScore=100, mcqWeight=40 → effectiveMcq=(100/100)*40=40
-      // totalScore = 60 + 40 = 100
+      // totalScore = 60+40 = 100
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 70, rubric_total: 20 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 4, quality_and_utility: 4, iteration_and_improvement: 4, human_quality_assurance: 4, responsible_use: 4 },
+          rubric_total: 20,
+          practical_score_scaled: 70,
+        }),
         assessmentPolicy: { scoring: { practicalWeight: 60, mcqWeight: 40 } },
       });
       expect(result.totalScore).toBe(100);
@@ -537,12 +560,16 @@ describe("decision service", () => {
 
   describe("assessmentPolicy override", () => {
     it("passes when module-level totalMin is lower than global and score is above module threshold", async () => {
-      // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=20 → total=65 (fails globally)
+      // sum=12, rubricMaxTotal=20: recomputedPractical=42; mcqScaled=20 → total=62 (fails global 70)
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 20,
         mcqPercentScore: 66,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 3, quality_and_utility: 3, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 12,
+          practical_score_scaled: 42,
+        }),
         assessmentPolicy: { passRules: { totalMin: 60 } },
       });
       expect(result.passesThresholds).toBe(true);
@@ -551,12 +578,16 @@ describe("decision service", () => {
     });
 
     it("fails when module-level totalMin is higher than global and score is below module threshold", async () => {
-      // Default global totalMin is 70. practicalScoreScaled=45, mcqScaledScore=30 → total=75 (passes globally)
+      // sum=12, rubricMaxTotal=20: recomputedPractical=42; mcqScaled=30 → total=72 (passes global but below module 80)
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 3, quality_and_utility: 3, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 12,
+          practical_score_scaled: 42,
+        }),
         assessmentPolicy: { passRules: { totalMin: 80 } },
       });
       expect(result.passesThresholds).toBe(false);
@@ -564,12 +595,12 @@ describe("decision service", () => {
     });
 
     it("falls back to global rules when assessmentPolicy is null", async () => {
-      // practicalScoreScaled=45, mcqScaledScore=30 → total=75 passes global default (70)
+      // sum=14, rubricMaxTotal=20: recomputedPractical=49; mcqScaled=30 → total=79 passes global default (70)
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 12 }),
+        llmResult: buildLlmResult(),
         assessmentPolicy: null,
       });
       expect(result.passesThresholds).toBe(true);
@@ -579,14 +610,15 @@ describe("decision service", () => {
 
   describe("resolveAssessmentDecision — score and practicalPercent", () => {
     it("returns totalScore = practical + mcq with default weights", async () => {
+      // sum=14, rubricMaxTotal=20: recomputedPractical=49; mcqScaled=30 → total=79
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
+        llmResult: buildLlmResult(),
         assessmentPolicy: null,
       });
-      expect(result.totalScore).toBe(75);
+      expect(result.totalScore).toBe(79);
     });
 
     it("computes practicalPercent as rubric_total / rubricMaxTotal * 100", async () => {
@@ -594,7 +626,11 @@ describe("decision service", () => {
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 10 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 2, quality_and_utility: 2, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 10,
+          practical_score_scaled: 35,
+        }),
         assessmentPolicy: null,
         rubricMaxTotal: 20,
       });
@@ -606,7 +642,11 @@ describe("decision service", () => {
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 0 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
+          rubric_total: 0,
+          practical_score_scaled: 0,
+        }),
         assessmentPolicy: null,
         rubricMaxTotal: 0,
       });
@@ -614,11 +654,16 @@ describe("decision service", () => {
     });
 
     it("uses the provided rubricMaxTotal instead of the default of 20", async () => {
+      // sum=20, rubricMaxTotal=25: practicalPercent=(20/25)*100=80
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45, rubric_total: 20 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 4, quality_and_utility: 4, iteration_and_improvement: 4, human_quality_assurance: 4, responsible_use: 4 },
+          rubric_total: 20,
+          practical_score_scaled: 56,
+        }),
         assessmentPolicy: null,
         rubricMaxTotal: 25,
       });
@@ -626,13 +671,18 @@ describe("decision service", () => {
     });
 
     it("rounds totalScore to 2 decimal places", async () => {
+      // sum=1, rubricMaxTotal=7, practicalWeight=30, mcqScaled=30
+      // recomputedPractical=(1/7)*70=10; effectivePractical=(10/70)*30=300/70=4.2857...; total=34.2857... → 34.29
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // effectivePractical = (10 / 70) * 30 = 4.285714... → combined with mcq=30 → 34.285714... → 34.29
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 10 }),
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 1 },
+          rubric_total: 1,
+        }),
         assessmentPolicy: { scoring: { practicalWeight: 30 } },
+        rubricMaxTotal: 7,
       });
       expect(result.totalScore).toBe(34.29);
     });
@@ -641,19 +691,18 @@ describe("decision service", () => {
   describe("resolveAssessmentDecision — red flag routing", () => {
     it("sets hasOpenRedFlag=true and passesThresholds=false even when total score is above threshold", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // POTENTIAL_SENSITIVE_DATA is in redFlagCodes and "high" is in redFlagSeverities → forcing flag
+      // Default sum=14: total=49+30=79; POTENTIAL_SENSITIVE_DATA is forcing red flag → passesThresholds=false
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
         llmResult: buildLlmResult({
-          practical_score_scaled: 50,
           red_flags: [{ code: "POTENTIAL_SENSITIVE_DATA", severity: "high", description: "Sensitive data." }],
           manual_review_recommended: true,
           recommended_outcome: "manual_review",
         }),
         assessmentPolicy: null,
       });
-      expect(result.totalScore).toBe(80);
+      expect(result.totalScore).toBe(79);
       expect(result.hasOpenRedFlag).toBe(true);
       expect(result.passesThresholds).toBe(false);
       expect(result.needsManualReview).toBe(true);
@@ -661,19 +710,18 @@ describe("decision service", () => {
 
     it("routes to manual review when LLM recommends it with no red flags", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // Score 80 passes all gates; LLM says manual_review due to low_confidence
+      // Default sum=14: total=79 passes all gates; LLM says manual_review due to low_confidence
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
         llmResult: buildLlmResult({
-          practical_score_scaled: 50,
           manual_review_recommended: true,
           recommended_outcome: "manual_review",
           manual_review_reason_code: "low_confidence",
         }),
         assessmentPolicy: null,
       });
-      expect(result.totalScore).toBe(80);
+      expect(result.totalScore).toBe(79);
       expect(result.hasOpenRedFlag).toBe(false);
       expect(result.needsManualReview).toBe(true);
     });
@@ -685,7 +733,7 @@ describe("decision service", () => {
       const result = resolveAssessmentDecision({
         mcqScaledScore: 30,
         mcqPercentScore: 100,
-        llmResult: buildLlmResult({ practical_score_scaled: 45 }),
+        llmResult: buildLlmResult(),
         assessmentPolicy: null,
       });
       expect(result.decisionReason).toBe("Automatic pass by threshold rules.");
@@ -694,12 +742,11 @@ describe("decision service", () => {
 
     it("returns 'Automatic fail by threshold rules.' for a score below threshold with no insufficient signal", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // total = 40 + 20 = 60 < 70; confidence_note has no patterns
+      // Default sum=14: recomputedPractical=49; mcqScaled=20 → total=49+20=69 < 70; confidence has no patterns
       const result = resolveAssessmentDecision({
         mcqScaledScore: 20,
         mcqPercentScore: 67,
         llmResult: buildLlmResult({
-          practical_score_scaled: 40,
           evidence_sufficiency: "sufficient",
           recommended_outcome: "fail",
           manual_review_recommended: false,
@@ -708,7 +755,7 @@ describe("decision service", () => {
         }),
         assessmentPolicy: null,
       });
-      expect(result.totalScore).toBe(60);
+      expect(result.totalScore).toBe(69);
       expect(result.autoFailForInsufficientEvidence).toBe(false);
       expect(result.needsManualReview).toBe(false);
       expect(result.decisionReason).toBe("Automatic fail by threshold rules.");
@@ -721,8 +768,9 @@ describe("decision service", () => {
         mcqScaledScore: 0,
         mcqPercentScore: 0,
         llmResult: buildLlmResult({
-          practical_score_scaled: 0,
+          rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
           rubric_total: 0,
+          practical_score_scaled: 0,
           evidence_sufficiency: "insufficient",
           recommended_outcome: "fail",
           manual_review_recommended: false,
@@ -757,6 +805,7 @@ describe("decision service", () => {
       mcqScaledScore: 0,
       mcqPercentScore: 0,
       llmResult: buildLlmResult({
+        rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
         rubric_total: 0,
         practical_score_scaled: 0,
         pass_fail_practical: false,
