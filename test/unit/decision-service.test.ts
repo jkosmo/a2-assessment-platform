@@ -688,6 +688,113 @@ describe("decision service", () => {
     });
   });
 
+  describe("resolveAssessmentDecision — component pass gates", () => {
+    it("fails when MCQ percent is below mcqMinPercent even if total score passes", async () => {
+      // sum=12, rubricMaxTotal=20: practical=42; mcqScaled=30 → total=72 passes global 70
+      // but mcqPercentScore=40 < mcqMinPercent=50 → gate fails
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 40,
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 3, quality_and_utility: 3, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 12,
+          practical_score_scaled: 42,
+        }),
+        assessmentPolicy: { passRules: { totalMin: 70, mcqMinPercent: 50 } },
+      });
+      expect(result.passesThresholds).toBe(false);
+      expect(result.passFailTotal).toBe(false);
+      expect(result.decisionReason).toBe("Automatic fail: MCQ score below required minimum.");
+    });
+
+    it("passes when MCQ percent meets mcqMinPercent exactly", async () => {
+      // mcqPercentScore=50 >= mcqMinPercent=50 → gate passes; total=72 passes
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 50,
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 3, quality_and_utility: 3, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 12,
+          practical_score_scaled: 42,
+        }),
+        assessmentPolicy: { passRules: { totalMin: 70, mcqMinPercent: 50 } },
+      });
+      expect(result.passesThresholds).toBe(true);
+      expect(result.passFailTotal).toBe(true);
+    });
+
+    it("fails when practical percent is below practicalMinPercent even if total score passes", async () => {
+      // sum=8, rubricMaxTotal=20: practicalPercent=40 < practicalMinPercent=50 → gate fails
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 100,
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 1, quality_and_utility: 1, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 8,
+          practical_score_scaled: 28,
+        }),
+        assessmentPolicy: { passRules: { totalMin: 50, practicalMinPercent: 50 } },
+        rubricMaxTotal: 20,
+      });
+      expect(result.practicalPercent).toBe(40);
+      expect(result.passesThresholds).toBe(false);
+      expect(result.passFailTotal).toBe(false);
+      expect(result.decisionReason).toBe("Automatic fail: practical score below required minimum.");
+    });
+
+    it("passes when practical percent meets practicalMinPercent exactly", async () => {
+      // sum=10, rubricMaxTotal=20: practicalPercent=50 >= practicalMinPercent=50 → gate passes
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 100,
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 2, quality_and_utility: 2, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 10,
+          practical_score_scaled: 35,
+        }),
+        assessmentPolicy: { passRules: { totalMin: 50, practicalMinPercent: 50 } },
+        rubricMaxTotal: 20,
+      });
+      expect(result.practicalPercent).toBe(50);
+      expect(result.passesThresholds).toBe(true);
+      expect(result.passFailTotal).toBe(true);
+    });
+
+    it("applies both mcqMinPercent and practicalMinPercent as AND conditions", async () => {
+      // mcqPercentScore=60>=50 (passes), practicalPercent=(8/20)*100=40<50 (fails)
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 25,
+        mcqPercentScore: 60,
+        llmResult: buildLlmResult({
+          rubric_scores: { relevance_for_case: 1, quality_and_utility: 1, iteration_and_improvement: 2, human_quality_assurance: 2, responsible_use: 2 },
+          rubric_total: 8,
+          practical_score_scaled: 28,
+        }),
+        assessmentPolicy: { passRules: { totalMin: 50, mcqMinPercent: 50, practicalMinPercent: 50 } },
+        rubricMaxTotal: 20,
+      });
+      expect(result.passesThresholds).toBe(false);
+      expect(result.decisionReason).toBe("Automatic fail: practical score below required minimum.");
+    });
+
+    it("skips component gates when neither is set in policy", async () => {
+      // Default buildLlmResult (sum=14), total=79; no component gates → passes on total alone
+      const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+      const result = resolveAssessmentDecision({
+        mcqScaledScore: 30,
+        mcqPercentScore: 30,
+        llmResult: buildLlmResult(),
+        assessmentPolicy: { passRules: { totalMin: 70 } },
+      });
+      expect(result.passesThresholds).toBe(true);
+    });
+  });
+
   describe("resolveAssessmentDecision — red flag routing", () => {
     it("sets hasOpenRedFlag=true and passesThresholds=false even when total score is above threshold", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");

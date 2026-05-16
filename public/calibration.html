@@ -116,6 +116,18 @@
           <div class="small" data-i18n="calibration.thresholds.totalMinHelp">Minimum total score to pass.</div>
         </div>
       </div>
+      <div class="row">
+        <div>
+          <label for="thresholdMcqMinPercent" data-i18n="calibration.thresholds.mcqMinPercent">MCQ minimum (% correct, optional)</label>
+          <input id="thresholdMcqMinPercent" type="number" min="0" max="100" step="1" placeholder="None" />
+          <div class="small" data-i18n="calibration.thresholds.mcqMinPercentHelp">Participant must meet this MCQ % even if total score passes. Leave blank to disable.</div>
+        </div>
+        <div>
+          <label for="thresholdPracticalMinPercent" data-i18n="calibration.thresholds.practicalMinPercent">Practical minimum (% of rubric, optional)</label>
+          <input id="thresholdPracticalMinPercent" type="number" min="0" max="100" step="1" placeholder="None" />
+          <div class="small" data-i18n="calibration.thresholds.practicalMinPercentHelp">Participant must meet this practical rubric % even if total score passes. Leave blank to disable.</div>
+        </div>
+      </div>
 
       <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
         <div>

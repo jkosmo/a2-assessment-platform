@@ -32,6 +32,8 @@ const outcomesBody = document.getElementById("calibrationOutcomesBody");
 const anchorsBody = document.getElementById("calibrationAnchorsBody");
 const thresholdEditorSection = document.getElementById("thresholdEditorSection");
 const thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
+const thresholdMcqMinPercentInput = document.getElementById("thresholdMcqMinPercent");
+const thresholdPracticalMinPercentInput = document.getElementById("thresholdPracticalMinPercent");
 const publishThresholdsButton = document.getElementById("publishThresholds");
 const thresholdPublishResult = document.getElementById("thresholdPublishResult");
 
@@ -396,12 +398,20 @@ function populateStatusOptions() {
 }
 
 function getThresholdInputValues() {
-  return { totalMin: Number(thresholdTotalMinInput.value) };
+  const mcqRaw = thresholdMcqMinPercentInput.value.trim();
+  const practicalRaw = thresholdPracticalMinPercentInput.value.trim();
+  return {
+    totalMin: Number(thresholdTotalMinInput.value),
+    mcqMinPercent: mcqRaw !== "" ? Number(mcqRaw) : undefined,
+    practicalMinPercent: practicalRaw !== "" ? Number(practicalRaw) : undefined,
+  };
 }
 
 function renderThresholds(effectiveThresholds) {
   if (!effectiveThresholds) return;
   thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
+  thresholdMcqMinPercentInput.value = effectiveThresholds.mcqMinPercent != null ? String(effectiveThresholds.mcqMinPercent) : "";
+  thresholdPracticalMinPercentInput.value = effectiveThresholds.practicalMinPercent != null ? String(effectiveThresholds.practicalMinPercent) : "";
   const sourceKey =
     effectiveThresholds.source === "module_policy"
       ? "calibration.thresholds.source.module"
@@ -428,7 +438,12 @@ publishThresholdsButton.addEventListener("click", async () => {
           ...headers(),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ moduleId, totalMin: values.totalMin }),
+        body: JSON.stringify({
+          moduleId,
+          totalMin: values.totalMin,
+          ...(values.mcqMinPercent !== undefined && { mcqMinPercent: values.mcqMinPercent }),
+          ...(values.practicalMinPercent !== undefined && { practicalMinPercent: values.practicalMinPercent }),
+        }),
       });
       thresholdPublishResult.textContent = t("calibration.thresholds.publishSuccess");
       log(body);

@@ -235,10 +235,15 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
 
   const rules = getAssessmentRules();
   const modulePolicy = safeParsePolicy(module.activeVersion?.assessmentPolicyJson);
-  const hasModuleOverrides = modulePolicy?.passRules?.totalMin != null;
+  const hasModuleOverrides =
+    modulePolicy?.passRules?.totalMin != null ||
+    modulePolicy?.passRules?.mcqMinPercent != null ||
+    modulePolicy?.passRules?.practicalMinPercent != null;
 
   const effectiveThresholds = {
     totalMin: modulePolicy?.passRules?.totalMin ?? rules.thresholds.totalMin,
+    mcqMinPercent: modulePolicy?.passRules?.mcqMinPercent ?? null,
+    practicalMinPercent: modulePolicy?.passRules?.practicalMinPercent ?? null,
     source: hasModuleOverrides ? ("module_policy" as const) : ("global_defaults" as const),
   };
 

@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.14 - 2026-05-16
+
+fix(security): enforce MCQ and practical component pass gates in assessment decisions
+
+- `src/codecs/assessmentPolicyCodec.ts`: Added `mcqMinPercent` and
+  `practicalMinPercent` to `ModuleAssessmentPolicy.passRules`, enabling
+  per-component minimum thresholds that act as AND conditions alongside
+  `totalMin`.
+- `src/modules/assessment/decisionService.ts`: `resolveAssessmentDecision` now
+  checks both component gates — a submission fails if MCQ percent falls below
+  `mcqMinPercent` or practical percent falls below `practicalMinPercent`, even
+  when total score would otherwise pass. Dedicated fail reasons distinguish
+  component failures from threshold failures.
+- `src/routes/calibration.ts`: `publish-thresholds` endpoint now accepts
+  optional `mcqMinPercent` and `practicalMinPercent` fields.
+- `src/modules/adminContent/adminContentCommands.ts`: `publishModuleVersionWithThresholds`
+  persists the new per-component thresholds into the module's `assessmentPolicyJson`.
+- `src/modules/calibration/calibrationWorkspaceService.ts`: `effectiveThresholds`
+  in the workspace snapshot now includes `mcqMinPercent` and `practicalMinPercent`.
+- `public/calibration.html` + `public/calibration.js`: Calibration UI gains two
+  optional inputs for the new per-component thresholds.
+- `test/unit/decision-service.test.ts`: Rewrote `buildLlmResult` defaults to
+  have consistent `rubric_scores`/`rubric_total` (sum=14 matches default total),
+  updated score expectations to reflect server-side recomputation, and added 6
+  new tests for the component gate logic.
+- `test/unit/read-models.test.ts`: Fixed stale `rubric_scores: { evidence: 8 }`
+  test data that violated the `max(4)` codec constraint added in v1.1.13.
+
 ## 1.1.13 - 2026-05-16
 
 fix(security): recompute LLM assessment scores server-side to prevent prompt injection

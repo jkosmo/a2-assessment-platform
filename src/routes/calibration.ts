@@ -86,6 +86,8 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
 const publishThresholdsBodySchema = z.object({
   moduleId: z.string().trim().min(1),
   totalMin: z.number().min(0).max(100),
+  mcqMinPercent: z.number().min(0).max(100).optional(),
+  practicalMinPercent: z.number().min(0).max(100).optional(),
 });
 
 calibrationRouter.post("/workspace/publish-thresholds", async (request, response, next) => {
@@ -114,6 +116,8 @@ calibrationRouter.post("/workspace/publish-thresholds", async (request, response
     const published = await publishModuleVersionWithThresholds({
       moduleId: parsed.data.moduleId,
       totalMin: parsed.data.totalMin,
+      mcqMinPercent: parsed.data.mcqMinPercent,
+      practicalMinPercent: parsed.data.practicalMinPercent,
       actorId,
     });
     response.status(200).json({ moduleVersion: published });

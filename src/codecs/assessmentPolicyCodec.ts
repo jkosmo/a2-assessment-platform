@@ -5,6 +5,8 @@ export type ModuleAssessmentPolicy = {
   };
   passRules?: {
     totalMin?: number;
+    mcqMinPercent?: number;
+    practicalMinPercent?: number;
   };
 };
 
