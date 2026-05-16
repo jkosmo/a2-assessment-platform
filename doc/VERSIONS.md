@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.10 - 2026-05-16
+
+fix(security): harden XSS attack surface in admin content UI
+
+- `src/modules/adminContent/adminContentSchemas.ts`: Added `safeShortString`
+  validator (max 100 chars, rejects `<>"'&`) and `certificationLevelInputSchema`
+  which applies it to all locales. `moduleCreateBodySchema.certificationLevel`
+  now uses this schema instead of the unrestricted `localizedTextSchema`, closing
+  a stored-XSS vector where an attacker with admin access could inject HTML via
+  the certification level field.
+- `src/modules/adminContent/adminContentQueries.ts`: Fixed `listArchivedModules`
+  to localise `certificationLevel` through `localizeContentText` (was returning
+  the raw DB value, bypassing the localization pipeline).
+- `public/static/admin-content-courses.js`: Changed `appendConvUserBubble` from
+  `innerHTML` to `textContent`, removing a reflected-XSS sink in the conversation
+  flow UI.
+
 ## 1.1.9 - 2026-05-16
 
 fix(security): Redact assessor-only guidanceText from participant module APIs (#387)

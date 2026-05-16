@@ -47,7 +47,7 @@ export async function listArchivedModules(locale: SupportedLocale = "en-GB", sea
     id: module.id,
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
-    certificationLevel: module.certificationLevel,
+    certificationLevel: localizeContentText(locale, module.certificationLevel) ?? module.certificationLevel ?? null,
     archivedAt: module.archivedAt,
   }));
 }

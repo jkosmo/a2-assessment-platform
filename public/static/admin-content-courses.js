@@ -496,7 +496,7 @@ async function renderNewCourseConversational() {
     convTitle = val;
     if (titleInput) titleInput.disabled = true;
     if (titleNext) titleNext.disabled = true;
-    appendConvUserBubble(escapeHtml(convTitle));
+    appendConvUserBubble(convTitle);
     showConvCertStep();
   }
 
@@ -505,12 +505,12 @@ async function renderNewCourseConversational() {
   titleInput?.focus();
 }
 
-function appendConvUserBubble(html) {
+function appendConvUserBubble(text) {
   const flow = document.getElementById("convFlow");
   if (!flow) return;
   const bubble = document.createElement("div");
   bubble.className = "conv-user-bubble";
-  bubble.innerHTML = html;
+  bubble.textContent = text;
   flow.insertBefore(bubble, document.getElementById("convAfterTitle"));
 }
 
