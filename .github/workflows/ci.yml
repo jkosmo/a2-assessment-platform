@@ -7,6 +7,52 @@ on:
       - main
 
 jobs:
+  infra-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint — enableRbacAuthorization must not depend on skip flags
+        run: |
+          if grep -rn 'enableRbacAuthorization.*skip\|enableRbacAuthorization.*Skip' infra/; then
+            echo "FAIL: enableRbacAuthorization is coupled to a skip flag. Key Vault must always use RBAC (invariant #1)."
+            exit 1
+          fi
+
+      - name: Lint — KV secret child resources must have dependsOn when KV is conditional
+        run: |
+          # Warn if any KV secret uses parent: keyVaultRef without a nearby dependsOn
+          if grep -n 'parent: keyVaultRef' infra/azure/main.bicep | grep -v '//' > /dev/null 2>&1; then
+            if ! grep -n 'dependsOn.*keyVault' infra/azure/main.bicep > /dev/null 2>&1; then
+              echo "FAIL: KV secret uses parent: keyVaultRef but no dependsOn: [keyVault] found. ARM ordering not guaranteed (invariant #4)."
+              exit 1
+            fi
+          fi
+
+      - name: Lint — role assignment GUIDs must be seeded on principalId
+        run: |
+          # Flag guid() calls in role assignment resources that don't include principalId
+          if grep -A5 "roleAssignment" infra/azure/main.bicep | grep -E "guid\([^)]*\)" | grep -v "principalId" | grep -v "//"; then
+            echo "FAIL: Role assignment GUID does not include principalId in seed. GUIDs will change on App Service recreate (invariant #5)."
+            exit 1
+          fi
+
+      - name: Lint — prod-destructive scripts must not suppress role assignment failures
+        run: |
+          if grep -rn 'az role assignment.*2>.*null\|az role assignment.*Out-Null\|az role assignment.*SilentlyContinue' scripts/; then
+            echo "FAIL: az role assignment failure is suppressed. Surface errors in production (invariant #6)."
+            exit 1
+          fi
+
+      - name: Lint — PowerShell URL strings must use braces around variables before query params
+        run: |
+          # Catch patterns like "$varName?query" which PS parses as single variable $varName?query
+          if grep -rn '"\$[A-Za-z][A-Za-z0-9]*?' scripts/ | grep -v '\${'; then
+            echo "FAIL: PowerShell variable in URL string before '?' without braces. Use \${varName}?query to avoid silent empty substitution."
+            exit 1
+          fi
+
   verify:
     runs-on: ubuntu-latest
     steps:

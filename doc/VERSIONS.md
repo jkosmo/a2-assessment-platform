@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.30 - 2026-05-17
+
+docs(agents): agent guardrails — AGENTS.md, infra invariants, PR template, what-if CI, lint (#417–#420)
+
+- `AGENTS.md` (new): Codex equivalent of CLAUDE.md — tenant split warning, Windows deploy prohibition, 10 hard infra invariants, Codex behavior rules.
+- `CLAUDE.md`: added infra QA checklist and 10 hard infra invariants derived from May 2026 production incident.
+- `.github/pull_request_template.md`: added infra changes section with permission/ARM/credential/safety checklist and scenario matrix (required for PRs touching `infra/`, `scripts/azure/`, or `.github/workflows/`).
+- `.github/workflows/bicep-whatif.yml` (new): runs `az deployment group what-if` against staging on PRs that modify Bicep or deploy script; posts result as PR comment.
+- `.github/workflows/ci.yml`: added `infra-lint` job with five grep-based checks for dangerous patterns (RBAC coupled to skip flag, missing `dependsOn`, role GUID without principalId, suppressed role assignment errors, PS variable-in-URL without braces).
+
 ## 1.1.29 - 2026-05-16
 
 fix(infra): restore KV secret ARM dependency chain broken by parent: keyVaultRef (v1.1.29)

@@ -53,6 +53,41 @@
 - RCA summary (single sentence):
 - Evidence links/notes:
 
+## Infra changes (required when touching `infra/`, `scripts/azure/`, or `.github/workflows/`)
+
+_Skip this section if no infra files are changed._
+
+**Permission and identity**
+- [ ] `enableRbacAuthorization` is NOT coupled to any deploy flag — it is always `true`.
+- [ ] Role assignment GUIDs are seeded on `principalId`, not `App.id` or other mutable values.
+- [ ] If App Services are deleted and recreated, managed identities still have KV access.
+
+**ARM dependency chain**
+- [ ] Conditional Bicep resources (`= if (condition)`) have `dependsOn` on all child resources.
+- [ ] Switching `parent:` from a deployed resource to an `existing` reference preserves ARM ordering.
+
+**Secret and credential sync**
+- [ ] If a credential secret (e.g. `DATABASE-URL`) is updated, the underlying resource is updated in the same deploy — or the existing credential is explicitly reused.
+
+**Production safety**
+- [ ] Change works correctly with `SKIP_ROLE_ASSIGNMENTS=true` (current prod workaround).
+- [ ] Change works correctly after `SKIP_ROLE_ASSIGNMENTS` is removed (#404).
+- [ ] Prod-destructive scripts assert correct subscription/RG before acting.
+
+**Scenario matrix** _(fill in for Bicep changes)_
+
+| Scenario | Expected result |
+|----------|----------------|
+| Staging — first deploy (fresh env) | |
+| Staging — normal deploy | |
+| Staging — App Service recreated | |
+| Prod — normal deploy (`SKIP_ROLE_ASSIGNMENTS=true`) | |
+| Prod — after #404 (`SKIP_ROLE_ASSIGNMENTS` removed) | |
+| Prod — recovery after deleted App Service | |
+| Prod — PG `ServerIsBusy` | |
+
+- Rollback procedure:
+
 ## Checklist
 - [ ] Acceptance criteria are met.
 - [ ] Security/privacy/traceability impacts were reviewed.
