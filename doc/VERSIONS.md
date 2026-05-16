@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.9 - 2026-05-16
+
+fix(security): Redact assessor-only guidanceText from participant module APIs (#387)
+
+- `src/modules/module/moduleService.ts`: Conditionally omit `guidanceText`
+  from all participant-facing response paths (`listModules`, `getModuleById`,
+  `getActiveModuleVersion`) when `participantFacing=true`. Admin/assessor
+  workflows with `?adminFacing=true` still receive the field.
+- `test/security-p1-387-redact-assessor-guidance.test.ts`: Response-shape
+  tests verifying the field is absent for PARTICIPANT role and present for
+  ADMINISTRATOR with `?adminFacing=true`.
+
 ## 1.1.8 - 2026-05-16
 
 fix(deploy): refresh OIDC during long ARM deployments

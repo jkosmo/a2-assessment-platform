@@ -205,7 +205,8 @@ describe("MVP i18n baseline", () => {
     expect(moduleNb.body.module.taskText).toBe(
       "Vurder styringsrisiko og dokumenter en praktisk tilnærming til risikoreduserende tiltak.",
     );
-    expect(moduleNb.body.module.guidanceText).toBe("Beskriv konkrete kontroller, ansvarlige og oppfølgingsaktiviteter.");
+    // guidanceText is assessor-only; participant-facing endpoint omits it
+    expect(moduleNb.body.module).not.toHaveProperty("guidanceText");
 
     const submissionResponse = await request(app)
       .post("/api/submissions")
@@ -290,10 +291,10 @@ describe("MVP i18n baseline", () => {
     expect(modulesNb.status).toBe(200);
 
     const localizedModule = (
-      modulesNb.body.modules as Array<{ id: string; taskText?: string; guidanceText?: string }>
+      modulesNb.body.modules as Array<{ id: string; taskText?: string }>
     ).find((module) => module.id === seedModule.id);
     expect(localizedModule?.taskText).toBe("Norsk oppgavekontekst.");
-    expect(localizedModule?.guidanceText).toBe("Norsk veiledningskontekst.");
+    // guidanceText is assessor-only; participant list endpoint omits it
 
     env.LLM_MODE = "azure_openai";
     env.AZURE_OPENAI_ENDPOINT = "https://example.openai.azure.com";
