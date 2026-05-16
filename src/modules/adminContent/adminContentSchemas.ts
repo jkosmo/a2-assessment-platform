@@ -21,10 +21,20 @@ export function localizedTextIdentity(value: LocalizedText): string {
   return `locale:${value["en-GB"] ?? ""}|${value.nb ?? ""}|${value.nn ?? ""}`;
 }
 
+const safeShortString = z.string().trim().max(100).refine(
+  (v) => !/[<>"'&]/.test(v),
+  { message: "Value must not contain HTML special characters." },
+);
+
+export const certificationLevelInputSchema = z.union([
+  safeShortString,
+  z.record(z.string(), safeShortString),
+]).optional();
+
 export const moduleCreateBodySchema = z.object({
   title: localizedTextSchema,
   description: localizedTextSchema.optional(),
-  certificationLevel: localizedTextSchema.optional(),
+  certificationLevel: certificationLevelInputSchema,
   validFrom: z.string().trim().optional(),
   validTo: z.string().trim().optional(),
 });
