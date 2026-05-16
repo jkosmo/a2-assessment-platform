@@ -251,11 +251,170 @@ function Invoke-WebAppDeploy([string]$ResourceGroup, [string]$AppName, [string]$
   throw "az webapp deploy to $AppName failed after $maxAttempts attempts."
 }
 
+function Invoke-WebAppDeployBatch([string]$ResourceGroup, [array]$Deployments, [string]$ZipPath) {
+  Refresh-AzureCliOidcLogin "deploying app packages in parallel"
+
+  $appList = ($Deployments | ForEach-Object { $_.AppName }) -join ", "
+  Write-Host "Deploying app packages in parallel: $appList"
+
+  $jobs = @()
+  foreach ($deployment in $Deployments) {
+    $appName = [string]$deployment.AppName
+    $label = [string]$deployment.Label
+    $jobs += Start-Job -Name "deploy-$label" -ScriptBlock {
+      param(
+        [string]$ResourceGroup,
+        [string]$AppName,
+        [string]$ZipPath,
+        [string]$Label
+      )
+
+      $maxAttempts = 5
+      $delaySeconds = 15
+      $lastExitCode = 0
+
+      for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Write-Output "[$Label] Deploying app package to $AppName (attempt $attempt/$maxAttempts)..."
+        az webapp deploy `
+          --resource-group $ResourceGroup `
+          --name $AppName `
+          --src-path $ZipPath `
+          --type zip `
+          --track-status false `
+          --restart true 2>&1 | ForEach-Object { Write-Output "[$Label] $_" }
+
+        $lastExitCode = $LASTEXITCODE
+        if ($lastExitCode -eq 0) {
+          Write-Output "[$Label] Deployment succeeded."
+          return [pscustomobject]@{
+            Label = $Label
+            AppName = $AppName
+            Success = $true
+            ExitCode = 0
+          }
+        }
+
+        if ($attempt -lt $maxAttempts) {
+          Write-Output "[$Label] Deploy attempt $attempt failed (exit $lastExitCode); retrying in ${delaySeconds}s..."
+          Start-Sleep -Seconds $delaySeconds
+        }
+      }
+
+      [pscustomobject]@{
+        Label = $Label
+        AppName = $AppName
+        Success = $false
+        ExitCode = $lastExitCode
+      }
+    } -ArgumentList $ResourceGroup, $appName, $ZipPath, $label
+  }
+
+  Wait-Job -Job $jobs | Out-Null
+
+  $results = @()
+  $failedJobs = @()
+  try {
+    foreach ($job in $jobs) {
+      $jobOutput = Receive-Job -Job $job
+      foreach ($item in $jobOutput) {
+        if ($item.PSObject.Properties.Name -contains "Success" -and $item.PSObject.Properties.Name -contains "AppName") {
+          $results += $item
+        } else {
+          Write-Host $item
+        }
+      }
+
+      if ($job.State -ne "Completed") {
+        $failedJobs += $job.Name
+      }
+    }
+  } finally {
+    Remove-Job -Job $jobs -Force
+  }
+
+  $failedDeployments = @($results | Where-Object { -not $_.Success })
+  if ($failedJobs.Count -gt 0 -or $failedDeployments.Count -gt 0 -or $results.Count -ne $Deployments.Count) {
+    $failedNames = @()
+    $failedNames += $failedJobs
+    $failedNames += ($failedDeployments | ForEach-Object { "$($_.Label) (exit $($_.ExitCode))" })
+    throw "One or more app package deployments failed: $($failedNames -join ', ')"
+  }
+}
+
 function Restart-WebAppForKeyVaultReferences([string]$ResourceGroup, [string]$AppName) {
   Refresh-AzureCliOidcLogin "restarting $AppName"
   Write-Host "Restarting $AppName to refresh Key Vault references..."
   az webapp restart --resource-group $ResourceGroup --name $AppName | Out-Null
   Assert-LastExitCode "restart $AppName"
+}
+
+function Invoke-KeyVaultReferenceRefresh([string]$ResourceGroup, [string]$AppName) {
+  $refreshUrl = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$AppName/config/configreferences/appsettings/refresh?api-version=2022-03-01"
+  az rest --method POST --url $refreshUrl -o none 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "Could not refresh Key Vault references for $AppName yet; will poll current status."
+  }
+}
+
+function Get-KeyVaultReferenceStatuses([string]$ResourceGroup, [string]$AppName) {
+  $statusUrl = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$AppName/config/configreferences/appsettings?api-version=2022-03-01"
+  $statusJson = az rest --method GET --url $statusUrl -o json 2>$null
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($statusJson)) {
+    return @()
+  }
+
+  $statusResponse = $statusJson | ConvertFrom-Json
+  return @($statusResponse.value |
+    Where-Object { $_.properties.reference -like "@Microsoft.KeyVault*" } |
+    ForEach-Object {
+      [pscustomobject]@{
+        AppName = $AppName
+        Name = $_.name
+        Status = $_.properties.status
+        Details = $_.properties.details
+      }
+    })
+}
+
+function Wait-KeyVaultReferencesResolved([string]$ResourceGroup, [string[]]$AppNames, [int]$TimeoutSeconds = 90, [int]$DelaySeconds = 10) {
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+  while ($true) {
+    Refresh-AzureCliOidcLogin "checking Key Vault reference propagation"
+
+    $unresolved = @()
+    $checkedCount = 0
+    foreach ($appName in $AppNames) {
+      Invoke-KeyVaultReferenceRefresh -ResourceGroup $ResourceGroup -AppName $appName
+      $references = @(Get-KeyVaultReferenceStatuses -ResourceGroup $ResourceGroup -AppName $appName)
+      $checkedCount += $references.Count
+
+      foreach ($reference in $references) {
+        if ($reference.Status -ne "Resolved") {
+          $suffix = if ($reference.Details) { " - $($reference.Details)" } else { "" }
+          $unresolved += "$($reference.AppName)/$($reference.Name)=$($reference.Status)$suffix"
+        }
+      }
+    }
+
+    if ($checkedCount -eq 0) {
+      Write-Host "No Key Vault app setting references reported by App Service; continuing without fixed wait."
+      return
+    }
+
+    if ($unresolved.Count -eq 0) {
+      Write-Host "Key Vault references resolved for all apps ($checkedCount references)."
+      return
+    }
+
+    if ((Get-Date) -ge $deadline) {
+      Write-Warning "Timed out waiting for Key Vault references to resolve: $($unresolved -join '; '). Continuing; health checks will validate startup."
+      return
+    }
+
+    Write-Host "Waiting for Key Vault references to resolve: $($unresolved -join '; ')"
+    Start-Sleep -Seconds $DelaySeconds
+  }
 }
 
 function Copy-DeploymentSources([string]$destinationRoot) {
@@ -329,24 +488,35 @@ if ($existingWebApp -and $existingWorkerApp) {
   }
   Write-Host "Firewall rules: $i IPs"
 
-  # Pre-flight: skip ARM firewall update if rules already match desired state.
-  # Azure PostgreSQL Flexible Server serialises firewall changes internally; parallel
-  # ARM deployments of unchanged rules cause one operation to hang indefinitely
-  # waiting for a control-plane lock. Passing an empty array means the @batchSize(1)
-  # Bicep loop runs zero iterations, leaving existing rules untouched.
+  # Pre-flight: skip ARM firewall updates when existing rules already cover the
+  # current App Service outbound IPs. Extra manual operator rules are allowed.
   $existingPgServer = (az postgres flexible-server list -g $ResourceGroupName --query "[0].name" -o tsv 2>$null)
   if ($existingPgServer) {
-    # Use az rest to avoid az postgres firewall-rule CLI flag churn (--name → --server-name in az 2.86)
-    $existingRules = (az rest --method GET `
+    # Use az rest to avoid az postgres firewall-rule CLI flag churn.
+    $existingRulesJson = az rest --method GET `
       --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$existingPgServer/firewallRules?api-version=2022-12-01" `
-      --query "value[].properties.startIpAddress" -o tsv 2>$null) -split "`n" |
-      Where-Object { $_ } | Sort-Object
-    $desiredIps = $dbAllowedIpAddresses | ForEach-Object { $_.startIpAddress } | Sort-Object
-    if (($desiredIps -join ",") -eq ($existingRules -join ",")) {
-      Write-Host "PostgreSQL firewall rules unchanged ($i IPs already correct) — skipping ARM update."
-      $dbAllowedIpAddresses = @()
+      -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingRulesJson)) {
+      $existingRulesResponse = $existingRulesJson | ConvertFrom-Json
+      $existingRuleIps = @($existingRulesResponse.value |
+        Where-Object { $_.properties.startIpAddress } |
+        ForEach-Object { $_.properties.startIpAddress.Trim() } |
+        Where-Object { $_ } |
+        Sort-Object -Unique)
+      $desiredIps = @($dbAllowedIpAddresses |
+        ForEach-Object { $_.startIpAddress.Trim() } |
+        Where-Object { $_ } |
+        Sort-Object -Unique)
+      $missingDesiredIps = @($desiredIps | Where-Object { $existingRuleIps -notcontains $_ })
+
+      if ($missingDesiredIps.Count -eq 0) {
+        Write-Host "PostgreSQL firewall rules already cover all $($desiredIps.Count) App Service outbound IPs ($($existingRuleIps.Count) total rules present) - skipping ARM update."
+        $dbAllowedIpAddresses = @()
+      } else {
+        Write-Host "PostgreSQL firewall rules missing IPs ($($missingDesiredIps -join ', ')) - ARM will update them (serialised via @batchSize(1))."
+      }
     } else {
-      Write-Host "PostgreSQL firewall rules changed — ARM will update them (serialised via @batchSize(1))."
+      Write-Warning "Could not read existing PostgreSQL firewall rules; ARM will update them (serialised via @batchSize(1))."
     }
   }
 } else {
@@ -377,7 +547,7 @@ if ($ParticipantNotificationChannel -eq "acs_email") {
 }
 
 # Production: trigger pre-deploy backup on any existing vault before changing infra.
-# This is best-effort — a failure here is logged as a warning and does not abort the deploy.
+# This is best-effort - a failure here is logged as a warning and does not abort the deploy.
 if ($EnvironmentName -eq "production") {
   Write-Host "Checking for existing backup vault in $ResourceGroupName (pre-deploy snapshot)..."
   $preDeployVaultName = (az dataprotection backup-vault list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
@@ -540,17 +710,19 @@ if ($PackagePath) {
   }
 }
 
-# Staging runs web, worker, and parser on the same small App Service plan.
-# Deploy the user-facing web app last so the plan can absorb worker/parser churn first.
-Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
-Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
-Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
+# Web, worker, and parser packages are independent; upload them in parallel to
+# avoid paying the Kudu warmup/upload cost three times in series.
+Invoke-WebAppDeployBatch -ResourceGroup $ResourceGroupName -ZipPath $zipPath -Deployments @(
+  @{ Label = "worker"; AppName = $workerAppName },
+  @{ Label = "parser"; AppName = $parserAppName },
+  @{ Label = "web"; AppName = $webAppName }
+)
 
 # Key Vault RBAC role assignments for managed identities can take 30-120 s to
 # propagate. Keep App Service settings as Key Vault references and refresh the
 # apps after propagation instead of writing raw secret values into app settings.
 Write-Host "Waiting for Key Vault RBAC propagation before refreshing app runtimes..."
-Start-Sleep -Seconds 90
+Wait-KeyVaultReferencesResolved -ResourceGroup $ResourceGroupName -AppNames @($workerAppName, $parserAppName, $webAppName)
 Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $workerAppName
 Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $parserAppName
 Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $webAppName
@@ -788,7 +960,7 @@ if ($EnvironmentName -eq "production") {
     if ($LASTEXITCODE -eq 0) {
       Write-Host "Backup instance registered."
     } else {
-      Write-Warning "Backup instance registration failed — run az dataprotection backup-instance create manually. See doc/PRODUCTION_RESTORE_RUNBOOK.md."
+      Write-Warning "Backup instance registration failed - run az dataprotection backup-instance create manually. See doc/PRODUCTION_RESTORE_RUNBOOK.md."
     }
   } else {
     Write-Host "Backup instance already registered: $($existingBkpInstance.Trim())"

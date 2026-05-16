@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.24 - 2026-05-16
+
+fix(infra): shorten staging deploy path and avoid redundant PostgreSQL firewall ARM hangs (#407, #408, #409)
+
+- `scripts/azure/deploy-environment.ps1`: PostgreSQL firewall pre-flight now checks
+  whether existing rules cover all current App Service outbound IPs instead of requiring
+  exact equality. Manual operator rules no longer force redundant firewall updates.
+- `scripts/azure/deploy-environment.ps1`: web, worker, and parser ZIP package uploads
+  now run in parallel while preserving retry handling for each app.
+- `scripts/azure/deploy-environment.ps1`: replaces the fixed 90-second Key Vault RBAC
+  wait with polling of App Service Key Vault reference status, exiting early when all
+  references are resolved.
+
 ## 1.1.23 - 2026-05-16
 
 fix(infra): tie enableRbacAuthorization to skipRoleAssignments to unblock production deploy
