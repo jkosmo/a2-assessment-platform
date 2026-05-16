@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.18 - 2026-05-16
+
+fix(infra): prevent PostgreSQL firewall rule ARM hang on staging deploys
+
+Root cause: Bicep `for` loop deployed all `dbAllowedIpAddresses` firewall rules in parallel.
+PostgreSQL Flexible Server's control plane serialises firewall mutations internally, so
+concurrent ARM operations compete for the same lock — one rule always hangs indefinitely.
+
+- `infra/azure/main.bicep`: added `@batchSize(1)` to `postgresFirewallRules` loop so ARM
+  deploys rules one-at-a-time instead of in parallel.
+- `scripts/azure/deploy-environment.ps1`: pre-flight check compares desired IPs to existing
+  rules via `az rest`; if identical, passes empty array to Bicep so the loop runs zero
+  iterations and the PG control plane is not touched at all on unchanged deploys.
+
 ## 1.1.17 - 2026-05-16
 
 feat(ops/reporting): split authoring/assessment model config + per-level MCQ quality thresholds (#375, #377)

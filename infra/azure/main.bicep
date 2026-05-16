@@ -388,6 +388,10 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
   }
 }
 
+// @batchSize(1) serialises firewall-rule ARM operations so they don't compete for
+// the PostgreSQL control-plane lock. Parallel updates cause one rule to hang
+// indefinitely waiting for a lock held by a sibling operation.
+@batchSize(1)
 resource postgresFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = [
   for ip in dbAllowedIpAddresses: {
     parent: postgresServer

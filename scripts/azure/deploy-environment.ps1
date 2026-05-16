@@ -326,6 +326,27 @@ if ($existingWebApp -and $existingWorkerApp) {
     $i++
   }
   Write-Host "Firewall rules: $i IPs"
+
+  # Pre-flight: skip ARM firewall update if rules already match desired state.
+  # Azure PostgreSQL Flexible Server serialises firewall changes internally; parallel
+  # ARM deployments of unchanged rules cause one operation to hang indefinitely
+  # waiting for a control-plane lock. Passing an empty array means the @batchSize(1)
+  # Bicep loop runs zero iterations, leaving existing rules untouched.
+  $existingPgServer = (az postgres flexible-server list -g $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+  if ($existingPgServer) {
+    # Use az rest to avoid az postgres firewall-rule CLI flag churn (--name → --server-name in az 2.86)
+    $existingRules = (az rest --method GET `
+      --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$existingPgServer/firewallRules?api-version=2022-12-01" `
+      --query "value[].properties.startIpAddress" -o tsv 2>$null) -split "`n" |
+      Where-Object { $_ } | Sort-Object
+    $desiredIps = $dbAllowedIpAddresses | ForEach-Object { $_.startIpAddress } | Sort-Object
+    if (($desiredIps -join ",") -eq ($existingRules -join ",")) {
+      Write-Host "PostgreSQL firewall rules unchanged ($i IPs already correct) — skipping ARM update."
+      $dbAllowedIpAddresses = @()
+    } else {
+      Write-Host "PostgreSQL firewall rules changed — ARM will update them (serialised via @batchSize(1))."
+    }
+  }
 } else {
   Write-Host "NOTE: App Services not yet deployed; dbAllowedIpAddresses will be empty on first deploy."
 }
