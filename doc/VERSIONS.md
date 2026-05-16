@@ -2,6 +2,13 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.27 - 2026-05-16
+
+fix(infra): skip PostgreSQL ARM update when server properties unchanged (v1.1.27)
+
+- `infra/azure/main.bicep`: `skipPostgresUpdate` param makes `postgresServer` and `postgresDatabase` resources conditional; adds `postgresServerRef existing` so child resources and outputs work regardless of skip state.
+- `scripts/azure/deploy-environment.ps1`: pre-flight compares current PG server SKU, version, storage, HA and backup against desired state; sets `skipPostgresUpdate=true` when all match, avoiding the `ServerIsBusy` control-plane lock that blocks staging and prod deploys.
+
 ## 1.1.26 - 2026-05-16
 
 fix(infra): restore enableRbacAuthorization: true on Key Vault — decoupled from skipRoleAssignments

@@ -387,6 +387,7 @@ $existingWebApp = if ($existingWebApp) { ($existingWebApp -split "`n")[0].Trim()
 $existingWorkerApp = if ($existingWorkerApp) { ($existingWorkerApp -split "`n")[0].Trim() } else { "" }
 
 $dbAllowedIpAddresses = @()
+$skipPostgresUpdate = $false
 if ($existingWebApp -and $existingWorkerApp) {
   Write-Host "Found App Services: $existingWebApp, $existingWorkerApp"
   $webIps = (az webapp show -n $existingWebApp -g $ResourceGroupName --query "outboundIpAddresses" -o tsv).Split(",")
@@ -428,6 +429,32 @@ if ($existingWebApp -and $existingWorkerApp) {
       }
     } else {
       Write-Warning "Could not read existing PostgreSQL firewall rules; ARM will update them (serialised via @batchSize(1))."
+    }
+  }
+
+  # Pre-flight: skip ARM PostgreSQL server/database update when existing properties
+  # already match desired state, to avoid ServerIsBusy control-plane locks.
+  $skipPostgresUpdate = $false
+  if ($existingPgServer) {
+    $pgJson = az rest --method GET `
+      --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$existingPgServer?api-version=2023-12-01-preview" `
+      -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($pgJson)) {
+      $pg = $pgJson | ConvertFrom-Json
+      $skuMatch     = $pg.sku.name -eq $PostgresSkuName -and $pg.sku.tier -eq $PostgresSkuTier
+      $versionMatch = $pg.properties.version -eq $PostgresVersion
+      $storageMatch = $pg.properties.storage.storageSizeGB -eq [int]$PostgresStorageSizeGB
+      $haMatch      = $pg.properties.highAvailability.mode -eq $PostgresHighAvailabilityMode
+      $backupMatch  = $pg.properties.backup.backupRetentionDays -eq [int]$PostgresBackupRetentionDays -and
+                      $pg.properties.backup.geoRedundantBackup -eq $PostgresGeoRedundantBackup
+      if ($skuMatch -and $versionMatch -and $storageMatch -and $haMatch -and $backupMatch) {
+        Write-Host "PostgreSQL server properties match desired state - skipping ARM server update."
+        $skipPostgresUpdate = $true
+      } else {
+        Write-Host "PostgreSQL server properties differ from desired state - ARM will update server."
+      }
+    } else {
+      Write-Warning "Could not read PostgreSQL server properties; ARM will update server."
     }
   }
 } else {
@@ -531,6 +558,7 @@ az deployment group create `
               azureOpenAiTokenLimitParameter=$AzureOpenAiTokenLimitParameter `
               azureOpenAiAuthoringTokenLimitParameter=$AzureOpenAiAuthoringTokenLimitParameter `
               skipRoleAssignments=$SkipRoleAssignments `
+              skipPostgresUpdate=$skipPostgresUpdate `
               assessmentJobPollIntervalMs=$AssessmentJobPollIntervalMs `
               assessmentJobMaxAttempts=$AssessmentJobMaxAttempts `
               observabilityAlertEmail=$ObservabilityAlertEmail `

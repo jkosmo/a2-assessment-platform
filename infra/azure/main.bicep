@@ -140,6 +140,9 @@ param azureOpenAiAuthoringTokenLimitParameter string = ''
 @description('Skip Key Vault secret role assignments. Set to true when the deployment SP lacks roleAssignments/write (e.g. has Contributor but not Owner). Existing assignments are preserved; missing ones will not be created. Default false.')
 param skipRoleAssignments bool = false
 
+@description('Skip PostgreSQL server and database ARM update when existing properties already match desired state. Set automatically by the deploy script pre-flight check to avoid ServerIsBusy control-plane locks on unchanged servers.')
+param skipPostgresUpdate bool = false
+
 @description('Assessment worker polling interval in milliseconds.')
 param assessmentJobPollIntervalMs int = 4000
 
@@ -351,7 +354,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   }
 }
 
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = if (!skipPostgresUpdate) {
   name: postgresServerName
   location: location
   tags: {
@@ -391,8 +394,14 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' =
   }
 }
 
-resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = {
-  parent: postgresServer
+// Always-present reference used by child resources and outputs so they work
+// regardless of whether skipPostgresUpdate suppressed the server deployment.
+resource postgresServerRef 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' existing = {
+  name: postgresServerName
+}
+
+resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = if (!skipPostgresUpdate) {
+  parent: postgresServerRef
   name: postgresDatabaseName
   properties: {
     charset: 'UTF8'
@@ -406,7 +415,7 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
 @batchSize(1)
 resource postgresFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = [
   for ip in dbAllowedIpAddresses: {
-    parent: postgresServer
+    parent: postgresServerRef
     name: ip.name
     properties: {
       startIpAddress: ip.startIpAddress
@@ -1393,6 +1402,6 @@ output parserAppName string = parserApp.name
 output appServicePlanName string = appServicePlan.name
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
-output postgresServerName string = postgresServer.name
-output postgresDatabaseName string = postgresDatabase.name
+output postgresServerName string = postgresServerRef.name
+output postgresDatabaseName string = postgresDatabaseName
 output keyVaultName string = keyVault.name
