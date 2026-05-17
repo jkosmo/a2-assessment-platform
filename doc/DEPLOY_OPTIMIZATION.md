@@ -12,9 +12,10 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 
 | Wave | Scope | Issues | Deploys | Status |
 |------|-------|--------|---------|--------|
-| 1 | actionlint in CI | #426 | 0 (CI only) | pending |
-| 2 | Bicep timeout fix (v1.1.41 already in main) | #427 | 1 (stg+prd) | pending |
-| 3 | P1 artifact reuse | (P1 below) | 1 (stg+prd) | pending |
+| 1 | actionlint in CI | #426 | 0 (CI only) | ✓ done (v1.1.42) |
+| 2 | Bicep timeout fix | #427 | 1 (stg+prd) | ✓ done (v1.1.41+42, prod on 1.1.42) |
+| 2.5 | Deploy script verification bugs | #429 | 1 (stg+prd) | pending (next) |
+| 3 | WEBSITES_INCLUDE_CLOUD_CERTS, P1 artifact reuse | #430, P1 | 1–2 deploys | pending |
 | 4 | KV RBAC → split workflow → grant SP role | #428, #425, #404 | 3–4 deploys, spread weeks | deferred |
 
 **Discipline rules** are authoritative in [CLAUDE.md § Deploy discipline](../CLAUDE.md#deploy-discipline--established-2026-05-17). Summary:
@@ -40,6 +41,9 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 2026-05-17 | 25987069247 | staging | 32m34s | success | v1.1.38 — first staging deploy with env.ts ACS fix; Wait-Healthy took ~6 min (MSI sidecar resolving 10 KV refs on B1) |
 | 2026-05-17 | 25987845377 | prod | 14m59s | failure | v1.1.40 — Wait-Stable failed 3 consecutive; actual root cause: `WEBSITES_CONTAINER_START_TIME_LIMIT=300` killed container at exactly 300s. Manual override to 600s + restart recovered prod. See #427 |
 | 2026-05-17 | (manual) | prod | n/a | recovered | `az webapp config appsettings set WEBSITES_CONTAINER_START_TIME_LIMIT=600` + container restart; healthy at 10:59 UTC; v1.1.41 in main locks this into Bicep |
+| 2026-05-17 | 25989345754/25989386807 | CI only | 1m+6s | success | v1.1.42 — Wave 1 actionlint integration; shellcheck disabled to avoid style-warning noise |
+| 2026-05-17 | 25989438848 | staging | 12m33s | success | v1.1.42 — Wave 2 with Bicep timeout fix; 20 min faster than 2026-05-17 staging (32m) thanks to ARM no-change + v1.1.41 timeout |
+| 2026-05-17 | 25989764900 | prod | 15m59s | failure+app-recovered | v1.1.42 — Wait-Stable failed 3 consecutive at attempt 5-7; VNETFailure during restart triggered second cold start; app actually came up healthy on v1.1.42 at 12:02 UTC. Script reported failure but deploy succeeded. See #429 Bug 3 for the Wait-Stable tolerance issue |
 
 ---
 
