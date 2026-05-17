@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.42 - 2026-05-17
+
+ci: add actionlint to infra-lint job (Wave 1 of deploy hygiene rollout, closes #426)
+
+Catches workflow-level errors statically: typos in `github.context.foo` property names,
+undefined input/secret references, invalid `uses:` action versions, shell script issues,
+and other workflow YAML problems before they hit a deploy cycle.
+
+Does NOT catch the specific bug from v1.1.39/40 (missing `always()` guard with skipped
+needs) — that's a semantic rule, not a syntactic one. Still valuable for the many other
+classes of error it does catch.
+
 ## 1.1.41 - 2026-05-17
 
 fix(infra): set WEBSITES_CONTAINER_START_TIME_LIMIT=600 for all envs (was 300 on prod, killed container before Express bound — #427)

@@ -58,6 +58,16 @@ jobs:
             exit 1
           fi
 
+      - name: Lint — actionlint (GitHub Actions workflow syntax + context references)
+        run: |
+          # actionlint catches typos in context properties (github.evnt.foo),
+          # undefined input/secret references, invalid `uses:` values, shell script
+          # issues, and many other workflow-level errors before they hit prod.
+          # See https://github.com/rhysd/actionlint
+          curl -sLO https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash
+          bash download-actionlint.bash 1.7.12
+          ./actionlint -color
+
   verify:
     runs-on: ubuntu-latest
     steps:
