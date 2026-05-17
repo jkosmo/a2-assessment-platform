@@ -4,6 +4,18 @@
 >
 > **Why this matters:** Deploy time is a stability parameter, not just a convenience metric. Long deploys create pressure to bundle changes, which increases blast radius per deploy. Target: staging deploy under 5 min, prod deploy under 10 min.
 
+> ⚠️ **CRITICAL — DO NOT RUN deploy-azure.yml ON PROD UNTIL #431 SUBPROCESS FIX IS DEPLOYED** (2026-05-17 evening)
+>
+> Prod v1.1.48 deploy ran into Prisma subprocess issue (#431 comment): `prisma migrate deploy` is spawned BEFORE env.ts loads, so the bundled-secret parser doesn't help it. Prod was recovered by manually re-adding DATABASE_URL as a KV ref via `az webapp config appsettings set`. Bicep still has Stage 2 (no individual KV refs), so the next deploy will remove DATABASE_URL again and break prod.
+>
+> **Required fix before next prod deploy via deploy-azure.yml:**
+> - Move bundle parsing into `scripts/runtime/startup.mjs` (or equivalent) so it runs BEFORE Prisma subprocess
+> - OR revert Bicep Stage 2 (re-add the 5 individual KV refs) and accept no cold-start savings
+>
+> Safe operations until then:
+> - `deploy-app.yml` to prod: SAFE — only zip-deploy, doesn't touch app settings
+> - `deploy-azure.yml` to staging: SAFE — staging has SKIP_MIGRATE=true so Prisma subprocess is skipped
+
 ---
 
 ## Active rollout plan (2026-05-17)
@@ -49,6 +61,11 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 2026-05-17 | 25990996032 | staging | 22m15s | success | v1.1.43 + tolerance=30 hotfix — first **truly clean** deploy with no false reports. Version-aware Wait-Stable correctly waited for new container cold-start. Wave 2.5 complete |
 | 2026-05-17 | 25991581849 | staging | 31m46s | success+cascade | v1.1.44 — WEBSITES_INCLUDE_CLOUD_CERTS=false. Cascading container restart added ~9 min (Azure-side, SiteStartupCancelled at 13:22; new container at 13:25 succeeded). App on 1.1.44 confirmed |
 | 2026-05-17 | 25992327380 | staging | **16m18s** | success | v1.1.45 — **first app-only deploy via new deploy-app.yml**. Skipped ARM/Bicep, Wait-KV, restart. ~6 min faster than v1.1.43 full deploy. Wave 3 complete |
+| 2026-05-17 | 25997727280 | staging | 12m54s | success | v1.1.46 — MCQ count fix (#424). deploy-app.yml — even faster than first measurement |
+| 2026-05-17 | 25998074546 | **prod** | **15m0s** | success | v1.1.46 — **first clean prod deploy via deploy-app.yml**. No false alarms. MCQ fix live |
+| 2026-05-17 | 25998477632 | staging | 29m44s | success | v1.1.47 (#431 Stage 1) — bundled secret added alongside individual refs. Validates bundle path works |
+| 2026-05-17 | 25999563382 | staging | 29m51s | success | v1.1.48 (#431 Stage 2) — individual KV refs removed. **Cold-start 4m37s** vs ~6-9 min baseline |
+| 2026-05-17 | 26001359725 | **prod** | 33m54s | **failure** | v1.1.48 (#431 Stage 2) — Prisma subprocess can't see bundled secret (prod has SKIP_MIGRATE=false). App crash-looped on `Environment variable not found: DATABASE_URL`. Recovered by manually re-adding DATABASE_URL KV ref via `az webapp config appsettings set`. Prod on v1.1.48 confirmed at 20:51 UTC after ~4 min cold-start |
 
 ---
 
