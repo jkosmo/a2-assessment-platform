@@ -14,9 +14,10 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 |------|-------|--------|---------|--------|
 | 1 | actionlint in CI | #426 | 0 (CI only) | ✓ done (v1.1.42) |
 | 2 | Bicep timeout fix | #427 | 1 (stg+prd) | ✓ done (v1.1.41+42, prod on 1.1.42) |
-| 2.5 | Deploy script verification bugs | #429 | 1 (stg+prd) | pending (next) |
-| 3 | WEBSITES_INCLUDE_CLOUD_CERTS, P1 artifact reuse | #430, P1 | 1–2 deploys | pending |
-| 4 | KV RBAC → split workflow → grant SP role | #428, #425, #404 | 3–4 deploys, spread weeks | deferred |
+| 2.5 | Deploy script verification bugs | #429 | 1 (stg only — script change auto-picks for prod) | ✓ done (v1.1.43) |
+| 3 | WEBSITES_INCLUDE_CLOUD_CERTS | #430 | 1 deploy | in progress |
+| 3 (+secondary goal) | Split workflow (infra vs app) | #425 | 1+ deploy | in progress (moved up by user 2026-05-17) |
+| 4 | KV RBAC → grant SP role | #428, #404 | 2 deploys | deferred |
 
 **Discipline rules** are authoritative in [CLAUDE.md § Deploy discipline](../CLAUDE.md#deploy-discipline--established-2026-05-17). Summary:
 - Max one structural change per deploy
@@ -44,6 +45,8 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 2026-05-17 | 25989345754/25989386807 | CI only | 1m+6s | success | v1.1.42 — Wave 1 actionlint integration; shellcheck disabled to avoid style-warning noise |
 | 2026-05-17 | 25989438848 | staging | 12m33s | success | v1.1.42 — Wave 2 with Bicep timeout fix; 20 min faster than 2026-05-17 staging (32m) thanks to ARM no-change + v1.1.41 timeout |
 | 2026-05-17 | 25989764900 | prod | 15m59s | failure+app-recovered | v1.1.42 — Wait-Stable failed 3 consecutive at attempt 5-7; VNETFailure during restart triggered second cold start; app actually came up healthy on v1.1.42 at 12:02 UTC. Script reported failure but deploy succeeded. See #429 Bug 3 for the Wait-Stable tolerance issue |
+| 2026-05-17 | 25990441607 | staging | 19m57s | failure+app-recovered | v1.1.43 first attempt — Wait-Stable correctly waited for /version match but timed out at 15 failures (~9 min). App came up healthy 60-90s after script gave up. Hotfix d5a90cb bumped tolerance to 30 |
+| 2026-05-17 | 25990996032 | staging | 22m15s | success | v1.1.43 + tolerance=30 hotfix — first **truly clean** deploy with no false reports. Version-aware Wait-Stable correctly waited for new container cold-start. Wave 2.5 complete |
 
 ---
 
