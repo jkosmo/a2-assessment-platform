@@ -402,7 +402,7 @@ describe("llm content generation prompts", () => {
         optionCount: 3,
       });
 
-      expect(userPrompt).toContain("Generate 4 multiple-choice questions");
+      expect(userPrompt).toContain("Generate EXACTLY 4 multiple-choice questions");
       expect(userPrompt).toContain("Each question must have exactly 3 answer options");
     });
   });
