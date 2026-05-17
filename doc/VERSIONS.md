@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.43 - 2026-05-17
+
+fix(deploy): post-deploy verification robustness (Wave 2.5, closes #429)
+
+Three bugs in `scripts/azure/deploy-environment.ps1` that caused the v1.1.42 prod
+deploy to report failure even though the app deployed successfully:
+
+1. **Wait-Stable tolerance**: was 2 consecutive failures (~40s tolerance) vs B1 cold-start
+   needing ~5 min. Bumped to 15 (~5 min). v1.1.37's increase from 1 to 2 was directionally
+   correct but didn't account for actual observed cold-start times.
+
+2. **Version mismatch race + restart**: previously restarted the app on version mismatch
+   and waited only 75s, which is too short for the new container to come up. Replaced with
+   a version-aware Wait-Stable that polls /version directly. Eliminates the dual /healthz
+   + /version race entirely.
+
+3. **`.Trim()` on ErrorRecord**: when `az ad app show` failed, `2>&1` produced an
+   ErrorRecord (not string), and `.Trim()` threw "method not found" — hiding the actual
+   command error. Cast via `"$var"` string interpolation to handle both shapes.
+
+Same file, same purpose (post-deploy verification). Single structural change. No infra changes.
+
 ## 1.1.42 - 2026-05-17
 
 ci: add actionlint to infra-lint job (Wave 1 of deploy hygiene rollout, closes #426)

@@ -754,34 +754,55 @@ function Wait-Stable {
     [string]$Label,
     [int]$RequiredSuccesses = 6,
     [int]$DelaySeconds = 20,
-    [int]$MaxConsecutiveFailures = 2
+    [int]$MaxConsecutiveFailures = 15,
+    [string]$ExpectedVersion = ""
   )
 
-  # Tolerates up to $MaxConsecutiveFailures transient failures before giving up.
-  # Needed because App Service can report healthy from the OLD process during the
-  # restart window while the NEW process is initialising (e.g. running Prisma
-  # migrations). The old process terminates mid-check, causing a transient 504
-  # before the new process binds to the port. Failing immediately on the first
-  # unhealthy response caused false deploy failures on every prod deploy.
-  Write-Host "Confirming $Label remains healthy after deployment ($RequiredSuccesses checks, ${DelaySeconds}s interval, tolerates $MaxConsecutiveFailures transient failures)..."
+  # If $ExpectedVersion is set, $Url must point to a /version endpoint returning {"version":"x.y.z"}.
+  # A "success" is then: HTTP 200 AND version matches. This eliminates the OLD-process-still-serving-/healthz
+  # false positive that previously caused the dual Wait-Stable + separate version-check race.
+  #
+  # MaxConsecutiveFailures = 15 (default) gives ~5 min tolerance at 20s intervals, matching B1 cold-start
+  # time (cert update + Prisma migrate + KV ref resolution). v1.1.37's value of 2 (~40s) was too short
+  # and caused false deploy failures on every prod deploy. See #429.
+  $modeDescription = if ($ExpectedVersion) { "/version == $ExpectedVersion" } else { "/healthz HTTP 200" }
+  Write-Host "Confirming $Label is stable on $modeDescription ($RequiredSuccesses successes, ${DelaySeconds}s interval, tolerates $MaxConsecutiveFailures consecutive failures during restart window)..."
   $successes = 0
   $consecutiveFailures = 0
   $totalAttempts = $RequiredSuccesses + $MaxConsecutiveFailures
 
   for ($attempt = 1; $attempt -le $totalAttempts; $attempt++) {
-    $result = Test-HealthEndpoint -Url $Url
-    if ($result.Success) {
+    $isHealthy = $false
+    $detail = ""
+    if ($ExpectedVersion) {
+      try {
+        $versionResponse = Invoke-RestMethod -Uri $Url -TimeoutSec 15
+        if ($versionResponse.version -eq $ExpectedVersion) {
+          $isHealthy = $true
+        } else {
+          $detail = "version=$($versionResponse.version) (expected $ExpectedVersion)"
+        }
+      } catch {
+        $detail = $_.Exception.Message
+      }
+    } else {
+      $result = Test-HealthEndpoint -Url $Url
+      $isHealthy = $result.Success
+      if (-not $isHealthy -and $result.StatusCode) { $detail = "status $($result.StatusCode)" }
+    }
+
+    if ($isHealthy) {
       $consecutiveFailures = 0
       $successes++
       Write-Host "$Label stability check $successes/$RequiredSuccesses succeeded (attempt $attempt)."
       if ($successes -ge $RequiredSuccesses) { return }
     } else {
       $consecutiveFailures++
-      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
+      $detailSuffix = if ($detail) { " ($detail)" } else { "" }
       if ($consecutiveFailures -gt $MaxConsecutiveFailures) {
-        throw "$Label became unhealthy during post-deploy stability validation$statusSuffix at $Url ($consecutiveFailures consecutive failures)"
+        throw "$Label became unhealthy during post-deploy stability validation$detailSuffix at $Url ($consecutiveFailures consecutive failures)"
       }
-      Write-Warning "$Label stability check failed$statusSuffix (consecutive failure $consecutiveFailures/$MaxConsecutiveFailures — likely restart in progress, waiting ${DelaySeconds}s)..."
+      Write-Warning "$Label stability check failed$detailSuffix (consecutive failure $consecutiveFailures/$MaxConsecutiveFailures — likely restart in progress, waiting ${DelaySeconds}s)..."
     }
     if ($attempt -lt $totalAttempts) {
       Start-Sleep -Seconds $DelaySeconds
@@ -791,48 +812,32 @@ function Wait-Stable {
   throw "$Label did not achieve $RequiredSuccesses stable health checks within $totalAttempts attempts at $Url"
 }
 
-# App Service has occasionally reported a healthy /healthz immediately after zip deploy while still
-# serving the previous package/version for a short period. We always verify /version to confirm
-# the new package is live, and restart once if it isn't.
+$packageVersion = (Get-Content (Join-Path $PSScriptRoot '..\..\package.json') | ConvertFrom-Json).version
+
 Wait-Healthy -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App" -AppName $webAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$workerAppName.azurewebsites.net/healthz" -Label "Worker App" -AppName $workerAppName -ResourceGroup $ResourceGroupName
 Wait-Healthy -Url "https://$parserAppName.azurewebsites.net/health" -Label "Parser App" -AppName $parserAppName -ResourceGroup $ResourceGroupName
-Wait-Stable -Url "https://$webAppName.azurewebsites.net/healthz" -Label "Web App"
 
-$packageVersion = (Get-Content (Join-Path $PSScriptRoot '..\..\package.json') | ConvertFrom-Json).version
-Write-Host "Verifying deployed version is $packageVersion..."
-try {
-  $versionResponse = Invoke-RestMethod -Uri "https://$webAppName.azurewebsites.net/version" -TimeoutSec 20
-  $deployedVersion = $versionResponse.version
-  if ($deployedVersion -ne $packageVersion) {
-    Write-Warning "Version mismatch: expected $packageVersion but /version returned '$deployedVersion'. Restarting web app once..."
-    az webapp restart --name $webAppName --resource-group $ResourceGroupName | Out-Null
-    Start-Sleep -Seconds 75
-    try {
-      $versionResponse = Invoke-RestMethod -Uri "https://$webAppName.azurewebsites.net/version" -TimeoutSec 30
-      if ($versionResponse.version -ne $packageVersion) {
-        Write-Warning "Version still '$($versionResponse.version)' after restart (expected '$packageVersion'). App is healthy; verify /version manually."
-      } else {
-        Write-Host "Version confirmed after restart: $($versionResponse.version)"
-      }
-    } catch {
-      Write-Warning "Could not reach /version after restart: $($_.Exception.Message). App passed health checks; verify /version manually."
-    }
-  } else {
-    Write-Host "Version confirmed: $deployedVersion"
-  }
-} catch {
-  Write-Warning "Could not verify /version endpoint: $($_.Exception.Message). Verify manually."
-}
+# Version-aware stability check: confirms the NEW code is consistently being served.
+# Polling /version (not /healthz) prevents the OLD process from satisfying the stability
+# window while the NEW process is still cold-starting. Removes the need for the previous
+# separate restart-on-version-mismatch logic (#429).
+Wait-Stable -Url "https://$webAppName.azurewebsites.net/version" -Label "Web App" -ExpectedVersion $packageVersion
 
 if ($AuthMode -eq "entra" -and $EntraClientId) {
   Refresh-AzureCliOidcLogin "updating Entra SPA redirect URI"
   $spaRedirectUri = "https://$webAppName.azurewebsites.net/admin-content"
   Write-Host "Updating SPA redirect URI on Entra app registration $EntraClientId to: $spaRedirectUri"
   try {
-    $appObjectId = (az ad app show --id $EntraClientId --query id -o tsv 2>&1).Trim()
+    # Cast via "$var" string interpolation so .Trim() works whether $appObjectIdRaw
+    # is a string (success path) or a PowerShell ErrorRecord (stderr captured via 2>&1).
+    # Calling .Trim() directly on an ErrorRecord throws "method not found" and hides
+    # the actual command error. See #429 Bug 2.
+    $appObjectIdRaw = az ad app show --id $EntraClientId --query id -o tsv 2>&1
+    $appObjectId = "$appObjectIdRaw".Trim()
     if ($LASTEXITCODE -ne 0 -or -not $appObjectId) {
-      Write-Warning "Could not resolve app object ID for $EntraClientId (exit $LASTEXITCODE). Configure SPA redirect URI manually in the Azure portal."
+      $errorDetail = if ($LASTEXITCODE -ne 0) { ": $($appObjectIdRaw | Out-String)" } else { " (empty result)" }
+      Write-Warning "Could not resolve app object ID for $EntraClientId (exit $LASTEXITCODE)$errorDetail. Configure SPA redirect URI manually in the Azure portal."
     } else {
       $body = '{"spa":{"redirectUris":["' + $spaRedirectUri + '"]}}'
       $result = az rest --method PATCH `
