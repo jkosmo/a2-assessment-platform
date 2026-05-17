@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "1.1.37",
+  "version": "1.1.38",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",

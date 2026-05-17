@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.38 - 2026-05-17
+
+fix(startup): don't crash on missing ACS config at boot — warn instead (#422 root cause)
+
+Root cause of recurring post-deploy instability on both staging and production:
+env.ts called process.exit(1) if PARTICIPANT_NOTIFICATION_CHANNEL=acs_email but
+AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING was missing. On Azure App Service
+the MSI sidecar resolves KV references before the container starts — but if the
+sidecar is slow or retrying, Node.js could start before the secret is injected,
+causing an instant 3-second crash loop on every deploy.
+
+Both environments have acs_email channel, which is why the same crash appeared
+in two different tenants in two different regions.
+
+Fix: downgrade to console.warn. ACS email sending will fail gracefully at runtime
+if the secret is genuinely missing, rather than crashing the entire app on boot.
+
 ## 1.1.37 - 2026-05-17
 
 fix(deploy): make Wait-Stable tolerate transient failures during app restart

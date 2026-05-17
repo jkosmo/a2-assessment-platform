@@ -119,10 +119,14 @@ if (
   env.PARTICIPANT_NOTIFICATION_CHANNEL === "acs_email" &&
   (!env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING || !env.ACS_EMAIL_SENDER)
 ) {
-  console.error(
-    "AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING and ACS_EMAIL_SENDER are required when PARTICIPANT_NOTIFICATION_CHANNEL=acs_email",
+  // Warn but do not crash. On Azure App Service the MSI sidecar resolves KV
+  // references asynchronously — if Node.js starts before the sidecar finishes,
+  // ACS_CONNECTION_STRING is temporarily empty. Crashing here caused a 3-second
+  // boot loop on every deploy. ACS sending will fail gracefully at runtime if
+  // the secret is genuinely missing.
+  console.warn(
+    "WARNING: PARTICIPANT_NOTIFICATION_CHANNEL=acs_email but AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING or ACS_EMAIL_SENDER is missing. Email sending will fail until secrets are resolved.",
   );
-  process.exit(1);
 }
 
 if (env.PARSER_WORKER_URL && !env.PARSER_WORKER_AUTH_KEY) {

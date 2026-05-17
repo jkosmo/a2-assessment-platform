@@ -13,6 +13,8 @@
 | 2026-05-17 | 25983751451 | staging | 4m | failure | RoleAssignmentExists — aborted early |
 | 2026-05-17 | 25984078289 | staging | 16m | success | v1.1.34 bicep fix |
 | 2026-05-17 | 25984407821 | staging+prod | 17m+ | in progress | v1.1.34 prod deploy |
+| 2026-05-17 | 25985553582 | CI only | 1m15s | success | v1.1.36 — infra-lint 4s, verify 1m11s; no deploy triggered |
+| 2026-05-17 | 25985699851 | staging | 14m36s | failure+manual-fix | v1.1.37 — Wait-Stable 3 consecutive failures (checks 5-7); app deployed correctly, manual restart resolved; web+worker healthy at 08:44 UTC |
 
 ---
 
@@ -25,7 +27,20 @@
 
 **Investigation needed:** Check ARM operation logs to confirm `emailServices/domains` is `noChange` or `succeeded` immediately on re-deploys where the domain already exists.
 
-### 2. App restart + warmup — 236–295s (~4 min) on B1
+### 2. Post-deploy web app instability — requires manual restart (recurring)
+Observed 2026-05-17 prod deploy (run 25984407821): initial `/healthz` passed on attempt 1, but web app returned 504 during stability check 3/6 (~30s later). Manual `az webapp restart` resolved it. User confirms this is a recurring pattern.
+
+**Root cause unknown.** Candidates:
+- B1 memory pressure: app starts, serves first requests, OOM-kills and restarts
+- Prisma migration (`SKIP_MIGRATE=false` in prod) blocking event loop during first requests
+- MSI sidecar cycling during the stability window, temporarily breaking KV reference resolution
+
+**Current workaround:** Manual restart after deploy if stability check fails.  
+**Proper fix:** Diagnose root cause — add memory metrics monitoring, check if failure correlates with Prisma migration timing.
+
+**Stability check failure is the deploy script failing** (line 764) — the app was actually deployed correctly but the script reports failure. This means prod is actually on the new version after a manual restart, even when the workflow shows red.
+
+### 3. App restart + warmup — 236–295s (~4 min) on B1
 After zip deploy, App Service restarts the container. MSI sidecar must start and resolve all Key Vault references before Node.js starts. Currently 10 KV references × round-trip latency on shared B1 CPU.
 
 - `alwaysOn: true` is already set — this is not idle cold-start, it is deploy-induced restart
