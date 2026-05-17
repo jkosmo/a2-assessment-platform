@@ -1015,7 +1015,7 @@ var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 
 resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretDatabaseUrl
-  name: guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: webApp.identity.principalId
@@ -1025,7 +1025,7 @@ resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@202
 
 resource workerAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretDatabaseUrl
-  name: guid(kvSecretDatabaseUrl.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretDatabaseUrl.id, workerApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretDatabaseUrl.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: workerApp.identity.principalId
@@ -1035,7 +1035,7 @@ resource workerAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@
 
 resource webAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(azureOpenAiApiKey)) {
   scope: kvSecretOpenAiKey
-  name: guid(kvSecretOpenAiKey.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretOpenAiKey.id, webApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretOpenAiKey.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: webApp.identity.principalId
@@ -1045,7 +1045,7 @@ resource webAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-
 
 resource workerAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(azureOpenAiApiKey)) {
   scope: kvSecretOpenAiKey
-  name: guid(kvSecretOpenAiKey.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretOpenAiKey.id, workerApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretOpenAiKey.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: workerApp.identity.principalId
@@ -1055,7 +1055,7 @@ resource workerAppOpenAiSecretReader 'Microsoft.Authorization/roleAssignments@20
 
 resource webAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && createAcsEmail) {
   scope: kvSecretAcsConnection
-  name: guid(kvSecretAcsConnection.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretAcsConnection.id, webApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretAcsConnection.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: webApp.identity.principalId
@@ -1065,7 +1065,7 @@ resource webAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-
 
 resource workerAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && createAcsEmail) {
   scope: kvSecretAcsConnection
-  name: guid(kvSecretAcsConnection.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretAcsConnection.id, workerApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretAcsConnection.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: workerApp.identity.principalId
@@ -1075,7 +1075,7 @@ resource workerAppAcsSecretReader 'Microsoft.Authorization/roleAssignments@2022-
 
 resource webAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(participantNotificationWebhookUrl)) {
   scope: kvSecretParticipantNotificationWebhookUrl
-  name: guid(kvSecretParticipantNotificationWebhookUrl.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretParticipantNotificationWebhookUrl.id, webApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretParticipantNotificationWebhookUrl.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: webApp.identity.principalId
@@ -1085,7 +1085,7 @@ resource webAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssi
 
 resource workerAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(participantNotificationWebhookUrl)) {
   scope: kvSecretParticipantNotificationWebhookUrl
-  name: guid(kvSecretParticipantNotificationWebhookUrl.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretParticipantNotificationWebhookUrl.id, workerApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretParticipantNotificationWebhookUrl.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: workerApp.identity.principalId
@@ -1095,7 +1095,7 @@ resource workerAppNotificationWebhookSecretReader 'Microsoft.Authorization/roleA
 
 resource webAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretParserWorkerAuthKey
-  name: guid(kvSecretParserWorkerAuthKey.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretParserWorkerAuthKey.id, webApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretParserWorkerAuthKey.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: webApp.identity.principalId
@@ -1105,7 +1105,7 @@ resource webAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2
 
 resource parserAppParserAuthSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretParserWorkerAuthKey
-  name: guid(kvSecretParserWorkerAuthKey.id, parserApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  name: empty(roleAssignmentSalt) ? guid(kvSecretParserWorkerAuthKey.id, parserApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretParserWorkerAuthKey.id, parserApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: parserApp.identity.principalId

@@ -2,6 +2,13 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.34 - 2026-05-17
+
+fix(infra): correct all 10 role assignment GUID ternary expressions in main.bicep
+
+- All 10 KV secret role assignment `name` fields now use the correct ternary: `empty(roleAssignmentSalt) ? guid(secret.id, app.id, roleId) : guid(secret.id, app.id, roleId, roleAssignmentSalt)`.
+- Previous botched `replace_all` had appended `: guid(...)` without the `empty(...) ?` prefix, and hardcoded `kvSecretDatabaseUrl.id` / `webApp.id` for all 10 assignments — causing Bicep compile errors and `RoleAssignmentExists` on deploy.
+
 ## 1.1.33 - 2026-05-17
 
 fix(ci): correct infra lint rules to match actual Bicep constraints
