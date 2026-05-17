@@ -831,15 +831,22 @@ function Wait-Stable {
     if ($isHealthy) {
       $consecutiveFailures = 0
       $successes++
-      Write-Host "$Label stability check $successes/$RequiredSuccesses succeeded (attempt $attempt)."
+      Write-Host "$Label confirmed on expected version $successes/$RequiredSuccesses (attempt $attempt)."
       if ($successes -ge $RequiredSuccesses) { return }
     } else {
       $consecutiveFailures++
       $detailSuffix = if ($detail) { " ($detail)" } else { "" }
       if ($consecutiveFailures -gt $MaxConsecutiveFailures) {
-        throw "$Label became unhealthy during post-deploy stability validation$detailSuffix at $Url ($consecutiveFailures consecutive failures)"
+        throw "$Label did not transition to $ExpectedVersion after $consecutiveFailures consecutive checks$detailSuffix at $Url. Cold start exceeded budget — investigate App Service container start."
       }
-      Write-Warning "$Label stability check failed$detailSuffix (consecutive failure $consecutiveFailures/$MaxConsecutiveFailures — likely restart in progress, waiting ${DelaySeconds}s)..."
+      # Version-mismatch (old container still responding) is expected and informational.
+      # HTTP timeout/error is the container in restart cycle — still expected, but louder.
+      $isVersionMismatch = $ExpectedVersion -and $detail -like "version=*"
+      if ($isVersionMismatch) {
+        Write-Host "$Label waiting for new version: $detail (poll $consecutiveFailures/$MaxConsecutiveFailures, old container still serving — normal during ~5-8 min B1 cold-start)"
+      } else {
+        Write-Host "$Label not yet responding$detailSuffix (poll $consecutiveFailures/$MaxConsecutiveFailures, new container starting — normal during ~5-8 min B1 cold-start)"
+      }
     }
     if ($attempt -lt $totalAttempts) {
       Start-Sleep -Seconds $DelaySeconds
