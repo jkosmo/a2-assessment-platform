@@ -507,6 +507,27 @@ resource kvSecretParticipantNotificationWebhookUrl 'Microsoft.KeyVault/vaults/se
   dependsOn: [keyVault]
 }
 
+// Bundled secret: one KV reference resolves all five runtime secrets in a single MSI sidecar
+// round-trip on container start, instead of 5 serial round-trips. Saves ~1.5-2.5 min of
+// cold-start time on B1 (#431). The env.ts startup parser unpacks this JSON into individual
+// process.env vars before zod validation, so the rest of the app sees the same env shape.
+var appRuntimeSecretsBundle = string({
+  DATABASE_URL: postgresConnectionString
+  AZURE_OPENAI_API_KEY: azureOpenAiApiKey
+  AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+  PARSER_WORKER_AUTH_KEY: parserWorkerAuthKey
+  PARTICIPANT_NOTIFICATION_WEBHOOK_URL: participantNotificationWebhookUrl
+})
+
+resource kvSecretAppRuntime 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVaultRef
+  name: 'APP-RUNTIME-SECRETS'
+  properties: {
+    value: appRuntimeSecretsBundle
+  }
+  dependsOn: [keyVault]
+}
+
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   name: webAppName
   location: location
@@ -564,6 +585,15 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           // which are already in the base node:22-lts image. Saves ~2 min cold start. #430
           name: 'WEBSITES_INCLUDE_CLOUD_CERTS'
           value: 'false'
+        }
+        {
+          // Bundled secrets (#431): single KV ref resolved once at container start.
+          // env.ts startup parser unpacks the JSON into individual process.env vars
+          // before zod validation. Individual KV refs below are kept as fallback;
+          // once the bundled path is verified stable, the individual KV refs can be
+          // removed in a follow-up deploy to achieve the actual cold-start savings.
+          name: 'APP_RUNTIME_SECRETS'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=APP-RUNTIME-SECRETS)'
         }
         {
           name: 'DATABASE_URL'
@@ -786,6 +816,11 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           // which are already in the base node:22-lts image. Saves ~2 min cold start. #430
           name: 'WEBSITES_INCLUDE_CLOUD_CERTS'
           value: 'false'
+        }
+        {
+          // Bundled secrets (#431) — see web app comment above for rationale.
+          name: 'APP_RUNTIME_SECRETS'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=APP-RUNTIME-SECRETS)'
         }
         {
           name: 'DATABASE_URL'
@@ -1036,6 +1071,28 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // ---------------------------------------------------------------------------
 
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+
+// Role assignments for bundled secret (#431). Web and worker apps need read access to the
+// bundled APP-RUNTIME-SECRETS so MSI sidecar can resolve the single KV reference at startup.
+resource webAppRuntimeSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
+  scope: kvSecretAppRuntime
+  name: empty(roleAssignmentSalt) ? guid(kvSecretAppRuntime.id, webApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretAppRuntime.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: webApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAppRuntimeSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
+  scope: kvSecretAppRuntime
+  name: empty(roleAssignmentSalt) ? guid(kvSecretAppRuntime.id, workerApp.id, keyVaultSecretsUserRoleId) : guid(kvSecretAppRuntime.id, workerApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 resource webAppDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
   scope: kvSecretDatabaseUrl

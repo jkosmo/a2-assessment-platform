@@ -1,6 +1,35 @@
 import "dotenv/config";
 import { z } from "zod";
 
+// Bundled-secrets path: one KV ref `APP_RUNTIME_SECRETS` containing JSON of all sensitive
+// values. Parsed into process.env BEFORE zod validation. Saves ~1.5-2.5 min on cold start
+// by reducing Key Vault references from 5+ to 1 (MSI sidecar fetches in parallel less
+// efficiently on B1 shared CPU). See #431.
+//
+// Falls back gracefully:
+// - If APP_RUNTIME_SECRETS is unset or invalid JSON, we leave process.env unchanged and
+//   zod will validate against whatever individual env vars are present.
+// - Individual env vars (DATABASE_URL etc) already set take precedence over bundled values.
+//   This lets us roll out incrementally: add bundled secret first (no behavior change),
+//   then remove individual KV refs in a follow-up deploy.
+const bundledSecretsRaw = process.env.APP_RUNTIME_SECRETS;
+if (bundledSecretsRaw && bundledSecretsRaw.trim().length > 0) {
+  try {
+    const parsed = JSON.parse(bundledSecretsRaw) as Record<string, string>;
+    let appliedCount = 0;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string" && value.length > 0 && !process.env[key]) {
+        process.env[key] = value;
+        appliedCount += 1;
+      }
+    }
+    console.log(`Loaded ${appliedCount} secrets from APP_RUNTIME_SECRETS bundle.`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`Failed to parse APP_RUNTIME_SECRETS JSON: ${message}. Falling back to individual env vars.`);
+  }
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PROCESS_ROLE: z.enum(["web", "worker", "all"]).default("all"),

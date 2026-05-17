@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.47 - 2026-05-17
+
+feat(infra): bundled KV secret for faster cold start — Stage 1 (#431)
+
+Introduces `APP-RUNTIME-SECRETS` Key Vault secret containing JSON of all 5 sensitive
+values (DATABASE_URL, AZURE_OPENAI_API_KEY, ACS connection, parser auth key, webhook URL).
+
+**Stage 1 (this deploy):** Bundle is created in KV, web + worker apps reference it as
+APP_RUNTIME_SECRETS app setting, env.ts parses it at startup. Individual KV refs are
+**kept** so existing behavior is unchanged. Validates the bundled path works.
+
+**Stage 2 (later):** Remove individual KV refs from app settings → ~1.5-2.5 min cold-start
+savings (5 KV refs → 1).
+
+env.ts parser is gracefully fallback: individual env vars already set take precedence,
+parse errors log a warning and let zod validate against whatever env vars are present.
+
+Requires full deploy via deploy-azure.yml (Bicep change).
+
 ## 1.1.46 - 2026-05-17
 
 fix(content): MCQ generation returns exactly the requested count (closes #424)
