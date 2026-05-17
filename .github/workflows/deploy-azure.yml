@@ -10,6 +10,10 @@ on:
         description: "Deploy production after staging (requires environment approval)"
         required: false
         default: "false"
+      skip_staging:
+        description: "Skip staging deploy — use only when staging is already verified green"
+        required: false
+        default: "false"
 
 permissions:
   id-token: write
@@ -23,7 +27,8 @@ jobs:
   deploy-staging:
     # Only run on manual workflow_dispatch — push to main deploys production directly.
     # This prevents main-branch commits from overwriting a feature-branch staging deploy.
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch
+    # Set skip_staging=true to bypass when staging is already verified green.
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.skip_staging != 'true'
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -123,13 +128,13 @@ jobs:
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}"
 
   deploy-production:
-    # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded.
+    # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded or was skipped.
     # Production never deploys automatically on push to main.
     if: |
       github.event_name == 'workflow_dispatch' &&
       github.ref_name == github.event.repository.default_branch &&
       github.event.inputs.deploy_production == 'true' &&
-      needs.deploy-staging.result == 'success'
+      (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production

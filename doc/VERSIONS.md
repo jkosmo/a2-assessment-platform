@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.35 - 2026-05-17
+
+fix(ci): add skip_staging input to deploy workflow to avoid redundant staging deploys
+
+- `deploy_production=true` previously always re-ran staging even when it was already verified.
+- New `skip_staging=true` input skips the staging job entirely.
+- `deploy-production` now unblocks when staging result is `success` OR `skipped`.
+
 ## 1.1.34 - 2026-05-17
 
 fix(infra): correct all 10 role assignment GUID ternary expressions in main.bicep
