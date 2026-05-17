@@ -753,22 +753,42 @@ function Wait-Stable {
     [string]$Url,
     [string]$Label,
     [int]$RequiredSuccesses = 6,
-    [int]$DelaySeconds = 10
+    [int]$DelaySeconds = 20,
+    [int]$MaxConsecutiveFailures = 2
   )
 
-  Write-Host "Confirming $Label remains healthy after deployment..."
-  for ($attempt = 1; $attempt -le $RequiredSuccesses; $attempt++) {
-    $result = Test-HealthEndpoint -Url $Url
-    if (-not $result.Success) {
-      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
-      throw "$Label became unhealthy during post-deploy stability validation$statusSuffix at $Url"
-    }
+  # Tolerates up to $MaxConsecutiveFailures transient failures before giving up.
+  # Needed because App Service can report healthy from the OLD process during the
+  # restart window while the NEW process is initialising (e.g. running Prisma
+  # migrations). The old process terminates mid-check, causing a transient 504
+  # before the new process binds to the port. Failing immediately on the first
+  # unhealthy response caused false deploy failures on every prod deploy.
+  Write-Host "Confirming $Label remains healthy after deployment ($RequiredSuccesses checks, ${DelaySeconds}s interval, tolerates $MaxConsecutiveFailures transient failures)..."
+  $successes = 0
+  $consecutiveFailures = 0
+  $totalAttempts = $RequiredSuccesses + $MaxConsecutiveFailures
 
-    Write-Host "$Label stability check $attempt/$RequiredSuccesses succeeded."
-    if ($attempt -lt $RequiredSuccesses) {
+  for ($attempt = 1; $attempt -le $totalAttempts; $attempt++) {
+    $result = Test-HealthEndpoint -Url $Url
+    if ($result.Success) {
+      $consecutiveFailures = 0
+      $successes++
+      Write-Host "$Label stability check $successes/$RequiredSuccesses succeeded (attempt $attempt)."
+      if ($successes -ge $RequiredSuccesses) { return }
+    } else {
+      $consecutiveFailures++
+      $statusSuffix = if ($result.StatusCode) { " (status $($result.StatusCode))" } else { "" }
+      if ($consecutiveFailures -gt $MaxConsecutiveFailures) {
+        throw "$Label became unhealthy during post-deploy stability validation$statusSuffix at $Url ($consecutiveFailures consecutive failures)"
+      }
+      Write-Warning "$Label stability check failed$statusSuffix (consecutive failure $consecutiveFailures/$MaxConsecutiveFailures — likely restart in progress, waiting ${DelaySeconds}s)..."
+    }
+    if ($attempt -lt $totalAttempts) {
       Start-Sleep -Seconds $DelaySeconds
     }
   }
+
+  throw "$Label did not achieve $RequiredSuccesses stable health checks within $totalAttempts attempts at $Url"
 }
 
 # App Service has occasionally reported a healthy /healthz immediately after zip deploy while still

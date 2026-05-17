@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.37 - 2026-05-17
+
+fix(deploy): make Wait-Stable tolerate transient failures during app restart
+
+Root cause of recurring prod post-deploy instability: App Service serves healthz
+from the OLD process during the restart window while the NEW process runs Prisma
+migrations. When the old process terminates before the new one binds to the port,
+stability check 3/6 returns 504 and the deploy script threw immediately, reporting
+a false failure even though the app recovered within ~30s.
+
+Fix: Wait-Stable now tolerates up to 2 consecutive failures before giving up,
+with 20s between checks (was 10s). 6 required successes unchanged. A real outage
+(process crash loop) will still fail after 3 consecutive unhealthy checks.
+
 ## 1.1.36 - 2026-05-17
 
 fix(ci): remove duplicate npm ci, update actions to Node 24, closes #421
