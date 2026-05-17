@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.33 - 2026-05-17
+
+fix(ci): correct infra lint rules to match actual Bicep constraints
+
+- `principalId`-based GUID lint rule replaced with `roleAssignmentSalt` check — Bicep cannot use runtime values in role assignment names.
+- KV role assignment suppression rule narrowed to KV-specific patterns — backup vault Reader assignments may legitimately suppress success JSON output.
+- `scripts/azure/deploy-environment.ps1`: backup vault role assignment calls now use `| Out-Null` (suppress stdout only) instead of `2>&1 | Out-Null` (suppress everything), so real errors surface.
+
 ## 1.1.32 - 2026-05-17
 
 fix(infra): stable role assignment GUIDs via roleAssignmentSalt parameter (#406)

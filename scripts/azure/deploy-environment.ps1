@@ -863,12 +863,12 @@ if ($EnvironmentName -eq "production") {
 
   $pgServerId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$postgresServerName"
   Write-Host "Assigning backup roles to vault MSI $vaultPrincipalId on $postgresServerName..."
-  # Role assignments are idempotent; suppress "already exists" warnings.
-  az role assignment create --role "Reader" --assignee $vaultPrincipalId --scope $pgServerId 2>&1 | Out-Null
+  # Suppress success JSON output only — stderr (errors) still surfaces.
+  az role assignment create --role "Reader" --assignee $vaultPrincipalId --scope $pgServerId | Out-Null
   az role assignment create `
     --role "PostgreSQL Flexible Server Long Term Retention Backup Role" `
     --assignee $vaultPrincipalId `
-    --scope $pgServerId 2>&1 | Out-Null
+    --scope $pgServerId | Out-Null
   Write-Host "Backup role assignments applied."
 
   $existingBkpInstance = (az dataprotection backup-instance list `
