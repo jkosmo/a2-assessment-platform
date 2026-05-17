@@ -754,7 +754,7 @@ function Wait-Stable {
     [string]$Label,
     [int]$RequiredSuccesses = 6,
     [int]$DelaySeconds = 20,
-    [int]$MaxConsecutiveFailures = 15,
+    [int]$MaxConsecutiveFailures = 30,
     [string]$ExpectedVersion = ""
   )
 
@@ -762,9 +762,10 @@ function Wait-Stable {
   # A "success" is then: HTTP 200 AND version matches. This eliminates the OLD-process-still-serving-/healthz
   # false positive that previously caused the dual Wait-Stable + separate version-check race.
   #
-  # MaxConsecutiveFailures = 15 (default) gives ~5 min tolerance at 20s intervals, matching B1 cold-start
-  # time (cert update + Prisma migrate + KV ref resolution). v1.1.37's value of 2 (~40s) was too short
-  # and caused false deploy failures on every prod deploy. See #429.
+  # MaxConsecutiveFailures budget: each iteration is up to 15s (HTTP timeout) + 20s (sleep) = 35s.
+  # 30 iterations = ~17 min tolerance. Observed B1 cold-start times: 6-9 min (variable, sometimes
+  # cascading VNETFailure → second cold start). v1.1.43 used 15 (~9 min) and just barely missed.
+  # 30 gives ~2x safety margin over worst observed time.
   $modeDescription = if ($ExpectedVersion) { "/version == $ExpectedVersion" } else { "/healthz HTTP 200" }
   Write-Host "Confirming $Label is stable on $modeDescription ($RequiredSuccesses successes, ${DelaySeconds}s interval, tolerates $MaxConsecutiveFailures consecutive failures during restart window)..."
   $successes = 0
