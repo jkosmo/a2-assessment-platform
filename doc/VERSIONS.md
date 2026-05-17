@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.48 - 2026-05-17
+
+perf(infra): bundled KV secret Stage 2 — remove individual KV refs (#431)
+
+Stage 1 (v1.1.47) added the bundled APP-RUNTIME-SECRETS alongside individual KV refs.
+Stage 2 (this version) removes the individual KV refs from web + worker app settings.
+Only APP_RUNTIME_SECRETS remains as a KV ref for those apps. env.ts unpacks the JSON
+to set DATABASE_URL, AZURE_OPENAI_API_KEY, etc. as process.env vars before zod
+validation.
+
+KV ref count after this change:
+- Web: 1 (APP_RUNTIME_SECRETS) — was 5
+- Worker: 1 (APP_RUNTIME_SECRETS) — was 5
+- Parser: 1 (PARSER-WORKER-AUTH-KEY individual, parser doesn't have bundled) — unchanged
+
+Total: 3 KV refs (down from 10). Expected cold-start savings: ~1.5-2.5 min.
+
+Risk: if APP_RUNTIME_SECRETS bundle parsing fails for any reason, app crashes on
+startup (no fallback to individual env vars since those are no longer set by App Service).
+Mitigated by:
+- env.ts has try/catch around JSON.parse
+- v1.1.47 already validated bundled secret is correctly written to KV and resolves
+- Rollback: revert this commit, redeploy with deploy-azure.yml
+
 ## 1.1.47 - 2026-05-17
 
 feat(infra): bundled KV secret for faster cold start — Stage 1 (#431)

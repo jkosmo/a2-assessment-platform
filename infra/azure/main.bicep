@@ -587,17 +587,12 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: 'false'
         }
         {
-          // Bundled secrets (#431): single KV ref resolved once at container start.
-          // env.ts startup parser unpacks the JSON into individual process.env vars
-          // before zod validation. Individual KV refs below are kept as fallback;
-          // once the bundled path is verified stable, the individual KV refs can be
-          // removed in a follow-up deploy to achieve the actual cold-start savings.
+          // Bundled secrets (#431 Stage 2): single KV ref resolves all 5 sensitive values
+          // in one MSI sidecar round-trip on container start, saving ~1.5-2.5 min of cold
+          // start vs the previous 5 individual KV refs. env.ts startup parser unpacks the
+          // JSON into individual process.env vars before zod validation.
           name: 'APP_RUNTIME_SECRETS'
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=APP-RUNTIME-SECRETS)'
-        }
-        {
-          name: 'DATABASE_URL'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
         {
           name: 'AUTH_MODE'
@@ -634,10 +629,6 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_ENDPOINT'
           value: azureOpenAiEndpoint
-        }
-        {
-          name: 'AZURE_OPENAI_API_KEY'
-          value: !empty(azureOpenAiApiKey) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)' : ''
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -692,16 +683,8 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: participantNotificationChannel
         }
         {
-          name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_URL'
-          value: !empty(participantNotificationWebhookUrl) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARTICIPANT-NOTIFICATION-WEBHOOK-URL)' : ''
-        }
-        {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
           value: string(participantNotificationWebhookTimeoutMs)
-        }
-        {
-          name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
-          value: createAcsEmail ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ACS-CONNECTION-STRING)' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER'
@@ -722,10 +705,6 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'PARSER_WORKER_URL'
           value: 'https://${parserApp.properties.defaultHostName}'
-        }
-        {
-          name: 'PARSER_WORKER_AUTH_KEY'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARSER-WORKER-AUTH-KEY)'
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
@@ -823,10 +802,6 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=APP-RUNTIME-SECRETS)'
         }
         {
-          name: 'DATABASE_URL'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
-        }
-        {
           name: 'AUTH_MODE'
           value: authMode
         }
@@ -853,10 +828,6 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_ENDPOINT'
           value: azureOpenAiEndpoint
-        }
-        {
-          name: 'AZURE_OPENAI_API_KEY'
-          value: !empty(azureOpenAiApiKey) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)' : ''
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -911,16 +882,8 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: participantNotificationChannel
         }
         {
-          name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_URL'
-          value: !empty(participantNotificationWebhookUrl) ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=PARTICIPANT-NOTIFICATION-WEBHOOK-URL)' : ''
-        }
-        {
           name: 'PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS'
           value: string(participantNotificationWebhookTimeoutMs)
-        }
-        {
-          name: 'AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING'
-          value: createAcsEmail ? '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ACS-CONNECTION-STRING)' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER'
