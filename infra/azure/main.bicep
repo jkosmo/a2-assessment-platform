@@ -559,6 +559,13 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: appServiceStartupTimeLimitSeconds
         }
         {
+          // Skip Linux App Service base image cert-store rehash on cold start.
+          // We use Azure CA-signed endpoints (Postgres, KV, ACS, Graph, OpenAI),
+          // which are already in the base node:22-lts image. Saves ~2 min cold start. #430
+          name: 'WEBSITES_INCLUDE_CLOUD_CERTS'
+          value: 'false'
+        }
+        {
           name: 'DATABASE_URL'
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
@@ -774,6 +781,13 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           value: appServiceStartupTimeLimitSeconds
         }
         {
+          // Skip Linux App Service base image cert-store rehash on cold start.
+          // We use Azure CA-signed endpoints (Postgres, KV, ACS, Graph, OpenAI),
+          // which are already in the base node:22-lts image. Saves ~2 min cold start. #430
+          name: 'WEBSITES_INCLUDE_CLOUD_CERTS'
+          value: 'false'
+        }
+        {
           name: 'DATABASE_URL'
           value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
         }
@@ -968,6 +982,13 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
           value: appServiceStartupTimeLimitSeconds
+        }
+        {
+          // Skip Linux App Service base image cert-store rehash on cold start.
+          // We use Azure CA-signed endpoints (Postgres, KV, ACS, Graph, OpenAI),
+          // which are already in the base node:22-lts image. Saves ~2 min cold start. #430
+          name: 'WEBSITES_INCLUDE_CLOUD_CERTS'
+          value: 'false'
         }
         {
           name: 'PARSER_WORKER_AUTH_KEY'

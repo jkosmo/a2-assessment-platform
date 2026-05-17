@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.44 - 2026-05-17
+
+perf(infra): set WEBSITES_INCLUDE_CLOUD_CERTS=false to skip cert rehash (Wave 3, closes #430)
+
+The Linux App Service base image runs a CA-store rehash on cold start when
+WEBSITES_INCLUDE_CLOUD_CERTS is not set to true. Observed time: ~2 minutes.
+Setting it explicitly to false skips this rehash. We use Azure CA-signed endpoints
+(Postgres, KV, ACS, Graph, OpenAI) — all already present in the base node:22-lts image.
+
+Expected impact: ~2 min off every cold start, which means ~2 min off every deploy's
+Wait-Stable phase. Will be measured on next staging deploy.
+
 ## 1.1.43 - 2026-05-17
 
 fix(deploy): post-deploy verification robustness (Wave 2.5, closes #429)
