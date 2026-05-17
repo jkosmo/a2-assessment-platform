@@ -78,7 +78,17 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 
 - Always bump `package.json` version and `doc/VERSIONS.md` in the same commit as code changes.
 - Create GitHub issue → specify/plan → implement → test → document, in that order.
-- Deploy cadence: staging deploys on push to `main`; production requires manual `workflow_dispatch` with `deploy_production=true`.
+- Deploy cadence: staging and production both require manual `workflow_dispatch`. Push to `main` does NOT auto-deploy.
+
+### Which deploy workflow to use
+
+| Type of change | Use workflow | Why |
+|----------------|--------------|-----|
+| Code-only (no `infra/`, no Bicep, no workflow YAML) | `.github/workflows/deploy-app.yml` | ~6 min faster (~16 min vs ~22 min) — skips ARM, KV-ref wait, explicit restart |
+| Anything touching `infra/azure/*.bicep` | `.github/workflows/deploy-azure.yml` | Full deploy — applies Bicep changes |
+| Changes to `.github/workflows/*.yml` | `.github/workflows/deploy-azure.yml` | Workflow changes only take effect on next deploy from main; use full deploy to be safe |
+| Changes to `scripts/azure/deploy-environment.ps1` | Either | Both workflows use the same script; the change auto-picks via main |
+| Secret rotation requiring KV-ref refresh | `.github/workflows/deploy-azure.yml` | KV-ref propagation + container restart needed |
 
 ## AI delegation workflow (Claude orchestrates, Codex/Gemini drafts)
 

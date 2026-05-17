@@ -15,8 +15,8 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 1 | actionlint in CI | #426 | 0 (CI only) | ✓ done (v1.1.42) |
 | 2 | Bicep timeout fix | #427 | 1 (stg+prd) | ✓ done (v1.1.41+42, prod on 1.1.42) |
 | 2.5 | Deploy script verification bugs | #429 | 1 (stg only — script change auto-picks for prod) | ✓ done (v1.1.43) |
-| 3 | WEBSITES_INCLUDE_CLOUD_CERTS | #430 | 1 deploy | in progress |
-| 3 (+secondary goal) | Split workflow (infra vs app) | #425 | 1+ deploy | in progress (moved up by user 2026-05-17) |
+| 3 | WEBSITES_INCLUDE_CLOUD_CERTS | #430 | 1 deploy | ✓ done on staging (v1.1.44, **not deployed to prod** — cascade risk) |
+| 3 (+secondary goal) | Split workflow (infra vs app) | #425 | 1+ deploy | ✓ done on staging (v1.1.45, **not deployed to prod** — deploy-tooling change auto-picks via main) |
 | 4 | KV RBAC → grant SP role | #428, #404 | 2 deploys | deferred |
 
 **Discipline rules** are authoritative in [CLAUDE.md § Deploy discipline](../CLAUDE.md#deploy-discipline--established-2026-05-17). Summary:
@@ -47,6 +47,8 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 2026-05-17 | 25989764900 | prod | 15m59s | failure+app-recovered | v1.1.42 — Wait-Stable failed 3 consecutive at attempt 5-7; VNETFailure during restart triggered second cold start; app actually came up healthy on v1.1.42 at 12:02 UTC. Script reported failure but deploy succeeded. See #429 Bug 3 for the Wait-Stable tolerance issue |
 | 2026-05-17 | 25990441607 | staging | 19m57s | failure+app-recovered | v1.1.43 first attempt — Wait-Stable correctly waited for /version match but timed out at 15 failures (~9 min). App came up healthy 60-90s after script gave up. Hotfix d5a90cb bumped tolerance to 30 |
 | 2026-05-17 | 25990996032 | staging | 22m15s | success | v1.1.43 + tolerance=30 hotfix — first **truly clean** deploy with no false reports. Version-aware Wait-Stable correctly waited for new container cold-start. Wave 2.5 complete |
+| 2026-05-17 | 25991581849 | staging | 31m46s | success+cascade | v1.1.44 — WEBSITES_INCLUDE_CLOUD_CERTS=false. Cascading container restart added ~9 min (Azure-side, SiteStartupCancelled at 13:22; new container at 13:25 succeeded). App on 1.1.44 confirmed |
+| 2026-05-17 | 25992327380 | staging | **16m18s** | success | v1.1.45 — **first app-only deploy via new deploy-app.yml**. Skipped ARM/Bicep, Wait-KV, restart. ~6 min faster than v1.1.43 full deploy. Wave 3 complete |
 
 ---
 
