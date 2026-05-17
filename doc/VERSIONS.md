@@ -2,6 +2,10 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.39 - 2026-05-17
+
+fix(ci): flatten multiline if-condition on deploy-production job — GitHub Actions skips needs-dependent jobs when condition uses YAML literal block (`|`) and the needed job was skipped
+
 ## 1.1.38 - 2026-05-17
 
 fix(startup): don't crash on missing ACS config at boot — warn instead (#422 root cause)
