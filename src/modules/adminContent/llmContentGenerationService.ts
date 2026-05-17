@@ -565,7 +565,7 @@ export function buildMcqGenerationPrompts(input: McqGenerationInput): {
   const systemPrompt =
     "You are an MCQ question author for a professional certification platform. Return strict JSON only - no markdown, no commentary.";
 
-  const userPrompt = `Generate ${input.questionCount} multiple-choice questions using the source material below as hidden author background only.
+  const userPrompt = `Generate EXACTLY ${input.questionCount} multiple-choice questions (not fewer, not more) using the source material below as hidden author background only. The questions array in your JSON response must contain exactly ${input.questionCount} items.
 
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
@@ -1024,6 +1024,18 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   const parsed = mcqGenerationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`MCQ generation LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  // Defensive guard: the LLM occasionally returns one extra question even when the prompt
+  // says "exactly N". Truncate to the requested count. If it returned fewer, leave as-is
+  // and let downstream validation surface that. See #424.
+  if (parsed.data.questions.length !== input.questionCount) {
+    console.warn(
+      `MCQ generation count mismatch: requested ${input.questionCount}, LLM returned ${parsed.data.questions.length}. ` +
+      `${parsed.data.questions.length > input.questionCount ? "Truncating to requested count." : "Returning fewer than requested."}`,
+    );
+    if (parsed.data.questions.length > input.questionCount) {
+      return { ...parsed.data, questions: parsed.data.questions.slice(0, input.questionCount) };
+    }
   }
   return parsed.data;
 }

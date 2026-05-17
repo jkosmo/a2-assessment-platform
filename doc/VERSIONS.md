@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.46 - 2026-05-17
+
+fix(content): MCQ generation returns exactly the requested count (closes #424)
+
+Two-layer fix for the bug where requesting 10 MCQs returned 11:
+
+1. **Prompt change**: emphasize "EXACTLY N" instead of just "N"; explicit instruction
+   that the questions array must contain exactly N items.
+
+2. **Defensive post-processing**: after parsing the LLM response, slice the questions
+   array to the requested count. Log a warning if the LLM returned a different count
+   than requested. This catches the "model ignores the count instruction sometimes"
+   case that the prompt alone can't guarantee.
+
+Test scenario for verification:
+- Create a new module
+- Set MCQ count to 10
+- Generate content
+- Verify exactly 10 questions returned
+
+This is also the first production deploy via the new app-only deploy-app.yml workflow (#425).
+
 ## 1.1.45 - 2026-05-17
 
 feat(deploy): split deploy into infra vs app-only paths (Wave 3 secondary goal, closes #425)
