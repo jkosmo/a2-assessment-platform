@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.45 - 2026-05-17
+
+feat(deploy): split deploy into infra vs app-only paths (Wave 3 secondary goal, closes #425)
+
+Adds a new workflow `.github/workflows/deploy-app.yml` that skips ARM/Bicep deploy
+and deploys application code only. Existing infrastructure is required and
+KV references must already be resolved.
+
+Changes:
+- `deploy-environment.ps1`: new `-SkipInfra` parameter; when "true", skips ARM/Bicep
+  deploy, resolves app names from Azure (instead of Bicep outputs), skips
+  Wait-KeyVaultReferencesResolved + Restart-WebAppForKeyVaultReferences (zip-deploy
+  already triggers a container restart), and skips backup vault deployment.
+- `deploy-environment.ps1`: `-PostgresAdministratorPassword` made optional (was
+  mandatory); validation throws only when `-SkipInfra` is "false".
+- New workflow `deploy-app.yml`: same structure as `deploy-azure.yml` but invokes
+  the script with minimal parameters + `-SkipInfra "true"`. Shared concurrency
+  group prevents app + infra deploys from overlapping.
+
+Expected savings: ~7-10 min per deploy by skipping the ARM phase (3-7 min), KV-ref
+wait (up to 90s), and explicit container restart (~90s for 3 apps).
+
+`deploy-azure.yml` is unchanged — continues to be the canonical full deploy.
+Use `deploy-app.yml` for code-only changes; use `deploy-azure.yml` for any infra/
+or Bicep changes.
+
 ## 1.1.44 - 2026-05-17
 
 perf(infra): set WEBSITES_INCLUDE_CLOUD_CERTS=false to skip cert rehash (Wave 3, closes #430)

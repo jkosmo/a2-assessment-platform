@@ -11,8 +11,8 @@ param(
   [string]$CostCenter = "a2-assessment-platform",
   [string]$Owner = "engineering",
   [string]$PostgresAdministratorLogin = "a2platformadmin",
-  [Parameter(Mandatory = $true)]
-  [string]$PostgresAdministratorPassword,
+  # Required for full deploy (when -SkipInfra is "false"). Not needed for app-only deploys.
+  [string]$PostgresAdministratorPassword = "",
   [string]$PostgresDatabaseName = "a2assessment",
   [string]$PostgresVersion = "16",
   [string]$PostgresSkuName = "Standard_B1ms",
@@ -60,7 +60,11 @@ param(
   [string]$AzureFederatedClientId = "",
   [string]$AzureFederatedTenantId = "",
   [int]$DeploymentPollIntervalSeconds = 30,
-  [string]$BackupVaultResourceGroup = "rg-a2-assessment-backup"
+  [string]$BackupVaultResourceGroup = "rg-a2-assessment-backup",
+  # SkipInfra="true" skips ARM/Bicep deploy and goes straight to zip-deploy + verify.
+  # Used by deploy-app.yml workflow when only application code changes (#425).
+  # Existing infrastructure must be present and KV refs already resolved.
+  [string]$SkipInfra = "false"
 )
 
 Set-StrictMode -Version Latest
@@ -93,6 +97,15 @@ if (@("staging", "production") -contains $EnvironmentName -and $AuthMode -eq "mo
 
 if ($AuthMode -eq "entra" -and ([string]::IsNullOrWhiteSpace($EntraTenantId) -or [string]::IsNullOrWhiteSpace($EntraClientId) -or [string]::IsNullOrWhiteSpace($EntraAudience))) {
   throw "ENTRA_TENANT_ID, ENTRA_CLIENT_ID, and ENTRA_AUDIENCE are required when -AuthMode entra."
+}
+
+$skipInfraBool = $SkipInfra -eq "true"
+if ($skipInfraBool) {
+  Write-Host "SkipInfra=true: ARM/Bicep deploy will be skipped. App-only deploy path enabled. (#425)"
+} else {
+  if ([string]::IsNullOrWhiteSpace($PostgresAdministratorPassword)) {
+    throw "PostgresAdministratorPassword is required for full deploy. For app-only deploys, pass -SkipInfra true."
+  }
 }
 
 if (-not $ParserWorkerAuthKey) {
@@ -380,6 +393,24 @@ az group create `
   --tags environment=$EnvironmentName costCenter=$CostCenter owner=$Owner | Out-Null
 Assert-LastExitCode "az group create"
 
+if ($skipInfraBool) {
+  # App-only deploy: skip ARM/Bicep, resolve app names from existing infrastructure. (#425)
+  Write-Host "Resolving existing App Service names from resource group $ResourceGroupName..."
+  $envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
+  $appNames = az webapp list --resource-group $ResourceGroupName --query "[].name" -o tsv 2>$null
+  Assert-LastExitCode "az webapp list"
+  $appNameList = @($appNames -split "`n" | Where-Object { $_ })
+  $webAppName = ($appNameList | Where-Object { $_ -match "${envCode}-app" } | Select-Object -First 1)
+  $workerAppName = ($appNameList | Where-Object { $_ -match "${envCode}-worker" } | Select-Object -First 1)
+  $parserAppName = ($appNameList | Where-Object { $_ -match "${envCode}-parser" } | Select-Object -First 1)
+  if (-not $webAppName) { throw "Could not resolve web app name from existing infrastructure in $ResourceGroupName." }
+  if (-not $workerAppName) { throw "Could not resolve worker app name from existing infrastructure in $ResourceGroupName." }
+  if (-not $parserAppName) { throw "Could not resolve parser app name from existing infrastructure in $ResourceGroupName." }
+  Write-Host "Resolved: web=$webAppName, worker=$workerAppName, parser=$parserAppName"
+  $postgresServerName = ""  # not needed in skip-infra path; backup vault block is also skipped
+  $postgresDatabaseName = ""
+} else {
+
 # Query App Service outbound IPs for PostgreSQL firewall allowlist (#334)
 $envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
 Write-Host "Querying App Service outbound IPs for PostgreSQL firewall allowlist..."
@@ -606,6 +637,7 @@ if (-not $workerAppName) {
 if (-not $parserAppName) {
   throw "parserAppName output missing from deployment."
 }
+}  # end else branch of `if ($skipInfraBool)` — ARM/Bicep deploy block ends here
 
 $tempBasePath = Get-TempBasePath
 if ($PackagePath) {
@@ -660,14 +692,18 @@ Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -Z
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
 Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 
-# Key Vault RBAC role assignments for managed identities can take 30-120 s to
-# propagate. Keep App Service settings as Key Vault references and refresh the
-# apps after propagation instead of writing raw secret values into app settings.
-Write-Host "Waiting for Key Vault RBAC propagation before refreshing app runtimes..."
-Wait-KeyVaultReferencesResolved -ResourceGroup $ResourceGroupName -AppNames @($workerAppName, $parserAppName, $webAppName)
-Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $workerAppName
-Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $parserAppName
-Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $webAppName
+if (-not $skipInfraBool) {
+  # Key Vault RBAC role assignments for managed identities can take 30-120 s to
+  # propagate. Keep App Service settings as Key Vault references and refresh the
+  # apps after propagation instead of writing raw secret values into app settings.
+  # Skipped in app-only deploy: zip-deploy already triggers a container restart, and KV
+  # refs were already resolved during the prior full deploy. (#425)
+  Write-Host "Waiting for Key Vault RBAC propagation before refreshing app runtimes..."
+  Wait-KeyVaultReferencesResolved -ResourceGroup $ResourceGroupName -AppNames @($workerAppName, $parserAppName, $webAppName)
+  Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $workerAppName
+  Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $parserAppName
+  Restart-WebAppForKeyVaultReferences -ResourceGroup $ResourceGroupName -AppName $webAppName
+}
 
 function Get-WebAppState {
   param([string]$ResourceGroup, [string]$AppName)
@@ -858,7 +894,8 @@ if ($AuthMode -eq "entra" -and $EntraClientId) {
 
 # Production: ensure backup vault exists in isolated resource group that survives
 # teardown of the main application resource group.
-if ($EnvironmentName -eq "production") {
+# Skipped in app-only deploy: backup vault is infra, deployed by the full deploy. (#425)
+if ($EnvironmentName -eq "production" -and -not $skipInfraBool) {
   Refresh-AzureCliOidcLogin "deploying backup vault"
   Write-Host "Ensuring backup vault resource group '$BackupVaultResourceGroup' exists..."
   az group create `
@@ -935,7 +972,7 @@ if ($EnvironmentName -eq "production") {
   }
 }
 
-if ($BudgetContactEmail) {
+if ($BudgetContactEmail -and -not $skipInfraBool) {
   & "$PSScriptRoot/configure-cost-guardrails.ps1" `
     -SubscriptionId $SubscriptionId `
     -EnvironmentName $EnvironmentName `
@@ -946,15 +983,19 @@ if ($BudgetContactEmail) {
 Write-Host "Deployment complete."
 Write-Host "Web App URL: https://$webAppName.azurewebsites.net"
 Write-Host "Worker App URL: https://$workerAppName.azurewebsites.net"
-Write-Host "PostgreSQL server: $postgresServerName"
-Write-Host "PostgreSQL database: $postgresDatabaseName"
+if ($postgresServerName) {
+  Write-Host "PostgreSQL server: $postgresServerName"
+  Write-Host "PostgreSQL database: $postgresDatabaseName"
+}
 
 if ($env:GITHUB_OUTPUT) {
   Add-Content -Path $env:GITHUB_OUTPUT -Value "web_app_name=$webAppName"
   Add-Content -Path $env:GITHUB_OUTPUT -Value "web_app_url=https://$webAppName.azurewebsites.net"
   Add-Content -Path $env:GITHUB_OUTPUT -Value "resource_group=$ResourceGroupName"
-  Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_server_name=$postgresServerName"
-  Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_database_name=$postgresDatabaseName"
+  if ($postgresServerName) {
+    Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_server_name=$postgresServerName"
+    Add-Content -Path $env:GITHUB_OUTPUT -Value "postgres_database_name=$postgresDatabaseName"
+  }
 }
 
 exit 0

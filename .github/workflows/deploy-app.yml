@@ -1,0 +1,147 @@
+name: Deploy App Only (no infra)
+
+# App-only deploy path (#425). Skips ARM/Bicep, KV-ref propagation wait, and
+# backup vault deployment. Use when only application code or runtime config changes.
+# Existing infrastructure must be present and stable.
+#
+# When to use:
+# - Code-only changes (no infra/, no Bicep, no GitHub Actions workflow changes)
+# - ~50% faster than full deploy: skips 7+ min of ARM + KV-ref + restart steps
+#
+# When NOT to use (use deploy-azure.yml instead):
+# - Any infra/azure/*.bicep change
+# - New environment variable wired through Bicep
+# - Role assignment changes
+# - Secret rotation that needs KV-ref refresh
+#
+# Workflow inputs:
+# - deploy_production=true: also deploy to prod after staging
+# - skip_staging=true: skip staging job (only valid with deploy_production=true)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: "Deploy production after staging (requires environment approval)"
+        required: false
+        default: "false"
+      skip_staging:
+        description: "Skip staging deploy — only valid when staging is already verified"
+        required: false
+        default: "false"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  # Shared with deploy-azure to prevent overlapping app + infra deploys.
+  group: deploy-azure-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.skip_staging != 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.3.1
+
+      - name: Build deployment package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_path="$RUNNER_TEMP/a2-assessment-staging.zip"
+          package_root="$RUNNER_TEMP/a2-assessment-package"
+          rm -rf "$package_root" "$package_path"
+          mkdir -p "$package_root"
+          git archive --format=tar HEAD | tar -x -C "$package_root"
+          cd "$package_root"
+          npm ci --ignore-scripts
+          npm run prisma:generate
+          npm run build
+          npm prune --omit=dev --ignore-scripts
+          zip -r -q "$package_path" .
+          echo "path=$package_path" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy staging app (no infra)
+        shell: pwsh
+        run: |
+          ./scripts/azure/deploy-environment.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "staging" `
+            -Location "${{ vars.AZURE_LOCATION }}" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            -AppNamePrefix "${{ vars.AZURE_APP_NAME_PREFIX }}" `
+            -AuthMode "${{ vars.AUTH_MODE || 'entra' }}" `
+            -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
+            -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
+            -PackagePath "${{ steps.package.outputs.path }}" `
+            -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
+            -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
+            -SkipInfra "true"
+
+  deploy-production:
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.deploy_production == 'true' && (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.3.1
+
+      - name: Build deployment package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_path="$RUNNER_TEMP/a2-assessment-production.zip"
+          package_root="$RUNNER_TEMP/a2-assessment-package"
+          rm -rf "$package_root" "$package_path"
+          mkdir -p "$package_root"
+          git archive --format=tar HEAD | tar -x -C "$package_root"
+          cd "$package_root"
+          npm ci --ignore-scripts
+          npm run prisma:generate
+          npm run build
+          npm prune --omit=dev --ignore-scripts
+          zip -r -q "$package_path" .
+          echo "path=$package_path" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy production app (no infra)
+        shell: pwsh
+        run: |
+          ./scripts/azure/deploy-environment.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -EnvironmentName "production" `
+            -Location "${{ vars.AZURE_LOCATION }}" `
+            -ResourceGroupName "${{ vars.AZURE_RESOURCE_GROUP }}" `
+            -AppNamePrefix "${{ vars.AZURE_APP_NAME_PREFIX }}" `
+            -AuthMode "${{ vars.AUTH_MODE || 'entra' }}" `
+            -EntraTenantId "${{ vars.ENTRA_TENANT_ID }}" `
+            -EntraClientId "${{ vars.ENTRA_CLIENT_ID }}" `
+            -EntraAudience "${{ vars.ENTRA_AUDIENCE }}" `
+            -PackagePath "${{ steps.package.outputs.path }}" `
+            -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
+            -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
+            -SkipInfra "true"
