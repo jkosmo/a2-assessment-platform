@@ -125,7 +125,7 @@ jobs:
   deploy-production:
     # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded or was skipped.
     # Production never deploys automatically on push to main.
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.deploy_production == 'true' && (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.deploy_production == 'true' && (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
