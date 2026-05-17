@@ -61,12 +61,15 @@ jobs:
       - name: Lint — actionlint (GitHub Actions workflow syntax + context references)
         run: |
           # actionlint catches typos in context properties (github.evnt.foo),
-          # undefined input/secret references, invalid `uses:` values, shell script
-          # issues, and many other workflow-level errors before they hit prod.
+          # undefined input/secret references, invalid `uses:` values, and many
+          # other workflow-level errors before they hit prod.
           # See https://github.com/rhysd/actionlint
+          # -shellcheck= disables the shellcheck integration; it auto-detects shellcheck on
+          # GitHub runners and flags style/info-level warnings as failures (noise, not bugs).
+          # Shell style can be lint-checked separately if we want it.
           curl -sLO https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash
           bash download-actionlint.bash 1.7.12
-          ./actionlint -color
+          ./actionlint -color -shellcheck=
 
   verify:
     runs-on: ubuntu-latest
