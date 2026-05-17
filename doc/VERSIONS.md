@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.32 - 2026-05-17
+
+fix(infra): stable role assignment GUIDs via roleAssignmentSalt parameter (#406)
+
+- `infra/azure/main.bicep`: add `roleAssignmentSalt string = ''` parameter. All 10 Key Vault secret role assignment GUID seeds now include the salt: `guid(secret.id, app.id, roleId, roleAssignmentSalt)`. In normal operation salt is empty and GUIDs are unchanged. If App Services are ever recreated without the resource group being deleted (leaving stale assignments at the old GUIDs), bump `ROLE_ASSIGNMENT_SALT` in GitHub environment variables to a new value — ARM will create new assignments at new GUIDs without conflicting with the stale ones.
+- `scripts/azure/deploy-environment.ps1`: add `$RoleAssignmentSalt` parameter (default `""`), passed to Bicep.
+- `.github/workflows/deploy-azure.yml`: pass `ROLE_ASSIGNMENT_SALT` env var to deploy script for both staging and production.
+
+Note: `principalId`-based seeding is not feasible in Bicep — ARM requires role assignment `name` to be computable at deployment start, and `identity.principalId` is a runtime property. Salt is the practical escape hatch. See #406 for full decision rationale.
+
 ## 1.1.31 - 2026-05-17
 
 fix(content): strip UTF-8 BOM from AZURE_OPENAI_API_KEY before use as HTTP header

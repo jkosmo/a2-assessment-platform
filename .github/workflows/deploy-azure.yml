@@ -103,6 +103,7 @@ jobs:
             -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
             -AzureOpenAiAuthoringTokenLimitParameter "${{ vars.AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER || '' }}" `
             -SkipRoleAssignments "${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" `
+            -RoleAssignmentSalt "${{ vars.ROLE_ASSIGNMENT_SALT || '' }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
@@ -209,6 +210,7 @@ jobs:
             -AzureOpenAiTokenLimitParameter "${{ vars.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER || 'auto' }}" `
             -AzureOpenAiAuthoringTokenLimitParameter "${{ vars.AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER || '' }}" `
             -SkipRoleAssignments "${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" `
+            -RoleAssignmentSalt "${{ vars.ROLE_ASSIGNMENT_SALT || '' }}" `
             -AssessmentJobPollIntervalMs "${{ vars.ASSESSMENT_JOB_POLL_INTERVAL_MS }}" `
             -AssessmentJobMaxAttempts "${{ vars.ASSESSMENT_JOB_MAX_ATTEMPTS }}" `
             -ObservabilityAlertEmail "${{ vars.OBSERVABILITY_ALERT_EMAIL }}" `
