@@ -24,7 +24,7 @@ const envSchema = z.object({
   LLM_MODE: z.enum(["stub", "azure_openai"]).default("stub"),
   LLM_STUB_MODEL_NAME: z.string().default("stub-model-v1"),
   AZURE_OPENAI_ENDPOINT: z.string().optional(),
-  AZURE_OPENAI_API_KEY: z.string().optional(),
+  AZURE_OPENAI_API_KEY: z.string().optional().transform((v) => v?.replace(/^﻿/, "")),
   AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
   AZURE_OPENAI_AUTHORING_DEPLOYMENT: z.string().optional(),
   AZURE_OPENAI_ASSESSMENT_DEPLOYMENT: z.string().optional(),

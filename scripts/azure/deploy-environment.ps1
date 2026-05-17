@@ -890,7 +890,7 @@ if ($EnvironmentName -eq "production") {
       }
     } | ConvertTo-Json -Depth 10
     $instanceJsonPath = Join-Path (Get-TempBasePath) "a2-backup-instance-$EnvironmentName.json"
-    [System.IO.File]::WriteAllText($instanceJsonPath, $instanceJson, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($instanceJsonPath, $instanceJson, [System.Text.UTF8Encoding]::new($false))
     az dataprotection backup-instance create `
       --vault-name $backupVaultName `
       --resource-group $BackupVaultResourceGroup `

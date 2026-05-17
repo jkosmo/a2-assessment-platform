@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.31 - 2026-05-17
+
+fix(content): strip UTF-8 BOM from AZURE_OPENAI_API_KEY before use as HTTP header
+
+- `src/config/env.ts`: add `.transform()` to strip U+FEFF (BOM) from `AZURE_OPENAI_API_KEY` at env parse time. BOM in the KV secret causes Node.js `fetch()` to throw "Cannot convert argument to a ByteString" when the key is used as `api-key` header, failing all LLM generation requests with 500.
+- `scripts/azure/deploy-environment.ps1`: fix backup instance JSON write to use `UTF8Encoding($false)` instead of `Encoding.UTF8` which includes BOM in .NET.
+
+Root cause: KV secret `AZURE-OPENAI-API-KEY` was likely written with a BOM prefix during the May 2026 incident deploys. Code fix is defensive; the KV secret should also be corrected via Portal or fresh deploy.
+
 ## 1.1.30 - 2026-05-17
 
 docs(agents): agent guardrails — AGENTS.md, infra invariants, PR template, what-if CI, lint (#417–#420)
