@@ -17,11 +17,14 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 3 | P1 artifact reuse | (P1 below) | 1 (stg+prd) | pending |
 | 4 | KV RBAC → split workflow → grant SP role | #428, #425, #404 | 3–4 deploys, spread weeks | deferred |
 
-**Discipline rules established:**
+**Discipline rules** are authoritative in [CLAUDE.md § Deploy discipline](../CLAUDE.md#deploy-discipline--established-2026-05-17). Summary:
 - Max one structural change per deploy
 - CI-only fixes before any prod deploy
+- One released version per confirmed fix, not per attempt
 - Read platform `docker.log` before app `default_docker.log` when diagnosing hangs
-- Never push Bicep/workflow changes that someone else's commit could bundle with
+- Verify lock hypotheses with `pg_stat_activity` before acting
+- Use `Monitor` (read-only) for deploy observation, not `Agent`
+- Occam's razor before exotic hypotheses
 
 ---
 

@@ -14,7 +14,10 @@ Related documents:
 - [PRODUCTION_RESTORE_RUNBOOK.md](PRODUCTION_RESTORE_RUNBOOK.md)
 - [PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md](PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md)
 - [INCIDENTS.md](INCIDENTS.md)
+- [DEPLOY_OPTIMIZATION.md](DEPLOY_OPTIMIZATION.md)
 - [pilot/VERIFICATION_CHECKLIST.md](pilot/VERIFICATION_CHECKLIST.md)
+
+**Deploy discipline rules** are authoritative in [../CLAUDE.md](../CLAUDE.md#deploy-discipline--established-2026-05-17). Read those before making any infra/workflow change.
 
 ## Production Deployment and Rollback
 

@@ -157,3 +157,25 @@ These rules exist because their violation caused or worsened the May 2026 produc
 8. **Never** run prod-destructive scripts without first asserting the correct subscription (`az account show`) and resource group.
 9. **Always** include rollback notes for infra changes in the PR description.
 10. **Always** verify staging `/healthz` is healthy before triggering a production deploy.
+
+---
+
+## Deploy discipline — established 2026-05-17
+
+These rules exist because their violation cost ~2 hours of misdiagnosis on 2026-05-17, when chaining workflow YAML fixes (v1.1.39 → v1.1.40) and root-cause hypotheses (env.ts → Prisma locks → container timeout) burned five deploy cycles before landing on the real fix.
+
+See `doc/DEPLOY_OPTIMIZATION.md` for the full incident narrative and wave-based rollout plan.
+
+### Process rules
+
+1. **Max one structural change per deploy.** Either one Bicep variable, OR one workflow YAML change — never both. Bundling creates ambiguity when the deploy fails: you can't tell which change caused the failure.
+2. **CI-only fixes before prod fixes.** If a fix can be validated in CI (e.g. `actionlint`, type check, unit tests), ship it BEFORE any deploy that depends on the workflow being correct. Saves whole 45-min deploy cycles.
+3. **One released version per confirmed fix, not per attempt.** Don't bump `package.json` version for every failed-attempt commit. Wait for the fix to be confirmed correct, then bump. Failed attempts can be additional commits on the same in-progress version.
+4. **Never push Bicep or workflow changes that another commit could be bundled with.** Push-to-main does not auto-deploy, but the next manual deploy will include all pending main commits. Coordinate timing or stage the change in a branch until ready.
+
+### Diagnostic rules
+
+5. **When a deploy hangs, read the platform log first.** `LogFiles/*_docker.log` (Azure's view of the container lifecycle: pulls, mounts, probes, terminations) BEFORE `LogFiles/*_default_docker.log` (app stdout/stderr). The platform log tells you what Azure thinks happened; the app log only shows what the app got to say before being killed.
+6. **Verify lock/concurrency hypotheses with `pg_stat_activity` before acting.** Restarting workers "to break a lock" creates noise and may hide the real problem. Querying `pg_stat_activity` and `pg_locks` takes 30 seconds and either confirms or refutes the hypothesis.
+7. **Use `Monitor` (read-only) for deploy observation, not `Agent`.** Agent subprocesses can have side effects (e.g. triggering follow-up deploys). Monitor only watches. Agent-based monitoring caused 3 spurious workflow runs on 2026-05-17 because agents kept firing `gh workflow run` after they were stopped.
+8. **Occam's razor before exotic hypotheses.** If the same failure happens in two different tenants in two different regions, it is almost certainly in our code or config — not in Azure. Verify shared variables (env vars, app settings, Bicep) before blaming external systems.
