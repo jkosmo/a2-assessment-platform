@@ -209,7 +209,10 @@ var appInsightsName = toLower('${appNamePrefix}-${envCode}-appi-${suffix}')
 var logAnalyticsWorkspaceName = toLower('${appNamePrefix}-${envCode}-law-${suffix}')
 var observabilityActionGroupName = toLower('${appNamePrefix}-${envCode}-ag-${suffix}')
 var postgresServerName = toLower('${appNamePrefix}-${envCode}-pg-${suffix}')
-var appServiceStartupTimeLimitSeconds = environmentName == 'production' ? '300' : '600'
+// 600s for all environments. Prod previously had 300s which terminated the container before
+// Express bound to the port on cold start (cert update + Prisma migrate + KV ref resolution
+// totals 5+ minutes on B1). See #427.
+var appServiceStartupTimeLimitSeconds = '600'
 var createObservabilityActionGroup = !empty(observabilityAlertEmail)
 var createNotificationDeliveryAlert = participantNotificationChannel == 'acs_email' || participantNotificationChannel == 'webhook'
 var acsEmailServiceName = toLower('${appNamePrefix}-${envCode}-email-${suffix}')

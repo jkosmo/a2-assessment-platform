@@ -2,6 +2,10 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.41 - 2026-05-17
+
+fix(infra): set WEBSITES_CONTAINER_START_TIME_LIMIT=600 for all envs (was 300 on prod, killed container before Express bound — #427)
+
 ## 1.1.40 - 2026-05-17
 
 fix(ci): add always() guard to deploy-production if-condition so GitHub evaluates it when deploy-staging is skipped (v1.1.40)
