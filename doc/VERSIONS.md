@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.36 - 2026-05-17
+
+fix(ci): remove duplicate npm ci, update actions to Node 24, closes #421
+
+- Removed redundant top-level `npm ci --ignore-scripts` from staging and production deploy jobs (ran in $GITHUB_WORKSPACE but build runs in $RUNNER_TEMP — was pure waste, ~1 min saved per job).
+- Updated actions/checkout → v4.3.1, actions/setup-node → v4.4.0, azure/login → v2.3.0 across all three workflows.
+- Added FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true env var to ci.yml, deploy-azure.yml, and bicep-whatif.yml to opt into Node 24 before the forced June 2 migration.
+
 ## 1.1.35 - 2026-05-17
 
 fix(ci): add skip_staging input to deploy workflow to avoid redundant staging deploys
