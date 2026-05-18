@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.55 - 2026-05-18
+
+fix(ux): generation broken for existing modules + failed-module color (v1.1.54 follow-ups)
+
+1. **Regression fix:** v1.1.54 removed `askForGenerationMode` but left one caller at
+   `askForSourceMaterial` line 2417 — when an EXISTING module had a known
+   `certificationLevel`, adding new source material silently called the removed
+   function and the conversation hung with no generation start. JS ReferenceError
+   in a callback doesn't surface in the UI. Fixed by inlining the call to
+   `generateBlueprintAndConfirm` with hard-defaulted "thorough" mode.
+
+2. **Failed-module color:** Modules where the student's latest decision was a fail
+   were rendering with the same light-green styling as passed completions. Now
+   `.module-card.completed.failed` gets light-pink instead, using
+   `module.participantStatus.latestDecision.passFailTotal === false` to detect.
+
 ## 1.1.54 - 2026-05-18
 
 fix(ux): three quick wins from author feedback on Admin Content shell (#372 follow-ups)

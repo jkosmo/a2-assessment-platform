@@ -17,6 +17,8 @@
       .module-card:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       .module-card.selected { border-color: var(--color-blue); background: var(--color-blue-light); }
       .module-card.completed { border-color: #b8d9c6; background: #f7fcf9; }
+      /* Light pink for completed-but-failed modules so students can distinguish at a glance */
+      .module-card.completed.failed { border-color: #e8c4c4; background: #fdf6f6; }
       .module-title { font-weight: 600; }
       .module-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-1); }
       .module-status-badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 10px; }

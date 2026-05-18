@@ -2414,7 +2414,10 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel) {
     "shell.action.next",
     (sourceMaterial) => {
       if (knownCertLevel) {
-        askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, knownCertLevel, currentLocale);
+        // Hard-default "thorough" — see askForCertLevel comment. v1.1.54 removed the
+        // intermediate askForGenerationMode step; calling it directly here would
+        // ReferenceError silently in the callback. (v1.1.54 regression caught 2026-05-18)
+        generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough");
       } else {
         askForCertLevel(moduleTitle, existingModuleId, sourceMaterial);
       }

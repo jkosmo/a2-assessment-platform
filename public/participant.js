@@ -799,6 +799,11 @@ function renderModules() {
     button.type = "button";
     button.className = module.selected ? "btn-secondary module-card selected" : "btn-secondary module-card";
     button.classList.toggle("completed", module.completed === true);
+    // If the latest decision was a fail, mark the card so the green-success styling
+    // doesn't visually mislead students who haven't passed yet.
+    const latestFailed = module.completed === true
+      && module.participantStatus?.latestDecision?.passFailTotal === false;
+    button.classList.toggle("failed", latestFailed);
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
       activateParticipantModule(module.id);
