@@ -3,6 +3,29 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runPrismaCommand } from "./prismaCommand.mjs";
 
+// Bundled-secrets unpacking: must run BEFORE spawning prisma subprocess (#431).
+// Mirrors src/config/env.ts logic, but earlier in the lifecycle. Prisma migrate is
+// spawned as a child process that inherits process.env from startup.mjs — so any
+// env vars that come from the APP_RUNTIME_SECRETS bundle must be populated here,
+// not in env.ts (which only runs inside the app's main process after Prisma).
+const bundledSecretsRaw = process.env.APP_RUNTIME_SECRETS;
+if (bundledSecretsRaw && bundledSecretsRaw.trim().length > 0) {
+  try {
+    const parsed = JSON.parse(bundledSecretsRaw);
+    let appliedCount = 0;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string" && value.length > 0 && !process.env[key]) {
+        process.env[key] = value;
+        appliedCount += 1;
+      }
+    }
+    console.log(`startup.mjs: loaded ${appliedCount} secrets from APP_RUNTIME_SECRETS bundle before spawning Prisma.`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`startup.mjs: failed to parse APP_RUNTIME_SECRETS JSON: ${message}. Subprocess will inherit existing env only.`);
+  }
+}
+
 const appEntrypoint = path.resolve(process.cwd(), "dist", "src", "index.js");
 const allowDbPushFallback = (process.env.PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK ?? "false").toLowerCase() === "true";
 const skipMigrate = (process.env.SKIP_MIGRATE ?? "false").toLowerCase() === "true";

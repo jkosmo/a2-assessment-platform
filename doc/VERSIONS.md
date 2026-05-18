@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.49 - 2026-05-18
+
+fix(deploy): parse APP_RUNTIME_SECRETS in startup.mjs BEFORE Prisma subprocess (#431)
+
+The v1.1.48 prod deploy crashed because `prisma migrate deploy` is spawned as a child
+process from `scripts/runtime/startup.mjs` BEFORE the app's entry point loads. The
+bundled-secret parser in `src/config/env.ts` only runs inside the app, so the child
+process inherits a `process.env` that's missing `DATABASE_URL` (which Stage 2 removed
+from App Service settings, expecting env.ts to populate it).
+
+Fix: mirror the bundle-parsing logic into `startup.mjs`, running before the Prisma
+subprocess is spawned. Child processes then inherit the populated env.
+
+Recovers ability to safely run `deploy-azure.yml` on prod after the Stage 2 Bicep
+change in v1.1.48. The manual DATABASE_URL workaround applied to prod yesterday will
+be removed by Bicep on this deploy and replaced by the bundle parsing path.
+
 ## 1.1.48 - 2026-05-17
 
 perf(infra): bundled KV secret Stage 2 — remove individual KV refs (#431)
