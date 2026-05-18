@@ -139,12 +139,12 @@ export function deriveShellModuleActionModel({
 }
 
 export function deriveShellDraftReadyActionModel({ hasSelectedModule }) {
-  const actionKeys = ["directEdit"];
+  const actionKeys = ["directEdit", "revise"];
   if (hasSelectedModule) actionKeys.push("openEditor");
   actionKeys.push("restart", "saveDraft");
   return {
     actionKeys,
-    shouldOpenUnifiedRevision: true,
+    shouldOpenUnifiedRevision: false,
   };
 }
 

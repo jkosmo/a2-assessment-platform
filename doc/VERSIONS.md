@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.56 - 2026-05-18
+
+fix(ux): save menu always at conversation bottom (#372 follow-up, item #4)
+
+Closes the last of the four author-feedback items from v1.1.54/55 testing.
+
+Before this change `showDraftReadyActions()` posted two bubbles back-to-back:
+the action menu (Direct edit, Open editor, Restart, Save draft) and immediately
+below it the unified-revision textarea ("What should I change?"). The textarea
+always became the last element in the chat, so after a revision cycle authors
+had to scroll back up to find Save draft. User feedback (2026-05-18):
+
+> "Fokus trekkes naturlig med siste del av dialogen med redigeringsmuligheter,
+> og det er ikke intuitivt at man må gå tilbake til tidligere i samtalen for å
+> få meny for Lagring osv. Det bryter prinsippet om en samtale som hele tiden
+> beveger seg fremover skritt for skritt."
+
+Fix:
+- `deriveShellDraftReadyActionModel`: adds explicit `revise` action key,
+  switches `shouldOpenUnifiedRevision` default to `false`.
+- `showDraftReadyActions` registers `revise → startUnifiedRevisionFlow` using
+  the existing `shell.draftReady.editInChat` label (already translated in en/nb/nn).
+- The textarea now only appears when the author clicks "Be om endringer i chat",
+  and after the revision completes the action menu is once again the bottom
+  bubble — Save draft is always at the focal point of the conversation.
+
+Tests:
+- `test/unit/admin-content-shell-state.test.js` — updated to assert the new
+  action order (`directEdit, revise, openEditor?, restart, saveDraft`) and
+  `shouldOpenUnifiedRevision: false`.
+
 ## 1.1.55 - 2026-05-18
 
 fix(ux): generation broken for existing modules + failed-module color (v1.1.54 follow-ups)

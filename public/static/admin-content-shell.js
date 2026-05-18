@@ -2561,6 +2561,7 @@ function showDraftReadyActions() {
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
     directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+    revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
     openEditor: { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) },
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },

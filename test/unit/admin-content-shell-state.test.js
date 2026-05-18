@@ -133,17 +133,17 @@ describe("admin content shell state helpers", () => {
   });
 
   describe("deriveShellDraftReadyActionModel", () => {
-    it("prefers open-editor first when a module already exists", () => {
+    it("includes revise as an explicit action and does not auto-open the textarea when a module already exists", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: true })).toEqual({
-        actionKeys: ["directEdit", "openEditor", "restart", "saveDraft"],
-        shouldOpenUnifiedRevision: true,
+        actionKeys: ["directEdit", "revise", "openEditor", "restart", "saveDraft"],
+        shouldOpenUnifiedRevision: false,
       });
     });
 
-    it("omits open-editor when no module has been created yet", () => {
+    it("omits open-editor when no module has been created yet and keeps revise as an explicit action", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: false })).toEqual({
-        actionKeys: ["directEdit", "restart", "saveDraft"],
-        shouldOpenUnifiedRevision: true,
+        actionKeys: ["directEdit", "revise", "restart", "saveDraft"],
+        shouldOpenUnifiedRevision: false,
       });
     });
   });
