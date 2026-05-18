@@ -142,11 +142,29 @@ export const blueprintGenerationBodySchema = z.object({
   locale: generationLocaleSchema,
 });
 
+// Schema mirrors the AssessmentBlueprint shape in llmContentGenerationService.ts.
+// Kept here (in the route-input layer) so we validate incoming JSON before it reaches the generator.
+const assessmentBlueprintSchema = z.object({
+  learningObjectives: z.array(z.string().trim().min(1)).default([]),
+  keyTopics: z.array(z.string().trim().min(1)).default([]),
+  complexityBudget: z.object({
+    actors: z.number().int().min(0).default(0),
+    concepts: z.number().int().min(0).default(0),
+    tradeoffs: z.number().int().min(0).default(0),
+  }).default({ actors: 0, concepts: 0, tradeoffs: 0 }),
+  mcqProfile: z.object({
+    suggestedCount: z.number().int().min(1).max(20).default(10),
+    topicDistribution: z.record(z.string(), z.number().min(0).max(1)).default({}),
+  }).default({ suggestedCount: 10, topicDistribution: {} }),
+  notes: z.string().default(""),
+});
+
 export const moduleDraftGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
   generationMode: generationModeSchema.default("ordinary"),
+  blueprint: assessmentBlueprintSchema.optional(),
 });
 
 export const moduleDraftRevisionBodySchema = z.object({
@@ -164,6 +182,7 @@ export const mcqGenerationBodySchema = z.object({
   generationMode: generationModeSchema.default("ordinary"),
   questionCount: z.number().int().min(1).max(20).default(10),
   optionCount: z.number().int().min(2).max(6).default(4),
+  blueprint: assessmentBlueprintSchema.optional(),
 });
 
 export const mcqRevisionBodySchema = z.object({

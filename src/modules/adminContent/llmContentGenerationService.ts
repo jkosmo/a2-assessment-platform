@@ -15,6 +15,10 @@ export type ModuleDraftInput = {
   certificationLevel: CertificationLevel;
   locale: GenerationLocale;
   generationMode: GenerationMode;
+  // When provided, the blueprint's learning objectives + complexityBudget constrain the
+  // generated scenario so that scope, actor count, and trade-off count match the contract
+  // also applied to MCQ generation. See #372.
+  blueprint?: AssessmentBlueprint;
 };
 
 export type ModuleDraftResult = {
@@ -40,6 +44,10 @@ export type McqGenerationInput = {
   generationMode: GenerationMode;
   questionCount: number;
   optionCount: number;
+  // When provided, the blueprint's learningObjectives, keyTopics, and mcqProfile constrain
+  // question distribution across topics so the MCQ set covers the contract that the
+  // scenario was also generated against. See #372.
+  blueprint?: AssessmentBlueprint;
 };
 
 export type McqDistractorMetadata = {
@@ -475,6 +483,69 @@ function buildUrl(): string {
   return `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
 }
 
+// Normalizes a potentially-partial blueprint (e.g. from Zod-parsed request body where
+// fields are nominally optional even with defaults) into the strict AssessmentBlueprint
+// shape consumed by the generators. Returns undefined if input is undefined. See #372.
+export type PartialAssessmentBlueprint = {
+  learningObjectives?: string[];
+  keyTopics?: string[];
+  complexityBudget?: { actors?: number; concepts?: number; tradeoffs?: number };
+  mcqProfile?: { suggestedCount?: number; topicDistribution?: Record<string, number> };
+  notes?: string;
+};
+export function normalizeAssessmentBlueprint(
+  raw: PartialAssessmentBlueprint | undefined,
+): AssessmentBlueprint | undefined {
+  if (!raw) return undefined;
+  return {
+    learningObjectives: raw.learningObjectives ?? [],
+    keyTopics: raw.keyTopics ?? [],
+    complexityBudget: {
+      actors: raw.complexityBudget?.actors ?? 0,
+      concepts: raw.complexityBudget?.concepts ?? 0,
+      tradeoffs: raw.complexityBudget?.tradeoffs ?? 0,
+    },
+    mcqProfile: {
+      suggestedCount: raw.mcqProfile?.suggestedCount ?? 10,
+      topicDistribution: raw.mcqProfile?.topicDistribution ?? {},
+    },
+    notes: raw.notes ?? "",
+  };
+}
+
+// Renders the optional assessment blueprint as a prompt section that downstream generators
+// (scenario + MCQ) consume. Returns empty string when no blueprint is provided, so the
+// generators fall back to the level-default complexity budget. See #372.
+function renderBlueprintSection(blueprint: AssessmentBlueprint | undefined): string {
+  if (!blueprint) return "";
+  const objectives = blueprint.learningObjectives.length > 0
+    ? blueprint.learningObjectives.map((o) => `- ${o}`).join("\n")
+    : "- (none specified)";
+  const topics = blueprint.keyTopics.length > 0
+    ? blueprint.keyTopics.map((t) => `- ${t}`).join("\n")
+    : "- (none specified)";
+  const cb = blueprint.complexityBudget;
+  return `
+## Assessment blueprint (author-confirmed contract — follow strictly)
+
+The blueprint defines the contract this task must satisfy. The MCQ for this module is generated against
+the same blueprint, so consistent adherence here ensures the two formats stay calibrated.
+
+Learning objectives to test:
+${objectives}
+
+Key topics covered by source material:
+${topics}
+
+Refined complexity targets (override defaults below if more specific):
+- Actors in scenario: ${cb.actors}
+- Distinct concepts to integrate: ${cb.concepts}
+- Trade-offs or dilemmas: ${cb.tradeoffs}
+
+Author notes: ${blueprint.notes || "(none)"}
+`;
+}
+
 export function buildModuleDraftPrompts(input: ModuleDraftInput): {
   systemPrompt: string;
   userPrompt: string;
@@ -487,7 +558,7 @@ export function buildModuleDraftPrompts(input: ModuleDraftInput): {
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
 Generation mode: ${input.generationMode}
-
+${renderBlueprintSection(input.blueprint)}
 ## Authoring constraints
 
 - The source material is for you only. The candidate will NOT see it.
@@ -565,7 +636,40 @@ export function buildMcqGenerationPrompts(input: McqGenerationInput): {
   const systemPrompt =
     "You are an MCQ question author for a professional certification platform. Return strict JSON only - no markdown, no commentary.";
 
-  const userPrompt = `Generate EXACTLY ${input.questionCount} multiple-choice questions (not fewer, not more) using the source material below as hidden author background only. The questions array in your JSON response must contain exactly ${input.questionCount} items.
+  // Render MCQ-specific guidance from blueprint (topic distribution constrains which key topics
+  // each question targets; learning objectives steer cognitive level). Empty when no blueprint.
+  let mcqBlueprintSection = "";
+  if (input.blueprint) {
+    const dist = Object.entries(input.blueprint.mcqProfile.topicDistribution);
+    const distLines = dist.length > 0
+      ? dist.map(([topic, weight]) => `- ${topic}: ~${Math.round(weight * 100)}% of questions`).join("\n")
+      : "- (no topic distribution specified — distribute evenly across key topics)";
+    const objectives = input.blueprint.learningObjectives.length > 0
+      ? input.blueprint.learningObjectives.map((o) => `- ${o}`).join("\n")
+      : "- (none specified)";
+    const topics = input.blueprint.keyTopics.length > 0
+      ? input.blueprint.keyTopics.map((t) => `- ${t}`).join("\n")
+      : "- (none specified)";
+    mcqBlueprintSection = `
+## Assessment blueprint (author-confirmed contract — follow strictly)
+
+The scenario task for this module is generated against the same blueprint. Adhere to the
+contract so MCQ and scenario stay calibrated against each other.
+
+Learning objectives the MCQ set must test:
+${objectives}
+
+Key topics from the source material:
+${topics}
+
+Target topic distribution for the ${input.questionCount} questions:
+${distLines}
+
+Author notes: ${input.blueprint.notes || "(none)"}
+`;
+  }
+
+  const userPrompt = `Generate EXACTLY ${input.questionCount} multiple-choice questions (not fewer, not more) using the source material below as hidden author background only. The questions array in your JSON response must contain exactly ${input.questionCount} items.${mcqBlueprintSection}
 
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}

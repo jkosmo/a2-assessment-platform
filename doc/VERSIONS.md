@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.53 - 2026-05-18
+
+feat(content): module-draft + MCQ prompts consume assessment blueprint (#372 partial)
+
+When an assessment blueprint is generated (existing endpoint `/generate/blueprint`)
+and accepted by the author, the next module-draft and MCQ generation calls now
+include the blueprint, and the prompt builders embed it as an explicit "Assessment
+blueprint" section that the LLM must honour.
+
+This is the remaining integration work from #372. Previously the blueprint was
+generated and stored on `ModuleVersion`, but the actual generators ignored it —
+so the calibration contract between scenario and MCQ wasn't enforced.
+
+Changes:
+- `ModuleDraftInput` + `McqGenerationInput`: optional `blueprint` field
+- `moduleDraftGenerationBodySchema` + `mcqGenerationBodySchema`: optional blueprint
+  (validated as nested z.object — Zod normalises defaults)
+- `buildModuleDraftPrompts`: injects a blueprint section between cert-level header
+  and the level-default complexity budget. Blueprint overrides defaults when present.
+- `buildMcqGenerationPrompts`: injects a blueprint section with topic-distribution
+  hints so MCQ coverage matches blueprint allocation
+- `normalizeAssessmentBlueprint` helper bridges Zod-parsed partial-shaped objects to
+  the strict `AssessmentBlueprint` type
+- UI: `generateDraftInBackground` + `generateMcqInBackground` send the accepted
+  blueprint (parsed from JSON string stored in session) in the request body
+
+Tests: 4 new test cases verifying prompts include / omit blueprint section correctly.
+
+**Staging-only deploy.** Pre-publish gate validation against blueprint and prod
+rollout deferred.
+
 ## 1.1.52 - 2026-05-18
 
 fix(infra): worker healthCheckPath + subscription-guard CI lint (closes #413, #420)

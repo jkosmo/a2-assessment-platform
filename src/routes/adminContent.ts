@@ -43,6 +43,7 @@ import {
   localizeModuleDraft,
   localizeMcqQuestions,
   generateMcqQuestions,
+  normalizeAssessmentBlueprint,
   reviseModuleDraft,
   reviseMcqQuestions,
   checkScenarioAnswerability,
@@ -505,6 +506,7 @@ adminContentRouter.post("/generate/module-draft", generateLimiter, async (reques
     const draft = await generateModuleDraft({
       ...data,
       generationMode: data.generationMode ?? "ordinary",
+      blueprint: normalizeAssessmentBlueprint(data.blueprint),
     });
     const scenarioValidation = validateScenarioDraft(
       draft.taskText,
@@ -582,6 +584,7 @@ adminContentRouter.post("/generate/mcq", generateLimiter, async (request, respon
       generationMode: data.generationMode ?? "ordinary",
       questionCount: data.questionCount ?? 10,
       optionCount: data.optionCount ?? 4,
+      blueprint: normalizeAssessmentBlueprint(data.blueprint),
     });
     const validation = validateMcqDistractors(result.questions);
     response.json({

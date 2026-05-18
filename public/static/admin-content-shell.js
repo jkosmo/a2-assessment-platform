@@ -1187,6 +1187,17 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   const slot = logProgress("shell.generating.draftProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
+  // Blueprint may arrive as a JSON string (from confirmAndGenerate after author accepts it)
+  // or as an object (in retry callbacks). Normalise to object form for the API body.
+  let blueprintObject = null;
+  if (blueprint) {
+    if (typeof blueprint === "string") {
+      try { blueprintObject = JSON.parse(blueprint); } catch { blueprintObject = null; }
+    } else if (typeof blueprint === "object") {
+      blueprintObject = blueprint;
+    }
+  }
+
   let result;
   try {
     result = await apiFetch(
@@ -1194,7 +1205,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
         signal: abort.signal,
       },
     );
@@ -1235,6 +1246,19 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
   const slot = logProgress("shell.generating.mcqProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
+  // Pull blueprint from sessionDraft if present so MCQ is generated against the same contract
+  // as the scenario task. Stored as JSON string — parse back to object for the API. See #372.
+  let blueprintObject = null;
+  const sessionBlueprint = sessionDraft?.assessmentBlueprint
+    ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint;
+  if (sessionBlueprint) {
+    if (typeof sessionBlueprint === "string") {
+      try { blueprintObject = JSON.parse(sessionBlueprint); } catch { blueprintObject = null; }
+    } else if (typeof sessionBlueprint === "object") {
+      blueprintObject = sessionBlueprint;
+    }
+  }
+
   let result;
   try {
     result = await apiFetch(
@@ -1242,7 +1266,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, questionCount, optionCount }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, questionCount, optionCount, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
         signal: abort.signal,
       },
     );

@@ -406,4 +406,74 @@ describe("llm content generation prompts", () => {
       expect(userPrompt).toContain("Each question must have exactly 3 answer options");
     });
   });
+
+  describe("assessment blueprint consumption (#372)", () => {
+    const blueprint = {
+      learningObjectives: ["Apply privacy principles", "Identify processing risks"],
+      keyTopics: ["GDPR Article 6", "data minimisation"],
+      complexityBudget: { actors: 2, concepts: 3, tradeoffs: 1 },
+      mcqProfile: {
+        suggestedCount: 8,
+        topicDistribution: { "GDPR Article 6": 0.5, "data minimisation": 0.5 },
+      },
+      notes: "Focus on practical, situational application.",
+    };
+
+    it("module-draft prompt embeds blueprint when provided", () => {
+      const { userPrompt } = buildModuleDraftPrompts({
+        sourceMaterial: "Any topic.",
+        certificationLevel: "intermediate",
+        locale: "en-GB",
+        generationMode: "ordinary",
+        blueprint,
+      });
+
+      expect(userPrompt).toContain("Assessment blueprint");
+      expect(userPrompt).toContain("Apply privacy principles");
+      expect(userPrompt).toContain("GDPR Article 6");
+      expect(userPrompt).toContain("Actors in scenario: 2");
+      expect(userPrompt).toContain("Focus on practical, situational application.");
+    });
+
+    it("module-draft prompt omits blueprint section when not provided", () => {
+      const { userPrompt } = buildModuleDraftPrompts({
+        sourceMaterial: "Any topic.",
+        certificationLevel: "intermediate",
+        locale: "en-GB",
+        generationMode: "ordinary",
+      });
+
+      expect(userPrompt).not.toContain("Assessment blueprint");
+    });
+
+    it("mcq prompt embeds blueprint topic distribution when provided", () => {
+      const { userPrompt } = buildMcqGenerationPrompts({
+        sourceMaterial: "Any topic.",
+        certificationLevel: "intermediate",
+        locale: "en-GB",
+        generationMode: "ordinary",
+        questionCount: 8,
+        optionCount: 4,
+        blueprint,
+      });
+
+      expect(userPrompt).toContain("Assessment blueprint");
+      expect(userPrompt).toContain("Apply privacy principles");
+      expect(userPrompt).toContain("GDPR Article 6: ~50%");
+      expect(userPrompt).toContain("data minimisation: ~50%");
+    });
+
+    it("mcq prompt omits blueprint section when not provided", () => {
+      const { userPrompt } = buildMcqGenerationPrompts({
+        sourceMaterial: "Any topic.",
+        certificationLevel: "intermediate",
+        locale: "en-GB",
+        generationMode: "ordinary",
+        questionCount: 4,
+        optionCount: 4,
+      });
+
+      expect(userPrompt).not.toContain("Assessment blueprint");
+    });
+  });
 });
