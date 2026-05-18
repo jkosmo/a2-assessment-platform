@@ -58,6 +58,26 @@ jobs:
             exit 1
           fi
 
+      - name: Lint — destructive Azure scripts must assert subscription before acting
+        run: |
+          # Any script that performs az webapp delete / az resource delete / az group delete /
+          # az deployment group create must first verify the current subscription matches an
+          # explicit param (defense against the May 2026 wrong-subscription incident). See #420.
+          fail=0
+          for script in scripts/azure/deactivate-app-layer.ps1 scripts/azure/deploy-environment.ps1 scripts/azure/activate-staging-app-layer.ps1; do
+            [ -f "$script" ] || continue
+            if grep -qE 'az (webapp|resource|group) delete|az deployment group create' "$script"; then
+              # Either an explicit assertion against `az account show --query id` OR az account set
+              # to a parameter-passed subscription is acceptable. Bare `az account set` without
+              # subscription validation isn't enough.
+              if ! grep -qE 'az account show.*--query.*id|currentSubscription.*-ne.*SubscriptionId' "$script"; then
+                echo "FAIL: $script performs destructive az operations but lacks subscription assertion. Add a check that fails before acting if az context doesn't match expected subscription."
+                fail=1
+              fi
+            fi
+          done
+          exit $fail
+
       - name: Lint — actionlint (GitHub Actions workflow syntax + context references)
         run: |
           # actionlint catches typos in context properties (github.evnt.foo),

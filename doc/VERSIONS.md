@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.52 - 2026-05-18
+
+fix(infra): worker healthCheckPath + subscription-guard CI lint (closes #413, #420)
+
+- `#413`: Worker App Service now has `healthCheckPath: '/healthz'` in its siteConfig.
+  Without this, Azure couldn't detect unhealthy worker instances and wouldn't auto-replace
+  them. Worker failures used to stay invisible until queue depth or job staleness
+  became user-facing.
+
+- `#420`: New CI lint that fails the build if any destructive Azure script
+  (`az webapp delete`, `az resource delete`, `az group delete`, `az deployment group create`)
+  doesn't have a subscription assertion. Implemented in `.github/workflows/ci.yml` infra-lint
+  job. Caught a real gap: `deploy-environment.ps1` set the subscription but never verified
+  the resulting context — now adds the same `az account show` assertion as
+  `deactivate-app-layer.ps1`.
+
+Both dormant until next deploy via deploy-azure.yml (Bicep+script changes).
+
 ## 1.1.51 - 2026-05-18
 
 fix(infra): safety guards on deactivate-app-layer.ps1 (closes #414)

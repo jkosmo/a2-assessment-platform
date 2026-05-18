@@ -387,6 +387,14 @@ Write-Host "Resource group: $ResourceGroupName"
 az account set --subscription $SubscriptionId
 Assert-LastExitCode "az account set"
 
+# Defense-in-depth: verify the az context is now actually the expected subscription.
+# `az account set` succeeding doesn't guarantee az reads from the right tenant if a stale
+# cached context interferes. Re-read and assert. (#420)
+$currentSubscription = (az account show --query id -o tsv).Trim()
+if ($currentSubscription -ne $SubscriptionId) {
+  throw "SAFETY ABORT: az account context is '$currentSubscription' but caller declared SubscriptionId='$SubscriptionId'. Refusing to mutate infrastructure in unknown context."
+}
+
 az group create `
   --name $ResourceGroupName `
   --location $Location `

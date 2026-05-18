@@ -762,6 +762,10 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'NODE|22-lts'
       appCommandLine: 'node scripts/runtime/startup.mjs'
       alwaysOn: true
+      // Worker exposes the same /healthz endpoint as web. Without this, Azure can't
+      // auto-replace unhealthy instances and worker failures stay invisible until
+      // queue depth or job staleness becomes user-facing. (#413)
+      healthCheckPath: '/healthz'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
