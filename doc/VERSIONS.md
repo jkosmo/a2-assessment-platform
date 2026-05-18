@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.51 - 2026-05-18
+
+fix(infra): safety guards on deactivate-app-layer.ps1 (closes #414)
+
+Adds three safety asserts before any destructive action:
+1. Current Azure context subscription matches `-SubscriptionId` parameter
+2. Resource group exists and has an `environment` tag
+3. RG's `environment` tag matches `-EnvironmentName` parameter
+
+Also logs full resource inventory before deletion (audit trail in workflow log).
+
+Belt-and-suspenders with the workflow-level subscription guard from #405.
+Defense against the May 2026 incident pattern (script ran against wrong env).
+
+Dormant change — only takes effect when deactivate-app-layer.ps1 is actually invoked
+(which is rare, usually manual operator action).
+
 ## 1.1.50 - 2026-05-18
 
 fix(infra): production safety lock + backup pre-flight RG fix (#405 partial, closes #412)
