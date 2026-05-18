@@ -4,17 +4,9 @@
 >
 > **Why this matters:** Deploy time is a stability parameter, not just a convenience metric. Long deploys create pressure to bundle changes, which increases blast radius per deploy. Target: staging deploy under 5 min, prod deploy under 10 min.
 
-> ⚠️ **CRITICAL — DO NOT RUN deploy-azure.yml ON PROD UNTIL #431 SUBPROCESS FIX IS DEPLOYED** (2026-05-17 evening)
+> ✅ **#431 fully resolved 2026-05-18.** Bundled-secret path validated end-to-end in production via v1.1.49 (`startup.mjs` now parses APP_RUNTIME_SECRETS before spawning Prisma subprocess). Prod's `Wait-Stable` confirmed 6/6 clean on `/version == 1.1.49`. Cold-start time on prod with bundled secrets + cloud-certs-off: ~5 min.
 >
-> Prod v1.1.48 deploy ran into Prisma subprocess issue (#431 comment): `prisma migrate deploy` is spawned BEFORE env.ts loads, so the bundled-secret parser doesn't help it. Prod was recovered by manually re-adding DATABASE_URL as a KV ref via `az webapp config appsettings set`. Bicep still has Stage 2 (no individual KV refs), so the next deploy will remove DATABASE_URL again and break prod.
->
-> **Required fix before next prod deploy via deploy-azure.yml:**
-> - Move bundle parsing into `scripts/runtime/startup.mjs` (or equivalent) so it runs BEFORE Prisma subprocess
-> - OR revert Bicep Stage 2 (re-add the 5 individual KV refs) and accept no cold-start savings
->
-> Safe operations until then:
-> - `deploy-app.yml` to prod: SAFE — only zip-deploy, doesn't touch app settings
-> - `deploy-azure.yml` to staging: SAFE — staging has SKIP_MIGRATE=true so Prisma subprocess is skipped
+> ⚠️ **Pre-existing issue surfaced by v1.1.49 prod deploy:** the deploy SP lacks permission to create the backup vault resource group (`rg-a2-assessment-backup`). The app deploy itself succeeded cleanly — only the post-deploy backup vault step failed. This is **separate from #431** and relates to #404 (deploy SP role grant). Until granted, `deploy-azure.yml` to prod will report failure even when app deploy is clean.
 
 ---
 
@@ -66,6 +58,9 @@ Sequenced to minimize deploy cycles. Each wave waits for the previous to stabili
 | 2026-05-17 | 25998477632 | staging | 29m44s | success | v1.1.47 (#431 Stage 1) — bundled secret added alongside individual refs. Validates bundle path works |
 | 2026-05-17 | 25999563382 | staging | 29m51s | success | v1.1.48 (#431 Stage 2) — individual KV refs removed. **Cold-start 4m37s** vs ~6-9 min baseline |
 | 2026-05-17 | 26001359725 | **prod** | 33m54s | **failure** | v1.1.48 (#431 Stage 2) — Prisma subprocess can't see bundled secret (prod has SKIP_MIGRATE=false). App crash-looped on `Environment variable not found: DATABASE_URL`. Recovered by manually re-adding DATABASE_URL KV ref via `az webapp config appsettings set`. Prod on v1.1.48 confirmed at 20:51 UTC after ~4 min cold-start |
+| 2026-05-18 | 26014263032 | staging | 22m47s | success | v1.1.49 — startup.mjs parses bundled secret before Prisma subprocess. SKIP_MIGRATE=true here so Prisma not exercised, but app starts cleanly |
+| 2026-05-18 | (manual restart) | staging | 96s cold-start | success | v1.1.49 + SKIP_MIGRATE=false temporarily — **validated Prisma subprocess path**. New container with 96-second cold-start (best ever measured) |
+| 2026-05-18 | 26015191246 | **prod** | 34m1s (clean app deploy + backup-vault permission failure) | mixed | v1.1.49 — **bundled secret + Prisma subprocess fix fully working in prod**. `Wait-Stable confirmed 6/6` clean on /version==1.1.49. Backup vault RG creation failed at end with AuthorizationFailed (#404 territory, pre-existing). App is on v1.1.49 healthy |
 
 ---
 
