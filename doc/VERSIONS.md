@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.50 - 2026-05-18
+
+fix(infra): production safety lock + backup pre-flight RG fix (#405 partial, closes #412)
+
+Two production-safety fixes ready for next prod deploy (after #404 SP grant unblocks):
+
+1. **CanNotDelete lock on prod resource group** (#405 partial): Bicep adds a
+   Microsoft.Authorization/locks resource gated by `environmentName == 'production'`.
+   Blocks all DELETE operations on prod resources, including accidental targeting
+   from cross-environment workflows (May 2026 incident). Requires
+   `Microsoft.Authorization/locks/write` on the deploy SP — same dependency as #404.
+
+2. **Backup pre-flight fix** (#412): the pre-deploy backup snapshot was querying
+   the wrong resource group (`rg-a2-assessment-{env}` instead of
+   `rg-a2-assessment-backup`) and the wrong rule type (`AzureRetentionRule`
+   instead of `AzureBackupRule`). This silently disabled the pre-deploy snapshot
+   for months. Both fixed in `scripts/azure/deploy-environment.ps1`.
+
+Both fixes are dormant until the next deploy via deploy-azure.yml that touches infra.
+The deploy script change (#412) takes effect immediately on next deploy regardless
+of SP state. The Bicep lock activates only when SP has lock-write permission.
+
 ## 1.1.49 - 2026-05-18
 
 fix(deploy): parse APP_RUNTIME_SECRETS in startup.mjs BEFORE Prisma subprocess (#431)

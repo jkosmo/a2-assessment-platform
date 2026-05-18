@@ -520,21 +520,23 @@ if ($ParticipantNotificationChannel -eq "acs_email") {
 
 # Production: trigger pre-deploy backup on any existing vault before changing infra.
 # This is best-effort - a failure here is logged as a warning and does not abort the deploy.
+# Vault lives in $BackupVaultResourceGroup (default: rg-a2-assessment-backup), NOT in the
+# main app RG. Adhoc backup needs the backup-rule (AzureBackupRule), not the retention-rule. #412
 if ($EnvironmentName -eq "production") {
-  Write-Host "Checking for existing backup vault in $ResourceGroupName (pre-deploy snapshot)..."
-  $preDeployVaultName = (az dataprotection backup-vault list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+  Write-Host "Checking for existing backup vault in $BackupVaultResourceGroup (pre-deploy snapshot)..."
+  $preDeployVaultName = (az dataprotection backup-vault list --resource-group $BackupVaultResourceGroup --query "[0].name" -o tsv 2>$null)
   if ($preDeployVaultName -and $preDeployVaultName.Trim()) {
     $preDeployVaultName = $preDeployVaultName.Trim()
-    $preDeployInstance = (az dataprotection backup-instance list --vault-name $preDeployVaultName --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+    $preDeployInstance = (az dataprotection backup-instance list --vault-name $preDeployVaultName --resource-group $BackupVaultResourceGroup --query "[0].name" -o tsv 2>$null)
     if ($preDeployInstance -and $preDeployInstance.Trim()) {
       $preDeployInstance = $preDeployInstance.Trim()
-      $preDeployRuleName = (az dataprotection backup-policy list --vault-name $preDeployVaultName --resource-group $ResourceGroupName --query "[0].properties.policyRules[?objectType=='AzureRetentionRule'].name | [0]" -o tsv 2>$null)
+      $preDeployRuleName = (az dataprotection backup-policy list --vault-name $preDeployVaultName --resource-group $BackupVaultResourceGroup --query "[0].properties.policyRules[?objectType=='AzureBackupRule'].name | [0]" -o tsv 2>$null)
       if (-not $preDeployRuleName -or -not $preDeployRuleName.Trim()) { $preDeployRuleName = "BackupDaily" }
       $preDeployRuleName = $preDeployRuleName.Trim()
       Write-Host "Triggering pre-deploy backup: vault='$preDeployVaultName' instance='$preDeployInstance' rule='$preDeployRuleName'..."
       $adhocOut = (az dataprotection backup-instance adhoc-backup `
         --vault-name $preDeployVaultName `
-        --resource-group $ResourceGroupName `
+        --resource-group $BackupVaultResourceGroup `
         --backup-instance-name $preDeployInstance `
         --rule-name $preDeployRuleName 2>&1)
       if ($LASTEXITCODE -eq 0) {
@@ -546,7 +548,7 @@ if ($EnvironmentName -eq "production") {
       Write-Host "No backup instances registered in vault '$preDeployVaultName'; skipping pre-deploy snapshot."
     }
   } else {
-    Write-Host "No existing backup vault found in $ResourceGroupName; skipping pre-deploy snapshot."
+    Write-Host "No existing backup vault found in $BackupVaultResourceGroup; skipping pre-deploy snapshot."
   }
 }
 

@@ -1457,6 +1457,19 @@ resource notificationFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-0
   }
 }
 
+// Production resource group CanNotDelete lock (#405). Blocks all DELETE operations on
+// resources in the prod RG. The May 2026 incident where a staging deactivate workflow
+// targeted production resources would have been blocked here with a 409 Conflict before
+// any damage. Removal requires Owner-level intentional unlock via Azure portal or `az lock delete`.
+resource productionResourceGroupLock 'Microsoft.Authorization/locks@2020-05-01' = if (environmentName == 'production') {
+  name: 'rg-production-do-not-delete'
+  scope: resourceGroup()
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'Production safety lock — remove only for intentional teardown. See #405.'
+  }
+}
+
 output webAppName string = webApp.name
 output workerAppName string = workerApp.name
 output parserAppName string = parserApp.name
