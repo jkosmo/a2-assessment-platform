@@ -2326,8 +2326,10 @@ function showModuleActions() {
     pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     publish: {
+      // Direct publish — author already confirmed by clicking "Publish". The prior
+      // double-confirm dialog was redundant friction. (2026-05-18 author feedback)
       labelKey: "shell.draftReady.publish",
-      action: () => confirmHighImpactAction("shell.publish.confirmPrompt", "shell.publish.confirmAction", publishLatestDraftInBackground, showModuleActions, { module: moduleLabel }),
+      action: publishLatestDraftInBackground,
     },
     unpublish: {
       labelKey: "shell.module.unpublish",
@@ -2421,17 +2423,12 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel) {
 }
 
 function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
+  // Generation mode is always "thorough" — author feedback (2026-05-18) confirmed the
+  // "Vanlig" option was never selected in practice. Removed to reduce conversation friction.
   logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale) },
-    { labelKey: "shell.certLevel.intermediate", action: () => askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale) },
-    { labelKey: "shell.certLevel.advanced", action: () => askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale) },
-  ]);
-}
-
-function askForGenerationMode(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale) {
-  logBot(() => t("shell.generationMode.prompt"), [
-    { labelKey: "shell.generationMode.ordinary", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "ordinary") },
-    { labelKey: "shell.generationMode.thorough", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, "thorough") },
+    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale, "thorough") },
+    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough") },
+    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough") },
   ]);
 }
 
@@ -2592,17 +2589,11 @@ function startGenerateMcqFlow() {
 }
 
 function askForCertLevelMcqOnly(sourceMaterial) {
+  // Generation mode hard-defaulted to "thorough" — see askForCertLevel above for rationale.
   logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => askForMcqGenerationMode(sourceMaterial, "basic", currentLocale, () => showModuleActions()) },
-    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqGenerationMode(sourceMaterial, "intermediate", currentLocale, () => showModuleActions()) },
-    { labelKey: "shell.certLevel.advanced", action: () => askForMcqGenerationMode(sourceMaterial, "advanced", currentLocale, () => showModuleActions()) },
-  ]);
-}
-
-function askForMcqGenerationMode(sourceMaterial, certLevel, locale, onAccept) {
-  logBot(() => t("shell.generationMode.prompt"), [
-    { labelKey: "shell.generationMode.ordinary", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, "ordinary", onAccept) },
-    { labelKey: "shell.generationMode.thorough", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, "thorough", onAccept) },
+    { labelKey: "shell.certLevel.basic", action: () => askForMcqQuestionCount(sourceMaterial, "basic", currentLocale, "thorough", () => showModuleActions()) },
+    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", currentLocale, "thorough", () => showModuleActions()) },
+    { labelKey: "shell.certLevel.advanced", action: () => askForMcqQuestionCount(sourceMaterial, "advanced", currentLocale, "thorough", () => showModuleActions()) },
   ]);
 }
 

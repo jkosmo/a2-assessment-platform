@@ -820,6 +820,25 @@ function renderModules() {
     badges.className = "module-badges";
     let hasBadges = false;
 
+    // Show certification level so students can tell modules at different levels apart.
+    // module.certificationLevel may be a plain string ("basic"/"intermediate"/"advanced")
+    // or a localized object — normalise to a key we can label. See #372 follow-up.
+    let levelKey = null;
+    const rawLevel = module.certificationLevel;
+    if (typeof rawLevel === "string") {
+      levelKey = rawLevel.toLowerCase();
+    } else if (rawLevel && typeof rawLevel === "object") {
+      const firstValue = Object.values(rawLevel).find((v) => typeof v === "string" && v.length > 0);
+      if (typeof firstValue === "string") levelKey = firstValue.toLowerCase();
+    }
+    if (levelKey === "basic" || levelKey === "intermediate" || levelKey === "advanced") {
+      const levelBadge = document.createElement("div");
+      levelBadge.className = `module-status-badge level level-${levelKey}`;
+      levelBadge.textContent = t(`modules.levelBadge.${levelKey}`);
+      badges.appendChild(levelBadge);
+      hasBadges = true;
+    }
+
     if (module.completed) {
       const completedBadge = document.createElement("div");
       completedBadge.className = "module-status-badge completed";

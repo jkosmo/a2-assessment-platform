@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.54 - 2026-05-18
+
+fix(ux): three quick wins from author feedback on Admin Content shell (#372 follow-ups)
+
+1. **Participant module list shows certification level badge.** Previously two modules
+   on the same topic with different levels (e.g. Bourdieu basic vs advanced) were
+   indistinguishable in the participant module picker. Adds a level badge using
+   the existing module-status-badge styling, with new translations
+   (`modules.levelBadge.{basic,intermediate,advanced}`) for all 3 locales.
+
+2. **Removed "Vanlig" / "Grundig" generation-mode choice in conversation.** Author
+   feedback (2026-05-18): always picked Grundig. The intermediate step was pure
+   friction. Hard-defaulted to "thorough" for both module-draft and MCQ generation
+   in the conversational shell. The advanced editor still controls generationMode
+   directly if needed.
+
+3. **Removed redundant second "Confirm publish" dialog.** Previously: click Publish →
+   Confirm dialog → Confirm Publish action. The middle dialog was redundant friction.
+   Publish now triggers immediately when the Publish action is clicked.
+
+(Item #4 from feedback — Save menu visibility under Editor in conversation — needs
+visual inspection before fixing. Not in this deploy.)
+
 ## 1.1.53 - 2026-05-18
 
 feat(content): module-draft + MCQ prompts consume assessment blueprint (#372 partial)
