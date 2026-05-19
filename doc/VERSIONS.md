@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.58 - 2026-05-19
+
+fix(deploy): Wait-GroupDeployment idempotency for RoleAssignmentExists
+
+The v1.1.57 prod deploy run (26082016139) failed at the staging job before
+production could run. Root cause: ARM `Microsoft.Authorization/roleAssignments`
+PUT is NOT idempotent for the principalId+roleDefinitionId+scope tuple — even
+with a deterministic GUID name, a second create attempt for the same effective
+mapping fails with `RoleAssignmentExists`.
+
+Staging KV already had 10 role assignments from the 2026-05-15 deploy with the
+OLD unstable-GUID seeds. v1.1.57 introduced #406 stable GUIDs, so ARM saw 10
+"new" assignments to create against principals that already had equivalent
+assignments — fail.
+
+The deploy script threw on the first sign of `provisioningState=Failed`, without
+inspecting whether the failures were idempotency-safe. This patch adds a
+filter in `scripts/azure/deploy-environment.ps1` `Wait-GroupDeployment`:
+
+- If ALL failed operations are `Microsoft.Authorization/roleAssignments` with
+  errorCode `RoleAssignmentExists`, log a WARN and treat the deploy as Succeeded.
+  The principal+role+scope mapping is already what Bicep intended.
+- If ANY failed operation is non-exempt (e.g. `ResourceQuotaExceeded`,
+  `SecretNotFound`), throw as before with the non-idempotent failures listed.
+
+Validated locally against the actual failed ops from run 26082016139
+(10 RoleAssignmentExists → 0 non-idempotent → would WARN and return) and
+against synthetic mixed/non-RAE inputs (correctly throws).
+
+This is intentionally narrow — only this specific resourceType + errorCode
+combination is exempted. Every other ARM failure still fails the deploy loudly.
+
+Existing environments (staging post-deploy) will retain the OLD unstable GUIDs
+until a future maintenance window deletes them and lets the next deploy create
+the NEW stable ones. Production starts with 0 role assignments at secret scope,
+so the v1.1.58 deploy will create all 12 with stable GUIDs from the start.
+
 ## 1.1.57 - 2026-05-19
 
 fix(infra): stable role assignment GUIDs (#406) — unblocks #404 Steps 2-4

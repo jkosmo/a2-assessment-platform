@@ -206,11 +206,33 @@ function Wait-GroupDeployment([string]$ResourceGroup, [string]$DeploymentName) {
     if ($terminalStates -contains $state) {
       if ($state -ne "Succeeded") {
         Write-Host "Failed deployment operations:"
-        az deployment operation group list `
+        $failedOpsRaw = az deployment operation group list `
           --resource-group $ResourceGroup `
           --name $DeploymentName `
-          --query "[?properties.provisioningState=='Failed'].{operationId:operationId,status:properties.provisioningState,statusMessage:properties.statusMessage}" `
-          -o json 2>$null | Write-Host
+          --query "[?properties.provisioningState=='Failed'].{operationId:operationId,resourceType:properties.targetResource.resourceType,errorCode:properties.statusMessage.error.code,errorMessage:properties.statusMessage.error.message}" `
+          -o json 2>$null
+        Write-Host $failedOpsRaw
+
+        # Idempotency exemption: Microsoft.Authorization/roleAssignments cannot be created twice for the same
+        # principalId+roleDefinitionId+scope combination, even with a different GUID name. After #406 introduced
+        # stable GUIDs, environments that previously held assignments under the OLD unstable-GUID seeds (e.g. the
+        # 2026-05-15 staging deploy) will report RoleAssignmentExists on every subsequent deploy because the
+        # equivalent assignment is already in place. Treat that as success — the principal+role+scope mapping is
+        # already what Bicep intended.
+        $failedOps = $null
+        try { $failedOps = $failedOpsRaw | ConvertFrom-Json } catch { $failedOps = $null }
+        if ($failedOps -and $failedOps.Count -gt 0) {
+          $nonIdempotentFailures = @($failedOps | Where-Object {
+            -not ($_.resourceType -eq 'Microsoft.Authorization/roleAssignments' -and $_.errorCode -eq 'RoleAssignmentExists')
+          })
+          if ($nonIdempotentFailures.Count -eq 0) {
+            Write-Host "WARN: ARM reported $($failedOps.Count) failed operation(s) — ALL are RoleAssignmentExists (idempotency-safe). Treating $DeploymentName as Succeeded."
+            return
+          }
+          Write-Host "Failure is NOT exempt: $($nonIdempotentFailures.Count) operation(s) failed with non-idempotent errors:"
+          $nonIdempotentFailures | ConvertTo-Json -Depth 6 | Write-Host
+        }
+
         throw "ARM deployment $DeploymentName ended with provisioningState=$state."
       }
       return
