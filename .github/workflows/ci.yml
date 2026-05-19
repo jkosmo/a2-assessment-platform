@@ -181,3 +181,36 @@ jobs:
           $config.TestResult.Enabled = $true
           $config.TestResult.OutputPath = 'test/scripts/pester-results.xml'
           Invoke-Pester -Configuration $config
+
+  playwright:
+    # Admin-content Playwright e2e suite (#432). Runs 24 mocked-browser tests against
+    # the static server defined in playwright.admin-content.config.ts. Catches UX
+    # regressions like the v1.1.54 silent ReferenceError that prompted #432.
+    # Total runtime ~90s including browser install (~30s with caching).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.3.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run admin-content e2e suite
+        run: npm run test:e2e:admin-content
+
+      - name: Upload Playwright trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
