@@ -1,24 +1,86 @@
 param(
   [string]$SubscriptionId = "5b3f760b-42d4-4d78-812c-c059278d1086",
   [string]$ResourceGroupName = "rg-a2-assessment-production",
+  [string]$BackupResourceGroupName = "rg-a2-assessment-backup",
   [string]$Location = "norwayeast",
   [string]$ServicePrincipalObjectId = "cba285e6-680c-4e00-abd1-ac0eaa2d313a",
   [string]$TenantId = "a018856e-8cf2-4ec4-bbc8-ab18058027dc"
 )
 
-# Run once by a subscription Owner/Admin before the first production deploy.
-# Grants the GitHub Actions service principal Role Based Access Control
-# Administrator on the production resource group so Bicep roleAssignments/write
-# succeeds during Key Vault managed-identity role assignment creation without
-# granting broader User Access Administrator permissions.
+# One-shot bootstrap, idempotent: brings the GitHub Actions service principal into the state
+# the deploy workflow expects. Run by a subscription Owner before the first deploy of a new
+# environment, OR after the resource group(s) are deleted and recreated.
 #
-# This step cannot be performed by the deploy workflow itself because the SP
-# lacks roleAssignments/write until after this script runs.
+# What this grants:
+#   - Main RG (e.g. rg-a2-assessment-production): Role Based Access Control Administrator
+#     (lets Bicep create Key Vault role assignments for managed identities -- #404).
+#   - Backup RG (e.g. rg-a2-assessment-backup): Contributor (lets deploy create the backup
+#     vault and PostgreSQL backup policy -- #439). Backup vault must live in a DIFFERENT RG
+#     from the workloads it protects (Azure Backup Vault constraint).
+#
+# Both grants are necessary; #404 covered the main RG, #439 covered the backup RG. They are
+# now in the same script so a future RG-recreate doesn't require remembering both.
+#
+# This script cannot be performed by the deploy workflow itself because the SP lacks
+# roleAssignments/write until after this runs.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $rbacAdministratorRoleId = "f1a07417-d97a-45cb-824c-7a7467783830"
+$contributorRoleId       = "b24988ac-6180-42a0-ab88-20f7382dd24c"
+
+function Ensure-ResourceGroup {
+  param(
+    [Parameter(Mandatory)] [string]$Name,
+    [Parameter(Mandatory)] [string]$Location
+  )
+  $exists = az group exists --name $Name | ConvertFrom-Json
+  if (-not $exists) {
+    Write-Host "Creating resource group $Name in $Location..."
+    az group create --name $Name --location $Location --tags environment=production owner=engineering costCenter=a2-assessment-platform | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "az group create $Name failed" }
+  } else {
+    Write-Host "Resource group $Name already exists."
+  }
+  $id = (az group show --name $Name --query id -o tsv).Trim()
+  if (-not $id) { throw "Could not retrieve resource group id for $Name." }
+  return $id
+}
+
+function Grant-RoleOnScope {
+  param(
+    [Parameter(Mandatory)] [string]$Scope,
+    [Parameter(Mandatory)] [string]$RoleDefinitionId,
+    [Parameter(Mandatory)] [string]$RoleDisplayName,
+    [Parameter(Mandatory)] [string]$PrincipalObjectId
+  )
+  $assignmentGuid = [System.Guid]::NewGuid().ToString()
+  $body = @{
+    properties = @{
+      roleDefinitionId = "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$RoleDefinitionId"
+      principalId      = $PrincipalObjectId
+      principalType    = "ServicePrincipal"
+    }
+  } | ConvertTo-Json -Compress
+
+  Write-Host "Granting '$RoleDisplayName' to SP $PrincipalObjectId on $Scope..."
+  $result = az rest --method PUT `
+    --uri "https://management.azure.com${Scope}/providers/Microsoft.Authorization/roleAssignments/${assignmentGuid}?api-version=2022-04-01" `
+    --body $body 2>&1
+
+  if ($LASTEXITCODE -ne 0) {
+    if ($result -match "RoleAssignmentExists") {
+      Write-Host "  -> Already granted (idempotent)."
+    } else {
+      throw "Failed to grant '$RoleDisplayName' on $Scope`: $result"
+    }
+  } else {
+    Write-Host "  -> Granted."
+  }
+}
+
+# --- main ---
 
 Write-Host "Authenticating to tenant $TenantId..."
 az login --use-device-code --tenant $TenantId
@@ -34,45 +96,25 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "Service principal verified."
 
-Write-Host "Ensuring resource group $ResourceGroupName exists in $Location..."
-$rgExists = az group exists --name $ResourceGroupName | ConvertFrom-Json
-if (-not $rgExists) {
-  az group create --name $ResourceGroupName --location $Location | Out-Null
-  Write-Host "Resource group created."
-} else {
-  Write-Host "Resource group already exists."
-}
+# 1. Main RG: ensure exists + grant RBAC Admin (for Key Vault role assignment creation)
+$mainRgId = Ensure-ResourceGroup -Name $ResourceGroupName -Location $Location
+Grant-RoleOnScope `
+  -Scope $mainRgId `
+  -RoleDefinitionId $rbacAdministratorRoleId `
+  -RoleDisplayName "Role Based Access Control Administrator" `
+  -PrincipalObjectId $ServicePrincipalObjectId
 
-$rgId = (az group show --name $ResourceGroupName --query id -o tsv).Trim()
-if (-not $rgId) { throw "Could not retrieve resource group ID" }
-
-$assignmentGuid = (node -e "const {randomUUID}=require('crypto');console.log(randomUUID())").Trim()
-
-Write-Host "Granting Role Based Access Control Administrator to SP $ServicePrincipalObjectId on $ResourceGroupName..."
-$body = @{
-  properties = @{
-    roleDefinitionId = "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$rbacAdministratorRoleId"
-    principalId      = $ServicePrincipalObjectId
-    principalType    = "ServicePrincipal"
-  }
-} | ConvertTo-Json -Compress
-
-$result = az rest --method PUT `
-  --uri "https://management.azure.com${rgId}/providers/Microsoft.Authorization/roleAssignments/${assignmentGuid}?api-version=2022-04-01" `
-  --body $body 2>&1
-
-if ($LASTEXITCODE -ne 0) {
-  # Idempotent: already-exists is not an error
-  if ($result -match "RoleAssignmentExists") {
-    Write-Host "Role assignment already exists — nothing to do."
-  } else {
-    throw "Failed to create role assignment: $result"
-  }
-} else {
-  Write-Host "Role assignment created successfully."
-}
+# 2. Backup RG: ensure exists + grant Contributor (for backup vault + PostgreSQL backup policy)
+$backupRgId = Ensure-ResourceGroup -Name $BackupResourceGroupName -Location $Location
+Grant-RoleOnScope `
+  -Scope $backupRgId `
+  -RoleDefinitionId $contributorRoleId `
+  -RoleDisplayName "Contributor" `
+  -PrincipalObjectId $ServicePrincipalObjectId
 
 Write-Host ""
-Write-Host "Bootstrap complete. GitHub Actions SP $ServicePrincipalObjectId now has"
-Write-Host "Role Based Access Control Administrator on resource group $ResourceGroupName."
-Write-Host "You can now trigger the production deploy workflow."
+Write-Host "Bootstrap complete. GitHub Actions SP $ServicePrincipalObjectId now has:"
+Write-Host "  - Role Based Access Control Administrator on $ResourceGroupName"
+Write-Host "  - Contributor on $BackupResourceGroupName"
+Write-Host ""
+Write-Host "You can now trigger the deploy workflow."

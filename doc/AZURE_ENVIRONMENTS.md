@@ -147,6 +147,31 @@ Do not set these manually in GitHub Environment variables:
 - `DATABASE_URL` - composed and injected by the deployment
 - `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING` / `ACS_EMAIL_SENDER` - provisioned and injected automatically when ACS email notifications are enabled
 
+## One-time SP bootstrap (before first deploy of a new environment)
+
+Before the first deploy of a new environment, OR after the resource group is deleted
+and recreated, run the bootstrap script from an account with `Owner` on the target
+subscription. The script is idempotent — running it again on a fully-bootstrapped
+environment is a no-op.
+
+```powershell
+./scripts/azure/bootstrap-sp-permissions.ps1 `
+  -SubscriptionId 5b3f760b-42d4-4d78-812c-c059278d1086 `
+  -ResourceGroupName rg-a2-assessment-production `
+  -BackupResourceGroupName rg-a2-assessment-backup `
+  -ServicePrincipalObjectId cba285e6-680c-4e00-abd1-ac0eaa2d313a `
+  -TenantId a018856e-8cf2-4ec4-bbc8-ab18058027dc
+```
+
+What this grants:
+- Main RG: `Role Based Access Control Administrator` (so Bicep can create Key Vault
+  role assignments for managed identities — see #404).
+- Backup RG: `Contributor` (so the deploy can create the backup vault and PostgreSQL
+  backup policy — see #439). The backup RG must be SEPARATE from the main RG due to
+  Azure Backup Vault's "different RG from protected workload" constraint.
+
+Without this bootstrap step, the deploy fails with `AuthorizationFailed` partway through.
+
 ## Deployment flow
 1. Push to `main`:
 - Deploys `staging` automatically.
