@@ -20,10 +20,10 @@ jobs:
     environment: staging
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v6.0.2
 
       - name: Azure login (OIDC)
-        uses: azure/login@v2.3.0
+        uses: azure/login@v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -55,7 +55,7 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Post what-if result as PR comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9.0.0
         with:
           script: |
             const result = `${{ steps.whatif.outputs.result }}`;
