@@ -49,26 +49,45 @@ echo "  parser: $PARSER"
 echo
 
 FAIL=0
+MAX_ATTEMPTS=4    # 4 attempts at ~30s timeout each, with 45s sleep between → ~3 min total budget
+SLEEP_BETWEEN=45
 
+# An endpoint counts as healthy when curl returns the expected HTTP code. The deploy
+# script's own Wait-Healthy guarantees the apps WERE healthy when the deploy returned,
+# but a Key Vault reference refresh that fires shortly after can cycle the parser app
+# (#436 follow-up — observed in run 26090019125 when parser cycled at 10:14:56 after
+# Wait-Healthy said it was OK at 10:13:42, then re-stabilized at 10:23:25). Retrying
+# absorbs that transient hiccup without masking a real outage.
 check_endpoint() {
   local label="$1"
   local url="$2"
   local expected="$3"
-  local body_file
-  body_file=$(mktemp)
-  local code
-  code=$(curl -s -o "$body_file" -w '%{http_code}' --max-time 30 "$url" || echo "000")
-  if [ "$code" = "$expected" ]; then
-    echo "  $label  → $code OK"
-    if [ "$label" = "worker" ]; then
-      echo "  worker body: $(cat "$body_file")"
+  local attempt
+  for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+    local body_file
+    body_file=$(mktemp)
+    local code
+    # curl -w '%{http_code}' always emits a 3-digit code (000 on connection failure).
+    # Pre-v1.1.58 follow-up: the previous `|| echo "000"` fallback double-printed
+    # ("000000") whenever curl exited non-zero. With set -e on this is also a guard
+    # — wrap in a subshell so an exit-1 from curl doesn't terminate the loop.
+    code=$(curl -s -o "$body_file" -w '%{http_code}' --max-time 30 "$url" 2>/dev/null) || code="${code:-000}"
+    if [ "$code" = "$expected" ]; then
+      echo "  $label  → $code OK (attempt $attempt/$MAX_ATTEMPTS)"
+      if [ "$label" = "worker" ]; then
+        echo "  worker body: $(cat "$body_file")"
+      fi
+      rm -f "$body_file"
+      return 0
     fi
-  else
-    echo "::error::$label /healthz returned $code (expected $expected)"
-    echo "  body: $(head -c 500 "$body_file")"
-    FAIL=1
-  fi
-  rm -f "$body_file"
+    echo "  $label  attempt $attempt/$MAX_ATTEMPTS: got $code (expected $expected)"
+    rm -f "$body_file"
+    if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+      sleep "$SLEEP_BETWEEN"
+    fi
+  done
+  echo "::error::$label /healthz returned $code after $MAX_ATTEMPTS attempts (expected $expected)"
+  FAIL=1
 }
 
 check_endpoint "web   " "https://${WEB}.azurewebsites.net/healthz" 200
