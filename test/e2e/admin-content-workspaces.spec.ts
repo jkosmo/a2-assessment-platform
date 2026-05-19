@@ -62,7 +62,7 @@ type MockModuleExport = {
   };
 };
 
-function localizedText(base: string): Record<string, string> {
+export function localizedText(base: string): Record<string, string> {
   return {
     "en-GB": `${base} (EN)`,
     nb: `${base} (NB)`,
@@ -82,7 +82,7 @@ function buildMockQuestion(index: number, optionCount = 4) {
   };
 }
 
-function buildMockModuleExport({
+export function buildMockModuleExport({
   id,
   title,
   certificationLevel = "basic",
@@ -194,7 +194,7 @@ function buildMockModuleExport({
   };
 }
 
-async function clickEnabledButton(page: Page, label: string | RegExp) {
+export async function clickEnabledButton(page: Page, label: string | RegExp) {
   const button = page
     .locator("button:enabled")
     .filter(typeof label === "string" ? { hasText: label } : { hasText: label })
@@ -203,7 +203,7 @@ async function clickEnabledButton(page: Page, label: string | RegExp) {
   await button.click();
 }
 
-async function submitActiveChatInput(page: Page, value: string) {
+export async function submitActiveChatInput(page: Page, value: string) {
   const input = page.locator(".chat-text-input:enabled, .chat-textarea:enabled").last();
   await expect(input).toBeVisible();
   await input.fill(value);
@@ -222,7 +222,7 @@ function courseTextForLocale(value: Record<string, string> | string | undefined 
   return value[locale] ?? value["en-GB"] ?? value.nb ?? value.nn ?? Object.values(value)[0] ?? "";
 }
 
-async function mockCommonApis(page: Page, {
+export async function mockCommonApis(page: Page, {
   modules = [],
   libraryModules = [],
   courses = [],
