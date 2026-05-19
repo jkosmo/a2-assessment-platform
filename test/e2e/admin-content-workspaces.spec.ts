@@ -413,6 +413,29 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // Mock for the blueprint endpoint (v1.1.53 / #372). Called between cert-level
+  // selection and the actual draft generation. The shell shows a preview with
+  // "Use this blueprint" / "Skip blueprint" buttons. Tests typically click skip.
+  await page.route("**/api/admin/content/generate/blueprint", async (route: Route) => {
+    const body = route.request().postDataJSON() as {
+      certificationLevel?: string;
+      sourceMaterial?: string;
+      locale?: string;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        blueprint: {
+          learningObjectives: ["Stub objective for E2E test"],
+          keyTopics: ["Stub key topic"],
+          mcqProfile: { suggestedCount: 3 },
+          notes: `Mock blueprint for ${body.certificationLevel ?? "basic"}`,
+        },
+      }),
+    });
+  });
+
   await page.route("**/api/admin/content/generate/module-draft", async (route: Route) => {
     const body = route.request().postDataJSON() as {
       certificationLevel?: string;
@@ -1034,7 +1057,15 @@ test.describe("admin content browser coverage", () => {
     await submitActiveChatInput(page, "Trade unions");
     await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
     await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, "Ordinary");
+
+    // v1.1.54 removed the "Vanlig/Grundig" (Ordinary/Thorough) generation-mode prompt
+    // (always "thorough" now). After cert level the next interactive step is the
+    // blueprint preview (v1.1.53). Pin BOTH facts:
+    //   - no Ordinary/Thorough button exists in this conversation
+    //   - blueprint accept/skip buttons DO appear
+    await expect(page.getByRole("button", { name: /^Ordinary$|^Vanlig$|^Thorough$|^Grundig$/i })).toHaveCount(0);
+    await clickEnabledButton(page, /Skip blueprint|Hopp over/);
+
     await clickEnabledButton(page, "Yes, generate MCQ");
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
@@ -1221,6 +1252,12 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
 
+    // v1.1.56 made the unified-revision textarea an explicit step: the action menu
+    // now contains a "Request changes in chat" button instead of auto-opening the
+    // textarea below Save draft. Pin both: no textarea before click, textarea after.
+    await expect(page.locator(".chat-textarea:enabled")).toHaveCount(0);
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+
     const revisionInput = page.locator(".chat-textarea:enabled").last();
     await revisionInput.fill('Rename the module title to "Trade union dialogue"');
     await clickEnabledButton(page, /Revise|Revider/);
@@ -1315,7 +1352,8 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation");
 
-    await clickEnabledButton(page, /Publish|Publiser/);
+    // v1.1.55 removed the second "Confirm publish" dialog — publish now fires
+    // immediately on the first click. Two clicks would race against the next bubble.
     await clickEnabledButton(page, /Publish|Publiser/);
 
     await expect(page.locator(".module-list .module-list-item")).toContainText("Trade unions");
@@ -1342,7 +1380,10 @@ test.describe("admin content browser coverage", () => {
     await sourceTextarea.fill("Use a practical workplace framing.");
     await clickEnabledButton(page, /Next|Neste|Næste/i);
     await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, "Ordinary");
+
+    // v1.1.54 removed Ordinary/Thorough generation-mode buttons — the flow goes
+    // directly to the blueprint preview after cert-level selection.
+    await clickEnabledButton(page, /Skip blueprint|Hopp over/);
 
     await expect
       .poll(() => state.lastDraftGenerationBody?.sourceMaterial ?? "")
