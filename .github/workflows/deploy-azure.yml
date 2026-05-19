@@ -125,7 +125,7 @@ jobs:
       - name: Post-deploy /healthz smoke test
         if: success()
         shell: bash
-        run: ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
+        run: bash ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
 
   deploy-production:
     # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded or was skipped.
@@ -226,4 +226,4 @@ jobs:
       - name: Post-deploy /healthz smoke test
         if: success()
         shell: bash
-        run: ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
+        run: bash ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
