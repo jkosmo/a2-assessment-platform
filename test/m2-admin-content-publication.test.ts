@@ -682,7 +682,11 @@ describe("MVP admin content management and publication", () => {
       .post(`/api/admin/content/modules/${moduleId}/module-versions`)
       .set(adminHeaders)
       .send({
-        taskText: "Complete the policy test task.",
+        taskText: "Complete the policy test task with documented reasoning.",
+        // #372 pre-publish gate (a1e9a73) now requires assessorExpectedContent at
+        // publish time. Adding the field here so this policy-focused test does not
+        // get rejected by the unrelated content-validation gate.
+        assessorExpectedContent: "A strong response includes clear reasoning and references to policy.",
         rubricVersionId: rubricResponse.body.rubricVersion.id,
         promptTemplateVersionId: promptResponse.body.promptTemplateVersion.id,
         mcqSetVersionId: mcqResponse.body.mcqSetVersion.id,
