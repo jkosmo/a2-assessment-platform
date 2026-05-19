@@ -102,16 +102,21 @@ Describe 'Test-DeploymentFailureIsIdempotent' {
 }
 
 Describe 'Resolve-AppNames' {
-  $stagingApps = @(
-    'a2-assessment-platform-stg-app-x6eyx4',
-    'a2-assessment-platform-stg-worker-x6eyx4',
-    'a2-assessment-platform-stg-parser-x6eyx4'
-  )
-  $prodApps = @(
-    'a2-assessment-platform-prd-app-hea5kl',
-    'a2-assessment-platform-prd-worker-hea5kl',
-    'a2-assessment-platform-prd-parser-hea5kl'
-  )
+  BeforeAll {
+    # Pester v5: variables defined directly inside Describe (outside It / BeforeAll) are
+    # in DISCOVERY scope, not run-time scope, so the It blocks below would see them as
+    # $null. Putting fixtures here makes them available during It execution.
+    $script:stagingApps = @(
+      'a2-assessment-platform-stg-app-x6eyx4',
+      'a2-assessment-platform-stg-worker-x6eyx4',
+      'a2-assessment-platform-stg-parser-x6eyx4'
+    )
+    $script:prodApps = @(
+      'a2-assessment-platform-prd-app-hea5kl',
+      'a2-assessment-platform-prd-worker-hea5kl',
+      'a2-assessment-platform-prd-parser-hea5kl'
+    )
+  }
 
   It 'prefers ARM outputs when all three are present' {
     $outputs = [PSCustomObject]@{
@@ -119,14 +124,14 @@ Describe 'Resolve-AppNames' {
       workerAppName = [PSCustomObject]@{ value = 'a2-from-outputs-worker' }
       parserAppName = [PSCustomObject]@{ value = 'a2-from-outputs-parser' }
     }
-    $result = Resolve-AppNames -ArmOutputs $outputs -EnvCode 'stg' -ExistingAppNames $stagingApps
+    $result = Resolve-AppNames -ArmOutputs $outputs -EnvCode 'stg' -ExistingAppNames $script:stagingApps
     $result.web    | Should -Be 'a2-from-outputs-app'
     $result.worker | Should -Be 'a2-from-outputs-worker'
     $result.parser | Should -Be 'a2-from-outputs-parser'
   }
 
   It 'falls back to RG enumeration for all three when ARM outputs is $null' {
-    $result = Resolve-AppNames -ArmOutputs $null -EnvCode 'stg' -ExistingAppNames $stagingApps
+    $result = Resolve-AppNames -ArmOutputs $null -EnvCode 'stg' -ExistingAppNames $script:stagingApps
     $result.web    | Should -Be 'a2-assessment-platform-stg-app-x6eyx4'
     $result.worker | Should -Be 'a2-assessment-platform-stg-worker-x6eyx4'
     $result.parser | Should -Be 'a2-assessment-platform-stg-parser-x6eyx4'
@@ -137,7 +142,7 @@ Describe 'Resolve-AppNames' {
     $partial = [PSCustomObject]@{
       webAppName = [PSCustomObject]@{ value = 'a2-from-outputs-app' }
     }
-    $result = Resolve-AppNames -ArmOutputs $partial -EnvCode 'stg' -ExistingAppNames $stagingApps
+    $result = Resolve-AppNames -ArmOutputs $partial -EnvCode 'stg' -ExistingAppNames $script:stagingApps
     $result.web    | Should -Be 'a2-from-outputs-app'                            # from outputs
     $result.worker | Should -Be 'a2-assessment-platform-stg-worker-x6eyx4'       # from fallback
     $result.parser | Should -Be 'a2-assessment-platform-stg-parser-x6eyx4'       # from fallback
@@ -151,7 +156,7 @@ Describe 'Resolve-AppNames' {
   }
 
   It 'matches "prd" pattern when EnvCode is prd' {
-    $result = Resolve-AppNames -ArmOutputs $null -EnvCode 'prd' -ExistingAppNames $prodApps
+    $result = Resolve-AppNames -ArmOutputs $null -EnvCode 'prd' -ExistingAppNames $script:prodApps
     $result.web    | Should -Be 'a2-assessment-platform-prd-app-hea5kl'
     $result.worker | Should -Be 'a2-assessment-platform-prd-worker-hea5kl'
     $result.parser | Should -Be 'a2-assessment-platform-prd-parser-hea5kl'
