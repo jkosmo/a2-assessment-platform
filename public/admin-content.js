@@ -1912,15 +1912,52 @@ async function handleLoadSelectedModuleContent() {
 }
 
 async function handleExportSelectedModule() {
-  const moduleExport = await refreshSelectedModuleStatus();
-  if (!moduleExport) {
-    throw new Error("Module export payload was empty.");
+  // v1.1.59+ (#433): export uses the versioned a2-content-export/v1 envelope so
+  // the resulting file is portable and importable in any environment. The live-
+  // editing fetchModuleExport() above still uses /export for the in-page form.
+  const moduleId = resolveModuleIdOrThrow();
+  const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, headers);
+  const envelope = body?.envelope ?? null;
+  if (!envelope) {
+    throw new Error("Module export envelope was empty.");
   }
-
-  const filename = `module-${selectedModuleId || moduleExport.module?.id || "export"}.json`;
-  downloadJsonFile(filename, moduleExport);
+  const filename = `module-${moduleId}-${new Date().toISOString().slice(0, 10)}.json`;
+  downloadJsonFile(filename, envelope);
   setMessage(t("adminContent.message.moduleExported"));
-  log({ moduleExport });
+  log({ envelope });
+}
+
+async function handleImportModulePackage(file) {
+  // #433: POSTs the parsed envelope to /modules/import, then refreshes the
+  // module list and selects the newly-created module. Only mode=createNew is
+  // exposed via the UI for now; mode=replaceExisting requires more UX
+  // (collision dialog, target picker) and is a backend-only capability
+  // until phase 4b.
+  if (!file) {
+    throw new Error("No file selected.");
+  }
+  const text = await file.text();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch (parseError) {
+    throw new Error(`Selected file is not valid JSON: ${parseError instanceof Error ? parseError.message : "unknown error"}`);
+  }
+  const result = await apiFetch(
+    "/api/admin/content/modules/import",
+    headers,
+    {
+      method: "POST",
+      body: JSON.stringify({ payload, mode: "createNew" }),
+    },
+  );
+  if (!result?.moduleId) {
+    throw new Error("Import response did not include a moduleId.");
+  }
+  await loadModules();
+  setSelectedModule(result.moduleId, true);
+  setMessage(t("adminContent.message.modulePackageImported") || "Module package imported.");
+  log({ imported: result });
 }
 
 async function handleDuplicateSelectedModule() {
@@ -3341,6 +3378,22 @@ exportModuleButton.addEventListener("click", async () => {
       throw error;
     }
   });
+});
+
+const importPackageFileInput = document.getElementById("importPackageFile");
+importPackageFileInput?.addEventListener("change", async (event) => {
+  const target = event.target;
+  const file = target?.files?.[0] ?? null;
+  if (!file) return;
+  try {
+    await handleImportModulePackage(file);
+  } catch (error) {
+    setMessage(parseActionableErrorMessage(error), "error");
+    log(error);
+  } finally {
+    // Allow re-importing the same file (otherwise change event won't refire).
+    target.value = "";
+  }
 });
 
 duplicateModuleButton?.addEventListener("click", async () => {

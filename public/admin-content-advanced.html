@@ -358,6 +358,10 @@
           <button id="duplicateModule" class="btn-secondary" data-i18n="adminContent.select.duplicateModule">Duplicate module</button>
           <button id="deleteModule" class="btn-danger" data-i18n="adminContent.select.deleteModule">Delete selected module</button>
         </div>
+        <div class="button-row">
+          <label for="importPackageFile" class="btn-secondary" style="cursor:pointer" data-i18n="adminContent.select.importPackage">Import module package (.json)</label>
+          <input id="importPackageFile" type="file" accept="application/json,.json" hidden />
+        </div>
       </div>
       <div class="small" data-i18n="adminContent.help.loadContent">Loads the saved rubric, prompt, MCQ, and module version into steps 3-7.</div>
       <div class="small" data-i18n="adminContent.help.deleteModule">Deletes only empty modules without submissions, versions, or published content.</div>
