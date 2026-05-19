@@ -484,7 +484,8 @@ resource kvSecretAcsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   parent: keyVaultRef
   name: 'ACS-CONNECTION-STRING'
   properties: {
-    value: acsService.listKeys().primaryConnectionString
+    // Resource is the same `if (createAcsEmail)` condition, so non-null assertion is sound.
+    value: acsService!.listKeys().primaryConnectionString
   }
   dependsOn: [keyVault]
 }
@@ -514,7 +515,7 @@ resource kvSecretParticipantNotificationWebhookUrl 'Microsoft.KeyVault/vaults/se
 var appRuntimeSecretsBundle = string({
   DATABASE_URL: postgresConnectionString
   AZURE_OPENAI_API_KEY: azureOpenAiApiKey
-  AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: createAcsEmail ? acsService.listKeys().primaryConnectionString : ''
+  AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: createAcsEmail ? acsService!.listKeys().primaryConnectionString : ''
   PARSER_WORKER_AUTH_KEY: parserWorkerAuthKey
   PARTICIPANT_NOTIFICATION_WEBHOOK_URL: participantNotificationWebhookUrl
 })
@@ -688,7 +689,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'ACS_EMAIL_SENDER'
-          value: createAcsEmail ? 'DoNotReply@${acsEmailDomain.properties.mailFromSenderDomain}' : ''
+          value: createAcsEmail ? 'DoNotReply@${acsEmailDomain!.properties.mailFromSenderDomain}' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER_DISPLAY_NAME'
@@ -891,7 +892,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'ACS_EMAIL_SENDER'
-          value: createAcsEmail ? 'DoNotReply@${acsEmailDomain.properties.mailFromSenderDomain}' : ''
+          value: createAcsEmail ? 'DoNotReply@${acsEmailDomain!.properties.mailFromSenderDomain}' : ''
         }
         {
           name: 'ACS_EMAIL_SENDER_DISPLAY_NAME'
