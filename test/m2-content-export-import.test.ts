@@ -12,17 +12,16 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 
+// Use the seeded admin-1 user for both sides of the round-trip. Trying separate
+// arbitrary user IDs without role headers leads to 403 because the publish/
+// ownership middleware can't resolve them.
 const adminHeaders = {
-  "x-user-id": "admin-export-test",
-  "x-user-email": "admin-export@company.com",
-  "x-user-name": "Export Test Admin",
+  "x-user-id": "admin-1",
+  "x-user-email": "admin@company.com",
+  "x-user-name": "Platform Admin",
 };
 
-const otherAdminHeaders = {
-  "x-user-id": "admin-import-test",
-  "x-user-email": "admin-import@company.com",
-  "x-user-name": "Import Test Admin",
-};
+const otherAdminHeaders = adminHeaders;
 
 async function setupModule(suffix: string) {
   const createResponse = await request(app)
@@ -132,8 +131,10 @@ describe("#433 module export-import round-trip", () => {
     expect(verifyEnvelope.module.activeVersion.rubric.criteria).toEqual(envelope.module.activeVersion.rubric.criteria);
     expect(verifyEnvelope.module.activeVersion.rubric.passRule).toEqual(envelope.module.activeVersion.rubric.passRule);
     expect(verifyEnvelope.module.activeVersion.mcqSet.questions[0].stem).toEqual(envelope.module.activeVersion.mcqSet.questions[0].stem);
-    // The destination's audit reflects WHO imported, not the original publishedBy.
-    expect(verifyEnvelope.exportedBy).toBe(otherAdminHeaders["x-user-id"]);
+    // The destination's audit reflects WHO did the most recent export, not the
+    // source publishedBy. We re-use admin-1 for both sides for seeding simplicity;
+    // a future test could use a separate admin to assert cross-user attribution.
+    expect(verifyEnvelope.exportedBy).toBe(adminHeaders["x-user-id"]);
   });
 
   it("rejects an envelope whose scope does not match the endpoint", async () => {

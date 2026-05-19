@@ -51,7 +51,7 @@ import {
   reviseMcqQuestions,
   checkScenarioAnswerability,
 } from "../modules/adminContent/llmContentGenerationService.js";
-import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
+import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish } from "../modules/adminContent/contentValidationService.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -424,6 +424,54 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
 
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+
+    // #372: Run blueprint-aware pre-publish gate. Blocks if any blocking
+    // issue surfaces; warnings are returned but do not block (the author
+    // can choose to publish anyway via the existing UI flow).
+    const bundle = await getModuleContentBundle(request.params.moduleId);
+    const moduleVersionData = bundle.versions.moduleVersions.find(
+      (v) => v.id === request.params.moduleVersionId,
+    );
+    if (moduleVersionData) {
+      const mcqSetVersion = bundle.versions.mcqSetVersions.find(
+        (v) => v.id === moduleVersionData.mcqSetVersionId,
+      );
+      let blueprint: unknown = null;
+      const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
+      if (rawBlueprint && typeof rawBlueprint === "string") {
+        try { blueprint = JSON.parse(rawBlueprint); } catch { blueprint = null; }
+      }
+      const validation = validateModuleVersionForPublish({
+        taskText: typeof moduleVersionData.taskText === "string"
+          ? moduleVersionData.taskText
+          : JSON.stringify(moduleVersionData.taskText ?? ""),
+        candidateTaskConstraints: typeof moduleVersionData.candidateTaskConstraints === "string"
+          ? moduleVersionData.candidateTaskConstraints
+          : null,
+        assessorExpectedContent: typeof moduleVersionData.assessorExpectedContent === "string"
+          ? moduleVersionData.assessorExpectedContent
+          : null,
+        blueprint: blueprint as never,
+        mcqQuestionCount: mcqSetVersion?.questions?.length ?? 0,
+      });
+      if (!validation.valid) {
+        response.status(422).json({
+          error: "publish_blocked_by_validation",
+          message: "Pre-publish validation found blocking issues. See `issues` for details.",
+          issues: validation.issues,
+        });
+        return;
+      }
+      // Warnings still go through; surfaced in response so the UI can display them.
+      const moduleVersion = await publishModuleVersion(
+        request.params.moduleId,
+        request.params.moduleVersionId,
+        actorId,
+      );
+      response.json({ moduleVersion, validationWarnings: validation.issues });
+      return;
+    }
+
     const moduleVersion = await publishModuleVersion(
       request.params.moduleId,
       request.params.moduleVersionId,

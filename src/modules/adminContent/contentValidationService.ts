@@ -133,3 +133,118 @@ export function validateScenarioDraft(
   const hasBlockingIssues = issues.some((issue) => issue.severity === "blocking");
   return { valid: !hasBlockingIssues, issues };
 }
+
+// Blueprint-aware pre-publish check (#372). Compares the about-to-be-published
+// content against the assessment blueprint that the author confirmed during
+// generation (#372 stored on ModuleVersion). Returns blocking issues for hard
+// contract violations and warnings for soft deviations.
+//
+// What this CAN check without an LLM call:
+// - MCQ count vs blueprint's suggestedCount (off-by-many implies the set was
+//   over- or under-generated relative to the calibration intent)
+// - Whether key learning objectives appear at all in taskText / assessor
+//   expected content (cheap substring check; not semantic, but catches the
+//   "blueprint was ignored entirely" case)
+//
+// What this CANNOT do without an LLM:
+// - Actor count, concept count, tradeoff count in taskText (needs NLP)
+// - Topic distribution validation across MCQs (needs per-question tagging
+//   which #370 metadata could provide but isn't propagated through validation yet)
+//
+// Those deeper checks are tracked as #371 follow-ups.
+type BlueprintLike = {
+  learningObjectives?: string[];
+  keyTopics?: string[];
+  complexityBudget?: { actors?: number; concepts?: number; tradeoffs?: number };
+  mcqProfile?: { suggestedCount?: number };
+};
+
+export function validateBlueprintAgainstContent(
+  blueprint: BlueprintLike | null | undefined,
+  content: {
+    taskText: string;
+    assessorExpectedContent?: string | null;
+    mcqQuestionCount: number;
+  },
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (!blueprint) return issues;
+
+  const suggestedCount = blueprint.mcqProfile?.suggestedCount;
+  if (typeof suggestedCount === "number" && suggestedCount > 0) {
+    const actual = content.mcqQuestionCount;
+    const ratio = actual / suggestedCount;
+    if (ratio < 0.5) {
+      issues.push({
+        severity: "blocking",
+        code: "MCQ_COUNT_FAR_BELOW_BLUEPRINT",
+        message: `Blueprint suggested ${suggestedCount} MCQ questions but only ${actual} are present (${Math.round(ratio * 100)}%). This likely means the MCQ set was not regenerated after blueprint changes.`,
+      });
+    } else if (ratio < 0.8 || ratio > 1.5) {
+      issues.push({
+        severity: "warning",
+        code: "MCQ_COUNT_DEVIATES_FROM_BLUEPRINT",
+        message: `Blueprint suggested ${suggestedCount} MCQ questions but ${actual} are present. Calibration may drift; consider revising.`,
+      });
+    }
+  }
+
+  // Substring presence check: at least one learning objective should be
+  // mentionable from the visible content. This is intentionally minimal — a
+  // genuine semantic check needs an LLM. Catches "blueprint was completely
+  // ignored" but not "blueprint was paraphrased."
+  const objectives = (blueprint.learningObjectives ?? []).filter((o) => typeof o === "string" && o.trim().length > 0);
+  if (objectives.length > 0) {
+    const haystack = `${content.taskText} ${content.assessorExpectedContent ?? ""}`.toLowerCase();
+    const matched = objectives.filter((o) => {
+      // Use the first 4 alphanumeric words of the objective as a fingerprint —
+      // any tighter match would over-block paraphrased content.
+      const fingerprint = o.toLowerCase().split(/\W+/).filter(Boolean).slice(0, 4).join(" ");
+      return fingerprint.length > 0 && haystack.includes(fingerprint);
+    });
+    if (matched.length === 0) {
+      issues.push({
+        severity: "warning",
+        code: "BLUEPRINT_OBJECTIVES_NOT_REFERENCED",
+        message: `None of the ${objectives.length} learning objective(s) from the blueprint appear in taskText or assessor guidance. Check that the generation actually consumed the blueprint.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+export type ModuleVersionPublishValidation = {
+  valid: boolean;
+  issues: ValidationIssue[];
+};
+
+// Composite pre-publish check that runs every available validator against the
+// module version's content and returns a single roll-up. The publish route
+// blocks the operation when valid=false (any blocking issue).
+export function validateModuleVersionForPublish(input: {
+  taskText: string;
+  candidateTaskConstraints?: string | null;
+  assessorExpectedContent?: string | null;
+  blueprint?: BlueprintLike | null;
+  mcqQuestionCount: number;
+  mcqQuestions?: GeneratedMcqQuestion[];
+}): ModuleVersionPublishValidation {
+  const scenarioIssues = validateScenarioDraft(
+    input.taskText,
+    input.candidateTaskConstraints,
+    input.assessorExpectedContent,
+  ).issues;
+
+  const blueprintIssues = validateBlueprintAgainstContent(input.blueprint, {
+    taskText: input.taskText,
+    assessorExpectedContent: input.assessorExpectedContent,
+    mcqQuestionCount: input.mcqQuestionCount,
+  });
+
+  const mcqIssues = input.mcqQuestions ? validateMcqDistractors(input.mcqQuestions).issues : [];
+
+  const issues = [...scenarioIssues, ...blueprintIssues, ...mcqIssues];
+  const valid = !issues.some((i) => i.severity === "blocking");
+  return { valid, issues };
+}
