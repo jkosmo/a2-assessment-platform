@@ -122,6 +122,11 @@ jobs:
             -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}"
 
+      - name: Post-deploy /healthz smoke test
+        if: success()
+        shell: bash
+        run: ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
+
   deploy-production:
     # Only runs on manual workflow_dispatch when deploy_production=true AND staging succeeded or was skipped.
     # Production never deploys automatically on push to main.
@@ -217,3 +222,8 @@ jobs:
             -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
             -BackupVaultResourceGroup "rg-a2-assessment-backup"
+
+      - name: Post-deploy /healthz smoke test
+        if: success()
+        shell: bash
+        run: ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"

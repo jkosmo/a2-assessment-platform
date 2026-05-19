@@ -94,6 +94,11 @@ jobs:
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
             -SkipInfra "true"
 
+      - name: Post-deploy /healthz smoke test
+        if: success()
+        shell: bash
+        run: ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
+
   deploy-production:
     if: always() && github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch && github.event.inputs.deploy_production == 'true' && (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
     needs: deploy-staging
@@ -145,3 +150,8 @@ jobs:
             -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
             -SkipInfra "true"
+
+      - name: Post-deploy /healthz smoke test
+        if: success()
+        shell: bash
+        run: ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
