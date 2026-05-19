@@ -55,22 +55,19 @@ function Grant-RoleOnScope {
     [Parameter(Mandatory)] [string]$RoleDisplayName,
     [Parameter(Mandatory)] [string]$PrincipalObjectId
   )
-  $assignmentGuid = [System.Guid]::NewGuid().ToString()
-  $body = @{
-    properties = @{
-      roleDefinitionId = "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$RoleDefinitionId"
-      principalId      = $PrincipalObjectId
-      principalType    = "ServicePrincipal"
-    }
-  } | ConvertTo-Json -Compress
-
   Write-Host "Granting '$RoleDisplayName' to SP $PrincipalObjectId on $Scope..."
-  $result = az rest --method PUT `
-    --uri "https://management.azure.com${Scope}/providers/Microsoft.Authorization/roleAssignments/${assignmentGuid}?api-version=2022-04-01" `
-    --body $body 2>&1
+  # az role assignment create is the documented CLI command and handles its own
+  # GUID generation. The previous `az rest --method PUT --body $body` form (used
+  # in earlier versions of this script) failed with "Unsupported Media Type"
+  # because az rest does not auto-set Content-Type for the body — verified
+  # against rg-a2-assessment-backup on 2026-05-19.
+  $result = az role assignment create `
+    --assignee $PrincipalObjectId `
+    --role $RoleDefinitionId `
+    --scope $Scope 2>&1
 
   if ($LASTEXITCODE -ne 0) {
-    if ($result -match "RoleAssignmentExists") {
+    if ("$result" -match "RoleAssignmentExists|already exists") {
       Write-Host "  -> Already granted (idempotent)."
     } else {
       throw "Failed to grant '$RoleDisplayName' on $Scope`: $result"
