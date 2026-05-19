@@ -663,11 +663,23 @@ if (-not [string]::IsNullOrWhiteSpace($deploymentOutputsRaw) -and $deploymentOut
   try { $deployment = $deploymentOutputsRaw | ConvertFrom-Json } catch { $deployment = $null }
 }
 
-$webAppName = $deployment.webAppName.value
-$workerAppName = $deployment.workerAppName.value
-$parserAppName = $deployment.parserAppName.value
-$postgresServerName = $deployment.postgresServerName.value
-$postgresDatabaseName = $deployment.postgresDatabaseName.value
+# StrictMode-safe accessor: $deployment may be null or a PSCustomObject without the property,
+# both of which throw on direct .Name.value access under `Set-StrictMode -Version Latest` (line 70).
+function Get-DeploymentOutputValue([object]$outputs, [string]$name) {
+  if ($null -eq $outputs) { return $null }
+  $prop = $outputs.PSObject.Properties[$name]
+  if ($null -eq $prop) { return $null }
+  $val = $prop.Value
+  if ($null -eq $val) { return $null }
+  if ($val.PSObject.Properties['value']) { return $val.value }
+  return $val
+}
+
+$webAppName = Get-DeploymentOutputValue $deployment 'webAppName'
+$workerAppName = Get-DeploymentOutputValue $deployment 'workerAppName'
+$parserAppName = Get-DeploymentOutputValue $deployment 'parserAppName'
+$postgresServerName = Get-DeploymentOutputValue $deployment 'postgresServerName'
+$postgresDatabaseName = Get-DeploymentOutputValue $deployment 'postgresDatabaseName'
 
 if (-not $webAppName -or -not $workerAppName -or -not $parserAppName) {
   Write-Host "ARM outputs missing or incomplete (likely because deployment ended in Failed state with RoleAssignmentExists-only errors). Falling back to resource-group enumeration."
