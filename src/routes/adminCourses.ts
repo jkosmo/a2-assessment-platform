@@ -9,8 +9,9 @@ import {
   deleteCourse,
   courseRepository,
 } from "../modules/course/index.js";
-import { generationLocaleSchema, localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest } from "../modules/adminContent/adminContentSchemas.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
+import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
 import { NotFoundError, AppError } from "../errors/AppError.js";
@@ -102,6 +103,47 @@ adminCoursesRouter.get("/", async (_request, response, next) => {
     response.json({ courses: items });
   } catch (error) {
     next(error);
+  }
+});
+
+// Course import from a2-content-export/v1 envelope (#433). Counterpart to
+// /:courseId/export-package. Inlined modules are always imported as fresh
+// modules (createNew); course-level mode controls whether the course itself
+// is new or whether the imported modules attach to an existing target course.
+adminCoursesRouter.post("/import", async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { data, error } = parseRequest(importBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  if (data.payload.scope !== "course") {
+    response.status(400).json({ error: "scope_mismatch", message: "Envelope scope must be 'course' for this endpoint." });
+    return;
+  }
+  try {
+    const envelope = data.payload as unknown as Parameters<typeof importCourseFromEnvelope>[0];
+    const result = await importCourseFromEnvelope(envelope, {
+      actorId,
+      mode: data.mode ?? "createNew",
+      targetCourseId: data.targetId,
+    });
+    response.status(201).json({ courseId: result.courseId, moduleIds: result.moduleIds });
+  } catch (err) {
+    if (err instanceof AppError) {
+      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Unknown error";
+    if (/not found/i.test(message)) {
+      response.status(404).json({ error: "import_target_not_found", message });
+      return;
+    }
+    next(err);
   }
 });
 

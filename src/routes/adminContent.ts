@@ -35,9 +35,11 @@ import {
   mcqLocalizationBodySchema,
   mcqRevisionBodySchema,
   sourceMaterialUploadBodySchema,
+  importBodySchema,
   parseRequest,
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
+import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import {
   generateAssessmentBlueprint,
   generateModuleDraft,
@@ -216,6 +218,51 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
       return;
     }
     response.status(404).json({ error: "module_export_failed", message: "Could not export module." });
+  }
+});
+
+// Module import from a2-content-export/v1 envelope (#433). Counterpart to
+// /modules/:id/export-package. mode=createNew creates a fresh module; mode=
+// replaceExisting appends a new active version to the existing targetId
+// (history preserved; never silently overwrites).
+adminContentRouter.post("/modules/import", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { data, error } = parseRequest(importBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  if (data.payload.scope !== "module") {
+    response.status(400).json({ error: "scope_mismatch", message: "Envelope scope must be 'module' for this endpoint." });
+    return;
+  }
+  try {
+    // Cast through unknown: zod-inferred OUTPUT types from the import side and the
+    // schema-builder side are structurally identical but nominally unrelated when
+    // they cross module boundaries via different re-export chains. Runtime payload
+    // is what the schema validated.
+    const envelope = data.payload as unknown as Parameters<typeof importModuleFromEnvelope>[0];
+    const result = await importModuleFromEnvelope(envelope, {
+      actorId,
+      mode: data.mode ?? "createNew",
+      targetModuleId: data.targetId,
+    });
+    response.status(201).json({ moduleId: result.moduleId, moduleVersionId: result.moduleVersionId });
+  } catch (err) {
+    if (err instanceof AppError) {
+      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Unknown error";
+    if (/not found/i.test(message)) {
+      response.status(404).json({ error: "import_target_not_found", message });
+      return;
+    }
+    response.status(400).json({ error: "module_import_failed", message });
   }
 });
 

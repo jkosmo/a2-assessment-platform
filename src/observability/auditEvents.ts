@@ -33,6 +33,10 @@ export const auditActions = {
     benchmarkExampleVersionCreated: "benchmark_example_version_created",
     moduleVersionPublished: "module_version_published",
     calibrationThresholdsPublished: "calibration_thresholds_published",
+    moduleExported: "module_exported",
+    moduleImported: "module_imported",
+    courseExported: "course_exported",
+    courseImported: "course_imported",
   },
   appeal: {
     created: "appeal_created",
@@ -127,6 +131,29 @@ export type AuditMetadataByAction = {
   [auditActions.adminContent.calibrationThresholdsPublished]: EventMetadata<{
     moduleId: string;
     moduleVersionId: string;
+  }>;
+  [auditActions.adminContent.moduleExported]: EventMetadata<{
+    moduleId: string;
+    exportedAt: string;
+  }>;
+  [auditActions.adminContent.moduleImported]: EventMetadata<{
+    moduleId: string;
+    moduleVersionId: string;
+    mode: "createNew" | "replaceExisting";
+    sourcePublishedAt: string | null;
+    sourcePublishedBy: string | null;
+    sourceVersionNo: number | null;
+  }>;
+  [auditActions.adminContent.courseExported]: EventMetadata<{
+    courseId: string;
+    exportedAt: string;
+    moduleCount: number;
+  }>;
+  [auditActions.adminContent.courseImported]: EventMetadata<{
+    courseId: string;
+    mode: "createNew" | "replaceExisting";
+    moduleCount: number;
+    sourcePublishedAt: string | null;
   }>;
   [auditActions.appeal.created]: EventMetadata<{
     submissionId: string;
