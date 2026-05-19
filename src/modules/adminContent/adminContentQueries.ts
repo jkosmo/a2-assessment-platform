@@ -165,3 +165,94 @@ export async function getModuleContentBundle(moduleId: string) {
     },
   };
 }
+
+// Build the versioned export envelope for a single module (#433). Picks the
+// currently-active ModuleVersion (or, if none is active, the latest one) and
+// inlines the referenced rubric, prompt template, and MCQ set so the resulting
+// file can recreate the module in another environment without external lookups.
+// publishedBy/publishedAt are preserved as opaque source-env strings — display
+// only, NEVER resolved against destination user IDs.
+export async function buildModuleExportEnvelope(
+  moduleId: string,
+  exportedBy: { userId?: string | null; email?: string | null },
+): Promise<import("./adminContentSchemas.js").ExportEnvelope> {
+  const bundle = await getModuleContentBundle(moduleId);
+
+  const moduleVersion =
+    bundle.versions.moduleVersions.find((v) => v.id === bundle.module.activeVersionId)
+    ?? bundle.versions.moduleVersions[0]
+    ?? null;
+  if (!moduleVersion) {
+    throw new Error("Module has no versions to export.");
+  }
+
+  const rubricVersion =
+    bundle.versions.rubricVersions.find((v) => v.id === moduleVersion.rubricVersionId)
+    ?? bundle.versions.rubricVersions[0]
+    ?? null;
+  if (!rubricVersion) {
+    throw new Error("Module has no rubric versions to export.");
+  }
+
+  const promptTemplateVersion =
+    bundle.versions.promptTemplateVersions.find((v) => v.id === moduleVersion.promptTemplateVersionId)
+    ?? bundle.versions.promptTemplateVersions[0]
+    ?? null;
+  if (!promptTemplateVersion) {
+    throw new Error("Module has no prompt-template versions to export.");
+  }
+
+  const mcqSetVersion =
+    bundle.versions.mcqSetVersions.find((v) => v.id === moduleVersion.mcqSetVersionId)
+    ?? bundle.versions.mcqSetVersions[0]
+    ?? null;
+  if (!mcqSetVersion) {
+    throw new Error("Module has no MCQ-set versions to export.");
+  }
+
+  return {
+    exportFormat: "a2-content-export/v1",
+    exportedAt: new Date().toISOString(),
+    exportedBy: exportedBy.userId ?? null,
+    exportedByEmail: exportedBy.email ?? null,
+    scope: "module",
+    module: {
+      module: {
+        title: bundle.module.title as never,
+        description: (bundle.module.description ?? null) as never,
+        certificationLevel: bundle.module.certificationLevel as never,
+      },
+      activeVersion: {
+        taskText: moduleVersion.taskText as never,
+        assessorExpectedContent: (moduleVersion.assessorExpectedContent ?? null) as never,
+        candidateTaskConstraints: (moduleVersion.candidateTaskConstraints ?? null) as never,
+        assessmentBlueprint: null,
+        submissionSchema: (moduleVersion.submissionSchema ?? null) as never,
+        assessmentPolicy: (moduleVersion.assessmentPolicy ?? null) as never,
+        rubric: {
+          criteria: rubricVersion.criteria as Record<string, unknown>,
+          scalingRule: rubricVersion.scalingRule as Record<string, unknown>,
+          passRule: rubricVersion.passRule as Record<string, unknown>,
+          active: true,
+        },
+        promptTemplate: {
+          systemPrompt: promptTemplateVersion.systemPrompt as never,
+          userPromptTemplate: promptTemplateVersion.userPromptTemplate as never,
+          examples: (promptTemplateVersion.examples ?? []) as Array<Record<string, unknown>>,
+          active: true,
+        },
+        mcqSet: {
+          title: mcqSetVersion.title as never,
+          questions: mcqSetVersion.questions as never,
+          active: true,
+        },
+        audit: {
+          publishedAt: moduleVersion.publishedAt ? new Date(moduleVersion.publishedAt).toISOString() : null,
+          publishedBy: moduleVersion.publishedBy ?? null,
+          publishedByEmail: null,
+          sourceVersionNo: moduleVersion.versionNo,
+        },
+      },
+    },
+  };
+}
