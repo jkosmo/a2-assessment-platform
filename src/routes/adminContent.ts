@@ -17,6 +17,7 @@ import {
   archiveModule,
   restoreModule,
   adminContentRepository,
+  buildModuleExportEnvelope,
 } from "../modules/adminContent/index.js";
 import {
   moduleCreateBodySchema,
@@ -215,6 +216,31 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
       return;
     }
     response.status(404).json({ error: "module_export_failed", message: "Could not export module." });
+  }
+});
+
+// Versioned export envelope for cross-environment transfer / file backup (#433).
+// Distinct from /export above which returns the bundle for live editing in the
+// admin UI. This one returns the a2-content-export/v1 envelope: a self-contained
+// portable file that the matching /import endpoint can re-hydrate elsewhere.
+adminContentRouter.get("/modules/:moduleId/export-package", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    const envelope = await buildModuleExportEnvelope(request.params.moduleId, {
+      userId: actorId,
+    });
+    response.json({ envelope });
+  } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
+    response.status(404).json({ error: "module_export_failed", message: "Could not build module export envelope." });
   }
 });
 

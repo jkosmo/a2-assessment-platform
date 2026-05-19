@@ -10,9 +10,10 @@ import {
   courseRepository,
 } from "../modules/course/index.js";
 import { generationLocaleSchema, localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
-import { NotFoundError } from "../errors/AppError.js";
+import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 
@@ -100,6 +101,32 @@ adminCoursesRouter.get("/", async (_request, response, next) => {
     }));
     response.json({ courses: items });
   } catch (error) {
+    next(error);
+  }
+});
+
+// Versioned export envelope for cross-environment transfer / file backup (#433).
+// Self-contained: inlines each referenced module's full active-version payload
+// so the file can recreate the course in another environment without external
+// lookups. Counterpart to /api/admin/content/modules/:id/export-package.
+adminCoursesRouter.get("/:courseId/export-package", async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const envelope = await buildCourseExportEnvelope(request.params.courseId, { userId: actorId });
+    response.json({ envelope });
+  } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
+    if (error instanceof Error && /not found|no modules/i.test(error.message)) {
+      response.status(404).json({ error: "course_export_failed", message: error.message });
+      return;
+    }
     next(error);
   }
 });

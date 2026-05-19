@@ -166,6 +166,65 @@ export async function getModuleContentBundle(moduleId: string) {
   };
 }
 
+// Helper: build only the inner module payload (without the envelope wrapper)
+// for use by both the module-export endpoint and the course-export endpoint
+// (which inlines each module's payload).
+async function buildModuleExportPayload(
+  moduleId: string,
+): Promise<import("./adminContentSchemas.js").ModuleExportPayload> {
+  const envelope = await buildModuleExportEnvelope(moduleId, { userId: null, email: null });
+  if (!envelope.module) {
+    throw new Error("Internal: module envelope did not include module payload.");
+  }
+  return envelope.module;
+}
+
+// Course export envelope (#433). Self-contained: inlines each module's full
+// activeVersion payload so the destination environment does not need the
+// source modules to exist already. Module order preserved via sortOrder.
+export async function buildCourseExportEnvelope(
+  courseId: string,
+  exportedBy: { userId?: string | null; email?: string | null },
+): Promise<import("./adminContentSchemas.js").ExportEnvelope> {
+  const course = await (await import("../course/courseRepository.js")).courseRepository.findCourseById(courseId);
+  if (!course) {
+    throw new Error("Course not found.");
+  }
+  if (!course.modules || course.modules.length === 0) {
+    throw new Error("Course has no modules to export.");
+  }
+
+  const sortedModules = [...course.modules].sort((a, b) => a.sortOrder - b.sortOrder);
+  const modulePayloads = await Promise.all(
+    sortedModules.map(async (cm) => ({
+      sortOrder: cm.sortOrder,
+      module: await buildModuleExportPayload(cm.moduleId),
+    })),
+  );
+
+  return {
+    exportFormat: "a2-content-export/v1",
+    exportedAt: new Date().toISOString(),
+    exportedBy: exportedBy.userId ?? null,
+    exportedByEmail: exportedBy.email ?? null,
+    scope: "course",
+    course: {
+      course: {
+        title: decodeLocalizedText(course.title) as never ?? course.title as never,
+        description: (course.description ? decodeLocalizedText(course.description) : null) as never,
+        certificationLevel: (course.certificationLevel ? decodeLocalizedText(course.certificationLevel) : null) as never,
+        audit: {
+          publishedAt: course.publishedAt ? new Date(course.publishedAt).toISOString() : null,
+          publishedBy: null,
+          publishedByEmail: null,
+          sourceVersionNo: null,
+        },
+        modules: modulePayloads,
+      },
+    },
+  };
+}
+
 // Build the versioned export envelope for a single module (#433). Picks the
 // currently-active ModuleVersion (or, if none is active, the latest one) and
 // inlines the referenced rubric, prompt template, and MCQ set so the resulting
