@@ -1635,7 +1635,16 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/course-1");
     await page.locator("#desc-en-GB").fill("Updated description");
+    // Race fix: wait for the PUT response, not just the UI button state. CI is
+    // slower than local and the next page.goto would otherwise outrun the mock's
+    // in-memory updatedAt update (#432 follow-up; observed in run 26107095823).
+    const saveResponse = page.waitForResponse((response) =>
+      response.url().includes("/api/admin/content/courses/course-1") &&
+      response.request().method() === "PUT" &&
+      response.status() === 200,
+    );
     await page.locator("#saveCourseBtn").click();
+    await saveResponse;
     await expect(page.locator("#saveCourseBtn")).toBeEnabled();
 
     await page.goto("/admin-content/courses");
