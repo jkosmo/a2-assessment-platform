@@ -71,6 +71,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $script:lastAzureOidcRefreshAt = $null
 
+# Pure-logic helpers -- extracted so they can be Pester-tested without Azure (#434).
+. (Join-Path $PSScriptRoot 'deploy-environment.helpers.ps1')
+
 # INCIDENT 2026-05-15: Windows zip (New-ZipArchiveFromDirectory / .NET ZipArchive) produces a
 # package that Azure App Service cannot mount as Run-From-Package. The container starts but
 # /home/site/wwwroot contains only hostingstart.html, causing "Application Error" on every request.
@@ -213,24 +216,20 @@ function Wait-GroupDeployment([string]$ResourceGroup, [string]$DeploymentName) {
           -o json 2>$null
         Write-Host $failedOpsRaw
 
-        # Idempotency exemption: Microsoft.Authorization/roleAssignments cannot be created twice for the same
-        # principalId+roleDefinitionId+scope combination, even with a different GUID name. After #406 introduced
-        # stable GUIDs, environments that previously held assignments under the OLD unstable-GUID seeds (e.g. the
-        # 2026-05-15 staging deploy) will report RoleAssignmentExists on every subsequent deploy because the
-        # equivalent assignment is already in place. Treat that as success — the principal+role+scope mapping is
-        # already what Bicep intended.
+        # Idempotency exemption -- see Test-DeploymentFailureIsIdempotent in deploy-environment.helpers.ps1
+        # and doc/DEPLOY_OPTIMIZATION.md (2026-05-19 incident layer 1) for the why.
         $failedOps = $null
         try { $failedOps = $failedOpsRaw | ConvertFrom-Json } catch { $failedOps = $null }
-        if ($failedOps -and $failedOps.Count -gt 0) {
-          $nonIdempotentFailures = @($failedOps | Where-Object {
+        if (Test-DeploymentFailureIsIdempotent $failedOps) {
+          Write-Host "WARN: ARM reported $(@($failedOps).Count) failed operation(s) -- ALL are RoleAssignmentExists (idempotency-safe). Treating $DeploymentName as Succeeded."
+          return
+        }
+        if ($failedOps -and @($failedOps).Count -gt 0) {
+          $nonIdempotent = @($failedOps | Where-Object {
             -not ($_.resourceType -eq 'Microsoft.Authorization/roleAssignments' -and $_.errorCode -eq 'RoleAssignmentExists')
           })
-          if ($nonIdempotentFailures.Count -eq 0) {
-            Write-Host "WARN: ARM reported $($failedOps.Count) failed operation(s) — ALL are RoleAssignmentExists (idempotency-safe). Treating $DeploymentName as Succeeded."
-            return
-          }
-          Write-Host "Failure is NOT exempt: $($nonIdempotentFailures.Count) operation(s) failed with non-idempotent errors:"
-          $nonIdempotentFailures | ConvertTo-Json -Depth 6 | Write-Host
+          Write-Host "Failure is NOT exempt: $($nonIdempotent.Count) operation(s) failed with non-idempotent errors:"
+          $nonIdempotent | ConvertTo-Json -Depth 6 | Write-Host
         }
 
         throw "ARM deployment $DeploymentName ended with provisioningState=$state."
@@ -651,7 +650,7 @@ Refresh-AzureCliOidcLogin "reading ARM deployment outputs"
 # ARM only emits deployment outputs when the deployment provisioningState is Succeeded. When
 # Wait-GroupDeployment treats a Failed deployment as success because the only failures were
 # idempotent RoleAssignmentExists errors (v1.1.58), the outputs object is null/empty. In that
-# case we still need webAppName/workerAppName/parserAppName for downstream steps — derive them
+# case we still need webAppName/workerAppName/parserAppName for downstream steps -- derive them
 # from the existing resource group using the same naming-convention fallback that the
 # skip-infra path uses (lines ~426-441).
 $deploymentOutputsRaw = az deployment group show `
@@ -663,18 +662,7 @@ if (-not [string]::IsNullOrWhiteSpace($deploymentOutputsRaw) -and $deploymentOut
   try { $deployment = $deploymentOutputsRaw | ConvertFrom-Json } catch { $deployment = $null }
 }
 
-# StrictMode-safe accessor: $deployment may be null or a PSCustomObject without the property,
-# both of which throw on direct .Name.value access under `Set-StrictMode -Version Latest` (line 70).
-function Get-DeploymentOutputValue([object]$outputs, [string]$name) {
-  if ($null -eq $outputs) { return $null }
-  $prop = $outputs.PSObject.Properties[$name]
-  if ($null -eq $prop) { return $null }
-  $val = $prop.Value
-  if ($null -eq $val) { return $null }
-  if ($val.PSObject.Properties['value']) { return $val.value }
-  return $val
-}
-
+$envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
 $webAppName = Get-DeploymentOutputValue $deployment 'webAppName'
 $workerAppName = Get-DeploymentOutputValue $deployment 'workerAppName'
 $parserAppName = Get-DeploymentOutputValue $deployment 'parserAppName'
@@ -683,13 +671,13 @@ $postgresDatabaseName = Get-DeploymentOutputValue $deployment 'postgresDatabaseN
 
 if (-not $webAppName -or -not $workerAppName -or -not $parserAppName) {
   Write-Host "ARM outputs missing or incomplete (likely because deployment ended in Failed state with RoleAssignmentExists-only errors). Falling back to resource-group enumeration."
-  $envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
   $appNames = az webapp list --resource-group $ResourceGroupName --query "[].name" -o tsv 2>$null
   Assert-LastExitCode "az webapp list (fallback)"
   $appNameList = @($appNames -split "`n" | Where-Object { $_ })
-  if (-not $webAppName) { $webAppName = ($appNameList | Where-Object { $_ -match "${envCode}-app" } | Select-Object -First 1) }
-  if (-not $workerAppName) { $workerAppName = ($appNameList | Where-Object { $_ -match "${envCode}-worker" } | Select-Object -First 1) }
-  if (-not $parserAppName) { $parserAppName = ($appNameList | Where-Object { $_ -match "${envCode}-parser" } | Select-Object -First 1) }
+  $resolved = Resolve-AppNames -ArmOutputs $deployment -EnvCode $envCode -ExistingAppNames $appNameList
+  $webAppName = $resolved.web
+  $workerAppName = $resolved.worker
+  $parserAppName = $resolved.parser
   if (-not $postgresServerName) {
     $postgresServerName = (az postgres flexible-server list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
   }
@@ -706,7 +694,7 @@ if (-not $workerAppName) {
 if (-not $parserAppName) {
   throw "parserAppName could not be resolved from deployment outputs or resource group enumeration."
 }
-}  # end else branch of `if ($skipInfraBool)` — ARM/Bicep deploy block ends here
+}  # end else branch of `if ($skipInfraBool)` -- ARM/Bicep deploy block ends here
 
 $tempBasePath = Get-TempBasePath
 if ($PackagePath) {
@@ -906,15 +894,15 @@ function Wait-Stable {
       $consecutiveFailures++
       $detailSuffix = if ($detail) { " ($detail)" } else { "" }
       if ($consecutiveFailures -gt $MaxConsecutiveFailures) {
-        throw "$Label did not transition to $ExpectedVersion after $consecutiveFailures consecutive checks$detailSuffix at $Url. Cold start exceeded budget — investigate App Service container start."
+        throw "$Label did not transition to $ExpectedVersion after $consecutiveFailures consecutive checks$detailSuffix at $Url. Cold start exceeded budget -- investigate App Service container start."
       }
       # Version-mismatch (old container still responding) is expected and informational.
-      # HTTP timeout/error is the container in restart cycle — still expected, but louder.
+      # HTTP timeout/error is the container in restart cycle -- still expected, but louder.
       $isVersionMismatch = $ExpectedVersion -and $detail -like "version=*"
       if ($isVersionMismatch) {
-        Write-Host "$Label waiting for new version: $detail (poll $consecutiveFailures/$MaxConsecutiveFailures, old container still serving — normal during ~5-8 min B1 cold-start)"
+        Write-Host "$Label waiting for new version: $detail (poll $consecutiveFailures/$MaxConsecutiveFailures, old container still serving -- normal during ~5-8 min B1 cold-start)"
       } else {
-        Write-Host "$Label not yet responding$detailSuffix (poll $consecutiveFailures/$MaxConsecutiveFailures, new container starting — normal during ~5-8 min B1 cold-start)"
+        Write-Host "$Label not yet responding$detailSuffix (poll $consecutiveFailures/$MaxConsecutiveFailures, new container starting -- normal during ~5-8 min B1 cold-start)"
       }
     }
     if ($attempt -lt $totalAttempts) {
@@ -1002,7 +990,7 @@ if ($EnvironmentName -eq "production" -and -not $skipInfraBool) {
 
   $pgServerId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$postgresServerName"
   Write-Host "Assigning backup roles to vault MSI $vaultPrincipalId on $postgresServerName..."
-  # Suppress success JSON output only — stderr (errors) still surfaces.
+  # Suppress success JSON output only -- stderr (errors) still surfaces.
   az role assignment create --role "Reader" --assignee $vaultPrincipalId --scope $pgServerId | Out-Null
   az role assignment create `
     --role "PostgreSQL Flexible Server Long Term Retention Backup Role" `

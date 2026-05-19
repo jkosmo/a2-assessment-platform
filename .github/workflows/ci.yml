@@ -159,3 +159,25 @@ jobs:
       - name: Destroy PostgreSQL test environment
         if: always()
         run: npm run postgres:destroy
+
+  pester:
+    # Pester v5 unit tests for scripts/azure/deploy-environment.helpers.ps1 (#434).
+    # Cheap (<60s) and catches the kind of footguns that cost 3 deploy cycles on 2026-05-19
+    # (see doc/DEPLOY_OPTIMIZATION.md 2026-05-19 cascade).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.3.1
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -MinimumVersion 5.5.0 -Force
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'test/scripts/'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'test/scripts/pester-results.xml'
+          Invoke-Pester -Configuration $config
