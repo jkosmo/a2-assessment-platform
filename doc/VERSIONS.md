@@ -2,6 +2,62 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.57 - 2026-05-19
+
+fix(infra): stable role assignment GUIDs (#406) — unblocks #404 Steps 2-4
+
+Prerequisite for removing the `SKIP_ROLE_ASSIGNMENTS=true` workaround in production.
+With #404 Step 1 done (SP `cba285e6-…` now has `User Access Administrator` on
+`rg-a2-assessment-production`), the SP could create role assignments — but the
+Bicep was deriving each role assignment GUID from mutable inputs (`webApp.id`,
+`kvSecret*.id`). When the production environment was deleted and recreated in
+May 2026, those resource IDs changed, so the next deploy would compute new GUIDs
+while the old principal+role+scope assignments still existed, triggering
+`RoleAssignmentExists` 409 errors.
+
+This change replaces all 12 GUID seeds with stable inputs:
+
+```bicep
+// Before — mutable, breaks on RG-recreate
+name: empty(roleAssignmentSalt)
+  ? guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId)
+  : guid(kvSecretDatabaseUrl.id, webApp.id, keyVaultSecretsUserRoleId, roleAssignmentSalt)
+
+// After — stable across recreate, suffix is human-readable
+name: empty(roleAssignmentSalt)
+  ? guid(subscription().subscriptionId, environmentName, 'webApp-databaseUrl-kvSecretsUser')
+  : guid(subscription().subscriptionId, environmentName, 'webApp-databaseUrl-kvSecretsUser', roleAssignmentSalt)
+```
+
+All 12 assignments get a unique per-binding suffix:
+
+| Resource | Suffix |
+|---|---|
+| webApp ↔ APP-RUNTIME-SECRETS | `webApp-appRuntime-kvSecretsUser` |
+| workerApp ↔ APP-RUNTIME-SECRETS | `workerApp-appRuntime-kvSecretsUser` |
+| webApp ↔ DATABASE-URL | `webApp-databaseUrl-kvSecretsUser` |
+| workerApp ↔ DATABASE-URL | `workerApp-databaseUrl-kvSecretsUser` |
+| webApp ↔ AZURE-OPENAI-API-KEY | `webApp-openAiKey-kvSecretsUser` |
+| workerApp ↔ AZURE-OPENAI-API-KEY | `workerApp-openAiKey-kvSecretsUser` |
+| webApp ↔ ACS-CONNECTION-STRING | `webApp-acsConnection-kvSecretsUser` |
+| workerApp ↔ ACS-CONNECTION-STRING | `workerApp-acsConnection-kvSecretsUser` |
+| webApp ↔ PARTICIPANT-NOTIFICATION-WEBHOOK-URL | `webApp-notifWebhook-kvSecretsUser` |
+| workerApp ↔ PARTICIPANT-NOTIFICATION-WEBHOOK-URL | `workerApp-notifWebhook-kvSecretsUser` |
+| webApp ↔ PARSER-WORKER-AUTH-KEY | `webApp-parserAuth-kvSecretsUser` |
+| parserApp ↔ PARSER-WORKER-AUTH-KEY | `parserApp-parserAuth-kvSecretsUser` |
+
+`roleAssignmentSalt` is retained as an emergency escape hatch (description
+updated to reflect that it is rarely needed now); CI lint upgraded from a single
+"must include roleAssignmentSalt" check to four checks: (1) GUID must include
+`subscription().subscriptionId`, (2) must include `environmentName`, (3) must
+wire up the salt escape hatch, (4) must NOT use mutable `*App.id` / `kvSecret*.id`
+seeds. Bicep build is green; `az bicep build` succeeds with no warnings on these
+files.
+
+This is a code+lint change only — no runtime behavior change until #404 Steps
+2-4 are executed (remove `SKIP_ROLE_ASSIGNMENTS`, clean up orphans, deploy).
+That work is staged for the next prod deploy verification window.
+
 ## 1.1.56 - 2026-05-18
 
 fix(ux): save menu always at conversation bottom (#372 follow-up, item #4)

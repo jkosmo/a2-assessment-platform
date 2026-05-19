@@ -33,12 +33,47 @@ jobs:
             fi
           fi
 
-      - name: Lint — role assignment GUIDs must include roleAssignmentSalt
+      - name: Lint — role assignment GUIDs must be stable (#406)
         run: |
-          # principalId cannot be used in Bicep GUID seeds (runtime value, not known at deployment start).
-          # Instead we use roleAssignmentSalt as a manual escape hatch — verify it is wired up.
-          if grep -A2 "Microsoft.Authorization/roleAssignments" infra/azure/main.bicep | grep -E "name: guid\(" | grep -v "roleAssignmentSalt" | grep -v "//"; then
-            echo "FAIL: Role assignment GUID does not include roleAssignmentSalt. Add it so GUIDs can be reset if App Services are recreated without RG deletion (invariant #5)."
+          # Role assignment GUIDs MUST be derived from stable inputs (subscription().subscriptionId + environmentName +
+          # a per-assignment suffix string), NOT from resource IDs like webApp.id or kvSecret*.id which change when
+          # the resource is recreated. Unstable GUIDs cause RoleAssignmentExists 409 conflicts on RG-recreate (#406).
+          # The roleAssignmentSalt escape hatch must still be wired up as a 4th argument for emergency GUID resets.
+          set -e
+          # Match the resource declaration line, then take the following 3 lines to capture scope + name + properties opener.
+          # Role assignment 'name:' values come in two shapes:
+          #   1. `name: guid(...)`                                        — without escape-hatch salt
+          #   2. `name: empty(roleAssignmentSalt) ? guid(...) : guid(...)` — with escape-hatch (our standard form)
+          ROLE_ASSIGN_LINES=$(grep -A3 "resource.*'Microsoft.Authorization/roleAssignments" infra/azure/main.bicep | grep -E "^\s*name: (guid\(|empty\(roleAssignmentSalt\))" | grep -v "//")
+          if [ -z "$ROLE_ASSIGN_LINES" ]; then
+            echo "FAIL: No role assignment 'name:' lines found — refusing to silently pass."
+            exit 1
+          fi
+          # Each name line must include subscription().subscriptionId AND environmentName.
+          BAD=$(echo "$ROLE_ASSIGN_LINES" | grep -v "subscription().subscriptionId" || true)
+          if [ -n "$BAD" ]; then
+            echo "FAIL: Role assignment GUID does not include subscription().subscriptionId — must use stable inputs (#406):"
+            echo "$BAD"
+            exit 1
+          fi
+          BAD=$(echo "$ROLE_ASSIGN_LINES" | grep -v "environmentName" || true)
+          if [ -n "$BAD" ]; then
+            echo "FAIL: Role assignment GUID does not include environmentName — must use stable inputs (#406):"
+            echo "$BAD"
+            exit 1
+          fi
+          # Each line must also wire up the roleAssignmentSalt escape hatch (4th guid arg in the non-empty branch).
+          BAD=$(echo "$ROLE_ASSIGN_LINES" | grep -v "roleAssignmentSalt" || true)
+          if [ -n "$BAD" ]; then
+            echo "FAIL: Role assignment GUID does not wire up roleAssignmentSalt escape hatch (invariant #5):"
+            echo "$BAD"
+            exit 1
+          fi
+          # Forbid resource-id seeds (webApp.id, workerApp.id, parserApp.id, kvSecret*.id) — they are unstable.
+          BAD=$(echo "$ROLE_ASSIGN_LINES" | grep -E "webApp\.id|workerApp\.id|parserApp\.id|kvSecret[A-Za-z]*\.id" || true)
+          if [ -n "$BAD" ]; then
+            echo "FAIL: Role assignment GUID uses an ARM resource .id seed — these are NOT stable across RG-recreate (#406):"
+            echo "$BAD"
             exit 1
           fi
 
