@@ -648,11 +648,20 @@ Assert-LastExitCode "az deployment group create"
 Wait-GroupDeployment $ResourceGroupName $deploymentName
 Refresh-AzureCliOidcLogin "reading ARM deployment outputs"
 
-$deployment = az deployment group show `
+# ARM only emits deployment outputs when the deployment provisioningState is Succeeded. When
+# Wait-GroupDeployment treats a Failed deployment as success because the only failures were
+# idempotent RoleAssignmentExists errors (v1.1.58), the outputs object is null/empty. In that
+# case we still need webAppName/workerAppName/parserAppName for downstream steps — derive them
+# from the existing resource group using the same naming-convention fallback that the
+# skip-infra path uses (lines ~426-441).
+$deploymentOutputsRaw = az deployment group show `
   --resource-group $ResourceGroupName `
   --name $deploymentName `
-  --query properties.outputs | ConvertFrom-Json
-Assert-LastExitCode "az deployment group show"
+  --query properties.outputs -o json 2>$null
+$deployment = $null
+if (-not [string]::IsNullOrWhiteSpace($deploymentOutputsRaw) -and $deploymentOutputsRaw -ne 'null') {
+  try { $deployment = $deploymentOutputsRaw | ConvertFrom-Json } catch { $deployment = $null }
+}
 
 $webAppName = $deployment.webAppName.value
 $workerAppName = $deployment.workerAppName.value
@@ -660,14 +669,30 @@ $parserAppName = $deployment.parserAppName.value
 $postgresServerName = $deployment.postgresServerName.value
 $postgresDatabaseName = $deployment.postgresDatabaseName.value
 
+if (-not $webAppName -or -not $workerAppName -or -not $parserAppName) {
+  Write-Host "ARM outputs missing or incomplete (likely because deployment ended in Failed state with RoleAssignmentExists-only errors). Falling back to resource-group enumeration."
+  $envCode = if ($EnvironmentName -eq "production") { "prd" } else { "stg" }
+  $appNames = az webapp list --resource-group $ResourceGroupName --query "[].name" -o tsv 2>$null
+  Assert-LastExitCode "az webapp list (fallback)"
+  $appNameList = @($appNames -split "`n" | Where-Object { $_ })
+  if (-not $webAppName) { $webAppName = ($appNameList | Where-Object { $_ -match "${envCode}-app" } | Select-Object -First 1) }
+  if (-not $workerAppName) { $workerAppName = ($appNameList | Where-Object { $_ -match "${envCode}-worker" } | Select-Object -First 1) }
+  if (-not $parserAppName) { $parserAppName = ($appNameList | Where-Object { $_ -match "${envCode}-parser" } | Select-Object -First 1) }
+  if (-not $postgresServerName) {
+    $postgresServerName = (az postgres flexible-server list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+  }
+  if (-not $postgresDatabaseName) { $postgresDatabaseName = "a2assessment" }
+  Write-Host "Fallback resolved: web=$webAppName, worker=$workerAppName, parser=$parserAppName, postgres=$postgresServerName"
+}
+
 if (-not $webAppName) {
-  throw "webAppName output missing from deployment."
+  throw "webAppName could not be resolved from deployment outputs or resource group enumeration."
 }
 if (-not $workerAppName) {
-  throw "workerAppName output missing from deployment."
+  throw "workerAppName could not be resolved from deployment outputs or resource group enumeration."
 }
 if (-not $parserAppName) {
-  throw "parserAppName output missing from deployment."
+  throw "parserAppName could not be resolved from deployment outputs or resource group enumeration."
 }
 }  # end else branch of `if ($skipInfraBool)` — ARM/Bicep deploy block ends here
 
