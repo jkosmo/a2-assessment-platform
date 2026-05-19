@@ -441,16 +441,23 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       if (rawBlueprint && typeof rawBlueprint === "string") {
         try { blueprint = JSON.parse(rawBlueprint); } catch { blueprint = null; }
       }
+      // taskText / assessorExpectedContent are LocalizedText (string OR
+      // {en-GB, nb, nn} object after decode). The validator only needs a
+      // representative string — pick the first non-empty locale value.
+      const flattenLocalized = (value: unknown): string | null => {
+        if (typeof value === "string") return value;
+        if (value && typeof value === "object") {
+          const candidate = (value as Record<string, unknown>)["en-GB"]
+            ?? (value as Record<string, unknown>).nb
+            ?? (value as Record<string, unknown>).nn;
+          return typeof candidate === "string" ? candidate : null;
+        }
+        return null;
+      };
       const validation = validateModuleVersionForPublish({
-        taskText: typeof moduleVersionData.taskText === "string"
-          ? moduleVersionData.taskText
-          : JSON.stringify(moduleVersionData.taskText ?? ""),
-        candidateTaskConstraints: typeof moduleVersionData.candidateTaskConstraints === "string"
-          ? moduleVersionData.candidateTaskConstraints
-          : null,
-        assessorExpectedContent: typeof moduleVersionData.assessorExpectedContent === "string"
-          ? moduleVersionData.assessorExpectedContent
-          : null,
+        taskText: flattenLocalized(moduleVersionData.taskText) ?? "",
+        candidateTaskConstraints: flattenLocalized(moduleVersionData.candidateTaskConstraints),
+        assessorExpectedContent: flattenLocalized(moduleVersionData.assessorExpectedContent),
         blueprint: blueprint as never,
         mcqQuestionCount: mcqSetVersion?.questions?.length ?? 0,
       });
