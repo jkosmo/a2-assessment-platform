@@ -379,6 +379,7 @@ async function renderListView() {
           ${canPublishCourse(course)
             ? `<button class="row-action-btn" data-action="publish" data-course-id="${escapeHtml(course.courseId)}">Publiser</button>`
             : ""}
+          <button class="row-action-btn" data-action="export" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Eksporter</button>
           <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Slett</button>
         </div>
       </td>
@@ -387,7 +388,11 @@ async function renderListView() {
   pageContent.innerHTML = `
     <div class="page-header">
       <h1>Kurs</h1>
-      <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
+      <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
+        <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
+        <label for="importCoursePackageFile" class="btn btn-secondary" style="cursor:pointer">Importer kurs-pakke (.json)</label>
+        <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
+      </div>
     </div>
     <div class="courses-table-wrap">
       <table class="courses-table" aria-label="Kursliste">
@@ -405,6 +410,59 @@ async function renderListView() {
     </div>`;
 
   document.getElementById("coursesTableBody")?.addEventListener("click", handleListTableClick);
+  document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
+}
+
+// #433 phase 4b — course export download. Calls /export-package and saves the
+// versioned envelope as a JSON file the destination environment can import.
+async function exportCoursePackage(courseId, courseTitle) {
+  try {
+    const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/export-package`, getHeaders);
+    const envelope = body?.envelope ?? null;
+    if (!envelope) throw new Error("Kurs-eksport returnerte tom envelope.");
+    const safeTitle = String(courseTitle ?? "course").replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "course";
+    const filename = `course-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Kurs «${courseTitle}» er eksportert.`);
+  } catch (error) {
+    showToast(`Kurs-eksport feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+  }
+}
+
+// #433 phase 4b — course import from file. POSTs envelope to /courses/import
+// with mode=createNew, re-renders the list, and navigates to the new course.
+async function handleImportCoursePackageFile(event) {
+  const target = event.target;
+  const file = target?.files?.[0] ?? null;
+  if (!file) return;
+  try {
+    const text = await file.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (parseError) {
+      throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
+    }
+    const result = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ payload, mode: "createNew" }),
+    });
+    if (!result?.courseId) throw new Error("Import-respons mangler courseId.");
+    showToast(`Kurs importert (${result.moduleIds?.length ?? 0} moduler).`);
+    window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
+  } catch (error) {
+    showToast(`Kurs-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+  } finally {
+    target.value = "";
+  }
 }
 
 function handleListTableClick(event) {
@@ -412,6 +470,10 @@ function handleListTableClick(event) {
   if (!btn) return;
   if (btn.dataset.action === "publish") {
     publishCourseInAdmin(btn.dataset.courseId, btn);
+    return;
+  }
+  if (btn.dataset.action === "export") {
+    exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle);
     return;
   }
   if (btn.dataset.action === "delete") {
