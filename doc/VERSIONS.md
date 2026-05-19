@@ -4,7 +4,73 @@ This document tracks release versions and what each version includes.
 
 ## 1.1.58 - 2026-05-19
 
-fix(deploy): Wait-GroupDeployment idempotency for RoleAssignmentExists
+fix(deploy): Wait-GroupDeployment idempotency + outputs fallback + StrictMode-safe accessor
+
+Three coordinated patches in the same version (per the "one released version per
+confirmed fix, not per attempt" deploy discipline rule).
+
+Deploy run history for this fix:
+
+| Run | Outcome | What it taught us |
+|---|---|---|
+| 26082016139 | staging failed, prod skipped | RoleAssignmentExists for 10 ops (the original problem #406 needed to handle) |
+| 26082568457 | staging WARN succeeded, then threw on `webAppName output missing` | ARM emits no outputs when state=Failed |
+| 26082842024 | same throw (fallback never ran) | `Set-StrictMode -Version Latest` makes property access on null throw before null-check fires |
+| 26083148230 | staging GREEN (18 min), prod GREEN through /healthz validation (web 200, worker 200), then a NEW failure at backup vault RG creation | Tail-end SP permission gap → see #439 |
+
+### Patch 1: Wait-GroupDeployment idempotency
+
+ARM `Microsoft.Authorization/roleAssignments` PUT is NOT idempotent for the
+(principalId, roleDefinitionId, scope) tuple — even with a deterministic GUID
+name, a second create attempt for the same effective mapping fails with
+`RoleAssignmentExists`. Staging KV already had 10 role assignments from the
+2026-05-15 deploy with the OLD unstable-GUID seeds. v1.1.57 #406 stable GUIDs
+reached out to create the "new" equivalent of those same mappings → ARM
+rejected each.
+
+Filter in `Wait-GroupDeployment`: if ALL failed operations are
+`Microsoft.Authorization/roleAssignments` + `RoleAssignmentExists`, log a WARN
+and treat the deploy as Succeeded. Otherwise throw with non-idempotent
+failures listed.
+
+### Patch 2: ARM outputs fallback
+
+Bicep deployments with status=Failed do NOT emit outputs. The script
+immediately tries `$deployment.webAppName.value` and throws. Added a fallback
+to derive app names from `az webapp list` using the same envCode-naming
+pattern that the skip-infra path already uses (lines 426-441).
+
+### Patch 3: StrictMode-safe property accessor
+
+`Set-StrictMode -Version Latest` (line 70) causes `$obj.foo.bar` to throw when
+either `$obj` is null or `$obj` is a PSCustomObject without property `foo` —
+defeating null-check logic that runs AFTER the property access. New
+`Get-DeploymentOutputValue` helper probes `PSObject.Properties[name]` first,
+returning `$null` cleanly for 5 input shapes (null, empty PSCustomObject,
+different-property, ARM-shape `{value: x}`, raw scalar). Validated locally
+against all 5.
+
+### Functional state after run 26083148230
+
+Despite the workflow reporting "failure", production reached the desired
+state before the tail-end backup-vault failure:
+
+- KV `a2-prd-kv-hea5kl` `enableRbacAuthorization: true` (flipped from false)
+- 10 stable-GUID role assignments at secret scope
+- web /healthz: 200
+- worker /healthz: 200 (all 4 monitors cycling)
+- parser /healthz: 401 (expected)
+- Joakim Kosmo: re-granted `Key Vault Secrets Officer` via RBAC (replaces
+  the vault-level access policy lost in the flip)
+
+### Remaining work tracked in issues
+
+- #439: deploy SP cannot create `rg-a2-assessment-backup` — pre-create + grant
+- #434: Pester unit tests for deploy-environment.ps1 (would have caught all 3
+  patch iterations before push)
+- #435: Document this incident in DEPLOY_OPTIMIZATION.md
+
+
 
 The v1.1.57 prod deploy run (26082016139) failed at the staging job before
 production could run. Root cause: ARM `Microsoft.Authorization/roleAssignments`
