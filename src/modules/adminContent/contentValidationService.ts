@@ -220,8 +220,16 @@ export type ModuleVersionPublishValidation = {
 };
 
 // Composite pre-publish check that runs every available validator against the
-// module version's content and returns a single roll-up. The publish route
-// blocks the operation when valid=false (any blocking issue).
+// module version's content and returns a single roll-up.
+//
+// IMPORTANT: This gate is intentionally narrower than the generation-time
+// validator. It blocks publish ONLY on issues that imply the BLUEPRINT was
+// ignored (the actual #372 contract). Generation-time scenario/MCQ findings
+// (missing assessorExpectedContent, weak distractors, etc.) surface as
+// warnings only — those checks existed before this gate was wired in, and
+// retroactively blocking publish on them would invalidate published modules
+// that worked under the old rules. A future enhancement could promote them to
+// blocking via a separate strict-mode flag.
 export function validateModuleVersionForPublish(input: {
   taskText: string;
   candidateTaskConstraints?: string | null;
@@ -230,19 +238,25 @@ export function validateModuleVersionForPublish(input: {
   mcqQuestionCount: number;
   mcqQuestions?: GeneratedMcqQuestion[];
 }): ModuleVersionPublishValidation {
+  // Generation-time checks — included as warnings, never blocking at publish.
   const scenarioIssues = validateScenarioDraft(
     input.taskText,
     input.candidateTaskConstraints,
     input.assessorExpectedContent,
-  ).issues;
+  ).issues.map((issue) => ({ ...issue, severity: "warning" as const }));
 
+  // Blueprint checks — these CAN block at publish, since a blueprint mismatch
+  // means the author published content that doesn't honour their own contract.
   const blueprintIssues = validateBlueprintAgainstContent(input.blueprint, {
     taskText: input.taskText,
     assessorExpectedContent: input.assessorExpectedContent,
     mcqQuestionCount: input.mcqQuestionCount,
   });
 
-  const mcqIssues = input.mcqQuestions ? validateMcqDistractors(input.mcqQuestions).issues : [];
+  // MCQ distractor checks — warnings only at publish.
+  const mcqIssues = input.mcqQuestions
+    ? validateMcqDistractors(input.mcqQuestions).issues.map((issue) => ({ ...issue, severity: "warning" as const }))
+    : [];
 
   const issues = [...scenarioIssues, ...blueprintIssues, ...mcqIssues];
   const valid = !issues.some((i) => i.severity === "blocking");

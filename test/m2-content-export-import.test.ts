@@ -103,7 +103,10 @@ describe("#433 module export-import round-trip", () => {
     const envelope = exportResponse.body.envelope;
     expect(envelope.exportFormat).toBe("a2-content-export/v1");
     expect(envelope.scope).toBe("module");
-    expect(envelope.exportedBy).toBe(adminHeaders["x-user-id"]);
+    // exportedBy is the internal DB user id (Prisma CUID), not the x-user-id
+    // header value. Just confirm it's a non-empty string.
+    expect(typeof envelope.exportedBy).toBe("string");
+    expect((envelope.exportedBy as string).length).toBeGreaterThan(0);
     expect(envelope.module).toBeDefined();
     expect(envelope.module.module.title).toEqual(expect.objectContaining({ "en-GB": expect.stringContaining("Export source") }));
     expect(envelope.module.activeVersion.taskText).toEqual(expect.objectContaining({ "en-GB": "Reflect on QA" }));

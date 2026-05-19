@@ -92,13 +92,19 @@ describe("validateModuleVersionForPublish", () => {
     expect(result.issues.filter((i) => i.severity === "blocking")).toHaveLength(0);
   });
 
-  it("invalid when scenario draft has a blocking issue", () => {
+  it("warns but does NOT block when scenario draft is missing assessor content (publish-time leniency)", () => {
+    // Generation-time scenario validator marks MISSING_ASSESSOR_EXPECTED_CONTENT
+    // as blocking, but publish-time downgrades that to a warning so already-
+    // authored modules (pre-#372) can still be published. Only blueprint
+    // mismatches block at publish.
     const result = validateModuleVersionForPublish({
       ...validBaseInput,
-      assessorExpectedContent: null, // triggers MISSING_ASSESSOR_EXPECTED_CONTENT (blocking)
+      assessorExpectedContent: null,
     });
-    expect(result.valid).toBe(false);
-    expect(result.issues.some((i) => i.code === "MISSING_ASSESSOR_EXPECTED_CONTENT")).toBe(true);
+    expect(result.valid).toBe(true);
+    const missing = result.issues.find((i) => i.code === "MISSING_ASSESSOR_EXPECTED_CONTENT");
+    expect(missing).toBeDefined();
+    expect(missing?.severity).toBe("warning");
   });
 
   it("invalid when blueprint MCQ count is far below actual", () => {
