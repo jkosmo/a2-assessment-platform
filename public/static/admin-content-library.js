@@ -583,6 +583,35 @@ async function init() {
 
   // Create module
   createModuleBtn?.addEventListener("click", openCreateDialog);
+
+  // Import module package (#433). On file pick: parse JSON, POST envelope to
+  // /modules/import, navigate to the freshly-created module's advanced view.
+  const importModulePackageFile = document.getElementById("importModulePackageFile");
+  importModulePackageFile?.addEventListener("change", async (event) => {
+    const target = event.target;
+    const file = target?.files?.[0] ?? null;
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch (parseError) {
+        throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
+      }
+      const result = await apiFetch("/api/admin/content/modules/import", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ payload, mode: "createNew" }),
+      });
+      if (!result?.moduleId) throw new Error("Import-respons mangler moduleId.");
+      showToast("Modul-pakken er importert.");
+      window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/advanced`;
+    } catch (error) {
+      showToast(`Modul-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+    } finally {
+      target.value = "";
+    }
+  });
   newModuleTitle?.addEventListener("input", validateCreateForm);
   newModuleLevel?.addEventListener("change", validateCreateForm);
   createOpenConversation?.addEventListener("click", () => createAndNavigate("conversation"));

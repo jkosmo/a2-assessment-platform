@@ -355,13 +355,18 @@ async function renderListView() {
     pageContent.innerHTML = `
       <div class="page-header">
         <h1>Kurs</h1>
-        <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
+        <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
+          <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
+          <label for="importCoursePackageFile" class="btn btn-secondary" style="cursor:pointer">Importer kurs-pakke (.json)</label>
+          <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
+        </div>
       </div>
       <div class="empty-state">
         <p class="empty-state-title">Ingen kurs ennå</p>
-        <p class="empty-state-text">Opprett et kurs for å samle moduler i en kursstruktur.</p>
+        <p class="empty-state-text">Opprett et kurs for å samle moduler i en kursstruktur, eller importer en kurs-pakke.</p>
         <a href="/admin-content/courses/new" class="btn btn-primary">Opprett kurs</a>
       </div>`;
+    document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
     return;
   }
 

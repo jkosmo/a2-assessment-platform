@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.61 - 2026-05-20
+
+fix(admin): import buttons now visible on Modul-library + empty-courses-state (#433 follow-up)
+
+User reported that v1.1.60 export now works but they could not find an
+import button. Two gaps in v1.1.59 UI placement:
+
+1. **Course-library empty-state was missing the import button.** The
+   non-empty render path (`renderListView` line 388) had the import
+   button next to "Opprett nytt kurs", but the empty-state path (line
+   354) only had the create button. Users with zero courses (the most
+   likely state for the import use case!) never saw it. Added the same
+   page-header-actions block + handler wiring to the empty branch.
+
+2. **Modul-library had no import button at all.** The only import
+   surface for modules was on `admin-content-advanced.html` (inside the
+   "Open existing module" section of the advanced editor). Users
+   starting from the conversational shell or the module library
+   (`/admin-content` library view) never encountered it. Added an
+   "Importer modul-pakke (.json)" button next to "Opprett ny modul" in
+   `public/admin-content-library.html`, with the change handler wired
+   in `admin-content-library.js`.
+
+After import the page navigates to the new module's advanced editor so
+the author can immediately verify the imported content.
+
 ## 1.1.60 - 2026-05-20
 
 fix(admin): export endpoints surface 422 instead of 500 for not-yet-exportable content (#433 follow-up)
