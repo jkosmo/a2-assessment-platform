@@ -2,6 +2,58 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.65 - 2026-05-20
+
+feat(admin): module-specific rubric generation (#378, closes #368)
+
+Third and final child of EPIC #368 ("Balansert vanskelighetsgrad"),
+following #372 (blueprint), #244+#246 (#369 guidanceText split), #424
+(generation guards), #376 (content benchmark).
+
+**Why:** When a module is saved without an existing rubric, the
+platform falls back to five generic criteria
+(`task_comprehension`, `quality_and_depth`, `evidence_and_examples`,
+`reasoning_and_reflection`, `clarity_and_structure`, each weight 0.2).
+This means scenario and assessment are not co-designed — a scenario
+may require domain-specific trade-offs, while the rubric only says
+"quality and depth", leaving the LLM assessor to invent its own
+calibration.
+
+**Change:** New `generateModuleRubric` function in
+`llmContentGenerationService.ts` that derives a 3–6 criterion rubric
+from `taskText`, `candidateTaskConstraints`,
+`assessorExpectedContent` and (optionally) the blueprint. Each
+criterion has `id`, `label`, `description`, `maxScore` (1–10),
+`candidateVisible`. The function also returns `assessorNotes` for
+calibration guidance. Exposed at
+`POST /api/admin/content/generate/rubric`.
+
+`saveDraftBundleInBackground` now calls this endpoint when no
+existing rubric is loaded for the module. The LLM rubric is
+serialised to the existing `RubricVersion` storage shape — array of
+criteria flattened into a record keyed by `id`, plus weight derived
+from maxScore. Generic defaults still apply if the call fails.
+
+**Acceptance criteria from #378:**
+- Ny funksjon `generateModuleRubric(...)` i
+  `llmContentGenerationService.ts`. ✅
+- Generert rubric lagres som ny `Rubric`-versjon og knyttes til
+  `ModuleVersion`. ✅ (via existing save flow)
+- Generisk standardrubric brukes fortsatt som fallback hvis
+  generering feiler. ✅
+- Manuell test: rubric for et avansert scenario er merkbart mer
+  domenespesifikk enn generisk standard — to be verified after
+  deploy by running save against a module with an advanced scenario.
+
+The "Generer rubric fra oppgave"-knapp in the rubric editor section
+is deferred — the auto-generation on save covers the primary use case
+(authoring shell flow) and the advanced editor still allows manual
+edits. A separate explicit "regenerate" button can be added when
+authors report needing finer control.
+
+Closes #378.
+Closes EPIC #368.
+
 ## 1.1.64 - 2026-05-20
 
 feat(admin): per-row Eksporter button on Modul-library (#433 follow-up)

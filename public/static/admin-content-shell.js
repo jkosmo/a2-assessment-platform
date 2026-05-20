@@ -1069,6 +1069,71 @@ function resolveCurrentRubricPayload() {
   };
 }
 
+function moduleSpecificRubricToStoragePayload(generated) {
+  const criteria = Array.isArray(generated?.criteria) ? generated.criteria : [];
+  const totalMax = criteria.reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
+  const criteriaRecord = Object.fromEntries(
+    criteria.map((c) => [
+      String(c?.id ?? "criterion"),
+      {
+        label: c?.label ?? "",
+        description: c?.description ?? "",
+        maxScore: Number(c?.maxScore) || 0,
+        weight: Number(((Number(c?.maxScore) || 0) / totalMax).toFixed(2)),
+        candidateVisible: Boolean(c?.candidateVisible),
+      },
+    ]),
+  );
+  return {
+    criteria: criteriaRecord,
+    scalingRule: {
+      practical_weight: 70,
+      max_total: totalMax,
+      generated_from_task: Boolean(generated?.generatedFromTask),
+      assessor_notes: String(generated?.assessorNotes ?? ""),
+    },
+    passRule: { total_min: 60, practical_min_percent: 50, mcq_min_percent: 60, no_open_red_flags: true },
+  };
+}
+
+async function tryGenerateModuleSpecificRubric({ taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint }) {
+  if (bundle?.selectedConfiguration?.rubricVersion) return null;
+  const localizedTask = String(translateLocalizedText(taskText) ?? "").trim();
+  const localizedAssessor = String(translateLocalizedText(assessorExpectedContent) ?? "").trim();
+  if (!localizedTask || !localizedAssessor) return null;
+
+  const certificationLevel = bundle?.module?.certificationLevel ?? "intermediate";
+  const locale = currentLocale;
+  const localizedConstraints = String(translateLocalizedText(candidateTaskConstraints) ?? "").trim();
+
+  let blueprintObject = null;
+  if (assessmentBlueprint) {
+    if (typeof assessmentBlueprint === "string") {
+      try { blueprintObject = JSON.parse(assessmentBlueprint); } catch { blueprintObject = null; }
+    } else if (typeof assessmentBlueprint === "object") {
+      blueprintObject = assessmentBlueprint;
+    }
+  }
+
+  try {
+    const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        taskText: localizedTask,
+        assessorExpectedContent: localizedAssessor,
+        candidateTaskConstraints: localizedConstraints || undefined,
+        certificationLevel,
+        locale,
+        ...(blueprintObject ? { blueprint: blueprintObject } : {}),
+      }),
+    });
+    return result?.rubric ? moduleSpecificRubricToStoragePayload(result.rubric) : null;
+  } catch (err) {
+    console.warn("Module-specific rubric generation failed; falling back to generic defaults.", err);
+    return null;
+  }
+}
+
 function resolveCurrentPromptPayload() {
   const prompt = bundle?.selectedConfiguration?.promptTemplateVersion;
   return {
@@ -1496,7 +1561,13 @@ async function saveDraftBundleInBackground(options = {}) {
   slot.abortBtn.remove();
 
   try {
-    const rubricPayload = resolveCurrentRubricPayload();
+    const generatedRubricPayload = await tryGenerateModuleSpecificRubric({
+      taskText,
+      assessorExpectedContent,
+      candidateTaskConstraints,
+      assessmentBlueprint,
+    });
+    const rubricPayload = generatedRubricPayload ?? resolveCurrentRubricPayload();
     const promptPayload = resolveCurrentPromptPayload();
 
     const titlePatch = normalizeModuleTitlePatch(sessionDraft?.title);

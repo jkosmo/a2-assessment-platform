@@ -141,6 +141,29 @@ export type AssessmentBlueprint = {
   notes: string;
 };
 
+export type ModuleRubricInput = {
+  taskText: string;
+  candidateTaskConstraints?: string;
+  assessorExpectedContent: string;
+  certificationLevel: CertificationLevel;
+  locale: GenerationLocale;
+  blueprint?: AssessmentBlueprint;
+};
+
+export type ModuleRubricCriterion = {
+  id: string;
+  label: string;
+  description: string;
+  maxScore: number;
+  candidateVisible: boolean;
+};
+
+export type ModuleRubric = {
+  criteria: ModuleRubricCriterion[];
+  generatedFromTask: boolean;
+  assessorNotes: string;
+};
+
 // ---------------------------------------------------------------------------
 // Response codecs
 // ---------------------------------------------------------------------------
@@ -195,6 +218,23 @@ const assessmentBlueprintResponseCodec = z.object({
     topicDistribution: z.record(z.string(), z.number().min(0).max(1)),
   }),
   notes: z.string().default(""),
+});
+
+const moduleRubricResponseCodec = z.object({
+  criteria: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        label: z.string().min(1),
+        description: z.string().min(1),
+        maxScore: z.number().int().min(1).max(10),
+        candidateVisible: z.boolean().default(true),
+      }),
+    )
+    .min(2)
+    .max(8),
+  generatedFromTask: z.boolean().default(true),
+  assessorNotes: z.string().default(""),
 });
 
 // ---------------------------------------------------------------------------
@@ -993,6 +1033,64 @@ ${returnFields.join(",\n")}
   return { systemPrompt, userPrompt };
 }
 
+export function buildModuleRubricPrompts(input: ModuleRubricInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are an assessment design specialist. Derive a module-specific scoring rubric from the assignment text and assessor expectations. Return strict JSON only - no markdown, no commentary. Criteria must be specific to THIS task, not generic placeholders like 'quality and depth' or 'clarity'.";
+
+  const constraintsSection = input.candidateTaskConstraints
+    ? `## Visible constraints / instructions to the candidate\n\n${input.candidateTaskConstraints}\n\n`
+    : "";
+
+  const blueprintSection = input.blueprint
+    ? `## Assessment blueprint (use to align criteria with learning objectives)\n\nLearning objectives:\n${input.blueprint.learningObjectives.map((o) => `- ${o}`).join("\n")}\n\nKey topics:\n${input.blueprint.keyTopics.map((t) => `- ${t}`).join("\n")}\n\nAuthor notes: ${input.blueprint.notes || "(none)"}\n\n`
+    : "";
+
+  const userPrompt = `Design a scoring rubric tailored to this specific module. The rubric must reflect what THIS assignment actually requires — not generic essay criteria.
+
+Language for labels and descriptions: ${LOCALE_DISPLAY[input.locale]}
+Certification level: ${input.certificationLevel}
+
+## Task text (what the candidate sees and must respond to)
+
+${input.taskText}
+
+${constraintsSection}## Assessor expectations (hidden — describes what a strong response covers)
+
+${input.assessorExpectedContent}
+
+${blueprintSection}## Authoring rules
+
+- Produce 3-6 criteria. Each must name a specific dimension the task actually tests (e.g. "Trade-off between privacy and audit obligation", not "Quality of reasoning").
+- Each \`description\` must reference concrete content from the task or assessor expectations so a human assessor can apply it without guessing.
+- \`maxScore\` per criterion is an integer 1-10. Sum across all criteria should land in the range 10-30.
+- \`id\` is short snake_case (e.g. "scenario_application", "priority_reasoning"). Stable across runs.
+- \`candidateVisible: true\` means the criterion text is appropriate to show the candidate before they submit. Set false only for criteria that would leak the expected answer.
+- \`assessorNotes\` is a short paragraph with one or two judgement calls the assessor should make consistently across submissions (e.g. don't penalise for missing X unless the task asked for it). Keep it under 60 words.
+- \`generatedFromTask\` must be true.
+
+## Return format
+
+Return a single JSON object:
+{
+  "criteria": [
+    {
+      "id": "snake_case_id",
+      "label": "Short label in ${LOCALE_DISPLAY[input.locale]}",
+      "description": "1-2 sentences that name what the assessor checks for, grounded in the task.",
+      "maxScore": integer 1-10,
+      "candidateVisible": boolean
+    }
+  ],
+  "generatedFromTask": true,
+  "assessorNotes": "Short calibration note for assessors."
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
 export function buildBlueprintPrompts(input: BlueprintInput): {
   systemPrompt: string;
   userPrompt: string;
@@ -1323,6 +1421,20 @@ export async function generateAssessmentBlueprint(input: BlueprintInput): Promis
   const parsed = assessmentBlueprintResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`Assessment blueprint LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+// ---------------------------------------------------------------------------
+// Module-specific rubric generation (#378)
+// ---------------------------------------------------------------------------
+
+export async function generateModuleRubric(input: ModuleRubricInput): Promise<ModuleRubric> {
+  const { systemPrompt, userPrompt } = buildModuleRubricPrompts(input);
+  const raw = await callLlm(systemPrompt, userPrompt, 2500);
+  const parsed = moduleRubricResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Module rubric LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
 }

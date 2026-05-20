@@ -167,6 +167,15 @@ export const moduleDraftGenerationBodySchema = z.object({
   blueprint: assessmentBlueprintSchema.optional(),
 });
 
+export const rubricGenerationBodySchema = z.object({
+  taskText: z.string().trim().min(1),
+  candidateTaskConstraints: z.string().trim().optional(),
+  assessorExpectedContent: z.string().trim().min(1),
+  certificationLevel: certificationLevelSchema,
+  locale: generationLocaleSchema,
+  blueprint: assessmentBlueprintSchema.optional(),
+});
+
 export const moduleDraftRevisionBodySchema = z.object({
   taskText: z.string().trim().min(1),
   assessorExpectedContent: z.string().trim().min(1),

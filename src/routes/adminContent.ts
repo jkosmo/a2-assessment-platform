@@ -28,6 +28,7 @@ import {
   moduleVersionBodySchema,
   benchmarkExampleVersionBodySchema,
   blueprintGenerationBodySchema,
+  rubricGenerationBodySchema,
   moduleDraftGenerationBodySchema,
   moduleDraftLocalizationBodySchema,
   moduleDraftRevisionBodySchema,
@@ -43,6 +44,7 @@ import { importModuleFromEnvelope } from "../modules/adminContent/contentImportS
 import {
   generateAssessmentBlueprint,
   generateModuleDraft,
+  generateModuleRubric,
   localizeModuleDraft,
   localizeMcqQuestions,
   generateMcqQuestions,
@@ -625,6 +627,25 @@ adminContentRouter.post("/generate/blueprint", generateLimiter, async (request, 
   try {
     const blueprint = await generateAssessmentBlueprint(data);
     response.json({ blueprint });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "generation_failed", message });
+  }
+});
+
+adminContentRouter.post("/generate/rubric", generateLimiter, async (request, response) => {
+  const { data, error } = parseRequest(rubricGenerationBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  try {
+    const rubric = await generateModuleRubric({
+      ...data,
+      blueprint: normalizeAssessmentBlueprint(data.blueprint),
+    });
+    response.json({ rubric });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "generation_failed", message });
