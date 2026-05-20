@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.60 - 2026-05-20
+
+fix(admin): export endpoints surface 422 instead of 500 for not-yet-exportable content (#433 follow-up)
+
+User reported a 500 "Unexpected error" when exporting a newly-created
+course in staging. Root cause: my export catch handlers in v1.1.59 only
+matched `/not found|no modules/i` and let every other error from
+`buildModuleExportEnvelope` fall through to express's default 500
+handler — which is what fires when a course contains a module that does
+not yet have its rubric/prompt/MCQ/active-version content.
+
+Module-export endpoint throws are:
+- "Module has no versions to export."
+- "Module has no rubric versions to export."
+- "Module has no prompt-template versions to export."
+- "Module has no MCQ-set versions to export."
+
+Course-export endpoint wraps the module-export and additionally throws:
+- "Course not found."
+- "Course has no modules to export."
+
+Fix:
+- Both endpoints now match `/no (modules|versions|rubric|prompt|MCQ)/i`
+  and return 422 with the literal error message + an actionable error
+  code (`course_not_exportable` / `module_not_exportable`).
+- 404 reserved for "X not found" (resource doesn't exist).
+- 500 only for genuinely unexpected errors that propagate to
+  `next(error)`.
+
+The author UI already shows the toast message from the response body,
+so the user now sees a clear "Course has no modules to export" instead
+of a generic "Unexpected error".
+
 ## 1.1.59 - 2026-05-20
 
 feat(admin): Pakke B — content export/import + blueprint pre-publish gate (#433, #372) + Node 24 actions (#421)

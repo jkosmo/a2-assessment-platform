@@ -165,8 +165,17 @@ adminCoursesRouter.get("/:courseId/export-package", async (request, response, ne
       response.status(error.httpStatus).json({ error: error.code, message: error.message });
       return;
     }
-    if (error instanceof Error && /not found|no modules/i.test(error.message)) {
-      response.status(404).json({ error: "course_export_failed", message: error.message });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (/not found/i.test(message)) {
+      response.status(404).json({ error: "course_export_failed", message });
+      return;
+    }
+    // Course exists but is not exportable yet — e.g. has no modules, or one of
+    // its modules has no rubric/prompt/MCQ/active-version content. 422 is
+    // semantically correct (the resource is there but cannot be processed in
+    // its current state) and gives the UI a clear actionable message.
+    if (/no (modules|versions|rubric|prompt|MCQ)/i.test(message)) {
+      response.status(422).json({ error: "course_not_exportable", message });
       return;
     }
     next(error);

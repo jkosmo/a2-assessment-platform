@@ -287,7 +287,15 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
       response.status(error.httpStatus).json({ error: error.code, message: error.message });
       return;
     }
-    response.status(404).json({ error: "module_export_failed", message: "Could not build module export envelope." });
+    const message = error instanceof Error ? error.message : "Could not build module export envelope.";
+    // Module exists but is missing content needed to build a portable envelope
+    // (no active version, no rubric/prompt/MCQ). 422 surfaces an actionable
+    // message to the UI; 404 is reserved for "module does not exist".
+    if (/no (versions|rubric|prompt|MCQ)/i.test(message)) {
+      response.status(422).json({ error: "module_not_exportable", message });
+      return;
+    }
+    response.status(404).json({ error: "module_export_failed", message });
   }
 });
 
