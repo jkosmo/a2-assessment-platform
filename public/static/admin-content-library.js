@@ -227,6 +227,7 @@ function renderLibrary() {
           <a href="${openConvUrl}" class="row-action-btn">Åpne i Samtale</a>
           <a href="${openAdvUrl}" class="row-action-btn">Åpne i Avansert</a>
           <button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>
+          <button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>
           ${archiveAction}
         </div>
       </td>
@@ -289,6 +290,37 @@ function handleTableClick(event) {
   if (action === "archive") archiveModule(moduleId, btn);
   else if (action === "restore") restoreModule(moduleId, btn);
   else if (action === "duplicate") duplicateModule(moduleId, btn);
+  else if (action === "export") exportModulePackage(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
+}
+
+// #433 — per-row module export. Calls the versioned /export-package endpoint
+// and downloads the envelope as JSON. Mirrors the course-list "Eksporter"
+// behavior so authors have a consistent surface for both module + course
+// portability without having to enter the advanced editor.
+async function exportModulePackage(moduleId, moduleTitle, btn) {
+  btn.disabled = true;
+  try {
+    const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
+    const envelope = body?.envelope ?? null;
+    if (!envelope) throw new Error("Eksport returnerte tom envelope.");
+    const safeTitle = String(moduleTitle ?? "module").replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "module";
+    const filename = `module-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Modul «${moduleTitle}» er eksportert.`);
+  } catch (err) {
+    const msg = err?.message ?? "Kunne ikke eksportere modul.";
+    showToast(`Modul-eksport feilet: ${msg}`, "error");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ---------------------------------------------------------------------------

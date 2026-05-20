@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.64 - 2026-05-20
+
+feat(admin): per-row Eksporter button on Modul-library (#433 follow-up)
+
+User feedback after v1.1.63 cross-env testing: "Det er uklart for meg hvor
+'Eksporter modul' knappen er eksponert i UI?"
+
+The export button was only visible inside `admin-content-advanced.html`,
+buried in section 3 ("Open existing module"). Course-list already has a
+per-row "Eksporter" button — modules should be consistent.
+
+Added an "Eksporter" action button per module row in `admin-content-
+library.js` (alongside Åpne i Samtale / Åpne i Avansert / Dupliser /
+Arkiver). Click downloads the versioned a2-content-export/v1 envelope
+as `module-<slug>-<date>.json`, identical to the course flow.
+
+Implementation reuses the existing `/modules/:id/export-package`
+endpoint; no backend change.
+
 ## 1.1.63 - 2026-05-20
 
 fix(admin): imported modules/courses auto-publish if source was published + import button styling (#433 follow-up)
