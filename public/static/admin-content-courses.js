@@ -531,7 +531,11 @@ async function renderNewCourseConversational() {
   // Load library modules for the optional module-add step
   try {
     const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    allLibraryModules = (libData.modules ?? []).filter(m => m.status !== "archived");
+    // #440: only show PUBLISHED modules in the course picker. A course referring
+    // to an unpublished module creates latent failures (broken exports, broken
+    // course publish, broken participant view). Authors finalise modules first,
+    // then assemble courses.
+    allLibraryModules = (libData.modules ?? []).filter(m => m.status === "published");
   } catch {
     allLibraryModules = [];
   }
@@ -868,7 +872,11 @@ async function renderDetailView(courseId) {
   // Load library modules for combobox
   try {
     const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    allLibraryModules = (libData.modules ?? []).filter(m => m.status !== "archived");
+    // #440: only show PUBLISHED modules in the course picker. A course referring
+    // to an unpublished module creates latent failures (broken exports, broken
+    // course publish, broken participant view). Authors finalise modules first,
+    // then assemble courses.
+    allLibraryModules = (libData.modules ?? []).filter(m => m.status === "published");
   } catch {
     allLibraryModules = [];
   }

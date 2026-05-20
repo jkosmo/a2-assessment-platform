@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.62 - 2026-05-20
+
+feat(admin): course module picker filters to published modules + import button visibility (closes #440, #433 follow-up)
+
+Bundled v1.1.61 button-visibility fix + #440 filter into a single deploy
+since they touch the same UX area discovered during cross-env testing.
+
+**Closes #440 — Course module picker filters to published modules only**
+
+The course-edit and course-create flows would let authors attach any
+non-archived module to a course, including modules that had no rubric/
+prompt/MCQ content saved yet. That created latent failures downstream
+(broken exports, broken course publish, broken participant view).
+
+Changed both module-picker call sites in
+`public/static/admin-content-courses.js` to filter on
+`status === "published"` instead of `status !== "archived"`. Authors
+now finalise modules (publish at least one version) before assembling
+them into courses.
+
+Playwright mock for `/modules/library` defaults `status` to `"published"`
+when the fixture omits it, so existing 24 admin-content tests still
+pass without per-test fixture updates. Tests that explicitly need
+unpublished/archived statuses can set `status` on the fixture entry.
+
+**v1.1.61 carry-over — Import button visibility**
+
+(Originally drafted as v1.1.61 but deploy was cancelled to bundle with
+this filter fix.) Two placement gaps in v1.1.59's import UI:
+
+1. Course list empty-state was missing the import button (only
+   non-empty state had it). Added to the empty branch in
+   `renderListView`.
+2. Modul-library (`/admin-content`) had no import button at all.
+   Module import was only on the advanced editor's "Open existing
+   module" section, which is buried. Added "Importer modul-pakke
+   (.json)" next to "Opprett ny modul" in
+   `public/admin-content-library.html`.
+
+After import the page navigates to the new module's advanced editor.
+
 ## 1.1.61 - 2026-05-20
 
 fix(admin): import buttons now visible on Modul-library + empty-courses-state (#433 follow-up)
