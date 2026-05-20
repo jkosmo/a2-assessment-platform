@@ -3380,7 +3380,11 @@ exportModuleButton.addEventListener("click", async () => {
   });
 });
 
+const importPackageBtn = document.getElementById("importPackageBtn");
 const importPackageFileInput = document.getElementById("importPackageFile");
+importPackageBtn?.addEventListener("click", () => {
+  importPackageFileInput?.click();
+});
 importPackageFileInput?.addEventListener("change", async (event) => {
   const target = event.target;
   const file = target?.files?.[0] ?? null;

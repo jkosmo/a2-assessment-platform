@@ -584,9 +584,15 @@ async function init() {
   // Create module
   createModuleBtn?.addEventListener("click", openCreateDialog);
 
-  // Import module package (#433). On file pick: parse JSON, POST envelope to
-  // /modules/import, navigate to the freshly-created module's advanced view.
+  // Import module package (#433). The visible button triggers a hidden file
+  // input; on file pick: parse JSON, POST envelope to /modules/import,
+  // navigate to the freshly-created module's advanced view. Using <button>
+  // (not <label>) so .btn styling applies cleanly.
+  const importModulePackageBtn = document.getElementById("importModulePackageBtn");
   const importModulePackageFile = document.getElementById("importModulePackageFile");
+  importModulePackageBtn?.addEventListener("click", () => {
+    importModulePackageFile?.click();
+  });
   importModulePackageFile?.addEventListener("change", async (event) => {
     const target = event.target;
     const file = target?.files?.[0] ?? null;

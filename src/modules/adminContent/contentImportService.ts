@@ -19,10 +19,11 @@ import {
   createPromptTemplateVersion,
   createMcqSetVersion,
   createModuleVersion,
+  publishModuleVersion,
 } from "./adminContentCommands.js";
 import { adminContentRepository } from "./adminContentRepository.js";
 import { courseRepository } from "../course/courseRepository.js";
-import { createCourse, setCourseModules } from "../course/courseCommands.js";
+import { createCourse, setCourseModules, publishCourse } from "../course/courseCommands.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -117,6 +118,15 @@ async function importModulePayload(
       : undefined,
   });
 
+  // If the source had this module published (audit.publishedAt set), auto-
+  // publish the imported version too. Matches the user's design choice for
+  // audit-history preservation: if the source was live, the destination
+  // should be live. Without this, imported modules end up as drafts and
+  // participants get "module not available" when the course references them.
+  if (payload.activeVersion.audit?.publishedAt) {
+    await publishModuleVersion(moduleId, moduleVersion.id, options.actorId);
+  }
+
   return { moduleId, moduleVersionId: moduleVersion.id };
 }
 
@@ -205,6 +215,13 @@ export async function importCourseFromEnvelope(
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
   );
+
+  // Same publish-state-preservation rule as for modules: if source course was
+  // published (audit.publishedAt set), publish the destination course too.
+  // Must happen AFTER setCourseModules so the published course has its modules.
+  if (payload.course.audit?.publishedAt) {
+    await publishCourse(courseId, options.actorId);
+  }
 
   await recordAuditEvent({
     entityType: auditEntityTypes.course,

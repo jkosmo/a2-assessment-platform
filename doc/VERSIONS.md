@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.63 - 2026-05-20
+
+fix(admin): imported modules/courses auto-publish if source was published + import button styling (#433 follow-up)
+
+Two issues from user testing after the v1.1.62 deploy:
+
+**Fix 1 — Import did not preserve published state**
+
+After importing a course on prod that had a published module attached
+in staging, the user could not see the module as a participant. The
+error "Modulen er ikke tilgjengelig i deltakerflaten" surfaced because
+the imported module had `activeVersionId: null` — the destination's
+module-version was a draft, not published.
+
+Root cause: `importModulePayload` created the module + rubric + prompt
++ MCQ + moduleVersion but never called `publishModuleVersion`. Same
+for courses — `importCourseFromEnvelope` did not call `publishCourse`.
+
+This contradicted the user's design choice for audit-history
+preservation. Since the envelope carries `audit.publishedAt` from the
+source, the destination should reflect the same lifecycle state.
+
+`contentImportService` now:
+- Auto-publishes the imported ModuleVersion when
+  `payload.activeVersion.audit.publishedAt` is set on the envelope.
+- Auto-publishes the imported Course when `payload.course.audit.
+  publishedAt` is set, after `setCourseModules` (so the course has
+  its modules when published).
+
+If the source was a draft, the destination is also a draft — author
+must publish manually.
+
+**Fix 2 — Import button styling was inconsistent**
+
+Used `<label for="...">` with `class="btn btn-secondary"` for the
+file-picker triggers. Labels do not inherit the same focus/hover/
+typography that `<button>` does, so the buttons rendered as text-only
+boxes with a thin black border instead of the standard secondary style.
+
+Switched all three import buttons (module-library, module-advanced,
+course-list — both render paths) to `<button type="button">` with a
+hidden `<input type="file">` and a JS click forwarder. Visual styling
+now matches the rest of the action row.
+
 ## 1.1.62 - 2026-05-20
 
 feat(admin): course module picker filters to published modules + import button visibility (closes #440, #433 follow-up)

@@ -357,7 +357,7 @@ async function renderListView() {
         <h1>Kurs</h1>
         <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
           <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
-          <label for="importCoursePackageFile" class="btn btn-secondary" style="cursor:pointer">Importer kurs-pakke (.json)</label>
+          <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs-pakke (.json)</button>
           <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
         </div>
       </div>
@@ -367,6 +367,9 @@ async function renderListView() {
         <a href="/admin-content/courses/new" class="btn btn-primary">Opprett kurs</a>
       </div>`;
     document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
+    document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
+      document.getElementById("importCoursePackageFile")?.click();
+    });
     return;
   }
 
@@ -395,7 +398,7 @@ async function renderListView() {
       <h1>Kurs</h1>
       <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
         <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
-        <label for="importCoursePackageFile" class="btn btn-secondary" style="cursor:pointer">Importer kurs-pakke (.json)</label>
+        <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs-pakke (.json)</button>
         <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
       </div>
     </div>
