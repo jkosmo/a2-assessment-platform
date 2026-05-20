@@ -2,6 +2,78 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.59 - 2026-05-20
+
+feat(admin): Pakke B — content export/import + blueprint pre-publish gate (#433, #372) + Node 24 actions (#421)
+
+First user-visible content-portability release. 11 commits batched into a
+single deploy (a5abe40 → 8909506 + ede88fe), code-only, no infra changes
+since the v1.1.58 prod deploy.
+
+### #433 — Content export/import
+
+- Versioned `a2-content-export/v1` envelope schema (zod) with audit
+  attribution carried as opaque source-env strings.
+- 4 new endpoints:
+  - GET  `/api/admin/content/modules/:id/export-package`
+  - GET  `/api/admin/content/courses/:id/export-package`
+  - POST `/api/admin/content/modules/import`
+  - POST `/api/admin/content/courses/import`
+- `contentImportService` handles `createNew` and `replaceExisting`; module
+  versions in the destination append (no destructive overwrite).
+- Course exports inline each module's full active-version payload —
+  self-contained files that re-hydrate without source-env access.
+- 4 new audit actions: moduleExported / moduleImported / courseExported /
+  courseImported.
+
+UI:
+- Module advanced editor: existing "Export selected module" button now
+  returns the versioned envelope; new "Import module package (.json)"
+  file picker creates a fresh module from an envelope.
+- Course list: per-row "Eksporter" button + header "Importer kurs-pakke
+  (.json)" file picker.
+- i18n keys added for en-GB / nb / nn.
+
+### #372 — Blueprint-aware pre-publish gate (closes epic #368's last AC)
+
+- New `validateBlueprintAgainstContent` + `validateModuleVersionForPublish`
+  composite in contentValidationService.ts.
+- Wired into the publish route — returns 422 with issue list on blocking
+  failures; warnings surface in the response alongside the published
+  moduleVersion.
+- Intentionally narrow gating: BLOCKS only on blueprint contract
+  violations (MCQ_COUNT_FAR_BELOW_BLUEPRINT etc.). Generation-time
+  scenario/MCQ issues (missing assessor content, weak distractors)
+  surface as WARNINGS so legacy modules pre-#372 remain publishable.
+
+### #421 — GitHub Actions Node 24 runtime
+
+- All 30 `uses:` references across 9 workflow files bumped to action
+  versions that target Node 24 (checkout v6, setup-node v6,
+  upload-artifact v7, github-script v9, azure/login v3).
+- Closes 2026-06-02 Node 20 deprecation on GitHub-hosted runners.
+
+### Tests added
+
+- 4 vitest integration tests for module export/import round-trip
+  (test/m2-content-export-import.test.ts)
+- 11 vitest unit tests for the new pre-publish validators
+  (test/unit/content-validation-service.test.ts)
+- All 24 admin-content Playwright tests still green (no regressions)
+
+### Manual verification path post-deploy
+
+This release exists specifically so authors can copy content between
+staging and prod. To verify end-to-end after the deploy:
+
+1. On staging, open a module's advanced editor → "Export selected
+   module" → save the .json file.
+2. On prod, open the advanced editor → "Import module package (.json)"
+   → pick the file → verify the imported module appears in the list and
+   matches the staging source.
+3. Repeat for a course via the course-list "Eksporter" / "Importer"
+   buttons.
+
 ## 1.1.58 - 2026-05-19
 
 fix(deploy): Wait-GroupDeployment idempotency + outputs fallback + StrictMode-safe accessor
