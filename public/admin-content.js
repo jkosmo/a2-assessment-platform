@@ -2610,7 +2610,7 @@ async function fillOtherLocalesFromSource(sourceLocale) {
     for (const targetLocale of otherLocales) {
       const result = await apiFetch(
         "/api/admin/content/generate/module-draft/localize",
-        headers(),
+        headers,
         {
           method: "POST",
           body: JSON.stringify({
@@ -3187,7 +3187,7 @@ async function fillOtherLocalesFromActiveMcqLocale() {
     for (const targetLocale of otherLocales) {
       const result = await apiFetch(
         "/api/admin/content/generate/mcq/localize",
-        headers(),
+        headers,
         {
           method: "POST",
           body: JSON.stringify({ questions: sourceQuestions, sourceLocale, targetLocale }),

@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.67 - 2026-05-21
+
+fix(admin): Avansert 'Fyll andre språk'-knapp returned 404 (#444 follow-up)
+
+The translate-buttons added in v1.1.66 called `apiFetch(url, headers(),
+{ method: "POST", body })` — invoking the `headers` helper with parens
+instead of passing the function reference. `apiFetch`'s signature
+(`(url, getHeadersOrOptions, maybeOptions)`) treats a non-function
+second argument as the options object and silently ignores the third
+argument. The fetch therefore went out as GET without a body, hitting
+the unregistered GET route and returning a 404 HTML page with the
+message "Cannot GET /api/admin/content/generate/module-draft/localize".
+
+Fix: pass `headers` (no parens) — function reference — matching the
+pattern used elsewhere in `admin-content.js`. Applied to both
+`fillOtherLocalesFromSource` and `fillOtherLocalesFromActiveMcqLocale`.
+
 ## 1.1.66 - 2026-05-21
 
 fix(admin): MCQ locale robustness + Avansert editor 'Fyll andre språk'-knapp (#444)
