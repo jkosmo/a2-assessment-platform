@@ -247,6 +247,61 @@ const LOCALE_DISPLAY: Record<GenerationLocale, string> = {
   nn: "Norwegian Nynorsk",
 };
 
+// Strong language directive injected into every prompt that takes a locale. The LLM otherwise
+// tends to mirror the source material's language, so the bare "Language: X" hint is not enough.
+// See #444 — MCQ generated in English when source material was English even though locale=nb.
+function buildLanguageEnforcementDirective(locale: GenerationLocale): string {
+  const display = LOCALE_DISPLAY[locale];
+  return `## CRITICAL LANGUAGE RULE — read before authoring anything
+
+Every visible string in your response (task text, stems, options, rationales, labels, descriptions, notes) MUST be written in ${display}. This rule overrides any tendency to mirror the source material's language.
+
+If the source material is in a different language than ${display}, translate the relevant concepts into ${display} rather than echoing the source language. Do not produce output in any language other than ${display} under any circumstance.`;
+}
+
+// Function-word lists used by detectDominantLanguage (#444). These are deliberately small and
+// high-frequency so even a 50–100 word output has multiple hits. nb and nn share most common
+// words, so the heuristic only distinguishes English vs Norwegian — not nb vs nn — which is
+// sufficient for the failure mode we protect against (LLM outputs English when nb/nn was asked).
+const ENGLISH_FUNCTION_WORDS = new Set([
+  "the", "and", "of", "to", "in", "is", "for", "with", "on", "that",
+  "this", "by", "as", "be", "it", "are", "from", "or", "an", "at",
+]);
+
+const NORWEGIAN_FUNCTION_WORDS = new Set([
+  "og", "å", "som", "er", "ikke", "ikkje", "for", "på", "av", "med",
+  "det", "en", "ei", "et", "til", "i", "ved", "om", "kan", "skal",
+]);
+
+export type DominantLanguage = "english" | "norwegian" | "indeterminate";
+
+export function detectDominantLanguage(text: string): DominantLanguage {
+  if (!text || text.length < 50) return "indeterminate";
+  const tokens = text.toLowerCase().match(/[a-zæøå]+/g) ?? [];
+  if (tokens.length < 20) return "indeterminate";
+
+  let english = 0;
+  let norwegian = 0;
+  for (const token of tokens) {
+    if (ENGLISH_FUNCTION_WORDS.has(token)) english++;
+    if (NORWEGIAN_FUNCTION_WORDS.has(token)) norwegian++;
+  }
+
+  // Require at least 3 hits and a 2x lead to declare a winner. Norwegian wins ties because
+  // a handful of words ("for", "i") overlap with English and would otherwise tip toward English.
+  if (Math.max(english, norwegian) < 3) return "indeterminate";
+  if (english >= norwegian * 2 && english >= 3) return "english";
+  if (norwegian >= english * 2 && norwegian >= 3) return "norwegian";
+  return "indeterminate";
+}
+
+export function isLikelyWrongLocale(text: string, expectedLocale: GenerationLocale): boolean {
+  const detected = detectDominantLanguage(text);
+  if (detected === "indeterminate") return false;
+  if (expectedLocale === "en-GB") return detected === "norwegian";
+  return detected === "english";
+}
+
 const DISTRACTOR_GUIDELINES: Record<CertificationLevel, string> = {
   basic:
     "ALL options must be thematically plausible and relevant to the domain. A candidate with partial knowledge must pause before rejecting any option. Do not write throwaway distractors that are obviously wrong by category, length, or absurdity.",
@@ -595,6 +650,8 @@ export function buildModuleDraftPrompts(input: ModuleDraftInput): {
 
   const userPrompt = `Generate a certification module draft using the source material below as hidden author background only.
 
+${buildLanguageEnforcementDirective(input.locale)}
+
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
 Generation mode: ${input.generationMode}
@@ -711,6 +768,8 @@ Author notes: ${input.blueprint.notes || "(none)"}
 
   const userPrompt = `Generate EXACTLY ${input.questionCount} multiple-choice questions (not fewer, not more) using the source material below as hidden author background only. The questions array in your JSON response must contain exactly ${input.questionCount} items.${mcqBlueprintSection}
 
+${buildLanguageEnforcementDirective(input.locale)}
+
 Certification level: ${input.certificationLevel}
 Language: ${LOCALE_DISPLAY[input.locale]}
 Generation mode: ${input.generationMode}
@@ -798,6 +857,8 @@ export function buildModuleDraftRevisionPrompts(input: ModuleDraftRevisionInput)
 
   const userPrompt = `Revise the following certification module draft based on the instruction below.
 
+${buildLanguageEnforcementDirective(input.locale)}
+
 Language: ${LOCALE_DISPLAY[input.locale]}
 
 ## Revision rules
@@ -848,6 +909,8 @@ export function buildMcqRevisionPrompts(input: McqRevisionInput): {
     "You are an MCQ content editor for a professional certification platform. Revise the provided question set based on the user's change request. Return strict JSON only - no markdown, no commentary.";
 
   const userPrompt = `Revise the following multiple-choice questions based on the instruction below.
+
+${buildLanguageEnforcementDirective(input.locale)}
 
 Language: ${LOCALE_DISPLAY[input.locale]}
 
@@ -916,6 +979,8 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
 
   const userPrompt = `Translate the following certification module draft from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
 
+${buildLanguageEnforcementDirective(input.targetLocale)}
+
 ## Translation rules
 
 - Preserve meaning, structure, tone and difficulty.
@@ -956,6 +1021,8 @@ export function buildMcqLocalizationPrompts(input: McqLocalizationInput): {
 
   const serializedQuestions = JSON.stringify(input.questions, null, 2);
   const userPrompt = `Translate the following multiple-choice questions from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+
+${buildLanguageEnforcementDirective(input.targetLocale)}
 
 ## Translation rules
 
@@ -1012,6 +1079,8 @@ export function buildCourseCopyLocalizationPrompts(input: CourseCopyLocalization
 
   const userPrompt = `Translate the following course metadata from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
 
+${buildLanguageEnforcementDirective(input.targetLocale)}
+
 ## Translation rules
 
 - Preserve meaning, tone and intended audience.
@@ -1049,6 +1118,8 @@ export function buildModuleRubricPrompts(input: ModuleRubricInput): {
     : "";
 
   const userPrompt = `Design a scoring rubric tailored to this specific module. The rubric must reflect what THIS assignment actually requires — not generic essay criteria.
+
+${buildLanguageEnforcementDirective(input.locale)}
 
 Language for labels and descriptions: ${LOCALE_DISPLAY[input.locale]}
 Certification level: ${input.certificationLevel}
@@ -1101,6 +1172,8 @@ export function buildBlueprintPrompts(input: BlueprintInput): {
   const budget = COMPLEXITY_BUDGET[input.certificationLevel];
 
   const userPrompt = `Analyse the source material below and produce an assessment blueprint for a ${input.certificationLevel}-level certification module.
+
+${buildLanguageEnforcementDirective(input.locale)}
 
 Language for labels: ${LOCALE_DISPLAY[input.locale]}
 
@@ -1204,12 +1277,33 @@ async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 400
 export async function generateModuleDraft(input: ModuleDraftInput): Promise<ModuleDraftResult> {
   const { systemPrompt, userPrompt } = buildModuleDraftPrompts(input);
 
-  const raw = await callLlm(systemPrompt, userPrompt);
-  const parsed = moduleDraftResponseCodec.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`Module draft LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  const attempt = async (extraDirective: string | null): Promise<ModuleDraftResult> => {
+    const promptToUse = extraDirective ? `${userPrompt}\n\n${extraDirective}` : userPrompt;
+    const raw = await callLlm(systemPrompt, promptToUse);
+    const parsed = moduleDraftResponseCodec.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(`Module draft LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
+    }
+    return parsed.data;
+  };
+
+  const first = await attempt(null);
+  const sampleText = `${first.taskText}\n${first.assessorExpectedContent}`;
+  if (!isLikelyWrongLocale(sampleText, input.locale)) {
+    return first;
   }
-  return parsed.data;
+  console.warn(
+    `[#444] generateModuleDraft language mismatch: expected ${input.locale}, detected ${detectDominantLanguage(sampleText)}. Retrying with stronger directive.`,
+  );
+  const retryDirective = `## Language retry — your previous attempt was in the wrong language.\n\nYour previous response used the wrong language. Re-do the entire response with every visible string in ${LOCALE_DISPLAY[input.locale]}. The source material's language is irrelevant — output language is determined ONLY by this directive.`;
+  const second = await attempt(retryDirective);
+  const secondSample = `${second.taskText}\n${second.assessorExpectedContent}`;
+  if (isLikelyWrongLocale(secondSample, input.locale)) {
+    console.warn(
+      `[#444] generateModuleDraft language retry also produced wrong language (expected ${input.locale}). Returning result anyway — operator must verify.`,
+    );
+  }
+  return second;
 }
 
 // ---------------------------------------------------------------------------
@@ -1222,24 +1316,55 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   // Each question with distractorMetadata (3 verbose fields per distractor) needs ~800 tokens.
   // Floor at 4000 so single-question calls don't under-allocate.
   const maxTokens = Math.max(4000, input.questionCount * input.optionCount * 200);
-  const raw = await callLlm(systemPrompt, userPrompt, maxTokens);
-  const parsed = mcqGenerationResponseCodec.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`MCQ generation LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
-  }
-  // Defensive guard: the LLM occasionally returns one extra question even when the prompt
-  // says "exactly N". Truncate to the requested count. If it returned fewer, leave as-is
-  // and let downstream validation surface that. See #424.
-  if (parsed.data.questions.length !== input.questionCount) {
-    console.warn(
-      `MCQ generation count mismatch: requested ${input.questionCount}, LLM returned ${parsed.data.questions.length}. ` +
-      `${parsed.data.questions.length > input.questionCount ? "Truncating to requested count." : "Returning fewer than requested."}`,
-    );
-    if (parsed.data.questions.length > input.questionCount) {
-      return { ...parsed.data, questions: parsed.data.questions.slice(0, input.questionCount) };
+
+  const attempt = async (extraDirective: string | null): Promise<McqGenerationResult> => {
+    const promptToUse = extraDirective ? `${userPrompt}\n\n${extraDirective}` : userPrompt;
+    const raw = await callLlm(systemPrompt, promptToUse, maxTokens);
+    const parsed = mcqGenerationResponseCodec.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(`MCQ generation LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
     }
+    // Defensive guard: the LLM occasionally returns one extra question even when the prompt
+    // says "exactly N". Truncate to the requested count. If it returned fewer, leave as-is
+    // and let downstream validation surface that. See #424.
+    if (parsed.data.questions.length !== input.questionCount) {
+      console.warn(
+        `MCQ generation count mismatch: requested ${input.questionCount}, LLM returned ${parsed.data.questions.length}. ` +
+        `${parsed.data.questions.length > input.questionCount ? "Truncating to requested count." : "Returning fewer than requested."}`,
+      );
+      if (parsed.data.questions.length > input.questionCount) {
+        return { ...parsed.data, questions: parsed.data.questions.slice(0, input.questionCount) };
+      }
+    }
+    return parsed.data;
+  };
+
+  const first = await attempt(null);
+  const sampleText = mcqSampleForLanguageCheck(first);
+  if (!isLikelyWrongLocale(sampleText, input.locale)) {
+    return first;
   }
-  return parsed.data;
+  console.warn(
+    `[#444] generateMcqQuestions language mismatch: expected ${input.locale}, detected ${detectDominantLanguage(sampleText)}. Retrying with stronger directive.`,
+  );
+  const retryDirective = `## Language retry — your previous attempt was in the wrong language.\n\nYour previous response used the wrong language. Re-do every stem, option, correctAnswer and rationale in ${LOCALE_DISPLAY[input.locale]}. The source material's language is irrelevant — output language is determined ONLY by this directive.`;
+  const second = await attempt(retryDirective);
+  if (isLikelyWrongLocale(mcqSampleForLanguageCheck(second), input.locale)) {
+    console.warn(
+      `[#444] generateMcqQuestions language retry also produced wrong language (expected ${input.locale}). Returning result anyway — operator must verify.`,
+    );
+  }
+  return second;
+}
+
+function mcqSampleForLanguageCheck(result: McqGenerationResult): string {
+  const parts: string[] = [];
+  for (const question of result.questions.slice(0, 3)) {
+    parts.push(question.stem ?? "");
+    parts.push((question.options ?? []).join(" "));
+    parts.push(question.rationale ?? "");
+  }
+  return parts.join(" ");
 }
 
 export async function reviseModuleDraft(input: ModuleDraftRevisionInput): Promise<ModuleDraftResult> {

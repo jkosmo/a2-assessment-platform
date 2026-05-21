@@ -2574,6 +2574,72 @@ function applyVersionDetailsDialog() {
   closeFieldDialog(dialog);
 }
 
+// Translate the current pane's task/constraints/guidance into the other supported locales by
+// calling /generate/module-draft/localize for each. Confirms before overwriting because the
+// teacher may have hand-tuned the other locales. See #444.
+async function fillOtherLocalesFromSource(sourceLocale) {
+  const sourceSfx = _localeToSuffix[sourceLocale];
+  if (!sourceSfx) return;
+  const button = document.getElementById(`dlgVD_fillOther_${sourceSfx}`);
+  const statusEl = document.getElementById(`dlgVD_fillOther_status_${sourceSfx}`);
+  if (!button) return;
+
+  const sourceTask = document.getElementById(`dlgVD_task_${sourceSfx}`)?.value ?? "";
+  const sourceConstraints = document.getElementById(`dlgVD_constraints_${sourceSfx}`)?.value ?? "";
+  const sourceGuidance = document.getElementById(`dlgVD_guidance_${sourceSfx}`)?.value ?? "";
+
+  if (!sourceTask.trim() && !sourceGuidance.trim()) {
+    if (statusEl) statusEl.textContent = t("adminContent.dialog.versionDetails.fillOtherLocalesEmpty");
+    return;
+  }
+
+  const otherLocales = supportedLocales.filter((locale) => locale !== sourceLocale);
+  const otherLabels = otherLocales.map((locale) => localeLabels[locale] ?? locale).join(", ");
+  const sourceLabel = localeLabels[sourceLocale] ?? sourceLocale;
+  const confirmMsg = tf("adminContent.dialog.versionDetails.fillOtherLocalesConfirm", {
+    source: sourceLabel,
+    targets: otherLabels,
+  });
+  if (!window.confirm(confirmMsg)) return;
+
+  button.disabled = true;
+  button.dataset.busy = "true";
+  if (statusEl) statusEl.textContent = t("adminContent.dialog.versionDetails.fillOtherLocalesInProgress");
+
+  try {
+    for (const targetLocale of otherLocales) {
+      const result = await apiFetch(
+        "/api/admin/content/generate/module-draft/localize",
+        headers(),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            taskText: sourceTask,
+            assessorExpectedContent: sourceGuidance,
+            candidateTaskConstraints: sourceConstraints,
+            sourceLocale,
+            targetLocale,
+          }),
+        },
+      );
+      const draft = result?.draft ?? result;
+      const targetSfx = _localeToSuffix[targetLocale];
+      const taskEl = document.getElementById(`dlgVD_task_${targetSfx}`);
+      const constraintsEl = document.getElementById(`dlgVD_constraints_${targetSfx}`);
+      const guidanceEl = document.getElementById(`dlgVD_guidance_${targetSfx}`);
+      if (taskEl) taskEl.value = draft?.taskText ?? sourceTask;
+      if (constraintsEl) constraintsEl.value = draft?.candidateTaskConstraints ?? sourceConstraints;
+      if (guidanceEl) guidanceEl.value = draft?.assessorExpectedContent ?? sourceGuidance;
+    }
+    if (statusEl) statusEl.textContent = t("adminContent.dialog.versionDetails.fillOtherLocalesDone");
+  } catch (err) {
+    if (statusEl) statusEl.textContent = tf("adminContent.dialog.versionDetails.fillOtherLocalesError", { message: String(err?.message ?? err) });
+  } finally {
+    button.disabled = false;
+    delete button.dataset.busy;
+  }
+}
+
 // ── Assessment policy dialog ──────────────────────────────────────────────────
 
 function openAssessmentPolicyDialog(triggerBtn) {
@@ -3068,6 +3134,89 @@ function openMcqDialog(triggerBtn) {
   setActiveDialogLocaleTab(dialog, "en-GB");
   setActiveMcqLocale("en-GB");
   dialog.showModal();
+}
+
+// Translate every MCQ question's stem/options/correctAnswer/rationale from the currently active
+// locale tab into the other supported locales by calling /generate/mcq/localize. Confirms before
+// overwriting hand-tuned per-locale wording. See #444.
+async function fillOtherLocalesFromActiveMcqLocale() {
+  const button = document.getElementById("dlgMCQ_fillOther");
+  const statusEl = document.getElementById("dlgMCQ_fillOther_status");
+  if (!button) return;
+
+  const activeTab = document.querySelector("#dialogMcq .dialog-locale-tab.active");
+  const sourceLocale = activeTab?.dataset.localeTab ?? "en-GB";
+
+  const sourceQuestions = [];
+  for (const qItem of document.querySelectorAll("#dlgMCQ_questionsList .mcq-question-item")) {
+    const stem = qItem.querySelector(`[data-locale="${sourceLocale}"] .mcq-stem`)?.value ?? "";
+    const rationale = qItem.querySelector(`[data-locale="${sourceLocale}"] .mcq-rationale`)?.value ?? "";
+    const options = [];
+    let correctAnswer = "";
+    for (const row of qItem.querySelectorAll(".mcq-option-row")) {
+      const optText = row.querySelector(`.mcq-opt-text[data-locale="${sourceLocale}"]`)?.value ?? "";
+      options.push(optText);
+      if (row.querySelector("input[type='radio']")?.checked && !correctAnswer) {
+        correctAnswer = optText;
+      }
+    }
+    if (!correctAnswer && options.length > 0) correctAnswer = options[0];
+    sourceQuestions.push({ stem, options, correctAnswer, rationale });
+  }
+
+  const hasContent = sourceQuestions.some((q) => q.stem.trim() || q.options.some((o) => o.trim()));
+  if (!hasContent) {
+    if (statusEl) statusEl.textContent = t("adminContent.dialog.mcq.fillOtherLocalesEmpty");
+    return;
+  }
+
+  const otherLocales = supportedLocales.filter((locale) => locale !== sourceLocale);
+  const otherLabels = otherLocales.map((locale) => localeLabels[locale] ?? locale).join(", ");
+  const sourceLabel = localeLabels[sourceLocale] ?? sourceLocale;
+  const confirmMsg = tf("adminContent.dialog.mcq.fillOtherLocalesConfirm", {
+    source: sourceLabel,
+    targets: otherLabels,
+  });
+  if (!window.confirm(confirmMsg)) return;
+
+  button.disabled = true;
+  button.dataset.busy = "true";
+  if (statusEl) statusEl.textContent = t("adminContent.dialog.mcq.fillOtherLocalesInProgress");
+
+  try {
+    for (const targetLocale of otherLocales) {
+      const result = await apiFetch(
+        "/api/admin/content/generate/mcq/localize",
+        headers(),
+        {
+          method: "POST",
+          body: JSON.stringify({ questions: sourceQuestions, sourceLocale, targetLocale }),
+        },
+      );
+      const translated = result?.questions ?? [];
+      const qItems = document.querySelectorAll("#dlgMCQ_questionsList .mcq-question-item");
+      translated.forEach((question, index) => {
+        const qItem = qItems[index];
+        if (!qItem) return;
+        const stemEl = qItem.querySelector(`[data-locale="${targetLocale}"] .mcq-stem`);
+        const rationaleEl = qItem.querySelector(`[data-locale="${targetLocale}"] .mcq-rationale`);
+        if (stemEl) stemEl.value = question?.stem ?? sourceQuestions[index]?.stem ?? "";
+        if (rationaleEl) rationaleEl.value = question?.rationale ?? sourceQuestions[index]?.rationale ?? "";
+        const optionRows = qItem.querySelectorAll(".mcq-option-row");
+        const translatedOptions = question?.options ?? [];
+        optionRows.forEach((row, optIndex) => {
+          const optEl = row.querySelector(`.mcq-opt-text[data-locale="${targetLocale}"]`);
+          if (optEl) optEl.value = translatedOptions[optIndex] ?? sourceQuestions[index]?.options?.[optIndex] ?? "";
+        });
+      });
+    }
+    if (statusEl) statusEl.textContent = t("adminContent.dialog.mcq.fillOtherLocalesDone");
+  } catch (err) {
+    if (statusEl) statusEl.textContent = tf("adminContent.dialog.mcq.fillOtherLocalesError", { message: String(err?.message ?? err) });
+  } finally {
+    button.disabled = false;
+    delete button.dataset.busy;
+  }
 }
 
 function applyMcqDialog() {
@@ -3676,6 +3825,12 @@ document.getElementById("dialogVersionDetailsApply")?.addEventListener("click", 
   applyVersionDetailsDialog();
 });
 document.getElementById("dialogVersionDetails")?.addEventListener("click", (e) => {
+  const fillBtn = e.target.closest("[data-fill-other-locales]");
+  if (fillBtn) {
+    const sourceLocale = fillBtn.dataset.fillOtherLocales;
+    if (sourceLocale) fillOtherLocalesFromSource(sourceLocale);
+    return;
+  }
   const tab = e.target.closest(".dialog-locale-tab");
   if (!tab) return;
   const locale = tab.dataset.localeTab;
@@ -3759,6 +3914,9 @@ document.getElementById("dlgMCQ_addQuestion")?.addEventListener("click", () => {
   list.appendChild(createMcqQuestionEl(null, idx));
   const activeTab = document.querySelector("#dialogMcq .dialog-locale-tab.active");
   setActiveMcqLocale(activeTab?.dataset.localeTab ?? "en-GB");
+});
+document.getElementById("dlgMCQ_fillOther")?.addEventListener("click", () => {
+  fillOtherLocalesFromActiveMcqLocale();
 });
 document.getElementById("dialogMcq")?.addEventListener("click", (e) => {
   const tab = e.target.closest(".dialog-locale-tab");

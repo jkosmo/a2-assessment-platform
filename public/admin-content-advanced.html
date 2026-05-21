@@ -72,6 +72,8 @@
       .dialog-locale-tab:hover:not(.active) { color: var(--color-text); }
       .dialog-locale-pane { display: none; gap: var(--space-1); }
       .dialog-locale-pane.active { display: grid; }
+      .dialog-pane-actions { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
+      .dialog-pane-status { font-size: 12px; color: var(--color-meta); }
       .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-1); margin-top: var(--space-2); padding-top: var(--space-1); border-top: 1px solid var(--color-border-soft); }
       .dialog-footer .btn-primary, .dialog-footer .btn-secondary { width: auto; }
       .dialog-section-label { font-size: 12px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--space-2) 0 6px; border-bottom: 1px solid var(--color-border-soft); padding-bottom: 4px; }
@@ -820,16 +822,19 @@
         <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn" aria-controls="dlgVDPane_nn">NN</button>
       </div>
       <div id="dlgVDPane_enGB" class="dialog-locale-pane active" role="tabpanel" data-locale-pane="en-GB">
+        <div class="dialog-pane-actions"><button type="button" id="dlgVD_fillOther_enGB" data-fill-other-locales="en-GB" class="btn-secondary btn-sm" data-i18n="adminContent.dialog.versionDetails.fillOtherLocales">Fill other languages from this</button><span id="dlgVD_fillOther_status_enGB" class="dialog-pane-status" aria-live="polite"></span></div>
         <div><label for="dlgVD_task_enGB" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_enGB" rows="4"></textarea></div>
         <div><label for="dlgVD_constraints_enGB" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="dlgVD_constraints_enGB" rows="2"></textarea></div>
         <div><label for="dlgVD_guidance_enGB" data-i18n="adminContent.dialog.versionDetails.assessorExpectedContent">Guidance text</label><textarea id="dlgVD_guidance_enGB" rows="4"></textarea></div>
       </div>
       <div id="dlgVDPane_nb" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nb">
+        <div class="dialog-pane-actions"><button type="button" id="dlgVD_fillOther_nb" data-fill-other-locales="nb" class="btn-secondary btn-sm" data-i18n="adminContent.dialog.versionDetails.fillOtherLocales">Fill other languages from this</button><span id="dlgVD_fillOther_status_nb" class="dialog-pane-status" aria-live="polite"></span></div>
         <div><label for="dlgVD_task_nb" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_nb" rows="4"></textarea></div>
         <div><label for="dlgVD_constraints_nb" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="dlgVD_constraints_nb" rows="2"></textarea></div>
         <div><label for="dlgVD_guidance_nb" data-i18n="adminContent.dialog.versionDetails.assessorExpectedContent">Guidance text</label><textarea id="dlgVD_guidance_nb" rows="4"></textarea></div>
       </div>
       <div id="dlgVDPane_nn" class="dialog-locale-pane" role="tabpanel" data-locale-pane="nn">
+        <div class="dialog-pane-actions"><button type="button" id="dlgVD_fillOther_nn" data-fill-other-locales="nn" class="btn-secondary btn-sm" data-i18n="adminContent.dialog.versionDetails.fillOtherLocales">Fill other languages from this</button><span id="dlgVD_fillOther_status_nn" class="dialog-pane-status" aria-live="polite"></span></div>
         <div><label for="dlgVD_task_nn" data-i18n="adminContent.dialog.versionDetails.taskText">Assignment text</label><textarea id="dlgVD_task_nn" rows="4"></textarea></div>
         <div><label for="dlgVD_constraints_nn" data-i18n="adminContent.moduleVersion.candidateTaskConstraints">Candidate guidance (visible to participant)</label><textarea id="dlgVD_constraints_nn" rows="2"></textarea></div>
         <div><label for="dlgVD_guidance_nn" data-i18n="adminContent.dialog.versionDetails.assessorExpectedContent">Guidance text</label><textarea id="dlgVD_guidance_nn" rows="4"></textarea></div>
@@ -980,6 +985,7 @@
         <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nb">NB</button>
         <button type="button" role="tab" aria-selected="false" class="dialog-locale-tab" data-locale-tab="nn">NN</button>
       </div>
+      <div class="dialog-pane-actions"><button type="button" id="dlgMCQ_fillOther" class="btn-secondary btn-sm" data-i18n="adminContent.dialog.mcq.fillOtherLocales">Fill other languages from active language</button><span id="dlgMCQ_fillOther_status" class="dialog-pane-status" aria-live="polite"></span></div>
       <div class="dialog-section-label" data-i18n="adminContent.dialog.mcq.sectionQuestions">Questions</div>
       <div id="dlgMCQ_questionsList"></div>
       <button type="button" id="dlgMCQ_addQuestion" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.mcq.addQuestion">Add question</span></button>

@@ -6,8 +6,10 @@ import {
   buildModuleDraftPrompts,
   buildModuleDraftLocalizationPrompts,
   buildModuleDraftRevisionPrompts,
+  detectDominantLanguage,
   extractMcqRevisionTargets,
   hasMeaningfulMcqRevision,
+  isLikelyWrongLocale,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
 describe("llm content generation prompts", () => {
@@ -475,5 +477,103 @@ describe("llm content generation prompts", () => {
 
       expect(userPrompt).not.toContain("Assessment blueprint");
     });
+  });
+});
+
+describe("language enforcement directive (#444)", () => {
+  it("injects a CRITICAL LANGUAGE RULE into module draft prompts", () => {
+    const { userPrompt } = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "intermediate",
+      locale: "nb",
+      generationMode: "ordinary",
+    });
+
+    expect(userPrompt).toContain("CRITICAL LANGUAGE RULE");
+    expect(userPrompt).toContain("Norwegian Bokmål");
+    expect(userPrompt).toContain("This rule overrides any tendency to mirror the source material's language.");
+  });
+
+  it("injects a CRITICAL LANGUAGE RULE into MCQ generation prompts", () => {
+    const { userPrompt } = buildMcqGenerationPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "intermediate",
+      locale: "nb",
+      generationMode: "ordinary",
+      questionCount: 4,
+      optionCount: 4,
+    });
+
+    expect(userPrompt).toContain("CRITICAL LANGUAGE RULE");
+    expect(userPrompt).toContain("Norwegian Bokmål");
+  });
+
+  it("targets the target locale (not source) in localization prompts", () => {
+    const { userPrompt } = buildModuleDraftLocalizationPrompts({
+      taskText: "Some English task.",
+      assessorExpectedContent: "Hidden assessor notes.",
+      sourceLocale: "en-GB",
+      targetLocale: "nb",
+    });
+
+    expect(userPrompt).toContain("CRITICAL LANGUAGE RULE");
+    // Should enforce the target (nb), not the source (en-GB)
+    expect(userPrompt).toMatch(/in Norwegian Bokmål/);
+  });
+});
+
+describe("detectDominantLanguage (#444)", () => {
+  it("returns 'norwegian' for a clearly Norwegian paragraph", () => {
+    const text = "En kommune skal innføre fjernhjemler. Det er viktig å vurdere balansen og ta avveininger som er praktiske. Vi kan ikke se bort fra at det er en risiko for at ansatte ved kontoret blir overarbeidet og at det går ut over kvaliteten i tjenestene som leveres til innbyggerne.";
+    expect(detectDominantLanguage(text)).toBe("norwegian");
+  });
+
+  it("returns 'english' for a clearly English paragraph", () => {
+    const text = "A municipality needs to introduce remote access for records requests. It is important to weigh the balance of access rights and privacy. We must make trade-offs that are practical to execute.";
+    expect(detectDominantLanguage(text)).toBe("english");
+  });
+
+  it("returns 'indeterminate' for very short text", () => {
+    expect(detectDominantLanguage("Hei")).toBe("indeterminate");
+    expect(detectDominantLanguage("")).toBe("indeterminate");
+  });
+
+  it("returns 'indeterminate' when neither language dominates clearly", () => {
+    // Mixed/ambiguous prose — should not declare a winner
+    const text = "ID URL JSON HTTP API REST OAuth SAML XML YAML CSS HTML JavaScript TypeScript GraphQL gRPC OpenAPI Swagger Postman Insomnia curl wget HTTP/2 WebSocket TCP UDP IP DNS";
+    expect(detectDominantLanguage(text)).toBe("indeterminate");
+  });
+});
+
+describe("isLikelyWrongLocale (#444)", () => {
+  it("flags English output when nb was requested", () => {
+    const englishText = "A municipality needs to introduce remote access for records requests. It is important to weigh the balance between access rights and privacy.";
+    expect(isLikelyWrongLocale(englishText, "nb")).toBe(true);
+  });
+
+  it("flags English output when nn was requested", () => {
+    const englishText = "A municipality needs to introduce remote access for records requests. It is important to weigh the balance between access rights and privacy.";
+    expect(isLikelyWrongLocale(englishText, "nn")).toBe(true);
+  });
+
+  it("flags Norwegian output when en-GB was requested", () => {
+    const norwegianText = "En kommune skal innføre nye rutiner. Det er viktig å vurdere balansen og ta avveininger som er praktiske. Vi kan ikke se bort fra at det er en risiko for at ansatte blir overarbeidet og at det går ut over kvaliteten.";
+    expect(isLikelyWrongLocale(norwegianText, "en-GB")).toBe(true);
+  });
+
+  it("does NOT flag Norwegian output when nb was requested", () => {
+    const norwegianText = "En kommune skal innføre nye rutiner. Det er viktig å vurdere balansen og ta avveininger som er praktiske. Vi kan ikke se bort fra at det er en risiko for at ansatte blir overarbeidet og at det går ut over kvaliteten.";
+    expect(isLikelyWrongLocale(norwegianText, "nb")).toBe(false);
+  });
+
+  it("does NOT flag English output when en-GB was requested", () => {
+    const englishText = "A municipality needs to introduce remote access for records requests. It is important to weigh the balance between access rights and privacy.";
+    expect(isLikelyWrongLocale(englishText, "en-GB")).toBe(false);
+  });
+
+  it("does NOT flag indeterminate text in either direction (avoid false positives)", () => {
+    const ambiguous = "JSON HTTP API REST OAuth SAML XML YAML";
+    expect(isLikelyWrongLocale(ambiguous, "nb")).toBe(false);
+    expect(isLikelyWrongLocale(ambiguous, "en-GB")).toBe(false);
   });
 });

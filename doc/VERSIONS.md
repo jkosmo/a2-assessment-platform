@@ -2,6 +2,69 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.66 - 2026-05-21
+
+fix(admin): MCQ locale robustness + Avansert editor 'Fyll andre språk'-knapp (#444)
+
+**Why:** UI-testing of v1.1.65 / #378 surfaced two related flaws in
+the multilingual flow. First, when the source material was in a
+different language than the requested locale, the LLM produced output
+in the source language for MCQ generation (e.g. NB module + English
+source → English MCQ). The bare `Language: X` hint in the prompts
+was not strong enough to override the LLM's tendency to mirror the
+input language. Second, the Avansert editor allowed editing one
+locale's `taskText` without propagating the change to the other
+locales — only the conversational shell called the
+`/generate/module-draft/localize` endpoint. A teacher editing a
+single locale would silently leave the others stale.
+
+**Change (prompt-hardening):**
+- New private `buildLanguageEnforcementDirective(locale)` helper in
+  `llmContentGenerationService.ts`, injected into every prompt that
+  takes a locale: `buildModuleDraftPrompts`,
+  `buildMcqGenerationPrompts`, `buildModuleDraftRevisionPrompts`,
+  `buildMcqRevisionPrompts`, `buildModuleDraftLocalizationPrompts`,
+  `buildMcqLocalizationPrompts`, `buildCourseCopyLocalizationPrompts`,
+  `buildModuleRubricPrompts`, `buildBlueprintPrompts`. The directive
+  explicitly states that the source material's language is irrelevant
+  and that all output MUST be in the requested locale.
+
+**Change (output validation + retry):**
+- New `detectDominantLanguage(text)` and `isLikelyWrongLocale(text,
+  expectedLocale)` exported helpers. Function-word frequency
+  heuristic (English vs Norwegian), cheap and dependency-free.
+- `generateModuleDraft` and `generateMcqQuestions` now sample the
+  output, run the heuristic, and if the wrong language is detected
+  retry once with a stronger directive. After retry the result is
+  returned even if still off, with a structured warning so the
+  operator can verify. No hard failure surface for the user.
+
+**Change (Avansert editor — eksplisitt oversettelse):**
+- New "Fyll andre språk fra denne"-knapp per locale pane in the
+  Version Details dialog (`dlgVD_fillOther_{locale}` buttons). Reads
+  the active pane's `taskText`/`assessorExpectedContent`/
+  `candidateTaskConstraints`, calls
+  `/api/admin/content/generate/module-draft/localize` for each other
+  locale, and populates the other panes.
+- New "Fyll andre språk fra aktivt språk"-knapp in the MCQ dialog
+  (`dlgMCQ_fillOther`). Reads all questions in the active locale,
+  calls `/api/admin/content/generate/mcq/localize` for each other
+  locale, populates the other locales' inputs in-place.
+- Both knapper require confirm-dialog before overwriting other
+  locales (teachers may have hand-tuned per-locale terminology). See
+  memory `feedback_teacher_locale_control.md`.
+
+**i18n:** New keys
+`adminContent.dialog.versionDetails.fillOtherLocales*` and
+`adminContent.dialog.mcq.fillOtherLocales*` in nb, nn, and en-GB.
+
+**Tests:** New unit tests for `detectDominantLanguage`,
+`isLikelyWrongLocale`, and prompt directive injection. All 41 tests
+in `llm-content-generation-service.test.ts` pass. `tsc --noEmit`
+clean.
+
+Closes #444.
+
 ## 1.1.65 - 2026-05-20
 
 feat(admin): module-specific rubric generation (#378, closes #368)
