@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.73 - 2026-05-21
+
+ux(admin): handoff dialog defaults to "save first, then open Avansert" (#447 follow-up)
+
+UI verification of v1.1.72 surfaced a remaining issue: when the user
+clicks "Åpne i Avansert (lagre der)" handoff button on a brand-new
+module that hasn't been saved yet, Avansert sometimes hits a race
+condition where the freshly-created module isn't yet visible in
+/api/admin/content/modules. The boot logic skips setSelectedModule,
+selectedModuleIdInput stays empty, and "Lagre alle endringer" throws
+"Modul ID påkrevd".
+
+Per user feedback (2026-05-21): the cleanest UX is to ALWAYS save
+in shell first before navigating to Avansert. Users who regret can
+delete the module from Modul-library — cheaper UX than maintaining
+the take-draft-to-Avansert code path with its edge cases.
+
+Change:
+- Handoff dialog's primary "open" button now calls
+  saveDraftBundleInBackground first, then navigates after save
+  completes (afterSave callback).
+- writeHandoff still runs but with draft=null (no sessionStorage
+  carryover needed since data is in DB after save).
+- "Forkast utkastet og åpne Avansert" path unchanged for users who
+  want to discard.
+- Renamed i18n key handoff.hasDraft.takeDraft → handoff.hasDraft.saveAndOpen
+  for clarity, with text "Lagre og åpne Avansert" / "Lagre og opne
+  detaljredigering" / "Save and open advanced editor".
+- Avansert-side ensure-rubric logic (v1.1.72) kept — still useful for
+  Avansert-only flows (no shell handoff) where module has no rubric yet.
+
+The "Modul ID påkrevd" race condition is no longer reachable through
+the standard handoff path. A separate issue tracks the underlying
+Avansert boot logic that didn't handle the just-created-module case.
+
+tsc --noEmit clean.
+
 ## 1.1.72 - 2026-05-21
 
 fix(admin): Avansert save broke silently on shell-handoff (v1.1.71 regression, #447 follow-up)

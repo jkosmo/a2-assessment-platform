@@ -2364,23 +2364,22 @@ function openAdvancedEditor(moduleId) {
   }
 
   // Has unsaved work — ask what to do
-  const navigateWithDraft = () => {
-    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: sessionDraft, locale: currentLocale, previewLocale });
-    logBot(() => t("shell.module.openingEditor"));
-    setTimeout(() => { location.href = url; }, 400);
-  };
   const navigateWithoutDraft = () => {
     writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale });
     logBot(() => t("shell.module.openingEditor"));
     setTimeout(() => { location.href = url; }, 400);
   };
 
-  // #447: "Lagre utkastet og åpne Avansert" button removed — Avansert-save now triggers the
-  // same backend ensure-rubric flow as shell-save, so the two paths are functionally
-  // equivalent. The "Take draft to Avansert" path is enough to get the user there with
-  // unsaved work, and saving from Avansert produces the same result.
+  // v1.1.73 (#447 follow-up): default handoff action is "save first, then open" — this avoids
+  // the race condition where Avansert opens for a freshly-created module that isn't yet visible
+  // in /api/admin/content/modules ("Modul ID påkrevd" error). Users who regret can delete the
+  // module after; that's cheaper UX than maintaining the take-draft-to-Avansert code path.
+  const saveAndNavigate = () => {
+    saveDraftBundleInBackground({ afterSave: navigateWithoutDraft });
+  };
+
   logBot(() => t("handoff.hasDraft.prompt"), [
-    { labelKey: "handoff.hasDraft.takeDraft", action: navigateWithDraft },
+    { labelKey: "handoff.hasDraft.saveAndOpen", action: saveAndNavigate },
     { labelKey: "handoff.hasDraft.discard", action: navigateWithoutDraft },
     { labelKey: "shell.action.cancel", action: showModuleActions },
   ]);
