@@ -416,8 +416,9 @@ export async function mockCommonApis(page: Page, {
   });
 
   // Mock for the blueprint endpoint (v1.1.53 / #372). Called between cert-level
-  // selection and the actual draft generation. The shell shows a preview with
-  // "Use this blueprint" / "Skip blueprint" buttons. Tests typically click skip.
+  // selection and the actual draft generation. The shell shows an editable preview
+  // (v1.1.71 / #448 / B1) with "Use this plan" / "Regenerate" buttons. Tests typically
+  // click "Use this plan" to accept the mocked blueprint and continue.
   await page.route("**/api/admin/content/generate/blueprint", async (route: Route) => {
     const body = route.request().postDataJSON() as {
       certificationLevel?: string;
@@ -1065,7 +1066,7 @@ test.describe("admin content browser coverage", () => {
     //   - no Ordinary/Thorough button exists in this conversation
     //   - blueprint accept/skip buttons DO appear
     await expect(page.getByRole("button", { name: /^Ordinary$|^Vanlig$|^Thorough$|^Grundig$/i })).toHaveCount(0);
-    await clickEnabledButton(page, /Skip blueprint|Hopp over/);
+    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
     await clickEnabledButton(page, "Yes, generate MCQ");
     await clickEnabledButton(page, "3 questions");
@@ -1384,7 +1385,7 @@ test.describe("admin content browser coverage", () => {
 
     // v1.1.54 removed Ordinary/Thorough generation-mode buttons — the flow goes
     // directly to the blueprint preview after cert-level selection.
-    await clickEnabledButton(page, /Skip blueprint|Hopp over/);
+    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
     await expect
       .poll(() => state.lastDraftGenerationBody?.sourceMaterial ?? "")
