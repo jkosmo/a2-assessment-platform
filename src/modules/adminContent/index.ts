@@ -3,6 +3,7 @@ export {
   updateModuleTitle,
   deleteModule,
   createRubricVersion,
+  ensureRubricVersion,
   createPromptTemplateVersion,
   createMcqSetVersion,
   createModuleVersion,

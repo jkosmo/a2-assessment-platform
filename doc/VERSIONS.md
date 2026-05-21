@@ -2,6 +2,65 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.69 - 2026-05-21
+
+refactor: move #378 auto-rubric to backend ensure-rubric endpoint (#447)
+
+**Why:** Auto-rubric generation (#378) lived only in shell-side JS, so
+Avansert-save produced modules without the task-specific rubric that
+shell-save would produce. The "take draft to Avansert" handoff flow
+was particularly affected — the unsaved draft transferred to Avansert,
+the user saved from there, and the resulting module had a generic
+default rubric instead of an auto-generated one.
+
+**Change (backend):**
+- New `ensureRubricVersion` function in `adminContentCommands.ts`.
+  Idempotent: returns existing rubric for the module, or generates +
+  persists a new one via `generateModuleRubric`. Falls back to generic
+  defaults on LLM failure.
+- New `moduleRubricToStoragePayload` helper transforms the LLM output
+  (array shape) into storage shape (record keyed by id). Was previously
+  duplicated in shell-side JS — now single source of truth on backend.
+- New `GENERIC_RUBRIC_CRITERIA` and `GENERIC_RUBRIC_SCALING_RULE`
+  constants — defaults used to be loaded from i18n on the frontend;
+  now backend has its own canonical defaults.
+- New endpoint `POST /api/admin/content/modules/:moduleId/rubric-versions/ensure`
+  that takes the same body as `/generate/rubric` and persists when
+  needed. Rate-limited via `generateLimiter`.
+- New repository method `findActiveRubricVersionForModule`.
+
+**Change (shell):**
+- `saveDraftBundleInBackground` now calls the ensure-rubric endpoint
+  instead of the manual `/generate/rubric` + `/rubric-versions` POST
+  sequence. ~25 lines simpler.
+- Removed `tryGenerateModuleSpecificRubric`,
+  `moduleSpecificRubricToStoragePayload`, and `resolveCurrentRubricPayload`
+  from `admin-content-shell.js` — logic moved to backend.
+
+**Change (Avansert editor):**
+- `handleCreateRubricVersion` now detects empty criteria and calls the
+  ensure-rubric endpoint when both `taskText` and `assessorExpectedContent`
+  are present. Power users who fill criteria manually retain existing
+  POST `/rubric-versions` behaviour.
+
+**Change (handoff dialog):**
+- "Lagre utkastet, og åpne avansert redigering"-knapp fjernet — Avansert-
+  save now produces equivalent results, so this option is redundant.
+- "Take draft to advanced editor"-knapp omdøpt for klarhet:
+  "Åpne i Avansert (lagre der)" / "Opne i detaljredigering (lagre der)"
+  / "Open in advanced editor (will save there)".
+- `handoff.hasDraft.saveFirst` i18n keys removed from all three locales
+  (both top-level and nested-translations sections).
+
+**Verify:** New module created in shell + immediate "Open in advanced
+editor" → save from Avansert → module ends up with a task-specific
+auto-generated rubric (same as if user had completed the shell flow).
+
+`tsc --noEmit` clean. 77/77 affected unit tests pass. Existing
+rubric-versions POST endpoint unchanged for backwards-compat.
+
+Closes #447.
+
 ## 1.1.68 - 2026-05-21
 
 refactor: drop unused RubricVersion.passRuleJson column (#446)

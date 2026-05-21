@@ -267,6 +267,25 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // Returns the most recently created RubricVersion for the module, regardless of `active` flag.
+    // Used by the ensure-rubric flow to decide whether auto-generation is needed (#447). Any
+    // existing rubric — generic default or task-specific — skips the LLM call.
+    findActiveRubricVersionForModule(moduleId: string) {
+      return client.rubricVersion.findFirst({
+        where: { moduleId },
+        orderBy: { versionNo: "desc" },
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          criteriaJson: true,
+          scalingRuleJson: true,
+          active: true,
+          createdAt: true,
+        },
+      });
+    },
+
     findLatestPromptTemplateVersion(moduleId: string) {
       return client.promptTemplateVersion.findFirst({
         where: { moduleId },

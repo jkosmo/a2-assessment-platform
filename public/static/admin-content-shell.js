@@ -1060,78 +1060,6 @@ function tryParseJsonTranslation(key, fallback) {
   }
 }
 
-function resolveCurrentRubricPayload() {
-  const rubric = bundle?.selectedConfiguration?.rubricVersion;
-  return {
-    criteria: rubric?.criteria ?? tryParseJsonTranslation("adminContent.defaults.criteriaJson", {}),
-    scalingRule: rubric?.scalingRule ?? tryParseJsonTranslation("adminContent.defaults.scalingRuleJson", {}),
-  };
-}
-
-function moduleSpecificRubricToStoragePayload(generated) {
-  const criteria = Array.isArray(generated?.criteria) ? generated.criteria : [];
-  const totalMax = criteria.reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
-  const criteriaRecord = Object.fromEntries(
-    criteria.map((c) => [
-      String(c?.id ?? "criterion"),
-      {
-        label: c?.label ?? "",
-        description: c?.description ?? "",
-        maxScore: Number(c?.maxScore) || 0,
-        weight: Number(((Number(c?.maxScore) || 0) / totalMax).toFixed(2)),
-        candidateVisible: Boolean(c?.candidateVisible),
-      },
-    ]),
-  );
-  return {
-    criteria: criteriaRecord,
-    scalingRule: {
-      practical_weight: 70,
-      max_total: totalMax,
-      generated_from_task: Boolean(generated?.generatedFromTask),
-      assessor_notes: String(generated?.assessorNotes ?? ""),
-    },
-  };
-}
-
-async function tryGenerateModuleSpecificRubric({ taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint }) {
-  if (bundle?.selectedConfiguration?.rubricVersion) return null;
-  const localizedTask = String(translateLocalizedText(taskText) ?? "").trim();
-  const localizedAssessor = String(translateLocalizedText(assessorExpectedContent) ?? "").trim();
-  if (!localizedTask || !localizedAssessor) return null;
-
-  const certificationLevel = bundle?.module?.certificationLevel ?? "intermediate";
-  const locale = currentLocale;
-  const localizedConstraints = String(translateLocalizedText(candidateTaskConstraints) ?? "").trim();
-
-  let blueprintObject = null;
-  if (assessmentBlueprint) {
-    if (typeof assessmentBlueprint === "string") {
-      try { blueprintObject = JSON.parse(assessmentBlueprint); } catch { blueprintObject = null; }
-    } else if (typeof assessmentBlueprint === "object") {
-      blueprintObject = assessmentBlueprint;
-    }
-  }
-
-  try {
-    const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({
-        taskText: localizedTask,
-        assessorExpectedContent: localizedAssessor,
-        candidateTaskConstraints: localizedConstraints || undefined,
-        certificationLevel,
-        locale,
-        ...(blueprintObject ? { blueprint: blueprintObject } : {}),
-      }),
-    });
-    return result?.rubric ? moduleSpecificRubricToStoragePayload(result.rubric) : null;
-  } catch (err) {
-    console.warn("Module-specific rubric generation failed; falling back to generic defaults.", err);
-    return null;
-  }
-}
-
 function resolveCurrentPromptPayload() {
   const prompt = bundle?.selectedConfiguration?.promptTemplateVersion;
   return {
@@ -1559,13 +1487,6 @@ async function saveDraftBundleInBackground(options = {}) {
   slot.abortBtn.remove();
 
   try {
-    const generatedRubricPayload = await tryGenerateModuleSpecificRubric({
-      taskText,
-      assessorExpectedContent,
-      candidateTaskConstraints,
-      assessmentBlueprint,
-    });
-    const rubricPayload = generatedRubricPayload ?? resolveCurrentRubricPayload();
     const promptPayload = resolveCurrentPromptPayload();
 
     const titlePatch = normalizeModuleTitlePatch(sessionDraft?.title);
@@ -1576,9 +1497,27 @@ async function saveDraftBundleInBackground(options = {}) {
       });
     }
 
-    const rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, getHeaders, {
+    // #447: single ensure-rubric call replaces the previous /generate/rubric +
+    // /rubric-versions sequence. Idempotent — reuses existing rubric on re-save.
+    let blueprintObject = null;
+    if (assessmentBlueprint) {
+      if (typeof assessmentBlueprint === "string") {
+        try { blueprintObject = JSON.parse(assessmentBlueprint); } catch { blueprintObject = null; }
+      } else if (typeof assessmentBlueprint === "object") {
+        blueprintObject = assessmentBlueprint;
+      }
+    }
+    const ensureRubricBody = {
+      taskText: String(translateLocalizedText(taskText) ?? "").trim(),
+      assessorExpectedContent: String(translateLocalizedText(assessorExpectedContent) ?? "").trim(),
+      candidateTaskConstraints: String(translateLocalizedText(candidateTaskConstraints) ?? "").trim() || undefined,
+      certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+      locale: currentLocale,
+      ...(blueprintObject ? { blueprint: blueprintObject } : {}),
+    };
+    const rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions/ensure`, getHeaders, {
       method: "POST",
-      body: JSON.stringify(rubricPayload),
+      body: JSON.stringify(ensureRubricBody),
     });
 
     const promptBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/prompt-template-versions`, getHeaders, {
@@ -2436,12 +2375,12 @@ function openAdvancedEditor(moduleId) {
     setTimeout(() => { location.href = url; }, 400);
   };
 
+  // #447: "Lagre utkastet og åpne Avansert" button removed — Avansert-save now triggers the
+  // same backend ensure-rubric flow as shell-save, so the two paths are functionally
+  // equivalent. The "Take draft to Avansert" path is enough to get the user there with
+  // unsaved work, and saving from Avansert produces the same result.
   logBot(() => t("handoff.hasDraft.prompt"), [
     { labelKey: "handoff.hasDraft.takeDraft", action: navigateWithDraft },
-    {
-      labelKey: "handoff.hasDraft.saveFirst",
-      action: () => saveDraftBundleInBackground({ afterSave: navigateWithoutDraft }),
-    },
     { labelKey: "handoff.hasDraft.discard", action: navigateWithoutDraft },
     { labelKey: "shell.action.cancel", action: showModuleActions },
   ]);

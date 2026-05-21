@@ -1978,11 +1978,44 @@ async function handleDuplicateSelectedModule() {
 
 async function handleCreateRubricVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
-  const payload = {
-    criteria: parseJsonField(rubricCriteriaJsonInput.value, "adminContent.rubric.criteria"),
-    scalingRule: parseJsonField(rubricScalingRuleJsonInput.value, "adminContent.rubric.scalingRule"),
-  };
+  const criteria = parseJsonField(rubricCriteriaJsonInput.value, "adminContent.rubric.criteria");
+  const scalingRule = parseJsonField(rubricScalingRuleJsonInput.value, "adminContent.rubric.scalingRule");
 
+  // #447: when criteria is empty (typical of a draft handed off from shell), call the
+  // ensure-rubric endpoint instead — backend auto-generates from taskText if the module
+  // has no rubric yet, falling back to generic defaults on LLM failure. Avansert and
+  // shell now produce equivalent results for the no-rubric case.
+  const criteriaIsEmpty = !criteria || Object.keys(criteria).length === 0;
+  if (criteriaIsEmpty) {
+    const taskTextValue = localizeContentValue(parseLocalizedSafe(moduleVersionTaskTextInput.value)) || "";
+    const assessorValue = localizeContentValue(parseLocalizedSafe(moduleVersionAssessorExpectedContentInput.value)) || "";
+    if (taskTextValue.trim() && assessorValue.trim()) {
+      const constraintsValue = localizeContentValue(parseLocalizedSafe(moduleVersionCandidateTaskConstraintsInput?.value ?? "")) || "";
+      const ensureBody = await apiFetch(
+        `/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions/ensure`,
+        headers,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            taskText: taskTextValue,
+            assessorExpectedContent: assessorValue,
+            candidateTaskConstraints: constraintsValue || undefined,
+            certificationLevel: localizeContentValue(parseLocalizedSafe(moduleCertificationLevelInput.value)) || "intermediate",
+            locale: currentLocale,
+          }),
+        },
+      );
+      moduleVersionRubricVersionIdInput.value = ensureBody?.rubricVersion?.id ?? "";
+      if (!options.silent) {
+        setMessage(t("adminContent.message.rubricCreated"));
+        log(ensureBody);
+        await refreshSelectedModuleStatus();
+      }
+      return ensureBody;
+    }
+  }
+
+  const payload = { criteria, scalingRule };
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, headers, {
     method: "POST",
     body: JSON.stringify(payload),
