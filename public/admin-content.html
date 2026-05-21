@@ -141,22 +141,25 @@
       .bp-mcq-suggestion { margin: 8px 0 4px; color: var(--color-meta); font-size: 12px; }
       .bp-notes { margin: 6px 0 0; font-size: 12px; color: var(--color-meta); font-style: italic; }
 
-      /* B2 (#449): editable Vurderingskriterier */
+      /* B2 (#449): editable Vurderingskriterier. v1.1.76 layout-fix: card content
+         stacked vertically so each row stretches the full bubble width; weight + visibility
+         each on their own line; "Vekt:" label uses nowrap. */
       .vk-editor { margin-top: 8px; font-size: 13px; }
-      .vk-intro { margin: 4px 0 8px; color: var(--color-meta); font-size: 12px; }
-      .vk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-      .vk-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: 8px 10px; background: rgba(255,255,255,0.5); }
-      .vk-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-      .vk-label { flex: 1 1 auto; padding: 6px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 13px; font-weight: 600; }
-      .vk-remove { background: none; border: none; color: var(--color-meta); cursor: pointer; padding: 2px 8px; font-size: 16px; line-height: 1; border-radius: 4px; width: auto; }
+      .chat-msg--bot .chat-bubble:has(.vk-editor) { max-width: 100%; }
+      .vk-intro { margin: 4px 0 8px; color: var(--color-meta); font-size: 12px; line-height: 1.4; }
+      .vk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+      .vk-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: 10px 12px; background: rgba(255,255,255,0.7); display: flex; flex-direction: column; gap: 6px; }
+      .vk-row { display: flex; align-items: center; gap: 6px; }
+      .vk-label { flex: 1 1 auto; min-width: 0; padding: 6px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 13px; font-weight: 600; }
+      .vk-remove { flex-shrink: 0; background: none; border: none; color: var(--color-meta); cursor: pointer; padding: 2px 8px; font-size: 16px; line-height: 1; border-radius: 4px; width: auto; }
       .vk-remove:hover { background: var(--color-error-bg, #fde7e7); color: var(--color-error, #b00020); }
-      .vk-description { width: 100%; padding: 6px 10px; font-size: 12px; margin: 4px 0; }
-      .vk-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; color: var(--color-meta); margin-top: 4px; }
-      .vk-weight-label { display: flex; align-items: center; gap: 6px; }
-      .vk-weight { width: 100px; }
-      .vk-weight-value { min-width: 18px; font-weight: 700; color: var(--color-text); }
-      .vk-visible-label { display: flex; align-items: center; gap: 4px; }
-      .vk-visible-label input { margin: 0; }
+      .vk-description { width: 100%; padding: 6px 10px; font-size: 12px; box-sizing: border-box; }
+      .vk-weight-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--color-meta); }
+      .vk-weight-label span:first-child { white-space: nowrap; flex-shrink: 0; }
+      .vk-weight { flex: 1 1 auto; min-width: 80px; }
+      .vk-weight-value { min-width: 22px; font-weight: 700; color: var(--color-text); text-align: right; }
+      .vk-visible-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-meta); }
+      .vk-visible-label input { margin: 0; flex-shrink: 0; }
       .vk-total { margin: 8px 0 4px; font-size: 12px; color: var(--color-meta); }
       .vk-total-value { font-weight: 700; color: var(--color-text); }
       /* Override global button{width:100%} for chat form submit buttons */

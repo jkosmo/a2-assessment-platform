@@ -2,6 +2,42 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.76 - 2026-05-21
+
+fix(admin): B2 follow-up — duplicate menus after save + cramped card layout (#449)
+
+UI verification of v1.1.75 surfaced two issues:
+
+**1. Duplicate post-save menu.** After clicking "Lagre vurderingskriterier",
+the user saw TWO identical "Hva vil du gjøre med denne modulen?" menus
+appended to the chat. Root cause: `persistCriteria` called
+`loadModule(moduleId)` which already calls `showModuleActions()` at the
+end (line ~1998), then `persistCriteria` *also* called
+`showModuleActions()` explicitly. Two logBot entries → two menus.
+
+Fix: removed the explicit `showModuleActions()` call in
+`persistCriteria`. `loadModule` handles the next-step prompt.
+
+**2. Cramped card layout.** Each criterion card squeezed Vekt-slider,
+weight-value, and "Synlig for kandidat"-checkbox into a single flex row
+inside a narrow chat-bubble. The "Vekt:" label wrapped character-by-
+character (V/e/k/t stacked vertically) because there was no
+`white-space: nowrap` on it. Description placeholder was tiny.
+
+Fix:
+- Removed the `.vk-meta-row` wrapper — weight and visibility labels are
+  now direct children of the card with `flex-direction: column` on
+  the card itself.
+- Added `white-space: nowrap` to the "Vekt:" `<span>` so it never
+  wraps.
+- Made the weight slider stretch to fill (`flex: 1 1 auto`).
+- Increased card padding + gap for readability.
+- Widened the chat-bubble specifically for the criteria editor
+  (`:has(.vk-editor) { max-width: 100% }`) so cards use the full chat
+  pane width.
+
+No backend changes. tsc clean. 13/13 shell-state tests pass.
+
 ## 1.1.75 - 2026-05-21
 
 feat(admin): Vurderingskriterier-editor in conversational shell (#449, B2 of #445)

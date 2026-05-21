@@ -2667,18 +2667,16 @@ function renderEditableCriteria(working, ctx) {
         <textarea class="vk-description chat-textarea" rows="2"
                   placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
                   aria-label="${escapeHtml(t("shell.criteria.descLabel"))}">${escapeHtml(c.description)}</textarea>
-        <div class="vk-meta-row">
-          <label class="vk-weight-label">
-            <span>${escapeHtml(t("shell.criteria.weight"))}:</span>
-            <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
-                   aria-label="${escapeHtml(t("shell.criteria.weight"))}" />
-            <span class="vk-weight-value">${c.maxScore}</span>
-          </label>
-          <label class="vk-visible-label">
-            <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} />
-            ${escapeHtml(t("shell.criteria.visibleToCandidate"))}
-          </label>
-        </div>
+        <label class="vk-weight-label">
+          <span>${escapeHtml(t("shell.criteria.weight"))}:</span>
+          <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
+                 aria-label="${escapeHtml(t("shell.criteria.weight"))}" />
+          <span class="vk-weight-value">${c.maxScore}</span>
+        </label>
+        <label class="vk-visible-label">
+          <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} />
+          ${escapeHtml(t("shell.criteria.visibleToCandidate"))}
+        </label>
       </li>`).join("");
     return `<strong>${escapeHtml(tf("shell.criteria.title", { count: working.length }))}</strong>
       <p class="vk-intro">${escapeHtml(t("shell.criteria.intro"))}</p>
@@ -2764,11 +2762,14 @@ function renderEditableCriteria(working, ctx) {
         },
       );
       latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
-      await loadModule(ctx.moduleId);
+      // loadModule itself logs a fresh showModuleActions menu at the end (see line ~1998),
+      // so we must NOT call showModuleActions() here — that produced two duplicate menus
+      // in v1.1.75. Clear the editor slot's choices, write the success message into the
+      // savingSlot, and let loadModule handle the next-step prompt.
+      logResolveSlot(slot, renderHtml, []);
       logResolveSlot(savingSlot, () => `<strong>${escapeHtml(t("shell.criteria.savedSuccess"))}</strong>`);
       showToast(t("shell.criteria.savedSuccess"), "success");
-      logResolveSlot(slot, renderHtml, []);
-      showModuleActions();
+      await loadModule(ctx.moduleId);
     } catch (err) {
       const errMsg = String(err?.message ?? err);
       logResolveSlot(savingSlot, () => `${escapeHtml(t("shell.criteria.savedError"))}: ${escapeHtml(errMsg)}`, [
