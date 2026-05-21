@@ -558,7 +558,13 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'SKIP_MIGRATE'
-          value: environmentName == 'production' ? 'false' : 'true'
+          // Web always runs prisma migrate deploy on startup. Worker keeps SKIP_MIGRATE=true
+          // (see worker app definition below) — worker shouldn't run migrations because web
+          // already does. This was per-env conditional before, but stage having
+          // SKIP_MIGRATE=true meant migrations were only ever tested in prod, which contributed
+          // to the 2026-05-21 incident where the #446 drop-column migration silently never ran
+          // on stage. Migrations on stage should behave like prod. See v1.1.74 release notes.
+          value: 'false'
         }
         {
           name: 'NODE_ENV'

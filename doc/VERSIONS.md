@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.74 - 2026-05-21
+
+infra: stage-web SKIP_MIGRATE permanent false (#447 follow-up)
+
+Permanent fix for the issue diagnosed earlier today: stage-web's
+SKIP_MIGRATE was conditionally set to 'true' for non-prod environments
+in `infra/azure/main.bicep`. This meant Prisma migrations were never
+run on stage — only on prod. The #446 drop-column migration (v1.1.68)
+silently never executed, and the column-still-exists state surfaced
+hours later as a runtime constraint violation on rubric creation.
+
+Change:
+- `infra/azure/main.bicep` line 561 (web app SKIP_MIGRATE setting):
+  `value: environmentName == 'production' ? 'false' : 'true'` →
+  `value: 'false'`. Web on all environments now runs
+  `prisma migrate deploy` on startup.
+- Worker app's SKIP_MIGRATE='true' (separate block, ~line 778) is
+  intentional and unchanged — worker shouldn't migrate because web
+  already does. The original (worker-only) reason for SKIP_MIGRATE
+  from commit `ea974e3` still applies.
+
+Earlier today I set this via `az webapp config appsettings set` as
+the emergency fix; this Bicep change codifies it so the value sticks
+across future Bicep-driven deploys.
+
+Deploys via `.github/workflows/deploy-azure.yml` (not deploy-app.yml)
+because infra changes touch Bicep. ~22 min full deploy.
+
+Risk: very low — single env var change on existing web app, no
+resource changes. Worker behavior unchanged.
+
 ## 1.1.73 - 2026-05-21
 
 ux(admin): handoff dialog defaults to "save first, then open Avansert" (#447 follow-up)
