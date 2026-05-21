@@ -123,10 +123,15 @@ export function deriveShellModuleActionModel({
   canResumeEditing,
   canPublish,
   canUnpublish,
+  hasRubric,
 }) {
   const actionKeys = ["generateContent"];
   if (hasDraft) actionKeys.push("generateMcq");
   if (canResumeEditing) actionKeys.push("resumeChatEdit");
+  // B2 (#449): editCriteria appears once the module has a saved rubric. Opens the
+  // Vurderingskriterier editor in shell, letting non-technical authors refine the
+  // auto-generated rubric without going into Avansert.
+  if (hasRubric) actionKeys.push("editCriteria");
   actionKeys.push("directEdit", "editAdvanced", "pickAnother");
   if (hasDraft) actionKeys.push("saveDraft");
   if (!hasDraft && canPublish) actionKeys.push("publish");

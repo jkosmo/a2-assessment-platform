@@ -2,6 +2,67 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.75 - 2026-05-21
+
+feat(admin): Vurderingskriterier-editor in conversational shell (#449, B2 of #445)
+
+Largest implementation in the #445 arc. Authors can now refine the
+auto-generated assessment criteria from inside the shell — previously
+only available via raw-JSON editing in Avansert.
+
+**Entry point:** new "Rediger vurderingskriterier" action appears in
+the module-action menu (`shell.criteria.action`) when the loaded
+module has an active rubric. Click → editor opens as a chat bubble.
+
+**Per-criterion editing:**
+- Title (`label`) inline input
+- Description (`description`) textarea
+- Weight (`maxScore`) range slider 1–10 with live value display
+- "Synlig for kandidat" (`candidateVisible`) checkbox
+- × button to remove the criterion
+- Live total-weight display below the list
+
+**Bulk actions:**
+- **Add criterion** — appends an empty card with auto-id
+  `new_criterion_N`. New criteria get a slug from the label on save.
+- **Regenerate from plan** — calls existing `/api/admin/content/generate/rubric`
+  with current taskText, assessor expectations, and (if available)
+  blueprint. Replaces working set. Confirms first if user has edits.
+
+**Persistence:**
+- POST `/rubric-versions` with new criteria record and updated
+  scalingRule (max_total auto-recomputed from criteria sum).
+- POST `/module-versions` linking the new rubric — so future
+  assessments use the edited criteria. Other version IDs (prompt,
+  mcq) carry over unchanged.
+
+**Data tolerance:**
+- Editor renders criteria stored in either of the two historical
+  shapes: rich (`{ label, description, maxScore, weight, candidateVisible }`)
+  from #378 auto-generation, or sparse (`{ weight }`) from generic
+  fallback. Sparse criteria get humanised labels from their snake_case ids.
+
+**Other changes:**
+- `deriveShellModuleActionModel` accepts new `hasRubric` flag and emits
+  `editCriteria` action key when set. 13/13 existing shell-state tests
+  still pass (param defaults to undefined → action not added).
+- New `slugifyLabel` + `humaniseCriterionId` helpers in shell.js.
+- 25+ new `shell.criteria.*` i18n keys across nb / nn / en-GB
+  (top-level admin block + nested participant translations).
+- New `.vk-*` CSS for cards, weight slider, total display.
+
+**Out of scope (per #449 spec, deferred):**
+- Per-locale label/description editing — comes in B4.
+- Drag-and-drop criterion reordering.
+- Templating (reuse criteria sets across modules).
+- Editing `scalingRule.max_total` manually (auto = sum of weights).
+- B3 drift-detection between blueprint and criteria (uses different
+  endpoint shape; tracked separately).
+
+`tsc --noEmit` clean. 13/13 shell-state tests pass.
+
+Closes #449. Part of #445 (B2).
+
 ## 1.1.74 - 2026-05-21
 
 infra: stage-web SKIP_MIGRATE permanent false (#447 follow-up)

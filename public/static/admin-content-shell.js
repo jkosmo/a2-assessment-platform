@@ -2307,6 +2307,7 @@ function showModuleActions() {
   const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
   const canUnpublish = !hasDraft && !!bundle?.module?.activeVersionId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
+  const hasRubric = !!bundle?.selectedConfiguration?.rubricVersion;
   const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
   const model = deriveShellModuleActionModel({
     hasDraft,
@@ -2314,6 +2315,7 @@ function showModuleActions() {
     canResumeEditing,
     canPublish,
     canUnpublish,
+    hasRubric,
   });
   const actionMap = {
     generateContent: { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
@@ -2329,6 +2331,7 @@ function showModuleActions() {
       },
     },
     directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+    editCriteria: { labelKey: "shell.criteria.action", action: () => openCriteriaEditor() },
     editAdvanced: { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
@@ -2580,6 +2583,281 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
         renderAndWire();
         const inputs = slot.el.querySelectorAll(".bp-topic-input");
         inputs[inputs.length - 1]?.focus();
+      }
+    });
+  };
+
+  renderAndWire();
+}
+
+// B2 (#449): editable Vurderingskriterier in shell. Opens an editor for the module's active
+// rubric letting authors refine label / description / weight / candidateVisible per criterion,
+// add new criteria, remove existing, or regenerate from the current taskText + blueprint.
+// Saving creates a new RubricVersion and a new ModuleVersion linking it.
+async function openCriteriaEditor() {
+  const moduleId = selectedModuleId;
+  const rubric = bundle?.selectedConfiguration?.rubricVersion;
+  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
+  if (!moduleId || !rubric || !moduleVersion) {
+    logBot(() => t("shell.criteria.unavailable"));
+    return;
+  }
+
+  // Normalize rubric.criteria (a record keyed by id) into an ordered array for the editor.
+  // Tolerates two shapes: rich ({label, description, maxScore, weight, candidateVisible}) from
+  // #378 auto-generation, and generic ({weight}) from the default fallback. Missing fields
+  // are filled with sane defaults so the editor renders consistently.
+  const criteriaRecord = rubric.criteria && typeof rubric.criteria === "object" ? rubric.criteria : {};
+  const working = Object.entries(criteriaRecord).map(([id, raw]) => {
+    const c = raw && typeof raw === "object" ? raw : {};
+    return {
+      id: String(id),
+      label: typeof c.label === "string" && c.label.trim() ? c.label : humaniseCriterionId(String(id)),
+      description: typeof c.description === "string" ? c.description : "",
+      maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
+      candidateVisible: Boolean(c.candidateVisible),
+    };
+  });
+
+  const ctx = {
+    moduleId,
+    taskText: String(translateLocalizedText(moduleVersion.taskText) ?? "").trim(),
+    assessorExpectedContent: String(translateLocalizedText(moduleVersion.assessorExpectedContent) ?? "").trim(),
+    candidateTaskConstraints: String(translateLocalizedText(moduleVersion.candidateTaskConstraints) ?? "").trim(),
+    certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+    locale: currentLocale,
+    blueprint: moduleVersion.assessmentBlueprint ?? null,
+    rubricScalingRule: rubric.scalingRule ?? {},
+    promptTemplateVersionId: bundle?.selectedConfiguration?.promptTemplateVersion?.id,
+    mcqSetVersionId: bundle?.selectedConfiguration?.mcqSetVersion?.id,
+    moduleVersion,
+  };
+
+  renderEditableCriteria(working, ctx);
+}
+
+function humaniseCriterionId(id) {
+  return String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function slugifyLabel(label) {
+  if (typeof label !== "string") return null;
+  const slug = label.trim().toLowerCase()
+    .replace(/[æÆ]/g, "ae").replace(/[øØ]/g, "o").replace(/[åÅ]/g, "a")
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return slug || null;
+}
+
+function renderEditableCriteria(working, ctx) {
+  const slot = logProgress("shell.criteria.opening");
+  slot.abortBtn.remove();
+  let nextNewId = 1;
+
+  const renderHtml = () => {
+    const total = working.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0);
+    const items = working.map((c, i) => `
+      <li class="vk-card" data-index="${i}">
+        <div class="vk-row">
+          <input class="vk-label" type="text" value="${escapeHtml(c.label)}"
+                 placeholder="${escapeHtml(t("shell.criteria.labelPlaceholder"))}"
+                 aria-label="${escapeHtml(t("shell.criteria.labelLabel"))}" />
+          <button type="button" class="vk-remove" data-index="${i}"
+                  aria-label="${escapeHtml(t("shell.criteria.removeAria"))}">×</button>
+        </div>
+        <textarea class="vk-description chat-textarea" rows="2"
+                  placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
+                  aria-label="${escapeHtml(t("shell.criteria.descLabel"))}">${escapeHtml(c.description)}</textarea>
+        <div class="vk-meta-row">
+          <label class="vk-weight-label">
+            <span>${escapeHtml(t("shell.criteria.weight"))}:</span>
+            <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
+                   aria-label="${escapeHtml(t("shell.criteria.weight"))}" />
+            <span class="vk-weight-value">${c.maxScore}</span>
+          </label>
+          <label class="vk-visible-label">
+            <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} />
+            ${escapeHtml(t("shell.criteria.visibleToCandidate"))}
+          </label>
+        </div>
+      </li>`).join("");
+    return `<strong>${escapeHtml(tf("shell.criteria.title", { count: working.length }))}</strong>
+      <p class="vk-intro">${escapeHtml(t("shell.criteria.intro"))}</p>
+      <div class="vk-editor">
+        <ul class="vk-list">${items}</ul>
+        <p class="vk-total"><strong>${escapeHtml(t("shell.criteria.totalWeight"))}:</strong> <span class="vk-total-value">${total}</span></p>
+        <button type="button" class="vk-add bp-add-btn">+ ${escapeHtml(t("shell.criteria.add"))}</button>
+        <button type="button" class="vk-regenerate bp-add-btn">${escapeHtml(t("shell.criteria.regenerate"))}</button>
+      </div>`;
+  };
+
+  const captureInputs = () => {
+    const cards = slot.el.querySelectorAll(".vk-card");
+    const newArr = [];
+    cards.forEach((card, idx) => {
+      const existing = working[idx] ?? {};
+      newArr.push({
+        id: existing.id,
+        label: card.querySelector(".vk-label")?.value.trim() ?? "",
+        description: card.querySelector(".vk-description")?.value.trim() ?? "",
+        maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
+        candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
+      });
+    });
+    working.length = 0;
+    working.push(...newArr);
+  };
+
+  const refreshWeightLabels = () => {
+    slot.el.querySelectorAll(".vk-card").forEach((card) => {
+      const weight = Number(card.querySelector(".vk-weight")?.value) || 0;
+      const v = card.querySelector(".vk-weight-value");
+      if (v) v.textContent = String(weight);
+    });
+    const total = Array.from(slot.el.querySelectorAll(".vk-weight")).reduce(
+      (sum, el) => sum + (Number(el.value) || 0), 0,
+    );
+    const totalEl = slot.el.querySelector(".vk-total-value");
+    if (totalEl) totalEl.textContent = String(total);
+  };
+
+  const persistCriteria = async () => {
+    captureInputs();
+    if (working.length === 0) { window.alert(t("shell.criteria.atLeastOneRequired")); return; }
+    if (working.some((c) => !c.label.trim())) { window.alert(t("shell.criteria.labelRequired")); return; }
+    const savingSlot = logProgress("shell.criteria.saving");
+    savingSlot.abortBtn.remove();
+    try {
+      const totalMax = working.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
+      const criteriaRecord = Object.fromEntries(working.map((c, idx) => {
+        const baseId = c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`;
+        return [String(baseId), {
+          label: c.label,
+          description: c.description,
+          maxScore: Number(c.maxScore),
+          weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
+          candidateVisible: Boolean(c.candidateVisible),
+        }];
+      }));
+      const scalingRule = { ...(ctx.rubricScalingRule || {}), max_total: totalMax, practical_weight: 70 };
+      const rubricBody = await apiFetch(
+        `/api/admin/content/modules/${encodeURIComponent(ctx.moduleId)}/rubric-versions`,
+        getHeaders,
+        { method: "POST", body: JSON.stringify({ criteria: criteriaRecord, scalingRule, active: true }) },
+      );
+      const moduleVersionBody = await apiFetch(
+        `/api/admin/content/modules/${encodeURIComponent(ctx.moduleId)}/module-versions`,
+        getHeaders,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            taskText: ctx.moduleVersion.taskText,
+            assessorExpectedContent: ctx.moduleVersion.assessorExpectedContent,
+            candidateTaskConstraints: ctx.moduleVersion.candidateTaskConstraints || undefined,
+            assessmentBlueprint: typeof ctx.moduleVersion.assessmentBlueprint === "string"
+              ? ctx.moduleVersion.assessmentBlueprint
+              : (ctx.moduleVersion.assessmentBlueprint ? JSON.stringify(ctx.moduleVersion.assessmentBlueprint) : undefined),
+            rubricVersionId: rubricBody?.rubricVersion?.id,
+            promptTemplateVersionId: ctx.promptTemplateVersionId,
+            mcqSetVersionId: ctx.mcqSetVersionId,
+            submissionSchema: resolveSubmissionSchemaPayload(),
+          }),
+        },
+      );
+      latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
+      await loadModule(ctx.moduleId);
+      logResolveSlot(savingSlot, () => `<strong>${escapeHtml(t("shell.criteria.savedSuccess"))}</strong>`);
+      showToast(t("shell.criteria.savedSuccess"), "success");
+      logResolveSlot(slot, renderHtml, []);
+      showModuleActions();
+    } catch (err) {
+      const errMsg = String(err?.message ?? err);
+      logResolveSlot(savingSlot, () => `${escapeHtml(t("shell.criteria.savedError"))}: ${escapeHtml(errMsg)}`, [
+        { labelKey: "shell.action.retry", action: persistCriteria },
+      ]);
+    }
+  };
+
+  const regenerateFromTask = async () => {
+    captureInputs();
+    if (working.length > 0 && !window.confirm(t("shell.criteria.regenerateWarning"))) return;
+    if (!ctx.taskText.trim() || !ctx.assessorExpectedContent.trim()) {
+      window.alert(t("shell.criteria.regenerateMissingTask"));
+      return;
+    }
+    const regenSlot = logProgress("shell.criteria.regenerating");
+    regenSlot.abortBtn.remove();
+    let blueprintObj = null;
+    if (ctx.blueprint) {
+      if (typeof ctx.blueprint === "string") {
+        try { blueprintObj = JSON.parse(ctx.blueprint); } catch { blueprintObj = null; }
+      } else if (typeof ctx.blueprint === "object") {
+        blueprintObj = ctx.blueprint;
+      }
+    }
+    try {
+      const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          taskText: ctx.taskText,
+          assessorExpectedContent: ctx.assessorExpectedContent,
+          candidateTaskConstraints: ctx.candidateTaskConstraints || undefined,
+          certificationLevel: ctx.certificationLevel,
+          locale: ctx.locale,
+          ...(blueprintObj ? { blueprint: blueprintObj } : {}),
+        }),
+      });
+      const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
+      working.length = 0;
+      generated.forEach((c) => {
+        working.push({
+          id: String(c.id ?? slugifyLabel(c.label) ?? "criterion"),
+          label: c.label ?? "",
+          description: c.description ?? "",
+          maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
+          candidateVisible: Boolean(c.candidateVisible),
+        });
+      });
+      logResolveSlot(regenSlot, () => `<strong>${escapeHtml(t("shell.criteria.regenerated"))}</strong>`);
+      renderAndWire();
+    } catch (err) {
+      const errMsg = String(err?.message ?? err);
+      logResolveSlot(regenSlot, () => `${escapeHtml(t("shell.criteria.regenerateError"))}: ${escapeHtml(errMsg)}`, [
+        { labelKey: "shell.action.retry", action: regenerateFromTask },
+      ]);
+    }
+  };
+
+  const renderAndWire = () => {
+    logResolveSlot(slot, renderHtml, [
+      { labelKey: "shell.criteria.save", action: persistCriteria },
+      { labelKey: "shell.action.cancel", action: () => { logResolveSlot(slot, renderHtml, []); showModuleActions(); } },
+    ]);
+    const editor = slot.el.querySelector(".vk-editor");
+    if (!editor) return;
+    editor.addEventListener("input", (e) => {
+      if (e.target.classList?.contains("vk-weight")) refreshWeightLabels();
+    });
+    editor.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      if (btn.classList.contains("vk-remove")) {
+        captureInputs();
+        const idx = Number(btn.dataset.index);
+        if (Number.isFinite(idx)) { working.splice(idx, 1); renderAndWire(); }
+      } else if (btn.classList.contains("vk-add")) {
+        captureInputs();
+        working.push({
+          id: `new_criterion_${nextNewId++}`,
+          label: "",
+          description: "",
+          maxScore: 5,
+          candidateVisible: false,
+        });
+        renderAndWire();
+        const labels = slot.el.querySelectorAll(".vk-label");
+        labels[labels.length - 1]?.focus();
+      } else if (btn.classList.contains("vk-regenerate")) {
+        regenerateFromTask();
       }
     });
   };
