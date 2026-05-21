@@ -120,6 +120,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     assessorExpectedContent = "",
     candidateTaskConstraints = "",
     mcqQuestions = [],
+    criteria = null,
     versionChain = "",
     badgeClass = "shell",
     badgeText = "",
@@ -162,6 +163,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ? `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`
     : "";
   const mcqHtml = renderPreviewMcqQuestions(mcqQuestions, locale, t, tf);
+  const criteriaHtml = renderPreviewCriteria(criteria, t, tf);
 
   return `
     <div class="preview-module-header">
@@ -175,5 +177,60 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ${assessorExpectedContentHtml}
     ${mcqCountHtml}
     ${mcqHtml}
+    ${criteriaHtml}
   `.trim();
+}
+
+// B2 (#449 redesign): render assessment criteria as content in the preview pane.
+// `criteria` is the record-keyed shape stored on RubricVersion: { id: { label, description,
+// maxScore, weight, candidateVisible } }. Tolerates two historical shapes — rich (with label
+// + description) from #378 auto-gen, and sparse ({ weight }) from generic defaults. Returns
+// empty string when no criteria — section just doesn't render.
+function renderPreviewCriteria(criteria, t, tf) {
+  if (!criteria || typeof criteria !== "object") return "";
+  const entries = Object.entries(criteria);
+  if (entries.length === 0) return "";
+
+  const items = entries.map(([id, raw]) => {
+    const c = raw && typeof raw === "object" ? raw : {};
+    const label = typeof c.label === "string" && c.label.trim()
+      ? c.label
+      : humaniseCriterionId(String(id));
+    const description = typeof c.description === "string" ? c.description : "";
+    const maxScore = Number(c.maxScore) || 0;
+    const candidateVisible = Boolean(c.candidateVisible);
+    const weightHtml = maxScore > 0
+      ? `<span class="preview-criterion-weight">${escapeHtml(t("shell.criteria.weight"))}: ${maxScore}</span>`
+      : "";
+    const descHtml = description.trim()
+      ? `<p class="preview-criterion-desc">${escapeHtml(description)}</p>`
+      : "";
+    const visibleHtml = candidateVisible
+      ? `<p class="preview-criterion-visible">✓ ${escapeHtml(t("shell.criteria.visibleToCandidate"))}</p>`
+      : "";
+    return `
+      <li class="preview-criterion">
+        <div class="preview-criterion-header">
+          <span class="preview-criterion-title">${escapeHtml(label)}</span>
+          ${weightHtml}
+        </div>
+        ${descHtml}
+        ${visibleHtml}
+      </li>`;
+  }).join("");
+
+  const totalWeight = entries.reduce((sum, [, c]) => sum + (Number(c?.maxScore) || 0), 0);
+  const totalHtml = totalWeight > 0
+    ? `<p class="preview-criteria-total"><strong>${escapeHtml(t("shell.criteria.totalWeight"))}:</strong> ${totalWeight}</p>`
+    : "";
+
+  return `
+    <div class="preview-section-label">${escapeHtml(tf("shell.criteria.title", { count: entries.length }))}</div>
+    <ul class="preview-criteria-list">${items}</ul>
+    ${totalHtml}
+  `;
+}
+
+function humaniseCriterionId(id) {
+  return String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -2,6 +2,76 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.77 - 2026-05-21
+
+refactor(admin): Vurderingskriterier flyttet fra chat-bubble til preview-pane som innhold (#449 B2 redesign)
+
+UI-verifisering av v1.1.75/76 viste at chat-bubble (~200–280px bred) er
+strukturelt feil sted å plassere en kompleks editor med slider, checkbox
+og flerlinjet beskrivelse. Brukerens innspill (2026-05-21): "Vurderings-
+kriteria er innhold — vis det i den brede spalten og rediger gjennom
+'Rediger direkte'."
+
+Den observasjonen er strukturelt riktig: kriterier er like substantielt
+fag-innhold som oppgavetekst og MCQ — bare assessor-perspektiv i stedet
+for kandidat-perspektiv. Skåringsregler (vekting + bestått-terskler) er
+det som er "regler"; kriteriene er innhold.
+
+Endring:
+
+**Preview-pane (read-only):**
+- `buildPreviewHtml` i `admin-content-preview.js` aksepterer nytt
+  `criteria`-felt og rendrer en "Vurderingskriterier (N)"-seksjon med
+  ett kort per kriterium (label, beskrivelse, vekt, candidateVisible-
+  markering) + totalvekt under listen.
+- `renderPreview` i shell sender
+  `cfg.rubricVersion?.criteria` (eller draft-override) til
+  buildPreviewHtml.
+- Tolerant mot to historiske former: rik ({label, description,
+  maxScore, weight, candidateVisible}) fra #378 auto-gen og sparsom
+  ({weight}) fra generisk fallback. Sparsomme får humanisert label fra
+  snake_case id.
+
+**Preview-pane (direct-edit mode):**
+- `enterPreviewEditMode` har ny criteria-editor-seksjon nedenfor MCQ-
+  editor med `.vk-*` kort: tittel-input, beskrivelse-textarea, vekt-
+  slider 1-10 med live verdi, "Synlig for kandidat"-checkbox, ×-fjern
+  per kort, "+ Legg til kriterium" og "Generer på nytt fra planen".
+- Event-delegering på containeren — kun criteria-seksjonen
+  re-rendres ved add/remove (andre felt mister ikke ulagrede verdier).
+- WCAG: slider har aria-valuetext/min/max/now, × har aria-label, vk-
+  remove er ≥ 44px min touch target.
+- `confirm`-handler fanger criteria-state med
+  `captureLatestCriteriaState` + `buildCriteriaRecordFromEditorState`,
+  inkluderer som `criteria`-felt i sessionDraft via buildPreviewCandidate.
+
+**Lagrings-flyt:**
+- `resolveDraftForSave` returnerer nå også `criteria` fra sessionDraft.
+- `saveDraftBundleInBackground` har to grener: hvis sessionDraft har
+  eksplisitte criteria, POST som ny RubricVersion via legacy
+  `/rubric-versions`. Ellers som før via `/rubric-versions/ensure`
+  (idempotent, auto-gen ved første save).
+- ModuleVersion-create lenker uansett til den nye rubrikken.
+
+**Fjernet:**
+- `openCriteriaEditor` (chat-bubble entry) — slettet.
+- `renderEditableCriteria` (chat-bubble editor) — slettet. 216 linjer ut.
+- `.vk-editor`-CSS spesifikk for chat-bubble — erstattet.
+- `editCriteria`-action i `showModuleActions` peker nå til
+  `startDirectEditFlow` (samme target som "Rediger direkte"-knappen,
+  men beholder discoverability for brukere som leter etter
+  "Vurderingskriterier" spesifikt).
+
+**Helpers beholdt** (`humaniseCriterionId`, `slugifyLabel`) — brukes av
+ny preview/edit-kode.
+
+**Out of scope (B4):** per-locale label/description-redigering. I dag
+lagres kun aktiv locales tekst.
+
+tsc clean. 13/13 shell-state-tester passerer.
+
+Closes #449 (redesign). Part of #445 (B2).
+
 ## 1.1.76 - 2026-05-21
 
 fix(admin): B2 follow-up — duplicate menus after save + cramped card layout (#449)

@@ -730,6 +730,9 @@ function renderPreview() {
       assessorExpectedContent: hasDraft ? activeDraft.assessorExpectedContent : (cfg.moduleVersion?.assessorExpectedContent ?? ""),
       candidateTaskConstraints: hasDraft ? activeDraft.candidateTaskConstraints : (cfg.moduleVersion?.candidateTaskConstraints ?? ""),
       mcqQuestions: hasDraft ? (activeDraft.mcqQuestions ?? []) : (cfg.mcqSetVersion?.questions ?? []),
+      // B2 (#449): show Vurderingskriterier in the preview pane as content. Prefer draft
+      // overrides if user has edited via Rediger direkte; fall back to persisted rubric.
+      criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
       badgeText: hasDraft
@@ -852,6 +855,15 @@ function buildPreviewCandidate(patch) {
       ?? sessionDraft?.mcqQuestions
       ?? bundle?.selectedConfiguration?.mcqSetVersion?.questions
       ?? [],
+    // B2 (#449 redesign): criteria carry through preview drafts so direct-edit changes
+    // survive into sessionDraft and the subsequent save. Null = "no criteria override,
+    // use bundle's existing rubric". Object = "user explicitly set these criteria".
+    criteria:
+      patch.criteria !== undefined
+        ? patch.criteria
+        : baseDraft.criteria !== undefined
+          ? baseDraft.criteria
+          : sessionDraft?.criteria,
   };
 }
 
@@ -1084,8 +1096,12 @@ function resolveDraftForSave() {
   const mcqQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
+  // B2 (#449 redesign v1.1.77): explicit criteria override from direct-edit flow.
+  // null/undefined = "no override, let backend ensure-rubric handle it"; object = "POST
+  // these criteria as a new rubric version".
+  const criteria = sessionDraft?.criteria ?? null;
 
-  return { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions };
+  return { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria };
 }
 
 function resolveCurrentDraftSnapshot(locale = (previewLocale ?? currentLocale)) {
@@ -1473,7 +1489,7 @@ async function saveDraftBundleInBackground(options = {}) {
     return;
   }
 
-  const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions } = resolveDraftForSave();
+  const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria } = resolveDraftForSave();
   if (!localizeValueForLocale(taskText, currentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"));
     return;
@@ -1497,28 +1513,42 @@ async function saveDraftBundleInBackground(options = {}) {
       });
     }
 
-    // #447: single ensure-rubric call replaces the previous /generate/rubric +
-    // /rubric-versions sequence. Idempotent — reuses existing rubric on re-save.
-    let blueprintObject = null;
-    if (assessmentBlueprint) {
-      if (typeof assessmentBlueprint === "string") {
-        try { blueprintObject = JSON.parse(assessmentBlueprint); } catch { blueprintObject = null; }
-      } else if (typeof assessmentBlueprint === "object") {
-        blueprintObject = assessmentBlueprint;
+    // Rubric-save: two paths.
+    //   - If direct-edit produced explicit criteria (sessionDraft.criteria), POST them as a
+    //     new RubricVersion. This is the B2 (#449) flow — user edited criteria in preview.
+    //   - Otherwise call ensure-rubric (#447 idempotent flow). Backend reuses existing or
+    //     auto-generates from taskText if none exists.
+    let rubricBody;
+    if (criteria && Object.keys(criteria).length > 0) {
+      const existingScaling = bundle?.selectedConfiguration?.rubricVersion?.scalingRule ?? {};
+      const totalMax = Object.values(criteria).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
+      const scalingRule = { ...existingScaling, max_total: totalMax, practical_weight: existingScaling.practical_weight ?? 70 };
+      rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ criteria, scalingRule, active: true }),
+      });
+    } else {
+      let blueprintObject = null;
+      if (assessmentBlueprint) {
+        if (typeof assessmentBlueprint === "string") {
+          try { blueprintObject = JSON.parse(assessmentBlueprint); } catch { blueprintObject = null; }
+        } else if (typeof assessmentBlueprint === "object") {
+          blueprintObject = assessmentBlueprint;
+        }
       }
+      const ensureRubricBody = {
+        taskText: String(translateLocalizedText(taskText) ?? "").trim(),
+        assessorExpectedContent: String(translateLocalizedText(assessorExpectedContent) ?? "").trim(),
+        candidateTaskConstraints: String(translateLocalizedText(candidateTaskConstraints) ?? "").trim() || undefined,
+        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+        locale: currentLocale,
+        ...(blueprintObject ? { blueprint: blueprintObject } : {}),
+      };
+      rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions/ensure`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify(ensureRubricBody),
+      });
     }
-    const ensureRubricBody = {
-      taskText: String(translateLocalizedText(taskText) ?? "").trim(),
-      assessorExpectedContent: String(translateLocalizedText(assessorExpectedContent) ?? "").trim(),
-      candidateTaskConstraints: String(translateLocalizedText(candidateTaskConstraints) ?? "").trim() || undefined,
-      certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
-      locale: currentLocale,
-      ...(blueprintObject ? { blueprint: blueprintObject } : {}),
-    };
-    const rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions/ensure`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify(ensureRubricBody),
-    });
 
     const promptBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/prompt-template-versions`, getHeaders, {
       method: "POST",
@@ -2101,6 +2131,146 @@ function startDirectEditFlow() {
   enterPreviewEditMode();
 }
 
+// B2 (#449 redesign): builds inline criteria-editor HTML for use inside preview-edit-mode.
+// criteria is an array of { id, label, description, maxScore, candidateVisible }. Renders
+// as .vk-* cards (same classes the chat-bubble editor used; styles now sized for the wider
+// preview pane). Total weight + add/regenerate buttons at the bottom.
+function buildCriteriaEditorHtml(criteria, t, tf) {
+  const items = criteria.map((c, i) => {
+    const labelLabel = escapeHtml(t("shell.criteria.labelLabel"));
+    const descLabel = escapeHtml(t("shell.criteria.descLabel"));
+    const removeAria = escapeHtml(t("shell.criteria.removeAria"));
+    const weightText = escapeHtml(t("shell.criteria.weight"));
+    return `
+      <li class="vk-card" data-criterion-index="${i}">
+        <div class="vk-row">
+          <input class="vk-label" type="text" value="${escapeHtml(c.label)}"
+                 placeholder="${escapeHtml(t("shell.criteria.labelPlaceholder"))}"
+                 aria-label="${labelLabel}" />
+          <button type="button" class="vk-remove" data-criterion-index="${i}"
+                  aria-label="${removeAria}">×</button>
+        </div>
+        <textarea class="vk-description" rows="2"
+                  placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
+                  aria-label="${descLabel}">${escapeHtml(c.description)}</textarea>
+        <label class="vk-weight-label">
+          <span>${weightText}:</span>
+          <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
+                 aria-label="${weightText}"
+                 aria-valuemin="1" aria-valuemax="10" aria-valuenow="${c.maxScore}"
+                 aria-valuetext="${c.maxScore} av 10" />
+          <span class="vk-weight-value">${c.maxScore}</span>
+        </label>
+        <label class="vk-visible-label">
+          <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} />
+          ${escapeHtml(t("shell.criteria.visibleToCandidate"))}
+        </label>
+      </li>`;
+  }).join("");
+  const total = criteria.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0);
+  return `
+    <ul class="vk-list">${items}</ul>
+    <p class="vk-total"><strong>${escapeHtml(t("shell.criteria.totalWeight"))}:</strong> <span class="vk-total-value">${total}</span></p>
+    <div class="vk-actions-row">
+      <button type="button" class="vk-add vk-add-btn">+ ${escapeHtml(t("shell.criteria.add"))}</button>
+      <button type="button" class="vk-regenerate vk-add-btn">${escapeHtml(t("shell.criteria.regenerate"))}</button>
+    </div>`;
+}
+
+// B2 (#449 redesign): one-shot DOM-to-state capture, used when leaving edit mode. Re-reads
+// every visible criterion card and returns a fresh array; falls back to the closure's last
+// known state if the container has already been torn down. Same shape as criteriaEditorState
+// items but read from inputs to avoid stale-state bugs.
+function captureLatestCriteriaState(container, fallbackState) {
+  if (!container) return Array.isArray(fallbackState) ? fallbackState.slice() : [];
+  const cards = container.querySelectorAll(".vk-card");
+  if (cards.length === 0) return [];
+  return Array.from(cards).map((card, idx) => {
+    const fallback = (Array.isArray(fallbackState) && fallbackState[idx]) ? fallbackState[idx] : {};
+    return {
+      id: fallback.id,
+      label: card.querySelector(".vk-label")?.value.trim() ?? "",
+      description: card.querySelector(".vk-description")?.value.trim() ?? "",
+      maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
+      candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
+    };
+  });
+}
+
+// B2 (#449 redesign): transform editor-state array into storage-shape record (id-keyed).
+// Drops criteria with blank labels (they're noise). Auto-id new criteria from a slug of
+// the label, falling back to "criterion_N" if the slug ends up empty. Weight is computed
+// as a fraction of maxScore over the total — keeps the existing scalingRule.max_total math
+// happy. Returns null when no usable criteria, so callers can fall through to ensure-rubric.
+function buildCriteriaRecordFromEditorState(criteria) {
+  const valid = (criteria ?? []).filter((c) => c && c.label && c.label.trim());
+  if (valid.length === 0) return null;
+  const totalMax = valid.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
+  return Object.fromEntries(valid.map((c, idx) => {
+    const baseId = c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`;
+    return [String(baseId), {
+      label: c.label,
+      description: c.description ?? "",
+      maxScore: Number(c.maxScore),
+      weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
+      candidateVisible: Boolean(c.candidateVisible),
+    }];
+  }));
+}
+
+// B2 (#449 redesign): fetch new criteria from /generate/rubric using the current taskText
+// and assessor expectations in the form (NOT the persisted versions — the user may have
+// edited them in this same direct-edit session). Calls onSuccess with the new criteria
+// array so the caller can update its state and re-render.
+async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
+  const taskText = document.getElementById("previewEditTaskText")?.value.trim() ?? "";
+  const assessorText = document.getElementById("previewEditGuidanceText")?.value.trim() ?? "";
+  const constraintsText = document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() ?? "";
+  if (!taskText || !assessorText) {
+    window.alert(t("shell.criteria.regenerateMissingTask"));
+    return;
+  }
+  // Show inline progress in the criteria container.
+  const originalHtml = criteriaContainer.innerHTML;
+  criteriaContainer.innerHTML = `<p class="vk-total">${escapeHtml(t("shell.criteria.regenerating"))}</p>`;
+  let blueprintObj = null;
+  const bp = bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint;
+  if (bp) {
+    if (typeof bp === "string") {
+      try { blueprintObj = JSON.parse(bp); } catch { blueprintObj = null; }
+    } else if (typeof bp === "object") {
+      blueprintObj = bp;
+    }
+  }
+  try {
+    const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        taskText,
+        assessorExpectedContent: assessorText,
+        candidateTaskConstraints: constraintsText || undefined,
+        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+        locale: previewLocale ?? currentLocale,
+        ...(blueprintObj ? { blueprint: blueprintObj } : {}),
+      }),
+    });
+    const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
+    const mapped = generated.map((c) => ({
+      id: String(c.id ?? slugifyLabel(c.label) ?? "criterion"),
+      label: c.label ?? "",
+      description: c.description ?? "",
+      maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
+      candidateVisible: Boolean(c.candidateVisible),
+    }));
+    onSuccess(mapped);
+    showToast(t("shell.criteria.regenerated"), "success");
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    criteriaContainer.innerHTML = originalHtml;
+    showToast(`${t("shell.criteria.regenerateError")}: ${errMsg}`, "error");
+  }
+}
+
 function enterPreviewEditMode() {
   const editingLocale = previewLocale ?? currentLocale;
   const currentTitle = localizeValueForLocale(sessionDraft?.title ?? bundle?.module?.title ?? "", editingLocale) || "";
@@ -2117,6 +2287,24 @@ function enterPreviewEditMode() {
     editingLocale,
   );
   const currentMcqQuestions = resolveEditableMcqQuestions(editingLocale);
+  // B2 (#449 redesign): pull criteria from sessionDraft override OR existing rubric. Stored
+  // as record (id-keyed) — normalize to an ordered array for the editor. Mutated locally;
+  // captured back into a record on confirm. Tolerates rich + sparse shapes (#378 vs default).
+  const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
+  const currentCriteria = sourceCriteria && typeof sourceCriteria === "object"
+    ? Object.entries(sourceCriteria).map(([id, raw]) => {
+      const c = raw && typeof raw === "object" ? raw : {};
+      return {
+        id: String(id),
+        label: typeof c.label === "string" && c.label.trim() ? c.label : humaniseCriterionId(String(id)),
+        description: typeof c.description === "string" ? c.description : "",
+        maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
+        candidateVisible: Boolean(c.candidateVisible),
+      };
+    })
+    : [];
+  let criteriaEditorState = currentCriteria.map((c) => ({ ...c }));
+  let nextNewCriterionId = 1;
 
   // Lock locale bar and signal edit mode visually
   const previewPaneEl = document.querySelector(".preview-pane");
@@ -2197,6 +2385,12 @@ function enterPreviewEditMode() {
     `
     : "";
 
+  const renderCriteriaEditor = () => buildCriteriaEditorHtml(criteriaEditorState, t, tf);
+  const criteriaSectionHtml = bundle?.selectedConfiguration?.rubricVersion || criteriaEditorState.length > 0
+    ? `<div class="preview-section-label">${escapeHtml(tf("shell.criteria.title", { count: criteriaEditorState.length }))}</div>
+       <div id="previewEditCriteriaContainer">${renderCriteriaEditor()}</div>`
+    : "";
+
   previewContent.innerHTML = `
     <div class="preview-module-header">
       <input id="previewEditTitle" class="preview-edit-title" value="${escapedTitle}"
@@ -2213,6 +2407,7 @@ function enterPreviewEditMode() {
     <textarea id="previewEditGuidanceText" class="preview-edit-textarea preview-edit-textarea--secondary"
       aria-label="${labelGuidance}">${escapedGuidance}</textarea>
     ${mcqHtml}
+    ${criteriaSectionHtml}
     <div class="preview-edit-actions">
       <button id="previewEditCancel" class="btn-secondary">${escapeHtml(t("shell.action.cancel"))}</button>
       <button id="previewEditConfirm" class="btn-primary">${escapeHtml(t("shell.directEdit.submit"))}</button>
@@ -2221,6 +2416,74 @@ function enterPreviewEditMode() {
 
   scrollPreviewToTop();
   document.getElementById("previewEditTitle")?.focus();
+
+  // B2 (#449 redesign): wire up criteria-editor interactions. Captures DOM into state,
+  // mutates, re-renders the criteria container only (not the full preview, since other
+  // fields would lose their unsaved values). Uses event delegation on the container.
+  const criteriaContainer = document.getElementById("previewEditCriteriaContainer");
+  if (criteriaContainer) {
+    const captureCriteriaFromDom = () => {
+      const cards = criteriaContainer.querySelectorAll(".vk-card");
+      criteriaEditorState = Array.from(cards).map((card, idx) => {
+        const existing = criteriaEditorState[idx] ?? {};
+        return {
+          id: existing.id,
+          label: card.querySelector(".vk-label")?.value.trim() ?? "",
+          description: card.querySelector(".vk-description")?.value.trim() ?? "",
+          maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
+          candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
+        };
+      });
+    };
+
+    const reRenderCriteria = () => {
+      criteriaContainer.innerHTML = renderCriteriaEditor();
+    };
+
+    criteriaContainer.addEventListener("input", (e) => {
+      if (e.target.classList?.contains("vk-weight")) {
+        const card = e.target.closest(".vk-card");
+        const valueEl = card?.querySelector(".vk-weight-value");
+        if (valueEl) valueEl.textContent = String(e.target.value);
+        const total = Array.from(criteriaContainer.querySelectorAll(".vk-weight"))
+          .reduce((sum, el) => sum + (Number(el.value) || 0), 0);
+        const totalEl = criteriaContainer.querySelector(".vk-total-value");
+        if (totalEl) totalEl.textContent = String(total);
+      }
+    });
+
+    criteriaContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      if (btn.classList.contains("vk-remove")) {
+        captureCriteriaFromDom();
+        const idx = Number(btn.dataset.criterionIndex);
+        if (Number.isFinite(idx)) {
+          criteriaEditorState.splice(idx, 1);
+          reRenderCriteria();
+        }
+      } else if (btn.classList.contains("vk-add")) {
+        captureCriteriaFromDom();
+        criteriaEditorState.push({
+          id: `new_criterion_${nextNewCriterionId++}`,
+          label: "",
+          description: "",
+          maxScore: 5,
+          candidateVisible: false,
+        });
+        reRenderCriteria();
+        const inputs = criteriaContainer.querySelectorAll(".vk-label");
+        inputs[inputs.length - 1]?.focus();
+      } else if (btn.classList.contains("vk-regenerate")) {
+        captureCriteriaFromDom();
+        if (criteriaEditorState.length > 0 && !window.confirm(t("shell.criteria.regenerateWarning"))) return;
+        regenerateCriteriaFromTask(criteriaContainer, (newList) => {
+          criteriaEditorState = newList;
+          reRenderCriteria();
+        });
+      }
+    });
+  }
 
   function exitEditMode() {
     if (previewPaneEl) previewPaneEl.classList.remove("preview-pane--editing");
@@ -2237,6 +2500,13 @@ function enterPreviewEditMode() {
     const newTaskText = document.getElementById("previewEditTaskText").value.trim() || currentTaskText;
     const newGuidanceText = document.getElementById("previewEditGuidanceText").value.trim() || currentGuidanceText;
     const newCandidateTaskConstraints = document.getElementById("previewEditCandidateTaskConstraints").value.trim() || currentCandidateTaskConstraints;
+    // B2 (#449 redesign): capture criteria-editor state into a normalized record before
+    // exitEditMode tears down the DOM. transform to storage shape (id-keyed) with weight
+    // derived from maxScore. Empty/blank labels are dropped (matching the validation in
+    // the save flow). Returns null when criteria section wasn't rendered (no rubric).
+    const newCriteriaRecord = criteriaContainer
+      ? buildCriteriaRecordFromEditorState(captureLatestCriteriaState(criteriaContainer, criteriaEditorState))
+      : null;
     const newMcqQuestions = currentMcqQuestions.map((question, questionIndex) => {
       const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
       const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
@@ -2274,6 +2544,7 @@ function enterPreviewEditMode() {
           assessorExpectedContent: localizedDraft.assessorExpectedContent,
           candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
           mcqQuestions: localizedMcqQuestions,
+          criteria: newCriteriaRecord,
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
@@ -2288,6 +2559,7 @@ function enterPreviewEditMode() {
           assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
           candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
           mcqQuestions: buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
+          criteria: newCriteriaRecord,
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
@@ -2331,7 +2603,9 @@ function showModuleActions() {
       },
     },
     directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-    editCriteria: { labelKey: "shell.criteria.action", action: () => openCriteriaEditor() },
+    // B2 (#449 redesign v1.1.77): "Rediger vurderingskriterier"-snarvei til direct-edit.
+    // Egen chat-bubble-editor er fjernet — kriterier redigeres som innhold i preview.
+    editCriteria: { labelKey: "shell.criteria.action", action: () => startDirectEditFlow() },
     editAdvanced: { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
@@ -2590,52 +2864,10 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
   renderAndWire();
 }
 
-// B2 (#449): editable Vurderingskriterier in shell. Opens an editor for the module's active
-// rubric letting authors refine label / description / weight / candidateVisible per criterion,
-// add new criteria, remove existing, or regenerate from the current taskText + blueprint.
-// Saving creates a new RubricVersion and a new ModuleVersion linking it.
-async function openCriteriaEditor() {
-  const moduleId = selectedModuleId;
-  const rubric = bundle?.selectedConfiguration?.rubricVersion;
-  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
-  if (!moduleId || !rubric || !moduleVersion) {
-    logBot(() => t("shell.criteria.unavailable"));
-    return;
-  }
-
-  // Normalize rubric.criteria (a record keyed by id) into an ordered array for the editor.
-  // Tolerates two shapes: rich ({label, description, maxScore, weight, candidateVisible}) from
-  // #378 auto-generation, and generic ({weight}) from the default fallback. Missing fields
-  // are filled with sane defaults so the editor renders consistently.
-  const criteriaRecord = rubric.criteria && typeof rubric.criteria === "object" ? rubric.criteria : {};
-  const working = Object.entries(criteriaRecord).map(([id, raw]) => {
-    const c = raw && typeof raw === "object" ? raw : {};
-    return {
-      id: String(id),
-      label: typeof c.label === "string" && c.label.trim() ? c.label : humaniseCriterionId(String(id)),
-      description: typeof c.description === "string" ? c.description : "",
-      maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
-      candidateVisible: Boolean(c.candidateVisible),
-    };
-  });
-
-  const ctx = {
-    moduleId,
-    taskText: String(translateLocalizedText(moduleVersion.taskText) ?? "").trim(),
-    assessorExpectedContent: String(translateLocalizedText(moduleVersion.assessorExpectedContent) ?? "").trim(),
-    candidateTaskConstraints: String(translateLocalizedText(moduleVersion.candidateTaskConstraints) ?? "").trim(),
-    certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
-    locale: currentLocale,
-    blueprint: moduleVersion.assessmentBlueprint ?? null,
-    rubricScalingRule: rubric.scalingRule ?? {},
-    promptTemplateVersionId: bundle?.selectedConfiguration?.promptTemplateVersion?.id,
-    mcqSetVersionId: bundle?.selectedConfiguration?.mcqSetVersion?.id,
-    moduleVersion,
-  };
-
-  renderEditableCriteria(working, ctx);
-}
-
+// B2 helpers — used by enterPreviewEditMode and regenerateCriteriaFromTask. Hoisted as
+// function declarations so they're visible across the file. The chat-bubble criteria editor
+// (openCriteriaEditor + renderEditableCriteria) was removed in v1.1.77 when B2 was moved into
+// the preview pane / direct-edit flow — these two utilities are all that remained worth keeping.
 function humaniseCriterionId(id) {
   return String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -2648,223 +2880,6 @@ function slugifyLabel(label) {
   return slug || null;
 }
 
-function renderEditableCriteria(working, ctx) {
-  const slot = logProgress("shell.criteria.opening");
-  slot.abortBtn.remove();
-  let nextNewId = 1;
-
-  const renderHtml = () => {
-    const total = working.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0);
-    const items = working.map((c, i) => `
-      <li class="vk-card" data-index="${i}">
-        <div class="vk-row">
-          <input class="vk-label" type="text" value="${escapeHtml(c.label)}"
-                 placeholder="${escapeHtml(t("shell.criteria.labelPlaceholder"))}"
-                 aria-label="${escapeHtml(t("shell.criteria.labelLabel"))}" />
-          <button type="button" class="vk-remove" data-index="${i}"
-                  aria-label="${escapeHtml(t("shell.criteria.removeAria"))}">×</button>
-        </div>
-        <textarea class="vk-description chat-textarea" rows="2"
-                  placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
-                  aria-label="${escapeHtml(t("shell.criteria.descLabel"))}">${escapeHtml(c.description)}</textarea>
-        <label class="vk-weight-label">
-          <span>${escapeHtml(t("shell.criteria.weight"))}:</span>
-          <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
-                 aria-label="${escapeHtml(t("shell.criteria.weight"))}" />
-          <span class="vk-weight-value">${c.maxScore}</span>
-        </label>
-        <label class="vk-visible-label">
-          <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} />
-          ${escapeHtml(t("shell.criteria.visibleToCandidate"))}
-        </label>
-      </li>`).join("");
-    return `<strong>${escapeHtml(tf("shell.criteria.title", { count: working.length }))}</strong>
-      <p class="vk-intro">${escapeHtml(t("shell.criteria.intro"))}</p>
-      <div class="vk-editor">
-        <ul class="vk-list">${items}</ul>
-        <p class="vk-total"><strong>${escapeHtml(t("shell.criteria.totalWeight"))}:</strong> <span class="vk-total-value">${total}</span></p>
-        <button type="button" class="vk-add bp-add-btn">+ ${escapeHtml(t("shell.criteria.add"))}</button>
-        <button type="button" class="vk-regenerate bp-add-btn">${escapeHtml(t("shell.criteria.regenerate"))}</button>
-      </div>`;
-  };
-
-  const captureInputs = () => {
-    const cards = slot.el.querySelectorAll(".vk-card");
-    const newArr = [];
-    cards.forEach((card, idx) => {
-      const existing = working[idx] ?? {};
-      newArr.push({
-        id: existing.id,
-        label: card.querySelector(".vk-label")?.value.trim() ?? "",
-        description: card.querySelector(".vk-description")?.value.trim() ?? "",
-        maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
-        candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
-      });
-    });
-    working.length = 0;
-    working.push(...newArr);
-  };
-
-  const refreshWeightLabels = () => {
-    slot.el.querySelectorAll(".vk-card").forEach((card) => {
-      const weight = Number(card.querySelector(".vk-weight")?.value) || 0;
-      const v = card.querySelector(".vk-weight-value");
-      if (v) v.textContent = String(weight);
-    });
-    const total = Array.from(slot.el.querySelectorAll(".vk-weight")).reduce(
-      (sum, el) => sum + (Number(el.value) || 0), 0,
-    );
-    const totalEl = slot.el.querySelector(".vk-total-value");
-    if (totalEl) totalEl.textContent = String(total);
-  };
-
-  const persistCriteria = async () => {
-    captureInputs();
-    if (working.length === 0) { window.alert(t("shell.criteria.atLeastOneRequired")); return; }
-    if (working.some((c) => !c.label.trim())) { window.alert(t("shell.criteria.labelRequired")); return; }
-    const savingSlot = logProgress("shell.criteria.saving");
-    savingSlot.abortBtn.remove();
-    try {
-      const totalMax = working.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
-      const criteriaRecord = Object.fromEntries(working.map((c, idx) => {
-        const baseId = c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`;
-        return [String(baseId), {
-          label: c.label,
-          description: c.description,
-          maxScore: Number(c.maxScore),
-          weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
-          candidateVisible: Boolean(c.candidateVisible),
-        }];
-      }));
-      const scalingRule = { ...(ctx.rubricScalingRule || {}), max_total: totalMax, practical_weight: 70 };
-      const rubricBody = await apiFetch(
-        `/api/admin/content/modules/${encodeURIComponent(ctx.moduleId)}/rubric-versions`,
-        getHeaders,
-        { method: "POST", body: JSON.stringify({ criteria: criteriaRecord, scalingRule, active: true }) },
-      );
-      const moduleVersionBody = await apiFetch(
-        `/api/admin/content/modules/${encodeURIComponent(ctx.moduleId)}/module-versions`,
-        getHeaders,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            taskText: ctx.moduleVersion.taskText,
-            assessorExpectedContent: ctx.moduleVersion.assessorExpectedContent,
-            candidateTaskConstraints: ctx.moduleVersion.candidateTaskConstraints || undefined,
-            assessmentBlueprint: typeof ctx.moduleVersion.assessmentBlueprint === "string"
-              ? ctx.moduleVersion.assessmentBlueprint
-              : (ctx.moduleVersion.assessmentBlueprint ? JSON.stringify(ctx.moduleVersion.assessmentBlueprint) : undefined),
-            rubricVersionId: rubricBody?.rubricVersion?.id,
-            promptTemplateVersionId: ctx.promptTemplateVersionId,
-            mcqSetVersionId: ctx.mcqSetVersionId,
-            submissionSchema: resolveSubmissionSchemaPayload(),
-          }),
-        },
-      );
-      latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
-      // loadModule itself logs a fresh showModuleActions menu at the end (see line ~1998),
-      // so we must NOT call showModuleActions() here — that produced two duplicate menus
-      // in v1.1.75. Clear the editor slot's choices, write the success message into the
-      // savingSlot, and let loadModule handle the next-step prompt.
-      logResolveSlot(slot, renderHtml, []);
-      logResolveSlot(savingSlot, () => `<strong>${escapeHtml(t("shell.criteria.savedSuccess"))}</strong>`);
-      showToast(t("shell.criteria.savedSuccess"), "success");
-      await loadModule(ctx.moduleId);
-    } catch (err) {
-      const errMsg = String(err?.message ?? err);
-      logResolveSlot(savingSlot, () => `${escapeHtml(t("shell.criteria.savedError"))}: ${escapeHtml(errMsg)}`, [
-        { labelKey: "shell.action.retry", action: persistCriteria },
-      ]);
-    }
-  };
-
-  const regenerateFromTask = async () => {
-    captureInputs();
-    if (working.length > 0 && !window.confirm(t("shell.criteria.regenerateWarning"))) return;
-    if (!ctx.taskText.trim() || !ctx.assessorExpectedContent.trim()) {
-      window.alert(t("shell.criteria.regenerateMissingTask"));
-      return;
-    }
-    const regenSlot = logProgress("shell.criteria.regenerating");
-    regenSlot.abortBtn.remove();
-    let blueprintObj = null;
-    if (ctx.blueprint) {
-      if (typeof ctx.blueprint === "string") {
-        try { blueprintObj = JSON.parse(ctx.blueprint); } catch { blueprintObj = null; }
-      } else if (typeof ctx.blueprint === "object") {
-        blueprintObj = ctx.blueprint;
-      }
-    }
-    try {
-      const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          taskText: ctx.taskText,
-          assessorExpectedContent: ctx.assessorExpectedContent,
-          candidateTaskConstraints: ctx.candidateTaskConstraints || undefined,
-          certificationLevel: ctx.certificationLevel,
-          locale: ctx.locale,
-          ...(blueprintObj ? { blueprint: blueprintObj } : {}),
-        }),
-      });
-      const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-      working.length = 0;
-      generated.forEach((c) => {
-        working.push({
-          id: String(c.id ?? slugifyLabel(c.label) ?? "criterion"),
-          label: c.label ?? "",
-          description: c.description ?? "",
-          maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
-          candidateVisible: Boolean(c.candidateVisible),
-        });
-      });
-      logResolveSlot(regenSlot, () => `<strong>${escapeHtml(t("shell.criteria.regenerated"))}</strong>`);
-      renderAndWire();
-    } catch (err) {
-      const errMsg = String(err?.message ?? err);
-      logResolveSlot(regenSlot, () => `${escapeHtml(t("shell.criteria.regenerateError"))}: ${escapeHtml(errMsg)}`, [
-        { labelKey: "shell.action.retry", action: regenerateFromTask },
-      ]);
-    }
-  };
-
-  const renderAndWire = () => {
-    logResolveSlot(slot, renderHtml, [
-      { labelKey: "shell.criteria.save", action: persistCriteria },
-      { labelKey: "shell.action.cancel", action: () => { logResolveSlot(slot, renderHtml, []); showModuleActions(); } },
-    ]);
-    const editor = slot.el.querySelector(".vk-editor");
-    if (!editor) return;
-    editor.addEventListener("input", (e) => {
-      if (e.target.classList?.contains("vk-weight")) refreshWeightLabels();
-    });
-    editor.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      if (btn.classList.contains("vk-remove")) {
-        captureInputs();
-        const idx = Number(btn.dataset.index);
-        if (Number.isFinite(idx)) { working.splice(idx, 1); renderAndWire(); }
-      } else if (btn.classList.contains("vk-add")) {
-        captureInputs();
-        working.push({
-          id: `new_criterion_${nextNewId++}`,
-          label: "",
-          description: "",
-          maxScore: 5,
-          candidateVisible: false,
-        });
-        renderAndWire();
-        const labels = slot.el.querySelectorAll(".vk-label");
-        labels[labels.length - 1]?.focus();
-      } else if (btn.classList.contains("vk-regenerate")) {
-        regenerateFromTask();
-      }
-    });
-  };
-
-  renderAndWire();
-}
 
 async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null) {
   if (existingModuleId) {
