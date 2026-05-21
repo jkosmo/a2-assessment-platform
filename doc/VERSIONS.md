@@ -2,6 +2,53 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.70 - 2026-05-21
+
+refactor(admin): harmonize Avansert editor terminology — Vurderingskriterier / Skåringsregler (#452, part of #445)
+
+**Why:** Avansert editor used three different Norwegian terms for two
+underlying concepts: "Vurderingsregler" and "Rubrikk" both referred to
+the same `RubricVersion` (criteria + scaling rule), while
+"Vurderingspolicy" referred to the separate `ModuleVersion.assessmentPolicyJson`
+(scoring weights + total pass thresholds). Teachers couldn't tell that
+the first two were synonyms or that the third was something different,
+and the term fragmentation would worsen when shell-side
+"Vurderingskriterier" was introduced later in B1–B4.
+
+**Change:** Pure i18n string update for nb / nn / en-GB. Underlying
+field names in code and API (`rubric.criteria`, `assessmentPolicyJson`,
+etc.) are unchanged — no schema migration, no API contract change.
+
+Per #445 §1.2:
+
+| Old UI term | New UI term | Underlying field |
+|---|---|---|
+| "Vurderingsregler" / "Vurderingsreglar" / "Rubrikk" / "Submission scoring (rules)" | **Vurderingskriterier** / **Vurderingskriterium** / **Assessment criteria** | `rubric.criteria` + `rubric.scalingRule` |
+| "Vurderingspolicy" / "Assessment policy" | **Skåringsregler** / **Skåringsreglar** / **Scoring rules** | `assessmentPolicyJson` |
+
+**Keys updated** (across both top-level admin-translations object and
+the nested participant-translations object — both have admin keys):
+- `adminContent.rubric.title`, `adminContent.rubric.create`
+- `adminContent.cards.card.rubric`, `adminContent.cards.card.assessmentPolicy`
+- `adminContent.jsonFallback.rubric`, `adminContent.jsonFallback.versionDetails`
+- `adminContent.dialog.rubric.title`, `adminContent.dialog.assessmentPolicy.title`
+- `adminContent.moduleVersion.assessmentPolicyJson`, `adminContent.moduleVersion.rubricVersionId`
+- `adminContent.message.rubricCreated`
+- `adminContent.help.rubricOverview`, `adminContent.help.assessmentPolicyJson`
+
+Help texts rewritten to clarify what each concept does for content
+authors (per #445 §1.2 — "Hva kandidatens praktiske svar skal
+vurderes på" / "Hvordan praktisk-skår og flervalgs-skår vektes
+sammen, og hvilken samlet skår som kreves for bestått").
+
+**Out of scope:** Adding new info-icons / tooltip UI elements (the
+existing help texts already serve this purpose). Code-side field
+renames (`rubric.criteria` → `criteria` etc.) — deliberately not done
+to avoid migration cost.
+
+`tsc --noEmit` clean. Visual verification expected on stage. Closes
+#452. Part of #445 (B5).
+
 ## 1.1.69 - 2026-05-21
 
 refactor: move #378 auto-rubric to backend ensure-rubric endpoint (#447)
