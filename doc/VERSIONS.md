@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.72 - 2026-05-21
+
+fix(admin): Avansert save broke silently on shell-handoff (v1.1.71 regression, #447 follow-up)
+
+UI test surfaced a regression introduced by v1.1.69 (#447) and not
+caught by v1.1.71 (B1):
+
+**Flow that broke:**
+1. User creates new module in shell (DB row exists but no
+   RubricVersion / PromptTemplateVersion yet)
+2. User clicks "Åpne i Avansert (lagre der)" handoff
+3. populateFormFromModuleExport wipes the i18n defaults that
+   setDefaultFormValues had loaded into rubricCriteriaJsonInput,
+   rubricScalingRuleJsonInput, promptSystemPromptInput,
+   promptUserPromptTemplateInput, promptExamplesJsonInput — because
+   for a new module rubricVersion/promptTemplateVersion are null
+4. User clicks "Lagre alle endringer" in Avansert
+5. Title PATCH succeeds (200). handleCreateRubricVersion calls
+   parseJsonField("") → throws "Invalid JSON". Caught by outer
+   try/catch and shown as toast, but easy to miss — no save
+   completes from rubric onwards. All cards stay "Ulagret".
+
+**Fix:**
+- handleCreateRubricVersion: treat empty/whitespace input as `{}`
+  before parseJsonField. The downstream `criteriaIsEmpty` check
+  then correctly identifies this state and routes through the
+  ensure-rubric endpoint added in #447.
+- handleCreatePromptTemplateVersion: fall back to i18n defaults
+  (`adminContent.defaults.systemPrompt`, `.userPromptTemplate`,
+  `.examplesJson`) when form fields are empty. Mirrors shell's
+  `resolveCurrentPromptPayload` so shell-save and Avansert-save
+  produce equivalent results.
+
+After this fix, the v1.1.71 verification step 5 (shell → Avansert →
+Lagre → task-specific rubric appears) works end-to-end.
+
+`tsc --noEmit` clean.
+
 ## 1.1.71 - 2026-05-21
 
 feat(admin): editable Vurderingsplan card in conversational shell (#448, B1 of #445)

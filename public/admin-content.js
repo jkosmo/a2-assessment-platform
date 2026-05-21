@@ -1978,8 +1978,13 @@ async function handleDuplicateSelectedModule() {
 
 async function handleCreateRubricVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
-  const criteria = parseJsonField(rubricCriteriaJsonInput.value, "adminContent.rubric.criteria");
-  const scalingRule = parseJsonField(rubricScalingRuleJsonInput.value, "adminContent.rubric.scalingRule");
+  // Treat empty / whitespace input as an empty object so the handoff-from-shell scenario
+  // (no rubric version yet) doesn't blow up on parseJsonField. Fixes v1.1.71 regression
+  // where save threw silently after the title PATCH.
+  const criteriaRaw = (rubricCriteriaJsonInput.value ?? "").trim();
+  const scalingRuleRaw = (rubricScalingRuleJsonInput.value ?? "").trim();
+  const criteria = criteriaRaw ? parseJsonField(criteriaRaw, "adminContent.rubric.criteria") : {};
+  const scalingRule = scalingRuleRaw ? parseJsonField(scalingRuleRaw, "adminContent.rubric.scalingRule") : {};
 
   // #447: when criteria is empty (typical of a draft handed off from shell), call the
   // ensure-rubric endpoint instead — backend auto-generates from taskText if the module
@@ -2033,13 +2038,17 @@ async function handleCreateRubricVersion(options = { silent: false }) {
 
 async function handleCreatePromptTemplateVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
+  // Fall back to i18n defaults when the form is empty (typical of a shell handoff where
+  // populateFormFromModuleExport wiped setDefaultFormValues' contents). Mirrors the shell
+  // resolveCurrentPromptPayload behaviour so shell-save and Avansert-save produce
+  // equivalent results. #447 follow-up.
+  const systemPromptInput = (promptSystemPromptInput.value ?? "").trim() || t("adminContent.defaults.systemPrompt");
+  const userPromptInput = (promptUserPromptTemplateInput.value ?? "").trim() || t("adminContent.defaults.userPromptTemplate");
+  const examplesInput = (promptExamplesJsonInput.value ?? "").trim() || t("adminContent.defaults.examplesJson");
   const payload = {
-    systemPrompt: parseLocalizedTextField(promptSystemPromptInput.value, "adminContent.prompt.systemPrompt"),
-    userPromptTemplate: parseLocalizedTextField(
-      promptUserPromptTemplateInput.value,
-      "adminContent.prompt.userPromptTemplate",
-    ),
-    examples: parseJsonField(promptExamplesJsonInput.value, "adminContent.prompt.examplesJson"),
+    systemPrompt: parseLocalizedTextField(systemPromptInput, "adminContent.prompt.systemPrompt"),
+    userPromptTemplate: parseLocalizedTextField(userPromptInput, "adminContent.prompt.userPromptTemplate"),
+    examples: parseJsonField(examplesInput, "adminContent.prompt.examplesJson"),
   };
 
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/prompt-template-versions`, headers, {
