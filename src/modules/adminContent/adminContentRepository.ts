@@ -213,7 +213,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               versionNo: true,
               criteriaJson: true,
               scalingRuleJson: true,
-              passRuleJson: true,
               active: true,
               createdAt: true,
               updatedAt: true,
@@ -297,7 +296,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       versionNo: number;
       criteriaJson: string;
       scalingRuleJson: string;
-      passRuleJson: string;
       active: boolean;
     }) {
       return client.rubricVersion.create({

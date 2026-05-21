@@ -104,7 +104,6 @@ function buildSubmissionFixture() {
           responsible_use: "0-4",
         }),
         scalingRuleJson: JSON.stringify({ practical_weight: 70, max_total: 20 }),
-        passRuleJson: JSON.stringify({ total_min: 70 }),
       },
     },
     mcqAttempts: [

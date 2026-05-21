@@ -41,7 +41,6 @@ async function setupModule(suffix: string) {
     .send({
       criteria: { relevance: "0-4", quality: "0-4" },
       scalingRule: { practical_weight: 70, max_total: 20 },
-      passRule: { total_min: 70 },
     });
   expect(rubric.status).toBe(201);
   const rubricVersionId = rubric.body.rubricVersion.id as string;
@@ -132,7 +131,6 @@ describe("#433 module export-import round-trip", () => {
     expect(verifyEnvelope.module.activeVersion.taskText).toEqual(envelope.module.activeVersion.taskText);
     expect(verifyEnvelope.module.activeVersion.assessorExpectedContent).toEqual(envelope.module.activeVersion.assessorExpectedContent);
     expect(verifyEnvelope.module.activeVersion.rubric.criteria).toEqual(envelope.module.activeVersion.rubric.criteria);
-    expect(verifyEnvelope.module.activeVersion.rubric.passRule).toEqual(envelope.module.activeVersion.rubric.passRule);
     expect(verifyEnvelope.module.activeVersion.mcqSet.questions[0].stem).toEqual(envelope.module.activeVersion.mcqSet.questions[0].stem);
     // The destination's audit records WHO ran the latest export. exportedBy is
     // the INTERNAL user id (Prisma CUID), not the external x-user-id header; we

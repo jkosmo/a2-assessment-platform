@@ -62,12 +62,6 @@ describe("MVP admin content management and publication", () => {
           responsible_use: "0-4",
         },
         scalingRule: { practical_weight: 70, max_total: 20 },
-        passRule: {
-          total_min: 70,
-          practical_min_percent: 50,
-          mcq_min_percent: 60,
-          no_open_red_flags: true,
-        },
       });
     expect(rubricResponse.status).toBe(201);
     const rubricVersionId = rubricResponse.body.rubricVersion.id as string;
@@ -267,7 +261,6 @@ describe("MVP admin content management and publication", () => {
       .send({
         criteria: { x: "0-4" },
         scalingRule: { practical_weight: 70 },
-        passRule: { total_min: 70 },
       });
 
     expect(response.status).toBe(403);
@@ -328,12 +321,6 @@ describe("MVP admin content management and publication", () => {
       .send({
         criteria: { relevance_for_case: "0-4" },
         scalingRule: { practical_weight: 70, max_total: 20 },
-        passRule: {
-          total_min: 70,
-          practical_min_percent: 50,
-          mcq_min_percent: 60,
-          no_open_red_flags: true,
-        },
       });
 
     expect(rubricResponse.status).toBe(201);
@@ -524,12 +511,6 @@ describe("MVP admin content management and publication", () => {
           responsible_use: "0-4",
         },
         scalingRule: { practical_weight: 70, max_total: 20 },
-        passRule: {
-          total_min: 70,
-          practical_min_percent: 50,
-          mcq_min_percent: 60,
-          no_open_red_flags: true,
-        },
       });
     expect(rubricResponse.status).toBe(201);
 
@@ -644,7 +625,6 @@ describe("MVP admin content management and publication", () => {
       .send({
         criteria: { quality: "0-4" },
         scalingRule: { practical_weight: 70, max_total: 4 },
-        passRule: { total_min: 70, practical_min_percent: 50, mcq_min_percent: 60, no_open_red_flags: true },
       });
     expect(rubricResponse.status).toBe(201);
 

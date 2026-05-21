@@ -521,8 +521,6 @@
         <div class="small" data-i18n="adminContent.help.rubricCriteria">Criterion keys should match the current evaluator contract unless code is changed.</div>
         <div><label for="rubricScalingRuleJson" data-i18n="adminContent.rubric.scalingRule">Score scaling JSON</label><textarea id="rubricScalingRuleJson" rows="3"></textarea></div>
         <div class="small" data-i18n="adminContent.help.rubricScalingRule">Controls score scaling (for example submission weight and maximum score).</div>
-        <div><label for="rubricPassRuleJson" data-i18n="adminContent.rubric.passRule">Pass/fail threshold JSON</label><textarea id="rubricPassRuleJson" rows="3"></textarea></div>
-        <div class="small" data-i18n="adminContent.help.rubricPassRule">Controls pass/fail thresholds and hard-stop rules.</div>
       </details>
     </section>
 
@@ -909,18 +907,6 @@
       <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionCriteria">Criteria</div>
       <div id="dlgRubric_criteriaList"></div>
       <button type="button" id="dlgRubric_addCriterion" class="btn-secondary" style="margin-bottom:var(--space-1);width:auto">+ <span data-i18n="adminContent.dialog.rubric.addCriterion">Add criterion</span></button>
-
-      <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionPassRule">Pass rule</div>
-      <div class="row">
-        <div>
-          <label for="dlgRubric_minScore" data-i18n="adminContent.dialog.rubric.minScore">Minimum score (0–100)</label>
-          <input id="dlgRubric_minScore" type="number" min="0" max="100" step="1" autocomplete="off" />
-        </div>
-        <div>
-          <label for="dlgRubric_criteriaMin" data-i18n="adminContent.dialog.rubric.criteriaMin">All criteria above (opt.)</label>
-          <input id="dlgRubric_criteriaMin" type="number" min="0" max="100" step="1" autocomplete="off" />
-        </div>
-      </div>
 
       <div class="dialog-section-label" data-i18n="adminContent.dialog.rubric.sectionScalingRule">Scaling rule</div>
       <div class="row">

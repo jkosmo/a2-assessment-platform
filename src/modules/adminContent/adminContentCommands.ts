@@ -11,7 +11,6 @@ type CreateRubricVersionInput = {
   moduleId: string;
   criteria: Record<string, unknown>;
   scalingRule: Record<string, unknown>;
-  passRule: Record<string, unknown>;
   active: boolean;
 };
 
@@ -236,7 +235,6 @@ export async function createRubricVersion(input: CreateRubricVersionInput) {
     versionNo,
     criteriaJson: JSON.stringify(input.criteria),
     scalingRuleJson: JSON.stringify(input.scalingRule),
-    passRuleJson: JSON.stringify(input.passRule),
     active: input.active,
   });
 }

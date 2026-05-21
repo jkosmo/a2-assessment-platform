@@ -46,7 +46,9 @@ export const moduleTitleUpdateBodySchema = z.object({
 export const rubricBodySchema = z.object({
   criteria: z.record(z.unknown()),
   scalingRule: z.record(z.unknown()),
-  passRule: z.record(z.unknown()),
+  // passRule was dropped in #446 (dead field — never read by decisionService).
+  // Accept it on input for backwards compatibility with older JSON exports but ignore the value.
+  passRule: z.record(z.unknown()).optional(),
   active: z.boolean().default(true),
 });
 

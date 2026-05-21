@@ -383,7 +383,7 @@ async function duplicateModule(moduleId, btn) {
     if (cfg?.rubricVersion) {
       await apiFetch(`/api/admin/content/modules/${encodeURIComponent(newId)}/rubric-versions`, getHeaders, {
         method: "POST",
-        body: JSON.stringify({ criteria: cfg.rubricVersion.criteria, scalingRule: cfg.rubricVersion.scalingRule, passRule: cfg.rubricVersion.passRule, active: true }),
+        body: JSON.stringify({ criteria: cfg.rubricVersion.criteria, scalingRule: cfg.rubricVersion.scalingRule, active: true }),
       });
     }
 

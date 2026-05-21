@@ -99,7 +99,6 @@ export async function getModuleContentBundle(moduleId: string) {
     versionNo: version.versionNo,
     criteria: safeParseJson(version.criteriaJson),
     scalingRule: safeParseJson(version.scalingRuleJson),
-    passRule: safeParseJson(version.passRuleJson),
     active: version.active,
     createdAt: version.createdAt,
     updatedAt: version.updatedAt,
@@ -291,7 +290,6 @@ export async function buildModuleExportEnvelope(
         rubric: {
           criteria: rubricVersion.criteria as Record<string, unknown>,
           scalingRule: rubricVersion.scalingRule as Record<string, unknown>,
-          passRule: rubricVersion.passRule as Record<string, unknown>,
           active: true,
         },
         promptTemplate: {

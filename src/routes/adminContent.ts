@@ -319,7 +319,6 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, re
       moduleId: request.params.moduleId,
       criteria: data.criteria,
       scalingRule: data.scalingRule,
-      passRule: data.passRule,
       active: data.active ?? true,
     });
     response.status(201).json({ rubricVersion });

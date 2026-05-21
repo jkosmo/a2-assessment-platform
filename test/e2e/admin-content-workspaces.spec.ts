@@ -151,7 +151,6 @@ export function buildMockModuleExport({
             versionNo: 1,
             criteria: {},
             scalingRule: {},
-            passRule: {},
           }
         : null,
       promptTemplateVersion: moduleVersion
@@ -174,7 +173,6 @@ export function buildMockModuleExport({
               versionNo: 1,
               criteria: {},
               scalingRule: {},
-              passRule: {},
             },
           ]
         : [],
@@ -542,7 +540,6 @@ export async function mockCommonApis(page: Page, {
       versionNo: 1,
       criteria: {},
       scalingRule: {},
-      passRule: {},
     };
     moduleExport.selectedConfiguration.rubricVersion = rubricVersion;
     moduleExport.versions.rubricVersions = [rubricVersion];

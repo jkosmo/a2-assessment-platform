@@ -242,12 +242,6 @@ async function upsertModuleGraph(adminId, now, seed) {
         responsible_use: "0-4",
       }),
       scalingRuleJson: JSON.stringify({ practical_weight: 70, max_total: 20 }),
-      passRuleJson: JSON.stringify({
-        total_min: 70,
-        practical_min_percent: 50,
-        mcq_min_percent: 60,
-        no_open_red_flags: true,
-      }),
       active: true,
     },
     create: {
@@ -262,12 +256,6 @@ async function upsertModuleGraph(adminId, now, seed) {
         responsible_use: "0-4",
       }),
       scalingRuleJson: JSON.stringify({ practical_weight: 70, max_total: 20 }),
-      passRuleJson: JSON.stringify({
-        total_min: 70,
-        practical_min_percent: 50,
-        mcq_min_percent: 60,
-        no_open_red_flags: true,
-      }),
       active: true,
     },
   });

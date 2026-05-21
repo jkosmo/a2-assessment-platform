@@ -87,7 +87,6 @@ describe("Module archive and restore (#258)", () => {
       .send({
         criteria: { task_comprehension: "0-4" },
         scalingRule: { practical_weight: 70, max_total: 4 },
-        passRule: { total_min: 50, practical_min_percent: 50, mcq_min_percent: 50, no_open_red_flags: false },
         active: true,
       });
     expect(rubricRes.status).toBe(201);

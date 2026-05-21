@@ -1065,7 +1065,6 @@ function resolveCurrentRubricPayload() {
   return {
     criteria: rubric?.criteria ?? tryParseJsonTranslation("adminContent.defaults.criteriaJson", {}),
     scalingRule: rubric?.scalingRule ?? tryParseJsonTranslation("adminContent.defaults.scalingRuleJson", {}),
-    passRule: rubric?.passRule ?? tryParseJsonTranslation("adminContent.defaults.passRuleJson", {}),
   };
 }
 
@@ -1092,7 +1091,6 @@ function moduleSpecificRubricToStoragePayload(generated) {
       generated_from_task: Boolean(generated?.generatedFromTask),
       assessor_notes: String(generated?.assessorNotes ?? ""),
     },
-    passRule: { total_min: 60, practical_min_percent: 50, mcq_min_percent: 60, no_open_red_flags: true },
   };
 }
 
@@ -1829,7 +1827,6 @@ async function duplicateCurrentModuleInBackground() {
         body: JSON.stringify({
           criteria: sourceConfig.rubricVersion.criteria,
           scalingRule: sourceConfig.rubricVersion.scalingRule,
-          passRule: sourceConfig.rubricVersion.passRule,
         }),
       })
       : null;

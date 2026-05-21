@@ -286,7 +286,6 @@ model RubricVersion {
   versionNo       Int
   criteriaJson    String
   scalingRuleJson String
-  passRuleJson    String
   active          Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt

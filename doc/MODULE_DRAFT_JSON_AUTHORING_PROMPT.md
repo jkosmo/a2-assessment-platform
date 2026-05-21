@@ -51,7 +51,7 @@ Requirements:
   - correctAnswer
   - rationale
 - correctAnswer must match one of the options exactly.
-- rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
+- rubric.criteria and rubric.scalingRule must be valid JSON objects.
 - moduleVersion.taskText must describe the participant assignment clearly.
 - moduleVersion.guidanceText must describe what a good submission should include.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
@@ -75,8 +75,7 @@ Return JSON in this exact shape:
   },
   "rubric": {
     "criteria": {},
-    "scalingRule": {},
-    "passRule": {}
+    "scalingRule": {}
   },
   "promptTemplate": {
     "systemPrompt": {

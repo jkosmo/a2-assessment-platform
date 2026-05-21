@@ -107,7 +107,6 @@ const promptDialogCancel = document.getElementById("promptDialogCancel");
 
 const rubricCriteriaJsonInput = document.getElementById("rubricCriteriaJson");
 const rubricScalingRuleJsonInput = document.getElementById("rubricScalingRuleJson");
-const rubricPassRuleJsonInput = document.getElementById("rubricPassRuleJson");
 
 const promptSystemPromptInput = document.getElementById("promptSystemPrompt");
 const promptUserPromptTemplateInput = document.getElementById("promptUserPromptTemplate");
@@ -209,7 +208,7 @@ Requirements:
   - rationale
 - correctAnswer must match one of the options exactly.
 - All 4 options in each question must be comparable in length and level of detail. A candidate must not be able to identify the correct answer by noticing that one option is longer, more specific, or more qualified than the others. If the correct answer contains a qualifier or clause, all distractors must too. Never pad distractors with vague filler — write substantively comparable but wrong alternatives.
-- rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
+- rubric.criteria and rubric.scalingRule must be valid JSON objects.
 - moduleVersion.taskText must ask the participant to explain, compare, or interpret specific concepts. All concepts, definitions, terminology, and context the participant needs must be embedded directly in taskText — the participant has no access to the source material or any external document. Do not require application to a fictional or external example unless the source explicitly supports that framing.
 - moduleVersion.assessorExpectedContent must describe what a strong response contains. Write as if the participant has only seen taskText — never reference the source material in assessorExpectedContent.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
@@ -253,8 +252,7 @@ Return JSON in this exact shape:
   },
   "rubric": {
     "criteria": {},
-    "scalingRule": {},
-    "passRule": {}
+    "scalingRule": {}
   },
   "promptTemplate": {
     "systemPrompt": {
@@ -334,7 +332,7 @@ Requirements:
   - correctAnswer
   - rationale
 - correctAnswer must match one of the options exactly.
-- rubric.criteria, rubric.scalingRule, and rubric.passRule must be valid JSON objects.
+- rubric.criteria and rubric.scalingRule must be valid JSON objects.
 - moduleVersion.taskText must describe the participant assignment clearly.
 - moduleVersion.assessorExpectedContent must describe what a good submission should include.
 - validFrom and validTo should be empty strings unless a date range is explicitly provided.
@@ -362,8 +360,7 @@ Return JSON in this exact shape:
   },
   "rubric": {
     "criteria": {},
-    "scalingRule": {},
-    "passRule": {}
+    "scalingRule": {}
   },
   "promptTemplate": {
     "systemPrompt": {
@@ -921,7 +918,6 @@ function getEditorSnapshot() {
     moduleValidTo: normalizeSnapshotValue(moduleValidToInput.value),
     rubricCriteriaJson: normalizeSnapshotValue(rubricCriteriaJsonInput.value),
     rubricScalingRuleJson: normalizeSnapshotValue(rubricScalingRuleJsonInput.value),
-    rubricPassRuleJson: normalizeSnapshotValue(rubricPassRuleJsonInput.value),
     promptSystemPrompt: normalizeSnapshotValue(promptSystemPromptInput.value),
     promptUserPromptTemplate: normalizeSnapshotValue(promptUserPromptTemplateInput.value),
     promptExamplesJson: normalizeSnapshotValue(promptExamplesJsonInput.value),
@@ -948,7 +944,6 @@ function buildEditorSnapshotFromDraft(draft) {
     moduleValidTo: normalizeSnapshotValue(typeof draft?.module?.validTo === "string" ? draft.module.validTo : ""),
     rubricCriteriaJson: normalizeSnapshotValue(formatEditorValue(draft?.rubric?.criteria, "")),
     rubricScalingRuleJson: normalizeSnapshotValue(formatEditorValue(draft?.rubric?.scalingRule, "")),
-    rubricPassRuleJson: normalizeSnapshotValue(formatEditorValue(draft?.rubric?.passRule, "")),
     promptSystemPrompt: normalizeSnapshotValue(formatEditorValue(draft?.promptTemplate?.systemPrompt, "")),
     promptUserPromptTemplate: normalizeSnapshotValue(
       formatEditorValue(draft?.promptTemplate?.userPromptTemplate, ""),
@@ -1130,7 +1125,6 @@ function coerceModuleExportToImportDraft(payload) {
     rubric: {
       criteria: selectedConfiguration?.rubricVersion?.criteria ?? {},
       scalingRule: selectedConfiguration?.rubricVersion?.scalingRule ?? {},
-      passRule: selectedConfiguration?.rubricVersion?.passRule ?? {},
     },
     promptTemplate: {
       systemPrompt: selectedConfiguration?.promptTemplateVersion?.systemPrompt ?? "",
@@ -1200,7 +1194,6 @@ function applyImportDraftToForm(draft) {
 
   rubricCriteriaJsonInput.value = formatEditorValue(draft?.rubric?.criteria, "");
   rubricScalingRuleJsonInput.value = formatEditorValue(draft?.rubric?.scalingRule, "");
-  rubricPassRuleJsonInput.value = formatEditorValue(draft?.rubric?.passRule, "");
 
   promptSystemPromptInput.value = formatEditorValue(draft?.promptTemplate?.systemPrompt, "");
   promptUserPromptTemplateInput.value = formatEditorValue(draft?.promptTemplate?.userPromptTemplate, "");
@@ -1245,7 +1238,6 @@ function populateFormFromModuleExport(moduleExport) {
 
   rubricCriteriaJsonInput.value = formatEditorValue(rubricVersion?.criteria, "");
   rubricScalingRuleJsonInput.value = formatEditorValue(rubricVersion?.scalingRule, "");
-  rubricPassRuleJsonInput.value = formatEditorValue(rubricVersion?.passRule, "");
 
   promptSystemPromptInput.value = formatEditorValue(promptTemplateVersion?.systemPrompt, "");
   promptUserPromptTemplateInput.value = formatEditorValue(promptTemplateVersion?.userPromptTemplate, "");
@@ -1490,7 +1482,6 @@ function applyIdentityDefaults() {
 function setDefaultFormValues() {
   rubricCriteriaJsonInput.value = formatJsonDefault("adminContent.defaults.criteriaJson");
   rubricScalingRuleJsonInput.value = formatJsonDefault("adminContent.defaults.scalingRuleJson");
-  rubricPassRuleJsonInput.value = formatJsonDefault("adminContent.defaults.passRuleJson");
   promptSystemPromptInput.value = t("adminContent.defaults.systemPrompt");
   promptUserPromptTemplateInput.value = t("adminContent.defaults.userPromptTemplate");
   promptExamplesJsonInput.value = formatJsonDefault("adminContent.defaults.examplesJson");
@@ -1641,7 +1632,6 @@ function renderModuleStatus() {
 function clearVersionFields() {
   rubricCriteriaJsonInput.value = "";
   rubricScalingRuleJsonInput.value = "";
-  rubricPassRuleJsonInput.value = "";
   promptSystemPromptInput.value = "";
   promptUserPromptTemplateInput.value = "";
   promptExamplesJsonInput.value = "";
@@ -1811,7 +1801,6 @@ async function handleCreateModule(options = { silent: false }) {
   const savedVersionFields = {
     rubricCriteriaJson: rubricCriteriaJsonInput.value,
     rubricScalingRuleJson: rubricScalingRuleJsonInput.value,
-    rubricPassRuleJson: rubricPassRuleJsonInput.value,
     promptSystemPrompt: promptSystemPromptInput.value,
     promptUserPromptTemplate: promptUserPromptTemplateInput.value,
     promptExamplesJson: promptExamplesJsonInput.value,
@@ -1839,7 +1828,6 @@ async function handleCreateModule(options = { silent: false }) {
   // Restore version field content cleared by clearVersionFields during loadModules.
   rubricCriteriaJsonInput.value = savedVersionFields.rubricCriteriaJson;
   rubricScalingRuleJsonInput.value = savedVersionFields.rubricScalingRuleJson;
-  rubricPassRuleJsonInput.value = savedVersionFields.rubricPassRuleJson;
   promptSystemPromptInput.value = savedVersionFields.promptSystemPrompt;
   promptUserPromptTemplateInput.value = savedVersionFields.promptUserPromptTemplate;
   promptExamplesJsonInput.value = savedVersionFields.promptExamplesJson;
@@ -1993,7 +1981,6 @@ async function handleCreateRubricVersion(options = { silent: false }) {
   const payload = {
     criteria: parseJsonField(rubricCriteriaJsonInput.value, "adminContent.rubric.criteria"),
     scalingRule: parseJsonField(rubricScalingRuleJsonInput.value, "adminContent.rubric.scalingRule"),
-    passRule: parseJsonField(rubricPassRuleJsonInput.value, "adminContent.rubric.passRule"),
   };
 
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, headers, {
@@ -2719,8 +2706,6 @@ function openRubricDialog(triggerBtn) {
   try { criteria = JSON.parse(rubricCriteriaJsonInput.value.trim() || "{}"); } catch { criteria = {}; }
   let scalingRule = {};
   try { scalingRule = JSON.parse(rubricScalingRuleJsonInput.value.trim() || "{}"); } catch { scalingRule = {}; }
-  let passRule = {};
-  try { passRule = JSON.parse(rubricPassRuleJsonInput.value.trim() || "{}"); } catch { passRule = {}; }
 
   const list = document.getElementById("dlgRubric_criteriaList");
   list.innerHTML = "";
@@ -2732,11 +2717,6 @@ function openRubricDialog(triggerBtn) {
       addRubricCriterionRow(key, val.title ?? "", val.weight ?? 0.25, val.description ?? "");
     }
   }
-
-  const minScoreEl = document.getElementById("dlgRubric_minScore");
-  const criteriaMinEl = document.getElementById("dlgRubric_criteriaMin");
-  if (minScoreEl) minScoreEl.value = passRule.minimumScore ?? "";
-  if (criteriaMinEl) criteriaMinEl.value = passRule.requireAllCriteriaAbove ?? "";
 
   const scalingTypeEl = document.getElementById("dlgRubric_scalingType");
   const maxScoreEl = document.getElementById("dlgRubric_maxScore");
@@ -2842,17 +2822,8 @@ function applyRubricDialog() {
     ...(existingLevels.length > 0 ? { levels: existingLevels } : {}),
   };
 
-  const minScore = parseInt(document.getElementById("dlgRubric_minScore")?.value ?? "", 10);
-  const criteriaMin = parseInt(document.getElementById("dlgRubric_criteriaMin")?.value ?? "", 10);
-  const passRule = {
-    type: "minimumScore",
-    ...(isNaN(minScore) ? {} : { minimumScore: minScore }),
-    ...(isNaN(criteriaMin) ? {} : { requireAllCriteriaAbove: criteriaMin }),
-  };
-
   rubricCriteriaJsonInput.value = JSON.stringify(criteria, null, 2);
   rubricScalingRuleJsonInput.value = JSON.stringify(scalingRule, null, 2);
-  rubricPassRuleJsonInput.value = JSON.stringify(passRule, null, 2);
 
   dirtyCards.add("rubric");
   syncAllTextareaHeights();

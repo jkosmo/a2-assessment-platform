@@ -77,7 +77,6 @@ async function importModulePayload(
     moduleId,
     criteria: payload.activeVersion.rubric.criteria,
     scalingRule: payload.activeVersion.rubric.scalingRule,
-    passRule: payload.activeVersion.rubric.passRule,
     active: true,
   });
 

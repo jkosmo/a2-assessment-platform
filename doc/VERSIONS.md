@@ -2,6 +2,55 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.68 - 2026-05-21
+
+refactor: drop unused RubricVersion.passRuleJson column (#446)
+
+**Why:** `RubricVersion.passRuleJson` has been written to but never
+read by the assessment decision logic since commit `2aa216a` (refactor:
+forenkle vurderingsmodell til én terskel). All real pass/fail thresholds
+live in `ModuleVersion.assessmentPolicyJson` (assessmentPolicy.passRules)
+and are consumed by `decisionService.ts`. The dead field caused
+confusion for content authors who saw "Bestått/ikke bestått terskler
+JSON" in Avansert editor and assumed it controlled outcomes.
+
+**Change:**
+- New Prisma migration `20260521000001_drop_rubric_pass_rule_json` drops
+  the `passRuleJson` column from `RubricVersion`.
+- `rubricBodySchema` in `adminContentSchemas.ts` keeps `passRule` as
+  `.optional()` for backwards-compat with older JSON exports — the
+  field is accepted on input but ignored.
+- All `passRuleJson` references removed from:
+  - Backend: `adminContentCommands.ts`, `adminContentQueries.ts`,
+    `adminContentRepository.ts`, `contentImportService.ts`,
+    `routes/adminContent.ts`
+  - Frontend: `admin-content.js` (Avansert editor — passRule textarea,
+    Rubric dialog Pass-rule section, snapshot/restore plumbing),
+    `admin-content-advanced.html` (input fields + Pass-rule section),
+    `admin-content-shell.js` (rubric payload construction in
+    `resolveCurrentRubricPayload`, `moduleSpecificRubricToStoragePayload`,
+    duplicate-module flow), `admin-content-library.js` (duplicate flow)
+  - i18n: 6 keys × 3 languages removed from
+    `admin-content-translations.js`
+  - Tests: fixtures in `admin-content-service.test.ts`,
+    `assessment-job-service.test.ts`, `m2-admin-content-publication.test.ts`,
+    `m2-content-export-import.test.ts`, `m2-module-archive.test.ts`,
+    `admin-content-workspaces.spec.ts`
+  - Seeds: `seedCore.ts`, `bootstrapSeed.mjs`
+  - Docs: `MODULE_DRAFT_JSON_AUTHORING_PROMPT.md`
+
+**Data loss:** Values stored in `passRuleJson` are dropped by the
+migration. Confirmed unused — grep over `src/modules/assessment/`
+found no consumer.
+
+**Acceptance:**
+- `tsc --noEmit` clean
+- 126 affected unit tests pass
+- Avansert editor still loads, opens Rubric dialog, saves rubric
+- Bestått-logikken (via `assessmentPolicy.passRules`) unchanged
+
+Closes #446.
+
 ## 1.1.67 - 2026-05-21
 
 fix(admin): Avansert 'Fyll andre språk'-knapp returned 404 (#444 follow-up)
