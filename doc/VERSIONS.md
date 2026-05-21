@@ -2,6 +2,55 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.71 - 2026-05-21
+
+feat(admin): editable Vurderingsplan card in conversational shell (#448, B1 of #445)
+
+**Why:** The blueprint step in conversational shell showed only an
+"Godta" / "Hopp over" choice — no way for teachers to edit the
+proposed learning objectives or key topics. Per #445 §3.1 and the
+B1 child issue, the blueprint must be editable directly in the shell
+so domain experts can adjust the proposed plan before it drives
+scenario, MCQ, and rubric generation downstream.
+
+**Change (UI):**
+- New `renderEditableBlueprint(slot, blueprint, ctx)` function in
+  `admin-content-shell.js` replaces the static accept/skip preview
+  with an inline editor:
+  - Add / edit / remove `learningObjectives` (text input per row + ×
+    button per row + "+ Legg til mål" button)
+  - Add / edit / remove `keyTopics` (same pattern)
+  - Read-only display of `mcqProfile.suggestedCount` and `notes`
+- Two action buttons replace the previous three:
+  - **"Bruk denne planen"** — captures current input values,
+    packages as JSON, calls `confirmAndGenerate` with the edited
+    blueprint. Requires at least one objective.
+  - **"Generer på nytt"** — re-runs blueprint generation. Confirms
+    first if the user has made manual edits (input events / add/
+    remove clicks).
+
+**Change (i18n):**
+- New shell.blueprint.* keys for nb / nn / en-GB:
+  `usePlan`, `regenerate`, `addObjective`, `addTopic`, `removeItem`,
+  `objectivesRequired`, `regenerateWarning`.
+- Legacy `shell.blueprint.accept` and `shell.blueprint.skip` left in
+  place (unused) — to be cleaned up as part of B4 i18n sweep.
+
+**Change (CSS):**
+- New `.bp-*` styles in `admin-content.html` for editor rows, inputs,
+  add/remove buttons. Reuses `.chat-textarea` for input styling.
+
+**Out of scope (per #448 alternative C):**
+- Editing `assessmentBlueprint.taskType` — not yet a stored field;
+  defer until concrete user need surfaces.
+- Editing `complexityBudget` or `mcqProfile` (these are LLM-set and
+  rarely need manual adjustment; regenerate provides recourse).
+- Per-locale editing — comes in B4 with the i18n sweep.
+
+`tsc --noEmit` clean. Visual verification expected on stage.
+
+Closes #448. Part of #445 (B1).
+
 ## 1.1.70 - 2026-05-21
 
 refactor(admin): harmonize Avansert editor terminology — Vurderingskriterier / Skåringsregler (#452, part of #445)

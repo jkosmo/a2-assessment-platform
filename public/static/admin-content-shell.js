@@ -2474,28 +2474,118 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
   sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
 
   const bp = blueprintResult?.blueprint;
-  const objectives = (bp?.learningObjectives ?? []).map(o => `<li>${escapeHtml(o)}</li>`).join("");
-  const topics = (bp?.keyTopics ?? []).slice(0, 5).map(k => `<li>${escapeHtml(k)}</li>`).join("");
-  const mcqCount = bp?.mcqProfile?.suggestedCount ?? "–";
-  const notes = bp?.notes ? `<p style="margin:6px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(bp.notes)}</p>` : "";
-  const blueprintJson = bp ? JSON.stringify(bp) : null;
+  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode });
+}
 
-  logResolveSlot(
-    slot,
-    () => `<strong>${escapeHtml(t("shell.blueprint.ready"))}</strong>
-      <div style="margin:8px 0 0;font-size:13px">
-        <p style="margin:0 0 4px;font-weight:600">${escapeHtml(t("shell.blueprint.objectives"))}</p>
-        <ul style="margin:0 0 8px;padding-left:18px">${objectives}</ul>
-        <p style="margin:0 0 4px;font-weight:600">${escapeHtml(t("shell.blueprint.keyTopics"))}</p>
-        <ul style="margin:0 0 8px;padding-left:18px">${topics}</ul>
-        <p style="margin:0 0 4px"><strong>${escapeHtml(t("shell.blueprint.mcqSuggestion"))}</strong> ${escapeHtml(String(mcqCount))}</p>
+// B1 (#448): editable Vurderingsplan card replaces the static accept/skip preview. Lærer
+// can add, edit, and remove læringsmål and sentrale temaer before continuing. "Bruk denne
+// planen" captures current inputs and passes them to confirmAndGenerate. "Generer på nytt"
+// re-runs blueprint generation, warning first if the user made manual edits.
+function renderEditableBlueprint(slot, initialBlueprint, ctx) {
+  // Local mutable working copy — never mutates the original bundle/sessionDraft until
+  // the user clicks "Bruk denne planen".
+  const working = {
+    learningObjectives: Array.isArray(initialBlueprint?.learningObjectives) ? [...initialBlueprint.learningObjectives] : [],
+    keyTopics: Array.isArray(initialBlueprint?.keyTopics) ? [...initialBlueprint.keyTopics] : [],
+    complexityBudget: initialBlueprint?.complexityBudget ?? null,
+    mcqProfile: initialBlueprint?.mcqProfile ?? null,
+    notes: initialBlueprint?.notes ?? "",
+  };
+  let hasManualEdits = false;
+
+  const renderHtml = () => {
+    const objectiveItems = working.learningObjectives.map((o, i) =>
+      `<li class="bp-row" data-objective-index="${i}">`
+      + `<input class="bp-objective-input chat-textarea" type="text" value="${escapeHtml(o)}" data-index="${i}" />`
+      + `<button type="button" class="bp-objective-remove" data-index="${i}" aria-label="${escapeHtml(t("shell.blueprint.removeItem"))}">×</button>`
+      + `</li>`
+    ).join("");
+    const topicItems = working.keyTopics.map((tp, i) =>
+      `<li class="bp-row" data-topic-index="${i}">`
+      + `<input class="bp-topic-input chat-textarea" type="text" value="${escapeHtml(tp)}" data-index="${i}" />`
+      + `<button type="button" class="bp-topic-remove" data-index="${i}" aria-label="${escapeHtml(t("shell.blueprint.removeItem"))}">×</button>`
+      + `</li>`
+    ).join("");
+    const mcqCount = working.mcqProfile?.suggestedCount ?? "–";
+    const notes = working.notes ? `<p class="bp-notes">${escapeHtml(working.notes)}</p>` : "";
+    return `<strong>${escapeHtml(t("shell.blueprint.ready"))}</strong>
+      <div class="bp-editor">
+        <p class="bp-section-label">${escapeHtml(t("shell.blueprint.objectives"))}</p>
+        <ul class="bp-objectives">${objectiveItems}</ul>
+        <button type="button" class="bp-add-objective bp-add-btn">+ ${escapeHtml(t("shell.blueprint.addObjective"))}</button>
+        <p class="bp-section-label">${escapeHtml(t("shell.blueprint.keyTopics"))}</p>
+        <ul class="bp-topics">${topicItems}</ul>
+        <button type="button" class="bp-add-topic bp-add-btn">+ ${escapeHtml(t("shell.blueprint.addTopic"))}</button>
+        <p class="bp-mcq-suggestion"><strong>${escapeHtml(t("shell.blueprint.mcqSuggestion"))}</strong> ${escapeHtml(String(mcqCount))}</p>
         ${notes}
-      </div>`,
-    [
-      { labelKey: "shell.blueprint.accept", action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprintJson) },
-      { labelKey: "shell.blueprint.skip",   action: () => confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null) },
-    ],
-  );
+      </div>`;
+  };
+
+  const captureInputs = () => {
+    const objInputs = slot.el.querySelectorAll(".bp-objective-input");
+    const topInputs = slot.el.querySelectorAll(".bp-topic-input");
+    working.learningObjectives = Array.from(objInputs).map((i) => i.value.trim()).filter(Boolean);
+    working.keyTopics = Array.from(topInputs).map((i) => i.value.trim()).filter(Boolean);
+  };
+
+  const renderAndWire = () => {
+    logResolveSlot(slot, renderHtml, [
+      {
+        labelKey: "shell.blueprint.usePlan",
+        action: () => {
+          captureInputs();
+          if (working.learningObjectives.length === 0) {
+            window.alert(t("shell.blueprint.objectivesRequired"));
+            return;
+          }
+          const blueprintJson = JSON.stringify(working);
+          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson);
+        },
+      },
+      {
+        labelKey: "shell.blueprint.regenerate",
+        action: () => {
+          captureInputs();
+          if (hasManualEdits && !window.confirm(t("shell.blueprint.regenerateWarning"))) return;
+          generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode);
+        },
+      },
+    ]);
+
+    const editor = slot.el.querySelector(".bp-editor");
+    if (!editor) return;
+    editor.addEventListener("input", () => { hasManualEdits = true; });
+    editor.addEventListener("click", (e) => {
+      const target = e.target.closest("button");
+      if (!target) return;
+      hasManualEdits = true;
+      if (target.classList.contains("bp-objective-remove")) {
+        captureInputs();
+        const idx = Number(target.dataset.index);
+        working.learningObjectives.splice(idx, 1);
+        renderAndWire();
+      } else if (target.classList.contains("bp-topic-remove")) {
+        captureInputs();
+        const idx = Number(target.dataset.index);
+        working.keyTopics.splice(idx, 1);
+        renderAndWire();
+      } else if (target.classList.contains("bp-add-objective")) {
+        captureInputs();
+        working.learningObjectives.push("");
+        renderAndWire();
+        const inputs = slot.el.querySelectorAll(".bp-objective-input");
+        inputs[inputs.length - 1]?.focus();
+      } else if (target.classList.contains("bp-add-topic")) {
+        captureInputs();
+        working.keyTopics.push("");
+        renderAndWire();
+        const inputs = slot.el.querySelectorAll(".bp-topic-input");
+        inputs[inputs.length - 1]?.focus();
+      }
+    });
+  };
+
+  renderAndWire();
 }
 
 async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null) {

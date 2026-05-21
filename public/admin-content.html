@@ -127,6 +127,19 @@
       .chat-text-input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
       .chat-textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 13px; font-family: inherit; background: #fff; color: var(--color-text); resize: vertical; box-sizing: border-box; }
       .chat-textarea:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+
+      /* B1 (#448): editable Vurderingsplan card */
+      .bp-editor { margin-top: 8px; font-size: 13px; }
+      .bp-section-label { margin: 8px 0 4px; font-weight: 600; }
+      .bp-objectives, .bp-topics { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+      .bp-row { display: flex; align-items: center; gap: 6px; }
+      .bp-row .chat-textarea { flex: 1 1 auto; padding: 6px 10px; font-size: 13px; min-height: auto; }
+      .bp-objective-remove, .bp-topic-remove { background: none; border: none; color: var(--color-meta); cursor: pointer; padding: 2px 8px; font-size: 16px; line-height: 1; border-radius: 4px; width: auto; }
+      .bp-objective-remove:hover, .bp-topic-remove:hover { background: var(--color-error-bg, #fde7e7); color: var(--color-error, #b00020); }
+      .bp-add-btn { background: none; border: 1px dashed var(--color-border-soft); color: var(--color-meta); padding: 6px 10px; font-size: 13px; font-weight: 500; border-radius: var(--radius-card); cursor: pointer; width: auto; margin: 4px 0 8px; }
+      .bp-add-btn:hover { color: var(--color-link-active); border-color: var(--color-blue); }
+      .bp-mcq-suggestion { margin: 8px 0 4px; color: var(--color-meta); font-size: 12px; }
+      .bp-notes { margin: 6px 0 0; font-size: 12px; color: var(--color-meta); font-style: italic; }
       /* Override global button{width:100%} for chat form submit buttons */
       .chat-submit-btn { width: auto !important; white-space: nowrap; flex-shrink: 0; align-self: flex-end; }
 
