@@ -74,6 +74,11 @@ _Skip this section if no infra files are changed._
 - [ ] Change works correctly after `SKIP_ROLE_ASSIGNMENTS` is removed (#404).
 - [ ] Prod-destructive scripts assert correct subscription/RG before acting.
 
+**Idempotency and runtime correctness** _(see AGENTS.md / CLAUDE.md invariants)_
+- [ ] A second deploy with no changes produces the same result (no drift, no version churn).
+- [ ] This change cannot produce a green deploy with a broken runtime — MSI sidecar, KV reference resolution, and `/healthz` are all verified independently from ARM validation.
+- [ ] `az deployment group what-if` output was reviewed for staging (and prod, if applicable) — paste the relevant diff in the PR description or link it.
+
 **Scenario matrix** _(fill in for Bicep changes)_
 
 | Scenario | Expected result |
@@ -84,6 +89,8 @@ _Skip this section if no infra files are changed._
 | Prod — normal deploy (`SKIP_ROLE_ASSIGNMENTS=true`) | |
 | Prod — after #404 (`SKIP_ROLE_ASSIGNMENTS` removed) | |
 | Prod — recovery after deleted App Service | |
+| Prod — recovery after deleted Key Vault | |
+| Prod — PG exists, DB missing | |
 | Prod — PG `ServerIsBusy` | |
 
 - Rollback procedure:
