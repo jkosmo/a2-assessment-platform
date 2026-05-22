@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.95 - 2026-05-22
+
+fix(admin): MCQ-save dead-end + toast auto-dismiss tuning + close-glyph (batched x3)
+
+Tre uavhengige UX-fixes per ux_batching-policy.
+
+**Fix (a) — MCQ-save dead-end med action-knapper**
+
+Bruker valgte "Nei, fortsett uten MCQ" så "Lagre utkast". Shell-side validering blokkerte
+save siden mcqQuestions.length === 0, og loggdet bot-meldingen "Generer MCQ før du lagrer
+fra samtalegrensesnittet." uten knapper. Men forrige meny (showDraftReadyActions) var
+allerede deaktivert av `_deactivateAll` (utløst av logUser("Lagre utkast")). Resultat:
+bruker stuck — ingen vei videre.
+
+Fix: feilmeldingen i `saveDraftBundleInBackground` (både taskRequired og mcqRequired)
+får nå samme action-knapper som draft-ready-menyen (Rediger direkte / Be om endringer /
+Åpne i Avansert / Start på nytt / Lagre utkast). Bruker kan velge ny vei umiddelbart.
+
+**Fix (b) — toast auto-dismiss per type**
+
+Tidligere alle toaster 5s. Bruker rapporterte å gå glipp av success-toaster fordi de
+dukker opp i øvre høyre hjørne mens handlingen som trigget dem (Lagre nederst i chat)
+var langt unna. Endret til per-type:
+- success/info: 5s → 8s (mer tid å bemerke)
+- error: 0 = ingen auto-dismiss (krever brukerklikk på ×; feil bør bekreftes manuelt)
+
+**Fix (c) — toast close-glyph "x" → "×"**
+
+Latinsk lowercase x byttet ut med multiplication sign (×) som er konvensjonell close-glyph.
+Mer typografisk presist.
+
+Tester: 19/19 admin-content unit-tester. tsc clean.
+
 ## 1.1.94 - 2026-05-22
 
 fix(admin): state-rail chip-konsistens + toast aria-label lokalisert + i18n-cleanup (batched x3)

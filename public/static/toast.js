@@ -1,6 +1,14 @@
 const TOAST_REGION_ID = "toastRegion";
 const MAX_VISIBLE_TOASTS = 4;
-const AUTO_DISMISS_MS = 5000;
+// v1.1.95: per-type auto-dismiss. Bruker rapporterte å gå glipp av success-toaster (5s)
+// fordi de dukker opp i øvre høyre hjørne mens handlingen som trigget dem (f.eks. Lagre)
+// var nederst i chat-spalten — for kort tid å bemerke. Errors auto-dismiss ikke i det
+// hele tatt (krever brukerklikk på ×) siden feil bør bekreftes manuelt.
+const AUTO_DISMISS_MS = {
+  success: 8000,
+  info: 8000,
+  error: 0, // 0 = no auto-dismiss
+};
 
 // v1.1.94: small built-in label map so shared toast widget can be localised without
 // depending on any specific page's translation bundle. Keys mirror the participant.locale
@@ -58,7 +66,9 @@ export function showToast(message, type = "info", detail = "") {
   closeButton.type = "button";
   closeButton.className = "toast__close";
   closeButton.setAttribute("aria-label", resolveCloseLabel());
-  closeButton.textContent = "x";
+  // v1.1.95: ekte close-glyph (multiplication sign) i stedet for latinsk "x" — typografisk
+  // mer presist og matcher resten av appen.
+  closeButton.textContent = "×";
 
   const removeToast = () => {
     toast.remove();
@@ -83,6 +93,9 @@ export function showToast(message, type = "info", detail = "") {
     region.firstElementChild?.remove();
   }
 
-  window.setTimeout(removeToast, AUTO_DISMISS_MS);
+  const dismissMs = AUTO_DISMISS_MS[normalizedType] ?? AUTO_DISMISS_MS.info;
+  if (dismissMs > 0) {
+    window.setTimeout(removeToast, dismissMs);
+  }
   return toast;
 }

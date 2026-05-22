@@ -1604,12 +1604,28 @@ async function saveDraftBundleInBackground(options = {}) {
   }
 
   const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria } = resolveDraftForSave();
+  // v1.1.95: when save fails on pre-save validation, attach recovery actions to the error
+  // message. Previously the bot message had no choices and the chat menu was deactivated
+  // (because the user just clicked Lagre utkast and _deactivateAll fired), so users were
+  // stuck with no way forward. Same action set as draft-ready menu — user can edit,
+  // revise, open Avansert, restart, or retry Lagre.
+  const buildSaveRecoveryActions = () => {
+    const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
+    const actionMap = {
+      directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+      revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
+      openEditor: { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) },
+      restart: { labelKey: "shell.draftReady.restart", action: startIdle },
+      saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
+    };
+    return model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
+  };
   if (!localizeValueForLocale(taskText, currentLocale).trim()) {
-    logBot(() => t("shell.save.taskRequired"));
+    logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
     return;
   }
   if (!mcqQuestions.length) {
-    logBot(() => t("shell.save.mcqRequired"));
+    logBot(() => t("shell.save.mcqRequired"), buildSaveRecoveryActions());
     return;
   }
 
