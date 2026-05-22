@@ -110,7 +110,12 @@
       .chat-messages { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1); overflow-y: auto; min-height: 200px; }
 
       .chat-msg { display: flex; }
-      .chat-msg--bot { justify-content: flex-start; }
+      /* v1.1.93 (#360 follow-up): stack bubble + choices vertically for bot messages so
+         choice pills appear BELOW the bubble. Previously default flex-direction: row
+         squeezed choices into a narrow right column when bubble was wide (blueprint
+         editor, criteria editor, etc.), causing button text to wrap character-by-character.
+         User messages stay row-based since they typically have no choices. */
+      .chat-msg--bot { flex-direction: column; align-items: flex-start; }
       .chat-msg--user { justify-content: flex-end; }
 
       .chat-bubble { max-width: 90%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.5; }

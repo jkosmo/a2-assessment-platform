@@ -3652,7 +3652,12 @@ async function populateSessionDraftCriteriaInBackground() {
     // v1.1.91: don't re-render if user has entered Rediger direkte while generation was
     // in flight — would wipe their edit form. v1.1.92: also notify the active edit-mode
     // via criteriaReadyCallback so the placeholder is replaced with editor cards.
-    const inEditMode = previewPaneEl?.classList.contains("preview-pane--editing");
+    // v1.1.93: previewPaneEl is block-scoped inside enterPreviewEditMode — referencing it
+    // here threw ReferenceError, which prevented renderPreview() from running. Users saw
+    // criteria appear only after Lagre (which triggers loadModule → renderPreview). Use
+    // document.querySelector directly to read the live edit-mode state.
+    const previewPaneNow = document.querySelector(".preview-pane");
+    const inEditMode = previewPaneNow?.classList.contains("preview-pane--editing");
     if (inEditMode) {
       if (criteriaReadyCallback && sessionDraft?.criteria) {
         criteriaReadyCallback(sessionDraft.criteria);

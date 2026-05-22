@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.93 - 2026-05-22
+
+fix(admin): previewPaneEl scope-bug + chat-msg flex-column (#360 follow-up, batched)
+
+To uavhengige UX-fixes pakket per ux_batching-policy.
+
+**Fix (a) — previewPaneEl ReferenceError**
+
+v1.1.91 og v1.1.92 introduserte bug: `previewPaneEl` ble deklarert som `const` inni
+`enterPreviewEditMode` (block-scoped), men referert fra `populateSessionDraftCriteriaInBackground`
+sin finally-blokk. Det kastet `ReferenceError` → `renderPreview()` ble aldri kjørt.
+
+Bruker-symptom: "Av og til tar det lang tid før vurderingskriteria vises, trykker man
+da på lagre vises det øyeblikkelig" — kriteriene VAR generert og lagret i sessionDraft,
+men preview re-rendret ikke. Først ved Lagre (loadModule → renderPreview) ble de synlige.
+Også: "Genererer vurderingskriterier…"-placeholder ble stående i edit-mode.
+
+Fix: bruk `document.querySelector(".preview-pane")` direkte i finally-blokken i stedet
+for å referere lokal `previewPaneEl`.
+
+**Fix (b) — chat-msg flex-direction for bot-meldinger**
+
+`.chat-msg--bot` brukte default `flex-direction: row`, så valg-knapper havnet til høyre
+for boblen. Ved lange bobler (blueprint-editor, kriterier-editor) ble knappene klemt
+inn i en smal høyre-kolonne der teksten wrappet vertikalt — "Bruk denne planen" som
+en tynn stripe nede til høyre.
+
+Sketch (FØR vs ETTER) dokumentert i commit-melding.
+
+Fix: `.chat-msg--bot { flex-direction: column; align-items: flex-start }`. Valg-pills
+havner nå UNDER boblen, får full chat-pane-bredde. Standard chat-UX.
+Bruker-meldinger uberørt (har sjelden choices).
+
+Tester: 19/19 admin-content unit-tester. tsc clean.
+
 ## 1.1.92 - 2026-05-22
 
 fix(admin): sticky-preview tilbake i dual-column + edit-mode kriterier-placeholder
