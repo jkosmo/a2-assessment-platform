@@ -2,6 +2,24 @@ const TOAST_REGION_ID = "toastRegion";
 const MAX_VISIBLE_TOASTS = 4;
 const AUTO_DISMISS_MS = 5000;
 
+// v1.1.94: small built-in label map so shared toast widget can be localised without
+// depending on any specific page's translation bundle. Keys mirror the participant.locale
+// stored by every workspace shell.
+const TOAST_CLOSE_LABELS = {
+  "en-GB": "Close notification",
+  nb: "Lukk varsel",
+  nn: "Lukk varsel",
+};
+function resolveCloseLabel() {
+  let locale = null;
+  try {
+    locale = localStorage.getItem("participant.locale");
+  } catch {
+    // some browsing contexts block localStorage — fall through to default
+  }
+  return TOAST_CLOSE_LABELS[locale] ?? TOAST_CLOSE_LABELS["en-GB"];
+}
+
 function ensureToastRegion() {
   let region = document.getElementById(TOAST_REGION_ID);
   if (region) {
@@ -39,7 +57,7 @@ export function showToast(message, type = "info", detail = "") {
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "toast__close";
-  closeButton.setAttribute("aria-label", "Dismiss notification");
+  closeButton.setAttribute("aria-label", resolveCloseLabel());
   closeButton.textContent = "x";
 
   const removeToast = () => {

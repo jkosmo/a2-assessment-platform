@@ -855,9 +855,19 @@ dialog::backdrop {
   flex-shrink: 0;
 }
 
+/* v1.1.94 (#360 follow-up): state-rail-value harmoniseres med sr-badge for visuelt
+   ensartet rad. Tidligere var noen verdier pill-badges, andre var plain tekst — så
+   uryddig ut i state-rail. Nå: alle verdier får chip-form (rounded, padding, samme
+   font-size); sr-badge-varianter beholder fargede bakgrunner for aktive tilstander,
+   plain state-rail-value får subtil nøytral bakgrunn. */
 .state-rail-value {
-  font-size: 12px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eef1f5;
   color: var(--color-text);
   white-space: nowrap;
 }

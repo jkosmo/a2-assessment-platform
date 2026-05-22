@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.94 - 2026-05-22
+
+fix(admin): state-rail chip-konsistens + toast aria-label lokalisert + i18n-cleanup (batched x3)
+
+Tre uavhengige UX-polish-fixes per ny ux_batching-policy (utvidet fra 2 til 3 denne runden).
+
+**Fix (a) — state-rail chip-konsistens**
+
+Bruker rapporterte at toppstatus-linja ("DU REDIGERER / Lagret utkast v1 / LIVE NÅ / Ingen
+publisert versjon / ...") så uryddig ut fordi noen verdier var sr-badge-pills (Lagret utkast)
+og andre var plain text (Ingen publisert versjon, Publisert versjon, Alt lagret).
+
+Fix: `.state-rail-value` i shared.css fikk samme chip-form som sr-badge (inline-flex,
+border-radius 999px, padding 2px 8px, font-size 11px, font-weight 700). Subtil nøytral
+bakgrunn (`#eef1f5`). sr-badge-varianter beholder sine fargede bakgrunner for aktive
+tilstander. Alle verdier ser nå ut som chips i samme rad-rytme.
+
+**Fix (b) — toast aria-label lokalisert**
+
+`closeButton.setAttribute("aria-label", "Dismiss notification")` var hardkodet engelsk.
+Toast er delt på tvers av alle sider (admin, participant, etc.), så den kan ikke
+importere én bestemt translation bundle.
+
+Fix: liten innebygd map `TOAST_CLOSE_LABELS` med en-GB/nb/nn, og `resolveCloseLabel()`
+som leser `localStorage.participant.locale` (samme key alle shells bruker). Faller
+tilbake til en-GB ved manglende/ukjent locale eller blokkert localStorage.
+
+**Fix (c) — rydd ubrukt i18n-nøkkel**
+
+`shell.criteria.regenerateWarning` ble fjernet fra alle tre locales. Confirm-dialogen
+som brukte denne ble fjernet i v1.1.80. Søkt i hele kodebasen — ingen JS-referanser,
+kun docs-omtaler i VERSIONS.md.
+
+`shell.blueprint.regenerateWarning` BEHOLDES — fortsatt i bruk på blueprint-regenerer-knapp.
+
+Tester: 19/19 admin-content unit-tester. nb/nn locale missing=0 extra=0.
+
 ## 1.1.93 - 2026-05-22
 
 fix(admin): previewPaneEl scope-bug + chat-msg flex-column (#360 follow-up, batched)
