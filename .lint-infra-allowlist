@@ -1,0 +1,19 @@
+# Allowlist for scripts/lint-infra.sh
+#
+# Format: pattern_id|file|line_num [optional issue-ref or comment]
+# Lines starting with # are ignored.
+#
+# IMPORTANT: every entry here is a known violation of an infra invariant. The lint allows
+# it (so CI doesn't block on legacy code), but the underlying issue should be fixed.
+#
+# When fixing an entry, REMOVE the allowlist line — do not just edit the line number to
+# match a moved violation.
+
+# Two `| Out-Null` on `az role assignment create` in the backup-vault setup section.
+# Should be replaced with `| Out-Null; Assert-LastExitCode "az role assignment create"`
+# so a failed role assignment fails the deploy hard (per CLAUDE.md invariant #6) instead
+# of silently leaving the backup vault without permission to read PG snapshots.
+# Behavioural change: failed role assignment becomes blocking instead of silent.
+# Track in: TBD follow-up issue.
+PS-4|scripts/azure/deploy-environment.ps1|994
+PS-4|scripts/azure/deploy-environment.ps1|998

@@ -113,6 +113,14 @@ jobs:
           done
           exit $fail
 
+      - name: Lint — scripts/lint-infra.sh (Bicep + PowerShell anti-patterns, #420)
+        run: |
+          # Reusable local-runnable lint script. Catches a broader set of infra anti-patterns
+          # than the inline rules above (e.g. ALL `| Out-Null` on role assignments, not just
+          # KV-specific). Known existing violations are grandfathered via .lint-infra-allowlist;
+          # new violations fail CI. Run locally with: bash scripts/lint-infra.sh
+          bash scripts/lint-infra.sh
+
       - name: Lint — actionlint (GitHub Actions workflow syntax + context references)
         run: |
           # actionlint catches typos in context properties (github.evnt.foo),
