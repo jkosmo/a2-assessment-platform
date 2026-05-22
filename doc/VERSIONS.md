@@ -2,6 +2,48 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.92 - 2026-05-22
+
+fix(admin): sticky-preview tilbake i dual-column + edit-mode kriterier-placeholder
+
+Først UX-deploy som pakker to uavhengige fixes per ny feedback_ux_batching-policy.
+
+**Fix (a) — sticky preview tilbake, scope-begrenset til dual-column**
+
+Etter v1.1.90 fjernet jeg `position: sticky` globalt for å løse overlap-bug. Det fjernet
+også den nyttige "preview følger meg" — bruker rapporterte at chat-spalten blir mye lengre
+enn preview, mister oversikt over preview når man jobber i chat.
+
+Root cause for overlap-bugen var bare i SINGLE-column (paner stables vertikalt, sticky
+preview + transparent chat-button = overlap). I DUAL-column er paner i ulike grid-kolonner
+side-by-side — sticky kan ikke skape vertikal overlap.
+
+Fix: `@media (min-width: 1025px) { .preview-pane { position: sticky; top: var(--space-2); } }`.
+Dual-column (>1024px): sticky aktiv, preview følger scroll. Single-column (≤1024px):
+ingen sticky, ingen overlap-risiko.
+
+**Fix (b) — placeholder + populate-callback ved race condition i edit-mode**
+
+v1.1.91 fikset edit-form-wipen, men hvis bruker klikker "Rediger direkte" før kriterier
+er ferdig generert, åpnes edit-formen MED TOM kriterie-seksjon. Ingen visuell antydning
+om at generering pågår.
+
+Fix:
+- `enterPreviewEditMode` viser nå "Genererer vurderingskriterier…"-placeholder i
+  kriterie-editor-containeren hvis `criteriaGenerationInFlight = true` og editor-state
+  er tom.
+- Ny modul-scope `criteriaReadyCallback` registreres av enterPreviewEditMode; fyres av
+  `populateSessionDraftCriteriaInBackground` når generering avslutter mens edit-mode er
+  aktiv. Callback rebuild'er editor-state fra storage record og oppdaterer kun
+  criteria-containeren (ikke hele preview).
+- Callback ryddes ved exitEditMode så async generation etter exit ikke skriver til
+  torn-down DOM.
+
+Funksjonelt resultat: bruker klikker Rediger direkte tidlig → ser placeholder →
+kriterier dukker opp i editor når ferdig → kan redigere og lagre. Ingen race condition.
+
+Tester: 19/19 admin-content unit-tester passerer. tsc clean.
+
 ## 1.1.91 - 2026-05-22
 
 fix(admin): race condition mellom auto-kriteriegenerering og Rediger direkte (#360 follow-up)

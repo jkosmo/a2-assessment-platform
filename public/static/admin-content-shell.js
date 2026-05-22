@@ -96,6 +96,12 @@ let currentBlueprintHash = null;
 // whenever sessionDraft is replaced (commitSessionDraftPatch / loadModule).
 let criteriaGenerationInFlight = false;
 
+// v1.1.92: when enterPreviewEditMode is active, this callback receives the freshly-generated
+// criteria record so the in-progress edit-form can populate its criteria-editor state without
+// the whole preview being re-rendered (which would wipe the edit form). Set by
+// enterPreviewEditMode, cleared by exitEditMode, fired by populateSessionDraftCriteriaInBackground.
+let criteriaReadyCallback = null;
+
 // Chat log — every rendered message is stored here as a re-renderable spec so
 // that retranslateChat() can rebuild the entire dialog on locale switch.
 // Entry kinds:
@@ -2830,13 +2836,14 @@ function enterPreviewEditMode() {
   // B2 (#449 redesign): pull criteria from sessionDraft override OR existing rubric. Stored
   // as record (id-keyed) — normalize to an ordered array for the editor. Mutated locally;
   // captured back into a record on confirm. Tolerates rich + sparse shapes (#378 vs default).
-  const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
-  const currentCriteria = sourceCriteria && typeof sourceCriteria === "object"
-    ? Object.entries(sourceCriteria).map(([id, raw]) => {
+  // v1.1.92: extracted as helper so the criteriaReadyCallback can rebuild editor state when
+  // async generation completes mid-edit-session.
+  const buildEditorStateFromCriteriaRecord = (source) => {
+    if (!source || typeof source !== "object") return [];
+    return Object.entries(source).map(([id, raw]) => {
       const c = raw && typeof raw === "object" ? raw : {};
       // v1.1.78: for sparse legacy criteria with only `weight` (no maxScore), derive
-      // maxScore from weight × 10 so the slider opens at a meaningful position instead
-      // of always defaulting to 5. Default weight 0.2 → maxScore 2.
+      // maxScore from weight × 10 so the slider opens at a meaningful position.
       const derivedFromWeight = Number(c.weight) > 0 ? Math.max(1, Math.round(Number(c.weight) * 10)) : 0;
       const initialMaxScore = Number(c.maxScore) > 0
         ? Number(c.maxScore)
@@ -2848,9 +2855,10 @@ function enterPreviewEditMode() {
         maxScore: Math.max(1, Math.min(10, initialMaxScore)),
         candidateVisible: Boolean(c.candidateVisible),
       };
-    })
-    : [];
-  let criteriaEditorState = currentCriteria.map((c) => ({ ...c }));
+    });
+  };
+  const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
+  let criteriaEditorState = buildEditorStateFromCriteriaRecord(sourceCriteria);
   let nextNewCriterionId = 1;
 
   // Lock locale bar and signal edit mode visually
@@ -2932,8 +2940,21 @@ function enterPreviewEditMode() {
     `
     : "";
 
-  const renderCriteriaEditor = () => buildCriteriaEditorHtml(criteriaEditorState, t, tf);
-  const criteriaSectionHtml = bundle?.selectedConfiguration?.rubricVersion || criteriaEditorState.length > 0
+  // v1.1.92: when criteria-generation is in flight AND editor has no criteria yet, show
+  // a "Genererer…" placeholder instead of an empty editor. When generation completes,
+  // criteriaReadyCallback fires and the placeholder is replaced with real editor cards.
+  const renderCriteriaEditor = () => {
+    if (criteriaEditorState.length === 0 && criteriaGenerationInFlight) {
+      return `<p class="vk-total" style="font-style:italic;color:var(--color-meta);">${escapeHtml(t("shell.criteria.generating"))}</p>`;
+    }
+    return buildCriteriaEditorHtml(criteriaEditorState, t, tf);
+  };
+  // Show criteria section if existing rubric OR editor has criteria OR generation in flight.
+  // The last branch is what makes the placeholder visible in the race-condition scenario.
+  const showCriteriaSection = bundle?.selectedConfiguration?.rubricVersion
+    || criteriaEditorState.length > 0
+    || criteriaGenerationInFlight;
+  const criteriaSectionHtml = showCriteriaSection
     ? `<div class="preview-section-label">${escapeHtml(tf("shell.criteria.title", { count: criteriaEditorState.length }))}</div>
        <div id="previewEditCriteriaContainer">${renderCriteriaEditor()}</div>`
     : "";
@@ -2969,6 +2990,21 @@ function enterPreviewEditMode() {
   // fields would lose their unsaved values). Uses event delegation on the container.
   const criteriaContainer = document.getElementById("previewEditCriteriaContainer");
   if (criteriaContainer) {
+    // v1.1.92: register callback so async populateSessionDraftCriteriaInBackground can
+    // populate the criteria editor when it completes mid-edit-session. Cleared in exitEditMode.
+    // Title-label count is also updated since it's derived from criteriaEditorState.length.
+    criteriaReadyCallback = (record) => {
+      const fresh = buildEditorStateFromCriteriaRecord(record);
+      if (fresh.length === 0) return;
+      criteriaEditorState = fresh;
+      criteriaContainer.innerHTML = renderCriteriaEditor();
+      // Update the section label's count (it lives just above the container).
+      const sectionLabel = criteriaContainer.previousElementSibling;
+      if (sectionLabel?.classList?.contains("preview-section-label")) {
+        sectionLabel.textContent = tf("shell.criteria.title", { count: criteriaEditorState.length });
+      }
+    };
+
     const captureCriteriaFromDom = () => {
       const cards = criteriaContainer.querySelectorAll(".vk-card");
       criteriaEditorState = Array.from(cards).map((card, idx) => {
@@ -3059,6 +3095,9 @@ function enterPreviewEditMode() {
 
   function exitEditMode() {
     if (previewPaneEl) previewPaneEl.classList.remove("preview-pane--editing");
+    // v1.1.92: clear the criteriaReadyCallback so async generation that completes after
+    // exit doesn't try to write into a torn-down DOM.
+    criteriaReadyCallback = null;
     renderPreview();
   }
 
@@ -3610,13 +3649,15 @@ async function populateSessionDraftCriteriaInBackground() {
     // see the criteria in preview until after save in that case.
   } finally {
     criteriaGenerationInFlight = false;
-    // v1.1.91: don't re-render if the user has entered Rediger direkte while generation
-    // was in flight. Re-rendering would wipe out their edit form (race condition reported
-    // 2026-05-22). sessionDraft.criteria has been updated; the user's edit-form retains
-    // whatever criteria state was loaded when they entered edit-mode (empty if they
-    // clicked before generation finished — save still works via ensure-rubric fallback).
+    // v1.1.91: don't re-render if user has entered Rediger direkte while generation was
+    // in flight — would wipe their edit form. v1.1.92: also notify the active edit-mode
+    // via criteriaReadyCallback so the placeholder is replaced with editor cards.
     const inEditMode = previewPaneEl?.classList.contains("preview-pane--editing");
-    if (!inEditMode) {
+    if (inEditMode) {
+      if (criteriaReadyCallback && sessionDraft?.criteria) {
+        criteriaReadyCallback(sessionDraft.criteria);
+      }
+    } else {
       renderPreview();
     }
   }
