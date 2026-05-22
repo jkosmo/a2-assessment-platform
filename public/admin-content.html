@@ -15,7 +15,16 @@
       .advanced-link:hover { color: var(--color-link-active); text-decoration: underline; }
 
       .workspace-shell { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-2); align-items: start; }
-      @media (max-width: 900px) { .workspace-shell { grid-template-columns: 1fr; } }
+      /* #360 (200% zoom): 1920×1080 + 200% zoom → effektiv viewport 960px. Den falt
+         tidligere innenfor dual-column (>900px breakpoint), så chat ble klemt til 380px
+         og preview's `position: sticky` overlappet visuelt. Bump til 1024px slik at 960px
+         viewport får stablet layout — hver pane får full bredde (~928px) og scroller
+         naturlig. Sticky-preview slås av i stablet modus så de to seksjonene flyter
+         naturlig nedover siden i stedet for å konkurrere om viewport. */
+      @media (max-width: 1024px) {
+        .workspace-shell { grid-template-columns: 1fr; }
+        .preview-pane { position: static; }
+      }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
       /* v1.1.78: removed `max-height` + `overflow-y: auto` so the preview grows naturally

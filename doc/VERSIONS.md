@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.89 - 2026-05-22
+
+fix(admin): stablet layout ved 200% zoom på 1920×1080 (#360 design-first)
+
+Etter design-runde med bruker (alternativ B valgt): bump single-column-breakpoint
+fra 900px → 1024px, og drop `position: sticky` på preview-pane når stablet.
+
+**Måling før kode:**
+- 1920×1080 + 200% zoom = effektiv 960px CSS-viewport
+- Falt mellom gammel breakpoint (900) og standard desktop (1280+)
+- I dual-column ved 960px: chat-pane fikk 380px (cramped ved 200% zoom),
+  preview's sticky pos lagde visuell overlapp med chat
+
+**Endring (minimal):**
+- `@media (max-width: 900px)` → `@media (max-width: 1024px)`
+- Inni media-query: `.preview-pane { position: static }` (drop sticky i stablet modus)
+
+**Forventet effekt ved ulike viewports:**
+- ≥1025px (normal desktop): uendret — dual-column med sticky preview
+- 1024px og mindre (inkl. 1920×1080+200% zoom = 960px): stablet, hver pane full bredde
+- 200% zoom på mindre skjermer (1366×768 → 683px): allerede stablet før, fortsatt stablet
+
+Ingen JS-endringer, ingen øvrige CSS-tweaks. Kun strukturell breakpoint-fix.
+
 ## 1.1.88 - 2026-05-22
 
 revert(admin): rull tilbake 200% zoom layout-endringer fra v1.1.86/v1.1.87 (#360 partial)
