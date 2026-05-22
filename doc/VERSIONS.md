@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.83 - 2026-05-22
+
+fix(infra): parallelize 3 ZIP uploads i deploy-environment.ps1 (closes #408)
+
+Tidligere kjørte `Invoke-WebAppDeploy` for worker → parser → web sekvensielt, hver ~45-60s.
+Nå kjører alle tre i parallell med PS7 `ForEach-Object -Parallel -ThrottleLimit 3`.
+Forventet besparelse: ~2-3 min per deploy.
+
+**OIDC-håndtering**: `Refresh-AzureCliOidcLogin` kalles én gang før parallell-blokken
+slik at alle tre runspaces deler samme `az`-CLI-session via `~/.azure/` på disk.
+Funksjonens 4-min throttle hadde uansett gjort at de tre per-call refreshene i den
+sekvensielle versjonen ble én refresh — netto endring er at refresh nå er eksplisitt
+i stedet for tilfeldig.
+
+**Log-prefiks**: `[$appName]` foran alle Write-Host-meldinger i parallellblokken slik at
+interleaved GitHub Actions-log fortsatt kan spores tilbake til riktig deploy.
+
+**Funksjonen Invoke-WebAppDeploy** beholdes for backwards-compat selv om den ikke har
+callere lenger — kan brukes til ad-hoc manuell deploy ved behov.
+
+PowerShell `[scriptblock]::Create` parse-check passerer lokalt.
+
 ## 1.1.82 - 2026-05-22
 
 feat(admin): B4 — i18n + a11y for B1/B2/B3-editorene (closes #451)
