@@ -89,3 +89,13 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 - Deploy script: `scripts/azure/deploy-environment.ps1`
 - CI/CD: `.github/workflows/deploy-azure.yml`
 - Environments runbook: `doc/AZURE_ENVIRONMENTS.md`
+
+### Pre-merge Bicep what-if (production)
+
+Before merging a PR that touches `infra/azure/*.bicep` or `scripts/azure/deploy-environment.ps1`, run a production what-if to see the ARM diff:
+
+```bash
+gh workflow run bicep-whatif-prod.yml -f pr_number=<PR_NUMBER>
+```
+
+The diff is posted as a PR comment. Staging what-if runs automatically on PR; prod what-if is manual because the production GitHub environment has approval gates that would block PR-time auto-runs (#419).

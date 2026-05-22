@@ -95,6 +95,16 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 | Changes to `scripts/azure/deploy-environment.ps1` | Either | Both workflows use the same script; the change auto-picks via main |
 | Secret rotation requiring KV-ref refresh | `.github/workflows/deploy-azure.yml` | KV-ref propagation + container restart needed |
 
+### Pre-merge Bicep what-if (production)
+
+Before merging a PR that touches `infra/azure/*.bicep` or `scripts/azure/deploy-environment.ps1`, run a production what-if to see the ARM diff:
+
+```bash
+gh workflow run bicep-whatif-prod.yml -f pr_number=<PR_NUMBER>
+```
+
+The diff is posted as a PR comment. Staging what-if runs automatically on PR; prod what-if is manual because the production GitHub environment has approval gates that would block PR-time auto-runs (#419).
+
 ## AI delegation workflow (Claude orchestrates, Codex/Gemini drafts)
 
 Use `scripts/ai-draft.ps1` to delegate implementation to Codex or Gemini, then Claude QAs.

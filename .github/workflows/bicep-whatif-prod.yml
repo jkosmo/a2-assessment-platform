@@ -1,0 +1,133 @@
+name: Bicep what-if (production, manual)
+
+# #419: prod what-if as a manual pre-merge check. Cannot run on pull_request like the
+# staging variant because:
+#   - Prod uses a different Azure tenant (CLAUDE.md tenant-split table)
+#   - The production GitHub environment has approval gates that would block PR-time runs
+#
+# Usage: before merging a PR that touches Bicep or the deploy script, trigger this
+# workflow manually with the PR number. The diff is posted as a PR comment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to post the what-if comment on (leave blank to only log)"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  whatif-production:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve PR ref (if pr_number given)
+        id: ref
+        run: |
+          if [ -n "${{ inputs.pr_number }}" ]; then
+            ref=$(gh pr view "${{ inputs.pr_number }}" --json headRefName --jq '.headRefName')
+            echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout PR branch
+        if: inputs.pr_number != ''
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+
+      - name: Azure login (OIDC — production tenant)
+        uses: azure/login@v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run Bicep what-if (production)
+        id: whatif
+        run: |
+          output=$(az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --template-file infra/azure/main.bicep \
+            --mode Incremental \
+            --no-pretty-print \
+            --parameters \
+              environmentName=production \
+              location="${{ vars.AZURE_LOCATION }}" \
+              appNamePrefix="${{ vars.AZURE_APP_NAME_PREFIX }}" \
+              appServiceSkuName="${{ vars.AZURE_APP_SERVICE_SKU }}" \
+              postgresAdministratorLogin="${{ vars.POSTGRES_ADMIN_USERNAME }}" \
+              postgresAdministratorPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
+              postgresDatabaseName="${{ vars.POSTGRES_DATABASE_NAME }}" \
+              postgresVersion="${{ vars.POSTGRES_VERSION }}" \
+              postgresSkuName="${{ vars.POSTGRES_SKU_NAME }}" \
+              postgresSkuTier="${{ vars.POSTGRES_SKU_TIER }}" \
+              skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'true' }}" \
+            2>&1 || true)
+          echo "result<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$output" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post what-if result as PR comment
+        if: inputs.pr_number != ''
+        uses: actions/github-script@v9.0.0
+        with:
+          script: |
+            const result = `${{ steps.whatif.outputs.result }}`;
+            const body = [
+              '## Bicep what-if — production (manual)',
+              '',
+              `Changes that would be applied to \`${process.env.AZURE_RG_PROD || 'rg-a2-assessment-production'}\` if this PR is deployed:`,
+              '',
+              '```',
+              result.slice(0, 60000),
+              '```',
+              '',
+              '_Informational only. A green what-if does NOT guarantee runtime correctness — verify staging `/healthz` first (CLAUDE.md invariant #10), then deploy to prod via `deploy-azure.yml` with manual approval._',
+            ].join('\n');
+
+            const prNumber = parseInt('${{ inputs.pr_number }}', 10);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.startsWith('## Bicep what-if — production (manual)')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
+
+      - name: Log what-if to job output (no PR)
+        if: inputs.pr_number == ''
+        run: |
+          echo "Production what-if output:"
+          echo '${{ steps.whatif.outputs.result }}'
