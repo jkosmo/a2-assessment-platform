@@ -3610,10 +3610,11 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {
-  logBot(() => t("shell.askMcq.prompt"), [
-    { labelKey: "shell.askMcq.yes", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, () => showDraftReadyActions()) },
-    { labelKey: "shell.askMcq.no",  action: showDraftReadyActions },
-  ]);
+  // v1.1.96: Yes/No-dialogen ble fjernet. MCQ er nødvendig for save fra samtale, så "Nei"
+  // var en dead-end (bekreftet via bruker-feedback 2026-05-22). Går direkte til count-
+  // dialogen. Bruker kan fortsatt avbryte via "Avbryt"-knappen på progress-meldingen
+  // hvis de virkelig ikke vil ha MCQ — da må de bruke Avansert editor i stedet.
+  askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, () => showDraftReadyActions());
 }
 
 // v1.1.81: auto-generate criteria into sessionDraft so the preview pane shows them during

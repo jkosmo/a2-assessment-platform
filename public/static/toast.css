@@ -28,9 +28,13 @@
   background: #f4fbf7;
 }
 
+/* v1.1.96: errors don't auto-dismiss anymore (v1.1.95) so they should be visually
+   more prominent — bredere venstrekant + sterkere bakgrunns-tone for å trekke
+   oppmerksomhet. Success/info beholder slank kant siden de auto-dismisser. */
 .toast--error {
   border-left-color: #b42318;
-  background: #fff6f5;
+  border-left-width: 6px;
+  background: #ffeded;
 }
 
 .toast--info {

@@ -2,6 +2,42 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.96 - 2026-05-22
+
+fix(admin): fjern MCQ Yes/No-dialog + typo-fix + tydeligere error-toast (batched x3)
+
+Tre uavhengige UX-fixes per ux_batching-policy.
+
+**Fix (a) — fjern MCQ Yes/No-dialog**
+
+Tidligere flyt etter draft-generering:
+1. Bot: "Vil du også generere flervalgsspørsmål (MCQ)?" [Ja] [Nei]
+2. Hvis Ja → bot: "Hvor mange?" [3] [5] [10] [Egendefinert]
+3. Generering
+
+Nei-valget var en dead-end (v1.1.95 la til recovery-actions, men det reagerer på
+problemet i stedet for å forebygge). Bruker spurte: "Trenger vi egentlig å spørre om
+MCQ generering, hva med å bare gjøre det?". Korrekt observasjon — siden save krever
+MCQ, gir Yes/No-valget bare friksjon uten reell verdi.
+
+`askForMcqGeneration` går nå direkte til `askForMcqQuestionCount` (count-dialog).
+Hvis bruker virkelig ikke vil ha MCQ kan de bruke Avansert editor i stedet.
+
+**Fix (b) — typo "flervalgssspørsmål" → "flervalgsspørsmål"**
+
+6 nb-keys og 6 nn-keys hadde 3 s'er i sammensetningen ("flerval**gss**sp" / "fleirval**ss**sp"):
+- `shell.module.generateMcq`, `shell.blueprint.mcqSuggestion`,
+  `shell.generating.mcqProgress`, `shell.generating.mcqReady`,
+  `shell.askMcq.prompt`, `shell.mcq.countLabel`
+
+Total 12 forekomster fikset via `sed`. Locale-parity bevart (nb/nn missing=0 extra=0).
+
+**Fix (c) — error-toast mer prominent**
+
+Etter v1.1.95 auto-dismisser ikke error-toaster lenger (krever brukerklikk på ×).
+Da bør de visuelt trekke mer oppmerksomhet. `border-left-width: 4px → 6px` og sterkere
+bakgrunns-tone (`#fff6f5 → #ffeded`). Success/info uendret.
+
 ## 1.1.95 - 2026-05-22
 
 fix(admin): MCQ-save dead-end + toast auto-dismiss tuning + close-glyph (batched x3)
