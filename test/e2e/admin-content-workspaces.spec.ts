@@ -1103,7 +1103,9 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByRole("button", { name: /^Ordinary$|^Vanlig$|^Thorough$|^Grundig$/i })).toHaveCount(0);
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
-    await clickEnabledButton(page, "Yes, generate MCQ");
+    // v1.1.96 removed the "Yes/No, generate MCQ" dialog — MCQ is required for save from
+    // the shell, so the "No" branch was a dead-end. Flow now goes directly to the count
+    // question after the blueprint is accepted.
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
