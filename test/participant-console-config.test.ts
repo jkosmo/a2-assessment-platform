@@ -312,7 +312,9 @@ describe("participant console runtime config", () => {
     const toastJsResponse = await request(app).get("/static/toast.js");
     expect(toastJsResponse.status).toBe(200);
     expect(toastJsResponse.text).toContain("export function showToast");
-    expect(toastJsResponse.text).toContain("AUTO_DISMISS_MS = 5000");
+    // v1.1.95: AUTO_DISMISS_MS is now per-type ({ success: 8000, info: 8000, error: 0 })
+    // instead of a single 5000. Test still verifies the bundle exports the timing config.
+    expect(toastJsResponse.text).toContain("AUTO_DISMISS_MS");
 
     const participantJsResponse = await request(app).get("/static/participant.js");
     expect(participantJsResponse.status).toBe(200);
