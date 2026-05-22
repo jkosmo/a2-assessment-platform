@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.82 - 2026-05-22
+
+feat(admin): B4 — i18n + a11y for B1/B2/B3-editorene (closes #451)
+
+B4 fullfører B-serien (#445 epic) med tilgjengelighet og oversettelses-finpuss på B1
+(Vurderingsplan), B2 (Vurderingskriterier) og B3 (drift/diff).
+
+**i18n**:
+- Audit: alle eksisterende nøkler komplette i nb/nn/en-GB (0 missing, 0 extra) før og
+  etter denne endringen.
+- Nye dynamiske aria-label-nøkler i alle tre språk: `shell.blueprint.objectiveAria`,
+  `topicAria`, `removeObjectiveWithLabel`, `removeObjectivePositional`,
+  `removeTopicWithLabel`, `removeTopicPositional`; `shell.criteria.weightOfTen`,
+  `removeAriaWithLabel`, `removeAriaPositional`.
+
+**B1 Vurderingsplan-editor (a11y)**:
+- Hver mål- og tema-input fikk `aria-label="Læringsmål {n}"` / `"Sentralt tema {n}"`
+  for skjermleser-navigasjon uavhengig av seksjonsoverskrift.
+- Fjern-knapper inkluderer nå tekstinnholdet i aria-label ("Fjern læringsmål: Analyser
+  tekst") med positional fallback ("Fjern læringsmål 3") når feltet er tomt.
+- Input-handler oppdaterer fjern-knappens aria-label live mens brukeren skriver, så
+  skjermleser-tekst aldri henger etter visuelt innhold.
+
+**B2 Vurderingskriterier-editor (a11y)**:
+- Slider `aria-valuetext` lokalisert via `shell.criteria.weightOfTen` ("{value} av 10"
+  / "of 10"). Tidligere hardkodet norsk.
+- Slider input-handler oppdaterer `aria-valuenow` + `aria-valuetext` dynamisk under
+  drag/pil-justering.
+- Fjern-knappens aria-label inkluderer kriteriumets tittel ("Fjern: Klar kommunikasjon")
+  med positional fallback. Oppdateres live når tittelen endres.
+
+**B3 Diff-modal (a11y)**:
+- Fokus-trap: Tab/Shift-Tab loops innenfor modalen.
+- ESC lukker modalen.
+- Fokus returneres til knappen som åpnet modalen ved lukking.
+- Initial fokus på første fokuserbare element ved åpning.
+
+**Allerede etablert** (verifisert i denne pass-en, ingen endring nødvendig):
+- `chatMessages` har `role="log" aria-live="polite"` → status-meldinger annonseres.
+- `shellStatusAnnouncer` har `role="status" aria-live="polite"` → `announceStatus()`-kall.
+- Toast: `role="alert"` for feil (assertive), `role="status"` for success/info (polite).
+- Drift-banner: `role="status"` (implisitt aria-live=polite).
+- Diff-modal: `role="dialog" aria-modal="true" aria-labelledby` allerede satt.
+
+tsc clean. 38/38 admin-content unit-tester passerer.
+
 ## 1.1.81 - 2026-05-22
 
 feat(admin): vis vurderingskriterier i preview ved modul-opprettelse (#449 follow-up)

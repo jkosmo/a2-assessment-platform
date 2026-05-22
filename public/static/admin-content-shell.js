@@ -2234,8 +2234,18 @@ function buildCriteriaEditorHtml(criteria, t, tf) {
   const items = criteria.map((c, i) => {
     const labelLabel = escapeHtml(t("shell.criteria.labelLabel"));
     const descLabel = escapeHtml(t("shell.criteria.descLabel"));
-    const removeAria = escapeHtml(t("shell.criteria.removeAria"));
     const weightText = escapeHtml(t("shell.criteria.weight"));
+    // B4 (#451) a11y: remove-button aria-label includes the criterion's title so screen
+    // readers say "Fjern: Klar kommunikasjon" — not just "Fjern". Falls back to a
+    // positional label when title is empty.
+    const removeAria = escapeHtml(
+      c.label?.trim()
+        ? tf("shell.criteria.removeAriaWithLabel", { label: c.label })
+        : tf("shell.criteria.removeAriaPositional", { index: i + 1 })
+    );
+    // B4 a11y: aria-valuetext is what screen readers announce. Localised "{value} av 10" /
+    // "{value} of 10". The vk-weight input event listener updates this dynamically.
+    const weightValueText = escapeHtml(tf("shell.criteria.weightOfTen", { value: c.maxScore }));
     return `
       <li class="vk-card" data-criterion-index="${i}">
         <div class="vk-row">
@@ -2253,7 +2263,7 @@ function buildCriteriaEditorHtml(criteria, t, tf) {
           <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
                  aria-label="${weightText}"
                  aria-valuemin="1" aria-valuemax="10" aria-valuenow="${c.maxScore}"
-                 aria-valuetext="${c.maxScore} av 10" />
+                 aria-valuetext="${weightValueText}" />
           <span class="vk-weight-value">${c.maxScore}</span>
         </label>
         <label class="vk-visible-label">
@@ -2518,6 +2528,10 @@ function hasManuallyEditedCriteria() {
 // Accept-selected lets the author pick a subset (checkboxes); the resulting rubric is a
 // merge of existing + selected proposals.
 function openDriftDiffModal(diff, proposedRecord) {
+  // B4 (#451) a11y: remember the element that triggered the modal so focus can return
+  // to it on close — without this, keyboard users lose their place.
+  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
   const overlay = document.createElement("div");
   overlay.className = "drift-diff-overlay";
   overlay.setAttribute("role", "dialog");
@@ -2526,7 +2540,40 @@ function openDriftDiffModal(diff, proposedRecord) {
   overlay.innerHTML = buildDriftDiffModalHtml(diff);
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
+  // B4 a11y: focus trap + ESC handler. The trap is implemented as a Tab/Shift-Tab handler
+  // on the overlay that wraps focus inside the modal's focusable elements. ESC closes.
+  const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const getFocusables = () => Array.from(overlay.querySelectorAll(focusableSelector))
+    .filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+
+  const keyHandler = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusables = getFocusables();
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  overlay.addEventListener("keydown", keyHandler);
+
+  const close = () => {
+    overlay.removeEventListener("keydown", keyHandler);
+    overlay.remove();
+    // B4 a11y: return focus to the opener so keyboard users land back where they were.
+    opener?.focus?.();
+  };
+
   overlay.querySelector('[data-diff-action="close"]')?.addEventListener("click", close);
   overlay.querySelector('[data-diff-action="cancel"]')?.addEventListener("click", close);
   overlay.addEventListener("click", (event) => {
@@ -2550,6 +2597,11 @@ function openDriftDiffModal(diff, proposedRecord) {
     const merged = mergeProposedCriteria(diff, proposedRecord, new Set(acceptedIds));
     await persistMergedRubric(merged);
   });
+
+  // B4 a11y: focus the modal's first focusable on open (default: the close button) so
+  // keyboard/screen-reader users land inside the dialog instead of staying outside.
+  const initial = getFocusables()[0];
+  initial?.focus?.();
 }
 
 function buildDriftDiffModalHtml(diff) {
@@ -2924,10 +2976,31 @@ function enterPreviewEditMode() {
         const card = e.target.closest(".vk-card");
         const valueEl = card?.querySelector(".vk-weight-value");
         if (valueEl) valueEl.textContent = String(e.target.value);
+        // B4 (#451) a11y: keep aria-valuenow + aria-valuetext in sync with the slider so
+        // screen readers announce the current weight during drag/arrow-key adjustment.
+        e.target.setAttribute("aria-valuenow", String(e.target.value));
+        e.target.setAttribute("aria-valuetext", tf("shell.criteria.weightOfTen", { value: e.target.value }));
         const total = Array.from(criteriaContainer.querySelectorAll(".vk-weight"))
           .reduce((sum, el) => sum + (Number(el.value) || 0), 0);
         const totalEl = criteriaContainer.querySelector(".vk-total-value");
         if (totalEl) totalEl.textContent = String(total);
+      }
+      // B4 (#451) a11y: when the label changes, update the remove-button's aria-label so
+      // it always says "Fjern: {current label}". Without this, screen readers would
+      // announce the stale name set at render time.
+      if (e.target.classList?.contains("vk-label")) {
+        const card = e.target.closest(".vk-card");
+        const removeBtn = card?.querySelector(".vk-remove");
+        if (removeBtn) {
+          const idx = Number(card.dataset.criterionIndex ?? 0) + 1;
+          const newLabel = String(e.target.value ?? "").trim();
+          removeBtn.setAttribute(
+            "aria-label",
+            newLabel
+              ? tf("shell.criteria.removeAriaWithLabel", { label: newLabel })
+              : tf("shell.criteria.removeAriaPositional", { index: idx }),
+          );
+        }
       }
     });
 
@@ -3248,18 +3321,34 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
   let hasManualEdits = false;
 
   const renderHtml = () => {
-    const objectiveItems = working.learningObjectives.map((o, i) =>
-      `<li class="bp-row" data-objective-index="${i}">`
-      + `<input class="bp-objective-input chat-textarea" type="text" value="${escapeHtml(o)}" data-index="${i}" />`
-      + `<button type="button" class="bp-objective-remove" data-index="${i}" aria-label="${escapeHtml(t("shell.blueprint.removeItem"))}">×</button>`
-      + `</li>`
-    ).join("");
-    const topicItems = working.keyTopics.map((tp, i) =>
-      `<li class="bp-row" data-topic-index="${i}">`
-      + `<input class="bp-topic-input chat-textarea" type="text" value="${escapeHtml(tp)}" data-index="${i}" />`
-      + `<button type="button" class="bp-topic-remove" data-index="${i}" aria-label="${escapeHtml(t("shell.blueprint.removeItem"))}">×</button>`
-      + `</li>`
-    ).join("");
+    // B4 (#451) a11y: each input gets a positional aria-label ("Læringsmål 2") so screen
+    // readers can navigate without relying on the section header alone. Remove buttons
+    // include the item value when present ("Fjern: Analysér tekst") and fall back to
+    // positional ("Fjern læringsmål 3") when the field is empty.
+    const objectiveItems = working.learningObjectives.map((o, i) => {
+      const itemAriaLabel = escapeHtml(tf("shell.blueprint.objectiveAria", { index: i + 1 }));
+      const removeAria = escapeHtml(
+        String(o ?? "").trim()
+          ? tf("shell.blueprint.removeObjectiveWithLabel", { label: o })
+          : tf("shell.blueprint.removeObjectivePositional", { index: i + 1 })
+      );
+      return `<li class="bp-row" data-objective-index="${i}">`
+        + `<input class="bp-objective-input chat-textarea" type="text" value="${escapeHtml(o)}" data-index="${i}" aria-label="${itemAriaLabel}" />`
+        + `<button type="button" class="bp-objective-remove" data-index="${i}" aria-label="${removeAria}">×</button>`
+        + `</li>`;
+    }).join("");
+    const topicItems = working.keyTopics.map((tp, i) => {
+      const itemAriaLabel = escapeHtml(tf("shell.blueprint.topicAria", { index: i + 1 }));
+      const removeAria = escapeHtml(
+        String(tp ?? "").trim()
+          ? tf("shell.blueprint.removeTopicWithLabel", { label: tp })
+          : tf("shell.blueprint.removeTopicPositional", { index: i + 1 })
+      );
+      return `<li class="bp-row" data-topic-index="${i}">`
+        + `<input class="bp-topic-input chat-textarea" type="text" value="${escapeHtml(tp)}" data-index="${i}" aria-label="${itemAriaLabel}" />`
+        + `<button type="button" class="bp-topic-remove" data-index="${i}" aria-label="${removeAria}">×</button>`
+        + `</li>`;
+    }).join("");
     const mcqCount = working.mcqProfile?.suggestedCount ?? "–";
     const notes = working.notes ? `<p class="bp-notes">${escapeHtml(working.notes)}</p>` : "";
     return `<strong>${escapeHtml(t("shell.blueprint.ready"))}</strong>
@@ -3308,7 +3397,40 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
 
     const editor = slot.el.querySelector(".bp-editor");
     if (!editor) return;
-    editor.addEventListener("input", () => { hasManualEdits = true; });
+    editor.addEventListener("input", (e) => {
+      hasManualEdits = true;
+      // B4 (#451) a11y: keep remove-button aria-label in sync with the input value so the
+      // announced text matches what's visible. Without this, screen readers would read the
+      // stale label from initial render.
+      const target = e.target;
+      if (target?.classList?.contains("bp-objective-input")) {
+        const row = target.closest("[data-objective-index]");
+        const btn = row?.querySelector(".bp-objective-remove");
+        if (btn) {
+          const idx = Number(row.dataset.objectiveIndex ?? 0) + 1;
+          const value = String(target.value ?? "").trim();
+          btn.setAttribute(
+            "aria-label",
+            value
+              ? tf("shell.blueprint.removeObjectiveWithLabel", { label: value })
+              : tf("shell.blueprint.removeObjectivePositional", { index: idx }),
+          );
+        }
+      } else if (target?.classList?.contains("bp-topic-input")) {
+        const row = target.closest("[data-topic-index]");
+        const btn = row?.querySelector(".bp-topic-remove");
+        if (btn) {
+          const idx = Number(row.dataset.topicIndex ?? 0) + 1;
+          const value = String(target.value ?? "").trim();
+          btn.setAttribute(
+            "aria-label",
+            value
+              ? tf("shell.blueprint.removeTopicWithLabel", { label: value })
+              : tf("shell.blueprint.removeTopicPositional", { index: idx }),
+          );
+        }
+      }
+    });
     editor.addEventListener("click", (e) => {
       const target = e.target.closest("button");
       if (!target) return;
