@@ -1,5 +1,10 @@
 # CLAUDE.md — Critical context for AI agents
 
+> **Maintained in sync with `AGENTS.md`** (which Codex reads). Any change to the invariants,
+> tenant-split table, deploy discipline, or QA checklist sections MUST be applied to both
+> files in the same commit. CLAUDE.md additionally covers orchestration, AI delegation flow,
+> and Claude-specific guidance not relevant to other agents.
+
 ## ⚠️ CRITICAL: PRODUCTION AND STAGING USE DIFFERENT AZURE TENANTS
 
 **THIS IS THE SINGLE MOST IMPORTANT THING TO KNOW BEFORE RUNNING ANY `az` CLI COMMANDS.**
@@ -167,6 +172,8 @@ These rules exist because their violation caused or worsened the May 2026 produc
 8. **Never** run prod-destructive scripts without first asserting the correct subscription (`az account show`) and resource group.
 9. **Always** include rollback notes for infra changes in the PR description.
 10. **Always** verify staging `/healthz` is healthy before triggering a production deploy.
+11. **Always** propose `az deployment group what-if` output for staging (and prod) before implementing non-trivial Bicep changes. ARM what-if is the only check that catches schema drift before deploy.
+12. **Always** apply credential changes atomically: a KV secret and the underlying resource (PostgreSQL server, Storage account, etc.) must be updated in the same deploy, or one must explicitly re-read the existing value. Drift between KV and the underlying resource is silent until the next app restart.
 
 ---
 
