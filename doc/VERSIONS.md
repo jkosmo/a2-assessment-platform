@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.91 - 2026-05-22
+
+fix(admin): race condition mellom auto-kriteriegenerering og Rediger direkte (#360 follow-up)
+
+UI-test av v1.1.90 fant ny race condition. Sekvens:
+1. Bruker lager modul med MCQ
+2. `showDraftReadyActions` fyrer `populateSessionDraftCriteriaInBackground` (~3-5s LLM-kall)
+3. Bruker klikker "Rediger direkte" FØR kriterier er ferdig generert
+4. `enterPreviewEditMode` rendrer edit-form i preview-pane
+5. Auto-genereringen avslutter, kaller `renderPreview()` i finally-blokken
+6. → wiper edit-form-DOM, preview går tilbake til read-mode
+7. Chat sier "Rediger feltene i forhåndsvisningen, klikk Bekreft" — men det finnes ingen
+   Bekreft-knapp lenger fordi formen er borte
+
+Fix: i `populateSessionDraftCriteriaInBackground`-finally, sjekk om
+`.preview-pane--editing`-klassen er aktiv. Hvis ja, hopp over `renderPreview()`.
+`sessionDraft.criteria` er fortsatt oppdatert; brukerens edit-form bevares.
+
+Edge case: hvis bruker går inn i edit-mode FØR genereringen er ferdig, har edit-formen
+ingen kriterier i editor-state. Når bruker lagrer, går flow gjennom ensure-rubric
+fallback (samme som før v1.1.81). Litt suboptimalt men ikke kritisk — save fungerer.
+
 ## 1.1.90 - 2026-05-22
 
 fix(admin): fjern sticky preview-pane — løser overlap-bugen (#360)

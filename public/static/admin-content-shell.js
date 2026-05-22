@@ -3610,7 +3610,15 @@ async function populateSessionDraftCriteriaInBackground() {
     // see the criteria in preview until after save in that case.
   } finally {
     criteriaGenerationInFlight = false;
-    renderPreview();
+    // v1.1.91: don't re-render if the user has entered Rediger direkte while generation
+    // was in flight. Re-rendering would wipe out their edit form (race condition reported
+    // 2026-05-22). sessionDraft.criteria has been updated; the user's edit-form retains
+    // whatever criteria state was loaded when they entered edit-mode (empty if they
+    // clicked before generation finished — save still works via ensure-rubric fallback).
+    const inEditMode = previewPaneEl?.classList.contains("preview-pane--editing");
+    if (!inEditMode) {
+      renderPreview();
+    }
   }
 }
 
