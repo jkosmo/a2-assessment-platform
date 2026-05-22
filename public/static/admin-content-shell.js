@@ -91,6 +91,11 @@ let latestSavedModuleVersionId = null;
 // (in scalingRule.generated_from_blueprint_hash) to detect drift.
 let currentBlueprintHash = null;
 
+// v1.1.81: tracks whether criteria-generation is in flight for the current sessionDraft.
+// Used by renderPreview to show a "Vurderingskriterier genereres…" placeholder. Reset
+// whenever sessionDraft is replaced (commitSessionDraftPatch / loadModule).
+let criteriaGenerationInFlight = false;
+
 // Chat log — every rendered message is stored here as a re-renderable spec so
 // that retranslateChat() can rebuild the entire dialog on locale switch.
 // Entry kinds:
@@ -810,6 +815,9 @@ function renderPreview() {
       // B2 (#449): show Vurderingskriterier in the preview pane as content. Prefer draft
       // overrides if user has edited via Rediger direkte; fall back to persisted rubric.
       criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
+      // v1.1.81: show "genereres…" placeholder when criteria-generation is in flight for
+      // the current sessionDraft.
+      criteriaLoadingText: criteriaGenerationInFlight ? t("shell.criteria.generating") : "",
       // B3 (#450): drift banner rendered above the criteria section.
       driftBanner,
       versionChain: versionChainParts.join(" · "),
@@ -3415,8 +3423,64 @@ function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) 
   ]);
 }
 
+// v1.1.81: auto-generate criteria into sessionDraft so the preview pane shows them during
+// creation (before save). B2 (#449 redesign) made criteria "content" — they belong in the
+// preview pane, not gated behind save+publish+reopen. Fires once per session-draft when:
+//   - sessionDraft exists with taskText + assessor (otherwise LLM has nothing to work with)
+//   - sessionDraft.criteria not already set (idempotent — handoff/edit may pre-populate it)
+// On success, sessionDraft.criteria becomes the storage-shape record that saveDraftBundle
+// then POSTs as a new RubricVersion (the "explicit criteria" branch, not ensure-rubric).
+async function populateSessionDraftCriteriaInBackground() {
+  if (!sessionDraft) return;
+  if (sessionDraft.criteria) return;
+  const taskText = String(translateLocalizedText(sessionDraft.taskText ?? "") ?? "").trim();
+  const assessorText = String(translateLocalizedText(sessionDraft.assessorExpectedContent ?? "") ?? "").trim();
+  if (!taskText || !assessorText) return;
+  const constraintsText = String(translateLocalizedText(sessionDraft.candidateTaskConstraints ?? "") ?? "").trim();
+
+  let blueprintObject = null;
+  const bp = sessionDraft.assessmentBlueprint ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint;
+  if (bp) {
+    if (typeof bp === "string") {
+      try { blueprintObject = JSON.parse(bp); } catch { blueprintObject = null; }
+    } else if (typeof bp === "object") {
+      blueprintObject = bp;
+    }
+  }
+
+  criteriaGenerationInFlight = true;
+  renderPreview();
+  try {
+    const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        taskText,
+        assessorExpectedContent: assessorText,
+        candidateTaskConstraints: constraintsText || undefined,
+        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+        locale: currentLocale,
+        ...(blueprintObject ? { blueprint: blueprintObject } : {}),
+      }),
+    });
+    const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
+    const record = llmCriteriaArrayToStorageRecord(generated);
+    if (sessionDraft && Object.keys(record).length > 0) {
+      sessionDraft = { ...sessionDraft, criteria: record };
+    }
+  } catch {
+    // Silent fail — save-time ensure-rubric will still produce a rubric. Users just won't
+    // see the criteria in preview until after save in that case.
+  } finally {
+    criteriaGenerationInFlight = false;
+    renderPreview();
+  }
+}
+
 function showDraftReadyActions() {
   sessionState = "draft-pending";
+  // v1.1.81: kick off criteria-generation in background so preview shows them.
+  // Idempotent — does nothing if sessionDraft.criteria is already populated.
+  populateSessionDraftCriteriaInBackground();
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {

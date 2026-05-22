@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.81 - 2026-05-22
+
+feat(admin): vis vurderingskriterier i preview ved modul-opprettelse (#449 follow-up)
+
+UI-test av v1.1.79 avdekket at vurderingskriterier ikke vises i preview-pane før modulen
+er lagret + publisert + åpnet for ny redigering. Bruker-feedback: kriterier skal være
+synlige ved opprettelse, ikke gjemt bak save+publish+reopen. Det matcher B2-prinsippet
+om at kriterier er innhold.
+
+Ny `populateSessionDraftCriteriaInBackground()` kalles fra `showDraftReadyActions`. Den
+kaller `/api/admin/content/generate/rubric` med gjeldende taskText + assessorExpectedContent
++ assessmentBlueprint, konverterer LLM-array til storage-shape-record, og setter
+`sessionDraft.criteria`. Mens kallet pågår vises placeholder "Genererer vurderingskriterier…"
+i preview-pane. Når kallet er ferdig vises kriteriene umiddelbart.
+
+Idempotent: hopper over hvis `sessionDraft.criteria` allerede er satt (f.eks. via handoff
+eller direkte-edit). Stille-feiler hvis LLM-kallet feiler — save-tid ensure-rubric vil
+fortsatt produsere en rubric.
+
+Bonus: når `sessionDraft.criteria` er populert ved save-tid, går save gjennom "explicit
+criteria"-branchen (POST `/rubric-versions`), ikke ensure-rubric. Resultatet er at
+rubric-versjonen som lagres er den brukeren akkurat så i preview, ikke en separat
+LLM-generert versjon.
+
+i18n: `shell.criteria.generating` for en-GB / nb / nn.
+
 ## 1.1.80 - 2026-05-22
 
 ux(admin): fjern confirm-dialog ved "Generer på nytt fra planen" i Rediger direkte (v1.1.79 follow-up)

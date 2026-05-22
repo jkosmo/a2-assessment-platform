@@ -166,7 +166,16 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ? `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`
     : "";
   const mcqHtml = renderPreviewMcqQuestions(mcqQuestions, locale, t, tf);
-  const criteriaHtml = renderPreviewCriteria(criteria, t, tf);
+  // v1.1.81: when shell signals criteria-generation in flight AND no persisted/draft
+  // criteria exist yet, show a placeholder section so users see something is coming.
+  const criteriaLoadingText = data.criteriaLoadingText ?? "";
+  const hasCriteria = criteria && typeof criteria === "object" && Object.keys(criteria).length > 0;
+  const criteriaHtml = hasCriteria
+    ? renderPreviewCriteria(criteria, t, tf)
+    : (criteriaLoadingText
+      ? `<div class="preview-section-label">${escapeHtml(t("shell.criteria.title").replace(/\s*\(\{count\}\)\s*/, ""))}</div>
+         <p class="preview-criteria-loading">${escapeHtml(criteriaLoadingText)}</p>`
+      : "");
 
   return `
     <div class="preview-module-header">
