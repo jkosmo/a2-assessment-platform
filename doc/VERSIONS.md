@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.90 - 2026-05-22
+
+fix(admin): fjern sticky preview-pane — løser overlap-bugen (#360)
+
+Root cause for 200%-zoom-overlappen: `position: sticky` på preview-pane lager sin egen
+stacking-context. Når chat-pane (senere i DOM, ingen sticky) scrolles inn i samme
+vertikale område, painter den ON TOP av sticky preview. Kombinert med at
+`.btn-secondary` har `background: transparent`, fikk preview-tekst til å lyse gjennom
+chat-knapper — den karakteristiske visuelle overlappen brukeren rapporterte.
+
+Fix: `position: sticky` fjernet globalt fra `.preview-pane`. Default `static`
+positioning betyr at preview og chat følger normal flow uten stacking-context-konflikt.
+
+**Funksjonell trade-off**: Tidligere ville preview "følge" brukeren ved scrolling
+av siden. Nå scroller preview vekk når man scroller ned. Men `chat-messages` har sin
+egen interne scroll, så i praksis trenger ikke siden scrolles i normal dual-column-bruk.
+Hvis preview-content blir lang, scroller hele siden naturlig.
+
+@media (max-width: 1024px)-breakpoint beholdt fra v1.1.89 så 1920×1080 + 200% zoom
+fortsatt trigger stablet layout (chat under preview, hver full bredde).
+
 ## 1.1.89 - 2026-05-22
 
 fix(admin): stablet layout ved 200% zoom på 1920×1080 (#360 design-first)

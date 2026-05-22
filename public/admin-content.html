@@ -15,24 +15,21 @@
       .advanced-link:hover { color: var(--color-link-active); text-decoration: underline; }
 
       .workspace-shell { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-2); align-items: start; }
-      /* #360 (200% zoom): 1920×1080 + 200% zoom → effektiv viewport 960px. Den falt
-         tidligere innenfor dual-column (>900px breakpoint), så chat ble klemt til 380px
-         og preview's `position: sticky` overlappet visuelt. Bump til 1024px slik at 960px
-         viewport får stablet layout — hver pane får full bredde (~928px) og scroller
-         naturlig. Sticky-preview slås av i stablet modus så de to seksjonene flyter
-         naturlig nedover siden i stedet for å konkurrere om viewport. */
-      @media (max-width: 1024px) {
-        .workspace-shell { grid-template-columns: 1fr; }
-        .preview-pane { position: static; }
-      }
+      /* #360 (200% zoom): bump fra 900px → 1024px slik at 1920×1080 + 200% zoom (effektiv
+         960px) trigger stablet layout. Sticky-preview er borte globalt (se preview-pane
+         CSS), så ingen stacking-overrides her — bare grid-direction. */
+      @media (max-width: 1024px) { .workspace-shell { grid-template-columns: 1fr; } }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
-      /* v1.1.78: removed `max-height` + `overflow-y: auto` so the preview grows naturally
-         with content — authors should not need to scroll WITHIN the preview pane. Page
-         scroll is the only scroll. position: sticky keeps the preview visible while the
-         chat-pane scrolls independently for short modules; long modules just scroll the
-         whole page (sticky doesn't apply when element is taller than viewport). */
-      .preview-pane { position: sticky; top: var(--space-2); }
+      /* v1.1.90 (#360 final): removed `position: sticky` entirely. Sticky created its own
+         stacking context — when chat-pane (later in DOM) scrolled into the same vertical
+         area, it painted ON TOP of sticky preview. Combined with chat-choice-btn's
+         transparent background (.btn-secondary), this made preview text bleed through
+         chat buttons in a confusing visual overlap. Plain static positioning lets the
+         two panes stack naturally in single-column and sit side-by-side in dual-column
+         without z-index/stacking-context interference.
+         v1.1.78 history: removed max-height + overflow-y:auto so preview grows naturally. */
+      .preview-pane { /* position: static is the default */ }
       /* Locale bar only shown when a module is loaded (JS adds .visible) */
       .preview-locale-bar { display: none; gap: 4px; margin-bottom: var(--space-1); }
       .preview-locale-bar.visible { display: flex; }
