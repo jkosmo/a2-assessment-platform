@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.88 - 2026-05-22
+
+revert(admin): rull tilbake 200% zoom layout-endringer fra v1.1.86/v1.1.87 (#360 partial)
+
+UI-test av v1.1.87 viste at chat-pane fortsatt var tynn og hadde visuell overlapp med
+preview-pane. Bruker-feedback: dette er blind iterasjon på CSS, akkurat det
+memory-feedback `no_blind_ui_iteration` advarte mot.
+
+Reverter:
+- `@media (max-width: 900px)` blokken tilbake til original (kun `grid-template-columns: 1fr`)
+- `scrollPreviewToTop` tilbake til enkel `scrollTo({ top: 0 })`
+
+Beholder fra v1.1.86/v1.1.87:
+- "Generer fra kildemateriale": fokus på "Last opp fil" + `role="group"` + i18n-keys
+- "Videregående" (nb) / "Vidaregåande" (nn) for intermediate cert-nivå
+
+#360 layout-delen (200% zoom) krever skikkelig design-arbeid: faktiske bredder ved
+ulike viewport-størrelser, sketch, validering før CSS skrives. Ikke flere
+"deploy-test-iterer"-runder.
+
 ## 1.1.87 - 2026-05-22
 
 fix(admin): cert-nivå "Videregående" + 200% zoom chat-pane ikke lenger tynn stripe (#360 follow-up)
