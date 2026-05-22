@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.87 - 2026-05-22
+
+fix(admin): cert-nivå "Videregående" + 200% zoom chat-pane ikke lenger tynn stripe (#360 follow-up)
+
+UI-test av v1.1.86 avdekket to ting:
+
+1. **Begrepsbruk: intermediate cert-nivå** — vist som "Middels" i nb og nn. Bruker-feedback:
+   skal være "Videregående" (nb) / "Vidaregåande" (nn) per norsk utdannings-terminologi.
+   Endret `shell.certLevel.intermediate` i begge locale-overrides. en-GB beholder
+   "Intermediate" (mer generisk på engelsk).
+
+2. **200% zoom chat-pane kollapser** — v1.1.86 ga preview-pane `position: sticky` +
+   `z-index: 2` i single-column-modus. Resultatet ble at sticky preview konsumerte
+   nesten hele viewport, og chat-pane ble klemt til en tynn stripe — i praksis ubrukelig.
+
+Fix:
+- `.preview-pane { position: static }` i `@media (max-width: 900px)` — begge paner flyter
+  naturlig nedover siden i stedet
+- `.chat-pane { min-height: 70vh; border-top: 3px solid blue-light }` i samme media-query
+  — garantert plass + tydelig visuelt skille mellom preview og chat
+- z-index fjernet siden static ikke trenger stacking-kontekst
+- box-shadow på preview beholdt — gir fortsatt god visuell separasjon
+
 ## 1.1.86 - 2026-05-22
 
 fix(admin): shell source-material focus + 200% zoom layout polish (closes #360)
