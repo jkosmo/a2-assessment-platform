@@ -404,6 +404,11 @@ function _domFormFields(entry) {
   if (entry.initialValue) inputEl.value = entry.initialValue;
 
   if (isSourceMaterial) {
+    // #360 a11y: wrap upload + textarea in a semantic group so screen readers announce
+    // them as related controls. wrap is the outer chat-form-col which becomes the group.
+    wrap.setAttribute("role", "group");
+    wrap.setAttribute("aria-label", t("shell.source.groupLabel"));
+
     const uploadRow = document.createElement("div");
     uploadRow.className = "chat-form-row";
 
@@ -544,7 +549,18 @@ function _domFormFields(entry) {
   wrap.appendChild(btn);
   chatMessages.appendChild(wrap);
   _domScroll(wrap);
-  setTimeout(() => inputEl.focus(), 80);
+  // #360 a11y: for source-material, focus the upload button — the first meaningful
+  // control in the step. Keyboard users discover both upload AND textarea via natural
+  // Tab order; previously textarea autofocus required Shift+Tab to find the upload.
+  // For other form types, keep textarea/input autofocus (instant typing).
+  setTimeout(() => {
+    if (isSourceMaterial) {
+      const uploadBtn = wrap.querySelector(".chat-choice-btn");
+      (uploadBtn ?? inputEl).focus();
+    } else {
+      inputEl.focus();
+    }
+  }, 80);
 }
 
 // Renders a module-picker choices column.
@@ -845,7 +861,18 @@ function renderPreview() {
 }
 
 function scrollPreviewToTop() {
-  previewPane?.scrollTo({ top: 0, behavior: "smooth" });
+  if (!previewPane) return;
+  // #360 (200% zoom): in single-column layout (≤900px viewport, common at 200% zoom)
+  // the preview pane is stacked above the chat. After generation completes the user
+  // is scrolled down inside the chat — scrolling the preview's internal content alone
+  // doesn't bring the preview back into view. Detect "preview is off-screen" and bring
+  // the page scroll up to it; then reset the preview's own scroll to top.
+  const rect = previewPane.getBoundingClientRect();
+  const offScreen = rect.bottom <= 0 || rect.top >= window.innerHeight;
+  if (offScreen) {
+    previewPane.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  previewPane.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function scrollPreviewToBottom() {

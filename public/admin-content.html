@@ -15,7 +15,17 @@
       .advanced-link:hover { color: var(--color-link-active); text-decoration: underline; }
 
       .workspace-shell { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-2); align-items: start; }
-      @media (max-width: 900px) { .workspace-shell { grid-template-columns: 1fr; } }
+      /* #360 (200% zoom): single-column layout below 900px (common at 200% zoom on
+         standard laptops). Stronger visual separation between preview and chat so
+         they don't bleed into each other; sticky preview must stay clearly above. */
+      @media (max-width: 900px) {
+        .workspace-shell { grid-template-columns: 1fr; }
+        .preview-pane { z-index: 2; background: var(--color-bg-card, #fff); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+        .chat-pane { z-index: 1; margin-top: var(--space-2); }
+        /* Disabled chat-choice buttons can read as "ghosted background" — softer opacity
+           keeps them legible without making them look interactive. */
+        .chat-choice-btn:disabled { opacity: 0.55; }
+      }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
       /* v1.1.78: removed `max-height` + `overflow-y: auto` so the preview grows naturally

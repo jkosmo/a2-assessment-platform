@@ -2,6 +2,46 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.86 - 2026-05-22
+
+fix(admin): shell source-material focus + 200% zoom layout polish (closes #360)
+
+**Finding 1 — Keyboard focus order i kildemateriale-steg**
+
+Når brukeren velger "Generer innhold fra kildemateriale" presenterer shell-en både
+"Last opp fil"-knapp og et tekstfelt. Tekstfeltet fikk autofokus, så tastatur-brukere
+måtte Shift+Tab tilbake for å finne opplastings-knappen. #311 a11y-review flagget
+dette som ikke-blokkerende friksjon.
+
+Fix:
+- Initial fokus settes på "Last opp fil"-knappen (første meningsfulle kontroll i steget)
+- Hele formen wrappes i `role="group"` med `aria-label="Kildemateriale — last opp en
+  fil eller lim inn tekst"` (lokalisert nb/nn/en-GB via ny `shell.source.groupLabel`)
+- Skjermlesere annonserer nå begge kontrollene som relaterte
+- Tab-rekkefølge: upload → textarea → submit (naturlig leserekkefølge)
+
+Andre form-typer beholder textarea/input-autofokus (instant typing).
+
+**Finding 2 — 200% zoom post-generation layout**
+
+På 200% zoom og lignende cramped viewports (1366×768 → effektiv 683px) ble layout-en
+single-column (preview over chat). To problemer:
+
+1. `scrollPreviewToTop()` scrollet kun innenfor preview-pane — i single-column når
+   brukeren var scrollet ned i chat, ble preview-en aldri brakt i syne etter generation.
+2. Inaktive chat-choice-knapper med `opacity: 0.45` så ut som "spøkelses-bakgrunn" når
+   både preview og lange chat-historikk stablet seg på en smal skjerm.
+
+Fix:
+- `scrollPreviewToTop()` sjekker nå om preview-pane er utenfor viewport (off-screen)
+  og kaller `scrollIntoView({ block: "start" })` før den scroller pane'ens innhold
+  til topp. I dual-column-modus oppfører den seg uendret (off-screen er sjelden true).
+- `@media (max-width: 900px)`: preview-pane får `z-index: 2 + box-shadow` så den er
+  visuelt tydelig adskilt fra chat. Chat-pane får `margin-top` for å bryte stablingen.
+  Disabled chat-choice-btn opacity hevet fra 0.45 → 0.55 (mer lesbar i single-column).
+
+Ingen funksjonelle endringer — kun a11y- og responsive-polish.
+
 ## 1.1.85 - 2026-05-22
 
 revert(infra): tilbake til sekvensiell ZIP-deploy (#408 lukket som "not worth it")
