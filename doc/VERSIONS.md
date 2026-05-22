@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.84 - 2026-05-22
+
+fix(infra): suppress az stderr in parallel deploy runspaces (#408 follow-up)
+
+v1.1.83 parallel-deploy feilet på stage (run 26288056998) med exit code 1 selv om alle
+tre apper /healthz=200 etter deploy. Root cause: `az webapp deploy` skriver en
+informasjonsmelding til stderr om `SCM_DO_BUILD_DURING_DEPLOYMENT`. I PS7 parallel-
+runspaces tolker `ForEach-Object -Parallel` stderr-utskrift fra native commands som
+NativeCommandError, som setter `$?` til `$false` og surface'es som job-feil — selv om
+`$LASTEXITCODE = 0`.
+
+Sekvensiell versjon (v1.1.82 og tidligere) viste samme melding men ble ikke flagget
+som feil fordi top-level PS-script ignorerer NativeCommandError for native commands.
+
+Fix: to safeguards inni hver parallell script block:
+- `$ErrorActionPreference = 'Continue'` slik at stderr ikke aborter runspace-en
+- `--only-show-errors` på `az webapp deploy` slik at INFO/WARNING ikke skrives til
+  stderr i utgangspunktet
+
+Apper var i sunn tilstand etter v1.1.83 (deployen lyktes), så ingen rollback nødvendig.
+v1.1.84 fikser bare CI-rapporteringen.
+
 ## 1.1.83 - 2026-05-22
 
 fix(infra): parallelize 3 ZIP uploads i deploy-environment.ps1 (closes #408)

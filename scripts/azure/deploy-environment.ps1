@@ -758,6 +758,14 @@ $deployTargets = @(
 )
 
 $deployTargets | ForEach-Object -ThrottleLimit 3 -Parallel {
+  # v1.1.83 stage-feil (#408): `az webapp deploy` skriver en informasjonsmelding til stderr
+  # om SCM_DO_BUILD_DURING_DEPLOYMENT. I PS7 parallel-runspaces tolker PS dette som en
+  # NativeCommandError → $? = $false → ForEach-Object -Parallel surface'er det som job-feil
+  # selv om $LASTEXITCODE = 0 og deployen faktisk lyktes. To safeguards:
+  #   1. `--only-show-errors` på az så meldingen ikke skrives til stderr
+  #   2. `$ErrorActionPreference = 'Continue'` slik at andre stderr-linjer ikke aborterer
+  #      runspace-en. Vi stoler på $LASTEXITCODE for å oppdage faktiske feil.
+  $ErrorActionPreference = 'Continue'
   $appName = $_.Name
   $resourceGroup = $using:ResourceGroupName
   $zip = $using:zipPath
@@ -772,7 +780,8 @@ $deployTargets | ForEach-Object -ThrottleLimit 3 -Parallel {
       --type zip `
       --track-status false `
       --restart true `
-      --timeout 600000 | Out-Null
+      --timeout 600000 `
+      --only-show-errors | Out-Null
     if ($LASTEXITCODE -eq 0) {
       Write-Host "[$appName] Deploy succeeded."
       return
