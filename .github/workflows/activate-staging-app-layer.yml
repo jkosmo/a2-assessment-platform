@@ -8,7 +8,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: activate-staging-app-layer-${{ github.ref }}
+  # Shared with deploy-azure / deploy-app so this Azure-mutating workflow cannot run in
+  # parallel with a deploy. Parallel ARM operations on the same RG caused ServerIsBusy
+  # cascades in the May 2026 incident (#415).
+  group: deploy-azure-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
