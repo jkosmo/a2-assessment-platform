@@ -2947,7 +2947,11 @@ function enterPreviewEditMode() {
         inputs[inputs.length - 1]?.focus();
       } else if (btn.classList.contains("vk-regenerate")) {
         captureCriteriaFromDom();
-        if (criteriaEditorState.length > 0 && !window.confirm(t("shell.criteria.regenerateWarning"))) return;
+        // v1.1.80: ingen confirm-dialog her. Endringene i editoren er ikke persistert
+        // ennå — lukker du edit-modus uten å lagre, så er de like borte uansett. Den
+        // gamle dialogen forhindret kun et tilfeldig museklikk og kostet en ekstra OK
+        // hver gang. Confirm-dialogen for B3 drift-banner ("Regenerer fra ny plan") er
+        // beholdt der den faktisk skriver til DB umiddelbart.
         regenerateCriteriaFromTask(criteriaContainer, (newList) => {
           criteriaEditorState = newList;
           reRenderCriteria();

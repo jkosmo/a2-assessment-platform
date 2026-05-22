@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.80 - 2026-05-22
+
+ux(admin): fjern confirm-dialog ved "Generer på nytt fra planen" i Rediger direkte (v1.1.79 follow-up)
+
+UI-test av v1.1.79 viste at vk-regenerate-knappen inni Rediger direkte fortsatt utløste
+en confirm-dialog ("Du har endret kriteriene. Generere på nytt vil overskrive endringene.
+Fortsette?"). Bruker-feedback: dialogen er unødvendig friksjon — endringene i editoren er
+ikke persistert ennå, så lukker man edit-modus uten å lagre er de like borte uansett.
+
+Fjernet `if (...!window.confirm(t("shell.criteria.regenerateWarning"))) return` fra
+vk-regenerate-handleren. i18n-nøkkelen `shell.criteria.regenerateWarning` beholdes for
+backwards-compat (kan brukes senere). Confirm-dialogen i B3 drift-banner
+("Regenerer fra ny plan") er beholdt der — den skriver til DB umiddelbart og er ikke
+reversibel ved å lukke noe.
+
 ## 1.1.79 - 2026-05-22
 
 feat(admin): B3 — Vurderingsplan↔Vurderingskriterier drift-deteksjon + diff-modal (closes #450)
