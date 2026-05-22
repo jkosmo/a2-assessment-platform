@@ -123,15 +123,13 @@ export function deriveShellModuleActionModel({
   canResumeEditing,
   canPublish,
   canUnpublish,
-  hasRubric,
 }) {
   const actionKeys = ["generateContent"];
   if (hasDraft) actionKeys.push("generateMcq");
   if (canResumeEditing) actionKeys.push("resumeChatEdit");
-  // B2 (#449): editCriteria appears once the module has a saved rubric. Opens the
-  // Vurderingskriterier editor in shell, letting non-technical authors refine the
-  // auto-generated rubric without going into Avansert.
-  if (hasRubric) actionKeys.push("editCriteria");
+  // B2 (#449 redesign v1.1.78): "Rediger vurderingskriterier"-action removed from menu —
+  // Vurderingskriterier are now visible as content in the preview pane and editable via
+  // "Rediger direkte". Two paths to the same place was confusing per user feedback.
   actionKeys.push("directEdit", "editAdvanced", "pickAnother");
   if (hasDraft) actionKeys.push("saveDraft");
   if (!hasDraft && canPublish) actionKeys.push("publish");

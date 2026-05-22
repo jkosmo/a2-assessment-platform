@@ -18,7 +18,12 @@
       @media (max-width: 900px) { .workspace-shell { grid-template-columns: 1fr; } }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
-      .preview-pane { position: sticky; top: var(--space-2); max-height: calc(100vh - var(--space-4)); overflow-y: auto; }
+      /* v1.1.78: removed `max-height` + `overflow-y: auto` so the preview grows naturally
+         with content — authors should not need to scroll WITHIN the preview pane. Page
+         scroll is the only scroll. position: sticky keeps the preview visible while the
+         chat-pane scrolls independently for short modules; long modules just scroll the
+         whole page (sticky doesn't apply when element is taller than viewport). */
+      .preview-pane { position: sticky; top: var(--space-2); }
       /* Locale bar only shown when a module is loaded (JS adds .visible) */
       .preview-locale-bar { display: none; gap: 4px; margin-bottom: var(--space-1); }
       .preview-locale-bar.visible { display: flex; }
@@ -177,6 +182,11 @@
       .vk-actions-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
       .vk-add-btn { background: none; border: 1px dashed var(--color-border-soft); color: var(--color-meta); padding: 8px 14px; font-size: 13px; font-weight: 500; border-radius: var(--radius-card); cursor: pointer; width: auto; }
       .vk-add-btn:hover { color: var(--color-link-active); border-color: var(--color-blue); }
+      /* v1.1.78: "Generer på nytt fra planen" trenger mer visuell vekt — det er en vanlig
+         action etter at brukeren har endret oppgavetekst eller bare ønsker friske
+         forslag. Solid bakgrunn + tydeligere kontrast. */
+      .vk-add-btn.vk-regenerate { background: var(--color-blue-light); border: 1px solid var(--color-blue); border-style: solid; color: var(--color-link-active); font-weight: 600; }
+      .vk-add-btn.vk-regenerate:hover { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
       /* Override global button{width:100%} for chat form submit buttons */
       .chat-submit-btn { width: auto !important; white-space: nowrap; flex-shrink: 0; align-self: flex-end; }
 

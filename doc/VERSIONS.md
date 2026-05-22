@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.78 - 2026-05-22
+
+ux(admin): B2 polish — library default filter, preview-pane height, criteria weight display, regenerate prominence, menu cleanup (#449 follow-up)
+
+UI-verifisering av v1.1.77 ga 5 forbedringspunkter:
+
+1. **Modul-library default-filter "Aktive"** — landing page viste tidligere alle moduler
+   inkl. arkiverte. Endret default `activeFilter` fra "all" til "active" og flyttet
+   .active CSS-klasse til "Aktive"-knappen.
+
+2. **Preview-pane høyde tilpasset innhold** — fjernet `max-height: calc(100vh - var(--space-4))`
+   og `overflow-y: auto` på `.preview-pane`. Brukere skal ikke trenge å scrolle INNI
+   preview-panen — bare på siden. `position: sticky` beholdes for korte moduler.
+
+3. **Read-only kriterier viser vekt for sparsomme defaults** — generiske rubric-criteria
+   lagrer kun `{ weight: 0.2 }`, ikke maxScore. Forrige render hoppet over vekt-visning
+   når maxScore var 0. Nytt: utleder maxScore = round(weight × 10) når maxScore mangler.
+   Default 0.2-vekter viser nå "Vekt: 2". Samme logikk i editor-init, slik at slider
+   starter på 2 i stedet for default 5.
+
+4. **"Generer på nytt fra planen" mer synlig** — tidligere matte dashed-border-knapp
+   ved siden av "Legg til kriterium". Bruker-feedback: dette er en vanlig action og
+   bør være tydeligere. Ny stil: solid background med blå-lys + blå border + bold tekst.
+   Hover: solid blå.
+
+5. (Ingen handling — positiv tilbakemelding om at vekt nå vises etter redigering.)
+
+6. **Fjernet "Rediger vurderingskriterier"-action fra modul-meny** — overlappet med
+   "Rediger direkte"-action som nå dekker samme funksjon. Brukerens innspill:
+   "Man kan ikke ha for mange måter å gjøre det samme, det kompliserer". Fjernet
+   `editCriteria` fra `deriveShellModuleActionModel`, `actionMap` og `hasRubric`-flagg.
+   i18n-nøkkel `shell.criteria.action` beholdes (kan brukes andre steder).
+
+tsc clean. 13/13 shell-state-tester passerer.
+
 ## 1.1.77 - 2026-05-21
 
 refactor(admin): Vurderingskriterier flyttet fra chat-bubble til preview-pane som innhold (#449 B2 redesign)

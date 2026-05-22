@@ -2294,11 +2294,18 @@ function enterPreviewEditMode() {
   const currentCriteria = sourceCriteria && typeof sourceCriteria === "object"
     ? Object.entries(sourceCriteria).map(([id, raw]) => {
       const c = raw && typeof raw === "object" ? raw : {};
+      // v1.1.78: for sparse legacy criteria with only `weight` (no maxScore), derive
+      // maxScore from weight × 10 so the slider opens at a meaningful position instead
+      // of always defaulting to 5. Default weight 0.2 → maxScore 2.
+      const derivedFromWeight = Number(c.weight) > 0 ? Math.max(1, Math.round(Number(c.weight) * 10)) : 0;
+      const initialMaxScore = Number(c.maxScore) > 0
+        ? Number(c.maxScore)
+        : (derivedFromWeight > 0 ? derivedFromWeight : 5);
       return {
         id: String(id),
         label: typeof c.label === "string" && c.label.trim() ? c.label : humaniseCriterionId(String(id)),
         description: typeof c.description === "string" ? c.description : "",
-        maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
+        maxScore: Math.max(1, Math.min(10, initialMaxScore)),
         candidateVisible: Boolean(c.candidateVisible),
       };
     })
@@ -2579,7 +2586,6 @@ function showModuleActions() {
   const isLiveVersion = !!bundle?.module?.activeVersionId && selectedModuleVersionId === bundle.module.activeVersionId;
   const canUnpublish = !hasDraft && !!bundle?.module?.activeVersionId;
   const canPublish = !!latestSavedModuleVersionId || (!!selectedModuleVersionId && !isLiveVersion);
-  const hasRubric = !!bundle?.selectedConfiguration?.rubricVersion;
   const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
   const model = deriveShellModuleActionModel({
     hasDraft,
@@ -2587,7 +2593,6 @@ function showModuleActions() {
     canResumeEditing,
     canPublish,
     canUnpublish,
-    hasRubric,
   });
   const actionMap = {
     generateContent: { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
@@ -2603,9 +2608,6 @@ function showModuleActions() {
       },
     },
     directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-    // B2 (#449 redesign v1.1.77): "Rediger vurderingskriterier"-snarvei til direct-edit.
-    // Egen chat-bubble-editor er fjernet — kriterier redigeres som innhold i preview.
-    editCriteria: { labelKey: "shell.criteria.action", action: () => startDirectEditFlow() },
     editAdvanced: { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },

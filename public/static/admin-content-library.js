@@ -84,7 +84,9 @@ const navKalibrering = document.getElementById("navKalibrering");
 // ---------------------------------------------------------------------------
 
 let allModules = [];
-let activeFilter = "all";
+// Default filter is "active" so authors land on a curated list of currently relevant
+// modules. Arkiverte/older versions er fortsatt tilgjengelig via filter-knappene.
+let activeFilter = "active";
 let searchQuery = "";
 let sortColumn = "title"; // "title" | "updatedAt"
 let sortDirection = "asc"; // "asc" | "desc"

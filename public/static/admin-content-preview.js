@@ -191,13 +191,23 @@ function renderPreviewCriteria(criteria, t, tf) {
   const entries = Object.entries(criteria);
   if (entries.length === 0) return "";
 
+  // Generic-default rubrics store only `{ weight: 0.2 }` per criterion — no maxScore.
+  // To still show a meaningful weight in read-only view, derive maxScore = round(weight × 10)
+  // when missing. Result for default 0.2 weights: "Vekt: 2".
+  const resolveMaxScore = (c) => {
+    if (Number(c?.maxScore) > 0) return Number(c.maxScore);
+    const weight = Number(c?.weight);
+    if (weight > 0) return Math.max(1, Math.round(weight * 10));
+    return 0;
+  };
+
   const items = entries.map(([id, raw]) => {
     const c = raw && typeof raw === "object" ? raw : {};
     const label = typeof c.label === "string" && c.label.trim()
       ? c.label
       : humaniseCriterionId(String(id));
     const description = typeof c.description === "string" ? c.description : "";
-    const maxScore = Number(c.maxScore) || 0;
+    const maxScore = resolveMaxScore(c);
     const candidateVisible = Boolean(c.candidateVisible);
     const weightHtml = maxScore > 0
       ? `<span class="preview-criterion-weight">${escapeHtml(t("shell.criteria.weight"))}: ${maxScore}</span>`
@@ -219,7 +229,7 @@ function renderPreviewCriteria(criteria, t, tf) {
       </li>`;
   }).join("");
 
-  const totalWeight = entries.reduce((sum, [, c]) => sum + (Number(c?.maxScore) || 0), 0);
+  const totalWeight = entries.reduce((sum, [, c]) => sum + resolveMaxScore(c), 0);
   const totalHtml = totalWeight > 0
     ? `<p class="preview-criteria-total"><strong>${escapeHtml(t("shell.criteria.totalWeight"))}:</strong> ${totalWeight}</p>`
     : "";
