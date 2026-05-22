@@ -745,54 +745,9 @@ if ($PackagePath) {
   }
 }
 
-# #408: parallelize the three ZIP uploads. Sequential ran ~2-3 min; parallel ~1 min.
-# Refresh OIDC once up front so all three child runspaces share a valid az CLI session
-# via ~/.azure on disk — avoids racy concurrent `az login` writes. The function's 4-min
-# throttle would have collapsed the per-call refreshes to a single one anyway.
-Refresh-AzureCliOidcLogin "starting parallel ZIP uploads"
-
-$deployTargets = @(
-  [pscustomobject]@{ Name = $workerAppName }
-  [pscustomobject]@{ Name = $parserAppName }
-  [pscustomobject]@{ Name = $webAppName }
-)
-
-$deployTargets | ForEach-Object -ThrottleLimit 3 -Parallel {
-  # v1.1.83 stage-feil (#408): `az webapp deploy` skriver en informasjonsmelding til stderr
-  # om SCM_DO_BUILD_DURING_DEPLOYMENT. I PS7 parallel-runspaces tolker PS dette som en
-  # NativeCommandError → $? = $false → ForEach-Object -Parallel surface'er det som job-feil
-  # selv om $LASTEXITCODE = 0 og deployen faktisk lyktes. To safeguards:
-  #   1. `--only-show-errors` på az så meldingen ikke skrives til stderr
-  #   2. `$ErrorActionPreference = 'Continue'` slik at andre stderr-linjer ikke aborterer
-  #      runspace-en. Vi stoler på $LASTEXITCODE for å oppdage faktiske feil.
-  $ErrorActionPreference = 'Continue'
-  $appName = $_.Name
-  $resourceGroup = $using:ResourceGroupName
-  $zip = $using:zipPath
-  $maxAttempts = 5
-  $delaySeconds = 15
-  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-    Write-Host "[$appName] Deploying app package (attempt $attempt/$maxAttempts)..."
-    az webapp deploy `
-      --resource-group $resourceGroup `
-      --name $appName `
-      --src-path $zip `
-      --type zip `
-      --track-status false `
-      --restart true `
-      --timeout 600000 `
-      --only-show-errors | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "[$appName] Deploy succeeded."
-      return
-    }
-    if ($attempt -lt $maxAttempts) {
-      Write-Host "[$appName] Deploy attempt $attempt failed (exit $LASTEXITCODE); retrying in ${delaySeconds}s..."
-      Start-Sleep -Seconds $delaySeconds
-    }
-  }
-  throw "[$appName] az webapp deploy failed after $maxAttempts attempts."
-}
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $workerAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $parserAppName -ZipPath $zipPath
+Invoke-WebAppDeploy -ResourceGroup $ResourceGroupName -AppName $webAppName -ZipPath $zipPath
 
 if (-not $skipInfraBool) {
   # Key Vault RBAC role assignments for managed identities can take 30-120 s to

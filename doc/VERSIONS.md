@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.85 - 2026-05-22
+
+revert(infra): tilbake til sekvensiell ZIP-deploy (#408 lukket som "not worth it")
+
+v1.1.84-deployen viste at parallell-ZIP faktisk er **tregere** enn sekvensiell i vårt
+oppsett: ~4m37s parallell vs ~2-3 min sekvensiell. Sannsynlig årsak: Azure throttler
+concurrent zip-deploys til samme App Service Plan, så de tre uploads serialiserer i
+infrastrukturen uansett — vi får bare overhead fra PS7 runspaces på toppen.
+
+I tillegg førte den lengre upload-fasen til at web-appens cold-start-budget (7.5 min
+etter zip-deploy) ble overskredet, selv om appen til slutt kom opp på 1.1.84.
+
+Reverting til sekvensiell `Invoke-WebAppDeploy` for worker → parser → web. Beholder
+stderr-safeguards (`--only-show-errors`, `$ErrorActionPreference = 'Continue'`) selv
+om de ikke trengs i sekvensiell modus — de er nullsum-changes med dokumentert grunn
+i v1.1.83/v1.1.84-kommentarene.
+
+#408 kan lukkes som "fix doesn't deliver expected speedup; sequential retained".
+
 ## 1.1.84 - 2026-05-22
 
 fix(infra): suppress az stderr in parallel deploy runspaces (#408 follow-up)
