@@ -43,6 +43,12 @@ export const moduleTitleUpdateBodySchema = z.object({
   title: localizedTextPatchSchema,
 });
 
+// B3 (#450): "Behold kriteriene" sync — accepts the current blueprint hash. Null is allowed
+// so caller can also clear the stored hash if blueprint was deleted.
+export const rubricSyncBlueprintBodySchema = z.object({
+  blueprintHash: z.string().trim().max(64).nullable(),
+});
+
 export const rubricBodySchema = z.object({
   criteria: z.record(z.unknown()),
   scalingRule: z.record(z.unknown()),
@@ -176,6 +182,12 @@ export const rubricGenerationBodySchema = z.object({
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
   blueprint: assessmentBlueprintSchema.optional(),
+});
+
+// B3 (#450): /rubric-versions/ensure also accepts `force: true` to bypass the "existing
+// rubric" short-circuit. Used by the drift-banner regenerate flow.
+export const rubricEnsureBodySchema = rubricGenerationBodySchema.extend({
+  force: z.boolean().optional(),
 });
 
 export const moduleDraftRevisionBodySchema = z.object({

@@ -190,6 +190,80 @@
       /* Override global button{width:100%} for chat form submit buttons */
       .chat-submit-btn { width: auto !important; white-space: nowrap; flex-shrink: 0; align-self: flex-end; }
 
+      /* B3 (#450) drift-banner — rendered in preview-pane above the criteria section
+         when the blueprint has changed after the rubric was generated. */
+      .drift-banner {
+        margin: 16px 0;
+        padding: 14px 16px;
+        background: #fff7e6;
+        border: 1px solid #f5c97a;
+        border-left: 4px solid #d18b1a;
+        border-radius: var(--radius-card);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .drift-banner-message { display: flex; gap: 10px; align-items: flex-start; }
+      .drift-banner-icon { font-size: 18px; line-height: 1.2; flex-shrink: 0; }
+      .drift-banner-message p { margin: 0; font-size: 14px; color: var(--color-text); line-height: 1.45; }
+      .drift-banner-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      .drift-banner-actions button { width: auto; padding: 6px 14px; font-size: 13px; }
+
+      /* B3 (#450) drift-diff modal — full-screen overlay with per-change rows. Mirrors the
+         existing chat-modal pattern (overlay + centred card) but laid out for review,
+         not data entry. */
+      .drift-diff-overlay {
+        position: fixed; inset: 0; z-index: 1000;
+        background: rgba(15, 23, 42, 0.55);
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px;
+      }
+      .drift-diff-modal {
+        background: var(--color-bg-card, #fff);
+        border-radius: var(--radius-card);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+        max-width: 720px;
+        width: 100%;
+        max-height: 90vh;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+      }
+      .drift-diff-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--color-border-soft);
+      }
+      .drift-diff-modal-header h2 { margin: 0; font-size: 18px; }
+      .drift-diff-close {
+        background: none; border: none; font-size: 22px; line-height: 1; cursor: pointer;
+        color: var(--color-meta); padding: 4px 8px; width: auto;
+      }
+      .drift-diff-close:hover { color: var(--color-text); }
+      .drift-diff-modal-summary { margin: 0; padding: 12px 20px 0; font-size: 13px; color: var(--color-meta); }
+      .drift-diff-list { list-style: none; margin: 0; padding: 12px 20px; overflow-y: auto; flex: 1; }
+      .drift-diff-row { margin-bottom: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--color-border-soft); }
+      .drift-diff-row label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+      .drift-diff-row input[type="checkbox"] { margin-top: 4px; flex-shrink: 0; width: 18px; height: 18px; cursor: pointer; }
+      .drift-diff-row-body { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+      .drift-diff-row-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.4px; width: fit-content; }
+      .drift-diff-row-tag--added { background: #dcf5e6; color: #1f7a3e; }
+      .drift-diff-row-tag--removed { background: #fde2e2; color: #a32424; }
+      .drift-diff-row-tag--changed { background: #fdf2c8; color: #7a5e10; }
+      .drift-diff-row--added { background: #f3fbf6; }
+      .drift-diff-row--removed { background: #fcf3f3; }
+      .drift-diff-row--changed { background: #fdfaee; }
+      .drift-diff-row-desc { margin: 0; color: var(--color-meta); font-size: 13px; }
+      .drift-diff-row-fieldchange { margin: 2px 0; font-size: 13px; color: var(--color-text); }
+      .drift-diff-row-fieldchange em { color: var(--color-meta); font-style: normal; font-weight: 600; }
+      .drift-diff-empty { margin: 20px; text-align: center; color: var(--color-meta); }
+      .drift-diff-modal-footer {
+        display: flex; justify-content: flex-end; gap: 8px;
+        padding: 14px 20px;
+        border-top: 1px solid var(--color-border-soft);
+      }
+      .drift-diff-modal-footer button { width: auto; padding: 8px 16px; }
+
       /* ── Module workspace header + mode switch ───────────────────────────── */
       .module-workspace-header {
         display: flex;

@@ -329,6 +329,23 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // B3 (#450): patch scalingRule on an existing RubricVersion without bumping versionNo.
+    // Used by "Behold kriteriene"-handling — flips the stored blueprint-hash so drift-banner
+    // hides, but leaves criteria untouched.
+    updateRubricVersionScalingRule(id: string, scalingRuleJson: string) {
+      return client.rubricVersion.update({
+        where: { id },
+        data: { scalingRuleJson },
+        select: {
+          id: true,
+          moduleId: true,
+          versionNo: true,
+          active: true,
+          createdAt: true,
+        },
+      });
+    },
+
     createPromptTemplateVersion(data: {
       moduleId: string;
       versionNo: number;

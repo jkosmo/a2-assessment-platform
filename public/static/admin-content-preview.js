@@ -121,6 +121,9 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     candidateTaskConstraints = "",
     mcqQuestions = [],
     criteria = null,
+    // B3 (#450): pre-built HTML for the drift banner rendered above criteria. Empty when
+    // there is no drift. The shell is responsible for constructing this (i18n + handlers).
+    driftBanner = "",
     versionChain = "",
     badgeClass = "shell",
     badgeText = "",
@@ -177,6 +180,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ${assessorExpectedContentHtml}
     ${mcqCountHtml}
     ${mcqHtml}
+    ${driftBanner}
     ${criteriaHtml}
   `.trim();
 }

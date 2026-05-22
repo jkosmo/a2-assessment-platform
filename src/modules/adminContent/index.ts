@@ -4,6 +4,7 @@ export {
   deleteModule,
   createRubricVersion,
   ensureRubricVersion,
+  syncActiveRubricBlueprintHash,
   createPromptTemplateVersion,
   createMcqSetVersion,
   createModuleVersion,
@@ -26,3 +27,5 @@ export {
 export type { ModuleLibraryStatus } from "./adminContentQueries.js";
 
 export { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
+
+export { hashBlueprint } from "./blueprintHash.js";

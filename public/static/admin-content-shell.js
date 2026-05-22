@@ -18,6 +18,7 @@ import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";
 import {
   classifyShellEditInstruction,
   detectShellRevisionTargets,
@@ -84,6 +85,11 @@ let generationAbort = null; // AbortController for active generation
 let sessionDraft = null; // { taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions: [] }
 let previewDraft = null; // review candidate shown in preview before accept
 let latestSavedModuleVersionId = null;
+
+// B3 (#450): cache for the current blueprint's hash. Recomputed via refreshBlueprintHash()
+// after bundle load and blueprint changes. Compared against the active rubric's stored hash
+// (in scalingRule.generated_from_blueprint_hash) to detect drift.
+let currentBlueprintHash = null;
 
 // Chat log — every rendered message is stored here as a re-renderable spec so
 // that retranslateChat() can rebuild the entire dialog on locale switch.
@@ -694,6 +700,75 @@ function renderPreviewLocaleBar() {
   }
 }
 
+// B3 (#450): the blueprint that the current view "is about" — sessionDraft takes precedence
+// over the loaded module-version blueprint (an unsaved edit may move the blueprint forward
+// before save). Returns a parsed object or null.
+function getActiveBlueprint() {
+  const raw = sessionDraft?.assessmentBlueprint
+    ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint
+    ?? null;
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  if (typeof raw === "object") return raw;
+  return null;
+}
+
+// B3: recompute currentBlueprintHash after blueprint state changes. Re-renders preview when
+// the hash changed (so drift banner appears/disappears). Safe to call from anywhere — does
+// nothing if hash is unchanged.
+async function refreshBlueprintHash() {
+  const blueprint = getActiveBlueprint();
+  const next = await hashBlueprintAsync(blueprint);
+  if (next === currentBlueprintHash) return;
+  currentBlueprintHash = next;
+  renderPreview();
+}
+
+// B3: read the stored blueprint-hash off the active rubric's scalingRule. null when no
+// rubric, no scalingRule, or no hash (pre-B3 rubric).
+function getStoredBlueprintHash() {
+  const sr = bundle?.selectedConfiguration?.rubricVersion?.scalingRule;
+  if (!sr || typeof sr !== "object") return null;
+  const v = sr.generated_from_blueprint_hash;
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+// B3: classify drift for the current shell state. Returns the classifyDriftState code.
+function resolveDriftState() {
+  const hasBlueprint = !!getActiveBlueprint();
+  const hasRubric = !!bundle?.selectedConfiguration?.rubricVersion;
+  return classifyDriftState(currentBlueprintHash, getStoredBlueprintHash(), { hasBlueprint, hasRubric });
+}
+
+function renderDriftBannerHtml() {
+  return `
+    <div class="drift-banner" role="status" data-drift-banner>
+      <div class="drift-banner-message">
+        <span class="drift-banner-icon" aria-hidden="true">⚠</span>
+        <p>
+          <strong>${escapeHtml(t("shell.drift.title"))}</strong><br>
+          ${escapeHtml(t("shell.drift.body"))}
+        </p>
+      </div>
+      <div class="drift-banner-actions">
+        <button type="button" class="btn-secondary" data-drift-action="keep">${escapeHtml(t("shell.drift.action.keep"))}</button>
+        <button type="button" class="btn-secondary" data-drift-action="show-diff">${escapeHtml(t("shell.drift.action.showDiff"))}</button>
+        <button type="button" class="btn-primary" data-drift-action="regenerate">${escapeHtml(t("shell.drift.action.regenerate"))}</button>
+      </div>
+    </div>
+  `;
+}
+
+function attachDriftBannerHandlers() {
+  const banner = previewContent?.querySelector("[data-drift-banner]");
+  if (!banner) return;
+  banner.querySelector('[data-drift-action="keep"]')?.addEventListener("click", handleDriftKeep);
+  banner.querySelector('[data-drift-action="show-diff"]')?.addEventListener("click", handleDriftShowDiff);
+  banner.querySelector('[data-drift-action="regenerate"]')?.addEventListener("click", handleDriftRegenerate);
+}
+
 function renderPreview() {
   const opts = { locale: previewLocale, t, tf };
 
@@ -705,6 +780,8 @@ function renderPreview() {
 
   const activeDraft = previewDraft ?? sessionDraft;
   const hasDraft = !!activeDraft;
+  const driftState = resolveDriftState();
+  const driftBanner = driftState === "drifted" ? renderDriftBannerHtml() : "";
 
   if (bundle) {
     const mod = bundle?.module ?? null;
@@ -733,6 +810,8 @@ function renderPreview() {
       // B2 (#449): show Vurderingskriterier in the preview pane as content. Prefer draft
       // overrides if user has edited via Rediger direkte; fall back to persisted rubric.
       criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
+      // B3 (#450): drift banner rendered above the criteria section.
+      driftBanner,
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
       badgeText: hasDraft
@@ -741,6 +820,7 @@ function renderPreview() {
         : isDraft ? t("adminContent.status.badge.draft")
         : t("adminContent.status.badge.shellOnly"),
     }, opts);
+    attachDriftBannerHandlers();
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({
       title: activeDraft.title || t("shell.newModule.defaultTitle"),
@@ -1237,7 +1317,11 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, locale, draft.candidateTaskConstraints);
   sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
-  if (blueprint) sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
+  if (blueprint) {
+    sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
+    // B3 (#450): blueprint changed → may now drift from stored rubric hash.
+    refreshBlueprintHash();
+  }
   clearPreviewCandidate();
   scrollPreviewToTop();
   logResolveSlot(
@@ -1989,6 +2073,9 @@ async function loadModule(moduleId, options = {}) {
 
   sessionState = "module-loaded";
 
+  // B3 (#450): recompute blueprint hash so the drift banner can be classified on first render.
+  await refreshBlueprintHash();
+
   // Check for a handoff payload written by the advanced editor (or by ourselves before navigating away).
   // Handoff wins over resumeEditing: it carries more recent unsaved state than the saved bundle.
   const handoff = readAndClearHandoff(moduleId);
@@ -2214,8 +2301,385 @@ function buildCriteriaRecordFromEditorState(criteria) {
       maxScore: Number(c.maxScore),
       weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
       candidateVisible: Boolean(c.candidateVisible),
+      // B3 (#450): direct-edit always counts as manual editing — the user explicitly chose
+      // these values. Used by the drift "Regenerer fra ny plan" confirm prompt so we warn
+      // before overwriting. False positives (treating every edit as manual) are acceptable.
+      manuallyEdited: true,
     }];
   }));
+}
+
+// B3 (#450): "Behold kriteriene" — patch the active rubric's blueprint-hash to the current
+// hash so the drift banner hides. No version bump; criteria unchanged.
+async function handleDriftKeep() {
+  if (!selectedModuleId) return;
+  const hash = currentBlueprintHash;
+  if (!hash) return;
+  try {
+    await apiFetch(
+      `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions/sync-blueprint`,
+      getHeaders,
+      { method: "POST", body: JSON.stringify({ blueprintHash: hash }) },
+    );
+    // Patch bundle in place so we don't clobber unsaved sessionDraft via full reload.
+    const sr = bundle?.selectedConfiguration?.rubricVersion?.scalingRule;
+    if (sr && typeof sr === "object") sr.generated_from_blueprint_hash = hash;
+    renderPreview();
+    showToast(t("shell.drift.keep.success"), "success");
+  } catch (err) {
+    showToast(`${t("shell.drift.keep.error")}: ${String(err?.message ?? err)}`, "error");
+  }
+}
+
+// B3 (#450): "Regenerer fra ny plan" — if any criterion was manually edited, confirm with
+// the user first (their edits will be overwritten). Then POST /rubric-versions/ensure with
+// force:true to generate + persist a new RubricVersion against the current blueprint, and
+// reload the module to pick up the new versionNo and stored hash.
+async function handleDriftRegenerate() {
+  if (!selectedModuleId) return;
+  if (hasManuallyEditedCriteria() && !window.confirm(t("shell.drift.regenerate.confirm"))) return;
+
+  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
+  const taskText = localizeValueForLocale(
+    sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
+    previewLocale ?? currentLocale,
+  );
+  const assessorText = localizeValueForLocale(
+    sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
+    previewLocale ?? currentLocale,
+  );
+  const constraintsText = localizeValueForLocale(
+    sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
+    previewLocale ?? currentLocale,
+  );
+  if (!taskText || !assessorText) {
+    showToast(t("shell.drift.regenerate.missingTask"), "error");
+    return;
+  }
+  const blueprint = getActiveBlueprint();
+
+  const slot = logProgress("shell.drift.regenerate.progress");
+  try {
+    await apiFetch(
+      `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions/ensure`,
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          taskText,
+          assessorExpectedContent: assessorText,
+          candidateTaskConstraints: constraintsText || undefined,
+          certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+          locale: previewLocale ?? currentLocale,
+          ...(blueprint ? { blueprint } : {}),
+          force: true,
+        }),
+      },
+    );
+    logResolveSlot(slot, () => escapeHtml(t("shell.drift.regenerate.success")));
+    // Clear any direct-edit override — the freshly persisted rubric is now the truth.
+    if (sessionDraft?.criteria) {
+      sessionDraft = { ...sessionDraft, criteria: null };
+    }
+    await loadModule(selectedModuleId);
+    await refreshBlueprintHash();
+  } catch (err) {
+    logResolveSlot(slot, () =>
+      `${escapeHtml(t("shell.drift.regenerate.error"))}: ${escapeHtml(String(err?.message ?? err))}`,
+    );
+  }
+}
+
+// B3 (#450): "Vis hva som ville endret seg" — call /generate/rubric (dry-run, doesn't
+// persist) to see what the LLM would now produce given the new blueprint. Diff against the
+// existing rubric criteria, then offer accept-all / accept-selected. User can also cancel.
+async function handleDriftShowDiff() {
+  if (!selectedModuleId) return;
+  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
+  const taskText = localizeValueForLocale(
+    sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
+    previewLocale ?? currentLocale,
+  );
+  const assessorText = localizeValueForLocale(
+    sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
+    previewLocale ?? currentLocale,
+  );
+  const constraintsText = localizeValueForLocale(
+    sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
+    previewLocale ?? currentLocale,
+  );
+  if (!taskText || !assessorText) {
+    showToast(t("shell.drift.regenerate.missingTask"), "error");
+    return;
+  }
+  const blueprint = getActiveBlueprint();
+
+  const slot = logProgress("shell.drift.diff.progress");
+  let result;
+  try {
+    result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        taskText,
+        assessorExpectedContent: assessorText,
+        candidateTaskConstraints: constraintsText || undefined,
+        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+        locale: previewLocale ?? currentLocale,
+        ...(blueprint ? { blueprint } : {}),
+      }),
+    });
+  } catch (err) {
+    logResolveSlot(slot, () =>
+      `${escapeHtml(t("shell.drift.diff.error"))}: ${escapeHtml(String(err?.message ?? err))}`,
+    );
+    return;
+  }
+  logResolveSlot(slot, () => escapeHtml(t("shell.drift.diff.computed")));
+
+  const newCriteriaArr = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
+  const newCriteriaRecord = llmCriteriaArrayToStorageRecord(newCriteriaArr);
+  const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
+  const diff = computeCriteriaDiff(existing, newCriteriaRecord);
+
+  openDriftDiffModal(diff, newCriteriaRecord);
+}
+
+// B3 (#450): mirror of moduleRubricToStoragePayload's criteria branch. LLM returns an array
+// (with .id, .label, .description, .maxScore, .candidateVisible per item); storage wants a
+// record keyed by id with weight derived from maxScore.
+function llmCriteriaArrayToStorageRecord(arr) {
+  const valid = (arr ?? []).filter((c) => c && c.label && c.label.trim());
+  const totalMax = valid.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
+  return Object.fromEntries(valid.map((c, idx) => {
+    const baseId = String(c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`);
+    return [baseId, {
+      label: c.label ?? "",
+      description: c.description ?? "",
+      maxScore: Number(c.maxScore) || 0,
+      weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
+      candidateVisible: Boolean(c.candidateVisible),
+    }];
+  }));
+}
+
+// B3 (#450): per-criterion diff — categorise each id as "added" (only in new), "removed"
+// (only in existing), "changed" (id present in both but label/description/maxScore differs),
+// or "unchanged". Returns parallel arrays keyed for easy modal rendering. Compares by `id`
+// so an LLM relabeling the same criterion would still match — risk we accept (id stability
+// is the LLM's job, not ours).
+function computeCriteriaDiff(existing, next) {
+  const existingIds = new Set(Object.keys(existing ?? {}));
+  const nextIds = new Set(Object.keys(next ?? {}));
+  const added = [];
+  const removed = [];
+  const changed = [];
+  const unchanged = [];
+
+  for (const id of nextIds) {
+    if (!existingIds.has(id)) {
+      added.push({ id, next: next[id] });
+      continue;
+    }
+    const a = existing[id] ?? {};
+    const b = next[id] ?? {};
+    const labelChanged = String(a.label ?? "") !== String(b.label ?? "");
+    const descChanged = String(a.description ?? "") !== String(b.description ?? "");
+    const scoreChanged = Number(a.maxScore ?? 0) !== Number(b.maxScore ?? 0);
+    const visChanged = Boolean(a.candidateVisible) !== Boolean(b.candidateVisible);
+    if (labelChanged || descChanged || scoreChanged || visChanged) {
+      changed.push({ id, prev: a, next: b, fields: { labelChanged, descChanged, scoreChanged, visChanged } });
+    } else {
+      unchanged.push({ id, prev: a, next: b });
+    }
+  }
+  for (const id of existingIds) {
+    if (!nextIds.has(id)) {
+      removed.push({ id, prev: existing[id] });
+    }
+  }
+  return { added, removed, changed, unchanged };
+}
+
+function hasManuallyEditedCriteria() {
+  const criteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
+  return Object.values(criteria).some((c) => c && typeof c === "object" && c.manuallyEdited === true);
+}
+
+// B3 (#450): full-screen modal showing the diff. Accept-all triggers a single regenerate
+// against the LLM's proposal (writes a new RubricVersion with the proposed criteria).
+// Accept-selected lets the author pick a subset (checkboxes); the resulting rubric is a
+// merge of existing + selected proposals.
+function openDriftDiffModal(diff, proposedRecord) {
+  const overlay = document.createElement("div");
+  overlay.className = "drift-diff-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "driftDiffTitle");
+  overlay.innerHTML = buildDriftDiffModalHtml(diff);
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('[data-diff-action="close"]')?.addEventListener("click", close);
+  overlay.querySelector('[data-diff-action="cancel"]')?.addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+
+  overlay.querySelector('[data-diff-action="accept-all"]')?.addEventListener("click", async () => {
+    close();
+    await persistMergedRubric(proposedRecord);
+  });
+
+  overlay.querySelector('[data-diff-action="accept-selected"]')?.addEventListener("click", async () => {
+    const acceptedIds = Array.from(overlay.querySelectorAll('input[data-diff-checkbox]:checked'))
+      .map((input) => input.getAttribute("data-criterion-id"))
+      .filter(Boolean);
+    if (acceptedIds.length === 0) {
+      showToast(t("shell.drift.diff.noneSelected"), "error");
+      return;
+    }
+    close();
+    const merged = mergeProposedCriteria(diff, proposedRecord, new Set(acceptedIds));
+    await persistMergedRubric(merged);
+  });
+}
+
+function buildDriftDiffModalHtml(diff) {
+  const { added, removed, changed } = diff;
+  const totalChanges = added.length + removed.length + changed.length;
+
+  const renderRow = (id, kind, body) => `
+    <li class="drift-diff-row drift-diff-row--${kind}">
+      <label>
+        <input type="checkbox" data-diff-checkbox data-criterion-id="${escapeHtml(id)}" checked>
+        <span class="drift-diff-row-body">${body}</span>
+      </label>
+    </li>
+  `;
+
+  const addedHtml = added.map(({ id, next }) => renderRow(id, "added", `
+    <span class="drift-diff-row-tag drift-diff-row-tag--added">${escapeHtml(t("shell.drift.diff.added"))}</span>
+    <strong>${escapeHtml(String(next?.label ?? id))}</strong>
+    ${next?.description ? `<p class="drift-diff-row-desc">${escapeHtml(String(next.description))}</p>` : ""}
+  `)).join("");
+
+  const removedHtml = removed.map(({ id, prev }) => renderRow(id, "removed", `
+    <span class="drift-diff-row-tag drift-diff-row-tag--removed">${escapeHtml(t("shell.drift.diff.removed"))}</span>
+    <strong>${escapeHtml(String(prev?.label ?? id))}</strong>
+    ${prev?.description ? `<p class="drift-diff-row-desc">${escapeHtml(String(prev.description))}</p>` : ""}
+  `)).join("");
+
+  const changedHtml = changed.map(({ id, prev, next, fields }) => {
+    const parts = [];
+    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(String(prev?.label ?? ""))}</s> → <strong>${escapeHtml(String(next?.label ?? ""))}</strong></p>`);
+    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(String(next?.description ?? ""))}</p>`);
+    if (fields.scoreChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.maxScore"))}:</em> ${escapeHtml(String(prev?.maxScore ?? ""))} → ${escapeHtml(String(next?.maxScore ?? ""))}</p>`);
+    if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${Boolean(prev?.candidateVisible) ? "✓" : "—"} → ${Boolean(next?.candidateVisible) ? "✓" : "—"}</p>`);
+    return renderRow(id, "changed", `
+      <span class="drift-diff-row-tag drift-diff-row-tag--changed">${escapeHtml(t("shell.drift.diff.changed"))}</span>
+      <strong>${escapeHtml(String(next?.label ?? id))}</strong>
+      ${parts.join("")}
+    `);
+  }).join("");
+
+  const emptyHtml = totalChanges === 0
+    ? `<p class="drift-diff-empty">${escapeHtml(t("shell.drift.diff.noChanges"))}</p>`
+    : "";
+
+  return `
+    <div class="drift-diff-modal">
+      <header class="drift-diff-modal-header">
+        <h2 id="driftDiffTitle">${escapeHtml(t("shell.drift.diff.title"))}</h2>
+        <button type="button" class="drift-diff-close" data-diff-action="close" aria-label="${escapeHtml(t("shell.drift.diff.close"))}">×</button>
+      </header>
+      <p class="drift-diff-modal-summary">${escapeHtml(tf("shell.drift.diff.summary", { added: added.length, removed: removed.length, changed: changed.length }))}</p>
+      <ul class="drift-diff-list">
+        ${addedHtml}
+        ${changedHtml}
+        ${removedHtml}
+      </ul>
+      ${emptyHtml}
+      <footer class="drift-diff-modal-footer">
+        <button type="button" class="btn-secondary" data-diff-action="cancel">${escapeHtml(t("shell.drift.diff.cancel"))}</button>
+        <button type="button" class="btn-secondary" data-diff-action="accept-selected">${escapeHtml(t("shell.drift.diff.acceptSelected"))}</button>
+        <button type="button" class="btn-primary" data-diff-action="accept-all">${escapeHtml(t("shell.drift.diff.acceptAll"))}</button>
+      </footer>
+    </div>
+  `;
+}
+
+// B3 (#450): build the storage-shape record from "merge existing criteria with the proposed
+// changes the user accepted". Logic per id:
+//   - added id, accepted     → use proposed
+//   - added id, not accepted → drop (not present in result)
+//   - removed id, accepted   → drop (user accepted the removal)
+//   - removed id, not accepted → keep existing
+//   - changed id, accepted   → use proposed
+//   - changed id, not accepted → keep existing
+//   - unchanged              → keep existing
+// Weights are recomputed from the resulting maxScore totals so scalingRule.max_total stays
+// coherent — done downstream by the backend on POST, but we pre-normalise here too.
+function mergeProposedCriteria(diff, proposedRecord, acceptedIds) {
+  const result = {};
+  const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
+
+  for (const { id } of diff.unchanged) {
+    result[id] = existing[id];
+  }
+  for (const { id, prev } of diff.removed) {
+    if (!acceptedIds.has(id)) result[id] = prev;
+  }
+  for (const { id } of diff.changed) {
+    result[id] = acceptedIds.has(id) ? proposedRecord[id] : existing[id];
+  }
+  for (const { id } of diff.added) {
+    if (acceptedIds.has(id)) result[id] = proposedRecord[id];
+  }
+
+  const totalMax = Object.values(result).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
+  for (const [id, c] of Object.entries(result)) {
+    const maxScore = Number(c?.maxScore) || 0;
+    result[id] = { ...c, weight: Number((maxScore / totalMax).toFixed(2)) };
+  }
+  return result;
+}
+
+// B3 (#450): POST the merged criteria as a new RubricVersion. Server-side createRubricVersion
+// bumps versionNo and stamps generated_from_blueprint_hash via scalingRule passed here.
+async function persistMergedRubric(criteriaRecord) {
+  if (!selectedModuleId) return;
+  const blueprintHash = currentBlueprintHash;
+  const totalMax = Object.values(criteriaRecord).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
+  const existingScalingRule = bundle?.selectedConfiguration?.rubricVersion?.scalingRule ?? {};
+  const scalingRule = {
+    ...existingScalingRule,
+    practical_weight: Number(existingScalingRule.practical_weight) || 70,
+    max_total: totalMax,
+  };
+  if (blueprintHash) scalingRule.generated_from_blueprint_hash = blueprintHash;
+  else delete scalingRule.generated_from_blueprint_hash;
+
+  const slot = logProgress("shell.drift.diff.persisting");
+  try {
+    await apiFetch(
+      `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions`,
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({ criteria: criteriaRecord, scalingRule, active: true }),
+      },
+    );
+    logResolveSlot(slot, () => escapeHtml(t("shell.drift.diff.persisted")));
+    if (sessionDraft?.criteria) {
+      sessionDraft = { ...sessionDraft, criteria: null };
+    }
+    await loadModule(selectedModuleId);
+    await refreshBlueprintHash();
+  } catch (err) {
+    logResolveSlot(slot, () =>
+      `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(String(err?.message ?? err))}`,
+    );
+  }
 }
 
 // B2 (#449 redesign): fetch new criteria from /generate/rubric using the current taskText

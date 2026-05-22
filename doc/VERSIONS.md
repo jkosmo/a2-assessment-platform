@@ -2,6 +2,68 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.79 - 2026-05-22
+
+feat(admin): B3 — Vurderingsplan↔Vurderingskriterier drift-deteksjon + diff-modal (closes #450)
+
+B3 lukker koblingen mellom B1 (Vurderingsplan) og B2 (Vurderingskriterier): når læreren
+endrer planen *etter* at kriteriene er generert, varsler vi om at kriteriene reflekterer
+den forrige planen — i stedet for å auto-overskrive eller stille drift.
+
+**Datamodell** — alternativ B fra spec (i `scalingRule`-objektet, ingen migrasjon):
+- `RubricVersion.scalingRule.generated_from_blueprint_hash: string` lagres når en rubric
+  genereres mot en blueprint. Pre-B3 rubrikker har ikke feltet → ingen falsk drift.
+- Hash: kanonisk-JSON (sortert nøkler) + SHA-256, første 16 hex-tegn. Deterministisk,
+  ignorerer key-order. Backend (`src/modules/adminContent/blueprintHash.ts`) og frontend
+  (`public/static/admin-content-blueprint-hash.js`) bruker identisk algoritme — verifisert
+  med kryss-test.
+
+**Drift-banner** (rendret over kriterier i preview-pane når hash != stored-hash):
+> ⚠ Vurderingsplanen er endret etter at vurderingskriteriene ble laget.
+>   Kriteriene reflekterer den forrige planen.
+> [ Behold kriteriene ] [ Vis hva som ville endret seg ] [ Regenerer fra ny plan ]
+
+**Tre handlinger**:
+1. **Behold kriteriene** → POST `/rubric-versions/sync-blueprint` patcher
+   `scalingRule.generated_from_blueprint_hash` til nåværende hash. Ingen versjonsbump,
+   ingen endring i kriterier. Banner skjules. Hvis planen endres på nytt: banner igjen.
+2. **Vis hva som ville endret seg** → POST `/generate/rubric` (dry-run), diff per `id`
+   mot eksisterende, åpner modal med per-rad checkbox (added/removed/changed). Lærer
+   kan akseptere alle eller velge subset. Sammenslått resultat persisteres som ny
+   RubricVersion.
+3. **Regenerer fra ny plan** → Hvis noen kriterier har `manuallyEdited: true`,
+   bekreftelse først ("Dine endringer vil overskrives"). Kaller
+   `/rubric-versions/ensure` med `force: true` for å skrive ny versjon mot ny blueprint.
+
+**manuallyEdited-tracking**: Direkte-edit gjennom B2 ("Rediger direkte") setter nå
+`manuallyEdited: true` på alle lagrede kriterier. Heuristikken er bevisst grov — false
+positives (treat all direct-edits as manual) gir trygg advarsel før overskriving.
+
+**Backend**:
+- `src/modules/adminContent/blueprintHash.ts` (ny)
+- `moduleRubricToStoragePayload(generated, blueprintHash)` lagrer hash i scalingRule
+- `ensureRubricVersion({ ..., force? })` — `force: true` hopper over "existing"-short-circuit
+- `syncActiveRubricBlueprintHash(moduleId, hash)` (ny command, patcher scalingRule uten
+  versjonsbump)
+- `adminContentRepository.updateRubricVersionScalingRule(id, scalingRuleJson)` (ny)
+- Nye endepunkter: `POST /modules/:id/rubric-versions/sync-blueprint`, `force` på
+  `POST /modules/:id/rubric-versions/ensure`
+
+**Frontend**:
+- `public/static/admin-content-blueprint-hash.js` (ny — speilet av backend-hash)
+- Shell: drift-state-helpers (`getActiveBlueprint`, `refreshBlueprintHash`,
+  `getStoredBlueprintHash`, `resolveDriftState`), banner-render, diff-modal-build,
+  `computeCriteriaDiff`, `mergeProposedCriteria`, `persistMergedRubric`,
+  `llmCriteriaArrayToStorageRecord`
+- `buildPreviewHtml` tar nå `driftBanner` (HTML string fra shell) — preview-modulen
+  rendrer banneret over kriterier-seksjonen
+- i18n-nøkler: `shell.drift.*` (banner-tekst + 3 actions + diff-modal-tekst + statuser)
+  for en-GB/nb/nn
+- CSS: `.drift-banner` + `.drift-diff-overlay`/`.drift-diff-modal`/`.drift-diff-row*`
+
+**Tester**: 8 backend-hash-tester + 11 cross-modul-tester (frontend speiler backend,
+classifyDriftState dekker alle 5 grener). tsc clean.
+
 ## 1.1.78 - 2026-05-22
 
 ux(admin): B2 polish — library default filter, preview-pane height, criteria weight display, regenerate prominence, menu cleanup (#449 follow-up)
