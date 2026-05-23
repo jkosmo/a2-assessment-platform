@@ -729,10 +729,17 @@ function showUnsavedHandoffDialog() {
     const discardBtn = document.getElementById("dlgUnsavedDiscard");
     const cancelBtn = document.getElementById("dlgUnsavedCancel");
 
-    const onSave = () => { cleanup(); dialog.close(); resolve("save"); };
-    const onDiscard = () => { cleanup(); dialog.close(); resolve("discard"); };
-    const onCancel = () => { cleanup(); dialog.close(); resolve("cancel"); };
-    const onClose = () => { cleanup(); resolve("cancel"); };
+    // v1.2.16 (#353 part 3): husk hvilket element som hadde fokus før dialogen åpnet, og
+    // restorer det på close. Native <dialog> restorer fokus i moderne browsere, men kun
+    // konsekvent ved Escape og form-method=dialog-submit. Eksplisitt restore dekker også
+    // programmatic close (resolve via knapp-handlere).
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const restoreFocus = () => { try { opener?.focus(); } catch { /* opener gone — let body get focus */ } };
+    const onSave = () => { cleanup(); dialog.close(); restoreFocus(); resolve("save"); };
+    const onDiscard = () => { cleanup(); dialog.close(); restoreFocus(); resolve("discard"); };
+    const onCancel = () => { cleanup(); dialog.close(); restoreFocus(); resolve("cancel"); };
+    const onClose = () => { cleanup(); restoreFocus(); resolve("cancel"); };
 
     function cleanup() {
       saveBtn.removeEventListener("click", onSave);

@@ -592,11 +592,14 @@ function showConvCertStep() {
   const after = document.getElementById("convAfterTitle");
   if (!after) return;
 
+  // v1.2.16 (#353 part 2): hver conv-bot-msg er nå en aria-live region slik at SR-bruker
+  // får annonsert nye steg når de dukker opp. Fokus flyttes også til første interaktive
+  // element i steget — uten det måtte bruker Tab fra forrige posisjon (ofte langt unna).
   after.innerHTML = `
-    <div class="conv-bot-msg">
+    <div class="conv-bot-msg" role="status" aria-live="polite">
       <p>Hvilket sertifiseringsnivå passer for dette kurset?</p>
     </div>
-    <div class="conv-choices" id="convCertChoices">
+    <div class="conv-choices" id="convCertChoices" role="group" aria-label="Sertifiseringsnivå">
       <button class="conv-choice-btn" data-cert="basic">${escapeHtml(certLabel("basic"))}</button>
       <button class="conv-choice-btn" data-cert="intermediate">${escapeHtml(certLabel("intermediate"))}</button>
       <button class="conv-choice-btn" data-cert="advanced">${escapeHtml(certLabel("advanced"))}</button>
@@ -611,6 +614,9 @@ function showConvCertStep() {
     appendConvCertBubble(btn.textContent.trim());
     showConvModuleSearch();
   });
+
+  // Focus first cert-choice button so keyboard users land in the new step.
+  setTimeout(() => document.querySelector("#convCertChoices .conv-choice-btn")?.focus(), 60);
 }
 
 function appendConvCertBubble(label) {
@@ -632,7 +638,7 @@ function showConvModuleSearch() {
   comboboxOpen = false;
 
   after.innerHTML = `
-    <div class="conv-bot-msg">
+    <div class="conv-bot-msg" role="status" aria-live="polite">
       <p>Søk etter moduler og legg dem til i kurset. Du kan også opprette kurset direkte hvis du vil legge til moduler senere.</p>
     </div>
     <div id="convModuleListContainer"></div>
@@ -640,6 +646,7 @@ function showConvModuleSearch() {
       <div class="combobox-wrap" id="convComboboxWrap">
         <input id="convComboboxInput" type="text" class="combobox-input"
           placeholder="Søk på modulnavn eller modul-ID…"
+          aria-label="Søk etter modul"
           autocomplete="off" role="combobox" aria-expanded="false"
           aria-autocomplete="list" aria-controls="convComboboxDropdown" />
         <div id="convComboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
@@ -655,6 +662,8 @@ function showConvModuleSearch() {
   initConvCombobox();
 
   document.getElementById("convCreateBtn")?.addEventListener("click", convCreateCourse);
+  // v1.2.16 (#353 part 2): focus the search input so keyboard users start in the new step.
+  setTimeout(() => document.getElementById("convComboboxInput")?.focus(), 60);
 }
 
 function renderConvModuleList() {
@@ -705,6 +714,7 @@ function initConvCombobox() {
   input?.addEventListener("input", () => {
     comboboxQuery = input.value;
     comboboxSelectedId = null;
+    comboboxHighlightedIndex = -1;
     comboboxOpen = comboboxQuery.trim().length > 0;
     if (addBtn) addBtn.disabled = true;
     updateConvComboboxDropdown();
@@ -713,9 +723,67 @@ function initConvCombobox() {
     if (comboboxQuery.trim()) { comboboxOpen = true; updateConvComboboxDropdown(); }
   });
   input?.addEventListener("blur", () => {
-    setTimeout(() => { comboboxOpen = false; updateConvComboboxDropdown(); }, 150);
+    setTimeout(() => { comboboxOpen = false; comboboxHighlightedIndex = -1; updateConvComboboxDropdown(); }, 150);
+  });
+  // v1.2.16 (#353 part 1): keyboard nav per WAI-ARIA combobox-pattern.
+  input?.addEventListener("keydown", (event) => {
+    const visibleOptions = getVisibleComboboxOptions();
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!comboboxOpen && comboboxQuery.trim().length > 0) { comboboxOpen = true; }
+      if (visibleOptions.length === 0) return;
+      comboboxHighlightedIndex = Math.min(visibleOptions.length - 1, Math.max(0, comboboxHighlightedIndex) + 1);
+      if (comboboxHighlightedIndex === 0 && !visibleOptions[0]) comboboxHighlightedIndex = 0;
+      updateConvComboboxDropdown();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (visibleOptions.length === 0) return;
+      comboboxHighlightedIndex = Math.max(0, comboboxHighlightedIndex - 1);
+      updateConvComboboxDropdown();
+    } else if (event.key === "Enter") {
+      if (comboboxHighlightedIndex >= 0 && visibleOptions[comboboxHighlightedIndex]) {
+        event.preventDefault();
+        const opt = visibleOptions[comboboxHighlightedIndex];
+        comboboxSelectedId = opt.id;
+        input.value = opt.title;
+        comboboxOpen = false;
+        comboboxHighlightedIndex = -1;
+        if (addBtn) addBtn.disabled = false;
+        updateConvComboboxDropdown();
+        addConvSelectedModule();
+      }
+    } else if (event.key === "Escape") {
+      if (comboboxOpen) {
+        event.preventDefault();
+        comboboxOpen = false;
+        comboboxHighlightedIndex = -1;
+        updateConvComboboxDropdown();
+      }
+    } else if (event.key === "Home" && comboboxOpen && visibleOptions.length > 0) {
+      event.preventDefault();
+      comboboxHighlightedIndex = 0;
+      updateConvComboboxDropdown();
+    } else if (event.key === "End" && comboboxOpen && visibleOptions.length > 0) {
+      event.preventDefault();
+      comboboxHighlightedIndex = visibleOptions.length - 1;
+      updateConvComboboxDropdown();
+    }
   });
   addBtn?.addEventListener("click", addConvSelectedModule);
+}
+
+// v1.2.16 (#353): list of currently-visible combobox options as { id, title }. Brukt av
+// keyboard-handleren og dropdown-renderingen så begge ser samme array (indeks-konsistens).
+function getVisibleComboboxOptions() {
+  const addedIds = new Set(convModules.map(m => m.moduleId));
+  const q = comboboxQuery.trim().toLowerCase();
+  return allLibraryModules
+    .filter(m => {
+      if (addedIds.has(m.id)) return false;
+      if (!q) return true;
+      return (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
+    })
+    .map(m => ({ id: m.id, title: localizedText(m.title) || m.id }));
 }
 
 function updateConvComboboxDropdown() {
@@ -724,17 +792,12 @@ function updateConvComboboxDropdown() {
   const addBtn = document.getElementById("convAddModuleItemBtn");
   if (!input || !dropdown) return;
 
-  const addedIds = new Set(convModules.map(m => m.moduleId));
-  const q = comboboxQuery.trim().toLowerCase();
-  const options = allLibraryModules.filter(m => {
-    if (addedIds.has(m.id)) return false;
-    if (!q) return true;
-    return (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
-  });
+  const options = getVisibleComboboxOptions();
 
   if (!comboboxOpen || comboboxQuery.trim() === "") {
     dropdown.hidden = true;
     input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
     return;
   }
   dropdown.hidden = false;
@@ -743,17 +806,39 @@ function updateConvComboboxDropdown() {
   if (options.length === 0) {
     dropdown.innerHTML = `<div class="combobox-empty">Ingen moduler matcher søket.</div>`;
     comboboxSelectedId = null;
+    comboboxHighlightedIndex = -1;
+    input.removeAttribute("aria-activedescendant");
     if (addBtn) addBtn.disabled = true;
     return;
   }
 
-  dropdown.innerHTML = options.map(m => `
-    <div class="combobox-option${m.id === comboboxSelectedId ? " selected" : ""}"
-      role="option" aria-selected="${m.id === comboboxSelectedId}"
-      data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(localizedText(m.title) || m.id)}">
-      ${escapeHtml(localizedText(m.title) || m.id)}
+  // Clamp highlighted index to current options. -1 means nothing highlighted yet.
+  if (comboboxHighlightedIndex >= options.length) comboboxHighlightedIndex = options.length - 1;
+
+  // v1.2.16 (#353): hver option får stabil id slik at input kan peke til den med
+  // aria-activedescendant. SR-bruker hører hvilken option som er fokusert per pil-tast.
+  dropdown.innerHTML = options.map((m, idx) => {
+    const optionId = `combobox-opt-${escapeHtml(m.id)}`;
+    const isHighlighted = idx === comboboxHighlightedIndex;
+    const isSelected = m.id === comboboxSelectedId;
+    return `
+    <div id="${optionId}"
+      class="combobox-option${isSelected ? " selected" : ""}${isHighlighted ? " highlighted" : ""}"
+      role="option" aria-selected="${isSelected}"
+      data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title)}">
+      ${escapeHtml(m.title)}
       <span class="combobox-option-id">${escapeHtml(m.id)}</span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+
+  // Sett aria-activedescendant til highlighted option om noen er highlighted.
+  if (comboboxHighlightedIndex >= 0 && options[comboboxHighlightedIndex]) {
+    input.setAttribute("aria-activedescendant", `combobox-opt-${options[comboboxHighlightedIndex].id}`);
+    // Scroll into view i lang liste.
+    dropdown.querySelector(".combobox-option.highlighted")?.scrollIntoView({ block: "nearest" });
+  } else {
+    input.removeAttribute("aria-activedescendant");
+  }
 
   dropdown.querySelectorAll(".combobox-option").forEach(opt => {
     opt.addEventListener("mousedown", e => {
@@ -762,6 +847,7 @@ function updateConvComboboxDropdown() {
       const title = opt.dataset.moduleTitle;
       if (input) input.value = title.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"');
       comboboxOpen = false;
+      comboboxHighlightedIndex = -1;
       updateConvComboboxDropdown();
       if (addBtn) addBtn.disabled = false;
     });
@@ -845,6 +931,10 @@ let allLibraryModules = [];
 let comboboxQuery = "";
 let comboboxSelectedId = null;
 let comboboxOpen = false;
+// v1.2.16 (#353 part 1): WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
+// via aria-activedescendant) er separat fra selection (det som faktisk legges til). Arrow
+// up/down flytter highlight; Enter velger highlighted og legger den til; Escape lukker.
+let comboboxHighlightedIndex = -1;
 
 async function renderDetailView(courseId) {
   if (!courseId) {

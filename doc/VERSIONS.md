@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.16 - 2026-05-23
+
+feat(a11y): tre WCAG-fixes i Admin Content (addresses #353)
+
+**(1) Combobox-tastatur (admin-content-courses.js, conversational course-creation)**
+
+Den eksisterende combobox-en hadde kun mouse-selection. Nå:
+- Arrow Down / Up flytter highlight gjennom synlige options
+- Enter velger highlighted og legger til modulen
+- Escape lukker dropdownen
+- Home / End hopper til første / siste option
+- Hver option har stabil `id` og input har `aria-activedescendant` som peker til
+  highlighted option — SR-bruker hører hvilken option de er på per pil-tast
+- Visuell `.highlighted`-klasse + outline gir tydelig keyboard-fokus
+
+**(2) Step-fokus og live-region i conv-course-flyten**
+
+Hver bot-melding er nå en `aria-live="polite" role="status"`-region slik at SR-bruker
+får annonsert nye steg når de dukker opp. Etter hver step-transition (cert-level →
+modul-søk) flyttes fokus automatisk til første interaktive element i nytt steg — uten
+det måtte keyboard-bruker Tab gjennom hele forrige steg igjen.
+
+**(3) Focus-restore i dialogUnsavedHandoff (admin-content.js)**
+
+Den lagrer nå `document.activeElement` før dialogen åpner og restorer fokus eksplisitt
+på close (alle paths: Save, Discard, Cancel, Escape). Native `<dialog>.close()` restorer
+fokus konsekvent kun ved Escape og method=dialog-submit — vi har programmatic close via
+button-handlere, så eksplisitt restore er nødvendig.
+
+**Acceptance per #353**:
+- Hver av de tre opprinnelige issuene har konkret keyboard/fokus/SR-definisjon (over).
+- Manuell verifisering: Tab + Arrow + Enter + Escape gjennom course-creation-flyten.
+- Drift-diff og external-LLM-dialogene i shell.js har allerede opener-restore (B4 #451).
+
 ## 1.2.15 - 2026-05-23
 
 fix(test): playwright e2e oppdatert for scenario-step (CI rød siden v1.2.8)

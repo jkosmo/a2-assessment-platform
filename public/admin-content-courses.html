@@ -283,7 +283,9 @@
         cursor: pointer;
         color: var(--color-text);
       }
-      .combobox-option:hover, .combobox-option.selected { background: var(--color-blue-light); color: var(--color-link-active); }
+      .combobox-option:hover, .combobox-option.selected, .combobox-option.highlighted { background: var(--color-blue-light); color: var(--color-link-active); }
+      /* v1.2.16 (#353): tydeligere highlight når brukeren navigerer med piltastene. */
+      .combobox-option.highlighted { outline: 2px solid var(--color-link-active); outline-offset: -2px; }
       .combobox-option-id { font-size: 11px; color: var(--color-meta); margin-left: 6px; }
       .combobox-empty { padding: 8px 12px; font-size: 13px; color: var(--color-meta); font-style: italic; }
 
