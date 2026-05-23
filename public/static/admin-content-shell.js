@@ -396,7 +396,11 @@ function _domFormFields(entry) {
   const isMultiLine = entry.formType === "textarea" || entry.formType === "source-material";
   const isSourceMaterial = entry.formType === "source-material";
   wrap.className = isMultiLine ? "chat-form-col" : "chat-form-row";
-  let uploadedSourceMaterial = null;
+  // #454 Phase 2: multi-fil-opplasting. Bytter fra ett objekt til en array slik at flere
+  // filer kan stables i samme modul-opprettelse. Max 10 filer (rimelig grense; LLM-context
+  // og 50K-tegn-grensen vil typisk binde lenge før).
+  const uploadedFileSources = [];
+  const MAX_FILE_UPLOADS = 10;
 
   let inputEl;
   if (isMultiLine) {
@@ -444,7 +448,8 @@ function _domFormFields(entry) {
     // Aggregates "uploaded file: name | URLs: vg.no, wikipedia.org" into the hint span.
     const refreshUploadHint = () => {
       const parts = [];
-      if (uploadedSourceMaterial) parts.push(tf("shell.source.fileImported", { fileName: uploadedSourceMaterial.fileName }));
+      // #454 Phase 2: iterate all uploaded files (not just one)
+      for (const f of uploadedFileSources) parts.push(tf("shell.source.fileImported", { fileName: f.fileName }));
       for (const src of fetchedUrlSources) parts.push(tf("shell.source.urlFetched", { hostname: src.hostname }));
       uploadHint.textContent = parts.length === 0 ? t("shell.source.uploadHint") : parts.join(" · ");
     };
@@ -491,6 +496,12 @@ function _domFormFields(entry) {
       const file = fileInput.files?.[0];
       if (!file) return;
 
+      // #454 Phase 2: enforce max file count before extraction
+      if (uploadedFileSources.length >= MAX_FILE_UPLOADS) {
+        showToast(tf("shell.source.tooManyFiles", { max: MAX_FILE_UPLOADS }), "error");
+        fileInput.value = "";
+        return;
+      }
       if (!isSupportedSourceMaterialFile(file)) {
         showToast(t("shell.source.fileTypeInvalid"), "error");
         fileInput.value = "";
@@ -498,6 +509,12 @@ function _domFormFields(entry) {
       }
       if (file.size > SOURCE_MATERIAL_MAX_BYTES) {
         showToast(t("shell.source.fileTooLarge"), "error");
+        fileInput.value = "";
+        return;
+      }
+      // #454 Phase 2: don't allow uploading the same file twice (by name)
+      if (uploadedFileSources.some((f) => f.fileName === file.name)) {
+        showToast(tf("shell.source.duplicateFile", { fileName: file.name }), "error");
         fileInput.value = "";
         return;
       }
@@ -538,10 +555,11 @@ function _domFormFields(entry) {
         if (!trimmedText) {
           throw new Error("empty_extracted_text");
         }
-        uploadedSourceMaterial = {
+        // #454 Phase 2: push to array instead of replacing — allows stacking multiple files
+        uploadedFileSources.push({
           fileName: file.name,
           extractedText: trimmedText,
-        };
+        });
         refreshUploadHint();
         inputEl.focus();
         showToast(t("shell.source.fileReady"), "success");
@@ -569,13 +587,16 @@ function _domFormFields(entry) {
   function submit() {
     if (isSourceMaterial) {
       const notes = inputEl.value.trim();
-      const uploadedText = uploadedSourceMaterial?.extractedText ?? "";
-      // #454 Phase 1: prepend a short marker before each URL-fetched source so the LLM
-      // sees them as distinct chunks with origin attribution.
+      // #454 Phase 1/2: concat all file uploads, all URL fetches, and pasted notes.
+      // Each source prefixed with its origin marker (filename or hostname) so the LLM
+      // can attribute content. Separator "---" between sources.
+      const fileTexts = uploadedFileSources
+        .map((f) => `[${f.fileName}]\n${f.extractedText}`)
+        .join("\n\n---\n\n");
       const urlTexts = fetchedUrlSources
         .map((src) => `[${src.hostname}]\n${src.extractedText}`)
         .join("\n\n---\n\n");
-      const combinedSourceMaterial = [uploadedText, urlTexts, notes].filter(Boolean).join("\n\n").trim();
+      const combinedSourceMaterial = [fileTexts, urlTexts, notes].filter(Boolean).join("\n\n").trim();
       if (!combinedSourceMaterial) { inputEl.focus(); return; }
       if (combinedSourceMaterial.length > SOURCE_MATERIAL_MAX_CHARS) {
         showToast(t("shell.source.textTooLong"), "error");

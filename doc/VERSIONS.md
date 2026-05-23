@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.2 - 2026-05-23
+
+feat(admin): multi-fil-opplasting i kildemateriale (#454 Phase 2)
+
+Phase 1 (v1.2.0) fjernet URL-mangelen. Phase 2 fjerner én-fil-begrensningen.
+
+**Endringer i `_domFormFields`:**
+- `uploadedSourceMaterial` (singular) → `uploadedFileSources` (array, max 10)
+- "Last opp fil"-knappen kan klikkes flere ganger; hver fil pushes til array
+- `refreshUploadHint` enumererer alle filer + URL-er: `report.pdf · spec.docx · vg.no`
+- Submit konkatenerer alle fil-tekster + URL-tekster + paste; hver kilde har
+  `[name]\n...---\n[name2]` -prefiks slik at LLM kan attribuere
+
+**Validering:**
+- Max 10 filer per modul (`shell.source.tooManyFiles`)
+- Dupliserte filnavn avvises (`shell.source.duplicateFile`)
+- Eksisterende 2MB-per-fil-grense uendret
+- Eksisterende 50 000 tegn total uendret (Phase 3-jobb)
+
+**i18n:** to nye keys for en-GB/nb/nn (`tooManyFiles`, `duplicateFile`).
+
 ## 1.2.1 - 2026-05-23
 
 fix(admin): flytt `jsdom` til dependencies (#454 Phase 1 hotfix)
