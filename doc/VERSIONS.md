@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.17 - 2026-05-23
+
+fix(admin): Sertifiseringsnivå-kolonnen viste hardkodet engelsk + ugyldig "Foundation"
+
+Modul-bibliotek-tabellen hadde et `CERT_LABELS`-objekt med fastlåst engelsk («Basic»,
+«Intermediate», «Advanced») pluss en ugyldig «Foundation»-verdi som ikke finnes i
+skjemaet (`certificationLevelSchema = enum["basic","intermediate","advanced"]`).
+
+Fix:
+- Erstatt `CERT_LABELS` med `CERT_I18N_KEYS` som mapper enum → i18n-keys
+  (`adminContent.promptDialog.certificationLevelBasic|Intermediate|Advanced`). Bruker
+  ser «Grunnleggende / Videregående / Avansert» i nb, «Grunnleggjande / Vidaregåande /
+  Avansert» i nn, «Basic / Intermediate / Advanced» i en-GB.
+- Fjern «Foundation» (dead code).
+- Tolerer legacy-data der `certificationLevel` ble lagret som JSON-encoded locale-objekt
+  — parser ut en kjent enum-verdi om mulig, ellers viser verdien rå (synlig signal at
+  noe er feil og kan ryddes manuelt).
+
 ## 1.2.16 - 2026-05-23
 
 feat(a11y): tre WCAG-fixes i Admin Content (addresses #353)

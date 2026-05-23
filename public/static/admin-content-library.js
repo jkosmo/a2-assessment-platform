@@ -117,11 +117,13 @@ const STATUS_LABELS = {
   ready: "Klargjort",
 };
 
-const CERT_LABELS = {
-  basic: "Basic",
-  foundation: "Foundation",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
+// v1.2.17: bruk i18n-keyene fra adminContent.promptDialog.certificationLevel{Basic,
+// Intermediate,Advanced} i stedet for hardkodet engelsk. "Foundation" var dead-code —
+// skjemaet aksepterer kun basic/intermediate/advanced.
+const CERT_I18N_KEYS = {
+  basic: "adminContent.promptDialog.certificationLevelBasic",
+  intermediate: "adminContent.promptDialog.certificationLevelIntermediate",
+  advanced: "adminContent.promptDialog.certificationLevelAdvanced",
 };
 
 function statusBadge(status) {
@@ -130,8 +132,26 @@ function statusBadge(status) {
 
 function certBadge(level) {
   if (!level) return `<span class="cert-badge">—</span>`;
-  const normalized = typeof level === "string" ? level.toLowerCase() : level;
-  const label = CERT_LABELS[normalized] ?? CERT_LABELS[level] ?? level;
+  // level kan være en literal string ("intermediate"), en JSON-encoded locale-object
+  // (importerte moduler), eller en allerede-lokalisert streng fra serverens
+  // localizeContentText. Vi normaliserer til enum-key og slår opp i18n; om vi ikke
+  // klarer å normalisere, vis verdien som den er (fallback for legacy-data).
+  let normalized = null;
+  if (typeof level === "string") {
+    const lower = level.toLowerCase().trim();
+    if (lower in CERT_I18N_KEYS) {
+      normalized = lower;
+    } else if (lower.startsWith("{")) {
+      // Locale-object lagret som JSON-string — prøv å parse og finne en kjent enum-verdi.
+      try {
+        const obj = JSON.parse(level);
+        const candidates = Object.values(obj).filter(v => typeof v === "string");
+        const match = candidates.find(v => v.toLowerCase().trim() in CERT_I18N_KEYS);
+        if (match) normalized = match.toLowerCase().trim();
+      } catch { /* fall through to raw display */ }
+    }
+  }
+  const label = normalized ? t(CERT_I18N_KEYS[normalized]) : String(level);
   return `<span class="cert-badge">${escapeHtml(label)}</span>`;
 }
 
