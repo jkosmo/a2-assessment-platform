@@ -3,12 +3,17 @@
 // å populere sessionDraft slik at brukeren lander i Samtales draft-ready-state — samme
 // som etter vanlig LLM-generering.
 
-// Inline prompt-mal. Speilet av `doc/MODULE_DRAFT_JSON_AUTHORING_PROMPT.md` — endringer
-// må gjøres begge steder. Doc-en er menneske-lesbar referanse; denne strengen er det som
-// blir kopiert til clipboard.
+// Inline prompt-mal. doc/MODULE_DRAFT_JSON_AUTHORING_PROMPT.md beskriver den eldre
+// Avansert-flyten (med promptTemplate-seksjon, flat options-array, guidanceText). Denne
+// strengen er kanonisk for Samtale-flyten siden v1.2.7 — strengere språk-krav, MCQ-
+// options som locale-objekter, assessorExpectedContent. Ikke synk tilbake til doc-en uten
+// å oppdatere den eldre Avansert-importeren samtidig.
 //
 // v1.2.6: locale-felt-navn ble oppdatert til assessorExpectedContent (#449). Beholder
 // `guidanceText` som backwards-compat alias i parsern.
+// v1.2.7: forsterket språk-kravet etter at testing 2026-05-23 avdekket at MCQ-alternativer
+// og kriterier kom på engelsk selv om kildematerialet var norsk. Alle deltakerrettede felt
+// MÅ nå være locale-objekter med alle tre språk fylt ut.
 export const EXTERNAL_LLM_AUTHORING_PROMPT = `You are producing a module draft JSON for an assessment platform.
 
 Return one JSON object only.
@@ -17,40 +22,46 @@ If your interface cannot return a file, return the JSON as the only content in o
 Do not include commentary.
 Do not include comments.
 
-Requirements:
-- The root object must contain exactly these sections:
-  - module
-  - rubric
-  - mcqSet
-  - moduleVersion
-- Localized participant-facing text should use the locales:
-  - en-GB
-  - nb
-  - nn
-- If multilingual content is required, use locale objects for:
-  - module.title
-  - module.description
-  - mcqSet.title
-  - moduleVersion.taskText
-  - moduleVersion.assessorExpectedContent
-  - moduleVersion.candidateTaskConstraints
-- MCQ questions may also use locale objects when participant-facing text must be translated.
+LANGUAGE REQUIREMENT (CRITICAL):
+- The platform supports three locales: en-GB, nb (Norwegian Bokmål), nn (Norwegian Nynorsk).
+- Detect the dominant language of the source material below.
+- Every participant-facing text field listed under "Locale-object fields" MUST be a JSON
+  object with all three keys: "en-GB", "nb", "nn". Each key must contain a complete,
+  fluent translation — never leave a key empty, never leave a key in the wrong language.
+- Translate consistently: terminology, tone, and worked examples must align across locales.
+- This applies equally to MCQ stems, every MCQ option, correctAnswer, rationale, and every
+  rubric criterion's label and description. Do NOT leave these in English when the source
+  is in another language.
+
+Locale-object fields (each MUST be { "en-GB": "...", "nb": "...", "nn": "..." }):
+- module.title
+- module.description
+- mcqSet.title
+- moduleVersion.taskText
+- moduleVersion.assessorExpectedContent
+- moduleVersion.candidateTaskConstraints
+- For every MCQ question: stem, correctAnswer, rationale, AND each entry in options
+- For every rubric criterion: label, description
+
+Structural requirements:
+- Root object must contain exactly these sections: module, rubric, mcqSet, moduleVersion.
 - MCQ questions must include:
-  - stem
-  - options (array of 3-5 strings, one per option)
-  - correctAnswer (must match one of the options exactly)
-  - rationale (short explanation of why the correct answer is correct)
+  - stem (locale object)
+  - options — array of 3-5 entries, where each entry is itself a locale object
+  - correctAnswer (locale object) — its value in each locale must match exactly one of the
+    options' values in the SAME locale
+  - rationale (locale object) — short explanation of why the correct answer is correct
 - rubric.criteria must be a JSON object keyed by criterion-id, where each criterion has:
-  - label (string or locale object)
-  - description (string or locale object)
+  - label (locale object)
+  - description (locale object)
   - maxScore (integer 1-10)
   - candidateVisible (boolean — whether the criterion is shown to the candidate)
 - moduleVersion.taskText must describe the participant assignment clearly.
 - moduleVersion.assessorExpectedContent describes what a good submission should include (hidden from candidate).
-- moduleVersion.candidateTaskConstraints (optional) — short constraint hints shown to the candidate.
-- certificationLevel must be one of: "basic", "intermediate", "advanced".
+- moduleVersion.candidateTaskConstraints (optional content; the key + locale object are required) — short constraint hints shown to the candidate.
+- module.certificationLevel must be one of: "basic", "intermediate", "advanced".
 
-Return JSON in this exact shape:
+Return JSON in this exact shape (replace the placeholder strings with real, fully translated content — do NOT leave any locale key empty or in the wrong language):
 {
   "module": {
     "title": { "en-GB": "", "nb": "", "nn": "" },
@@ -72,8 +83,13 @@ Return JSON in this exact shape:
     "questions": [
       {
         "stem": { "en-GB": "", "nb": "", "nn": "" },
-        "options": ["", "", "", ""],
-        "correctAnswer": "",
+        "options": [
+          { "en-GB": "", "nb": "", "nn": "" },
+          { "en-GB": "", "nb": "", "nn": "" },
+          { "en-GB": "", "nb": "", "nn": "" },
+          { "en-GB": "", "nb": "", "nn": "" }
+        ],
+        "correctAnswer": { "en-GB": "", "nb": "", "nn": "" },
         "rationale": { "en-GB": "", "nb": "", "nn": "" }
       }
     ]

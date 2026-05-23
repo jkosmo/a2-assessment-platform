@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.7 - 2026-05-23
+
+fix(admin): ekstern-LLM-prompt språk-disiplin (#455 follow-up)
+
+Test 2026-05-23 av v1.2.6: norsk kildemateriale → MCQ-alternativer og vurderings-
+kriterier kom på engelsk; resten av modulen var korrekt på norsk.
+
+**Rotårsak**: forfatter-prompten var løs på MCQ-alternativer (`options (array of 3-5
+strings)` — ingen krav til locale-objekter) og rubric-kriterier (`label (string or
+locale object)` — "or" gjorde locale-objektet valgfritt). Den engelske prompten + den
+løse formuleringen gjorde at LLM defaulted til engelsk for de feltene som ikke var
+eksplisitt locale-merket.
+
+**Fix** i [public/static/admin-content-external-llm.js](public/static/admin-content-external-llm.js):
+
+- Nytt eksplisitt **LANGUAGE REQUIREMENT**-avsnitt i prompten: detekter språket i
+  kildematerialet, fyll ut alle tre locale-nøklene fluent og konsekvent, aldri tom
+  eller feil locale.
+- Listen «Locale-object fields» dekker nå hele settet av deltaker-rettede felt,
+  inkludert hver MCQ-stem/option/correctAnswer/rationale og hvert kriterie-label/
+  description.
+- MCQ `options`-strukturen er endret fra `array of strings` til `array of locale
+  objects` — én locale-objekt per alternativ. Dette matcher hvordan `localizeMcq-
+  AcrossLocales` i shell.js allerede strukturerer data (én locale-map per option).
+- Eksempel-JSON-en viser locale-objekter overalt der deltakeren ser teksten, slik at
+  modellen ikke kan kopiere en flat-string-mal som «default».
+- Helper-kommentar oppdatert med v1.2.7-historikk.
+
+**Robusthet**: parser er allerede tolerant — `parseExternalLlmJson` validerer kun
+`module.title` og `moduleVersion.taskText`, slipper resten gjennom. `localizeValue-
+ForLocale` håndterer både flate strings (legacy) og locale-objekter, så eldre
+JSON-eksporter fra ChatGPT/Claude fortsetter å virke.
+
+**Verifiseringsplan**: gjenta testen med norsk kildemateriale via «Bruk ekstern LLM».
+Sjekk at MCQ-alternativer, korrekt-svar, rationale, og rubric-kriterienes label/
+description alle er på norsk i preview.
+
 ## 1.2.6 - 2026-05-23
 
 feat(admin): ekstern-LLM-handoff i Samtale (closes #455)
