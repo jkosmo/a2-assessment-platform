@@ -400,9 +400,11 @@ async function duplicateModule(moduleId, btn) {
       envelope.module.module.title = `${srcTitle} (kopi)`;
     }
 
+    // v1.2.14 (#456): autoPublish=false så kopien lander som "Upublisert utkast" uansett
+    // om kilden var publisert. Forfatter skal eksplisitt publisere etter gjennomgang.
     const importResult = await apiFetch("/api/admin/content/modules/import", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ payload: envelope, mode: "createNew" }),
+      body: JSON.stringify({ payload: envelope, mode: "createNew", autoPublish: false }),
     });
     if (!importResult?.moduleId) throw new Error("Import-respons mangler moduleId.");
 

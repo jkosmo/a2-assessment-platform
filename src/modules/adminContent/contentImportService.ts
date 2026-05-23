@@ -49,6 +49,10 @@ async function importModulePayload(
     actorId: string;
     mode: ImportMode;
     targetModuleId?: string;
+    // v1.2.14 (#456): når false, auto-publiserer ikke selv om kildens audit.publishedAt er
+    // satt. Brukes av in-app dupliseringen — kopien skal alltid være utkast inntil
+    // forfatter eksplisitt publiserer. Default true bevarer fil-import-flytens atferd.
+    autoPublish?: boolean;
   },
 ): Promise<{ moduleId: string; moduleVersionId: string }> {
   let moduleId: string;
@@ -122,7 +126,10 @@ async function importModulePayload(
   // audit-history preservation: if the source was live, the destination
   // should be live. Without this, imported modules end up as drafts and
   // participants get "module not available" when the course references them.
-  if (payload.activeVersion.audit?.publishedAt) {
+  //
+  // v1.2.14 (#456): in-app duplisering passerer autoPublish=false så kopier alltid
+  // starter som utkast — forfatter skal eksplisitt publisere etter gjennomgang.
+  if (options.autoPublish !== false && payload.activeVersion.audit?.publishedAt) {
     await publishModuleVersion(moduleId, moduleVersion.id, options.actorId);
   }
 
@@ -135,6 +142,7 @@ export async function importModuleFromEnvelope(
     actorId: string;
     mode: ImportMode;
     targetModuleId?: string;
+    autoPublish?: boolean;
   },
 ): Promise<{ moduleId: string; moduleVersionId: string }> {
   if (envelope.scope !== "module" || !envelope.module) {

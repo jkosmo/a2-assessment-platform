@@ -4021,13 +4021,18 @@ loadParticipantConsoleConfig().then(async () => {
   if (autoModuleId) {
     try {
       await loadModules();
-      if (modules.some((m) => m.id === autoModuleId)) {
-        setSelectedModule(autoModuleId);
-        await handleLoadSelectedModuleContent();
-        // Apply any working draft carried over from the conversational shell.
-        // Must run after populateFormFromModuleExport so it can override form fields.
-        applyHandoffFromShell(autoModuleId);
-      }
+      // v1.2.14 (#453): tidligere gjorde vi `modules.some(m => m.id === autoModuleId)`
+      // som forutsetning. Nyopprettede moduler kan mangle i lista pga replikering/cache,
+      // så setSelectedModule ble hoppet over mens handleLoadSelectedModuleContent +
+      // applyHandoffFromShell kjørte uansett. Resultat: selectedModuleIdInput.value tom,
+      // og "Lagre alle endringer" gav "Modul ID påkrevd". Setter nå ID-en fra URL
+      // uansett — GET /modules/:id i handleLoadSelectedModuleContent feiler synlig
+      // hvis ID-en er ugyldig (manipulert URL), som er ønsket atferd.
+      setSelectedModule(autoModuleId);
+      await handleLoadSelectedModuleContent();
+      // Apply any working draft carried over from the conversational shell.
+      // Must run after populateFormFromModuleExport so it can override form fields.
+      applyHandoffFromShell(autoModuleId);
     } catch {
       // non-fatal – editor is still usable without auto-load
     }

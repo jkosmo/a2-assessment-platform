@@ -299,6 +299,7 @@ adminContentRouter.post("/modules/import", async (request, response) => {
       actorId,
       mode: data.mode ?? "createNew",
       targetModuleId: data.targetId,
+      autoPublish: data.autoPublish,
     });
     response.status(201).json({ moduleId: result.moduleId, moduleVersionId: result.moduleVersionId });
   } catch (err) {

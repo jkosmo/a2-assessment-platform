@@ -330,6 +330,9 @@ export const importBodySchema = z.object({
   // imported content to as a NEW active version (history is preserved in the
   // destination's normal version chain; the source's history is NOT replayed).
   targetId: z.string().min(1).optional(),
+  // v1.2.14 (#456): når false, auto-publiser ikke selv om kildens audit.publishedAt er
+  // satt. In-app duplisering sender false; fil-import lar default (true) stå.
+  autoPublish: z.boolean().optional(),
 }).refine(
   (body) => body.mode !== "replaceExisting" || !!body.targetId,
   { message: "targetId is required when mode is replaceExisting", path: ["targetId"] },

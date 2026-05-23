@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.14 - 2026-05-23
+
+fix(admin): dupliser → utkast + handoff modul-ID (addresses #456, addresses #453)
+
+To uavhengige feilfikser bundlet i én slice (per ux_batching-regel):
+
+**#456 — Dupliser-knapp setter ny modul som Publisert i stedet for Upublisert utkast**
+
+`importModulePayload` auto-publiserte hvis kildens `audit.publishedAt` var satt — det
+er ønsket atferd ved fil-import for cross-environment-overføring, men feil for in-app
+duplisering der forfatter forventer å gjennomgå kopien før publisering.
+
+- Nytt `autoPublish?: boolean` på `importModulePayload` + `importModuleFromEnvelope` +
+  `importBodySchema` (default true bevarer fil-import-atferd).
+- `duplicateModule` i library-frontend sender nå `autoPublish: false`.
+
+**#453 — "Modul ID påkrevd" når man åpner Avansert via handoff på nyopprettet modul**
+
+Boot-logikken i `admin-content.js` forutsatte at autoModuleId fantes i den nylig hentede
+modul-listen før den satte `selectedModuleId`. Nyopprettede moduler kan mangle der pga
+replikering/cache, så `setSelectedModule` ble hoppet over mens senere steg kjørte —
+resultat: `selectedModuleIdInput.value` tom og "Lagre alle endringer" feilet.
+
+Fix: sett `selectedModuleId` fra URL uansett (modul-IDer fra URL kommer fra valid
+creation-flow); `handleLoadSelectedModuleContent` feiler synlig hvis ID-en er ugyldig,
+som er ønsket atferd ved manipulert URL.
+
 ## 1.2.13 - 2026-05-23
 
 fix(admin): "Dupliser" brukte feil eksport-endepunkt (#348 follow-up)
