@@ -8,6 +8,7 @@ const submissionCreateStore = new MemoryStore();
 const assessmentRunStore = new MemoryStore();
 const mcqSubmitStore = new MemoryStore();
 const generateStore = new MemoryStore();
+const extractStore = new MemoryStore();
 
 function resolveRateLimitKey(request: Request) {
   return request.context?.userId ?? request.ip ?? "unknown";
@@ -86,12 +87,26 @@ export const generateLimiter = createLimiter({
   },
 });
 
+// #454 v1.2.5: dedikert limit for file-parser-ekstraksjon. Multi-fil-flyten (Phase 2)
+// kan submitte 5-10 filer i én batch, og hver fil poller resultat 1-30 ganger. Med den
+// gamle 10/min generateLimiter ble grensen blåst gjennom på sekunder. Separer extract-
+// flow så LLM-generation-budsjettet (10/min) ikke deles med parser-pollingen.
+export const extractLimiter = createLimiter({
+  store: extractStore,
+  limit: 60,
+  message: {
+    error: "rate_limited",
+    message: "Too many file extraction requests. Retry in 60 seconds.",
+  },
+});
+
 export async function resetRateLimitState() {
   await Promise.all([
     generalApiStore.resetAll?.(),
     submissionCreateStore.resetAll?.(),
     assessmentRunStore.resetAll?.(),
     mcqSubmitStore.resetAll?.(),
+    extractStore.resetAll?.(),
     generateStore.resetAll?.(),
   ]);
 }

@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.5 - 2026-05-23
+
+fix(admin): rate-limit + char-cap + encoding-bug (#454 follow-ups)
+
+UI-test av v1.2.3+ avdekket tre problemer:
+
+**Fix (a) — rate-limit på file-extract var for streng**
+
+`/source-material/extract` brukte `generateLimiter` (10/min) for BÅDE POST (submit) og
+GET (polling). Polling kjører opptil 30 ganger per fil; multi-fil-batch på 3 filer ⇒
+~90 requests inn i 60s-vinduet, langt over 10. Bruker fikk "Too many generation
+requests" på 2 av 3 filer i én batch.
+
+Fix:
+- Ny `extractLimiter` (60/min) for POST `/source-material/extract` — separat fra
+  generateLimiter (LLM-budsjett 10/min beholdes)
+- GET poll-endepunkt har INGEN dedikert limit (bare in-memory lookup)
+
+**Fix (b) — 200K char-cap blokkerte før condense fikk sjansen**
+
+Phase 4 (auto-condense) skulle håndtere store kilder, men hard-grensen `SOURCE_MATERIAL_MAX_CHARS=200000`
+sjekkes FØR submit kalles confirmAndGenerate → condense. Bruker med 3 presentasjon-PDFer
+(~80K chars per stk i ekstrahert tekst) traff grensen og kunne aldri trigge condense.
+
+Fix: 200K → 1 000 000. Phase 4 condense reduserer enhver source > 50K til ~30K før
+LLM-pipeline, så reell LLM-kost er bundet uavhengig av input. 1M cap eksisterer kun
+som sanity-grense for browser-ytelse (unngå 100MB-paste-låsing).
+
+**Fix (c) — encoding-bug "fÃ¸r" → "før"**
+
+`shell.source.textTooLong` i nb og nn hadde Latin-1-mangled UTF-8 ("fÃ¸r" var visningen
+av to-byte `c3 b8`-sekvensen lest som to enkeltbytes). Fikset i begge locales.
+
 ## 1.2.4 - 2026-05-23
 
 feat(admin): automatisk kondensering av stort kildemateriale (#454 Phase 4)

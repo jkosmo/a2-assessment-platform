@@ -70,7 +70,7 @@ import {
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
-import { generateLimiter } from "../middleware/rateLimiting.js";
+import { generateLimiter, extractLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 
 const adminContentRouter = Router();
@@ -664,7 +664,9 @@ adminContentRouter.post("/modules/:moduleId/restore", async (request, response) 
 // LLM content generation
 // ---------------------------------------------------------------------------
 
-adminContentRouter.post("/source-material/extract", generateLimiter, async (request, response) => {
+// v1.2.5: bruker extractLimiter (60/min) i stedet for generateLimiter (10/min). Multi-fil-
+// flyten (Phase 2+) submitter flere filer i én batch — 10/min ble blåst gjennom raskt.
+adminContentRouter.post("/source-material/extract", extractLimiter, async (request, response) => {
   const { data, error } = parseRequest(sourceMaterialUploadBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -680,7 +682,10 @@ adminContentRouter.post("/source-material/extract", generateLimiter, async (requ
   }
 });
 
-adminContentRouter.get("/source-material/extract/:jobId", generateLimiter, async (request, response) => {
+// v1.2.5: GET-poll-endepunkt har ingen dedikert rate-limit. Poll er bare in-memory job-status-
+// lookup uten ekstern cost. Tidligere generateLimiter delte budsjett med LLM-generation —
+// multi-fil-flyt med 30 polls/fil × 5 filer blåste gjennom 10/min på sekunder.
+adminContentRouter.get("/source-material/extract/:jobId", async (request, response) => {
   try {
     const result = await getParsedResult(request.params.jobId as string);
     if (!result) {

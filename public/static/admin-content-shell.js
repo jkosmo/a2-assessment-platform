@@ -162,10 +162,12 @@ const srPreview = document.getElementById("srPreview");
 const srLang = document.getElementById("srLang");
 
 const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
-// #454 Phase 3 (v1.2.3): hevet fra 50 000 → 200 000. gpt-4o-mini har 128K context;
-// 200K char ≈ ~50K tokens for engelsk/norsk tekst — ~40% av context-windowet, etterlater
-// godt rom for system-prompt + completion. Kan heves videre når større modeller brukes.
-const SOURCE_MATERIAL_MAX_CHARS = 200000;
+// #454 Phase 3 (v1.2.3): 50K → 200K. v1.2.5: 200K → 1M. Begrunnelse: Phase 4 (auto-condense)
+// komprimerer enhver source > 50K til ~30K før LLM-pipeline, så reell LLM-kost er bundet
+// uavhengig av input-størrelse. 1M-cap'en eksisterer bare som sanity-grense for å unngå at
+// brukeren paster inn 100MB tekst som låser nettleseren. Hvis du treffer 1M er det neppe
+// fornuftig materiale uansett.
+const SOURCE_MATERIAL_MAX_CHARS = 1_000_000;
 const SOURCE_MATERIAL_ACCEPT =
   ".txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.rtf,.odt,.odp,.ods,text/plain,text/markdown,text/x-markdown,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/rtf,text/rtf,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.presentation,application/vnd.oasis.opendocument.spreadsheet";
 const SOURCE_MATERIAL_ALLOWED_EXTENSIONS = new Set([
