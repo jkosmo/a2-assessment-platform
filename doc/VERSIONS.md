@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.1 - 2026-05-23
+
+fix(admin): flytt `jsdom` til dependencies (#454 Phase 1 hotfix)
+
+v1.2.0-test feilet på stage med "Cannot find package 'jsdom' imported from
+urlFetchService.js". `jsdom` lå i devDependencies — TypeScript-kompilering fungerte
+men runtime-importen i prod-builden manglet pakken. Flyttet til `dependencies`.
+
+`@mozilla/readability` var allerede i dependencies. `@types/jsdom` forblir devDep
+(brukes kun ved kompilering).
+
 ## 1.2.0 - 2026-05-23
 
 feat(admin): server-side URL-fetching for kildemateriale (#454 Phase 1)
