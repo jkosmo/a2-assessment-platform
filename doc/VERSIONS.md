@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.15 - 2026-05-23
+
+fix(test): playwright e2e oppdatert for scenario-step (CI rød siden v1.2.8)
+
+CI har vært rød i 7 påfølgende pushes (v1.2.8 → v1.2.14) — playwright-suiten testet den
+gamle new-module-flyten (title → source-material) uten å ta hensyn til scenario-steget
+som ble lagt inn mellom de to i v1.2.8.
+
+Lagt inn `clickEnabledButton(page, "Let the LLM decide")` etter hver
+`submitActiveChatInput(title)` i de to e2e-testene som bruker new-module-flyten:
+
+- `admin-content-workspaces.spec.ts:1088` — create + generate + save module-ID test
+- `admin-content-workspaces.spec.ts:1402` — source-material upload test
+
+"auto" velges fordi det tilsvarer den gamle atferden (LLM avgjør scenario).
+
 ## 1.2.14 - 2026-05-23
 
 fix(admin): dupliser → utkast + handoff modul-ID (addresses #456, addresses #453)

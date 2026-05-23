@@ -1092,6 +1092,9 @@ test.describe("admin content browser coverage", () => {
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Trade unions");
+    // v1.2.8: scenario-step inserted between title and source-material. Pick "auto" so
+    // the LLM decides (same behaviour as before the step existed).
+    await clickEnabledButton(page, "Let the LLM decide");
     await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
     await clickEnabledButton(page, "Basic");
 
@@ -1406,6 +1409,8 @@ test.describe("admin content browser coverage", () => {
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Upload module");
+    // v1.2.8: scenario-step inserted between title and source-material.
+    await clickEnabledButton(page, "Let the LLM decide");
 
     const fileInput = page.locator('input[type="file"]').last();
     await fileInput.setInputFiles({
