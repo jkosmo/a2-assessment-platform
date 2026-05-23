@@ -78,6 +78,20 @@ const createCancel = document.getElementById("createCancel");
 const coursesPopover = document.getElementById("coursesPopover");
 const coursesPopoverList = document.getElementById("coursesPopoverList");
 const navKalibrering = document.getElementById("navKalibrering");
+// v1.2.11: Rydd uplubliserte (kun ADMINISTRATOR).
+const purgeUnpublishedBtn = document.getElementById("purgeUnpublishedBtn");
+const purgeUnpublishedDialog = document.getElementById("purgeUnpublishedDialog");
+const purgePreviewLoading = document.getElementById("purgePreviewLoading");
+const purgePreviewBody = document.getElementById("purgePreviewBody");
+const purgeDeleteCount = document.getElementById("purgeDeleteCount");
+const purgeDeleteList = document.getElementById("purgeDeleteList");
+const purgeSkipCount = document.getElementById("purgeSkipCount");
+const purgeSkipList = document.getElementById("purgeSkipList");
+const purgeSkipDetails = document.getElementById("purgeSkipDetails");
+const purgeConfirmInput = document.getElementById("purgeConfirmInput");
+const purgeConfirmBtn = document.getElementById("purgeConfirmBtn");
+const purgeCancelBtn = document.getElementById("purgeCancelBtn");
+const purgeError = document.getElementById("purgeError");
 
 // ---------------------------------------------------------------------------
 // State
@@ -452,6 +466,78 @@ function openCreateDialog() {
   newModuleTitle.focus();
 }
 
+// v1.2.11: åpne purge-dialog, hent kandidat-preview fra backend og render lister.
+async function openPurgeDialog() {
+  if (!purgeUnpublishedDialog) return;
+  purgePreviewLoading.hidden = false;
+  purgePreviewBody.hidden = true;
+  purgeError.hidden = true;
+  purgeConfirmInput.value = "";
+  purgeConfirmBtn.disabled = true;
+  purgeUnpublishedDialog.showModal();
+  try {
+    const result = await apiFetch("/api/admin/content/modules/purge-unpublished/preview", getHeaders);
+    const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+    const toDelete = candidates.filter((c) => !c.reasonSkipped);
+    const toSkip = candidates.filter((c) => c.reasonSkipped);
+
+    purgeDeleteCount.textContent = String(toDelete.length);
+    purgeDeleteList.innerHTML = toDelete.length === 0
+      ? `<li style="color:#666">Ingen kandidater — alt er enten publisert, arkivert, i bruk, eller har submissions.</li>`
+      : toDelete.map((c) => `<li>${escapeHtml(c.title || c.id)}</li>`).join("");
+
+    purgeSkipCount.textContent = String(toSkip.length);
+    purgeSkipList.innerHTML = toSkip.map((c) =>
+      `<li>${escapeHtml(c.title || c.id)} — ${escapeHtml(c.reasonSkipped)}</li>`
+    ).join("");
+    purgeSkipDetails.hidden = toSkip.length === 0;
+
+    purgePreviewLoading.hidden = true;
+    purgePreviewBody.hidden = false;
+    // Hvis ingenting å slette, ikke aktiver bekreftelses-input.
+    if (toDelete.length === 0) {
+      purgeConfirmInput.disabled = true;
+      purgeConfirmInput.placeholder = "Ingenting å slette";
+    } else {
+      purgeConfirmInput.disabled = false;
+      purgeConfirmInput.placeholder = "";
+      purgeConfirmInput.focus();
+    }
+  } catch (error) {
+    purgePreviewLoading.hidden = true;
+    purgeError.hidden = false;
+    purgeError.textContent = `Klarte ikke hente forhåndsvisning: ${error instanceof Error ? error.message : "ukjent feil"}`;
+  }
+}
+
+async function runPurge() {
+  purgeError.hidden = true;
+  purgeConfirmBtn.disabled = true;
+  const originalLabel = purgeConfirmBtn.textContent;
+  purgeConfirmBtn.textContent = "Sletter…";
+  try {
+    const result = await apiFetch("/api/admin/content/modules/purge-unpublished", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ confirmation: "SLETT" }),
+    });
+    const deleted = Array.isArray(result?.deleted) ? result.deleted.length : 0;
+    const failed = Array.isArray(result?.failed) ? result.failed.length : 0;
+    purgeUnpublishedDialog.close();
+    if (failed > 0) {
+      showToast(`Slettet ${deleted}, ${failed} feilet. Sjekk audit-loggen.`, "error");
+    } else {
+      showToast(`Slettet ${deleted} uplubliserte moduler.`);
+    }
+    await loadModules();
+  } catch (error) {
+    purgeError.hidden = false;
+    purgeError.textContent = `Sletting feilet: ${error instanceof Error ? error.message : "ukjent feil"}`;
+    purgeConfirmBtn.disabled = false;
+  } finally {
+    purgeConfirmBtn.textContent = originalLabel;
+  }
+}
+
 async function createAndNavigate(target) {
   const title = newModuleTitle.value.trim();
   const level = newModuleLevel.value;
@@ -617,6 +703,18 @@ async function init() {
 
   // Create module
   createModuleBtn?.addEventListener("click", openCreateDialog);
+
+  // v1.2.11: Rydd uplubliserte — kun ADMINISTRATOR ser knappen.
+  if (purgeUnpublishedBtn) {
+    const isAdmin = resolveActiveWorkspaceRoles().includes("ADMINISTRATOR");
+    purgeUnpublishedBtn.hidden = !isAdmin;
+    purgeUnpublishedBtn.addEventListener("click", openPurgeDialog);
+  }
+  purgeCancelBtn?.addEventListener("click", () => purgeUnpublishedDialog?.close());
+  purgeConfirmInput?.addEventListener("input", () => {
+    purgeConfirmBtn.disabled = purgeConfirmInput.value.trim() !== "SLETT";
+  });
+  purgeConfirmBtn?.addEventListener("click", runPurge);
 
   // Import module package (#433). The visible button triggers a hidden file
   // input; on file pick: parse JSON, POST envelope to /modules/import,

@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.11 - 2026-05-23
+
+feat(admin): "Rydd uplubliserte" — bulk-delete av draft-moduler i modul-bibliotek
+
+Stage samler opp draft-moduler over tid. Ny ADMINISTRATOR-only knapp i modul-bibliotek-
+toolbaren sletter alle moduler som aldri har vært publisert (`activeVersionId IS NULL`),
+ikke er arkivert, ikke er i kurs, og ikke har submissions.
+
+**Backend**:
+- `listUnpublishedPurgeCandidates()` returnerer kandidater med avhengighet-tellinger.
+- `purgeUnpublishedModules(actorId)` sletter hver modul i egen transaksjon (FK-order:
+  moduleVersion → mcqQuestion → mcqSetVersion → rubricVersion → promptTemplateVersion →
+  module). Hver delete audit-logges med `source: "bulk_purge_unpublished"`.
+- `GET /api/admin/content/modules/purge-unpublished/preview` (preview-kandidater).
+- `POST /api/admin/content/modules/purge-unpublished` (krever `{ confirmation: "SLETT" }`).
+- Begge endepunktene returnerer 403 for ikke-ADMINISTRATOR-roller.
+
+**Frontend**:
+- Ny knapp "Rydd uplubliserte" i modul-bibliotek-headeren — kun synlig for ADMINISTRATOR.
+- Dialog med preview-liste (vil bli slettet vs utelatt med årsak), typed
+  "SLETT"-bekreftelse, og rød Slett-knapp.
+- Etter sletting: toast med antall + automatisk refresh av modullisten.
+
+**Sikkerhet**:
+- Rolle-sjekk i begge endepunktene.
+- Skrevet bekreftelse "SLETT" obligatorisk i POST-body.
+- Submissions og courseModules > 0 → modul utelates fra slett-listen automatisk.
+- Hver modul i egen transaksjon, så delvis feil ikke ruller tilbake hele batchen.
+
 ## 1.2.10 - 2026-05-23
 
 fix(admin): vurderingskriterier rendret ikke locale-objekt-labels (#455 follow-up)

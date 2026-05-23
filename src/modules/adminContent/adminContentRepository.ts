@@ -173,6 +173,36 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // v1.2.11: list purge candidates — moduler som aldri har vært publisert nå (activeVersionId
+    // null), ikke arkivert, ingen submissions, ikke i noe kurs. Returnerer både id og title
+    // pluss avhengighet-tellinger så caller kan vise en preview-liste til brukeren før purge.
+    listPurgeCandidates() {
+      return client.module.findMany({
+        where: {
+          activeVersionId: null,
+          archivedAt: null,
+        },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              submissions: true,
+              courseModules: true,
+              versions: true,
+              rubricVersions: true,
+              promptTemplateVersions: true,
+              mcqSetVersions: true,
+              mcqQuestions: true,
+              certificationStatuses: true,
+            },
+          },
+        },
+      });
+    },
+
     findModuleContentBundle(moduleId: string) {
       return client.module.findUnique({
         where: { id: moduleId },

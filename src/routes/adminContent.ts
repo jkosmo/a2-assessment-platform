@@ -20,6 +20,8 @@ import {
   restoreModule,
   adminContentRepository,
   buildModuleExportEnvelope,
+  listUnpublishedPurgeCandidates,
+  purgeUnpublishedModules,
 } from "../modules/adminContent/index.js";
 import {
   moduleCreateBodySchema,
@@ -181,6 +183,46 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
       return;
     }
     response.status(400).json({ error: "delete_module_failed", message: "Could not delete module." });
+  }
+});
+
+// v1.2.11: bulk-purge for "Rydd stage"-knappen i modul-bibliotek-toolbaren. Lister og
+// sletter alle uplubliserte moduler (activeVersionId=null, ikke arkivert, ingen kurs/
+// submissions). ADMINISTRATOR-only fordi det er en destruktiv batch-operasjon.
+adminContentRouter.get("/modules/purge-unpublished/preview", async (request, response) => {
+  if (!request.context?.roles?.includes("ADMINISTRATOR")) {
+    response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can preview the bulk purge list." });
+    return;
+  }
+  try {
+    const candidates = await listUnpublishedPurgeCandidates();
+    response.json({ candidates });
+  } catch (error) {
+    response.status(500).json({ error: "purge_preview_failed", message: error instanceof Error ? error.message : "unknown" });
+  }
+});
+
+adminContentRouter.post("/modules/purge-unpublished", async (request, response) => {
+  if (!request.context?.roles?.includes("ADMINISTRATOR")) {
+    response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can purge unpublished modules." });
+    return;
+  }
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  // Krev typed bekreftelse "SLETT" i bodyen — beskytter mot tilfeldig POST.
+  const confirmation = typeof request.body?.confirmation === "string" ? request.body.confirmation.trim() : "";
+  if (confirmation !== "SLETT") {
+    response.status(400).json({ error: "confirmation_required", message: "Body must include { confirmation: 'SLETT' }." });
+    return;
+  }
+  try {
+    const result = await purgeUnpublishedModules(actorId);
+    response.json(result);
+  } catch (error) {
+    response.status(500).json({ error: "purge_failed", message: error instanceof Error ? error.message : "unknown" });
   }
 });
 

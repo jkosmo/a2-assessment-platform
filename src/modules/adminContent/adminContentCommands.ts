@@ -172,6 +172,84 @@ export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedT
   return module;
 }
 
+// v1.2.11: bulk-purge alle uplubliserte moduler (activeVersionId=null) som ikke er i kurs
+// og ikke har submissions. Brukt av "Rydd stage"-knappen i modul-bibliotek-toolbaren —
+// kun ADMINISTRATOR. Hver modul slettes i egen transaksjon så én delvis feil ikke ruller
+// tilbake hele batchen.
+export type PurgeCandidate = {
+  id: string;
+  title: string;
+  updatedAt: Date;
+  submissions: number;
+  courseModules: number;
+  versions: number;
+  reasonSkipped: string | null;
+};
+
+export type PurgeResult = {
+  deleted: Array<{ id: string; title: string }>;
+  skipped: Array<{ id: string; title: string; reason: string }>;
+  failed: Array<{ id: string; title: string; message: string }>;
+};
+
+export async function listUnpublishedPurgeCandidates(): Promise<PurgeCandidate[]> {
+  const candidates = await adminContentRepository.listPurgeCandidates();
+  return candidates.map((m) => {
+    const reasons: string[] = [];
+    if (m._count.submissions > 0) reasons.push(`${m._count.submissions} submissions`);
+    if (m._count.courseModules > 0) reasons.push(`in ${m._count.courseModules} course(s)`);
+    if (m._count.certificationStatuses > 0) reasons.push(`${m._count.certificationStatuses} certification statuses`);
+    return {
+      id: m.id,
+      title: m.title,
+      updatedAt: m.updatedAt,
+      submissions: m._count.submissions,
+      courseModules: m._count.courseModules,
+      versions: m._count.versions,
+      reasonSkipped: reasons.length > 0 ? reasons.join("; ") : null,
+    };
+  });
+}
+
+export async function purgeUnpublishedModules(actorId: string): Promise<PurgeResult> {
+  const candidates = await listUnpublishedPurgeCandidates();
+  const result: PurgeResult = { deleted: [], skipped: [], failed: [] };
+
+  for (const candidate of candidates) {
+    if (candidate.reasonSkipped) {
+      result.skipped.push({ id: candidate.id, title: candidate.title, reason: candidate.reasonSkipped });
+      continue;
+    }
+    try {
+      await runInTransaction(async (tx) => {
+        // FKs på Module-relasjoner er Restrict, så vi må slette barn først i riktig
+        // rekkefølge: moduleVersions har FK til rubric/prompt/mcq-set-versions, så slett
+        // moduleVersions først; deretter mcqQuestions (FK til mcqSetVersion + module);
+        // deretter rubric/prompt/mcq-set-versions; til slutt selve modulen.
+        await tx.moduleVersion.deleteMany({ where: { moduleId: candidate.id } });
+        await tx.mCQQuestion.deleteMany({ where: { moduleId: candidate.id } });
+        await tx.mCQSetVersion.deleteMany({ where: { moduleId: candidate.id } });
+        await tx.rubricVersion.deleteMany({ where: { moduleId: candidate.id } });
+        await tx.promptTemplateVersion.deleteMany({ where: { moduleId: candidate.id } });
+        await tx.module.delete({ where: { id: candidate.id } });
+      });
+      result.deleted.push({ id: candidate.id, title: candidate.title });
+      await recordAuditEvent({
+        entityType: auditEntityTypes.module,
+        entityId: candidate.id,
+        action: auditActions.adminContent.moduleDeleted,
+        actorId,
+        metadata: { moduleId: candidate.id, title: candidate.title, purged: true, source: "bulk_purge_unpublished" },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown_error";
+      result.failed.push({ id: candidate.id, title: candidate.title, message });
+    }
+  }
+
+  return result;
+}
+
 export async function deleteModule(moduleId: string, actorId: string) {
   const module = await adminContentRepository.findModuleDeleteSummary(moduleId);
 

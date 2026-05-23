@@ -268,6 +268,8 @@
           <button id="createModuleBtn" class="btn btn-primary">Opprett ny modul</button>
           <button type="button" id="importModulePackageBtn" class="btn btn-secondary">Importer modul-pakke (.json)</button>
           <input id="importModulePackageFile" type="file" accept="application/json,.json" hidden />
+          <!-- v1.2.11: Rydd stage-knapp, kun synlig for ADMINISTRATOR. JS toggler `hidden`. -->
+          <button type="button" id="purgeUnpublishedBtn" class="btn btn-secondary" hidden style="color:#a32424;border-color:#fdb;background:#fff8f8">Rydd uplubliserte</button>
         </div>
       </div>
 
@@ -318,6 +320,34 @@
           <button type="button" class="dialog-cancel" id="createCancel">Avbryt</button>
         </div>
       </form>
+    </dialog>
+
+    <!-- v1.2.11: Rydd uplubliserte-dialog. Viser kandidater + utelatte med årsak, krever
+         skrevet "SLETT"-bekreftelse. Kun ADMINISTRATOR. -->
+    <dialog id="purgeUnpublishedDialog" aria-labelledby="purgeDialogTitle">
+      <h2 class="dialog-title" id="purgeDialogTitle">Rydd uplubliserte moduler</h2>
+      <p style="margin:0 0 12px;font-size:14px;color:#555">
+        Permanent sletting av alle moduler som aldri har vært publisert, ikke er arkivert,
+        ikke er i kurs, og ikke har submissions. Handlingen kan ikke angres.
+      </p>
+      <div id="purgePreviewLoading" style="font-size:13px;color:#666">Henter kandidater…</div>
+      <div id="purgePreviewBody" hidden>
+        <p style="margin:8px 0 4px;font-weight:600">Vil bli slettet (<span id="purgeDeleteCount">0</span>):</p>
+        <ul id="purgeDeleteList" style="max-height:180px;overflow:auto;font-size:13px;margin:0 0 12px;padding-left:18px"></ul>
+        <details id="purgeSkipDetails" style="margin:0 0 12px">
+          <summary style="cursor:pointer;font-size:13px;color:#666">Utelatt: <span id="purgeSkipCount">0</span></summary>
+          <ul id="purgeSkipList" style="max-height:140px;overflow:auto;font-size:12px;margin:6px 0 0;padding-left:18px;color:#666"></ul>
+        </details>
+        <div class="dialog-field">
+          <label for="purgeConfirmInput">Skriv <strong>SLETT</strong> for å bekrefte</label>
+          <input id="purgeConfirmInput" type="text" autocomplete="off" />
+        </div>
+      </div>
+      <div id="purgeError" class="error-text" hidden></div>
+      <div class="dialog-actions">
+        <button type="button" id="purgeConfirmBtn" class="btn btn-primary" disabled style="background:#a32424;border-color:#a32424">Slett alle</button>
+        <button type="button" id="purgeCancelBtn" class="btn btn-secondary">Avbryt</button>
+      </div>
     </dialog>
 
     <!-- Courses popover (inline, positioned by JS) -->

@@ -14,6 +14,8 @@ export {
   archiveModule,
   restoreModule,
   publishModuleVersionWithThresholds,
+  listUnpublishedPurgeCandidates,
+  purgeUnpublishedModules,
 } from "./adminContentCommands.js";
 
 export {
