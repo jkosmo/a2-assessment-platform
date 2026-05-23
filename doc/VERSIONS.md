@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.98 - 2026-05-23
+
+fix(admin): mobile top-bar stacking + fjern Avbryt-knapp i progress-meldinger (batched x2)
+
+**Fix (a) — mobile top-bar stacker vertikalt**
+
+Bruker rapporterte (2026-05-23, mobil-Edge) at toppmenyen på admin-content-library
+viste cut-off pill-former langs venstre kant. Root cause: `.page-top-bar` har
+`flex-direction: row` med `workspace-nav` (`flex: 1`) + `locale-picker` (`flex-shrink: 0`).
+På smale viewports (~360-400px) blir locale-picker (v1.1.96 chip + språk-select + Profil
++ help-?) bred nok til å klemme workspace-nav til minimal bredde — items overflowes via
+`overflow-x: auto` og vises kun delvis.
+
+Fix: `@media (max-width: 600px) { .page-top-bar { flex-direction: column; align-items:
+stretch; } .locale-picker { margin-left: 0; justify-content: flex-end; } }`.
+workspace-nav og locale-picker stables vertikalt, hver med full bredde.
+
+**Fix (b) — fjern Avbryt-knapp fra progress-meldinger**
+
+Bruker rapporterte at å klikke "Avbryt" på MCQ-generering ender med "MCQ-generering
+avbrutt."-melding uten noen meny å fortsette med — dead-end. Bruker-anbefaling:
+"Verdien av den er lav og den skaper ytterligere kompleksitet."
+
+Enklere å fjerne enn å reaktivere forrige meny ved abort. `_domProgress` rendrer ikke
+lenger abortBtn til DOM, men returnerer fortsatt en detached stub for API-kompatibilitet
+med ~17 callere som bruker `slot.abortBtn.addEventListener` / `.remove()` /
+`.disabled = true`. Stub-knappens click-event fyrer aldri siden den ikke er attached
+til DOM, så alle abort-listeners blir no-ops automatisk.
+
+LLM-kall tar typisk 30-60s — brukerne kan vente eller navigere bort. Trade-off
+akseptabel for å fjerne dead-end.
+
+Tester: 19/19 admin-content unit-tester. tsc clean.
+
 ## 1.1.97 - 2026-05-23
 
 fix(admin): MCQ recovery + saved-OK indicator + tactile button feedback (batched x3)

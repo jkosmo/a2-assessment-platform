@@ -337,6 +337,22 @@ button:focus-visible {
   margin-left: auto;
 }
 
+/* v1.1.98: på smale mobil-viewports (≤600px) blir locale-picker (versjon + språk-select
+   + Profil-link + help-?-knapp) bred nok til å klemme workspace-nav til minimal bredde.
+   Workspace-nav-items overflowes da via overflow-x: auto og vises kun delvis langs venstre
+   kant — bekreftet via brukerrapport (Samtung-type mobil, 2026-05-23). Stable de to
+   delene vertikalt slik at hver får full bredde og items renderer korrekt. */
+@media (max-width: 600px) {
+  .page-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .locale-picker {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
 .workspace-help-trigger {
   display: inline-flex;
   align-items: center;

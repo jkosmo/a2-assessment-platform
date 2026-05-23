@@ -364,8 +364,13 @@ function _domUserBubble(text) {
   _domScroll(msg);
 }
 
-// Creates a progress bubble with an abort button. Returns { el, abortBtn }.
-// textKeyOrFn: i18n key string OR () => string for dynamic text.
+// Creates a progress bubble. Returns { el, abortBtn }.
+// v1.1.98: abort button removed from progress messages. Value was low (LLM calls take
+// 30-60s; users can wait or navigate away) and it created a dead-end — clicking Avbryt
+// ended the chat with "...avbrutt" without a recovery menu, leaving the user stuck.
+// The abortBtn return is now a detached stub so existing callers (~17 places using
+// addEventListener/remove/disabled) keep working without behavior — the click event
+// never fires since the button isn't attached to the DOM.
 function _domProgress(textKeyOrFn) {
   const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
   setChatBusy(true);
@@ -376,11 +381,9 @@ function _domProgress(textKeyOrFn) {
   bubble.className = "chat-bubble chat-bubble--progress";
   bubble.innerHTML = `<span class="chat-spinner"></span>${escapeHtml(text)}`;
   msg.appendChild(bubble);
+  // Detached stub — kept for API compatibility with existing slot.abortBtn references.
   const abortBtn = document.createElement("button");
   abortBtn.type = "button";
-  abortBtn.className = "btn-secondary chat-choice-btn";
-  abortBtn.textContent = t("shell.action.cancel");
-  msg.appendChild(abortBtn);
   chatMessages.appendChild(msg);
   _domScroll(msg);
   return { el: msg, abortBtn };
