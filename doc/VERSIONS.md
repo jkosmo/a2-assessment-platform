@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.99 - 2026-05-23
+
+feat(admin): server-side URL-fetching for kildemateriale (#454 Phase 1)
+
+Pilot-flaskehalsen identifisert 2026-05-23 — brukere går til ekstern LLM fordi
+source-material-input er for begrenset. Phase 1 fjerner den største delen: nå kan
+brukere lime inn URL'er i kildemateriale-steget, og serveren henter + ekstraherer
+hovedinnholdet via Mozilla Readability.
+
+**Backend** (`src/modules/adminContent/urlFetchService.ts` + ny route):
+
+- `POST /api/admin/content/source-material/fetch-url`, body `{ url }`
+- Returnerer `{ extractedText, sourceHostname, fetchedBytes }`
+- Synkront (fetch+parse typisk <2s)
+- HTML/XHTML → Mozilla Readability (Firefox Reader Mode-algoritmen) for hovedinnhold
+- text/plain → ren UTF-8 dekoding
+- 10s timeout, Content-Type-allowlist, 2MB max bytes
+- **SSRF-vern**: blokkerer http/https-only, IP-literal i private ranges (10/8, 127/8,
+  169.254/16, 172.16/12, 192.168/16, 100.64/10, ::1, fc00::/7, fe80::/10), DNS-lookup
+  rejecte hostname som resolves til private IP, blokkerer `localhost`/`.local`/`.internal`
+- **Rate-limit**: 10 URL/min per autentisert bruker (in-memory, per-instance)
+- Lazy-load av `jsdom`+`@mozilla/readability` så avhengighetene ikke loadar når URL-fetch
+  ikke brukes
+
+**Frontend** (kildemateriale-steg):
+- Ny "Hent fra URL"-knapp ved siden av "Last opp fil"
+- Klikk → browser-prompt for URL → fetch via API
+- Multiple URL-er kan stables i samme modul; alle concat'es med `[hostname]\n...` -prefiks
+  i source material som sendes til LLM
+- Hint-tekst oppdaterer dynamisk: "Hentet: report.pdf · vg.no · wikipedia.org"
+- i18n-nøkler i en-GB/nb/nn: `shell.source.fetchUrlBtn`, `urlPrompt`, `fetching`,
+  `fetchReady`, `fetchError`, `fetchEmpty`, `urlFetched`
+
+**Tester**: 7/7 SSRF + rate-limit unit-tester. tsc clean.
+
+**Avgrensning Phase 1**: ingen multi-fil-upload (Phase 2), ingen heving av total
+50K-tegn-grense (Phase 3). Én URL om gangen via prompt(); kan stables sekvensielt.
+
+**Verifisering ved deploy**:
+- Lim inn `https://spader.zone/sp/` (samme lakmus-test som verifiserte at vi ikke
+  hadde fetching tidligere) — skal nå gi meningsfullt innhold
+- Lim inn `http://127.0.0.1/` — skal returnere 400 med `private_address`-feilkode
+- Multiple URLs i samme modul skal stables i source-material
+
 ## 1.1.98 - 2026-05-23
 
 fix(admin): mobile top-bar stacking + fjern Avbryt-knapp i progress-meldinger (batched x2)

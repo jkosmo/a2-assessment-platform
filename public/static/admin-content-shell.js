@@ -412,6 +412,11 @@ function _domFormFields(entry) {
   inputEl.placeholder = t(entry.placeholderKey);
   if (entry.initialValue) inputEl.value = entry.initialValue;
 
+  // #454 Phase 1: track multiple fetched URL sources alongside the single file upload.
+  // File upload remains one-at-a-time (existing constraint); URL fetching supports multiple
+  // per session — both combined into the source material on submit.
+  const fetchedUrlSources = [];
+
   if (isSourceMaterial) {
     // #360 a11y: wrap upload + textarea in a semantic group so screen readers announce
     // them as related controls. wrap is the outer chat-form-col which becomes the group.
@@ -426,9 +431,55 @@ function _domFormFields(entry) {
     uploadBtn.className = "btn-secondary chat-choice-btn";
     uploadBtn.textContent = t("shell.source.uploadBtn");
 
+    // #454 Phase 1: button to fetch a URL (HTML/plain) and add its main content as source.
+    const urlBtn = document.createElement("button");
+    urlBtn.type = "button";
+    urlBtn.className = "btn-secondary chat-choice-btn";
+    urlBtn.textContent = t("shell.source.fetchUrlBtn");
+
     const uploadHint = document.createElement("span");
     uploadHint.className = "chat-form-help";
     uploadHint.textContent = t("shell.source.uploadHint");
+
+    // Aggregates "uploaded file: name | URLs: vg.no, wikipedia.org" into the hint span.
+    const refreshUploadHint = () => {
+      const parts = [];
+      if (uploadedSourceMaterial) parts.push(tf("shell.source.fileImported", { fileName: uploadedSourceMaterial.fileName }));
+      for (const src of fetchedUrlSources) parts.push(tf("shell.source.urlFetched", { hostname: src.hostname }));
+      uploadHint.textContent = parts.length === 0 ? t("shell.source.uploadHint") : parts.join(" · ");
+    };
+
+    urlBtn.addEventListener("click", async () => {
+      const url = window.prompt(t("shell.source.urlPrompt"));
+      if (!url || !url.trim()) return;
+      const originalLabel = urlBtn.textContent;
+      urlBtn.disabled = true;
+      uploadBtn.disabled = true;
+      urlBtn.textContent = t("shell.source.fetching");
+      try {
+        const result = await apiFetch(
+          "/api/admin/content/source-material/fetch-url",
+          getHeaders,
+          { method: "POST", body: JSON.stringify({ url: url.trim() }) },
+        );
+        if (!result?.extractedText || !String(result.extractedText).trim()) {
+          throw new Error(t("shell.source.fetchEmpty"));
+        }
+        fetchedUrlSources.push({
+          hostname: String(result.sourceHostname ?? new URL(url.trim()).hostname),
+          extractedText: String(result.extractedText).trim(),
+        });
+        refreshUploadHint();
+        showToast(t("shell.source.fetchReady"), "success");
+        inputEl.focus();
+      } catch (error) {
+        showToast(parseApiErrorMessage(error, "shell.source.fetchError"), "error");
+      } finally {
+        urlBtn.disabled = false;
+        uploadBtn.disabled = false;
+        urlBtn.textContent = originalLabel;
+      }
+    });
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
@@ -491,7 +542,7 @@ function _domFormFields(entry) {
           fileName: file.name,
           extractedText: trimmedText,
         };
-        uploadHint.textContent = tf("shell.source.fileImported", { fileName: file.name });
+        refreshUploadHint();
         inputEl.focus();
         showToast(t("shell.source.fileReady"), "success");
       } catch (error) {
@@ -504,6 +555,7 @@ function _domFormFields(entry) {
     });
 
     uploadRow.appendChild(uploadBtn);
+    uploadRow.appendChild(urlBtn);
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);
     wrap.appendChild(uploadRow);
@@ -518,7 +570,12 @@ function _domFormFields(entry) {
     if (isSourceMaterial) {
       const notes = inputEl.value.trim();
       const uploadedText = uploadedSourceMaterial?.extractedText ?? "";
-      const combinedSourceMaterial = [uploadedText, notes].filter(Boolean).join("\n\n").trim();
+      // #454 Phase 1: prepend a short marker before each URL-fetched source so the LLM
+      // sees them as distinct chunks with origin attribution.
+      const urlTexts = fetchedUrlSources
+        .map((src) => `[${src.hostname}]\n${src.extractedText}`)
+        .join("\n\n---\n\n");
+      const combinedSourceMaterial = [uploadedText, urlTexts, notes].filter(Boolean).join("\n\n").trim();
       if (!combinedSourceMaterial) { inputEl.focus(); return; }
       if (combinedSourceMaterial.length > SOURCE_MATERIAL_MAX_CHARS) {
         showToast(t("shell.source.textTooLong"), "error");

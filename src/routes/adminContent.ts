@@ -693,6 +693,59 @@ adminContentRouter.get("/source-material/extract/:jobId", generateLimiter, async
   }
 });
 
+// #454 Phase 1: server-side URL fetcher. Fetches the URL, extracts main text via Mozilla
+// Readability (HTML) or plain UTF-8 (text/plain), and returns it as source material.
+// Synchronous since URL fetch + parse is typically <2s. SSRF-protected via DNS lookup
+// against private IP ranges. Rate-limited per user (in-memory, 10/min).
+adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const url = typeof request.body?.url === "string" ? request.body.url.trim() : "";
+  if (!url) {
+    response.status(400).json({ error: "validation_error", message: "url is required" });
+    return;
+  }
+  // Lazy-imported so the module's deps (jsdom + readability) don't load unless used
+  const { fetchUrlAsSourceMaterial, UrlFetchError, checkAndConsumeRateLimit } = await import(
+    "../modules/adminContent/urlFetchService.js"
+  );
+  const rateCheck = checkAndConsumeRateLimit(actorId);
+  if (!rateCheck.allowed) {
+    const retryAfterSec = Math.ceil((rateCheck.retryAfterMs ?? 60_000) / 1000);
+    response.setHeader("Retry-After", String(retryAfterSec));
+    response.status(429).json({
+      error: "rate_limited",
+      message: `Too many URL fetches. Retry in ~${retryAfterSec}s.`,
+    });
+    return;
+  }
+  try {
+    const result = await fetchUrlAsSourceMaterial(url);
+    response.json(result);
+  } catch (err) {
+    if (err instanceof UrlFetchError) {
+      // Map known error codes to appropriate HTTP statuses
+      const status =
+        err.code === "private_address" || err.code === "unsupported_protocol" || err.code === "invalid_url"
+          ? 400
+          : err.code === "timeout" || err.code === "dns_failed"
+            ? 504
+            : err.code === "too_large" || err.code === "unsupported_content_type"
+              ? 415
+              : err.code === "http_error"
+                ? 502
+                : 500;
+      response.status(status).json({ error: err.code, message: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "url_fetch_failed", message });
+  }
+});
+
 adminContentRouter.post("/generate/blueprint", generateLimiter, async (request, response) => {
   const { data, error } = parseRequest(blueprintGenerationBodySchema, request.body);
   if (error) {
