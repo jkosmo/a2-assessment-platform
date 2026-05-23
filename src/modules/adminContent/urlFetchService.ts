@@ -90,10 +90,14 @@ async function assertSafeUrl(rawUrl: string): Promise<URL> {
   if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
     throw new UrlFetchError("unsupported_protocol", `Only http and https are supported (got: ${parsed.protocol}).`);
   }
-  const hostname = parsed.hostname;
-  if (!hostname) {
+  const rawHostname = parsed.hostname;
+  if (!rawHostname) {
     throw new UrlFetchError("invalid_url", "URL has no hostname.");
   }
+  // Strip IPv6 brackets defensively — URL.hostname returns "[fc00::1]" on some Node
+  // versions (Linux CI observed) but "fc00::1" on others. Normalise to bracket-free
+  // before passing to net.isIPv6 / our IP-literal check.
+  const hostname = rawHostname.replace(/^\[|\]$/g, "");
   // If hostname is already an IP literal, validate directly
   if (isIPv4(hostname) || isIPv6(hostname)) {
     if (isPrivateIp(hostname)) {
