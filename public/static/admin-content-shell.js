@@ -162,7 +162,10 @@ const srPreview = document.getElementById("srPreview");
 const srLang = document.getElementById("srLang");
 
 const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
-const SOURCE_MATERIAL_MAX_CHARS = 50000;
+// #454 Phase 3 (v1.2.3): hevet fra 50 000 → 200 000. gpt-4o-mini har 128K context;
+// 200K char ≈ ~50K tokens for engelsk/norsk tekst — ~40% av context-windowet, etterlater
+// godt rom for system-prompt + completion. Kan heves videre når større modeller brukes.
+const SOURCE_MATERIAL_MAX_CHARS = 200000;
 const SOURCE_MATERIAL_ACCEPT =
   ".txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.rtf,.odt,.odp,.ods,text/plain,text/markdown,text/x-markdown,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/rtf,text/rtf,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.presentation,application/vnd.oasis.opendocument.spreadsheet";
 const SOURCE_MATERIAL_ALLOWED_EXTENSIONS = new Set([
@@ -445,13 +448,40 @@ function _domFormFields(entry) {
     uploadHint.className = "chat-form-help";
     uploadHint.textContent = t("shell.source.uploadHint");
 
-    // Aggregates "uploaded file: name | URLs: vg.no, wikipedia.org" into the hint span.
+    // v1.2.3 (#454 Phase 2.1): chip-liste i stedet for "·"-separert tekst, så hver kilde
+    // får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
+    const sourceList = document.createElement("ul");
+    sourceList.className = "source-chip-list";
+    sourceList.hidden = true;
+
     const refreshUploadHint = () => {
-      const parts = [];
-      // #454 Phase 2: iterate all uploaded files (not just one)
-      for (const f of uploadedFileSources) parts.push(tf("shell.source.fileImported", { fileName: f.fileName }));
-      for (const src of fetchedUrlSources) parts.push(tf("shell.source.urlFetched", { hostname: src.hostname }));
-      uploadHint.textContent = parts.length === 0 ? t("shell.source.uploadHint") : parts.join(" · ");
+      sourceList.innerHTML = "";
+      const items = [
+        ...uploadedFileSources.map((f, i) => ({ kind: "file", index: i, label: f.fileName })),
+        ...fetchedUrlSources.map((s, i) => ({ kind: "url", index: i, label: s.hostname })),
+      ];
+      sourceList.hidden = items.length === 0;
+      uploadHint.hidden = items.length > 0;
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.className = "source-chip";
+        const label = document.createElement("span");
+        label.className = "source-chip-label";
+        label.textContent = item.label;
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "source-chip-remove";
+        removeBtn.setAttribute("aria-label", tf("shell.source.removeSource", { label: item.label }));
+        removeBtn.textContent = "×";
+        removeBtn.addEventListener("click", () => {
+          if (item.kind === "file") uploadedFileSources.splice(item.index, 1);
+          else fetchedUrlSources.splice(item.index, 1);
+          refreshUploadHint();
+        });
+        li.appendChild(label);
+        li.appendChild(removeBtn);
+        sourceList.appendChild(li);
+      }
     };
 
     urlBtn.addEventListener("click", async () => {
@@ -489,87 +519,106 @@ function _domFormFields(entry) {
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = SOURCE_MATERIAL_ACCEPT;
+    // v1.2.3 (#454 Phase 2.1): allow multi-select i fil-picker så bruker kan velge mange
+    // filer i én operasjon. Behold "én ekstraksjon om gangen"-loopen siden parser-worker
+    // håndterer én fil per job — minimerer endring i backend, gir også klarere progress.
+    fileInput.multiple = true;
     fileInput.hidden = true;
 
     uploadBtn.addEventListener("click", () => fileInput.click());
+    // v1.2.3: håndter en eller flere filer fra picker-en. Validerer hver fil for seg;
+    // hopper over de som feiler (med toast) og fortsetter med resten.
     fileInput.addEventListener("change", async () => {
-      const file = fileInput.files?.[0];
-      if (!file) return;
+      const files = Array.from(fileInput.files ?? []);
+      if (files.length === 0) return;
 
-      // #454 Phase 2: enforce max file count before extraction
-      if (uploadedFileSources.length >= MAX_FILE_UPLOADS) {
-        showToast(tf("shell.source.tooManyFiles", { max: MAX_FILE_UPLOADS }), "error");
-        fileInput.value = "";
-        return;
+      // Filter ut filer som feiler validering, og varsle om dem før ekstraksjon starter
+      const toExtract = [];
+      for (const file of files) {
+        if (uploadedFileSources.length + toExtract.length >= MAX_FILE_UPLOADS) {
+          showToast(tf("shell.source.tooManyFiles", { max: MAX_FILE_UPLOADS }), "error");
+          break;
+        }
+        if (!isSupportedSourceMaterialFile(file)) {
+          showToast(`${t("shell.source.fileTypeInvalid")} (${file.name})`, "error");
+          continue;
+        }
+        if (file.size > SOURCE_MATERIAL_MAX_BYTES) {
+          showToast(`${t("shell.source.fileTooLarge")} (${file.name})`, "error");
+          continue;
+        }
+        if (uploadedFileSources.some((f) => f.fileName === file.name) || toExtract.some((f) => f.name === file.name)) {
+          showToast(tf("shell.source.duplicateFile", { fileName: file.name }), "error");
+          continue;
+        }
+        toExtract.push(file);
       }
-      if (!isSupportedSourceMaterialFile(file)) {
-        showToast(t("shell.source.fileTypeInvalid"), "error");
-        fileInput.value = "";
-        return;
-      }
-      if (file.size > SOURCE_MATERIAL_MAX_BYTES) {
-        showToast(t("shell.source.fileTooLarge"), "error");
-        fileInput.value = "";
-        return;
-      }
-      // #454 Phase 2: don't allow uploading the same file twice (by name)
-      if (uploadedFileSources.some((f) => f.fileName === file.name)) {
-        showToast(tf("shell.source.duplicateFile", { fileName: file.name }), "error");
+      if (toExtract.length === 0) {
         fileInput.value = "";
         return;
       }
 
       const originalLabel = uploadBtn.textContent;
       uploadBtn.disabled = true;
-      uploadBtn.textContent = t("shell.source.uploading");
+      urlBtn.disabled = true;
 
-      try {
-        const contentBase64 = await readFileAsBase64(file);
-        const { jobId } = await apiFetch(
-          "/api/admin/content/source-material/extract",
-          getHeaders,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              fileName: file.name,
-              mimeType: file.type || undefined,
-              contentBase64,
-            }),
-          },
-        );
-
-        let poll;
-        for (let i = 0; i < 30; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          poll = await apiFetch(
-            `/api/admin/content/source-material/extract/${jobId}`,
+      // v1.2.3: ekstrahérer filene sekvensielt. Sekvensielt er trygt for parser-worker
+      // (én job om gangen, ingen pool-uttømming) og gir tydelig progress-status til bruker.
+      // Knapp-label viser "Laster opp 2/5..." mens bruker ser progress.
+      let processed = 0;
+      for (const file of toExtract) {
+        processed += 1;
+        uploadBtn.textContent = toExtract.length === 1
+          ? t("shell.source.uploading")
+          : `${t("shell.source.uploading")} ${processed}/${toExtract.length}`;
+        try {
+          const contentBase64 = await readFileAsBase64(file);
+          const { jobId } = await apiFetch(
+            "/api/admin/content/source-material/extract",
             getHeaders,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                fileName: file.name,
+                mimeType: file.type || undefined,
+                contentBase64,
+              }),
+            },
           );
-          if (poll.status === "done" || poll.status === "failed") break;
-        }
-        if (!poll || poll.status === "pending") throw new Error("parse_timeout");
-        if (poll.status === "failed") throw new Error(poll.error ?? "parse_failed");
 
-        const text = poll.extractedText ?? "";
-        const trimmedText = text.trim();
-        if (!trimmedText) {
-          throw new Error("empty_extracted_text");
+          let poll;
+          for (let i = 0; i < 30; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            poll = await apiFetch(
+              `/api/admin/content/source-material/extract/${jobId}`,
+              getHeaders,
+            );
+            if (poll.status === "done" || poll.status === "failed") break;
+          }
+          if (!poll || poll.status === "pending") throw new Error("parse_timeout");
+          if (poll.status === "failed") throw new Error(poll.error ?? "parse_failed");
+
+          const text = poll.extractedText ?? "";
+          const trimmedText = text.trim();
+          if (!trimmedText) throw new Error("empty_extracted_text");
+          uploadedFileSources.push({
+            fileName: file.name,
+            extractedText: trimmedText,
+          });
+          refreshUploadHint();
+        } catch (error) {
+          showToast(`${parseApiErrorMessage(error, "shell.source.fileReadError")} (${file.name})`, "error");
         }
-        // #454 Phase 2: push to array instead of replacing — allows stacking multiple files
-        uploadedFileSources.push({
-          fileName: file.name,
-          extractedText: trimmedText,
-        });
-        refreshUploadHint();
-        inputEl.focus();
-        showToast(t("shell.source.fileReady"), "success");
-      } catch (error) {
-        showToast(parseApiErrorMessage(error, "shell.source.fileReadError"), "error");
-      } finally {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = originalLabel;
-        fileInput.value = "";
       }
+      // En kort suksess-toast på slutten i stedet for én per fil — mindre støy.
+      if (uploadedFileSources.length > 0) {
+        showToast(t("shell.source.fileReady"), "success");
+      }
+      uploadBtn.disabled = false;
+      urlBtn.disabled = false;
+      uploadBtn.textContent = originalLabel;
+      fileInput.value = "";
+      inputEl.focus();
     });
 
     uploadRow.appendChild(uploadBtn);
@@ -577,6 +626,9 @@ function _domFormFields(entry) {
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);
     wrap.appendChild(uploadRow);
+    // v1.2.3: chip-liste plassert under uploadRow så den ikke konkurrerer om plass med
+    // knappene. Skjules når tom (display: none via hidden-attributtet).
+    wrap.appendChild(sourceList);
   }
 
   const btn = document.createElement("button");

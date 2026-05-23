@@ -143,8 +143,17 @@
       .module-list-item { font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
       /* ── Chat full-width forms (rendered outside bubble so they fill pane width) */
-      .chat-form-row { display: flex; gap: 8px; align-items: center; padding: 4px var(--space-1) var(--space-1); }
+      .chat-form-row { display: flex; gap: 8px; align-items: center; padding: 4px var(--space-1) var(--space-1); flex-wrap: wrap; }
       .chat-form-col { display: flex; flex-direction: column; gap: 8px; padding: 4px var(--space-1) var(--space-1); }
+      /* v1.2.3 (#454 Phase 2.1): kilde-chip-liste for opplastede filer + URL-er. Hver
+         kilde får sin egen rad med × for fjerning. Liste over " · "-separert tekst som
+         ble uleselig ved mange kilder. */
+      .source-chip-list { list-style: none; margin: 0; padding: 4px var(--space-1) 0; display: flex; flex-direction: column; gap: 4px; }
+      .source-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; background: var(--color-blue-light, #e0e9fa); border: 1px solid var(--color-border-soft); border-radius: 999px; font-size: 12px; color: var(--color-text); width: fit-content; max-width: 100%; }
+      .source-chip-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+      .source-chip-remove { background: none; border: none; color: var(--color-meta); cursor: pointer; padding: 0 6px; font-size: 16px; line-height: 1; border-radius: 999px; width: auto; min-width: 22px; min-height: 22px; }
+      .source-chip-remove:hover { background: rgba(0,0,0,0.06); color: var(--color-text); }
+      .source-chip-remove:focus-visible { outline: 2px solid var(--color-focus, var(--color-blue)); outline-offset: 1px; }
       .chat-text-input { flex: 1 1 0; width: 0; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); }
       .chat-text-input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
       .chat-textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-size: 13px; font-family: inherit; background: #fff; color: var(--color-text); resize: vertical; box-sizing: border-box; }

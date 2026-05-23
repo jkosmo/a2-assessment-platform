@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.3 - 2026-05-23
+
+fix(admin): multi-select fil-picker + chip-liste + heve char-grense (#454 Phase 2.1 + 3)
+
+UI-test av v1.2.2 (multi-fil) avdekket tre rough edges:
+1. "Et og et dokument er upraktisk" — manglet multi-select i picker
+2. "Visning er dårlig tilpasset flere dokumenter" — " · "-separert tekst uleselig
+3. "Det samlede kildematerialet ble for stort" — 50K-tegn-grensen for konservativ
+
+**Fix (a) — multi-select fil-picker:** `fileInput.multiple = true`. Bruker velger N filer
+i én operasjon; vi ekstraherer sekvensielt (én job per fil til parser-worker for
+stabilitet). Progress vises som "Laster opp 2/5..." i knappe-label.
+
+**Fix (b) — chip-liste med ×:** ny `<ul.source-chip-list>` under upload-rad. Hver
+fil/URL får sin egen rad med fjern-knapp (×). Tomme listen skjuler seg; uploadHint
+vises i stedet når intet er lastet opp.
+
+**Fix (c) — heve char-grense 50K → 200K (#454 Phase 3):** `SOURCE_MATERIAL_MAX_CHARS`
+fra 50 000 til 200 000. gpt-4o-mini har 128K context window; 200K char ≈ ~50K tokens
+for nordisk tekst — etterlater 60%+ rom for system-prompt + completion. Kan heves
+videre når større modeller adopteres.
+
+**Innholdsflyt (svar på bruker-spørsmål)**: Alt konverteres til tekst FØR det sendes
+til LLM:
+- Filer: server-side parser (`pdf-parse`, `mammoth`, `officeparser`, etc.)
+- URL-er: server-side Readability-ekstrahering
+- Pastet tekst: brukes som-er
+Alt konkateneres med `[filnavn]\n...---\n[hostname]\n...` -separatorer og sendes
+som én lang user-prompt-streng.
+
+i18n: `shell.source.removeSource` for chip-fjern-aria-label (en-GB/nb/nn).
+CSS: `.source-chip-list` + `.source-chip` + `.source-chip-remove` med focus-visible.
+
 ## 1.2.2 - 2026-05-23
 
 feat(admin): multi-fil-opplasting i kildemateriale (#454 Phase 2)
