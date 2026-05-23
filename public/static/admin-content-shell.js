@@ -3483,7 +3483,49 @@ function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
   ]);
 }
 
+// #454 Phase 4 (v1.2.4): condense source material once before blueprint generation if it
+// exceeds 50K chars. Avoids paying full-context cost 4× (blueprint, draft, MCQ, rubric).
+const SOURCE_CONDENSE_THRESHOLD = 50_000;
+async function maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale) {
+  if (!sourceMaterial || sourceMaterial.length < SOURCE_CONDENSE_THRESHOLD) {
+    return sourceMaterial;
+  }
+  const slot = logProgress("shell.source.condensing");
+  slot.abortBtn.remove();
+  try {
+    const result = await apiFetch(
+      "/api/admin/content/source-material/condense",
+      getHeaders,
+      {
+        method: "POST",
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale }),
+      },
+    );
+    const condensed = String(result?.condensedText ?? "").trim();
+    if (!condensed) {
+      // Condensation failed silently — fall back to raw, log a warning bubble.
+      logResolveSlot(slot, () => escapeHtml(t("shell.source.condenseFallback")));
+      return sourceMaterial;
+    }
+    logResolveSlot(slot, () =>
+      escapeHtml(tf("shell.source.condensed", {
+        from: result.originalLength ?? sourceMaterial.length,
+        to: result.condensedLength ?? condensed.length,
+      })),
+    );
+    return condensed;
+  } catch (err) {
+    // On condense failure, fall through to raw source — generation still works, just costlier.
+    logResolveSlot(slot, () => escapeHtml(t("shell.source.condenseFallback")));
+    return sourceMaterial;
+  }
+}
+
 async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode) {
+  // v1.2.4: condense source material if over threshold. Condensed result replaces raw
+  // for ALL downstream calls (blueprint → draft → MCQ → rubric).
+  const effectiveSourceMaterial = await maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale);
+
   const abort = startGeneration();
   const slot = logProgress("shell.blueprint.progress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -3495,7 +3537,7 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale }),
+        body: JSON.stringify({ sourceMaterial: effectiveSourceMaterial, certificationLevel: certLevel, locale }),
         signal: abort.signal,
       },
     );
@@ -3515,7 +3557,9 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
   sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
 
   const bp = blueprintResult?.blueprint;
-  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode });
+  // v1.2.4: pass effectiveSourceMaterial (possibly condensed) so all downstream LLM calls
+  // (draft, MCQ, rubric) get the same condensed view rather than re-paying for raw.
+  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode });
 }
 
 // B1 (#448): editable Vurderingsplan card replaces the static accept/skip preview. Lærer

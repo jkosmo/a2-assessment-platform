@@ -1551,6 +1551,93 @@ export async function generateAssessmentBlueprint(input: BlueprintInput): Promis
 }
 
 // ---------------------------------------------------------------------------
+// Source material condensation (#454 Phase 4)
+// ---------------------------------------------------------------------------
+// When combined source material exceeds 50K chars, run a single condensation LLM call
+// before the blueprint/draft/MCQ/rubric pipeline. Keeps facts, definitions, key claims;
+// drops navigation, boilerplate, repetitive content. Result is reused across all
+// downstream calls so we pay 1 condensation cost instead of 4× full-context cost.
+
+export interface CondenseSourceMaterialInput {
+  sourceMaterial: string;
+  certificationLevel: CertificationLevel;
+  locale: GenerationLocale;
+  targetMaxChars?: number;
+}
+
+export interface CondenseSourceMaterialResult {
+  condensedText: string;
+  originalLength: number;
+  condensedLength: number;
+}
+
+function buildCondensationPrompts(input: CondenseSourceMaterialInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const targetMax = input.targetMaxChars ?? 30_000;
+  const systemPrompt = `You condense source material for assessment-module authoring.
+
+Goal: produce a faithful, fact-dense extract of the source material in ${LOCALE_DISPLAY[input.locale]} that an authoring LLM can use to generate a ${input.certificationLevel}-level module (blueprint, task text, MCQ, rubric criteria) WITHOUT seeing the original.
+
+KEEP:
+- Concrete facts, dates, names, numbers, definitions
+- Key claims, conclusions, and the reasoning behind them
+- Specific examples that could appear in test questions
+- Structural information (sections, themes, distinctions)
+- Direct quotes when they carry specific information
+- Any technical terms or domain vocabulary
+
+DROP:
+- Navigation, page headers/footers, cookie banners
+- Repetitive content, marketing fluff, generic transitions
+- Tangential digressions not useful for assessment
+- Already-summarized "this article will cover…" preambles
+- Image/figure references where the image isn't accessible
+
+OUTPUT FORMAT:
+- One JSON object with a single field "condensedText" containing the condensed text in ${LOCALE_DISPLAY[input.locale]}
+- The condensed text must be max ${targetMax.toLocaleString()} characters
+- Preserve source attribution markers ([filename] / [hostname]) when present in input
+- No meta-commentary about your process — just the condensed material inside condensedText
+- No "Here is the condensed version:" preamble — start directly with the content`;
+
+  const userPrompt = `Condense the following source material per the system instructions.
+
+## Source material
+
+${input.sourceMaterial}
+
+## Return format
+
+Return one JSON object:
+{
+  "condensedText": "the condensed material in ${LOCALE_DISPLAY[input.locale]}, max ${targetMax.toLocaleString()} characters"
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+export async function condenseSourceMaterial(
+  input: CondenseSourceMaterialInput,
+): Promise<CondenseSourceMaterialResult> {
+  const { systemPrompt, userPrompt } = buildCondensationPrompts(input);
+  // 8000 tokens ≈ 30K-40K chars output budget; matches default target of 30K.
+  const raw = await callLlm(systemPrompt, userPrompt, 8000);
+  const condensedText = typeof (raw as { condensedText?: unknown })?.condensedText === "string"
+    ? (raw as { condensedText: string }).condensedText.trim()
+    : "";
+  if (!condensedText) {
+    throw new Error("Condensation LLM response missing condensedText.");
+  }
+  return {
+    condensedText,
+    originalLength: input.sourceMaterial.length,
+    condensedLength: condensedText.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Module-specific rubric generation (#378)
 // ---------------------------------------------------------------------------
 

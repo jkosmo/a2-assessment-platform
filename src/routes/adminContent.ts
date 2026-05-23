@@ -46,6 +46,7 @@ import {
 } from "../modules/adminContent/adminContentSchemas.js";
 import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import {
+  condenseSourceMaterial,
   generateAssessmentBlueprint,
   generateModuleDraft,
   generateModuleRubric,
@@ -743,6 +744,38 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
     }
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "url_fetch_failed", message });
+  }
+});
+
+// #454 Phase 4 (v1.2.4): condensation step before blueprint/draft/MCQ pipeline. Frontend
+// calls this automatically when combined source material exceeds 50K chars. Trades one
+// LLM call (~10-30s) for significantly reduced context cost in the 4 downstream LLM calls.
+adminContentRouter.post("/source-material/condense", generateLimiter, async (request, response) => {
+  const sourceMaterial = typeof request.body?.sourceMaterial === "string" ? request.body.sourceMaterial : "";
+  const certificationLevel = typeof request.body?.certificationLevel === "string" ? request.body.certificationLevel : "intermediate";
+  const locale = typeof request.body?.locale === "string" ? request.body.locale : "nb";
+  if (!sourceMaterial.trim()) {
+    response.status(400).json({ error: "validation_error", message: "sourceMaterial is required" });
+    return;
+  }
+  if (!["basic", "intermediate", "advanced"].includes(certificationLevel)) {
+    response.status(400).json({ error: "validation_error", message: "invalid certificationLevel" });
+    return;
+  }
+  if (!["nb", "nn", "en-GB"].includes(locale)) {
+    response.status(400).json({ error: "validation_error", message: "invalid locale" });
+    return;
+  }
+  try {
+    const result = await condenseSourceMaterial({
+      sourceMaterial,
+      certificationLevel: certificationLevel as "basic" | "intermediate" | "advanced",
+      locale: locale as "nb" | "nn" | "en-GB",
+    });
+    response.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "condensation_failed", message });
   }
 });
 

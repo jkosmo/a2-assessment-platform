@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.4 - 2026-05-23
+
+feat(admin): automatisk kondensering av stort kildemateriale (#454 Phase 4)
+
+Pilot-funn 2026-05-23: brukere foretrekker Samtale-flyten, men hopper til ekstern LLM
+fordi vår source-material-pipeline ikke håndterer store kilder elegant. Phase 1-3 økte
+kapasitet (URL-fetch, multi-fil, 200K-grense). Phase 4 angriper kost+kvalitet ved å
+komprimere stort kildemateriale ned til ~30K tegn FØR LLM-pipelinen (blueprint → draft
+→ MCQ → rubric).
+
+**Når trigges**: automatisk når combined source > 50K tegn. Under terskelen brukes raw.
+
+**Pipeline**:
+- Bruker submitter source (alle filer + URLs + paste konkatenert)
+- Frontend sjekker length → hvis > 50K: kaller `POST /source-material/condense`
+- Backend: én LLM-call med condense-prompt som beholder fakta/definisjoner/sitater,
+  dropper navigasjon/boilerplate/repetisjon. Returnerer JSON med condensedText
+- Resultatet erstatter source-material i ALLE 4 downstream-kall (blueprint/draft/
+  MCQ/rubric) — én condense-cost vs 4× full-context-cost
+- Progress vises som "Komprimerer kildemateriale…" → "Komprimert: 120K → 28K tegn"
+
+**Sikkerhet**:
+- Hvis condense-LLM-kallet feiler: stille fallback til raw source, gen-pipeline kjører
+  som før (kun mer cost). Bruker ser melding "Kunne ikke komprimere — fortsetter med
+  fullt kildemateriale."
+
+**Backend** (`condenseSourceMaterial` i `llmContentGenerationService.ts`):
+- Prompt-mal: behold concrete facts + definitions + quotes; drop nav/repetition
+- targetMaxChars default 30K (justerbar)
+- 8000 tokens output-budget
+- Returnerer `{ condensedText, originalLength, condensedLength }`
+- Ny route `POST /api/admin/content/source-material/condense`
+
+**Frontend** (`maybeCondenseSourceMaterial` i `admin-content-shell.js`):
+- Wrapper rundt source-material som brukes som første steg i `generateBlueprintAndConfirm`
+- Threshold konstant `SOURCE_CONDENSE_THRESHOLD = 50_000`
+- Condensed result passeres som `ctx.sourceMaterial` videre i `renderEditableBlueprint`
+  så alle påfølgende kall (draft/MCQ/rubric) bruker den
+
+**i18n**: 3 nye keys i en-GB/nb/nn (`condensing`, `condensed`, `condenseFallback`)
+
 ## 1.2.3 - 2026-05-23
 
 fix(admin): multi-select fil-picker + chip-liste + heve char-grense (#454 Phase 2.1 + 3)
