@@ -2,9 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
-## 1.1.99 - 2026-05-23
+## 1.2.0 - 2026-05-23
 
 feat(admin): server-side URL-fetching for kildemateriale (#454 Phase 1)
+
+**Minor-version-bump** (v1.1.x → v1.2.0): URL-fetching var det piloten ropte mest om;
+egen-stående features som denne fortjener tydeligere release-merking enn patch-bump.
+Phase 2 (multi-fil) og Phase 3 (heving av tegn-grense) i #454 kommer som mindre
+patch-releases (v1.2.1+).
 
 Pilot-flaskehalsen identifisert 2026-05-23 — brukere går til ekstern LLM fordi
 source-material-input er for begrenset. Phase 1 fjerner den største delen: nå kan
