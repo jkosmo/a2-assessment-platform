@@ -28,6 +28,10 @@ import {
 } from "/static/admin-content-shell-state.js";
 import { buildAdminContentAdvancedUrl } from "/static/admin-content-handoff-routes.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
+import {
+  EXTERNAL_LLM_AUTHORING_PROMPT,
+  parseExternalLlmJson,
+} from "/static/admin-content-external-llm.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -446,6 +450,14 @@ function _domFormFields(entry) {
     urlBtn.className = "btn-secondary chat-choice-btn";
     urlBtn.textContent = t("shell.source.fetchUrlBtn");
 
+    // #455: external-LLM handoff. Copies authoring prompt to clipboard and opens modal
+    // where the user pastes the JSON the LLM produced. Bypasses the normal source-material
+    // submit path — the module is created directly from the imported JSON.
+    const externalLlmBtn = document.createElement("button");
+    externalLlmBtn.type = "button";
+    externalLlmBtn.className = "btn-secondary chat-choice-btn";
+    externalLlmBtn.textContent = t("shell.source.externalLlmBtn");
+
     const uploadHint = document.createElement("span");
     uploadHint.className = "chat-form-help";
     uploadHint.textContent = t("shell.source.uploadHint");
@@ -516,6 +528,31 @@ function _domFormFields(entry) {
         uploadBtn.disabled = false;
         urlBtn.textContent = originalLabel;
       }
+    });
+
+    // #455: external-LLM-handoff. Copies prompt + opens import modal. On successful
+    // import, marks the form submitted (skipping the normal source→cert→generate path)
+    // and lands user in draft-ready with module + sessionDraft populated.
+    externalLlmBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(EXTERNAL_LLM_AUTHORING_PROMPT);
+        showToast(t("shell.source.externalLlm.copied"), "success");
+      } catch {
+        // Clipboard API can fail in some browsers/contexts. Still open the modal — the
+        // textarea inside lets the user copy the prompt manually as fallback.
+        showToast(t("shell.source.externalLlm.copyFailed"), "error");
+      }
+      openExternalLlmModal({
+        onImportSuccess: () => {
+          entry.submitted = true;
+          _deactivateAll();
+          btn.disabled = true;
+          inputEl.disabled = true;
+          uploadBtn.disabled = true;
+          urlBtn.disabled = true;
+          externalLlmBtn.disabled = true;
+        },
+      });
     });
 
     const fileInput = document.createElement("input");
@@ -625,6 +662,7 @@ function _domFormFields(entry) {
 
     uploadRow.appendChild(uploadBtn);
     uploadRow.appendChild(urlBtn);
+    uploadRow.appendChild(externalLlmBtn);
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);
     wrap.appendChild(uploadRow);
@@ -2704,6 +2742,222 @@ function computeCriteriaDiff(existing, next) {
 function hasManuallyEditedCriteria() {
   const criteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
   return Object.values(criteria).some((c) => c && typeof c === "object" && c.manuallyEdited === true);
+}
+
+// #455: external-LLM import modal. Lets the author paste the JSON an external LLM produced
+// (after copying our authoring prompt), or upload a .json file. On Importer, parses the
+// JSON, creates a new module, populates sessionDraft, and lands the author in draft-ready.
+// Reuses the focus-trap / ESC pattern from openDriftDiffModal — they should stay in sync.
+function openExternalLlmModal({ onImportSuccess } = {}) {
+  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+  const overlay = document.createElement("div");
+  overlay.className = "drift-diff-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "externalLlmTitle");
+  overlay.innerHTML = `
+    <div class="drift-diff-modal external-llm-modal">
+      <header class="drift-diff-modal-header">
+        <h2 id="externalLlmTitle">${escapeHtml(t("shell.externalLlm.title"))}</h2>
+        <button type="button" class="drift-diff-close" data-ext-action="close" aria-label="${escapeHtml(t("shell.externalLlm.close"))}">×</button>
+      </header>
+      <ol class="external-llm-steps">
+        <li>${escapeHtml(t("shell.externalLlm.step1"))}</li>
+        <li>${escapeHtml(t("shell.externalLlm.step2"))}</li>
+        <li>${escapeHtml(t("shell.externalLlm.step3"))}</li>
+      </ol>
+      <div class="external-llm-prompt-actions">
+        <button type="button" class="btn-secondary" data-ext-action="copy-prompt">${escapeHtml(t("shell.externalLlm.copyPromptAgain"))}</button>
+        <button type="button" class="btn-secondary" data-ext-action="upload-json">${escapeHtml(t("shell.externalLlm.uploadJson"))}</button>
+        <input type="file" accept="application/json,.json" hidden data-ext-input="file">
+      </div>
+      <label class="external-llm-json-label" for="externalLlmJsonInput">${escapeHtml(t("shell.externalLlm.jsonLabel"))}</label>
+      <textarea id="externalLlmJsonInput" class="chat-textarea external-llm-json" rows="10" placeholder="${escapeHtml(t("shell.externalLlm.jsonPlaceholder"))}" data-ext-input="textarea"></textarea>
+      <p class="external-llm-error" data-ext-output="error" role="alert" hidden></p>
+      <footer class="drift-diff-modal-footer">
+        <button type="button" class="btn-secondary" data-ext-action="cancel">${escapeHtml(t("shell.externalLlm.cancel"))}</button>
+        <button type="button" class="btn-primary" data-ext-action="import">${escapeHtml(t("shell.externalLlm.import"))}</button>
+      </footer>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const getFocusables = () => Array.from(overlay.querySelectorAll(focusableSelector))
+    .filter((el) => !el.hasAttribute("disabled") && !el.hasAttribute("hidden") && el.offsetParent !== null);
+
+  const keyHandler = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusables = getFocusables();
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  overlay.addEventListener("keydown", keyHandler);
+
+  const close = () => {
+    overlay.removeEventListener("keydown", keyHandler);
+    overlay.remove();
+    opener?.focus?.();
+  };
+
+  const textarea = overlay.querySelector('[data-ext-input="textarea"]');
+  const fileInput = overlay.querySelector('[data-ext-input="file"]');
+  const errorEl = overlay.querySelector('[data-ext-output="error"]');
+  const importBtn = overlay.querySelector('[data-ext-action="import"]');
+
+  const setError = (message) => {
+    if (!message) {
+      errorEl.hidden = true;
+      errorEl.textContent = "";
+    } else {
+      errorEl.hidden = false;
+      errorEl.textContent = message;
+    }
+  };
+
+  overlay.querySelector('[data-ext-action="close"]').addEventListener("click", close);
+  overlay.querySelector('[data-ext-action="cancel"]').addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+
+  overlay.querySelector('[data-ext-action="copy-prompt"]').addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(EXTERNAL_LLM_AUTHORING_PROMPT);
+      showToast(t("shell.source.externalLlm.copied"), "success");
+    } catch {
+      showToast(t("shell.source.externalLlm.copyFailed"), "error");
+    }
+  });
+
+  overlay.querySelector('[data-ext-action="upload-json"]').addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      textarea.value = text;
+      setError("");
+    } catch {
+      setError(t("shell.externalLlm.fileReadError"));
+    } finally {
+      fileInput.value = "";
+    }
+  });
+
+  importBtn.addEventListener("click", async () => {
+    setError("");
+    const raw = textarea.value;
+    let parsed;
+    try {
+      parsed = parseExternalLlmJson(raw);
+    } catch (err) {
+      setError(err?.message ?? t("shell.externalLlm.parseError"));
+      return;
+    }
+    importBtn.disabled = true;
+    try {
+      await applyExternalLlmJsonImport(parsed);
+      onImportSuccess?.();
+      close();
+    } catch (err) {
+      setError(err?.message ?? t("shell.externalLlm.importError"));
+      importBtn.disabled = false;
+    }
+  });
+
+  const initial = textarea ?? getFocusables()[0];
+  initial?.focus?.();
+}
+
+// #455: take the parsed external-LLM JSON, create the module shell, populate sessionDraft,
+// and land the author in draft-ready. Mirrors the new-module branch of confirmAndGenerate
+// (line ~3759) without the LLM round-trips — the LLM work was done off-platform.
+async function applyExternalLlmJsonImport(parsed) {
+  // Wrap a plain-string title in a tri-locale object so it survives the module-create API
+  // contract (title: localized object). Locale-object titles pass through unchanged.
+  const moduleTitle = parsed.moduleTitle;
+  const titleLocalized = typeof moduleTitle === "string"
+    ? { nb: moduleTitle, nn: moduleTitle, "en-GB": moduleTitle }
+    : moduleTitle;
+  const certificationLevel = ["basic", "intermediate", "advanced"].includes(parsed.certificationLevel)
+    ? parsed.certificationLevel
+    : "intermediate";
+
+  const slot = logProgress(() => {
+    const previewTitle = typeof moduleTitle === "string"
+      ? moduleTitle
+      : (localizeValueForLocale(moduleTitle, currentLocale) || localizeValueForLocale(moduleTitle, "en-GB") || "");
+    return `${t("shell.newModule.creating").replace(/…$/, "")} «${previewTitle}»…`;
+  });
+  slot.abortBtn.remove();
+
+  let newModule;
+  try {
+    const body = await apiFetch(
+      "/api/admin/content/modules",
+      getHeaders,
+      { method: "POST", body: JSON.stringify({ title: titleLocalized, certificationLevel }) },
+    );
+    newModule = body?.module ?? body;
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(
+      slot,
+      () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(errMsg)}</span>`,
+    );
+    throw new Error(t("shell.externalLlm.importError"));
+  }
+
+  selectedModuleId = newModule?.id ?? newModule?.moduleId;
+  const capturedId = selectedModuleId;
+  const capturedTitle = typeof moduleTitle === "string"
+    ? moduleTitle
+    : (localizeValueForLocale(moduleTitle, currentLocale) || localizeValueForLocale(moduleTitle, "en-GB") || "");
+  logResolveSlot(slot, () =>
+    `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(capturedTitle)}</strong>` +
+    `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
+  );
+
+  // Build sessionDraft from imported content. buildPreviewCandidate accepts string OR
+  // locale-object values for any localizable field, so we pass parsed values through.
+  // Criteria, if provided, become an explicit override that saveDraftBundleInBackground
+  // POSTs as a new RubricVersion (the B2 explicit-criteria branch, not ensure-rubric).
+  sessionDraft = buildPreviewCandidate({
+    title: titleLocalized,
+    taskText: parsed.taskText,
+    assessorExpectedContent: parsed.assessorExpectedContent,
+    candidateTaskConstraints: parsed.candidateTaskConstraints,
+    mcqQuestions: parsed.mcqQuestions,
+  });
+  if (parsed.criteria && Object.keys(parsed.criteria).length > 0) {
+    sessionDraft = { ...sessionDraft, criteria: parsed.criteria };
+  }
+  previewDraft = null;
+  sessionState = "draft-pending";
+  renderPreviewLocaleBar();
+  renderPreview();
+
+  logBot(() => `<strong>${escapeHtml(t("shell.externalLlm.imported"))}</strong>
+    <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.externalLlm.importedHint"))}</p>`);
+  showDraftReadyActions();
 }
 
 // B3 (#450): full-screen modal showing the diff. Accept-all triggers a single regenerate

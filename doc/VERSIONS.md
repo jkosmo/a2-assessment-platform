@@ -2,6 +2,56 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.6 - 2026-05-23
+
+feat(admin): ekstern-LLM-handoff i Samtale (closes #455)
+
+Pilot-funn 2026-05-23 bekreftet at noen forfattere foretrekker å bruke ChatGPT/Claude
+til selve genereringen og deretter importere resultatet i A2 — ofte fordi de allerede
+har en åpen samtale i den eksterne modellen med kontekst som ikke lar seg overføre. Før
+var eneste vei dette via Avansert-editoren (manuell JSON-paste, ingen guide). #455 gjør
+samme handoff til en førsteklasses Samtale-flyt.
+
+**UX-flyt**
+
+- Ny knapp **«Bruk ekstern LLM»** i kildemateriale-steget, ved siden av «Last opp fil»
+  og «Hent fra URL».
+- Klikk → forfatter-prompten kopieres til utklippstavle + modal åpnes.
+- Modalen inneholder kort instruksjon (3 steg), «Kopier prompt på nytt», «Last opp
+  .json», JSON-textarea og Importer-knapp.
+- Bruker går til ekstern modell, limer inn prompten + sitt eget kildemateriale, får
+  tilbake JSON, kommer tilbake til A2.
+- Lim inn JSON eller last opp .json-fil → Importer → A2 oppretter modulen, populerer
+  sessionDraft (taskText / assessorExpectedContent / candidateTaskConstraints /
+  mcqQuestions / valgfritt criteria) og lander forfatter i draft-ready — samme tilstand
+  som etter normal LLM-generering.
+
+**Teknisk**
+
+- Ny modul [public/static/admin-content-external-llm.js](public/static/admin-content-external-llm.js)
+  - `EXTERNAL_LLM_AUTHORING_PROMPT` — inline prompt-mal (speilet av
+    [doc/MODULE_DRAFT_JSON_AUTHORING_PROMPT.md](doc/MODULE_DRAFT_JSON_AUTHORING_PROMPT.md))
+  - `parseExternalLlmJson()` — code-fence-stripping + validering av påkrevde felter +
+    field-alias `guidanceText` ↔ `assessorExpectedContent` for bakoverkompatibilitet
+- Modal + import-flyt i [admin-content-shell.js](public/static/admin-content-shell.js):
+  `openExternalLlmModal()`, `applyExternalLlmJsonImport()`. Modalen gjenbruker
+  `.drift-diff-overlay` / `.drift-diff-modal`-skall (samme focus-trap-mønster).
+- i18n-keys for en-GB/nb/nn under `shell.source.externalLlm.*` og `shell.externalLlm.*`.
+- CSS lagt til i [admin-content.html](public/admin-content.html) under «#455» -kommentar.
+
+**Verifiseringsplan**
+
+1. Åpne Samtale → Ny modul → tittel → kildemateriale-steget viser 3 knapper: Last opp /
+   Hent URL / **Bruk ekstern LLM**.
+2. Klikk «Bruk ekstern LLM» → toast «Forfatter-prompt kopiert til utklippstavlen» +
+   modal åpner.
+3. Verifiser at clipboard inneholder prompten (lim inn i ChatGPT/Claude).
+4. Generer en JSON-respons med modulen, lim inn i textarea → Importer.
+5. Modul opprettes, draft-ready vises med innholdet, «Lagre utkast» fungerer som vanlig.
+6. Test også .json-opplasting (samme JSON som fil).
+7. Test feil-paths: tom JSON, ugyldig JSON, manglende `module.title` — modal viser
+   feilmelding, ingen modul opprettes.
+
 ## 1.2.5 - 2026-05-23
 
 fix(admin): rate-limit + char-cap + encoding-bug (#454 follow-ups)

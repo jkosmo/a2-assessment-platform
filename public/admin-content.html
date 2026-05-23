@@ -291,6 +291,17 @@
       }
       .drift-diff-modal-footer button { width: auto; padding: 8px 16px; }
 
+      /* #455: external-LLM import modal — reuses .drift-diff-overlay + .drift-diff-modal
+         shell; only adds layout for the step list, prompt-actions row, and JSON textarea. */
+      .external-llm-modal { padding: 0 0 8px; }
+      .external-llm-steps { margin: 12px 20px 0; padding-left: 20px; font-size: 14px; color: var(--color-text); }
+      .external-llm-steps li { margin-bottom: 6px; }
+      .external-llm-prompt-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 20px 0; }
+      .external-llm-prompt-actions button { width: auto; padding: 8px 14px; }
+      .external-llm-json-label { display: block; padding: 12px 20px 4px; font-size: 13px; font-weight: 600; color: var(--color-text); }
+      .external-llm-json { margin: 0 20px; width: calc(100% - 40px); font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; font-size: 12px; }
+      .external-llm-error { margin: 8px 20px 0; padding: 8px 12px; border-radius: 6px; background: #fde2e2; color: #a32424; font-size: 13px; }
+
       /* ── Module workspace header + mode switch ───────────────────────────── */
       .module-workspace-header {
         display: flex;
