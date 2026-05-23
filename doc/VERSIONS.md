@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.19 - 2026-05-23
+
+feat(review): decision-orientert case-detail layout (addresses #349, #354)
+
+Review- og appeal-detail-paneler er omstrukturert fra «data dump + linear sections»
+til en decision-stack:
+
+1. **Header**: status-chip + SLA-chip + modul + kandidat (kort kontekst på toppen).
+2. **Kandidatens innlevering**: oppgave, svar, refleksjon, innleveringstidspunkt — som
+   en strukturert `<dl>` (ikke pre-formatert tekst).
+3. **Beslutningshistorikk**: AI-vurdering → Vurderer-overstyring → Anke → Anke-beslutning,
+   som en tidslinje med actor + tidspunkt + decision + begrunnelse.
+4. **Din beslutning**: textareas + select + Krev oppdraget / Fullfør beslutning (samme
+   form-felter som før, bare flyttet inn i sin egen seksjon med blå-toned bakgrunn).
+5. **Tekniske detaljer**: collapsed `<details>`-seksjon med rå JSON / ID-er / timestamps —
+   tilgjengelig, men ikke synlig i førsteinntrykk.
+
+**#354** (interaction grammar): «Claim review»/«Claim appeal»/«Assign to me» → konsistent
+«Krev oppdraget» (`case.action.claim`). «Finalize override»/«Resolve appeal» → «Fullfør
+beslutning» (`case.action.finalize`). Begge knapper plassert i samme rekkefølge i begge
+paneler. Eksisterende `manualReview.claim/override` og `appealHandler.claim/resolve`-keys
+beholdes for bakoverkompatibilitet — `data-i18n` på knappene peker nå på `case.action.*`.
+
+**Acceptance per #349**:
+- ✅ Case detail-paneler kan forstås uten å lese hele raw data dump
+- ✅ Viktigste decision-data først; teknisk metadata sekundær/collapsible
+- ✅ Operator-hastighet uten endring i business rules (samme form-felter, samme submit-paths)
+
+**Acceptance per #354**:
+- ✅ Manual-review og appeal bruker samme interaction-grammar (claim → finalize)
+- ✅ Rolle-spesifikke ord (Decision reason / Override note / Resolution note) beholdt
+  der de er distinkte; standardiserte der de var asymmetriske uten grunn.
+
 ## 1.2.18 - 2026-05-23
 
 slice: 3 endringer i modul-bibliotek (closes #457, closes #458, closes #352)

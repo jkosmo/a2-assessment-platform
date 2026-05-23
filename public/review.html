@@ -22,6 +22,30 @@
       .workspace-section-tab:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       .workspace-section-tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; padding: 2px 8px; border-radius: 999px; background: rgba(19, 78, 201, 0.12); color: var(--color-link-active); font-size: 12px; font-weight: 700; }
       .workspace-section-tab.active .workspace-section-tab-badge { background: var(--color-blue); color: var(--color-surface); }
+      /* v1.2.19 (#349): decision-orientert case-detail layout. */
+      .case-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--space-2); }
+      .case-header h2 { margin: 0; }
+      .case-header-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .case-chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; background: var(--color-bg-soft, #f1f3f5); color: var(--color-text); font-size: 12px; font-weight: 500; }
+      .case-chip.case-chip--status-open, .case-chip.case-chip--status-pending { background: #fdf2c8; color: #7a5e10; }
+      .case-chip.case-chip--status-claimed { background: #d4e7ff; color: #134ec9; }
+      .case-chip.case-chip--status-resolved, .case-chip.case-chip--status-finalised { background: #dcf5e6; color: #1f7a3e; }
+      .case-chip.case-chip--sla-breached { background: #fde2e2; color: #a32424; }
+      .case-section { margin: var(--space-2) 0; padding-top: var(--space-2); border-top: 1px solid var(--color-border-soft); }
+      .case-section:first-of-type { border-top: none; padding-top: 0; }
+      .case-section h3 { margin: 0 0 var(--space-1); font-size: 15px; font-weight: 600; }
+      .case-dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+      .case-dl dt { font-weight: 600; color: var(--color-meta); font-size: 13px; }
+      .case-dl dd { margin: 0; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+      .case-history { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+      .case-history-item { padding: 10px 12px; border-radius: 6px; border: 1px solid var(--color-border-soft); background: var(--color-surface); }
+      .case-history-actor { font-size: 12px; color: var(--color-meta); }
+      .case-history-decision { font-weight: 600; margin-top: 2px; }
+      .case-history-reason { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
+      .case-section-decision { background: var(--color-blue-light, #eef4ff); padding: var(--space-2); border-radius: 8px; border-top: none; }
+      .case-technical { margin-top: var(--space-2); }
+      .case-technical summary { cursor: pointer; font-size: 13px; color: var(--color-meta); padding: 6px 0; }
+      .case-technical[open] summary { color: var(--color-text); font-weight: 600; }
     </style>
   </head>
   <body>
@@ -117,25 +141,49 @@
       </section>
 
       <!-- Manual Review Details -->
+      <!-- v1.2.19 (#349): decision-orientert oppsett — header først (status + meta),
+           kandidatens innlevering, beslutningshistorikk, og «Din beslutning»-skjema.
+           Tekniske detaljer (raw data + ID-er) lagt under <details> nederst. -->
       <section id="manualReviewDetailsSection" class="card" hidden>
-        <h2 data-i18n="manualReview.detailsTitle">Selected review details</h2>
-        <div><label for="selectedReviewId" data-i18n="manualReview.selectedReview">Selected review</label><input id="selectedReviewId" readonly value="-" /></div>
-        <pre id="manualReviewDetails" class="pre-content"></pre>
-        <div><label for="reviewDecisionReason" data-i18n="manualReview.overrideDecision">Decision reason</label><textarea id="reviewDecisionReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
-        <div><label for="reviewOverrideReason" data-i18n="manualReview.overrideReason">Override note</label><textarea id="reviewOverrideReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
-        <div>
-          <label for="reviewPassFailTotal" data-i18n="manualReview.passFail">Final result</label>
-          <select id="reviewPassFailTotal">
-            <option value="true" data-i18n="manualReview.pass">Pass</option>
-            <option value="false" data-i18n="manualReview.fail">Fail</option>
-          </select>
-        </div>
-        <div class="small" id="reviewActionSequenceHint" data-i18n="manualReview.actionSequence">1. Claim review. 2. Finalize override.</div>
-        <div class="small" id="overrideValidationMessage"></div>
-        <div class="row">
-          <div><button id="claimReview" class="btn-secondary" data-i18n="manualReview.claim">Claim review</button></div>
-          <div><button id="overrideReview" class="btn-primary" data-i18n="manualReview.override">Finalize override</button></div>
-        </div>
+        <header class="case-header">
+          <h2 data-i18n="manualReview.detailsTitle">Selected review details</h2>
+          <div class="case-header-chips" id="reviewCaseHeaderChips"></div>
+        </header>
+
+        <section class="case-section">
+          <h3 data-i18n="case.section.submission">Candidate submission</h3>
+          <dl class="case-dl" id="reviewSubmissionView"></dl>
+        </section>
+
+        <section class="case-section">
+          <h3 data-i18n="case.section.history">Decision history</h3>
+          <ol class="case-history" id="reviewDecisionHistory"></ol>
+        </section>
+
+        <section class="case-section case-section-decision">
+          <h3 data-i18n="case.section.yourDecision">Your decision</h3>
+          <div><label for="reviewDecisionReason" data-i18n="manualReview.overrideDecision">Decision reason</label><textarea id="reviewDecisionReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
+          <div><label for="reviewOverrideReason" data-i18n="manualReview.overrideReason">Override note</label><textarea id="reviewOverrideReason" rows="2" aria-describedby="overrideValidationMessage"></textarea></div>
+          <div>
+            <label for="reviewPassFailTotal" data-i18n="manualReview.passFail">Final result</label>
+            <select id="reviewPassFailTotal">
+              <option value="true" data-i18n="manualReview.pass">Pass</option>
+              <option value="false" data-i18n="manualReview.fail">Fail</option>
+            </select>
+          </div>
+          <div class="small" id="reviewActionSequenceHint" data-i18n="manualReview.actionSequence">1. Claim review. 2. Finalize override.</div>
+          <div class="small" id="overrideValidationMessage"></div>
+          <div class="row">
+            <div><button id="claimReview" class="btn-secondary" data-i18n="case.action.claim">Claim case</button></div>
+            <div><button id="overrideReview" class="btn-primary" data-i18n="case.action.finalize">Finalize decision</button></div>
+          </div>
+        </section>
+
+        <details class="case-technical">
+          <summary data-i18n="case.section.technical">Technical details</summary>
+          <div><label for="selectedReviewId" data-i18n="manualReview.selectedReview">Selected review</label><input id="selectedReviewId" readonly value="-" /></div>
+          <pre id="manualReviewDetails" class="pre-content"></pre>
+        </details>
       </section>
       </div>
 
@@ -181,25 +229,47 @@
         </div>
       </section>
 
-      <!-- Appeal Details -->
+      <!-- Appeal Details — v1.2.19 (#349 + #354): samme decision-orienterte oppsett som
+           manual-review og standardisert interaction-grammar (claim → finalize). -->
       <section id="appealDetailsSection" class="card" hidden>
-        <h2 data-i18n="appealHandler.detailsTitle">Selected appeal details</h2>
-        <div><label for="handlerSelectedAppealId" data-i18n="appealHandler.selectedAppeal">Selected appeal ID</label><input id="handlerSelectedAppealId" readonly value="-" /></div>
-        <pre id="appealHandlerDetails" class="pre-content"></pre>
-        <div><label for="handlerDecisionReason" data-i18n="appealHandler.resolveDecision">Decision reason</label><textarea id="handlerDecisionReason" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
-        <div><label for="handlerResolutionNote" data-i18n="appealHandler.resolveNote">Resolution note</label><textarea id="handlerResolutionNote" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
-        <div>
-          <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail">Pass/fail total</label>
-          <select id="handlerPassFailTotal">
-            <option value="true" data-i18n="appealHandler.pass">Pass</option>
-            <option value="false" data-i18n="appealHandler.fail">Fail</option>
-          </select>
-        </div>
-        <div class="small" id="resolveValidationMessage"></div>
-        <div class="row">
-          <div><button id="claimAppeal" class="btn-secondary" data-i18n="appealHandler.claim">Assign to me</button></div>
-          <div><button id="resolveAppeal" class="btn-primary" data-i18n="appealHandler.resolve">Resolve appeal</button></div>
-        </div>
+        <header class="case-header">
+          <h2 data-i18n="appealHandler.detailsTitle">Selected appeal details</h2>
+          <div class="case-header-chips" id="appealCaseHeaderChips"></div>
+        </header>
+
+        <section class="case-section">
+          <h3 data-i18n="case.section.submission">Candidate submission</h3>
+          <dl class="case-dl" id="appealSubmissionView"></dl>
+        </section>
+
+        <section class="case-section">
+          <h3 data-i18n="case.section.history">Decision history</h3>
+          <ol class="case-history" id="appealDecisionHistory"></ol>
+        </section>
+
+        <section class="case-section case-section-decision">
+          <h3 data-i18n="case.section.yourDecision">Your decision</h3>
+          <div><label for="handlerDecisionReason" data-i18n="appealHandler.resolveDecision">Decision reason</label><textarea id="handlerDecisionReason" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
+          <div><label for="handlerResolutionNote" data-i18n="appealHandler.resolveNote">Resolution note</label><textarea id="handlerResolutionNote" rows="2" aria-describedby="resolveValidationMessage"></textarea></div>
+          <div>
+            <label for="handlerPassFailTotal" data-i18n="appealHandler.passFail">Pass/fail total</label>
+            <select id="handlerPassFailTotal">
+              <option value="true" data-i18n="appealHandler.pass">Pass</option>
+              <option value="false" data-i18n="appealHandler.fail">Fail</option>
+            </select>
+          </div>
+          <div class="small" id="resolveValidationMessage"></div>
+          <div class="row">
+            <div><button id="claimAppeal" class="btn-secondary" data-i18n="case.action.claim">Claim case</button></div>
+            <div><button id="resolveAppeal" class="btn-primary" data-i18n="case.action.finalize">Finalize decision</button></div>
+          </div>
+        </section>
+
+        <details class="case-technical">
+          <summary data-i18n="case.section.technical">Technical details</summary>
+          <div><label for="handlerSelectedAppealId" data-i18n="appealHandler.selectedAppeal">Selected appeal ID</label><input id="handlerSelectedAppealId" readonly value="-" /></div>
+          <pre id="appealHandlerDetails" class="pre-content"></pre>
+        </details>
       </section>
       </div>
 

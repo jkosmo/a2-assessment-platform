@@ -49,6 +49,10 @@ const reviewOverrideReasonInput = document.getElementById("reviewOverrideReason"
 const reviewPassFailTotalInput = document.getElementById("reviewPassFailTotal");
 const reviewActionSequenceHint = document.getElementById("reviewActionSequenceHint");
 const overrideValidationMessage = document.getElementById("overrideValidationMessage");
+// v1.2.19 (#349): strukturerte content-slots i case-detail-panelet.
+const reviewCaseHeaderChips = document.getElementById("reviewCaseHeaderChips");
+const reviewSubmissionView = document.getElementById("reviewSubmissionView");
+const reviewDecisionHistory = document.getElementById("reviewDecisionHistory");
 
 // ── DOM refs (appeal) ──────────────────────────────────────────────────────────
 
@@ -67,6 +71,10 @@ const handlerDecisionReasonInput = document.getElementById("handlerDecisionReaso
 const handlerResolutionNoteInput = document.getElementById("handlerResolutionNote");
 const handlerPassFailTotalInput = document.getElementById("handlerPassFailTotal");
 const resolveValidationMessage = document.getElementById("resolveValidationMessage");
+// v1.2.19 (#349): strukturerte content-slots i appeal-detail-panelet.
+const appealCaseHeaderChips = document.getElementById("appealCaseHeaderChips");
+const appealSubmissionView = document.getElementById("appealSubmissionView");
+const appealDecisionHistory = document.getElementById("appealDecisionHistory");
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -645,6 +653,46 @@ function renderReviewQueue() {
 
 // ── Manual Review: detail panel ────────────────────────────────────────────────
 
+// v1.2.19 (#349): populer de strukturerte content-slottene i case-detail-panelet.
+// Tar header-chips-container, submission-dl-container, history-ol-container og en
+// pre-resolved view-model. View-model-konstruksjon er forskjellig for review vs appeal,
+// så den bygges utenfor (i renderManualReviewDetails / renderAppealHandlerDetails) og
+// sendes inn. Holder DOM-mutasjonen sentralisert + lik for begge.
+function paintCaseChips(target, chips) {
+  if (!target) return;
+  target.innerHTML = chips.map(({ label, modifier }) =>
+    `<span class="case-chip${modifier ? ` case-chip--${modifier}` : ""}">${escapeText(label)}</span>`
+  ).join("");
+}
+function paintCaseSubmission(target, fields) {
+  if (!target) return;
+  target.innerHTML = fields
+    .filter((f) => f.value !== undefined && f.value !== null && f.value !== "")
+    .map((f) => `<dt>${escapeText(f.label)}</dt><dd>${escapeText(f.value)}</dd>`)
+    .join("");
+}
+function paintCaseHistory(target, items) {
+  if (!target) return;
+  target.innerHTML = items.map((item) => `
+    <li class="case-history-item">
+      <div class="case-history-actor">${escapeText(item.actor)}${item.when ? ` · ${escapeText(item.when)}` : ""}</div>
+      <div class="case-history-decision">${escapeText(item.decision)}</div>
+      ${item.reason ? `<div class="case-history-reason">${escapeText(item.reason)}</div>` : ""}
+    </li>
+  `).join("");
+}
+function escapeText(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+// Map manual-review-status strings til chip modifier class.
+function caseStatusModifier(rawStatus) {
+  const s = String(rawStatus ?? "").toUpperCase();
+  if (["RESOLVED","COMPLETED","FINALISED","FINALIZED"].includes(s)) return "status-resolved";
+  if (["IN_REVIEW","CLAIMED","ASSIGNED"].includes(s)) return "status-claimed";
+  if (["OPEN","PENDING","SUBMITTED"].includes(s)) return "status-open";
+  return null;
+}
+
 function buildMrCriterionRationaleLines(criteria) {
   if (!criteria || typeof criteria !== "object") return [t("manualReview.details.noCriteria")];
   const entries = Object.entries(criteria);
@@ -737,6 +785,50 @@ function renderManualReviewDetails(details) {
   ];
 
   manualReviewDetails.textContent = lines.join("\n");
+
+  // v1.2.19 (#349): populer de strukturerte slottene i tillegg til raw-dumpen over.
+  // Status/SLA-chips + kandidatens innlevering + beslutningshistorikk.
+  const headerChips = [
+    { label: localizeReviewStatus(review.reviewStatus), modifier: caseStatusModifier(review.reviewStatus) },
+  ];
+  if (submission.module?.title) headerChips.push({ label: submission.module.title });
+  if (submission.user?.name) headerChips.push({ label: submission.user.name });
+  paintCaseChips(reviewCaseHeaderChips, headerChips);
+
+  paintCaseSubmission(reviewSubmissionView, [
+    { label: t("case.field.task"), value: submission.module?.title },
+    { label: t("case.field.answer"), value: normalizeMultilineText(submission.rawText) },
+    { label: t("case.field.reflection"), value: normalizeMultilineText(submission.reflectionText) },
+    { label: t("case.field.submittedAt"), value: formatDateTime(submission.submittedAt) },
+  ]);
+
+  const history = [];
+  if (latestLlmEvaluation) {
+    history.push({
+      actor: t("case.history.ai"),
+      when: formatDateTime(latestLlmEvaluation.createdAt),
+      decision: `${formatMrPassFail(latestLlmEvaluation.passFailPractical)} · ${t("manualReview.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation.practicalScoreScaled)}`,
+      reason: latestLlmEvaluation.confidenceNote,
+    });
+  }
+  if (latestDecision) {
+    history.push({
+      actor: t("case.history.review"),
+      when: formatDateTime(latestDecision.finalisedAt),
+      decision: `${formatMrPassFail(latestDecision.passFailTotal)} · ${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision.totalScore)}`,
+      reason: latestDecision.decisionReason,
+    });
+  }
+  if (latestAppeal) {
+    history.push({
+      actor: t("case.history.appeal"),
+      when: formatDateTime(latestAppeal.createdAt),
+      decision: latestAppeal.appealStatus ?? "-",
+      reason: "",
+    });
+  }
+  paintCaseHistory(reviewDecisionHistory, history);
+
   renderReviewActionState();
 }
 
@@ -1180,6 +1272,58 @@ function renderAppealHandlerDetails(details) {
   }
 
   appealHandlerDetails.textContent = lines.join("\n");
+
+  // v1.2.19 (#349): strukturerte slots for appeal-detail-panelet.
+  const headerChips = [
+    { label: localizeAppealStatus(appeal.appealStatus), modifier: caseStatusModifier(appeal.appealStatus) },
+  ];
+  if (sla?.status) {
+    const slaMod = String(sla.status).toLowerCase().includes("breach") ? "sla-breached" : null;
+    headerChips.push({ label: `SLA: ${sla.status}`, modifier: slaMod });
+  }
+  if (submission.module?.title) headerChips.push({ label: resolveModuleTitle(submission.module.title) });
+  if (submission.user?.name) headerChips.push({ label: submission.user.name });
+  paintCaseChips(appealCaseHeaderChips, headerChips);
+
+  paintCaseSubmission(appealSubmissionView, [
+    { label: t("case.field.task"), value: resolveModuleTitle(submission.module?.title) },
+    { label: t("case.field.answer"), value: normalizeMultilineText(responseFields.response ?? submission.rawText) },
+    { label: t("case.field.reflection"), value: normalizeMultilineText(responseFields.reflection ?? submission.reflectionText) },
+    { label: t("case.field.submittedAt"), value: formatDateTime(submission.submittedAt) },
+  ]);
+
+  const history = [];
+  if (latestLlmEvaluation) {
+    history.push({
+      actor: t("case.history.ai"),
+      when: formatDateTime(latestLlmEvaluation.createdAt),
+      decision: `${formatAppealPassFail(latestLlmEvaluation.passFailPractical)} · ${t("appealHandler.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation.practicalScoreScaled)}`,
+      reason: latestLlmEvaluation.confidenceNote,
+    });
+  }
+  if (latestManualReview) {
+    history.push({
+      actor: t("case.history.review"),
+      when: formatDateTime(latestManualReview.reviewedAt),
+      decision: latestManualReview.overrideDecision ?? "-",
+      reason: latestManualReview.overrideReason,
+    });
+  }
+  history.push({
+    actor: t("case.history.appeal"),
+    when: formatDateTime(appeal.createdAt),
+    decision: localizeAppealStatus(appeal.appealStatus),
+    reason: appeal.appealReason,
+  });
+  if (appeal.resolvedAt) {
+    history.push({
+      actor: t("case.history.appealResolution"),
+      when: formatDateTime(appeal.resolvedAt),
+      decision: `${formatAppealPassFail(latestDecision?.passFailTotal)}`,
+      reason: appeal.resolutionNote,
+    });
+  }
+  paintCaseHistory(appealDecisionHistory, history);
 }
 
 // ── Appeal: action state ───────────────────────────────────────────────────────
