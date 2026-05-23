@@ -3268,10 +3268,15 @@ function enterPreviewEditMode() {
       const initialMaxScore = Number(c.maxScore) > 0
         ? Number(c.maxScore)
         : (derivedFromWeight > 0 ? derivedFromWeight : 5);
+      // v1.2.10: c.label/c.description kan være string ELLER locale-objekt. Bruk
+      // localizeValueForLocale så direkte-edit-view-en plukker riktig locale i input-feltet.
+      // humaniseCriterionId-fallback brukes kun når både string og locale-objekt mangler.
+      const rawLabel = localizeValueForLocale(c.label, currentLocale);
+      const rawDesc = localizeValueForLocale(c.description, currentLocale);
       return {
         id: String(id),
-        label: typeof c.label === "string" && c.label.trim() ? c.label : humaniseCriterionId(String(id)),
-        description: typeof c.description === "string" ? c.description : "",
+        label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
+        description: typeof rawDesc === "string" ? rawDesc : "",
         maxScore: Math.max(1, Math.min(10, initialMaxScore)),
         candidateVisible: Boolean(c.candidateVisible),
       };

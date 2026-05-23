@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.10 - 2026-05-23
+
+fix(admin): vurderingskriterier rendret ikke locale-objekt-labels (#455 follow-up)
+
+Test 2026-05-23 av v1.2.8 ekstern-LLM-flyt: oppgave + MCQ var på norsk (kildemateriale-
+språk), men vurderingskriteriene viste seg som "Written Offer Basis", "Equal Clarification"
+osv. — engelsk og generisk.
+
+**Rotårsak**: `renderPreviewCriteria` i `admin-content-preview.js` (og parallell-koden i
+`buildEditorStateFromCriteriaRecord` i shell.js) sjekket kun `typeof c.label === "string"`.
+LLM-en returnerte korrekt locale-objekt `{ "en-GB": "...", "nb": "...", "nn": "..." }`,
+men type-sjekken feilet og koden falt tilbake til `humaniseCriterionId(id)` —
+"written_offer_basis" → "Written Offer Basis". Samme for description.
+
+Det var altså ikke LLM-en som produserte engelsk innhold — preview-en konverterte snake-
+case-ID-en til Title Case og overstyrde de norske oversettelsene som faktisk var i JSON-en.
+
+**Fix**:
+- `renderPreviewCriteria` tar nå en `localize`-funksjon som håndterer både string- og
+  locale-objekt-input. humaniseCriterionId-fallback brukes kun når begge er tomme.
+- `buildEditorStateFromCriteriaRecord` (direkte-edit-view) bruker `localizeValueForLocale`
+  med currentLocale, så input-feltene viser riktig språk når lærer går inn for å redigere.
+
+**Backward-kompatibilitet**: legacy-auto-genererte criteria (#378-pipeline) og direkte-
+editerte criteria (rene strings) fortsetter å virke uendret — string-pathen er bevart.
+
 ## 1.2.9 - 2026-05-23
 
 fix(admin): scenario-spørsmål også i regen-flyten på eksisterende modul (#455 follow-up)

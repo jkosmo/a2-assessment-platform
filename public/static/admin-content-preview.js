@@ -171,7 +171,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
   const criteriaLoadingText = data.criteriaLoadingText ?? "";
   const hasCriteria = criteria && typeof criteria === "object" && Object.keys(criteria).length > 0;
   const criteriaHtml = hasCriteria
-    ? renderPreviewCriteria(criteria, t, tf)
+    ? renderPreviewCriteria(criteria, t, tf, localize)
     : (criteriaLoadingText
       ? `<div class="preview-section-label">${escapeHtml(t("shell.criteria.title").replace(/\s*\(\{count\}\)\s*/, ""))}</div>
          <p class="preview-criteria-loading">${escapeHtml(criteriaLoadingText)}</p>`
@@ -199,7 +199,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
 // maxScore, weight, candidateVisible } }. Tolerates two historical shapes — rich (with label
 // + description) from #378 auto-gen, and sparse ({ weight }) from generic defaults. Returns
 // empty string when no criteria — section just doesn't render.
-function renderPreviewCriteria(criteria, t, tf) {
+function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === "string" ? v : "")) {
   if (!criteria || typeof criteria !== "object") return "";
   const entries = Object.entries(criteria);
   if (entries.length === 0) return "";
@@ -216,10 +216,18 @@ function renderPreviewCriteria(criteria, t, tf) {
 
   const items = entries.map(([id, raw]) => {
     const c = raw && typeof raw === "object" ? raw : {};
-    const label = typeof c.label === "string" && c.label.trim()
-      ? c.label
+    // v1.2.10: label + description kan være enten string (legacy auto-gen, direkte-edit)
+    // eller locale-objekt (ekstern-LLM-handoff, fra v1.2.7+ prompt). Bruk localize-helperen
+    // som håndterer begge format. Fallback til humaniseCriterionId hvis lokal-strengen er
+    // tom — feks når LLM ikke fylte ut den valgte locale-en.
+    const rawLabel = localize(c.label);
+    const label = typeof rawLabel === "string" && rawLabel.trim()
+      ? rawLabel
       : humaniseCriterionId(String(id));
-    const description = typeof c.description === "string" ? c.description : "";
+    const description = (() => {
+      const v = localize(c.description);
+      return typeof v === "string" ? v : "";
+    })();
     const maxScore = resolveMaxScore(c);
     const candidateVisible = Boolean(c.candidateVisible);
     const weightHtml = maxScore > 0
