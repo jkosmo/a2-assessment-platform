@@ -56,17 +56,27 @@ app.get("/participant/completed", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant-completed.html"));
 });
 
+// v1.2.18 (#352): retire transitional routes.
+// - GET /admin-content?moduleId=X → 301 to canonical /admin-content/module/X/conversation
+// - GET /admin-content/advanced (no module context) → 301 to /admin-content (library)
+//
+// Canonical routes (still served below):
+// - /admin-content                              → library (module picker)
+// - /admin-content/module/:moduleId/conversation → Samtale-shell
+// - /admin-content/module/:moduleId/advanced     → Avansert editor
 app.get("/admin-content", (request, response) => {
-  // Transition: if moduleId is present, serve the conversational shell (legacy route)
-  if (request.query.moduleId) {
-    response.sendFile(path.resolve(process.cwd(), "public", "admin-content.html"));
-  } else {
-    response.sendFile(path.resolve(process.cwd(), "public", "admin-content-library.html"));
+  const legacyModuleId = typeof request.query.moduleId === "string" ? request.query.moduleId.trim() : "";
+  if (legacyModuleId) {
+    response.redirect(301, `/admin-content/module/${encodeURIComponent(legacyModuleId)}/conversation`);
+    return;
   }
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-library.html"));
 });
 
 app.get("/admin-content/advanced", (_request, response) => {
-  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-advanced.html"));
+  // Bare entry to Avansert (no module context) is no longer supported — users must
+  // pick a module in the library first, then use the row action "Åpne i Avansert".
+  response.redirect(301, "/admin-content");
 });
 
 // Module workspace target routes (Issue #322 — active after unified workspace is built)

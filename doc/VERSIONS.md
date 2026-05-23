@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.18 - 2026-05-23
+
+slice: 3 endringer i modul-bibliotek (closes #457, closes #458, closes #352)
+
+**#457 — STATUS_LABELS i18n**
+
+`STATUS_LABELS` i `admin-content-library.js` var hardkodet norsk («Arkivert», «Upublisert
+utkast», «Publisert», «Klargjort»). Brukere i en-GB/nn så norske labels. Erstattet med
+i18n-keys (`library.status.archived` osv.) med oversettelser for alle tre locales.
+
+**#458 — Import-dialog focus-restore på feil**
+
+`importModulePackageFile`-change-handleren fokuserer nå tilbake til `importModulePackageBtn`
+når import feiler, så tastatur-bruker kan re-trigge uten å Tab-e fra en tom file-input.
+SR-bruker får allerede annonsering via toast.js (`role="alert"` for error-toasts).
+
+**#352 — Retire transitional admin-content routes**
+
+- `GET /admin-content?moduleId=X` → 301-redirect til canonical
+  `/admin-content/module/X/conversation`.
+- `GET /admin-content/advanced` (no module context) → 301-redirect til `/admin-content`
+  (modul-bibliotek). Avansert-editoren ligger nå kun på `/admin-content/module/:id/advanced`.
+- Interne client-refs (`buildAdminContentAdvancedUrl` fallback, shell.js error-recovery)
+  oppdatert til canonical routes så vi ikke genererer 301-vekkredirects internt.
+- `participant-console-config.test.ts` testene oppdatert til å bekrefte både redirects og
+  canonical routes.
+
+Bookmarks/eksterne lenker til legacy URLs fortsetter å virke via 301.
+
 ## 1.2.17 - 2026-05-23
 
 fix(admin): Sertifiseringsnivå-kolonnen viste hardkodet engelsk + ugyldig "Foundation"

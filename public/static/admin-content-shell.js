@@ -4054,7 +4054,9 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       slot,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
-        { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content/advanced"; } },
+        // v1.2.18 (#352): legacy /admin-content/advanced retired — send brukeren tilbake til
+        // modul-bibliotek der de kan velge en eksisterende modul eller opprette en ny.
+        { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content"; } },
         { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],

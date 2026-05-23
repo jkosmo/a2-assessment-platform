@@ -139,11 +139,24 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain("admin-content-library.js");
   });
 
-  it("serves advanced admin content editor at /admin-content/advanced", async () => {
+  // v1.2.18 (#352): /admin-content/advanced (no module context) er retired — 301 til
+  // /admin-content (library). Avansert-editoren ligger nå kun på /admin-content/module/:id/advanced.
+  it("redirects bare /admin-content/advanced to library", async () => {
     const response = await request(app).get("/admin-content/advanced");
+    expect(response.status).toBe(301);
+    expect(response.headers.location).toBe("/admin-content");
+  });
 
+  it("serves advanced admin content editor at /admin-content/module/:moduleId/advanced", async () => {
+    const response = await request(app).get("/admin-content/module/test-module/advanced");
     expect(response.status).toBe(200);
     expect(response.text).toContain("admin-content.js");
+  });
+
+  it("redirects legacy /admin-content?moduleId=X to canonical conversation URL", async () => {
+    const response = await request(app).get("/admin-content?moduleId=test-module");
+    expect(response.status).toBe(301);
+    expect(response.headers.location).toBe("/admin-content/module/test-module/conversation");
   });
 
   it("serves dedicated results workspace page", async () => {
@@ -166,8 +179,8 @@ describe("participant console runtime config", () => {
       "/participant/completed",
       "/review",
       // /admin-content is the new conversational shell (no mock-identity-card panel)
-      // /admin-content/advanced is the full editor that retains the panel
-      "/admin-content/advanced",
+      // /admin-content/module/:id/advanced is the full editor that retains the panel
+      "/admin-content/module/test-module/advanced",
       "/calibration",
     ];
 
@@ -241,7 +254,7 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="courseCertSection"');
       }
 
-      if (pagePath === "/admin-content/advanced") {
+      if (pagePath === "/admin-content/module/test-module/advanced") {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('<details id="outputDetails">');
         expect(response.text).toContain("<summary>View raw response</summary>");

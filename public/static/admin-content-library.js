@@ -110,11 +110,13 @@ let sortDirection = "asc"; // "asc" | "desc"
 // Status badge helpers
 // ---------------------------------------------------------------------------
 
-const STATUS_LABELS = {
-  archived: "Arkivert",
-  unpublished_draft: "Upublisert utkast",
-  published: "Publisert",
-  ready: "Klargjort",
+// v1.2.18 (#457): bytt fra hardkodet norsk til i18n-keys så en-GB og nn også viser
+// riktige labels. Faller tilbake til statuskode (rå) hvis i18n-key mangler.
+const STATUS_I18N_KEYS = {
+  archived: "library.status.archived",
+  unpublished_draft: "library.status.unpublishedDraft",
+  published: "library.status.published",
+  ready: "library.status.ready",
 };
 
 // v1.2.17: bruk i18n-keyene fra adminContent.promptDialog.certificationLevel{Basic,
@@ -127,7 +129,9 @@ const CERT_I18N_KEYS = {
 };
 
 function statusBadge(status) {
-  return `<span class="status-badge ${escapeHtml(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>`;
+  const key = STATUS_I18N_KEYS[status];
+  const label = key ? t(key) : status;
+  return `<span class="status-badge ${escapeHtml(status)}">${escapeHtml(label)}</span>`;
 }
 
 function certBadge(level) {
@@ -757,6 +761,10 @@ async function init() {
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/advanced`;
     } catch (error) {
       showToast(`Modul-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+      // v1.2.18 (#458): toast har role="alert" så SR annonserer feilen. I tillegg flytter
+      // vi fokus tilbake til importbtn så tastatur-bruker kan re-trigge uten å Tab-e fra
+      // den (nå tomme) file-input-en.
+      importModulePackageBtn?.focus();
     } finally {
       target.value = "";
     }

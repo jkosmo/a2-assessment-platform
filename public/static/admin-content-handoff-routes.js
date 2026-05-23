@@ -1,7 +1,9 @@
+// v1.2.18 (#352): /admin-content/advanced (no module context) er retired — fall back til
+// modul-bibliotek der bruker kan velge en modul først.
 export function buildAdminContentAdvancedUrl(moduleId) {
   return moduleId
     ? `/admin-content/module/${encodeURIComponent(moduleId)}/advanced`
-    : "/admin-content/advanced";
+    : "/admin-content";
 }
 
 export function buildAdminContentConversationUrl(moduleId, { resumeEditing = true } = {}) {
