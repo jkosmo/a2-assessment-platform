@@ -167,12 +167,18 @@ const assessmentBlueprintSchema = z.object({
   notes: z.string().default(""),
 });
 
+// v1.2.8: scenarioMode lets the author choose whether the generated task uses a scenario.
+// "auto" preserves the legacy LLM-decides behaviour; "include" forces a scenario; "exclude"
+// suppresses scenario framing. See buildModuleDraftPrompts for the prompt-level effect.
+export const scenarioModeSchema = z.enum(["auto", "include", "exclude"]);
+
 export const moduleDraftGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
   locale: generationLocaleSchema,
   generationMode: generationModeSchema.default("ordinary"),
   blueprint: assessmentBlueprintSchema.optional(),
+  scenarioMode: scenarioModeSchema.default("auto"),
 });
 
 export const rubricGenerationBodySchema = z.object({

@@ -29,7 +29,7 @@ import {
 import { buildAdminContentAdvancedUrl } from "/static/admin-content-handoff-routes.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import {
-  EXTERNAL_LLM_AUTHORING_PROMPT,
+  buildExternalLlmAuthoringPrompt,
   parseExternalLlmJson,
 } from "/static/admin-content-external-llm.js";
 
@@ -533,9 +533,13 @@ function _domFormFields(entry) {
     // #455: external-LLM-handoff. Copies prompt + opens import modal. On successful
     // import, marks the form submitted (skipping the normal source→cert→generate path)
     // and lands user in draft-ready with module + sessionDraft populated.
+    // v1.2.8: scenarioMode plukkes opp fra form-entry-context (satt av askForScenarioMode
+    // før kildemateriale-steget) og injiseres i prompten.
     externalLlmBtn.addEventListener("click", async () => {
+      const scenarioMode = entry.context?.scenarioMode ?? "auto";
+      const promptText = buildExternalLlmAuthoringPrompt(scenarioMode);
       try {
-        await navigator.clipboard.writeText(EXTERNAL_LLM_AUTHORING_PROMPT);
+        await navigator.clipboard.writeText(promptText);
         showToast(t("shell.source.externalLlm.copied"), "success");
       } catch {
         // Clipboard API can fail in some browsers/contexts. Still open the modal — the
@@ -543,6 +547,7 @@ function _domFormFields(entry) {
         showToast(t("shell.source.externalLlm.copyFailed"), "error");
       }
       openExternalLlmModal({
+        scenarioMode,
         onImportSuccess: () => {
           entry.submitted = true;
           _deactivateAll();
@@ -836,8 +841,8 @@ function logResolveSlot(slot, htmlFn, choices = []) {
 }
 
 // Log + render a text input or textarea form (prompt bubble + input fields).
-function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "") {
-  const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue };
+function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "", context = {}) {
+  const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue, context };
   chatLog.push(entry);
   _domBotBubble(promptHtmlFn(), [], false);
   _domFormFields(entry);
@@ -1474,7 +1479,7 @@ function startGeneration() {
   return generationAbort;
 }
 
-async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint = null) {
+async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint = null, scenarioMode = "auto") {
   const abort = startGeneration();
   const slot = logProgress("shell.generating.draftProgress");
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -1497,7 +1502,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, scenarioMode, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
         signal: abort.signal,
       },
     );
@@ -1511,7 +1516,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
     }
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint) },
+      { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint, scenarioMode) },
     ]);
     return;
   }
@@ -2748,7 +2753,7 @@ function hasManuallyEditedCriteria() {
 // (after copying our authoring prompt), or upload a .json file. On Importer, parses the
 // JSON, creates a new module, populates sessionDraft, and lands the author in draft-ready.
 // Reuses the focus-trap / ESC pattern from openDriftDiffModal — they should stay in sync.
-function openExternalLlmModal({ onImportSuccess } = {}) {
+function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
   const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   const overlay = document.createElement("div");
@@ -2837,7 +2842,7 @@ function openExternalLlmModal({ onImportSuccess } = {}) {
 
   overlay.querySelector('[data-ext-action="copy-prompt"]').addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(EXTERNAL_LLM_AUTHORING_PROMPT);
+      await navigator.clipboard.writeText(buildExternalLlmAuthoringPrompt(scenarioMode));
       showToast(t("shell.source.externalLlm.copied"), "success");
     } catch {
       showToast(t("shell.source.externalLlm.copyFailed"), "error");
@@ -3702,15 +3707,27 @@ function startNewModuleFlow() {
     () => t("shell.newModule.titlePrompt"),
     "shell.newModule.titlePlaceholder",
     "shell.action.next",
-    (title) => askForSourceMaterial(title, null),
+    (title) => askForScenarioMode(title, null),
   );
 }
 
 // ---------------------------------------------------------------------------
-// Source material → cert level → locale → generate
+// Scenario mode → source material → cert level → locale → generate
 // ---------------------------------------------------------------------------
 
-function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel) {
+// v1.2.8: scenario-valg plassert mellom tittel og kildemateriale slik at samme valg
+// styrer både normal Samtale-generering (server-side prompt) og ekstern-LLM-handoff
+// (klient-side prompt). Eksisterende moduler (regen-flyten) hopper over dette steget
+// — de bevarer egen stil — og defaulter til "auto".
+function askForScenarioMode(moduleTitle, existingModuleId) {
+  logBot(() => `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`, [
+    { labelKey: "shell.scenario.auto", action: () => askForSourceMaterial(moduleTitle, existingModuleId, null, "auto") },
+    { labelKey: "shell.scenario.include", action: () => askForSourceMaterial(moduleTitle, existingModuleId, null, "include") },
+    { labelKey: "shell.scenario.exclude", action: () => askForSourceMaterial(moduleTitle, existingModuleId, null, "exclude") },
+  ]);
+}
+
+function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, scenarioMode = "auto") {
   logForm(
     "source-material",
     () => `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
@@ -3721,21 +3738,23 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel) {
         // Hard-default "thorough" — see askForCertLevel comment. v1.1.54 removed the
         // intermediate askForGenerationMode step; calling it directly here would
         // ReferenceError silently in the callback. (v1.1.54 regression caught 2026-05-18)
-        generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough");
+        generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough", scenarioMode);
       } else {
-        askForCertLevel(moduleTitle, existingModuleId, sourceMaterial);
+        askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode);
       }
     },
+    "",
+    { scenarioMode },
   );
 }
 
-function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial) {
+function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode = "auto") {
   // Generation mode is always "thorough" — author feedback (2026-05-18) confirmed the
   // "Vanlig" option was never selected in practice. Removed to reduce conversation friction.
   logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale, "thorough") },
-    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough") },
-    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough") },
+    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale, "thorough", scenarioMode) },
+    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough", scenarioMode) },
+    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough", scenarioMode) },
   ]);
 }
 
@@ -3777,7 +3796,7 @@ async function maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale) {
   }
 }
 
-async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode) {
+async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, scenarioMode = "auto") {
   // v1.2.4: condense source material if over threshold. Condensed result replaces raw
   // for ALL downstream calls (blueprint → draft → MCQ → rubric).
   const effectiveSourceMaterial = await maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale);
@@ -3805,7 +3824,7 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
       return;
     }
     logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.errorFallback")));
-    confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null);
+    confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null, scenarioMode);
     return;
   }
 
@@ -3815,7 +3834,8 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
   const bp = blueprintResult?.blueprint;
   // v1.2.4: pass effectiveSourceMaterial (possibly condensed) so all downstream LLM calls
   // (draft, MCQ, rubric) get the same condensed view rather than re-paying for raw.
-  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode });
+  // v1.2.8: scenarioMode forwarded through to draft generation.
+  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode });
 }
 
 // B1 (#448): editable Vurderingsplan card replaces the static accept/skip preview. Lærer
@@ -3896,7 +3916,7 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
             return;
           }
           const blueprintJson = JSON.stringify(working);
-          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson);
+          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode);
         },
       },
       {
@@ -3904,7 +3924,7 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
         action: () => {
           captureInputs();
           if (hasManualEdits && !window.confirm(t("shell.blueprint.regenerateWarning"))) return;
-          generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode);
+          generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, ctx.scenarioMode);
         },
       },
     ]);
@@ -3995,7 +4015,7 @@ function slugifyLabel(label) {
 }
 
 
-async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null) {
+async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null, scenarioMode = "auto") {
   if (existingModuleId) {
     const capturedTitle = localizeValue(bundle?.module?.title) || existingModuleId;
     const levelKey = `shell.certLevel.${certLevel}`;
@@ -4006,7 +4026,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
     );
     generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
       askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
-    }, blueprint);
+    }, blueprint, scenarioMode);
     return;
   }
 
@@ -4030,7 +4050,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
         { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content/advanced"; } },
-        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint) },
+        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],
     );
@@ -4049,7 +4069,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 
   generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
     askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
-  }, blueprint);
+  }, blueprint, scenarioMode);
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {

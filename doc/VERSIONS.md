@@ -2,6 +2,70 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.8 - 2026-05-23
+
+feat(admin): scenario-valg + ekstern-LLM-prompt på paritet med Samtale (#455 follow-up)
+
+To endringer som henger sammen:
+
+**(a) Scenario-valg som eksplisitt steg i Samtale**
+
+Etter tittel-steget får forfatter velge mellom «La LLM avgjøre», «Med scenario» og «Uten
+scenario». Valget styrer både normal Samtale-generering og ekstern-LLM-handoff — samme
+tre-tilstands-kontrakt på server (`buildModuleDraftPrompts` i `llmContentGenerationService`)
+og klient (`buildExternalLlmAuthoringPrompt` i `admin-content-external-llm.js`).
+
+- `scenarioMode: "auto" | "include" | "exclude"` lagt til `moduleDraftGenerationBodySchema`
+  + `ModuleDraftInput` med default "auto" for bakoverkompatibilitet.
+- `renderScenarioDirective(scenarioMode)` erstatter den faste "Scenario decision"-seksjonen
+  i `buildModuleDraftPrompts`.
+- Helper-funksjonen `buildExternalLlmAuthoringPrompt(scenarioMode)` erstatter den statiske
+  `EXTERNAL_LLM_AUTHORING_PROMPT`-konstanten i klient-helperen.
+- Nytt steg `askForScenarioMode` i shell.js, plassert mellom tittel og kildemateriale i
+  `startNewModuleFlow`. Eksisterende moduler (`startGenerateDraftFlow`) hopper over steget
+  og defaulter til "auto" — de bevarer egen stil.
+- `scenarioMode` tråes gjennom `askForSourceMaterial → askForCertLevel →
+  generateBlueprintAndConfirm → confirmAndGenerate → generateDraftInBackground` og sendes
+  som `scenarioMode` i POST body til `/api/admin/content/generate/module-draft`.
+- For ekstern-LLM-flyten plukkes `scenarioMode` opp fra form-entry-konteksten og injiseres
+  i prompten både ved første kopi til utklippstavle og ved «Kopier prompt på nytt» i modalen.
+
+**(b) Ekstern-LLM-prompt på paritet med Samtale-pipelinens 4 separate LLM-kall**
+
+Den eldre eksterne prompten manglet authoring constraints, complexity budget per cert-level,
+MCQ distractor quality + option parity, og oppgavespesifikke rubric-kriterier — felt som
+Samtale-flytens server-side prompter krever eksplisitt. Tester med norsk kildemateriale
+viste at den eksterne LLM-en (a) defaulta til engelsk for MCQ-options og criteria, og (b)
+produserte taskText med vesentlig annet format enn Samtale.
+
+Den nye prompten (`buildExternalLlmAuthoringPrompt`) speiler nå Samtale-prompten:
+
+- LANGUAGE REQUIREMENT (alle deltakerrettede felt MÅ være locale-objekter for alle tre
+  locales)
+- AUTHORING CONSTRAINTS (self-contained, ingen referanser til source/document/attachment)
+- CERTIFICATION LEVEL + COMPLEXITY BUDGET (tabell for alle 3 nivåer; LLM velger og
+  håndhever)
+- SCENARIO DECISION (nå dynamisk basert på scenarioMode — se (a))
+- TWO SEPARATE OUTPUT FIELDS (tydelige roller for taskText / candidateTaskConstraints /
+  assessorExpectedContent)
+- MCQ AUTHORING (self-contained stems, 3-regels distractor quality, option parity)
+- RUBRIC CRITERIA (oppgave-spesifikke 3-6 kriterier, snake_case id-er, maxScore 10-30
+  totalt)
+- RETURN FORMAT (full locale-objekt-mal)
+
+**Verifiseringsplan**
+
+1. Ny modul-flyt i Samtale: tittel → scenario-spørsmål dukker opp → «La LLM avgjøre» tar
+   deg til kildemateriale-steget som før.
+2. «Med scenario» → kildemateriale → cert-level → generering → taskText starter med
+   «Scenario:» og en kort situasjonsbeskrivelse.
+3. «Uten scenario» → generering produserer taskText uten «Scenario:»-prefiks og uten
+   konstruert situasjon.
+4. Ekstern-LLM-flyten: scenario-valget følger med prompten som kopieres til utklippstavle.
+   Test alle tre modusene, sjekk at MCQ-alternativer + rubric-kriterier er på samme språk
+   som kildematerialet (norsk kilde → norske alternativer).
+5. Eksisterende modul + regen-flyt: skal IKKE spørre om scenario (bevarer egen stil).
+
 ## 1.2.7 - 2026-05-23
 
 fix(admin): ekstern-LLM-prompt språk-disiplin (#455 follow-up)

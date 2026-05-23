@@ -1,25 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
-  EXTERNAL_LLM_AUTHORING_PROMPT,
+  buildExternalLlmAuthoringPrompt,
   parseExternalLlmJson,
 } from "../../public/static/admin-content-external-llm.js";
 
 describe("admin-content-external-llm", () => {
-  describe("EXTERNAL_LLM_AUTHORING_PROMPT", () => {
-    it("includes the [PASTE SOURCE MATERIAL HERE] placeholder so authors know where to append their source", () => {
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).toContain("[PASTE SOURCE MATERIAL HERE]");
+  describe("buildExternalLlmAuthoringPrompt", () => {
+    it("default (auto) prompt includes the [PASTE SOURCE MATERIAL HERE] placeholder", () => {
+      expect(buildExternalLlmAuthoringPrompt()).toContain("[PASTE SOURCE MATERIAL HERE]");
     });
 
-    it("instructs the LLM to use the current field name assessorExpectedContent (not legacy guidanceText)", () => {
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).toContain("assessorExpectedContent");
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).not.toContain("guidanceText");
+    it("default (auto) prompt uses the current field name assessorExpectedContent (not legacy guidanceText)", () => {
+      const prompt = buildExternalLlmAuthoringPrompt("auto");
+      expect(prompt).toContain("assessorExpectedContent");
+      expect(prompt).not.toContain("guidanceText");
     });
 
-    it("names the four required root sections", () => {
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).toContain("module");
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).toContain("rubric");
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).toContain("mcqSet");
-      expect(EXTERNAL_LLM_AUTHORING_PROMPT).toContain("moduleVersion");
+    it("default (auto) prompt names the four required root sections", () => {
+      const prompt = buildExternalLlmAuthoringPrompt("auto");
+      expect(prompt).toContain("module");
+      expect(prompt).toContain("rubric");
+      expect(prompt).toContain("mcqSet");
+      expect(prompt).toContain("moduleVersion");
+    });
+
+    it("auto mode lets the LLM decide whether to include a scenario", () => {
+      const prompt = buildExternalLlmAuthoringPrompt("auto");
+      expect(prompt).toContain("Include a scenario when");
+      expect(prompt).toContain("Skip a scenario when");
+    });
+
+    it("include mode requires a scenario", () => {
+      const prompt = buildExternalLlmAuthoringPrompt("include");
+      expect(prompt).toContain("MUST include a scenario");
+      expect(prompt).not.toContain("Skip a scenario when");
+    });
+
+    it("exclude mode forbids a scenario", () => {
+      const prompt = buildExternalLlmAuthoringPrompt("exclude");
+      expect(prompt).toContain("must NOT include a scenario");
+      expect(prompt).toContain('Do NOT start taskText with "Scenario:"');
+    });
+
+    it("unknown scenarioMode falls back to auto", () => {
+      expect(buildExternalLlmAuthoringPrompt("bogus")).toBe(buildExternalLlmAuthoringPrompt("auto"));
     });
   });
 

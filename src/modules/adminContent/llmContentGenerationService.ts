@@ -10,6 +10,11 @@ export type CertificationLevel = "basic" | "intermediate" | "advanced";
 export type GenerationLocale = "en-GB" | "nb" | "nn";
 export type GenerationMode = "ordinary" | "thorough";
 
+// v1.2.8: scenarioMode lets the author choose whether the generated task uses a scenario.
+// "auto" keeps the legacy LLM-decides behaviour; "include" forces a scenario; "exclude"
+// suppresses scenario framing.
+export type ScenarioMode = "auto" | "include" | "exclude";
+
 export type ModuleDraftInput = {
   sourceMaterial: string;
   certificationLevel: CertificationLevel;
@@ -19,6 +24,7 @@ export type ModuleDraftInput = {
   // generated scenario so that scope, actor count, and trade-off count match the contract
   // also applied to MCQ generation. See #372.
   blueprint?: AssessmentBlueprint;
+  scenarioMode?: ScenarioMode;
 };
 
 export type ModuleDraftResult = {
@@ -353,6 +359,50 @@ const GENERATION_MODE_GUIDELINES: Record<GenerationMode, { moduleDraft: string; 
   },
 };
 
+// v1.2.8: scenario decision can be author-locked. "auto" preserves the legacy LLM-decides
+// flow; "include" requires a scenario; "exclude" forbids one. Same three-state contract is
+// used by the client-side external-LLM prompt (admin-content-external-llm.js) — keep the
+// directives semantically aligned across both prompts so author intent survives the handoff.
+function renderScenarioDirective(scenarioMode: ScenarioMode): string {
+  if (scenarioMode === "include") {
+    return `## Scenario (required)
+
+The author has decided this module MUST include a scenario. Produce one.
+
+A scenario is a short, realistic situation (4-8 sentences) that grounds the task in a concrete context.
+
+- Place it at the very top of taskText, clearly labelled "Scenario:" followed by a blank line
+- Keep it realistic, concise (4-8 sentences), and grounded in the facts from the source material without referring to that material
+- The task instruction below the scenario must direct the candidate to use the scenario as the basis for their response`;
+  }
+  if (scenarioMode === "exclude") {
+    return `## Scenario (forbidden)
+
+The author has decided this module must NOT include a scenario.
+
+- Do NOT include a scenario, situation, case description, or roleplay framing in taskText
+- Do NOT start taskText with "Scenario:" or any similar narrative opener
+- Write taskText as a direct task or question to the candidate, grounded in the relevant facts and concepts from the source material but without a constructed situation
+- Keep the task clear and concrete; if context is needed to make the task self-contained, integrate it as a single short statement rather than as a multi-sentence scenario`;
+  }
+  return `## Scenario decision
+
+A scenario is a short, realistic situation (4-8 sentences) that grounds the task in a concrete context.
+
+Include a scenario in taskText when:
+- The module assesses situational analysis, ethical reasoning, professional judgement, or practical application of concepts
+- A concrete situation would let candidates demonstrate understanding beyond pure recall
+
+Do NOT include a scenario when:
+- The task is primarily factual recall or text summarisation
+- A scenario would feel artificial or forced given the content
+
+If including a scenario:
+- Place it at the very top of taskText, clearly labelled "Scenario:" followed by a blank line
+- Keep it realistic, concise (4-8 sentences), and grounded in the facts from the source material without referring to that material
+- The task instruction below the scenario must direct the candidate to use the scenario as the basis for their response`;
+}
+
 function localizeForPrompt(value: LocalizedText | undefined, locale: GenerationLocale): string {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -678,22 +728,7 @@ Respect these limits for ${input.certificationLevel} level:
 
 Before finalising, verify that a candidate can start a reasonable answer using only taskText and candidateTaskConstraints, plus expected prerequisite knowledge for this certification level. Do not introduce scenario elements that are not necessary to test the learning objective.
 
-## Scenario decision
-
-A scenario is a short, realistic situation (4-8 sentences) that grounds the task in a concrete context.
-
-Include a scenario in taskText when:
-- The module assesses situational analysis, ethical reasoning, professional judgement, or practical application of concepts
-- A concrete situation would let candidates demonstrate understanding beyond pure recall
-
-Do NOT include a scenario when:
-- The task is primarily factual recall or text summarisation
-- A scenario would feel artificial or forced given the content
-
-If including a scenario:
-- Place it at the very top of taskText, clearly labelled "Scenario:" followed by a blank line
-- Keep it realistic, concise (4-8 sentences), and grounded in the facts from the source material without referring to that material
-- The task instruction below the scenario must direct the candidate to use the scenario as the basis for their response
+${renderScenarioDirective(input.scenarioMode ?? "auto")}
 
 ## Two separate output fields — do not mix their roles
 
