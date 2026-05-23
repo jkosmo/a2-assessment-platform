@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.13 - 2026-05-23
+
+fix(admin): "Dupliser" brukte feil eksport-endepunkt (#348 follow-up)
+
+v1.2.12 byttet dupliseringen til å gå via export→import-pipelinen. Implementasjonen
+brukte `/modules/:id/export` (live editing-bundle) i stedet for `/modules/:id/export-
+package` (a2-content-export/v1-envelope) — formene er ikke kompatible, så `/import`
+returnerte 400 med validation_error mot `exportFormat`, `exportedAt`, `scope`, m.fl.
+
+Fix:
+- Bytt til `/export-package` og les `envelope` (ikke `moduleExport`).
+- Verifiser `envelope.exportFormat === "a2-content-export/v1"` før vi sender til import.
+
 ## 1.2.12 - 2026-05-23
 
 feat(admin): én create-path + ærlig duplisering i modul-bibliotek (closes #348)

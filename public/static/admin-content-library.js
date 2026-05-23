@@ -382,10 +382,12 @@ async function duplicateModule(moduleId, btn) {
   const sourceTitle = original?.title ?? "Modul";
 
   try {
-    const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
-    const envelope = exportResult?.moduleExport ?? exportResult;
-    if (!envelope || !envelope.module) {
-      throw new Error("Tom eksport-konvolutt fra server.");
+    // v1.2.13: bytt fra /export (live editing-bundle) til /export-package — det er
+    // sistnevnte som returnerer a2-content-export/v1-envelope-en /import faktisk forventer.
+    const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
+    const envelope = exportResult?.envelope ?? exportResult;
+    if (!envelope || envelope.exportFormat !== "a2-content-export/v1" || !envelope.module) {
+      throw new Error("Uventet eksport-format fra server.");
     }
 
     // Suffiks " (kopi)" på tittelen i alle locales så listen viser kopien tydelig.
