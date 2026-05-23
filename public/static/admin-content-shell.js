@@ -3717,13 +3717,13 @@ function startNewModuleFlow() {
 
 // v1.2.8: scenario-valg plassert mellom tittel og kildemateriale slik at samme valg
 // styrer både normal Samtale-generering (server-side prompt) og ekstern-LLM-handoff
-// (klient-side prompt). Eksisterende moduler (regen-flyten) hopper over dette steget
-// — de bevarer egen stil — og defaulter til "auto".
-function askForScenarioMode(moduleTitle, existingModuleId) {
+// (klient-side prompt). Gjelder både ny modul og regen-flyt på eksisterende modul.
+// knownCertLevel videreføres fra regen-flyten så vi ikke spør om cert-level på nytt.
+function askForScenarioMode(moduleTitle, existingModuleId, knownCertLevel = null) {
   logBot(() => `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`, [
-    { labelKey: "shell.scenario.auto", action: () => askForSourceMaterial(moduleTitle, existingModuleId, null, "auto") },
-    { labelKey: "shell.scenario.include", action: () => askForSourceMaterial(moduleTitle, existingModuleId, null, "include") },
-    { labelKey: "shell.scenario.exclude", action: () => askForSourceMaterial(moduleTitle, existingModuleId, null, "exclude") },
+    { labelKey: "shell.scenario.auto", action: () => askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, "auto") },
+    { labelKey: "shell.scenario.include", action: () => askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, "include") },
+    { labelKey: "shell.scenario.exclude", action: () => askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, "exclude") },
   ]);
 }
 
@@ -4173,9 +4173,12 @@ function showDraftReadyActions() {
   }
 }
 
-// Separate entry point for MCQ-only generation from the module actions menu
+// Separate entry point for MCQ-only generation from the module actions menu.
+// v1.2.8 (follow-up): regen-flyten på eksisterende modul skal også spørre om scenario
+// — samme intent som ved ny modul-flyten. Tidligere antakelse om at eksisterende moduler
+// bevarer egen stil var feil; forfatter vil styre per regenerering.
 function startGenerateDraftFlow() {
-  askForSourceMaterial(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
+  askForScenarioMode(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
 }
 
 function startGenerateMcqFlow() {

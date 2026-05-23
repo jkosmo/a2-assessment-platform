@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.9 - 2026-05-23
+
+fix(admin): scenario-spørsmål også i regen-flyten på eksisterende modul (#455 follow-up)
+
+v1.2.8 la scenario-valget kun inn i ny-modul-flyten (`startNewModuleFlow`). Testing
+viste at forfattere som regenererer innhold på eksisterende moduler («Generer nytt
+innhold fra kildemateriale» i modul-aksjons-menyen) er den vanligere veien til
+kildemateriale-steget — og den hoppet over scenario-spørsmålet i v1.2.8.
+
+Fix: `startGenerateDraftFlow` ruter nå også gjennom `askForScenarioMode` før
+kildematerialet. `askForScenarioMode` tar `knownCertLevel` som ekstra parameter slik at
+cert-level fra eksisterende modul ikke spørres om på nytt.
+
 ## 1.2.8 - 2026-05-23
 
 feat(admin): scenario-valg + ekstern-LLM-prompt på paritet med Samtale (#455 follow-up)
