@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.12 - 2026-05-23
+
+feat(admin): én create-path + ærlig duplisering i modul-bibliotek (closes #348)
+
+Pilot-funn (2026-05-23) viste at "Samtale vs Avansert"-valget før modulen finnes er
+unødvendig friksjon, og "Dupliser" gjorde en smalere kopi enn forventet (manglet
+taskText, MCQ-spørsmål og scenario).
+
+**Endringer**:
+
+1. **Én create-path** — "Opprett modul"-dialogen har nå én knapp ("Opprett modul") som
+   alltid åpner modulen i Samtale. Forfattere som vil bytte til Avansert bruker rad-
+   handlingen "Åpne i Avansert" på modul-raden i biblioteket etterpå.
+
+2. **Ærlig duplisering** — "Dupliser"-knappen kjører nå hele export→import-pipelinen
+   internt (`GET /modules/:id/export` → `POST /modules/import` med `mode: "createNew"`).
+   Det gir full strukturell kopi inkludert taskText, candidateTaskConstraints,
+   assessorExpectedContent, MCQ-spørsmål, rubric og prompt-template. Tittelen får
+   "(kopi)"-suffiks i alle locales. Tidligere kopierte versjonen kun rubric + prompt-
+   template, så kopien var ikke direkte brukbar uten å regenerere innhold.
+
+**Acceptance** mot #348:
+- ✅ Users no longer choose Conversation vs Advanced before the module is created
+- ✅ "Duplicate" performs a full structural copy
+- ✅ Library actions teach a stable mental model: alle nye moduler starter i Samtale,
+  Avansert er en alternativ visning på eksisterende modul
+
 ## 1.2.11 - 2026-05-23
 
 feat(admin): "Rydd uplubliserte" — bulk-delete av draft-moduler i modul-bibliotek

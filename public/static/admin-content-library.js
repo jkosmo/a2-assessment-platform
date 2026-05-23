@@ -73,7 +73,7 @@ const newModuleTitle = document.getElementById("newModuleTitle");
 const newModuleLevel = document.getElementById("newModuleLevel");
 const createModuleError = document.getElementById("createModuleError");
 const createOpenConversation = document.getElementById("createOpenConversation");
-const createOpenAdvanced = document.getElementById("createOpenAdvanced");
+// v1.2.12 (#348): createOpenAdvanced fjernet fra dialogen — én create-path.
 const createCancel = document.getElementById("createCancel");
 const coursesPopover = document.getElementById("coursesPopover");
 const coursesPopoverList = document.getElementById("coursesPopoverList");
@@ -104,7 +104,7 @@ let activeFilter = "active";
 let searchQuery = "";
 let sortColumn = "title"; // "title" | "updatedAt"
 let sortDirection = "asc"; // "asc" | "desc"
-let pendingCreateTarget = null; // "conversation" | "advanced"
+// v1.2.12 (#348): pendingCreateTarget fjernet — én create-path, alltid Samtale.
 
 // ---------------------------------------------------------------------------
 // Status badge helpers
@@ -371,47 +371,40 @@ async function restoreModule(moduleId, btn) {
 // Duplicate
 // ---------------------------------------------------------------------------
 
+// v1.2.12 (#348): "Dupliser" gjør nå full strukturell kopi via export → import-pipelinen.
+// Tidligere versjon kopierte kun rubric + promptTemplate, og lot taskText/MCQ/scenario
+// være tomt — det matchet ikke det brukerne forventer av "Dupliser". Pipelinen gjør samme
+// jobb som "Eksporter (.json) → Importer modul-pakke (.json)"-paret, bare bundlet i ett
+// klikk uten å gå via filsystemet.
 async function duplicateModule(moduleId, btn) {
   btn.disabled = true;
   const original = allModules.find(m => m.id === moduleId);
   const sourceTitle = original?.title ?? "Modul";
 
   try {
-    // Fetch full bundle
-    const { moduleExport } = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
-    const bundle = moduleExport;
-    const src = bundle.module;
-    const cfg = bundle.selectedConfiguration;
+    const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
+    const envelope = exportResult?.moduleExport ?? exportResult;
+    if (!envelope || !envelope.module) {
+      throw new Error("Tom eksport-konvolutt fra server.");
+    }
 
-    // Create new module shell
-    const titleObj = typeof src.title === "object"
-      ? Object.fromEntries(Object.entries(src.title).map(([l, v]) => [l, `${v} (kopi)`]))
-      : { "en-GB": `${src.title} (kopi)` };
+    // Suffiks " (kopi)" på tittelen i alle locales så listen viser kopien tydelig.
+    const srcTitle = envelope.module?.module?.title;
+    if (srcTitle && typeof srcTitle === "object") {
+      envelope.module.module.title = Object.fromEntries(
+        Object.entries(srcTitle).map(([l, v]) => [l, v ? `${v} (kopi)` : v])
+      );
+    } else if (typeof srcTitle === "string" && srcTitle) {
+      envelope.module.module.title = `${srcTitle} (kopi)`;
+    }
 
-    const createBody = await apiFetch("/api/admin/content/modules", getHeaders, {
+    const importResult = await apiFetch("/api/admin/content/modules/import", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ title: titleObj, certificationLevel: src.certificationLevel }),
+      body: JSON.stringify({ payload: envelope, mode: "createNew" }),
     });
-    const newId = createBody.module?.id ?? createBody.id;
-    if (!newId) throw new Error("Fikk ikke ID for kopi.");
+    if (!importResult?.moduleId) throw new Error("Import-respons mangler moduleId.");
 
-    // Copy rubric version
-    if (cfg?.rubricVersion) {
-      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(newId)}/rubric-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({ criteria: cfg.rubricVersion.criteria, scalingRule: cfg.rubricVersion.scalingRule, active: true }),
-      });
-    }
-
-    // Copy prompt template version
-    if (cfg?.promptTemplateVersion) {
-      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(newId)}/prompt-template-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({ systemPrompt: cfg.promptTemplateVersion.systemPrompt, userPromptTemplate: cfg.promptTemplateVersion.userPromptTemplate, examples: cfg.promptTemplateVersion.examples, active: true }),
-      });
-    }
-
-    showToast(`Kopi av «${sourceTitle}» opprettet.`, "success");
+    showToast(`Full kopi av «${sourceTitle}» opprettet.`, "success");
     await loadModules();
   } catch (err) {
     showToast(err?.message ?? "Kunne ikke duplisere modul.", "error");
@@ -453,7 +446,6 @@ function showCoursesPopover(anchor, moduleId) {
 function validateCreateForm() {
   const ok = newModuleTitle.value.trim().length > 0 && newModuleLevel.value !== "";
   createOpenConversation.disabled = !ok;
-  createOpenAdvanced.disabled = !ok;
 }
 
 function openCreateDialog() {
@@ -461,7 +453,6 @@ function openCreateDialog() {
   newModuleLevel.value = "";
   createModuleError.hidden = true;
   createOpenConversation.disabled = true;
-  createOpenAdvanced.disabled = true;
   createModuleDialog.showModal();
   newModuleTitle.focus();
 }
@@ -538,13 +529,14 @@ async function runPurge() {
   }
 }
 
-async function createAndNavigate(target) {
+// v1.2.12 (#348): én create-path — opprett modul og åpne i Samtale (anbefalt vei per
+// pilot-funn). Bruker kan bytte til Avansert via rad-handlingen "Åpne i Avansert" etterpå.
+async function createAndNavigate() {
   const title = newModuleTitle.value.trim();
   const level = newModuleLevel.value;
   if (!title || !level) return;
 
   createOpenConversation.disabled = true;
-  createOpenAdvanced.disabled = true;
   createModuleError.hidden = true;
 
   try {
@@ -556,16 +548,11 @@ async function createAndNavigate(target) {
     if (!newId) throw new Error("Fikk ikke modul-ID.");
 
     createModuleDialog.close();
-    if (target === "conversation") {
-      window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/conversation`;
-    } else {
-      window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/advanced`;
-    }
+    window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/conversation`;
   } catch (err) {
     createModuleError.textContent = err?.message ?? "Kunne ikke opprette modul.";
     createModuleError.hidden = false;
     createOpenConversation.disabled = false;
-    createOpenAdvanced.disabled = false;
   }
 }
 
@@ -752,8 +739,7 @@ async function init() {
   });
   newModuleTitle?.addEventListener("input", validateCreateForm);
   newModuleLevel?.addEventListener("change", validateCreateForm);
-  createOpenConversation?.addEventListener("click", () => createAndNavigate("conversation"));
-  createOpenAdvanced?.addEventListener("click", () => createAndNavigate("advanced"));
+  createOpenConversation?.addEventListener("click", () => createAndNavigate());
   createCancel?.addEventListener("click", () => createModuleDialog.close());
 
   // Close popover on Escape
