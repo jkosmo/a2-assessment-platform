@@ -920,7 +920,9 @@ function updateStateRail() {
     if (hasUnsaved) {
       srChanges.innerHTML = makeSrBadge("unsaved", t("stateRail.changes.unsaved"));
     } else {
-      srChanges.innerHTML = `<span class="state-rail-value" style="color:var(--color-success)">${escapeHtml(t("stateRail.changes.saved"))}</span>`;
+      // v1.1.97: "Alt lagret" får ✓-prefiks og grønn-tint via dedikert klasse i stedet for
+       // inline style — mer fremtredende OK-indikator.
+      srChanges.innerHTML = `<span class="state-rail-value state-rail-value--saved-ok">✓ ${escapeHtml(t("stateRail.changes.saved"))}</span>`;
     }
   }
 
@@ -1609,7 +1611,11 @@ async function saveDraftBundleInBackground(options = {}) {
   // (because the user just clicked Lagre utkast and _deactivateAll fired), so users were
   // stuck with no way forward. Same action set as draft-ready menu — user can edit,
   // revise, open Avansert, restart, or retry Lagre.
-  const buildSaveRecoveryActions = () => {
+  // v1.1.97: when MCQ is missing (cancelled or failed generation), recovery menu also
+  // includes "Generer MCQ" so the user can re-trigger generation without going via
+  // Avansert or restart. Uses startGenerateMcqFlow which asks for source material again
+  // — friction acceptable for a rare failure-recovery case.
+  const buildSaveRecoveryActions = ({ includeGenerateMcq = false } = {}) => {
     const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
     const actionMap = {
       directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
@@ -1618,14 +1624,18 @@ async function saveDraftBundleInBackground(options = {}) {
       restart: { labelKey: "shell.draftReady.restart", action: startIdle },
       saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     };
-    return model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
+    const actions = model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
+    if (includeGenerateMcq) {
+      actions.unshift({ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() });
+    }
+    return actions;
   };
   if (!localizeValueForLocale(taskText, currentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
     return;
   }
   if (!mcqQuestions.length) {
-    logBot(() => t("shell.save.mcqRequired"), buildSaveRecoveryActions());
+    logBot(() => t("shell.save.mcqRequired"), buildSaveRecoveryActions({ includeGenerateMcq: true }));
     return;
   }
 

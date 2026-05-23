@@ -2,6 +2,38 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.97 - 2026-05-23
+
+fix(admin): MCQ recovery + saved-OK indicator + tactile button feedback (batched x3)
+
+Tre uavhengige UX-polish-fixes per ux_batching-policy.
+
+**Fix (a) — save-error recovery: "Generer MCQ"-knapp**
+
+Hvis bruker har mistet MCQ (cancellet generering eller LLM-feil) og klikker Lagre,
+viste recovery-menyen kun directEdit/revise/openEditor/restart/saveDraft. Ingen
+direkte vei til å gjenoppta MCQ-generering.
+
+`buildSaveRecoveryActions` får ny opsjon `includeGenerateMcq: true` som setter "Generer
+MCQ" først i menyen. Aktiveres for `mcqRequired`-saven (ikke taskRequired). Triggers
+`startGenerateMcqFlow()` — heavy path som spør om source material igjen, men kjent å
+fungere. Friksjon akseptabel for sjelden recovery-case.
+
+**Fix (b) — state-rail "Alt lagret" mer fremtredende**
+
+Tidligere viste `srChanges.innerHTML` "Alt lagret" som plain text med inline
+`style="color:var(--color-success)"`. Ny dedikert klasse `.state-rail-value--saved-ok`
+gir grønn bakgrunn (`#e6f4ea`) + grønn tekst (`#12613a`) + ✓-prefiks. Skiller seg
+visuelt fra øvrige nøytrale chip-verdier slik at lagre-status er åpenbar uten å lese
+teksten.
+
+**Fix (c) — tactile feedback på chat-choice-knapper**
+
+Pure CSS: `.chat-choice-btn:active:not(:disabled) { transform: scale(0.96); }` +
+`transition: transform 80ms ease-out`. Når bruker klikker en knapp, "presses" den et
+øyeblikk så klikket ble synlig før neste bot-respons (typisk ~100-500ms latency).
+Ingen JS, ingen funksjonell endring.
+
 ## 1.1.96 - 2026-05-22
 
 fix(admin): fjern MCQ Yes/No-dialog + typo-fix + tydeligere error-toast (batched x3)

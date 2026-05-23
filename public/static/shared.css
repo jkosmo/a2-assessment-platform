@@ -872,6 +872,13 @@ dialog::backdrop {
   white-space: nowrap;
 }
 
+/* v1.1.97: "Alt lagret"-tilstand får grønt skjær så det er åpenbart at lagring er OK
+   uten å lese teksten. Skiller seg fra øvrige nøytrale chip-verdier. */
+.state-rail-value--saved-ok {
+  background: #e6f4ea;
+  color: #12613a;
+}
+
 .state-rail-sep {
   color: var(--color-border-soft);
   font-size: 14px;

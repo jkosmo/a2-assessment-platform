@@ -132,7 +132,11 @@
 
       .chat-choices { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px var(--space-1) var(--space-1); max-width: 100%; }
       .chat-choices--column { flex-direction: column; align-items: flex-start; }
-      .chat-choice-btn { width: auto !important; max-width: 100% !important; padding: 6px 14px !important; font-size: 13px !important; border-radius: 999px !important; }
+      .chat-choice-btn { width: auto !important; max-width: 100% !important; padding: 6px 14px !important; font-size: 13px !important; border-radius: 999px !important; transition: transform 80ms ease-out; }
+      /* v1.1.97: subtle tactile feedback on click — knappen "presses" et øyeblikk så
+         brukeren ser at klikket ble registrert før neste bot-melding kommer. Pure CSS,
+         ingen JS, ingen påvirkning på funksjonalitet. */
+      .chat-choice-btn:active:not(:disabled) { transform: scale(0.96); }
       .chat-choice-btn:disabled { opacity: 0.45; cursor: default; }
 
       .module-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
