@@ -2232,7 +2232,22 @@ async function handleSaveContentBundle() {
   }
 
   const moduleId = resolveModuleIdOrThrow();
-  const titlePatch = normalizeLocalizedTitlePatchValue(moduleTitleInput.value, "adminContent.module.name");
+  // v1.2.29 (#361 follow-up + e2e regresjon): bruker readLocalizedFieldValue så
+  // dataset.localeOriginal (satt av setLocalizedEditorValue når dialog brukes) merges
+  // korrekt — uten dette ville save bare ha tilgang til current-locale string fra
+  // .value og kopiert den til alle locales via normalizeLocalizedTitlePatchValue
+  // (e2e: "advanced editor persists a renamed module title when saving content").
+  let titlePatch = null;
+  try {
+    const localized = readLocalizedFieldValue(moduleTitleInput, "adminContent.module.name", { required: false });
+    if (localized) {
+      titlePatch = typeof localized === "string"
+        ? { "en-GB": localized, nb: localized, nn: localized }
+        : localized;
+    }
+  } catch {
+    titlePatch = normalizeLocalizedTitlePatchValue(moduleTitleInput.value, "adminContent.module.name");
+  }
   let titleBody = null;
   if (titlePatch) {
     titleBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, headers, {

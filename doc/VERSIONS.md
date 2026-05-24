@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.30 - 2026-05-24
+
+fix(admin): handleSaveContentBundle leser ikke dataset.localeOriginal (v1.2.29 e2e-regresjon)
+
+v1.2.29 endret `applyModuleDetailsDialog` til å bruke `setLocalizedEditorValue` —
+input.value inneholder nå current-locale string, og dataset.localeOriginal lagrer hele
+locale-objektet. Men `handleSaveContentBundle` (admin-content.js L2235) kalte
+`normalizeLocalizedTitlePatchValue(moduleTitleInput.value, ...)` som bruker
+`parseLocalizedTextField` (uten dataset-bevissthet). Resultat: lagring sendte
+{en-GB: "X", nb: "X", nn: "X"} med en-GB-strengen kopiert til alle locales — andre
+locales overskrevet. E2e-test "advanced editor persists a renamed module title when
+saving content" fanget regresjonen (#nb verdi var "Renamed module" i stedet for
+"Omdøpt modul").
+
+Fix: handleSaveContentBundle bruker nå `readLocalizedFieldValue` (med required:false)
+som merger dataset.localeOriginal med current-locale edit. Bevarer eksisterende
+behavior når dataset ikke er satt (faller tilbake til normalizeLocalizedTitlePatchValue).
+
 ## 1.2.29 - 2026-05-24
 
 fix(admin): handoff-tittel rendres som JSON-streng i Samtale-preview (#361 follow-up)
