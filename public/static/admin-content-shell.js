@@ -1006,8 +1006,11 @@ function renderPreview() {
     if (cfg.mcqSetVersion) versionChainParts.push(`MCQ v${cfg.mcqSetVersion.versionNo}`);
 
     previewContent.innerHTML = buildPreviewHtml({
-      title: mod.title,
-      description: mod.description,
+      // v1.2.27 (#361 follow-up): title/description respect draft-overrides like other
+      // fields. Without this, edits handed off from Avansert (changed title/description)
+      // were ignored because mod.title from the loaded bundle always won.
+      title: (hasDraft && activeDraft.title) ? activeDraft.title : mod.title,
+      description: (hasDraft && activeDraft.description) ? activeDraft.description : mod.description,
       taskText: hasDraft ? activeDraft.taskText : (cfg.moduleVersion?.taskText ?? ""),
       assessorExpectedContent: hasDraft ? activeDraft.assessorExpectedContent : (cfg.moduleVersion?.assessorExpectedContent ?? ""),
       candidateTaskConstraints: hasDraft ? activeDraft.candidateTaskConstraints : (cfg.moduleVersion?.candidateTaskConstraints ?? ""),

@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.27 - 2026-05-24
+
+fix(admin): title/description fra handoff vises ikke i shell (#361 follow-up)
+
+Brukertest av v1.2.26 viste at title-endring fra Avansert→Shell handoff ikke ble synlig
+i Samtale-preview (kun MCQ kom igjennom). Rotårsak i `renderPreview` (shell.js ~L1009):
+
+```js
+title: mod.title,           // ← ignorerte activeDraft.title
+description: mod.description,
+taskText: hasDraft ? activeDraft.taskText : (cfg.moduleVersion?.taskText ?? ""),
+```
+
+Mens taskText og andre felt brukte `hasDraft ? activeDraft : bundle`-mønsteret, fulgte
+ikke title/description samme prinsipp. Bundle.module.title vant alltid for loaded
+moduler — så handoff'd title-endringer ble overstyrt av server-state.
+
+Fix: title og description bruker nå samme `hasDraft && activeDraft.x ? activeDraft.x : mod.x`-
+mønster som de andre feltene.
+
 ## 1.2.26 - 2026-05-24
 
 feat(admin): full working-draft handoff shell ↔ Avansert (addresses #361)
