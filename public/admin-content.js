@@ -2588,8 +2588,23 @@ function openModuleDetailsDialog(triggerBtn) {
   if (!dialog) return;
   _dialogTriggerRef = triggerBtn ?? null;
 
-  const parsedTitle = parseLocalizedSafe(moduleTitleInput.value);
-  const parsedDesc = parseLocalizedSafe(moduleDescriptionInput.value);
+  // v1.2.31 (#361 follow-up): etter v1.2.29 byttet applyModuleDetailsDialog til
+  // setLocalizedEditorValue. .value inneholder nå bare current-locale string —
+  // full locale-objekt ligger på dataset.localeOriginal. Dialog-opener må prefer
+  // dataset så reopen viser alle locale-tabs korrekt (uten dette ble alle tabs
+  // blanke når current-locale verdien var "").
+  const readLocaleSrc = (el) => {
+    const originalJson = el?.dataset?.localeOriginal;
+    if (originalJson) {
+      try {
+        const parsed = JSON.parse(originalJson);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+      } catch { /* fall through */ }
+    }
+    return parseLocalizedSafe(el?.value ?? "");
+  };
+  const parsedTitle = readLocaleSrc(moduleTitleInput);
+  const parsedDesc = readLocaleSrc(moduleDescriptionInput);
   const parsedCert = parseLocalizedSafe(moduleCertificationLevelInput.value);
 
   for (const locale of ["en-GB", "nb", "nn"]) {

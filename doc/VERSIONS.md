@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.31 - 2026-05-24
+
+fix(admin): modul-detaljer-dialog viser blank tittel etter reopen (#361 follow-up)
+
+Bruker rapporterte: «Jeg går inn i Avansert og endrer tittel fra CLS til CLS3, lukker
+dialogboks, åpner dialogboks igjen. Tittel er blank.»
+
+Rotårsak: v1.2.29 byttet applyModuleDetailsDialog til setLocalizedEditorValue så
+moduleTitleInput.value inneholder bare current-locale string + dataset.localeOriginal
+har hele locale-objektet. Men openModuleDetailsDialog (admin-content.js L2591) leste
+fortsatt rå .value via parseLocalizedSafe — som returnerer den enkle strengen, ikke
+locale-objektet. Trace med currentLocale="nb" og {en-GB:"CLS3", nb:"", nn:""}:
+.value = "" (nb verdi) → parseLocalizedSafe("") = "" → alle tabs vises blanke.
+
+Fix: ny readLocaleSrc-helper i openModuleDetailsDialog leser dataset.localeOriginal
+først, faller tilbake til parseLocalizedSafe(.value) hvis dataset ikke er satt.
+Symmetrisk med readLocalizedFieldValue-pattern fra save-flyten.
+
+Version-details og prompt dialogene har ikke samme issue fordi deres apply-funksjoner
+fortsatt bruker formatEditorValue (JSON-stringify i .value) — de leser .value
+direkte og det fungerer. Latent inconsistency, men ikke fikset i denne sliсen.
+
 ## 1.2.30 - 2026-05-24
 
 fix(admin): handleSaveContentBundle leser ikke dataset.localeOriginal (v1.2.29 e2e-regresjon)
