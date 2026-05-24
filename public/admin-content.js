@@ -2616,8 +2616,14 @@ function applyModuleDetailsDialog() {
   const isMultiLocale = (obj) => Object.values(obj).some(v => v !== obj["en-GB"]);
   const asValue = (obj) => isMultiLocale(obj) ? JSON.stringify(obj, null, 2) : (obj["en-GB"] ?? "");
 
-  moduleTitleInput.value = asValue(titles);
-  moduleDescriptionInput.value = asValue(descs);
+  // v1.2.29 (#361 follow-up): bruk setLocalizedEditorValue for title/description så
+  // input.value bare inneholder current-locale string og dataset.localeOriginal lagrer
+  // hele locale-objektet. Tidligere stringify-pattern (asValue) plasserte rå JSON i
+  // input når dialogen redigerte flere locales — det brøt handoff til Samtale fordi
+  // doWriteHandoff sendte JSON-strengen videre. certificationLevel er ikke locale-aware
+  // i save-pathen, så beholdes på asValue-mønsteret.
+  setLocalizedEditorValue(moduleTitleInput, titles, "");
+  setLocalizedEditorValue(moduleDescriptionInput, descs, "");
   moduleCertificationLevelInput.value = asValue(certs);
   moduleValidFromInput.value = document.getElementById("dlgMD_validFrom")?.value ?? "";
   moduleValidToInput.value = document.getElementById("dlgMD_validTo")?.value ?? "";
@@ -4287,33 +4293,34 @@ function navigateToConversation() {
     } catch { /* malformed JSON — leave null */ }
     // Note: assessmentBlueprint is ikke direkte redigerbart i Avansert (ingen textarea),
     // og blir hentet fra det lagrede moduleVersion-bundle på shell-side. Utelates her.
+    // v1.2.29 (#361 follow-up): bruker readLocalizedFieldValue (med required:false) for
+    // locale-aware felt så vi sender lokal-objekt når dataset.localeOriginal er satt
+    // (dvs. felt populert via setLocalizedEditorValue). Tidligere `?.value` sendte rå
+    // tekstarea-innhold — som kunne være JSON-stringified locale-objekt fra dialog-flyten
+    // (applyModuleDetailsDialog stringify-pattern), hvilket shell rendret som "" fordi
+    // localizeValueForLocale fant tom streng på current-locale uten å falle tilbake.
+    const readLocaleField = (el) => {
+      try {
+        const v = readLocalizedFieldValue(el, "adminContent.module.name", { required: false });
+        return v ?? "";
+      } catch {
+        return el?.value ?? "";
+      }
+    };
     const payload = {
       moduleId,
       source: "advanced",
       draft: {
-        title: moduleTitleInput?.value ?? "",
-        description: moduleDescriptionInput?.value ?? "",
-        taskText: moduleVersionTaskTextInput?.value ?? "",
-        candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
-        assessorExpectedContent: moduleVersionAssessorExpectedContentInput?.value ?? "",
+        title: readLocaleField(moduleTitleInput),
+        description: readLocaleField(moduleDescriptionInput),
+        taskText: readLocaleField(moduleVersionTaskTextInput),
+        candidateTaskConstraints: readLocaleField(moduleVersionCandidateTaskConstraintsInput),
+        assessorExpectedContent: readLocaleField(moduleVersionAssessorExpectedContentInput),
         mcqQuestions,
         criteria,
       },
       locale: currentLocale,
     };
-    // v1.2.28 diagnostic (#361 follow-up): log hva som faktisk skrives til handoff
-    // så vi kan diagnostisere hvorfor title ikke synes i shell. Fjernes etter rotårsak
-    // er funnet.
-    try {
-      console.log("[handoff-write-advanced]", JSON.stringify({
-        titleLen: (payload.draft.title || "").length,
-        title: (payload.draft.title || "").slice(0, 80),
-        descriptionLen: (payload.draft.description || "").length,
-        taskTextLen: (payload.draft.taskText || "").length,
-        mcqCount: payload.draft.mcqQuestions?.length ?? 0,
-        criteriaKeys: payload.draft.criteria ? Object.keys(payload.draft.criteria).length : 0,
-      }));
-    } catch { /* logging never blocks */ }
     writeHandoff(payload);
   }
 

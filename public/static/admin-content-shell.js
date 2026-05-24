@@ -1450,19 +1450,6 @@ function createSessionDraftFromLoadedModule() {
 }
 
 function applyHandoffDraft(draft) {
-  // v1.2.28 diagnostic (#361 follow-up): log hva som faktisk mottas fra handoff.
-  // Fjernes etter rotårsak for title-display-bug er funnet.
-  try {
-    console.log("[handoff-apply-shell]", JSON.stringify({
-      titleType: typeof draft?.title,
-      titleLen: (typeof draft?.title === "string" ? draft.title.length : (draft?.title ? Object.keys(draft.title).length : 0)),
-      titlePreview: typeof draft?.title === "string" ? draft.title.slice(0, 80) : JSON.stringify(draft?.title).slice(0, 80),
-      descriptionLen: typeof draft?.description === "string" ? draft.description.length : 0,
-      taskTextLen: typeof draft?.taskText === "string" ? draft.taskText.length : 0,
-      mcqCount: draft?.mcqQuestions?.length ?? 0,
-      criteriaKeys: draft?.criteria ? Object.keys(draft.criteria).length : 0,
-    }));
-  } catch { /* logging never blocks */ }
   // v1.2.26 (#361): handoff inkluderer nå title, description, criteria og assessmentBlueprint
   // i tillegg til eksisterende felt. Tomt-sjekk dekker hele settet — handoff appliseres
   // hvis noen av feltene har innhold.

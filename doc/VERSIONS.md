@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.29 - 2026-05-24
+
+fix(admin): handoff-tittel rendres som JSON-streng i Samtale-preview (#361 follow-up)
+
+Bruker fanget diagnostic-log fra v1.2.28: `[handoff-apply-shell] {titleType:"string",
+titlePreview:"{\n  \"en-GB\": \"CLS3\",\n  \"nb\": \"\",\n  \"nn\": \"\"\n}"...}`.
+Det avslørte at moduleTitleInput.value inneholdt JSON-stringified locale-objekt med
+2-space-indent — eksakt mønsteret `JSON.stringify(obj, null, 2)` produserer. Tre sammen-
+hengende feil:
+
+1. **Rotårsak**: `applyModuleDetailsDialog` (admin-content.js L2616-2619) brukte legacy
+   stringify-pattern (`isMultiLocale ? JSON.stringify(obj, null, 2) : obj["en-GB"]`) som
+   plasserte rå JSON i input.value uten å sette dataset.localeOriginal. Bypassed v1.2.22-
+   invarianten om at locale-aware felt holder current-locale string i .value og lagrer
+   hele locale-objektet på dataset. Fix: bruk `setLocalizedEditorValue` for title og
+   description (locale-aware). certificationLevel beholdes på asValue-mønsteret.
+
+2. **doWriteHandoff** (admin-content.js L4294) leste rå `moduleTitleInput?.value` — som
+   etter dialog-bruk var JSON-strengen. Andre locale-felt (taskText, criteria-input)
+   hadde samme svakhet. Fix: ny `readLocaleField`-helper bruker eksisterende
+   `readLocalizedFieldValue` (required:false) for å hente locale-objektet fra dataset
+   når det finnes, ellers plain string. Sender full locale-fidelity i handoff.
+
+3. **localizeValueForLocale** (admin-content-preview.js L24) brukte `??`-coalesce i
+   fallback-kjeden, så tom streng ("") for current-locale returnerte "" i stedet for å
+   falle tilbake til en-GB. Med locale-objekt `{en-GB:"CLS3",nb:"",nn:""}` og preview-
+   locale nb fikk bruker blank tittel selv om en-GB hadde innhold. Fix: ny
+   `pickFirstNonEmpty`-helper med truthy-sjekk (whitespace trimmet).
+
+Sammen sikrer fixene at: (a) dialog ikke korrumperer input, (b) handoff bærer full
+locale-fidelity, (c) preview faller pent tilbake mellom locales. Diagnostic-logging
+fra v1.2.28 fjernet (server-POST og console.log).
+
 ## 1.2.28 - 2026-05-24
 
 fix+diag(admin): handoff dialog-copy oppdatert + diagnostic-log (#361 follow-up)

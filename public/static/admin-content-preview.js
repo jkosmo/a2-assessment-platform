@@ -20,14 +20,29 @@ function escapeHtml(str) {
 /**
  * Resolve a potentially-localized field value to a plain string for the given locale.
  * Accepts: plain string, JSON-encoded localized object, or a localized object.
+ *
+ * v1.2.29 (#361 follow-up): fallback-kjeden bruker truthy-sjekk i stedet for ??-coalesce
+ * så tomme strenger ("") behandles som "mangler for denne locale" og faller til neste.
+ * Tidligere returnerte locale-objekt-shape `{en-GB:"X", nb:"", nn:""}` på nb-locale tom
+ * streng (riktig per ??-semantikk siden "" ikke er nullish) — som ga blank tittel i
+ * preview-pane når kun en locale var fylt ut.
  */
+function pickFirstNonEmpty(obj, keys) {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim().length > 0) return v;
+  }
+  const any = Object.values(obj).find((v) => typeof v === "string" && v.trim().length > 0);
+  return any ?? "";
+}
+
 export function localizeValueForLocale(value, locale) {
   if (!value) return "";
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed[locale] ?? parsed["nb"] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? "";
+        return pickFirstNonEmpty(parsed, [locale, "nb", "en-GB"]);
       }
     } catch {
       // plain string — return as-is
@@ -35,7 +50,7 @@ export function localizeValueForLocale(value, locale) {
     return value;
   }
   if (typeof value === "object" && !Array.isArray(value)) {
-    return value[locale] ?? value["nb"] ?? value["en-GB"] ?? Object.values(value)[0] ?? "";
+    return pickFirstNonEmpty(value, [locale, "nb", "en-GB"]);
   }
   return String(value);
 }
