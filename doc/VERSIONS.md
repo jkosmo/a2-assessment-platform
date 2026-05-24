@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.28 - 2026-05-24
+
+fix+diag(admin): handoff dialog-copy oppdatert + diagnostic-log (#361 follow-up)
+
+(1) Dialog-copy `handoff.unsaved.body` oppdatert i alle tre locales etter v1.2.26
+utvidet handoff-settet. Tidligere tekst sa «kun oppgavetekst, veiledning og MCQ» —
+nå reflektert at title, description, criteria også blir med, og spesifiserer hva som
+IKKE blir med (rubric-vekting, prompt-mal, submission-skjema, vurderingspolicy).
+
+(2) Diagnostic console.log på begge sider av handoff (`[handoff-write-advanced]` i
+Avansert, `[handoff-apply-shell]` i Samtale) for å verifisere hva som faktisk
+skrives/leses. Brukertest av v1.2.26/27 viste at title ikke kom gjennom selv om kode-
+trace ser korrekt ut. Logging avklarer rotårsak. Fjernes etter neste verifisering.
+
 ## 1.2.27 - 2026-05-24
 
 fix(admin): title/description fra handoff vises ikke i shell (#361 follow-up)

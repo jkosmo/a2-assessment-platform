@@ -4287,7 +4287,7 @@ function navigateToConversation() {
     } catch { /* malformed JSON — leave null */ }
     // Note: assessmentBlueprint is ikke direkte redigerbart i Avansert (ingen textarea),
     // og blir hentet fra det lagrede moduleVersion-bundle på shell-side. Utelates her.
-    writeHandoff({
+    const payload = {
       moduleId,
       source: "advanced",
       draft: {
@@ -4300,7 +4300,21 @@ function navigateToConversation() {
         criteria,
       },
       locale: currentLocale,
-    });
+    };
+    // v1.2.28 diagnostic (#361 follow-up): log hva som faktisk skrives til handoff
+    // så vi kan diagnostisere hvorfor title ikke synes i shell. Fjernes etter rotårsak
+    // er funnet.
+    try {
+      console.log("[handoff-write-advanced]", JSON.stringify({
+        titleLen: (payload.draft.title || "").length,
+        title: (payload.draft.title || "").slice(0, 80),
+        descriptionLen: (payload.draft.description || "").length,
+        taskTextLen: (payload.draft.taskText || "").length,
+        mcqCount: payload.draft.mcqQuestions?.length ?? 0,
+        criteriaKeys: payload.draft.criteria ? Object.keys(payload.draft.criteria).length : 0,
+      }));
+    } catch { /* logging never blocks */ }
+    writeHandoff(payload);
   }
 
   const dest = getConversationUrl();
