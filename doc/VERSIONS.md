@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.26 - 2026-05-24
+
+feat(admin): full working-draft handoff shell ↔ Avansert (addresses #361)
+
+Tidligere bare 4 felt (taskText, candidateTaskConstraints, assessorExpectedContent,
+mcqQuestions). Roundtrip mistet title/description/criteria/blueprint hvis ulagrede.
+
+**Endringer**:
+- Shell→Avansert: handoff inkluderer nå title, description, criteria, assessmentBlueprint
+  i tillegg til eksisterende sett. «Forkast utkastet og åpne Avansert»-knappen er
+  re-labeled til «Ta utkastet med til Avansert (uten å lagre)» — den DEPRECATED å
+  forkaste; nå carries draft som dirty state i Avansert.
+- Avansert→Shell: handoff inkluderer nå title, description, criteria. Blueprint
+  utelates (Avansert eksponerer ikke blueprint som textarea — shell henter fra modul-
+  bundle).
+- `applyHandoffFromShell` (Avansert) markerer riktig dirty-card per felt (moduleDetails,
+  versionDetails, mcq, rubric).
+- `applyHandoffDraft` (shell) bygger sessionDraft med utvidet patch.
+
+**Eksplisitt utelatt** (Avansert-only — shell rendrer ikke, dokumentert i
+admin-content-handoff.js):
+- rubric.scalingRule, promptTemplate, submissionSchema, assessmentPolicy
+
 ## 1.2.25 - 2026-05-24
 
 fix(reports): TS2783 duplicate courseId i course-learners-mapping (v1.2.24 CI-fix)

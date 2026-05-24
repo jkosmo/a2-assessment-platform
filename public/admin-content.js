@@ -4276,14 +4276,28 @@ function navigateToConversation() {
     const moduleId = resolveConversationModuleId({ selectedModuleId, search: location.search }) || null;
     let mcqQuestions = [];
     try { mcqQuestions = JSON.parse(mcqQuestionsJsonInput?.value || "[]"); } catch { /* leave empty */ }
+    // v1.2.26 (#361): full working-draft handoff. Inkluderer felter shell forstår:
+    // title, description, criteria, assessmentBlueprint i tillegg til eksisterende sett.
+    // Avansert-only felt (scalingRule, promptTemplate, submissionSchema, assessmentPolicy)
+    // utelates bevisst — se admin-content-handoff.js for begrunnelse.
+    let criteria = null;
+    try {
+      const rawCriteria = rubricCriteriaJsonInput?.value?.trim();
+      if (rawCriteria) criteria = JSON.parse(rawCriteria);
+    } catch { /* malformed JSON — leave null */ }
+    // Note: assessmentBlueprint is ikke direkte redigerbart i Avansert (ingen textarea),
+    // og blir hentet fra det lagrede moduleVersion-bundle på shell-side. Utelates her.
     writeHandoff({
       moduleId,
       source: "advanced",
       draft: {
+        title: moduleTitleInput?.value ?? "",
+        description: moduleDescriptionInput?.value ?? "",
         taskText: moduleVersionTaskTextInput?.value ?? "",
         candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput?.value ?? "",
         assessorExpectedContent: moduleVersionAssessorExpectedContentInput?.value ?? "",
         mcqQuestions,
+        criteria,
       },
       locale: currentLocale,
     });
@@ -4331,24 +4345,40 @@ function applyHandoffFromShell(moduleId) {
   const handoff = readAndClearHandoff(moduleId);
   if (!handoff || handoff.source !== "shell" || !handoff.draft) return;
 
-  const { taskText, candidateTaskConstraints, assessorExpectedContent, mcqQuestions } = handoff.draft;
-  if (!taskText && !candidateTaskConstraints && !assessorExpectedContent && !(mcqQuestions?.length > 0)) return;
+  // v1.2.26 (#361): full working-draft handoff. Inkluderer nå title, description, criteria
+  // og assessmentBlueprint i tillegg til eksisterende sett. Marker tilsvarende dirty-card
+  // så bruker ser at endringer er ulagrede.
+  const { title, description, taskText, candidateTaskConstraints, assessorExpectedContent, mcqQuestions, criteria, assessmentBlueprint } = handoff.draft;
+  const hasAnything = title || description || taskText || candidateTaskConstraints || assessorExpectedContent || (mcqQuestions?.length > 0) || criteria || assessmentBlueprint;
+  if (!hasAnything) return;
 
-  if (moduleVersionTaskTextInput) {
-    moduleVersionTaskTextInput.value = formatEditorValue(taskText, "");
+  if (title && moduleTitleInput) {
+    setLocalizedEditorValue(moduleTitleInput, title, "");
+    dirtyCards.add("moduleDetails");
+  }
+  if (description && moduleDescriptionInput) {
+    setLocalizedEditorValue(moduleDescriptionInput, description, "");
+    dirtyCards.add("moduleDetails");
+  }
+  if (moduleVersionTaskTextInput && taskText) {
+    setLocalizedEditorValue(moduleVersionTaskTextInput, taskText, "");
     dirtyCards.add("versionDetails");
   }
   if (moduleVersionCandidateTaskConstraintsInput && candidateTaskConstraints) {
-    moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(candidateTaskConstraints, "");
+    setLocalizedEditorValue(moduleVersionCandidateTaskConstraintsInput, candidateTaskConstraints, "");
     dirtyCards.add("versionDetails");
   }
-  if (moduleVersionAssessorExpectedContentInput) {
-    moduleVersionAssessorExpectedContentInput.value = formatEditorValue(assessorExpectedContent, "");
+  if (moduleVersionAssessorExpectedContentInput && assessorExpectedContent) {
+    setLocalizedEditorValue(moduleVersionAssessorExpectedContentInput, assessorExpectedContent, "");
     dirtyCards.add("versionDetails");
   }
   if (mcqQuestionsJsonInput && Array.isArray(mcqQuestions) && mcqQuestions.length > 0) {
     mcqQuestionsJsonInput.value = JSON.stringify(mcqQuestions, null, 2);
     dirtyCards.add("mcq");
+  }
+  if (criteria && rubricCriteriaJsonInput && typeof criteria === "object" && Object.keys(criteria).length > 0) {
+    rubricCriteriaJsonInput.value = JSON.stringify(criteria, null, 2);
+    dirtyCards.add("rubric");
   }
 
   renderModuleStatus();

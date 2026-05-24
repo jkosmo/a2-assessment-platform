@@ -8,15 +8,36 @@
  * which makes it appropriate for carrying unsaved draft data across the two pages
  * without leaking it into other tabs or across browser sessions.
  *
- * Payload shape:
+ * Payload shape (v1.2.26 — #361):
  *   {
  *     moduleId:     string,
  *     source:       "shell" | "advanced",
- *     draft:        { taskText, candidateTaskConstraints, assessorExpectedContent, mcqQuestions } | null,
+ *     draft: {
+ *       // Fields included in both directions (full working draft):
+ *       title?:                    string | LocalizedText,
+ *       description?:              string | LocalizedText,
+ *       taskText?:                 string | LocalizedText,
+ *       candidateTaskConstraints?: string | LocalizedText,
+ *       assessorExpectedContent?:  string | LocalizedText,
+ *       mcqQuestions?:             MCQQuestion[],
+ *       criteria?:                 Record<criterionId, { label, description, maxScore, candidateVisible }>,
+ *       assessmentBlueprint?:      object | string,
+ *     } | null,
  *     locale:       string,      // UI language at time of write
  *     previewLocale: string,     // preview locale at time of write (shell only)
  *     timestamp:    number,      // Date.now() at write time
  *   }
+ *
+ * INTENTIONALLY EXCLUDED from handoff (Avansert-only structures — shell doesn't
+ * render them, so roundtrip provides no product benefit):
+ *   - rubric.scalingRule (weighting model — Avansert owns)
+ *   - promptTemplate (systemPrompt, userPromptTemplate, examples — Avansert specialization)
+ *   - submissionSchema (input field schema)
+ *   - assessmentPolicy (passRules, including totalMin and borderlineWindow — Avansert owns)
+ *
+ * Unsaved edits to these fields in Avansert stay in Avansert. Roundtripping them
+ * would either (a) lose precision when shell can't represent the value, or (b)
+ * tempt shell to expose half-rendered controls.
  */
 
 const HANDOFF_KEY = "adminContent.handoff";

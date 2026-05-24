@@ -1447,16 +1447,36 @@ function createSessionDraftFromLoadedModule() {
 }
 
 function applyHandoffDraft(draft) {
-  if (!draft?.taskText && !draft?.assessorExpectedContent && !draft?.candidateTaskConstraints && !(draft?.mcqQuestions?.length > 0)) {
+  // v1.2.26 (#361): handoff inkluderer nå title, description, criteria og assessmentBlueprint
+  // i tillegg til eksisterende felt. Tomt-sjekk dekker hele settet — handoff appliseres
+  // hvis noen av feltene har innhold.
+  const hasAnything =
+    draft?.title ||
+    draft?.description ||
+    draft?.taskText ||
+    draft?.assessorExpectedContent ||
+    draft?.candidateTaskConstraints ||
+    (draft?.mcqQuestions?.length > 0) ||
+    (draft?.criteria && typeof draft.criteria === "object" && Object.keys(draft.criteria).length > 0) ||
+    draft?.assessmentBlueprint;
+  if (!hasAnything) {
     return false;
   }
-  sessionDraft = buildPreviewCandidate({
-    title: bundle?.module?.title ?? "",
-    taskText: draft.taskText ?? "",
-    assessorExpectedContent: draft.assessorExpectedContent ?? "",
-    candidateTaskConstraints: draft.candidateTaskConstraints ?? "",
-    mcqQuestions: draft.mcqQuestions ?? [],
-  });
+  const patch = {
+    title: draft?.title ?? bundle?.module?.title ?? "",
+    description: draft?.description ?? bundle?.module?.description,
+    taskText: draft?.taskText ?? "",
+    assessorExpectedContent: draft?.assessorExpectedContent ?? "",
+    candidateTaskConstraints: draft?.candidateTaskConstraints ?? "",
+    mcqQuestions: draft?.mcqQuestions ?? [],
+  };
+  if (draft?.criteria && typeof draft.criteria === "object" && Object.keys(draft.criteria).length > 0) {
+    patch.criteria = draft.criteria;
+  }
+  if (draft?.assessmentBlueprint) {
+    patch.assessmentBlueprint = draft.assessmentBlueprint;
+  }
+  sessionDraft = buildPreviewCandidate(patch);
   previewDraft = null;
   sessionState = "draft-pending";
   renderPreviewLocaleBar();
@@ -3697,8 +3717,26 @@ function openAdvancedEditor(moduleId) {
   }
 
   // Has unsaved work — ask what to do
-  const navigateWithoutDraft = () => {
-    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale });
+  // v1.2.26 (#361): "Take draft" carries the FULL sessionDraft to Avansert as a handoff
+  // so user can continue editing in Avansert without losing unsaved work. Previously
+  // this action discarded the draft.
+  const takeDraftAndNavigate = () => {
+    writeHandoff({
+      moduleId: moduleId ?? null,
+      source: "shell",
+      draft: {
+        title: sessionDraft?.title,
+        description: sessionDraft?.description,
+        taskText: sessionDraft?.taskText,
+        candidateTaskConstraints: sessionDraft?.candidateTaskConstraints,
+        assessorExpectedContent: sessionDraft?.assessorExpectedContent,
+        mcqQuestions: sessionDraft?.mcqQuestions ?? [],
+        criteria: sessionDraft?.criteria ?? null,
+        assessmentBlueprint: sessionDraft?.assessmentBlueprint ?? null,
+      },
+      locale: currentLocale,
+      previewLocale,
+    });
     logBot(() => t("shell.module.openingEditor"));
     setTimeout(() => { location.href = url; }, 400);
   };
@@ -3713,7 +3751,7 @@ function openAdvancedEditor(moduleId) {
 
   logBot(() => t("handoff.hasDraft.prompt"), [
     { labelKey: "handoff.hasDraft.saveAndOpen", action: saveAndNavigate },
-    { labelKey: "handoff.hasDraft.discard", action: navigateWithoutDraft },
+    { labelKey: "handoff.hasDraft.discard", action: takeDraftAndNavigate },
     { labelKey: "shell.action.cancel", action: showModuleActions },
   ]);
 }
