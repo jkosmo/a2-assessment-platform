@@ -863,6 +863,69 @@ function formatEditorValue(value, fallback = "") {
   return JSON.stringify(value, null, 2);
 }
 
+// v1.2.22 (#462): for locale-aware textfields (taskText, assessorExpectedContent,
+// candidateTaskConstraints, moduleTitle, mcqSetTitle, prompt-template feltene), vis
+// kun current-locale-verdien i textarea i stedet for å dumpe hele locale-objektet
+// som rå JSON. Original locale-objekt lagres på el.dataset.localeOriginal slik at
+// readLocalizedFieldValue kan merge på save uten å miste de andre locale-ene.
+//
+// Bevarer to escape-hatches:
+//   1. Bruker kan fortsatt taste JSON-objekt manuelt — readLocalizedFieldValue
+//      detekterer det og bruker eksisterende parseLocalizedTextField-pathen.
+//   2. For ikke-locale-objekt-verdier faller funksjonen tilbake til formatEditorValue
+//      (rå JSON for konfig-blobs som rubric-criteria, mcq-questions).
+function setLocalizedEditorValue(el, value, fallback = "") {
+  if (!el) return;
+  delete el.dataset.localeOriginal;
+  // Locale-objekt sendt direkte fra server: lagre original, vis lokalisert verdi.
+  if (value && typeof value === "object" && !Array.isArray(value) && isLocalizedContentObject(value)) {
+    el.dataset.localeOriginal = JSON.stringify(value);
+    const localized = localizeContentValue(value);
+    el.value = typeof localized === "string" ? localized : "";
+    return;
+  }
+  // JSON-encoded locale-objekt (legacy lagring fra Samtale-flyt): parse, lagre, vis.
+  if (typeof value === "string" && value.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object" && isLocalizedContentObject(parsed)) {
+        el.dataset.localeOriginal = JSON.stringify(parsed);
+        const localized = localizeContentValue(parsed);
+        el.value = typeof localized === "string" ? localized : "";
+        return;
+      }
+    } catch { /* fall through to formatEditorValue */ }
+  }
+  el.value = formatEditorValue(value, fallback);
+}
+
+// v1.2.22 (#462): companion til setLocalizedEditorValue. Bygger save-payloaden ved å
+// merge brukerens tekstendring inn i den lagrede locale-objekt-originalen (kun
+// current-locale oppdateres). Hvis brukeren har skrevet JSON manuelt eller feltet
+// ikke har en lagret original, faller funksjonen tilbake til parseLocalizedTextField.
+function readLocalizedFieldValue(el, fieldLabelKey, options = { required: true }) {
+  const raw = typeof el?.value === "string" ? el.value : String(el?.value ?? "");
+  const originalJson = el?.dataset?.localeOriginal;
+  // No tracked original or user explicitly typed a JSON-blob → eksisterende parser.
+  if (!originalJson || raw.trim().startsWith("{")) {
+    return parseLocalizedTextField(raw, fieldLabelKey, options);
+  }
+  let original;
+  try { original = JSON.parse(originalJson); } catch { original = null; }
+  if (!original || typeof original !== "object" || !isLocalizedContentObject(original)) {
+    return parseLocalizedTextField(raw, fieldLabelKey, options);
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    if (options.required) {
+      throw new Error(`${t("adminContent.errors.valueRequiredPrefix")} ${t(fieldLabelKey)}`);
+    }
+    return undefined;
+  }
+  // Merge: behold andre locales, oppdater current-locale fra textarea.
+  return { ...original, [currentLocale]: trimmed };
+}
+
 function formatDateInputValue(value) {
   if (!value) {
     return "";
@@ -1193,8 +1256,10 @@ function normalizeImportDraftPayload(payload) {
 }
 
 function applyImportDraftToForm(draft) {
-  moduleTitleInput.value = formatEditorValue(draft?.module?.title, "");
-  moduleDescriptionInput.value = formatEditorValue(draft?.module?.description, "");
+  // v1.2.22 (#462): bruk setLocalizedEditorValue for locale-aware textfelt så textarea
+  // viser current-locale-verdi (ikke rå JSON) og original locale-objekt holdes på dataset.
+  setLocalizedEditorValue(moduleTitleInput, draft?.module?.title, "");
+  setLocalizedEditorValue(moduleDescriptionInput, draft?.module?.description, "");
   moduleCertificationLevelInput.value = formatEditorValue(draft?.module?.certificationLevel, "");
   moduleValidFromInput.value = typeof draft?.module?.validFrom === "string" ? draft.module.validFrom : "";
   moduleValidToInput.value = typeof draft?.module?.validTo === "string" ? draft.module.validTo : "";
@@ -1202,16 +1267,16 @@ function applyImportDraftToForm(draft) {
   rubricCriteriaJsonInput.value = formatEditorValue(draft?.rubric?.criteria, "");
   rubricScalingRuleJsonInput.value = formatEditorValue(draft?.rubric?.scalingRule, "");
 
-  promptSystemPromptInput.value = formatEditorValue(draft?.promptTemplate?.systemPrompt, "");
-  promptUserPromptTemplateInput.value = formatEditorValue(draft?.promptTemplate?.userPromptTemplate, "");
+  setLocalizedEditorValue(promptSystemPromptInput, draft?.promptTemplate?.systemPrompt, "");
+  setLocalizedEditorValue(promptUserPromptTemplateInput, draft?.promptTemplate?.userPromptTemplate, "");
   promptExamplesJsonInput.value = formatEditorValue(draft?.promptTemplate?.examples, "[]");
 
-  mcqSetTitleInput.value = formatEditorValue(draft?.mcqSet?.title, "");
+  setLocalizedEditorValue(mcqSetTitleInput, draft?.mcqSet?.title, "");
   mcqQuestionsJsonInput.value = formatEditorValue(draft?.mcqSet?.questions, "[]");
 
-  moduleVersionTaskTextInput.value = formatEditorValue(draft?.moduleVersion?.taskText, "");
-  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(draft?.moduleVersion?.candidateTaskConstraints, "");
-  moduleVersionAssessorExpectedContentInput.value = formatEditorValue(draft?.moduleVersion?.assessorExpectedContent, "");
+  setLocalizedEditorValue(moduleVersionTaskTextInput, draft?.moduleVersion?.taskText, "");
+  if (moduleVersionCandidateTaskConstraintsInput) setLocalizedEditorValue(moduleVersionCandidateTaskConstraintsInput, draft?.moduleVersion?.candidateTaskConstraints, "");
+  setLocalizedEditorValue(moduleVersionAssessorExpectedContentInput, draft?.moduleVersion?.assessorExpectedContent, "");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(draft?.moduleVersion?.submissionSchemaJson ?? draft?.moduleVersion?.submissionSchema),
     null,
@@ -1237,8 +1302,9 @@ function populateFormFromModuleExport(moduleExport) {
   const mcqSetVersion = selectedConfiguration.mcqSetVersion ?? null;
   const module = moduleExport?.module ?? null;
 
-  moduleTitleInput.value = formatEditorValue(module?.title, "");
-  moduleDescriptionInput.value = formatEditorValue(module?.description, "");
+  // v1.2.22 (#462): locale-aware textfelt via setLocalizedEditorValue.
+  setLocalizedEditorValue(moduleTitleInput, module?.title, "");
+  setLocalizedEditorValue(moduleDescriptionInput, module?.description, "");
   moduleCertificationLevelInput.value = formatEditorValue(module?.certificationLevel, "");
   moduleValidFromInput.value = typeof module?.validFrom === "string" ? module.validFrom : "";
   moduleValidToInput.value = typeof module?.validTo === "string" ? module.validTo : "";
@@ -1246,16 +1312,16 @@ function populateFormFromModuleExport(moduleExport) {
   rubricCriteriaJsonInput.value = formatEditorValue(rubricVersion?.criteria, "");
   rubricScalingRuleJsonInput.value = formatEditorValue(rubricVersion?.scalingRule, "");
 
-  promptSystemPromptInput.value = formatEditorValue(promptTemplateVersion?.systemPrompt, "");
-  promptUserPromptTemplateInput.value = formatEditorValue(promptTemplateVersion?.userPromptTemplate, "");
+  setLocalizedEditorValue(promptSystemPromptInput, promptTemplateVersion?.systemPrompt, "");
+  setLocalizedEditorValue(promptUserPromptTemplateInput, promptTemplateVersion?.userPromptTemplate, "");
   promptExamplesJsonInput.value = formatEditorValue(promptTemplateVersion?.examples, "[]");
 
-  mcqSetTitleInput.value = formatEditorValue(mcqSetVersion?.title, "");
+  setLocalizedEditorValue(mcqSetTitleInput, mcqSetVersion?.title, "");
   mcqQuestionsJsonInput.value = formatEditorValue(mcqSetVersion?.questions, "[]");
 
-  moduleVersionTaskTextInput.value = formatEditorValue(moduleVersion?.taskText, "");
-  if (moduleVersionCandidateTaskConstraintsInput) moduleVersionCandidateTaskConstraintsInput.value = formatEditorValue(moduleVersion?.candidateTaskConstraints, "");
-  moduleVersionAssessorExpectedContentInput.value = formatEditorValue(moduleVersion?.assessorExpectedContent, "");
+  setLocalizedEditorValue(moduleVersionTaskTextInput, moduleVersion?.taskText, "");
+  if (moduleVersionCandidateTaskConstraintsInput) setLocalizedEditorValue(moduleVersionCandidateTaskConstraintsInput, moduleVersion?.candidateTaskConstraints, "");
+  setLocalizedEditorValue(moduleVersionAssessorExpectedContentInput, moduleVersion?.assessorExpectedContent, "");
   moduleVersionSubmissionSchemaInput.value = JSON.stringify(
     normalizeSubmissionSchemaToSingleField(moduleVersion?.submissionSchema),
     null,
@@ -1789,8 +1855,9 @@ async function loadModules(options = {}) {
 
 async function handleCreateModule(options = { silent: false }) {
   const payload = {
-    title: parseLocalizedTextField(moduleTitleInput.value, "adminContent.module.name"),
-    description: parseLocalizedTextField(moduleDescriptionInput.value, "adminContent.module.description", {
+    // v1.2.22 (#462): bruk readLocalizedFieldValue så locale-objekter merges.
+    title: readLocalizedFieldValue(moduleTitleInput, "adminContent.module.name"),
+    description: readLocalizedFieldValue(moduleDescriptionInput, "adminContent.module.description", {
       required: false,
     }),
     certificationLevel: parseLocalizedTextField(
@@ -2049,12 +2116,18 @@ async function handleCreatePromptTemplateVersion(options = { silent: false }) {
   // populateFormFromModuleExport wiped setDefaultFormValues' contents). Mirrors the shell
   // resolveCurrentPromptPayload behaviour so shell-save and Avansert-save produce
   // equivalent results. #447 follow-up.
-  const systemPromptInput = (promptSystemPromptInput.value ?? "").trim() || t("adminContent.defaults.systemPrompt");
-  const userPromptInput = (promptUserPromptTemplateInput.value ?? "").trim() || t("adminContent.defaults.userPromptTemplate");
+  // v1.2.22 (#462): bruk readLocalizedFieldValue så locale-objektet bevares. Hvis bruker
+  // har tømt feltet, fall tilbake til default (plain string).
+  const systemPromptHasUserInput = (promptSystemPromptInput.value ?? "").trim().length > 0;
+  const userPromptHasUserInput = (promptUserPromptTemplateInput.value ?? "").trim().length > 0;
   const examplesInput = (promptExamplesJsonInput.value ?? "").trim() || t("adminContent.defaults.examplesJson");
   const payload = {
-    systemPrompt: parseLocalizedTextField(systemPromptInput, "adminContent.prompt.systemPrompt"),
-    userPromptTemplate: parseLocalizedTextField(userPromptInput, "adminContent.prompt.userPromptTemplate"),
+    systemPrompt: systemPromptHasUserInput
+      ? readLocalizedFieldValue(promptSystemPromptInput, "adminContent.prompt.systemPrompt")
+      : parseLocalizedTextField(t("adminContent.defaults.systemPrompt"), "adminContent.prompt.systemPrompt"),
+    userPromptTemplate: userPromptHasUserInput
+      ? readLocalizedFieldValue(promptUserPromptTemplateInput, "adminContent.prompt.userPromptTemplate")
+      : parseLocalizedTextField(t("adminContent.defaults.userPromptTemplate"), "adminContent.prompt.userPromptTemplate"),
     examples: parseJsonField(examplesInput, "adminContent.prompt.examplesJson"),
   };
 
@@ -2076,7 +2149,8 @@ async function handleCreatePromptTemplateVersion(options = { silent: false }) {
 async function handleCreateMcqSetVersion(options = { silent: false }) {
   const moduleId = resolveModuleIdOrThrow();
   const payload = {
-    title: parseLocalizedTextField(mcqSetTitleInput.value, "adminContent.mcq.setTitle"),
+    // v1.2.22 (#462): readLocalizedFieldValue merger med lagret locale-objekt.
+    title: readLocalizedFieldValue(mcqSetTitleInput, "adminContent.mcq.setTitle"),
     questions: parseJsonField(mcqQuestionsJsonInput.value, "adminContent.mcq.questionsJson"),
   };
 
@@ -2109,14 +2183,14 @@ async function handleCreateModuleVersion(options = { silent: false }) {
     ? parseJsonField(rawAssessmentPolicy, "adminContent.moduleVersion.assessmentPolicyJson")
     : undefined;
   const payload = {
-    taskText: parseLocalizedTextField(moduleVersionTaskTextInput.value, "adminContent.moduleVersion.taskText"),
-    candidateTaskConstraints: parseLocalizedTextField(
-      moduleVersionCandidateTaskConstraintsInput?.value ?? "",
-      "adminContent.moduleVersion.candidateTaskConstraints",
-      { required: false },
-    ),
-    assessorExpectedContent: parseLocalizedTextField(
-      moduleVersionAssessorExpectedContentInput.value,
+    // v1.2.22 (#462): readLocalizedFieldValue merger med lagret locale-objekt for de
+    // tre locale-aware moduleVersion-feltene.
+    taskText: readLocalizedFieldValue(moduleVersionTaskTextInput, "adminContent.moduleVersion.taskText"),
+    candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput
+      ? readLocalizedFieldValue(moduleVersionCandidateTaskConstraintsInput, "adminContent.moduleVersion.candidateTaskConstraints", { required: false })
+      : undefined,
+    assessorExpectedContent: readLocalizedFieldValue(
+      moduleVersionAssessorExpectedContentInput,
       "adminContent.moduleVersion.assessorExpectedContent",
       { required: false },
     ),

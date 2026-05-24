@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.22 - 2026-05-23
+
+slice: locale-aware textarea-display + kollaps modulliste (closes #462, closes #465)
+
+**#462 — rå JSON i Avansert-textareas**
+
+`formatEditorValue` viste locale-objekter som rå `{"en-GB":"...","nb":"..."}`-blob i
+textarea-feltene. Fikset med to nye helpers i `admin-content.js`:
+
+- `setLocalizedEditorValue(el, value)` — viser current-locale-verdi i textarea, lagrer
+  original locale-objekt på `el.dataset.localeOriginal`. Aksepterer både locale-objekt
+  direkte og JSON-encoded locale-objekt-string (legacy lagring fra Samtale).
+- `readLocalizedFieldValue(el, fieldLabelKey, options)` — merger brukerens textarea-tekst
+  inn i den lagrede originalen ved save (kun current-locale oppdateres, andre bevart).
+  Hvis bruker har skrevet en JSON-blob manuelt, faller den tilbake til
+  `parseLocalizedTextField` så multi-locale-edit via JSON fortsatt fungerer.
+
+Anvendt på 8 locale-aware felt: moduleTitle, moduleDescription, mcqSetTitle,
+moduleVersionTaskText, moduleVersionCandidateTaskConstraints,
+moduleVersionAssessorExpectedContent, promptSystemPrompt, promptUserPromptTemplate.
+
+Ikke-locale-felt (rubric-criteria, mcq-questions, assessment-policy) bruker fortsatt
+`formatEditorValue` / rå JSON som før.
+
+**Kjent begrensning**: locale-switching mid-edit oppdaterer ikke textarea-innholdet
+automatisk. Bytte av locale påvirker bare nyåpnede moduler. Dokumentert som
+follow-up-issue om det blir et reelt problem i bruk.
+
+**#465 — kollaps modulliste i Participant**
+
+Når deltakeren aktiverer en modul, kollapses modullisten (og hjelpeteksten) i
+participant-UI-en så modul-innholdet får mer plass. Header + «Last moduler»-knappen
+forblir synlig. Klikk på «Last moduler» ekspanderer listen igjen.
+
+Implementert som CSS-klasse `.module-list-collapsed` på `#moduleListSection` med
+`display: none` på `#moduleList` + `#moduleSelectionHint` + summary-hint.
+
 ## 1.2.21 - 2026-05-23
 
 fix(admin): #464 borderlineWindow ble stripped av zod-schema på lagring

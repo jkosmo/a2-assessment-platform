@@ -22,6 +22,11 @@
       .module-title { font-weight: 600; }
       /* v1.2.20 (#461): versjonsnummer diskret etter modul-tittel for support/debug. */
       .module-version-tag { font-weight: 400; font-size: 11px; color: var(--color-meta, #666); }
+      /* v1.2.22 (#465): kollaps modulliste + hjelpetekst når en modul er aktivert. Header
+         + Load-knapp er fortsatt synlig så bruker kan ekspandere igjen. */
+      #moduleListSection.module-list-collapsed #moduleList,
+      #moduleListSection.module-list-collapsed #moduleSelectionHint,
+      #moduleListSection.module-list-collapsed [data-i18n="modules.summaryHint"] { display: none; }
       .module-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-1); }
       .module-status-badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 10px; }
       .module-status-badge.completed { color: #1f7a4d; background: #e6f5ec; }
@@ -133,7 +138,10 @@
       <div id="courseAccordion" class="course-accordion"></div>
     </section>
 
-    <section class="card">
+    <!-- v1.2.22 (#465): seksjon kan kollapses når en modul er aktivert, så innholdet får
+         mer plass. Kollapser kun selve modullisten (header + Load-knapp er fortsatt synlig
+         så bruker kan klikke for å ekspandere igjen). -->
+    <section class="card" id="moduleListSection">
       <h2 data-i18n="modules.title">Modules</h2>
       <button id="loadModules" class="btn-secondary" data-i18n="modules.load">Load modules</button>
       <div class="small" data-i18n="modules.summaryHint">Select one module card before creating submission.</div>

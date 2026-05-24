@@ -949,6 +949,10 @@ function activateParticipantModule(moduleId, options = {}) {
   restoreDraftForSelectedModule(true);
   updateCreateSubmissionAvailability();
 
+  // v1.2.22 (#465): kollaps modullisten så modul-innholdet får mer plass. Bruker kan
+  // ekspandere igjen ved å klikke «Last moduler»-knappen.
+  document.getElementById("moduleListSection")?.classList.add("module-list-collapsed");
+
   if (savedDraft.saved && savedDraft.meaningful && previousModuleId && previousModuleId !== moduleId) {
     showToast(t("draft.savedSwitchToast").replace("{module}", savedDraft.title), "info");
   }
@@ -2238,6 +2242,9 @@ loadMeButton.addEventListener("click", async () => {
 });
 
 loadModulesButton.addEventListener("click", async () => {
+  // v1.2.22 (#465): klikk på "Last moduler" ekspanderer modullisten igjen om den var
+  // kollapset etter modul-aktivering.
+  document.getElementById("moduleListSection")?.classList.remove("module-list-collapsed");
   await runWithBusyButton(loadModulesButton, async () => {
     try {
       showLoading(moduleList, { rows: 3, variant: "cards" });
