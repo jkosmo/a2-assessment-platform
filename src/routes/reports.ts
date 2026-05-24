@@ -10,6 +10,7 @@ import {
   getCompletionLearnerReport,
   getMcqQualityReport,
   getManualReviewQueueReport,
+  getModuleLearnersReport,
   getPassRatesReport,
   getReportingDataQualityReport,
   getRecertificationStatusReport,
@@ -45,6 +46,13 @@ const exportQuerySchema = reportQuerySchema.extend({
     "recertification",
     "analytics-trends",
     "analytics-cohorts",
+    // v1.2.24 (#358): nye scoped learner-level eksporter. module-summary er essentially
+    // completion men eksponert under nytt navn for konsistens med course-summary. Course-
+    // eksportene krever courseId-filter (returnerer tom CSV uten).
+    "module-summary",
+    "module-learners",
+    "course-summary",
+    "course-learners",
   ]),
   format: z.literal("csv"),
 });
@@ -293,6 +301,50 @@ reportsRouter.get("/export", async (request, response) => {
     rows = (await getAnalyticsTrendsReport(filters)).rows;
   } else if (parsed.data.type === "analytics-cohorts") {
     rows = (await getAnalyticsCohortsReport(filters)).rows;
+  } else if (parsed.data.type === "module-summary") {
+    // v1.2.24 (#358): alias for completion (én rad per modul, aggregert).
+    rows = (await getCompletionReport(filters)).rows;
+  } else if (parsed.data.type === "module-learners") {
+    // v1.2.24 (#358): learner-level på tvers av moduler i aktive filters. Bruker
+    // getModuleLearnersReport som tolererer manglende moduleId-filter.
+    rows = (await getModuleLearnersReport(filters)).rows;
+  } else if (parsed.data.type === "course-summary") {
+    // v1.2.24 (#358): aggregert per kurs. Eksisterende getCourseReport flatset for CSV —
+    // moduleBreakdown serialiseres som komma-separert liste i én kolonne for å holde
+    // CSV-format flatt. Kunder som vil ha modul-detaljer bruker module-summary i tillegg.
+    const courseReport = await getCourseReport({
+      courseId: filters.courseId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      orgUnit: filters.orgUnit,
+    });
+    rows = courseReport.rows.map((row) => ({
+      scopeType: "course" as const,
+      courseId: row.courseId,
+      courseTitle: row.courseTitle,
+      enrolledParticipants: row.enrolledParticipants,
+      completedParticipants: row.completedParticipants,
+      completionRate: row.completionRate,
+      moduleCount: row.moduleBreakdown.length,
+    }));
+  } else if (parsed.data.type === "course-learners") {
+    // v1.2.24 (#358): course-learners krever courseId-filter (én rad per learner per
+    // kurs). Uten courseId returnerer vi tom CSV — alternativet hadde vært å iterere
+    // alle kurs, men det blir potensielt N+1 queries og er ikke spec'd ennå.
+    if (!filters.courseId) {
+      rows = [];
+    } else {
+      const courseLearnerReport = await getCourseLearnerReport(filters.courseId, {
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        orgUnit: filters.orgUnit,
+      });
+      rows = courseLearnerReport.rows.map((row) => ({
+        scopeType: "course" as const,
+        courseId: courseLearnerReport.selectedCourseId,
+        ...row,
+      }));
+    }
   } else {
     rows = (await getAppealsReport(filters)).rows;
   }

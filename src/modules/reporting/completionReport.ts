@@ -237,6 +237,67 @@ export async function getCompletionLearnerReport(
   };
 }
 
+// v1.2.24 (#358): learner-level eksport på tvers av moduler innen aktive filters. Skiller
+// seg fra getCompletionLearnerReport ved at moduleId er optional — uten den returneres
+// learners for alle matching modules. Én rad per (user, module) — latest submission per
+// kombinasjon.
+export async function getModuleLearnersReport(
+  filters: ReportFilters,
+  locale: SupportedLocale = "en-GB",
+) {
+  const where = {
+    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? {
+          submittedAt: {
+            ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+            ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+          },
+        }
+      : {}),
+    ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+  } as const;
+
+  const submissions = await reportingRepository.findSubmissionLearnersForModuleReport(where);
+  const latestByUserModule = new Map<string, (typeof submissions)[number]>();
+
+  for (const submission of submissions) {
+    const key = `${submission.user.id}::${submission.moduleId}`;
+    if (!latestByUserModule.has(key)) {
+      latestByUserModule.set(key, submission);
+    }
+  }
+
+  const rows: Array<CompletionLearnerRow & { scopeType: "module" }> = Array.from(latestByUserModule.values()).map((submission) => {
+    const latestDecision = submission.decisions[0] ?? null;
+    return {
+      scopeType: "module",
+      participantId: submission.user.id,
+      participantName: submission.user.name,
+      participantEmail: submission.user.email,
+      participantDepartment: submission.user.department,
+      moduleId: submission.module.id,
+      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
+      status: deriveLearnerSubmissionStatus(submission.submissionStatus, latestDecision?.passFailTotal),
+      score: latestDecision?.totalScore ?? null,
+      submittedAt: submission.submittedAt.toISOString(),
+      decidedAt: latestDecision?.finalisedAt?.toISOString() ?? null,
+    };
+  });
+
+  return {
+    reportType: "module-learners",
+    filters: normalizeFilters(filters),
+    totals: {
+      learners: rows.length,
+      passed: rows.filter((row) => row.status === "PASSED").length,
+      failed: rows.filter((row) => row.status === "FAILED").length,
+      underReview: rows.filter((row) => row.status === "UNDER_REVIEW").length,
+    },
+    rows,
+  };
+}
+
 function asSubmissionStatuses(input?: string[]) {
   if (!input || input.length === 0) {
     return [];

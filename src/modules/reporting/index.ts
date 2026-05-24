@@ -6,6 +6,7 @@ export {
   getCompletionReport,
   getPassRatesReport,
   getCompletionLearnerReport,
+  getModuleLearnersReport,
 } from "./completionReport.js";
 
 export {

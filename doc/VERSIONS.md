@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.24 - 2026-05-23
+
+feat(results): 4 nye scoped CSV-eksporter (closes #358)
+
+Bygger på eksisterende `exportCsv`-mønster og legger til fire nye `type`-verdier i
+`/api/reports/export`:
+
+- **`module-summary`** — én rad per modul, aggregert. Reuser `getCompletionReport`.
+- **`module-learners`** — én rad per (learner, modul) innen aktive filters. Ny
+  `getModuleLearnersReport` i `completionReport.ts` (generaliserer
+  `getCompletionLearnerReport` til å fungere uten moduleId-filter).
+- **`course-summary`** — én rad per kurs, aggregert. Flatset
+  `getCourseReport`-output med moduleCount; modul-breakdown forblir i UI-detalj-view.
+- **`course-learners`** — én rad per (learner, kurs). Krever `courseId`-filter
+  (returnerer tom CSV uten — iterering over alle kurs er ikke spec'd ennå).
+
+Alle eksporter respekterer top-level filters (module, course, status, dateRange,
+orgUnit). Eksisterende `completion`/`pass-rates`-buttons beholdes.
+
+Frontend: fire nye knapper i Results-export-row + i18n for en-GB/nb/nn.
+
 ## 1.2.23 - 2026-05-23
 
 feat(observability): intent-classification logging i Samtale (#357 Phase A, #466 sporer Phase B)
