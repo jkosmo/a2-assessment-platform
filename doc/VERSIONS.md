@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.25 - 2026-05-24
+
+fix(reports): TS2783 duplicate courseId i course-learners-mapping (v1.2.24 CI-fix)
+
+CI fanget TS2783 i `src/routes/reports.ts:344` etter v1.2.24 — `CourseLearnerRow`
+inkluderer allerede `courseId`, så explicit `courseId: courseLearnerReport.selectedCourseId`
+ble overskrevet av spread. Lokal tsc rapporterte falskt grønt (mistenker stale cache —
+verifisert i CI etterpå). Fjernet den eksplisitte assignment-en.
+
+Lærdom: TypeScript-feil som dukker opp i CI men ikke lokalt indikerer trolig en stale
+`.tsbuildinfo` eller node_modules-cache. Trygt å stole på CI-tsc framfor lokal.
+
 ## 1.2.24 - 2026-05-23
 
 feat(results): 4 nye scoped CSV-eksporter (closes #358)

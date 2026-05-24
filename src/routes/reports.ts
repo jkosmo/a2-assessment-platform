@@ -339,9 +339,9 @@ reportsRouter.get("/export", async (request, response) => {
         dateTo: filters.dateTo,
         orgUnit: filters.orgUnit,
       });
+      // CourseLearnerRow inkluderer allerede courseId — ikke duplikat-spesifiser.
       rows = courseLearnerReport.rows.map((row) => ({
         scopeType: "course" as const,
-        courseId: courseLearnerReport.selectedCourseId,
         ...row,
       }));
     }
