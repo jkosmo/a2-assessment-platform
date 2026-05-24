@@ -115,6 +115,7 @@ let sortDirection = "asc"; // "asc" | "desc"
 const STATUS_I18N_KEYS = {
   archived: "library.status.archived",
   unpublished_draft: "library.status.unpublishedDraft",
+  published_with_draft: "library.status.publishedWithDraft",
   published: "library.status.published",
   ready: "library.status.ready",
 };
@@ -205,8 +206,10 @@ function applyFilter(modules) {
   }
   if (activeFilter === "active") result = result.filter(m => m.status !== "archived");
   else if (activeFilter === "archived") result = result.filter(m => m.status === "archived");
-  else if (activeFilter === "unpublished_draft") result = result.filter(m => m.status === "unpublished_draft");
-  else if (activeFilter === "published") result = result.filter(m => m.status === "published");
+  // v1.2.20 (#460): "har upublisert utkast"-filter dekker både modulene som aldri har vært
+  // publisert OG modulene som er live med en nyere upublisert draft.
+  else if (activeFilter === "unpublished_draft") result = result.filter(m => m.status === "unpublished_draft" || m.status === "published_with_draft");
+  else if (activeFilter === "published") result = result.filter(m => m.status === "published" || m.status === "published_with_draft");
 
   result = [...result].sort((a, b) => {
     let cmp = 0;
@@ -255,6 +258,12 @@ function renderLibrary() {
     const archiveAction = isArchived
       ? `<button class="row-action-btn" data-action="restore" data-module-id="${escapeHtml(m.id)}">Gjenopprett</button>`
       : `<button class="row-action-btn" data-action="archive" data-module-id="${escapeHtml(m.id)}">Arkiver</button>`;
+    // v1.2.20 (#459): Avpubliser-knapp synlig kun for moduler som er aktivt publisert
+    // (published eller published_with_draft). Klikk → bekreftelses-prompt → POST /unpublish.
+    const isPublished = m.status === "published" || m.status === "published_with_draft";
+    const unpublishAction = isPublished
+      ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Avpubliser</button>`
+      : "";
 
     return `<tr>
       <td class="col-name">${escapeHtml(m.title ?? m.id)}</td>
@@ -268,6 +277,7 @@ function renderLibrary() {
           <a href="${openAdvUrl}" class="row-action-btn">Åpne i Avansert</a>
           <button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>
           <button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>
+          ${unpublishAction}
           ${archiveAction}
         </div>
       </td>
@@ -331,6 +341,7 @@ function handleTableClick(event) {
   else if (action === "restore") restoreModule(moduleId, btn);
   else if (action === "duplicate") duplicateModule(moduleId, btn);
   else if (action === "export") exportModulePackage(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
+  else if (action === "unpublish") unpublishModuleFromRow(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
 }
 
 // #433 — per-row module export. Calls the versioned /export-package endpoint
@@ -387,6 +398,26 @@ async function restoreModule(moduleId, btn) {
     await loadModules();
   } catch (err) {
     showToast(err?.message ?? "Kunne ikke gjenopprette modul.", "error");
+    btn.disabled = false;
+  }
+}
+
+// v1.2.20 (#459): Avpubliser fra bibliotek-rad. Krever skrevet bekreftelse via
+// window.confirm. POSTer til samme /unpublish-endepunkt som Avansert bruker.
+async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
+  const confirmed = window.confirm(
+    `Avpubliser «${moduleTitle}»?\n\n` +
+    `Modulen blir utilgjengelig for nye innleveringer. Eksisterende innleveringer ` +
+    `går videre uforandret. Du kan publisere en versjon på nytt fra Avansert-editoren.`
+  );
+  if (!confirmed) return;
+  btn.disabled = true;
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`, getHeaders, { method: "POST" });
+    showToast(`«${moduleTitle}» avpublisert.`, "success");
+    await loadModules();
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke avpublisere modul.", "error");
     btn.disabled = false;
   }
 }

@@ -2,6 +2,53 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.20 - 2026-05-23
+
+slice: 5 backlog-issues + #462 utsatt (addresses #464, #460, #459, #461, #463)
+
+**#464 — borderlineWindow brukes nå i decisionService**
+
+Tidligere dead field. Nå: hvis `passRules.borderlineWindow.{min,max}` er satt og
+`totalScore` er i intervallet, rutes innleveringen til manuell vurdering selv om
+threshold-rules ellers gir auto-pass. `passFailTotal=false` for borderline-saker.
+Decision-reason refererer eksplisitt til borderline-vinduet.
+
+**#460 — Status-label split i to (`published_with_draft`)**
+
+`deriveLibraryStatus` returnerer nå `published_with_draft` når `activeVersionId` er
+satt men `latestVersion !== activeVersion`. Frontend viser «Live + utkast» (en-GB:
+«Live + draft», nb/nn: «Live + utkast»). Grønn bakgrunn (publisert) + gul outline
+(har upublisert draft). Filter «Har upublisert utkast» dekker både `unpublished_draft`
+og `published_with_draft`. Filter «Publiserte» dekker både `published` og
+`published_with_draft`.
+
+**#459 — Avpubliser-knapp i modul-bibliotek-rad**
+
+Ny `Avpubliser`-knapp synlig kun for moduler med status `published` eller
+`published_with_draft`. Klikk → window.confirm-dialog med tydelig melding om
+konsekvensene → POST `/modules/:id/unpublish` (samme endepunkt Avansert bruker) →
+toast + refresh.
+
+**#461 — Versjonsnummer i participant module-list**
+
+Diskret «· vN»-tag etter modul-tittel i participant-modulvalg. Publiseringsdato vises
+i tooltip. Diskret stilet (`font-size: 11px`, `color: meta`) så det ikke konkurrerer
+med tittel-presentasjonen. Hjelper support/debug å reprodusere hvilken versjon en
+deltaker fikk servert.
+
+**#463 — Dirty-detection før publisering**
+
+`handlePublishModuleVersion` sjekker nå `dirtyCards.size > 0` før POST. Hvis det er
+ulagrede endringer, vises bekreftelses-dialog som lister hvilke cards som er dirty
+og forklarer at publisering bruker SIST LAGRET versjon. Brukeren kan velge å avbryte
+og lagre først, eller fortsette publisering uten ulagrede endringer.
+
+**#462 — Utsatt**
+
+Kvikkfix for rå JSON i Avansert-textareas ville introdusert data-tap (parser ville
+overskrive locale-objekter med plain string ved første save fra Avansert). Krever
+origin-tracking + merge-på-save. Bumpet til neste slice som dedikert oppgave.
+
 ## 1.2.19 - 2026-05-23
 
 feat(review): decision-orientert case-detail layout (addresses #349, #354)

@@ -7,6 +7,10 @@ export type ModuleAssessmentPolicy = {
     totalMin?: number;
     mcqMinPercent?: number;
     practicalMinPercent?: number;
+    // v1.2.20 (#464): hvis totalScore er i [min, max], rute til manuell vurdering selv
+    // om threshold-rules ellers passerer. Brukes til å fange grensetilfeller som skal
+    // ses gjennom av en assessor før endelig pass/fail.
+    borderlineWindow?: { min: number; max: number };
   };
 };
 

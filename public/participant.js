@@ -812,6 +812,21 @@ function renderModules() {
     const title = document.createElement("div");
     title.className = "module-title";
     title.textContent = module.title;
+    // v1.2.20 (#461): vis modul-versjon diskret etter tittelen så support kan reprodusere
+    // hvilken versjon en deltaker har fått servert. Publiseringsdato vises i tooltip.
+    const versionNo = module.activeVersion?.versionNo;
+    if (versionNo != null) {
+      const versionTag = document.createElement("span");
+      versionTag.className = "module-version-tag";
+      versionTag.textContent = ` · v${versionNo}`;
+      if (module.activeVersion?.publishedAt) {
+        try {
+          const d = new Date(module.activeVersion.publishedAt);
+          versionTag.title = `Publisert ${d.toLocaleDateString()}`;
+        } catch { /* fall through — no tooltip */ }
+      }
+      title.appendChild(versionTag);
+    }
     button.appendChild(title);
 
     if (!compact && typeof module.description === "string" && module.description.trim().length > 0) {

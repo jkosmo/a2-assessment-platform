@@ -3,7 +3,16 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 
-export type ModuleLibraryStatus = "archived" | "unpublished_draft" | "published" | "ready";
+// v1.2.20 (#460): "published_with_draft" skiller mellom (a) modul som aldri har vært
+// publisert (unpublished_draft) og (b) modul som er live med eldre publisert versjon
+// pluss en nyere upublisert draft. Sistnevnte vises fortsatt til participants
+// (activeVersion er publisert), så label må kommunisere det tydelig.
+export type ModuleLibraryStatus =
+  | "archived"
+  | "unpublished_draft"
+  | "published_with_draft"
+  | "published"
+  | "ready";
 
 function deriveLibraryStatus(module: {
   archivedAt: Date | null;
@@ -15,7 +24,7 @@ function deriveLibraryStatus(module: {
   if (!latestVersion) return "ready";
   if (!module.activeVersionId) return "unpublished_draft";
   const latestIsActive = latestVersion.id === module.activeVersionId;
-  if (!latestIsActive) return "unpublished_draft";
+  if (!latestIsActive) return "published_with_draft";
   return "published";
 }
 

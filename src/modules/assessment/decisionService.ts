@@ -104,11 +104,23 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     !passesThresholds &&
     (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientEvidenceFlags);
 
+  // v1.2.20 (#464): borderline-window — totalScore i [min, max] router til manuell
+  // vurdering. Overstyrer auto-pass selv om threshold-rules ellers passerer. Brukes til
+  // grensetilfeller forfatter vil ha assessor til å se på.
+  const borderlineWindow = input.assessmentPolicy?.passRules?.borderlineWindow;
+  const isInBorderlineWindow =
+    borderlineWindow !== undefined &&
+    typeof borderlineWindow.min === "number" &&
+    typeof borderlineWindow.max === "number" &&
+    totalScore >= borderlineWindow.min &&
+    totalScore <= borderlineWindow.max;
+
   const needsManualReview =
     Boolean(input.forceManualReviewReason) ||
     totalsInconsistent ||
     hasOpenRedFlag ||
-    (llmRecommendsManualReview && !autoFailForInsufficientEvidence);
+    (llmRecommendsManualReview && !autoFailForInsufficientEvidence) ||
+    isInBorderlineWindow;
 
   const componentFailReason = !mcqGatePasses
     ? "Automatic fail: MCQ score below required minimum."
@@ -120,7 +132,9 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     ? input.forceManualReviewReason ??
       (totalsInconsistent
         ? "LLM score inconsistency detected — routed to manual review."
-        : "Automatically routed to manual review due to red flag / confidence / borderline rule.")
+        : isInBorderlineWindow
+          ? `Routed to manual review: total score ${totalScore} is in the borderline window [${borderlineWindow!.min}, ${borderlineWindow!.max}].`
+          : "Automatically routed to manual review due to red flag / confidence rule.")
     : autoFailForInsufficientEvidence
       ? "Automatic fail due to insufficient submission evidence."
       : passesThresholds
@@ -134,7 +148,10 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     passesThresholds,
     autoFailForInsufficientEvidence,
     needsManualReview,
-    passFailTotal: passesThresholds,
+    // v1.2.20 (#464): passFailTotal er false når i borderline-window — kandidaten har
+    // ikke automatisk bestått selv om threshold-rules ellers passerte. Assessor må
+    // bekrefte.
+    passFailTotal: passesThresholds && !isInBorderlineWindow,
     decisionReason,
   };
 }

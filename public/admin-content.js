@@ -2201,6 +2201,20 @@ async function handlePublishModuleVersion() {
     throw new Error(t("adminContent.errors.moduleVersionIdRequired"));
   }
 
+  // v1.2.20 (#463): hvis det finnes ulagrede endringer i noen content-cards, advar
+  // bruker før vi publiserer den lagrede versjonen. Ellers risikerer vi at brukere
+  // mister endringer de gjorde i UI-en uten å skjønne det.
+  if (dirtyCards.size > 0) {
+    const dirtyList = Array.from(dirtyCards).join(", ");
+    const confirmed = await showSimpleConfirm(
+      t("adminContent.confirm.publishWithUnsaved.title"),
+      t("adminContent.confirm.publishWithUnsaved.message").replace("{cards}", dirtyList),
+    );
+    if (!confirmed) {
+      return;
+    }
+  }
+
   const body = await apiFetch(
     `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(moduleVersionId)}/publish`,
     headers,
