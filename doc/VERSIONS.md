@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.21 - 2026-05-23
+
+fix(admin): #464 borderlineWindow ble stripped av zod-schema på lagring
+
+v1.2.20 implementerte borderlineWindow-logikken i decisionService, men brukertest
+viste at vinduet ikke faktisk persisterte: oppgitt vindu 0-90, lagret, publisert,
+deretter participant-innlevering med score i vinduet → fortsatt automatisk
+pass/fail (avhengig av threshold), aldri manuell review. Ved re-åpning av Avansert
+var vinduet borte.
+
+**Root cause**: `assessmentPolicyBodySchema.passRules` i `adminContentSchemas.ts`
+hadde kun `totalMin` som tillatt felt. Zod stripper ukjente nøkler stille uten
+`.passthrough()`, så `borderlineWindow`, `mcqMinPercent` og `practicalMinPercent`
+(alle tilbudt av UI-dialogen) ble fjernet fra payloaden før den nådde createModuleVersion.
+
+**Fix**: utvidet schemaet til å akseptere alle feltene UI-en samler inn. Backward-
+kompatibelt (alle nye felt er `.optional()`).
+
 ## 1.2.20 - 2026-05-23
 
 slice: 5 backlog-issues + #462 utsatt (addresses #464, #460, #459, #461, #463)

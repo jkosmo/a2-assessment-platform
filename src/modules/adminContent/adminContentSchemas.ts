@@ -101,6 +101,10 @@ export const submissionSchemaBodySchema = z.object({
   fields: z.array(submissionSchemaFieldSchema).min(1),
 });
 
+// v1.2.21 (#464 fix): passRules schema utvidet til å inkludere alle feltene UI-en
+// faktisk samler inn. Tidligere strippa zod borderlineWindow, mcqMinPercent og
+// practicalMinPercent silent fordi de ikke fantes i schemaet — derfor virket
+// borderline-vinduet aldri i decisionService.
 export const assessmentPolicyBodySchema = z.object({
   scoring: z
     .object({
@@ -111,6 +115,14 @@ export const assessmentPolicyBodySchema = z.object({
   passRules: z
     .object({
       totalMin: z.number().min(0).max(100),
+      mcqMinPercent: z.number().min(0).max(100).optional(),
+      practicalMinPercent: z.number().min(0).max(100).optional(),
+      borderlineWindow: z
+        .object({
+          min: z.number().min(0).max(100),
+          max: z.number().min(0).max(100),
+        })
+        .optional(),
     })
     .optional(),
 });
