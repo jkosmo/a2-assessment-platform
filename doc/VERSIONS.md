@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.23 - 2026-05-23
+
+feat(observability): intent-classification logging i Samtale (#357 Phase A, #466 sporer Phase B)
+
+Beslutning på arkitektur for #357: hybrid (regler først, LLM-fallback når regler er
+clarify/unsupported). Phase A: instrumentering. Phase B: implementasjon basert på
+faktisk pilot-data.
+
+**Endringer**:
+- `POST /api/admin/content/intent-log` (`intentLogLimiter` 60/min/bruker): server-
+  endepunktet logger structured JSON via `console.log` med prefiks `[intent-log]`.
+  Ingen DB-tabell ennå; App Service log stream / Application Insights fanger payloaden.
+- Frontend `logIntentClassificationToServer` i `admin-content-shell.js`: fire-and-forget
+  fra `runUnifiedRevision` etter `classifyShellEditInstruction`. Sender `rawInput`,
+  `intentKind`, `targets`, `locale`, `moduleId`, `hasDraft`, `hasMcq`. Feil i logging
+  påvirker aldri brukerflyt.
+- `rawInput` truncated til 500 tegn på server for safety.
+
+**Phase B sporet i #466** — etter data-innsamling: utvide rule-set + bundet LLM-classifier-
+fallback.
+
 ## 1.2.22 - 2026-05-23
 
 slice: locale-aware textarea-display + kollaps modulliste (closes #462, closes #465)

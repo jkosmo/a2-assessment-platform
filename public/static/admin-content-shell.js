@@ -2375,12 +2375,37 @@ function describeStructuredEditIntent(intent) {
   return "";
 }
 
+// v1.2.23 (#357 Phase A): instrumentering. Sender hver intent-klassifisering til server
+// så vi kan samle ekte pilot-bruker-ordbruk og bygge evidensen som Phase B (hybrid LLM-
+// fallback) trenger. Best-effort fire-and-forget — feil i loggingen skal aldri påvirke
+// brukerens flyt.
+function logIntentClassificationToServer(rawInput, intent, ctx) {
+  apiFetch(
+    "/api/admin/content/intent-log",
+    getHeaders,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        rawInput,
+        intentKind: intent?.kind ?? null,
+        targets: { draft: !!intent?.draft, mcq: !!intent?.mcq },
+        locale: currentLocale,
+        moduleId: selectedModuleId ?? null,
+        hasDraft: ctx.hasDraft,
+        hasMcq: ctx.hasMcq,
+      }),
+    },
+  ).catch(() => { /* intentional — instrumentation must never block user flow */ });
+}
+
 async function runUnifiedRevision(instruction) {
-  const intent = classifyShellEditInstruction(instruction, {
+  const classifyCtx = {
     hasDraft: !!(sessionDraft?.taskText || sessionDraft?.assessorExpectedContent),
     hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
     hasSelectedModule: !!(selectedModuleId || sessionDraft?.title || bundle?.module?.title),
-  });
+  };
+  const intent = classifyShellEditInstruction(instruction, classifyCtx);
+  logIntentClassificationToServer(instruction, intent, classifyCtx);
 
   if (intent.kind === "unsupported") {
     logBot(

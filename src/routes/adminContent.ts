@@ -72,7 +72,7 @@ import {
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
-import { generateLimiter, extractLimiter } from "../middleware/rateLimiting.js";
+import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 
 const adminContentRouter = Router();
@@ -224,6 +224,31 @@ adminContentRouter.post("/modules/purge-unpublished", async (request, response) 
   } catch (error) {
     response.status(500).json({ error: "purge_failed", message: error instanceof Error ? error.message : "unknown" });
   }
+});
+
+// v1.2.23 (#357 Phase A): instrumentering for intent-detection i Samtale-shell. Logger
+// hver klassifisering med raw-input + decision så vi kan samle ekte pilot-bruker-ordbruk
+// for å informere Phase B (hybrid LLM-fallback). Payload er fritt format — vi vil endre
+// shape mens vi lærer hvilke felt som faktisk er nyttige.
+adminContentRouter.post("/intent-log", intentLogLimiter, async (request, response) => {
+  const actorId = request.context?.userId ?? "anonymous";
+  const body = request.body && typeof request.body === "object" ? request.body : {};
+  const truncate = (s: unknown) => (typeof s === "string" ? s.slice(0, 500) : s);
+  const record = {
+    ts: new Date().toISOString(),
+    actorId,
+    rawInput: truncate(body.rawInput),
+    intentKind: body.intentKind ?? null,
+    targets: body.targets ?? null,
+    locale: body.locale ?? null,
+    moduleId: body.moduleId ?? null,
+    hasDraft: body.hasDraft ?? null,
+    hasMcq: body.hasMcq ?? null,
+  };
+  // Bevisst console.log — ingen DB-tabell ennå. App Service log stream / Application
+  // Insights fanger structured JSON. Prefiks gjør det lett å grep-e ut.
+  console.log("[intent-log]", JSON.stringify(record));
+  response.status(204).end();
 });
 
 type McqSetVersionBundle = Awaited<ReturnType<typeof getModuleContentBundle>>["versions"]["mcqSetVersions"][number];

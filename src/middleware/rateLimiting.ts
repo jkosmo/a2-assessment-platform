@@ -9,6 +9,7 @@ const assessmentRunStore = new MemoryStore();
 const mcqSubmitStore = new MemoryStore();
 const generateStore = new MemoryStore();
 const extractStore = new MemoryStore();
+const intentLogStore = new MemoryStore();
 
 function resolveRateLimitKey(request: Request) {
   return request.context?.userId ?? request.ip ?? "unknown";
@@ -100,6 +101,17 @@ export const extractLimiter = createLimiter({
   },
 });
 
+// v1.2.23 (#357 Phase A): intent-classification logging fra Samtale-shell. 60/min per
+// bruker — sjelden brukt nok at det ikke skal slå tak, men beskytter mot abuse.
+export const intentLogLimiter = createLimiter({
+  store: intentLogStore,
+  limit: 60,
+  message: {
+    error: "rate_limited",
+    message: "Too many intent-log requests. Retry in 60 seconds.",
+  },
+});
+
 export async function resetRateLimitState() {
   await Promise.all([
     generalApiStore.resetAll?.(),
@@ -108,5 +120,6 @@ export async function resetRateLimitState() {
     mcqSubmitStore.resetAll?.(),
     extractStore.resetAll?.(),
     generateStore.resetAll?.(),
+    intentLogStore.resetAll?.(),
   ]);
 }
