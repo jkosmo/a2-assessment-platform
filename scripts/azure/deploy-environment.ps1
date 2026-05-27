@@ -545,10 +545,16 @@ if ($skipPostgresUpdate -and $existingPgServer) {
   $existingKvName = (az keyvault list -g $ResourceGroupName --query "[?contains(name,'${envCode}-kv')].name" -o tsv 2>$null)
   $existingKvName = if ($existingKvName) { ($existingKvName -split "`n")[0].Trim() } else { "" }
   $existingDbPassword = $null
+  # Track which sub-case we hit so the log distinguishes a genuine rotation from an inability
+  # to verify (e.g. missing Key Vault data-plane read) — they have very different follow-ups.
+  $kvReadStatus = "kv-name-unresolved"
   if ($existingKvName) {
     $existingDbUrl = (az keyvault secret show --vault-name $existingKvName --name "DATABASE-URL" --query "value" -o tsv 2>$null)
     if ($LASTEXITCODE -eq 0) {
       $existingDbPassword = Get-PostgresPasswordFromConnectionString -ConnectionString $existingDbUrl
+      $kvReadStatus = if ([string]::IsNullOrEmpty($existingDbPassword)) { "secret-unparseable" } else { "secret-read" }
+    } else {
+      $kvReadStatus = "secret-read-failed"
     }
   }
   $skipPostgresUpdate = Resolve-PostgresSkipForCredentialSafety `
@@ -556,9 +562,11 @@ if ($skipPostgresUpdate -and $existingPgServer) {
     -ExistingPassword $existingDbPassword `
     -DesiredPassword $PostgresAdministratorPassword
   if ($skipPostgresUpdate) {
-    Write-Host "PostgreSQL admin password matches the existing DATABASE-URL secret - skip is safe (no credential drift)."
+    Write-Host "Credential-drift check (#410): existing DATABASE-URL password matches desired - skip is safe (kvRead=$kvReadStatus)."
+  } elseif ($kvReadStatus -eq "secret-read") {
+    Write-Host "Credential-drift check (#410): existing DATABASE-URL password DIFFERS from desired - password rotation intended. Forcing ARM server update so server and Key Vault change atomically."
   } else {
-    Write-Host "Forcing ARM PostgreSQL server update (password rotation intended, or existing secret unavailable) so server and Key Vault change atomically - avoids credential drift (#410)."
+    Write-Warning "Credential-drift check (#410): could not verify the existing password (kvRead=$kvReadStatus). Forcing ARM server update as the safe default. If this recurs on every deploy, the deploy identity likely lacks Key Vault data-plane read on DATABASE-URL - investigate rather than leave the server updating unconditionally."
   }
 }
 

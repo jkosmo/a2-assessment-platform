@@ -18,5 +18,5 @@
 # Track in: #468.
 # Line numbers updated for the v1.2.34 pre-flight insertion above this section (#410/#411);
 # the violation itself is unchanged and still deferred to #468.
-PS-4|scripts/azure/deploy-environment.ps1|1032
-PS-4|scripts/azure/deploy-environment.ps1|1036
+PS-4|scripts/azure/deploy-environment.ps1|1040
+PS-4|scripts/azure/deploy-environment.ps1|1044
