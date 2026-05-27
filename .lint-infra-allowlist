@@ -13,7 +13,10 @@
 # Should be replaced with `| Out-Null; Assert-LastExitCode "az role assignment create"`
 # so a failed role assignment fails the deploy hard (per CLAUDE.md invariant #6) instead
 # of silently leaving the backup vault without permission to read PG snapshots.
-# Behavioural change: failed role assignment becomes blocking instead of silent.
-# Track in: TBD follow-up issue.
-PS-4|scripts/azure/deploy-environment.ps1|994
-PS-4|scripts/azure/deploy-environment.ps1|998
+# Behavioural change: failed role assignment becomes blocking instead of silent (must
+# tolerate the idempotent RoleAssignmentExists re-run case — see issue).
+# Track in: #468.
+# Line numbers updated for the v1.2.34 pre-flight insertion above this section (#410/#411);
+# the violation itself is unchanged and still deferred to #468.
+PS-4|scripts/azure/deploy-environment.ps1|1032
+PS-4|scripts/azure/deploy-environment.ps1|1036
