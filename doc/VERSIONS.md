@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.34 - 2026-05-27
+
+fix(infra): PG pre-flight uavhengig av App Service + credential-drift-guard (#411, #410)
+
+Begge endrer PG-pre-flight-regionen i `scripts/azure/deploy-environment.ps1`, derav én PR.
+
+**#411** — `$existingPgServer` resolves nå før `if ($existingWebApp -and $existingWorkerApp)`,
+og PostgreSQL-property-pre-flighten (som setter `$skipPostgresUpdate`) er flyttet UT av den
+App Service-guarden. Tidligere ble pre-flighten hoppet over på partial teardown (PG finnes,
+App Services slettet) → ubetinget server-update risikerte ServerIsBusy-lås. Kjører nå når
+PG-serveren finnes, uavhengig av App Services.
+
+**#410** — credential-drift-guard. main.bicep skriver `kvSecretDatabaseUrl` ubetinget men
+oppdaterer serveren kun når `!skipPostgresUpdate`. Korrigert premiss: workflowene passer en
+*fast* `POSTGRES_ADMIN_PASSWORD`-secret (ikke generert per kjøring), så drift oppstår kun ved
+en passord-rotasjon som treffer skip-pathen. Fiks: skip-beslutningen leser nåværende passord
+fra DATABASE-URL-secreten — hvis ønsket ≠ nåværende (rotasjon tilsiktet) tvinges server-update
+så server + Key Vault endres atomisk (invariant #12); ved match er skip trygt; ved usikkerhet
+tvinges update (trygg retning). Ren logikk i `deploy-environment.helpers.ps1`
+(`Get-PostgresPasswordFromConnectionString`, `Resolve-PostgresSkipForCredentialSafety`) med
+Pester-tester. Ingen Bicep-endring.
+
+Rollback: revert commit. Endringen legger kun til en sikkerhets-guard (tvinger server-update
+ved rotasjon/usikkerhet) — verste utfall er en retbar ServerIsBusy, aldri credential-drift.
+
 ## 1.2.33 - 2026-05-27
 
 sec(auth): vendre MSAL lokalt + CSP/security-headers (#393)

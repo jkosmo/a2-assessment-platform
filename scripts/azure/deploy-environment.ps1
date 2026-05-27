@@ -449,6 +449,12 @@ $existingWorkerApp = (az webapp list -g $ResourceGroupName --query "[?contains(n
 $existingWebApp = if ($existingWebApp) { ($existingWebApp -split "`n")[0].Trim() } else { "" }
 $existingWorkerApp = if ($existingWorkerApp) { ($existingWorkerApp -split "`n")[0].Trim() } else { "" }
 
+# #411: resolve the PostgreSQL server name independently of App Service existence, so the
+# PG pre-flight below can run whenever the server exists (e.g. after a partial teardown
+# where the PG server remains but the App Services were deleted).
+$existingPgServer = (az postgres flexible-server list -g $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+$existingPgServer = if ($existingPgServer) { ($existingPgServer -split "`n")[0].Trim() } else { "" }
+
 $dbAllowedIpAddresses = @()
 $skipPostgresUpdate = $false
 if ($existingWebApp -and $existingWorkerApp) {
@@ -465,7 +471,7 @@ if ($existingWebApp -and $existingWorkerApp) {
 
   # Pre-flight: skip ARM firewall updates when existing rules already cover the
   # current App Service outbound IPs. Extra manual operator rules are allowed.
-  $existingPgServer = (az postgres flexible-server list -g $ResourceGroupName --query "[0].name" -o tsv 2>$null)
+  # ($existingPgServer is resolved above, before this App Service guard — #411.)
   if ($existingPgServer) {
     # Use az rest to avoid az postgres firewall-rule CLI flag churn.
     $existingRulesJson = az rest --method GET `
@@ -495,33 +501,65 @@ if ($existingWebApp -and $existingWorkerApp) {
     }
   }
 
-  # Pre-flight: skip ARM PostgreSQL server/database update when existing properties
-  # already match desired state, to avoid ServerIsBusy control-plane locks.
-  $skipPostgresUpdate = $false
-  if ($existingPgServer) {
-    $pgJson = az rest --method GET `
-      --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/${existingPgServer}?api-version=2023-12-01-preview" `
-      -o json 2>$null
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($pgJson)) {
-      $pg = $pgJson | ConvertFrom-Json
-      $skuMatch     = $pg.sku.name -eq $PostgresSkuName -and $pg.sku.tier -eq $PostgresSkuTier
-      $versionMatch = $pg.properties.version -eq $PostgresVersion
-      $storageMatch = $pg.properties.storage.storageSizeGB -eq [int]$PostgresStorageSizeGB
-      $haMatch      = $pg.properties.highAvailability.mode -eq $PostgresHighAvailabilityMode
-      $backupMatch  = $pg.properties.backup.backupRetentionDays -eq [int]$PostgresBackupRetentionDays -and
-                      $pg.properties.backup.geoRedundantBackup -eq $PostgresGeoRedundantBackup
-      if ($skuMatch -and $versionMatch -and $storageMatch -and $haMatch -and $backupMatch) {
-        Write-Host "PostgreSQL server properties match desired state - skipping ARM server update."
-        $skipPostgresUpdate = $true
-      } else {
-        Write-Host "PostgreSQL server properties differ from desired state - ARM will update server."
-      }
-    } else {
-      Write-Warning "Could not read PostgreSQL server properties; ARM will update server."
-    }
-  }
 } else {
   Write-Host "NOTE: App Services not yet deployed; dbAllowedIpAddresses will be empty on first deploy."
+}
+
+# Pre-flight: skip ARM PostgreSQL server/database update when existing properties
+# already match desired state, to avoid ServerIsBusy control-plane locks.
+# #411: this runs independently of App Service existence — it only needs the PG server
+# to exist. Previously nested inside the `if ($existingWebApp -and $existingWorkerApp)`
+# block, so a partial teardown (PG present, App Services gone) skipped it and risked a
+# ServerIsBusy lock on the unconditional server update.
+if ($existingPgServer) {
+  $pgJson = az rest --method GET `
+    --url "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/${existingPgServer}?api-version=2023-12-01-preview" `
+    -o json 2>$null
+  if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($pgJson)) {
+    $pg = $pgJson | ConvertFrom-Json
+    $skuMatch     = $pg.sku.name -eq $PostgresSkuName -and $pg.sku.tier -eq $PostgresSkuTier
+    $versionMatch = $pg.properties.version -eq $PostgresVersion
+    $storageMatch = $pg.properties.storage.storageSizeGB -eq [int]$PostgresStorageSizeGB
+    $haMatch      = $pg.properties.highAvailability.mode -eq $PostgresHighAvailabilityMode
+    $backupMatch  = $pg.properties.backup.backupRetentionDays -eq [int]$PostgresBackupRetentionDays -and
+                    $pg.properties.backup.geoRedundantBackup -eq $PostgresGeoRedundantBackup
+    if ($skuMatch -and $versionMatch -and $storageMatch -and $haMatch -and $backupMatch) {
+      Write-Host "PostgreSQL server properties match desired state - skipping ARM server update."
+      $skipPostgresUpdate = $true
+    } else {
+      Write-Host "PostgreSQL server properties differ from desired state - ARM will update server."
+    }
+  } else {
+    Write-Warning "Could not read PostgreSQL server properties; ARM will update server."
+  }
+}
+
+# #410: credential-drift guard. When we would skip the PG server update, the server keeps its
+# current admin password — but kvSecretDatabaseUrl in main.bicep is written unconditionally, so
+# skipping while the password changed would leave Key Vault ahead of the server (drift that
+# breaks the app on next restart). Read the current password from the existing DATABASE-URL
+# secret and let Resolve-PostgresSkipForCredentialSafety decide: skip only when the desired
+# password matches; otherwise force the server update so server + Key Vault change atomically
+# (infra invariant #12). Pure decision logic lives in deploy-environment.helpers.ps1 (unit-tested).
+if ($skipPostgresUpdate -and $existingPgServer) {
+  $existingKvName = (az keyvault list -g $ResourceGroupName --query "[?contains(name,'${envCode}-kv')].name" -o tsv 2>$null)
+  $existingKvName = if ($existingKvName) { ($existingKvName -split "`n")[0].Trim() } else { "" }
+  $existingDbPassword = $null
+  if ($existingKvName) {
+    $existingDbUrl = (az keyvault secret show --vault-name $existingKvName --name "DATABASE-URL" --query "value" -o tsv 2>$null)
+    if ($LASTEXITCODE -eq 0) {
+      $existingDbPassword = Get-PostgresPasswordFromConnectionString -ConnectionString $existingDbUrl
+    }
+  }
+  $skipPostgresUpdate = Resolve-PostgresSkipForCredentialSafety `
+    -RequestedSkip $skipPostgresUpdate `
+    -ExistingPassword $existingDbPassword `
+    -DesiredPassword $PostgresAdministratorPassword
+  if ($skipPostgresUpdate) {
+    Write-Host "PostgreSQL admin password matches the existing DATABASE-URL secret - skip is safe (no credential drift)."
+  } else {
+    Write-Host "Forcing ARM PostgreSQL server update (password rotation intended, or existing secret unavailable) so server and Key Vault change atomically - avoids credential drift (#410)."
+  }
 }
 
 $ipParamsFile = Join-Path (Get-TempBasePath) "a2-ip-params-$EnvironmentName.json"

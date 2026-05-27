@@ -166,3 +166,60 @@ Describe 'Resolve-AppNames' {
     { Resolve-AppNames -ArmOutputs $null -EnvCode 'stg' -ExistingAppNames @() } | Should -Not -Throw
   }
 }
+
+Describe 'Get-PostgresPasswordFromConnectionString' {
+  It 'returns $null for $null / empty / whitespace input' {
+    Get-PostgresPasswordFromConnectionString -ConnectionString $null | Should -BeNullOrEmpty
+    Get-PostgresPasswordFromConnectionString -ConnectionString '' | Should -BeNullOrEmpty
+    Get-PostgresPasswordFromConnectionString -ConnectionString '   ' | Should -BeNullOrEmpty
+  }
+
+  It 'returns $null when the string is not a parseable URI' {
+    Get-PostgresPasswordFromConnectionString -ConnectionString 'not a uri at all' | Should -BeNullOrEmpty
+  }
+
+  It 'returns $null when there is no userinfo / no password component' {
+    Get-PostgresPasswordFromConnectionString -ConnectionString 'postgresql://host:5432/db' | Should -BeNullOrEmpty
+    Get-PostgresPasswordFromConnectionString -ConnectionString 'postgresql://justuser@host:5432/db' | Should -BeNullOrEmpty
+  }
+
+  It 'extracts a simple password' {
+    $cs = 'postgresql://a2admin:SimplePw123@host.postgres.database.azure.com:5432/a2db?sslmode=require'
+    Get-PostgresPasswordFromConnectionString -ConnectionString $cs | Should -Be 'SimplePw123'
+  }
+
+  It 'URI-decodes a password with special characters (matches Bicep uriComponent round-trip)' {
+    $pw = 'P@ss:w0rd/it' + "'" + 's me!#&='
+    $enc = [System.Uri]::EscapeDataString($pw)
+    $cs = "postgresql://a2admin:${enc}@host.postgres.database.azure.com:5432/a2db?schema=public&sslmode=require"
+    Get-PostgresPasswordFromConnectionString -ConnectionString $cs | Should -Be $pw
+  }
+
+  It 'does NOT throw under StrictMode on malformed input' {
+    { Get-PostgresPasswordFromConnectionString -ConnectionString $null } | Should -Not -Throw
+    { Get-PostgresPasswordFromConnectionString -ConnectionString 'garbage' } | Should -Not -Throw
+  }
+}
+
+Describe 'Resolve-PostgresSkipForCredentialSafety' {
+  It 'returns $false when skip was not requested (regardless of passwords)' {
+    Resolve-PostgresSkipForCredentialSafety -RequestedSkip $false -ExistingPassword 'x' -DesiredPassword 'x' | Should -BeFalse
+  }
+
+  It 'returns $true when skipping and passwords match (skip is safe)' {
+    Resolve-PostgresSkipForCredentialSafety -RequestedSkip $true -ExistingPassword 'samePw' -DesiredPassword 'samePw' | Should -BeTrue
+  }
+
+  It 'returns $false when skipping but desired password differs (rotation intended)' {
+    Resolve-PostgresSkipForCredentialSafety -RequestedSkip $true -ExistingPassword 'oldPw' -DesiredPassword 'newPw' | Should -BeFalse
+  }
+
+  It 'returns $false when skipping but existing password is unknown (null/empty -> force update)' {
+    Resolve-PostgresSkipForCredentialSafety -RequestedSkip $true -ExistingPassword $null -DesiredPassword 'newPw' | Should -BeFalse
+    Resolve-PostgresSkipForCredentialSafety -RequestedSkip $true -ExistingPassword '' -DesiredPassword 'newPw' | Should -BeFalse
+  }
+
+  It 'does NOT throw under StrictMode when existing password is null' {
+    { Resolve-PostgresSkipForCredentialSafety -RequestedSkip $true -ExistingPassword $null -DesiredPassword 'x' } | Should -Not -Throw
+  }
+}

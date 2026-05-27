@@ -63,3 +63,44 @@ function Resolve-AppNames {
   if (-not $parser) { $parser = (@($ExistingAppNames) | Where-Object { $_ -match "${EnvCode}-parser" } | Select-Object -First 1) }
   return @{ web = $web; worker = $worker; parser = $parser }
 }
+
+# #410: extracts the URI-decoded password from a PostgreSQL connection string of the form
+# postgresql://user:encodedPassword@host:5432/db?params (the shape main.bicep builds for the
+# DATABASE-URL secret via uriComponent()). Returns $null when the input is empty, not a
+# parseable URI, or has no password component. UnescapeDataString reverses any percent-encoding
+# regardless of which encoder produced it, so this round-trips Bicep's uriComponent() output.
+function Get-PostgresPasswordFromConnectionString {
+  param([string]$ConnectionString)
+  if ([string]::IsNullOrWhiteSpace($ConnectionString)) { return $null }
+  $uri = $null
+  try { $uri = [System.Uri]$ConnectionString } catch { return $null }
+  if ($null -eq $uri) { return $null }
+  $userInfo = $uri.UserInfo
+  if ([string]::IsNullOrEmpty($userInfo)) { return $null }
+  $sepIdx = $userInfo.IndexOf(':')
+  if ($sepIdx -lt 0) { return $null }
+  $encoded = $userInfo.Substring($sepIdx + 1)
+  if ([string]::IsNullOrEmpty($encoded)) { return $null }
+  return [System.Uri]::UnescapeDataString($encoded)
+}
+
+# #410 credential-drift guard (pure decision). Given the skip decision from the PostgreSQL
+# property pre-flight and the passwords involved, returns the FINAL skipPostgresUpdate value.
+# main.bicep writes the DATABASE-URL secret unconditionally but only updates the server when
+# !skipPostgresUpdate -- so skipping while the password changed would leave Key Vault ahead of
+# the server (drift; breaks the app on next restart). Rules:
+# - Not skipping anyway -> $false.
+# - Existing password unknown/empty -> $false (force update; never leave KV ahead of server).
+# - Desired password differs from existing -> $false (rotation intended; force update so server
+#   and Key Vault change atomically -- infra invariant #12).
+# - Passwords match -> $true (skip is safe, no drift).
+function Resolve-PostgresSkipForCredentialSafety {
+  param(
+    [bool]$RequestedSkip,
+    [string]$ExistingPassword,
+    [string]$DesiredPassword
+  )
+  if (-not $RequestedSkip) { return $false }
+  if ([string]::IsNullOrEmpty($ExistingPassword)) { return $false }
+  return ($ExistingPassword -eq $DesiredPassword)
+}
