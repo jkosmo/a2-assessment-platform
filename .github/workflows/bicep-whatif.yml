@@ -49,6 +49,7 @@ jobs:
               postgresSkuName="${{ vars.POSTGRES_SKU_NAME }}" \
               postgresSkuTier="${{ vars.POSTGRES_SKU_TIER }}" \
               parserWorkerAuthKey="whatif-only-placeholder-not-deployed" \
+              deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
               skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
             2>&1 || true)
           echo "result<<EOF" >> "$GITHUB_OUTPUT"
