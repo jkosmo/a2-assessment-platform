@@ -134,6 +134,10 @@ jobs:
 
       - name: Log what-if to job output (no PR)
         if: inputs.pr_number == ''
+        # #472: pass via env, not inline interpolation — echo '${{ ... }}' breaks on single
+        # quotes / special chars in the diff (e.g. KQL in alert rules).
+        env:
+          WHATIF_RESULT: ${{ steps.whatif.outputs.result }}
         run: |
           echo "Production what-if output:"
-          echo '${{ steps.whatif.outputs.result }}'
+          printf '%s\n' "$WHATIF_RESULT"
