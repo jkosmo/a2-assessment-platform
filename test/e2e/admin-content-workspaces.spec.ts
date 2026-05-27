@@ -1380,7 +1380,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
   });
 
-  test("shell publish returns to the module list after confirmation", async ({ page }) => {
+  test("shell publish keeps the module loaded and shows module actions", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -1398,8 +1398,14 @@ test.describe("admin content browser coverage", () => {
     // immediately on the first click. Two clicks would race against the next bubble.
     await clickEnabledButton(page, /Publish|Publiser/);
 
-    await expect(page.locator(".module-list .module-list-item")).toContainText("Trade unions");
-    await expect(page.locator("#previewContent .preview-empty")).toBeVisible();
+    // v1.2.32 (#361/#442): after publishing, the shell reloads the module (now Live)
+    // and shows the module-actions prompt instead of dropping the author back into the
+    // full module picker. "Pick another module" remains available from there.
+    await expect(
+      page.getByText(/What would you like to do with this module|Hva vil du gjøre med denne modulen/),
+    ).toBeVisible();
+    // The full module picker is NOT shown after publish.
+    await expect(page.locator(".module-list .module-list-item")).toHaveCount(0);
   });
 
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
