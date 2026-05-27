@@ -551,7 +551,24 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       healthCheckPath: '/healthz'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
-      appSettings: [
+    }
+  }
+}
+
+// #416: App settings extracted into a separate child resource that depends on the bundled KV
+// secret AND the web MSI's read-role assignment, so KV references only resolve after the role
+// exists (the May 2026 MSI-sidecar crash root cause). This breaks the dependency cycle —
+// webAppRuntimeSecretReader needs webApp.identity.principalId, so webApp itself cannot depend
+// on its own role assignment. The settings array is unchanged; toObject() converts it to the
+// flat map the config resource requires.
+resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: webApp
+  name: 'appsettings'
+  dependsOn: [
+    kvSecretAppRuntime
+    webAppRuntimeSecretReader
+  ]
+  properties: toObject([
         {
           name: 'PROCESS_ROLE'
           value: 'web'
@@ -725,9 +742,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appInsights.properties.ConnectionString
         }
-      ]
-    }
-  }
+  ], (entry) => entry.name, (entry) => entry.value)
 }
 
 resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
@@ -775,7 +790,20 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
       healthCheckPath: '/healthz'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
-      appSettings: [
+    }
+  }
+}
+
+// #416: worker app settings extracted to a separate child resource (see webAppSettingsConfig
+// for the full rationale — breaks the MSI role-assignment dependency cycle).
+resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: workerApp
+  name: 'appsettings'
+  dependsOn: [
+    kvSecretAppRuntime
+    workerAppRuntimeSecretReader
+  ]
+  properties: toObject([
         {
           name: 'PROCESS_ROLE'
           value: 'worker'
@@ -916,9 +944,7 @@ resource workerApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appInsights.properties.ConnectionString
         }
-      ]
-    }
-  }
+  ], (entry) => entry.name, (entry) => entry.value)
 }
 
 resource workerAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
@@ -967,7 +993,20 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
       healthCheckPath: '/health'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
-      appSettings: [
+    }
+  }
+}
+
+// #416: parser app settings extracted to a separate child resource (see webAppSettingsConfig
+// for the full rationale). Parser only references the PARSER-WORKER-AUTH-KEY secret.
+resource parserAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: parserApp
+  name: 'appsettings'
+  dependsOn: [
+    kvSecretParserWorkerAuthKey
+    parserAppParserAuthSecretReader
+  ]
+  properties: toObject([
         {
           name: 'APP_ROLE'
           value: 'parser'
@@ -1015,9 +1054,7 @@ resource parserApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appInsights.properties.ConnectionString
         }
-      ]
-    }
-  }
+  ], (entry) => entry.name, (entry) => entry.value)
 }
 
 resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {

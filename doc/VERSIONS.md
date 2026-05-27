@@ -2,6 +2,38 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.35 - 2026-05-27
+
+fix(infra): App Service-settings som separate child-ressurser etter KV + role assignments (#416)
+
+Mai-2026-rotårsak: appSettings lå inline i app-ressursenes siteConfig, så de deployet i samme
+ARM-operasjon som app-en — før KV-secrets og role assignments var ferdig provisjonert. MSI-
+sidecaren kunne forsøke å resolve KV-referanser før read-rollen var på plass → app crashet ved
+første boot.
+
+Fiks: appSettings for webApp, workerApp og parserApp er trukket ut til separate
+`Microsoft.Web/sites/config@2023-12-01`-child-ressurser (`name: 'appsettings'`) med eksplisitt
+`dependsOn`:
+- webApp/workerApp → [kvSecretAppRuntime, <app>RuntimeSecretReader] (begge refererer kun
+  APP-RUNTIME-SECRETS-bundelen, #431 Stage 2)
+- parserApp → [kvSecretParserWorkerAuthKey, parserAppParserAuthSecretReader]
+
+Hvorfor child-ressurs og ikke `dependsOn` på selve app-en: role assignment-en trenger
+app-ens MSI `principalId`, så app-en kan ikke avhenge av sin egen role assignment (syklus).
+Child-config-ressursen opprettes etter app-en (identitet finnes) og etter role assignment-en,
+så KV-referanser først resolves når rollen er på plass.
+
+Settings-arrayene er flyttet VERBATIM (ikke gjenskrevet) og konvertert til den flate mappen
+config-ressursen krever via `toObject(array, e => e.name, e => e.value)` — null risiko for
+tapte settings fra manuell array→map-omskriving. Ingen `connectionStrings` finnes.
+dependsOn på `!skipRoleAssignments`-betingede readers er trygt (Bicep ignorerer dependsOn på
+ikke-deployet betinget ressurs — gjelder dagens prod SKIP_ROLE_ASSIGNMENTS=true).
+
+Verifisert: `az bicep build` rent, infra-lint grønn, 3/3 config-ressurser, 0 gjenværende inline
+appSettings. ARM what-if (staging + prod) reviewes før merge per invariant #11.
+
+Rollback: revert Bicep-commit (inline-appSettings = nåværende prod-state).
+
 ## 1.2.34 - 2026-05-27
 
 fix(infra): PG pre-flight uavhengig av App Service + credential-drift-guard (#411, #410)
