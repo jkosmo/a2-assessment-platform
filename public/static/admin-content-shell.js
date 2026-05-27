@@ -1955,14 +1955,15 @@ async function publishLatestDraftInBackground() {
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
     showToast(t("shell.publish.success"), "success");
     announceStatus(t("shell.publish.success"));
-    bundle = null;
-    selectedModuleId = null;
     sessionDraft = null;
     previewDraft = null;
     latestSavedModuleVersionId = null;
-    renderPreviewLocaleBar();
-    renderPreview();
-    await startModulePicker();
+    // UX: etter publisering, last modulen på nytt (nå Live) og vis modul-handlinger
+    // ("Hva vil du gjøre med denne modulen?") i stedet for full modul-velger. loadModule
+    // avslutter med showModuleActions() og bevarer kontekst til modulen man nettopp
+    // publiserte; "Velg en annen modul" er fortsatt tilgjengelig derfra. Samme mønster
+    // som unpublishModuleInBackground.
+    await loadModule(moduleId);
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [

@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.32 - 2026-05-24
+
+ux(admin): handoff-dialog copy + post-publish-flyt (#361/#442 follow-up)
+
+To uavhengige UX-forbedringer i samme batch (jf. UX-batching):
+
+(1) **Handoff-dialog copy** (option C, brukerfeedback): «Ulagrede endringer»-dialogen
+ved Avansert→Samtale brukte «gå tilbake», men brukeren startet i Avansert — misvisende
+retning. Endret til retningsnøytralt:
+- saveFirst: «Lagre og gå tilbake» → «Lagre og fortsett» (en: «Save and continue»)
+- discard: «Gå tilbake uten å lagre» → «Fortsett uten å lagre» (en: «Continue without saving»)
+- brødtekst: «blir med tilbake til samtalen» → «blir med til samtalen» (en: «carry back» → «carry over»)
+Oppdatert i alle tre locales (begge translation-sett) + HTML-fallback i
+admin-content-advanced.html (som dessuten lå på pre-v1.2.28-tekst).
+
+(2) **Post-publish-flyt**: etter publisering landet brukeren i full modul-velger
+(«Velg en modul»), som er en unaturlig kontekst rett etter å ha jobbet med én modul.
+publishLatestDraftInBackground nullstiller ikke lenger hele konteksten + startModulePicker,
+men kaller `loadModule(moduleId)` — laster modulen på nytt (nå Live) og avslutter med
+showModuleActions («Hva vil du gjøre med denne modulen?»). «Velg en annen modul» er
+fortsatt tilgjengelig derfra. Samme mønster som unpublishModuleInBackground.
+
 ## 1.2.31 - 2026-05-24
 
 fix(admin): modul-detaljer-dialog viser blank tittel etter reopen (#361 follow-up)
