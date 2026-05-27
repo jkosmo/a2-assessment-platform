@@ -58,9 +58,13 @@ jobs:
 
       - name: Post what-if result as PR comment
         uses: actions/github-script@v9.0.0
+        # #472: pass the diff via env, not template-literal interpolation — large diffs with
+        # backticks/${ /control chars (e.g. KQL in alert rules) otherwise break the script.
+        env:
+          WHATIF_RESULT: ${{ steps.whatif.outputs.result }}
         with:
           script: |
-            const result = `${{ steps.whatif.outputs.result }}`;
+            const result = process.env.WHATIF_RESULT || '';
             const body = [
               '## Bicep what-if — staging',
               '',

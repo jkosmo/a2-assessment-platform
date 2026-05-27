@@ -78,7 +78,7 @@ jobs:
               postgresSkuTier="${{ vars.POSTGRES_SKU_TIER }}" \
               parserWorkerAuthKey="whatif-only-placeholder-not-deployed" \
               deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
-              skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'true' }}" \
+              skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
             2>&1 || true)
           echo "result<<EOF" >> "$GITHUB_OUTPUT"
           echo "$output" >> "$GITHUB_OUTPUT"
@@ -87,9 +87,13 @@ jobs:
       - name: Post what-if result as PR comment
         if: inputs.pr_number != ''
         uses: actions/github-script@v9.0.0
+        # #472: pass the diff via env, not template-literal interpolation — large diffs with
+        # backticks/${ /control chars otherwise break the script.
+        env:
+          WHATIF_RESULT: ${{ steps.whatif.outputs.result }}
         with:
           script: |
-            const result = `${{ steps.whatif.outputs.result }}`;
+            const result = process.env.WHATIF_RESULT || '';
             const body = [
               '## Bicep what-if — production (manual)',
               '',
