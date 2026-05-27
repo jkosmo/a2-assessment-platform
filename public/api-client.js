@@ -9,9 +9,14 @@ async function loadMsalScript() {
   if (window.msal) return;
   return new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js";
+    // #393: MSAL vendret lokalt (public/static/vendor/) i stedet for ekstern CDN, så en
+    // kompromittert CDN ikke kan kjøre kode i vår origin. SRI-integrity beholdes som
+    // defense-in-depth selv for egen origin. Versjon er pinnet i filnavnet; oppdaterings-
+    // prosess er dokumentert i doc/MSAL_VENDORING.md. crossOrigin kreves for SRI.
+    s.src = "/static/vendor/msal-browser-2.38.0.min.js";
+    s.integrity = "sha384-mz+8Q3jA4XBFbnyAsyQegn/0LHvziH7qHLBa9GzcU3HzeWj9J16SXM5S+TsmPBy0";
     s.crossOrigin = "anonymous";
-s.onload = resolve;
+    s.onload = resolve;
     s.onerror = () => reject(new Error("Failed to load MSAL script."));
     document.head.appendChild(s);
   });

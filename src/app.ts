@@ -6,6 +6,7 @@ import { rolesFor } from "./config/capabilities.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
+import { securityHeadersMiddleware } from "./middleware/securityHeaders.js";
 import { generalApiLimiter } from "./middleware/rateLimiting.js";
 import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
@@ -32,6 +33,7 @@ const publicStaticPath = path.resolve(publicRootPath, "static");
 
 app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
+app.use(securityHeadersMiddleware);
 app.use(express.json({ limit: "5mb" }));
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));

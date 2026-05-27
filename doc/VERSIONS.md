@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.33 - 2026-05-27
+
+sec(auth): vendre MSAL lokalt + CSP/security-headers (#393)
+
+[Security][P2] Klienten lastet MSAL fra ekstern CDN (alcdn.msauth.net) uten SRI. En
+kompromittert CDN-respons ville kjørt i vår origin og kunne lest tokens / kalt API-er
+som offeret.
+
+(1) **Vendret MSAL 2.38.0 lokalt**: `public/static/vendor/msal-browser-2.38.0.min.js`
+(hentet fra npm, kanonisk provenans). api-client.js `loadMsalScript()` laster nå lokalt
+med SRI-integrity (sha384) + crossorigin. Ingen ekstern CDN-avhengighet ved kjøretid.
+Oppdateringsprosess dokumentert i `doc/MSAL_VENDORING.md`.
+
+(2) **Security-headers-middleware** (`src/middleware/securityHeaders.ts`, mountet tidlig
+i app.ts): CSP med strikt `script-src 'self'` — mulig fordi MSAL nå er lokal og appen
+har null inline-script/event-handlers. style-src beholder 'unsafe-inline' (inline
+<style>/style-attrs, lavrisiko). connect/frame/form-action tillater Entra-login-origin
+for MSAL silent-token/redirect. Pluss X-Content-Type-Options: nosniff, X-Frame-Options:
+DENY, Referrer-Policy.
+
+Statisk verifisert før implementering: alle scripts lokale, ingen inline-script/handlers,
+all CSS lokal, ingen eksterne https-referanser, ingen ekstern fetch. blob:-nedlastinger
+bruker `download`-attr (ikke CSP-styrt). test/unit/security-headers.test.ts dekker
+header-kontrakten.
+
+Akseptansekriterier #393: (a) ingen ekstern CDN ✓ (b) versjon kontrollert av vendret
+asset ✓ (c) CSP begrenser script-injeksjon ✓ (d) Entra-login i alle arbeidsflater —
+gjenstår brukerverifisering.
+
 ## 1.2.32 - 2026-05-24
 
 ux(admin): handoff-dialog copy + post-publish-flyt (#361/#442 follow-up)

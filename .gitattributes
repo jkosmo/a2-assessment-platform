@@ -1,0 +1,3 @@
+# SRI-protected vendored assets (#393) must stay byte-exact across platforms —
+# any line-ending conversion would break the Subresource Integrity hash and block MSAL.
+public/static/vendor/** binary
