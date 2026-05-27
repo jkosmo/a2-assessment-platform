@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.36 - 2026-05-27
+
+fix(infra): kodifiser deploy-SP Key Vault Secrets User-grant i Bicep (#470, #410-durabilitet)
+
+#410-credential-guarden trenger lesetilgang til DATABASE-URL-secreten for å avgjøre om
+skipPostgresUpdate er trygt. Deploy-SP-en hadde bare control-plane-roller (ikke KV data-plane
+read) → guarden fikk `kvRead=secret-read-failed` og tvang PG-server-update på hver deploy
+(ServerIsBusy-risiko). En manuell staging-grant (az rest PUT) bekreftet fiksen, men forsvinner
+ved RG-recreate.
+
+Kodifiserer grant-en i `infra/azure/main.bicep`: ny ressurs `deployPrincipalDatabaseSecretReader`
+gir deploy-SP-en (param `deployPrincipalId`) **Key Vault Secrets User** scopet til DATABASE-URL-
+secreten (least-privilege — guarden leser kun den). Betinget på `!skipRoleAssignments && !empty(deployPrincipalId)`.
+Deploy-SP-en har User Access Administrator → oppretter assignment for seg selv.
+
+Plumbing: `deployPrincipalId` param i Bicep ← `-DeployPrincipalId` i deploy-environment.ps1 ←
+`${{ vars.DEPLOY_PRINCIPAL_ID }}` i deploy-azure.yml (begge miljø-jobber). GitHub env-vars satt:
+staging=36b2fabb…, production=cba285e6…. What-if-workflowene passer også param-et.
+
+Selvheling: pre-flighten kjører FØR Bicep, så første deploy med dette tvinger fortsatt update
+(rollen finnes ikke ennå); Bicep oppretter den; påfølgende deploys leser og skipper. Idempotent
+re-deploy dekkes av eksisterende RoleAssignmentExists-toleranse. Dekker både staging og prod.
+
+Oppfølging: fjern den manuelle staging-assignmenten (guid 23be1dd0…) når Bicep eier grant-en.
+
+Rollback: revert commit (grant forsvinner → guard over-fyrer igjen, men trygt — ingen drift).
+
 ## 1.2.35 - 2026-05-27
 
 fix(infra): App Service-settings som separate child-ressurser etter KV + role assignments (#416)

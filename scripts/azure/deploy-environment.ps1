@@ -56,6 +56,9 @@ param(
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30,
   [string]$ParserWorkerAuthKey = "",
+  # #470: object ID of the deploy SP, passed through to Bicep so it can grant itself Key Vault
+  # Secrets User on DATABASE-URL (lets the #410 pre-flight read the secret). Empty = skip grant.
+  [string]$DeployPrincipalId = "",
   [string]$PackagePath = "",
   [string]$AzureFederatedClientId = "",
   [string]$AzureFederatedTenantId = "",
@@ -686,6 +689,7 @@ az deployment group create `
               participantNotificationWebhookTimeoutMs=$ParticipantNotificationWebhookTimeoutMs `
               acsEmailSenderDisplayName=$AcsEmailSenderDisplayName `
               parserWorkerAuthKey=$ParserWorkerAuthKey `
+              deployPrincipalId=$DeployPrincipalId `
   --parameters "@$ipParamsFile" `
   --no-wait | Out-Null
 Assert-LastExitCode "az deployment group create"

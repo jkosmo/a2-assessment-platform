@@ -199,6 +199,9 @@ param dbAllowedIpAddresses array = []
 @secure()
 param parserWorkerAuthKey string
 
+@description('Object ID of the deploy service principal (CI/CD). When non-empty, grants it Key Vault Secrets User on the DATABASE-URL secret so the deploy-environment.ps1 pre-flight (#410) can read the existing password, detect rotation, and skip unchanged PostgreSQL server updates (avoids ServerIsBusy). Without it the #410 guard cannot read the secret and conservatively forces a server update on every deploy. The deploy SP has User Access Administrator, so it creates this assignment for itself. Set per environment via the DEPLOY_PRINCIPAL_ID variable; empty = skip the grant. See #470.')
+param deployPrincipalId string = ''
+
 var envCode = environmentName == 'production' ? 'prd' : 'stg'
 var suffix = substring(uniqueString(subscription().subscriptionId, resourceGroup().name), 0, 6)
 var appServicePlanName = toLower('${appNamePrefix}-${envCode}-plan-${suffix}')
@@ -1082,6 +1085,24 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // ---------------------------------------------------------------------------
 
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+
+// #470: grant the deploy service principal read on the DATABASE-URL secret so the
+// deploy-environment.ps1 pre-flight (#410) can compare the existing password and skip the
+// PostgreSQL server update when unchanged (avoids ServerIsBusy on routine deploys). Without
+// this the guard gets kvRead=secret-read-failed and conservatively forces the update every
+// deploy. The deploy SP has User Access Administrator, so it creates this assignment itself.
+// Self-heals: the pre-flight runs before this deploy applies, so the FIRST deploy after this
+// change still forces the update; subsequent deploys read and skip. Conditional on a non-empty
+// objectId (DEPLOY_PRINCIPAL_ID per environment).
+resource deployPrincipalDatabaseSecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(deployPrincipalId)) {
+  scope: kvSecretDatabaseUrl
+  name: empty(roleAssignmentSalt) ? guid(subscription().subscriptionId, environmentName, 'deployPrincipal-databaseUrl-kvSecretsUser') : guid(subscription().subscriptionId, environmentName, 'deployPrincipal-databaseUrl-kvSecretsUser', roleAssignmentSalt)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: deployPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 // Role assignments for bundled secret (#431). Web and worker apps need read access to the
 // bundled APP-RUNTIME-SECRETS so MSI sidecar can resolve the single KV reference at startup.

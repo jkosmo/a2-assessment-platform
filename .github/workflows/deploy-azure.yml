@@ -118,6 +118,7 @@ jobs:
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
             -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}" `
+            -DeployPrincipalId "${{ vars.DEPLOY_PRINCIPAL_ID }}" `
             -PackagePath "${{ steps.package.outputs.path }}" `
             -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}"
@@ -218,6 +219,7 @@ jobs:
             -BudgetContactEmail "${{ vars.BUDGET_CONTACT_EMAIL }}" `
             -MonthlyBudgetAmount "${{ vars.MONTHLY_BUDGET_AMOUNT }}" `
             -ParserWorkerAuthKey "${{ secrets.PARSER_WORKER_AUTH_KEY }}" `
+            -DeployPrincipalId "${{ vars.DEPLOY_PRINCIPAL_ID }}" `
             -PackagePath "${{ steps.package.outputs.path }}" `
             -AzureFederatedClientId "${{ secrets.AZURE_CLIENT_ID }}" `
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
