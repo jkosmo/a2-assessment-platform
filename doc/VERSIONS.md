@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.37 - 2026-05-29
+
+sec(frontend): participant console hardening — same-origin redirect-restore + dokumentert config-eksponering (#355)
+
+AC1 — `auth_intended_url`-restore validerer nå at lagret URL er same-origin + intern path
+før navigering, så en eventuelt forgiftet sessionStorage-verdi ikke blir en open-redirect.
+Ren funksjon `isSafeSameOriginRedirect(target, currentOrigin)` eksportert fra api-client.js
+med dedikert vitest-enhetstest (6/6 grønne) som dekker same-origin/positive, javascript:/
+data:/vbscript:-rejection, protocol-relative + relative path-rejection, port/scheme-mismatch,
+malformed input, og tom currentOrigin.
+
+AC2 — review av `/participant/config`: responsen er allerede minimal for et pre-auth-
+endpoint. Mock-only-feltene (mockRolePresets, identityDefaults) er server-side gated på
+`AUTH_MODE === "mock"` → tom/undefined i produksjon. Ingen gjenværende felt kan fjernes
+uten å brekke SPA-startup eller post-login workspace-rendering. Ingen kodeendringer
+trengtes; konklusjonen dokumenteres.
+
+AC3 — ny seksjon i `doc/CONFIG_REFERENCE.md` ("Public exposure of /participant/config")
+med per-felt-tabell: hvorfor hvert felt må være public, hva en uautentisert leser lærer.
+Default-policy ved nye felt: «default til authenticated, ikke /participant/config».
+
+Lukker #355.
+
 ## 1.2.36 - 2026-05-27
 
 fix(infra): kodifiser deploy-SP Key Vault Secrets User-grant i Bicep (#470, #410-durabilitet)

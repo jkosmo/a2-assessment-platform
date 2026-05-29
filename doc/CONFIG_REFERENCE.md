@@ -173,6 +173,24 @@ Controls how user records are reconciled when the org sync job runs (triggered v
 **Env override:** `PARTICIPANT_CONSOLE_CONFIG_FILE` (default: `config/participant-console.json`)
 **Used by:** `/participant/config` runtime config endpoint and frontend workspaces
 
+### Public exposure of `/participant/config` (#355 review)
+
+`/participant/config` is fetched **before authentication** — the SPA needs it to know how to authenticate (MSAL clientId/authority) and how to render the shell. Everything in the response is therefore reachable by an unauthenticated caller. The 2026-05-27 review (#355) walked every field; the rationale for each is recorded below so future audits do not have to re-derive it.
+
+| Field | Why it must be public | What an unauthenticated reader learns |
+|---|---|---|
+| `authMode` | The client must know whether to load MSAL (`entra`) or the mock switcher (`mock`) before calling MSAL.initialize() | `"entra"` or `"mock"` — same signal as the SPA bundle itself |
+| `entra.{clientId,authority,scopes}` | MSAL needs these to construct the login redirect; the SPA cannot authenticate without them | Public Entra metadata — clientId and authority are already public per the OAuth2 spec; the audience scope reveals the API resource id |
+| `debugMode` | Frontend gates dev-only UI affordances on this flag | Whether this build is a non-production env (always `false` in production — runtime asserted by `scripts/azure/smoke-web-runtime.mjs`) |
+| `mockRoleSwitchEnabled` + `mockRolePresets` + `identityDefaults` | Gated on `AUTH_MODE === "mock"` server-side; the mock role switcher is dev/test only and never exposed in production (`mockRolePresets: []`, `identityDefaults: undefined`) | Nothing in production (`mockRoleSwitchEnabled === false`, presets empty); in dev/test, the set of mock identities |
+| `navigation.items` | The SPA navigation bar is rendered from this contract; pages are not role-gated by Express, so the visible nav is the authoritative client-side workspace list | The set of workspace routes (`/admin-content`, `/results`, `/review`, …) — these are already discoverable from the SPA bundle and the marketing surface |
+| `drafts`, `flow` | Browser-side tuning constants (localStorage TTL, polling cadence, MCQ behavior) | Behavior constants — not user data, not access decisions |
+| `appealWorkspace`, `manualReviewWorkspace`, `calibrationWorkspace` | Workspace tuning + the `accessRoles` runtime override that the server *also* enforces via the RBAC matrix | The list of role names that can access each workspace (e.g. `SUBJECT_MATTER_OWNER`, `ADMINISTRATOR`) — role *names* are not secret; the server's RBAC matrix is the authoritative gate |
+
+**Minimization conclusion:** the response is already minimal for an unauthenticated startup endpoint. Mock-only fields are gated server-side (omitted/empty in production). No remaining field can be safely removed without breaking SPA startup or post-login workspace rendering. The companion hardening — same-origin/path validation of the MSAL redirect restore (`auth_intended_url`) — lives in `public/api-client.js` (`isSafeSameOriginRedirect`) with a unit test in `test/unit/auth-redirect-safety.test.ts`.
+
+**If a future change adds a new field here:** ask whether it really must be reachable pre-auth, or whether a new authenticated `/api/...` endpoint would serve it instead. Default to authenticated.
+
 Large composite config that drives browser-side runtime behavior. It no longer owns the canonical workspace navigation contract; navigation is derived from `src/config/capabilities.ts` and merged with runtime-tunable settings here.
 
 ### Sections

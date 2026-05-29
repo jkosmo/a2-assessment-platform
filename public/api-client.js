@@ -2,6 +2,27 @@
 // MSAL (Entra auth)
 // ---------------------------------------------------------------------------
 
+// #355: validate that a sessionStorage-recovered URL targets our own origin + a sensible
+// internal path before navigating to it. sessionStorage is same-origin already, but a
+// defense-in-depth validation keeps a future code path that could write a poisoned value
+// (or a bug that stores an absolute external URL) from turning into an open redirect.
+// Pure function — exported for unit testing.
+export function isSafeSameOriginRedirect(target, currentOrigin) {
+  if (typeof target !== "string" || target.length === 0) return false;
+  if (typeof currentOrigin !== "string" || currentOrigin.length === 0) return false;
+  let url;
+  try {
+    url = new URL(target);
+  } catch {
+    return false;
+  }
+  if (url.origin !== currentOrigin) return false;
+  // pathname must be an absolute internal path; URL parsing with a non-special scheme would
+  // not surface here (URL() rejects javascript:/data: as opaque), but we double-check.
+  if (!url.pathname.startsWith("/")) return false;
+  return true;
+}
+
 let msalInstance = null;
 let msalScopes = null;
 
@@ -44,14 +65,14 @@ async function initMsal(entraConfig) {
   // Handle the token response after a redirect login
   const result = await msalInstance.handleRedirectPromise();
   if (result) {
-    // Restore the page the user was on before being sent to login
+    // Restore the page the user was on before being sent to login.
+    // #355: only navigate if the stored URL is same-origin + an internal path. Reject and
+    // drop the value silently otherwise so a poisoned sessionStorage entry can't redirect us.
     const intended = sessionStorage.getItem("auth_intended_url");
-    if (intended) {
-      sessionStorage.removeItem("auth_intended_url");
-      if (intended !== window.location.href) {
-        window.location.replace(intended);
-        return;
-      }
+    sessionStorage.removeItem("auth_intended_url");
+    if (intended && isSafeSameOriginRedirect(intended, window.location.origin) && intended !== window.location.href) {
+      window.location.replace(intended);
+      return;
     }
     return;
   }
