@@ -159,8 +159,8 @@ For any change touching `infra/`, `scripts/azure/`, or `.github/workflows/`, Cla
 - If a KV secret (e.g. `DATABASE-URL`) is updated, is the underlying resource (e.g. PostgreSQL) also updated with the same credential — or is the skip path explicitly handled to reuse the existing credential?
 
 **Production safety**
-- Does the change behave correctly with `SKIP_ROLE_ASSIGNMENTS=true` (current prod workaround)?
-- Does the change behave correctly after `SKIP_ROLE_ASSIGNMENTS` is removed (#404)?
+- `SKIP_ROLE_ASSIGNMENTS` is no longer an active workaround — #404 closed 2026-05-19, the GitHub var is unset on both environments, deploys default to `false`, and role assignments are created normally on every deploy. The `skipRoleAssignments` Bicep param still exists and must remain functional (re-deploys that toggle it must succeed in either direction), but do not assume `true` is the current operational state.
+- Does the change behave correctly with `skipRoleAssignments=false` (current operational default)?
 - Do prod-destructive scripts assert the correct subscription before acting?
 
 **ARM validation gap**
