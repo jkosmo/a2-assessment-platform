@@ -363,6 +363,17 @@ az monitor log-analytics workspace list -g <resource-group> -o table
 - means the workflow finished but the notification side-effect failed
 - do not assume the business write failed just because the notification did
 
+### `Container get mounts received unexpected exception` (platform docker log)
+- benign cosmetic Linux App Service / Run-From-Package platform message — not an app error
+- emitted by Azure during the cold-start container mount check, regardless of Always On
+- triaged + closed not-planned in #423 (2026-05-27) with evidence: warning persists on cold starts but never correlates with functional failures
+- ignore unless it starts coinciding with real `/healthz` failures or container restarts
+
+### `Credential-drift check (#410): …` (deploy log)
+- emitted by `deploy-environment.ps1` pre-flight on every full Bicep deploy
+- read the `kvRead=` tag and the surrounding message for the path taken — see `doc/OPERATIONS_RUNBOOK.md` → "PG deploy hits `ServerIsBusy` or every deploy updates the server" for the full table
+- a `kvRead=secret-read` + "skip is safe" line is the happy path; anything else explains why the deploy chose to force a PG server update
+
 ## Follow-up Directions
 
 The current baseline is useful but still modest.

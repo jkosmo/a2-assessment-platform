@@ -502,6 +502,19 @@ Check:
 2. webhook configuration if channel is `webhook`
 3. ACS configuration if channel is `acs_email`
 
+### PG deploy hits `ServerIsBusy` or every deploy updates the server
+
+Symptoms:
+- `az deployment group create` fails with `ServerIsBusy` on `Microsoft.DBforPostgreSQL/flexibleServers`, or
+- every routine deploy logs `Forcing ARM PostgreSQL server update` even when the server properties have not changed
+
+Check (see `doc/AZURE_ENVIRONMENTS.md` → "Deploy mechanics" for the underlying logic):
+1. Deploy log: did the PG pre-flight (#411) actually run? Look for `PostgreSQL server properties match desired state - skipping ARM server update.` If absent, the pre-flight skipped — usually because `$existingPgServer` did not resolve (RG empty / fresh deploy / different env-code prefix).
+2. Deploy log: what did the credential guard (#410) say? Look for the `Credential-drift check (#410): …` line and the `kvRead=` tag:
+   - `kvRead=secret-read` + "skip is safe" → ordinary unchanged deploy; the server update *was* skipped.
+   - `kvRead=secret-read` + "DIFFERS … password rotation intended" → the deploy SP read the secret and a rotation is in progress; PG update is expected.
+   - `kvRead=secret-read-failed` / `secret-unparseable` / `kv-name-unresolved` → the deploy SP cannot read DATABASE-URL; guard forces the update conservatively. Expected once after a fresh env recreate (#470 grant doesn't exist yet, self-heals on next deploy). If it recurs every deploy, verify the env's `DEPLOY_PRINCIPAL_ID` GitHub variable is set to the deploy SP objectId (staging `36b2fabb-…`, production `cba285e6-…`) and that `Microsoft.Authorization/roleAssignments` for the SP on `DATABASE-URL` was actually created — `az rest` GET at `…/vaults/<kv>/secrets/DATABASE-URL/providers/Microsoft.Authorization/roleAssignments?$filter=atScope()`.
+
 ## Correlation IDs
 
 Correlation IDs are attached by:

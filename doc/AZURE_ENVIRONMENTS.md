@@ -173,12 +173,26 @@ What this grants:
 Without this bootstrap step, the deploy fails with `AuthorizationFailed` partway through.
 
 ## Deployment flow
-1. Push to `main`:
-- Deploys `staging` automatically.
-2. Manual dispatch with `deploy_production=true`:
-- Deploys `staging` first.
-- Waits for `production` environment approval.
-- Deploys `production` after approval.
+
+Both staging and production require **manual `workflow_dispatch`** — push to `main` does *not* auto-deploy. See `CLAUDE.md` → "Which deploy workflow to use" for the choice between `deploy-app.yml` (code-only, ~16 min) and `deploy-azure.yml` (full Bicep + app, ~22 min).
+
+1. **Staging only:** dispatch `deploy-azure.yml` (or `deploy-app.yml`) with defaults. Verify staging `/healthz` green before considering prod.
+2. **Production:** dispatch `deploy-azure.yml` with `deploy_production=true`. If staging is already verified green on the same `main` HEAD, also set `skip_staging=true` to bypass the redundant staging redeploy. The production GitHub environment has the approval gate.
+
+## Deploy mechanics — pre-flight, credential guard, KV grant
+
+The full deploy (`deploy-azure.yml` → `deploy-environment.ps1`) does several **idempotency-preserving checks** before invoking Bicep. Knowing what they print helps diagnose deploys quickly.
+
+**PostgreSQL pre-flight (#411).** Resolves the existing PG server name independently of App Service existence, then compares server properties (SKU/version/storage/HA/backup) against desired. If they match, sets `skipPostgresUpdate=true` to avoid `ServerIsBusy` control-plane locks on the unchanged server. Look for `PostgreSQL server properties match desired state - skipping ARM server update.`
+
+**Credential-drift guard (#410).** When the property pre-flight wants to skip, the script also compares the current `DATABASE-URL` Key Vault secret password against the desired `POSTGRES_ADMIN_PASSWORD`. Three outcomes (logged with `kvRead=` tag):
+- `Credential-drift check (#410): existing DATABASE-URL password matches desired - skip is safe (kvRead=secret-read).` → skip stays true, no PG update this deploy.
+- `Credential-drift check (#410): existing DATABASE-URL password DIFFERS from desired - password rotation intended. Forcing ARM server update so server and Key Vault change atomically.` → expected on a deliberate password rotation.
+- `WARNING: Credential-drift check (#410): could not verify the existing password (kvRead=<status>). Forcing ARM server update as the safe default. If this recurs on every deploy, the deploy identity likely lacks Key Vault data-plane read on DATABASE-URL …` → the deploy SP cannot read the secret. With #470 in place this should only occur on the *first* deploy of a recreated environment (self-heals on the next deploy when Bicep has created the grant).
+
+**App Service settings as child resources (#416).** `appSettings` for web, worker, and parser are deployed as separate `Microsoft.Web/sites/config@2023-12-01` ('appsettings') resources with explicit `dependsOn` on the bundled KV secret + the app's MSI read-role assignment. This is what makes KV references resolvable at first boot — the May 2026 incident root cause. Do *not* re-introduce inline `appSettings` in `siteConfig`; the child resource is authoritative and any inline list would race-conflict.
+
+**Deploy-SP Key Vault Secrets User grant (#470).** Bicep creates a `Microsoft.Authorization/roleAssignments` granting the deploy service principal `Key Vault Secrets User` on the `DATABASE-URL` secret (least-privilege). Driven by the `DEPLOY_PRINCIPAL_ID` environment variable per env (staging `36b2fabb-…`, production `cba285e6-…`). Self-heals: on the *first* deploy of a new RG the grant doesn't exist yet when the pre-flight runs, so the credential guard forces a PG update that deploy; subsequent deploys read and skip. If the env var is unset the grant is silently skipped and #410 falls back to safe-but-noisier behavior (forces PG update every deploy).
 
 ## Redeploy runbook
 Redeploy staging:
