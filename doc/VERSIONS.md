@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.38 - 2026-06-04
+
+fix(admin-content): «Importer kurs-pakke»-knappen åpner nå fil-velgeren også når kurslisten ikke er tom
+
+Klikk-handleren på `importCoursePackageBtn` ble kun wiret i tom-liste-renderingen av
+kurslisten. I den populerte listeveien (minst ett kurs finnes) ble kun `change`-handleren
+på fil-inputen registrert, så knappen ga ingen respons ved klikk. La til samme
+`click → importCoursePackageFile.click()`-binding i den populerte veien
+(`public/static/admin-content-courses.js`).
+
 ## 1.2.37 - 2026-05-29
 
 sec(frontend): participant console hardening — same-origin redirect-restore + dokumentert config-eksponering (#355)

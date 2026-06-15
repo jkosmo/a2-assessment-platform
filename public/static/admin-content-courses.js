@@ -419,6 +419,9 @@ async function renderListView() {
 
   document.getElementById("coursesTableBody")?.addEventListener("click", handleListTableClick);
   document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
+  document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
+    document.getElementById("importCoursePackageFile")?.click();
+  });
 }
 
 // #433 phase 4b — course export download. Calls /export-package and saves the
