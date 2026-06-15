@@ -486,3 +486,33 @@ model CourseCompletion {
 
   @@unique([userId, courseId])
 }
+
+// Læringsseksjon i et kurs (#476/#481). Speiler Module/ModuleVersion: innholdet
+// ligger i immutable, versjonerte rader slik at historiske besvarelser/visninger
+// kan fryses mot en bestemt versjon. Kobles til kurs via CourseItem (#480/F1).
+model CourseSection {
+  id              String                 @id @default(cuid())
+  title           String                 // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
+  activeVersionId String?
+  archivedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  versions        CourseSectionVersion[] @relation("CourseSectionVersions")
+  activeVersion   CourseSectionVersion?  @relation("ActiveCourseSectionVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+}
+
+model CourseSectionVersion {
+  id                String          @id @default(cuid())
+  sectionId         String
+  versionNo         Int
+  bodyMarkdown      String          // lokalisert JSON av markdown-tekst, per locale
+  publishedBy       String?
+  publishedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  section           CourseSection   @relation("CourseSectionVersions", fields: [sectionId], references: [id], onDelete: Restrict)
+  activeForSections CourseSection[] @relation("ActiveCourseSectionVersion")
+
+  @@unique([sectionId, versionNo])
+  @@index([sectionId, publishedAt])
+}

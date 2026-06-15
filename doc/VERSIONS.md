@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.1 - 2026-06-15
+
+feat(course): CourseSection + CourseSectionVersion-modeller — F2 (#481)
+
+Andre skive av #476 (Tier 2 LMS, epic #478). Additiv datamodell for læringsseksjoner:
+`CourseSection` (id, title som lokalisert JSON, activeVersionId, archivedAt) +
+`CourseSectionVersion` (immutabel versjon med `bodyMarkdown` som lokalisert JSON, versionNo,
+publishedBy/At) — speiler `Module`/`ModuleVersion`-mønsteret slik at historiske visninger kan
+fryses mot en versjon. Håndskrevet migrering `20260615000001_add_course_section_models`.
+
+Rent additivt (to nye tabeller + FK-er, ingen endring på eksisterende tabeller) → kan ikke
+brekke eksisterende kurs/moduler. Kobles til kurs via CourseItem (#480/F1) som kommer separat;
+står frittstående inntil da. Offline-verifisert: `prisma validate` 🚀, `prisma generate` + `tsc`
+rent. Runtime-migrering CI-verifisert (verify-jobben kjører migrering mot Postgres).
+
 ## 1.3.0 - 2026-06-15
 
 feat(course): markdown-sanitiseringstjeneste for læringsseksjoner — F3 (#482) + embedded-video iframe-allowlist X1 (#493)
