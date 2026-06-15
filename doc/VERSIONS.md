@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.5 - 2026-06-15
+
+feat(course): seksjons-editor (U1) + IA-design (D1) — #488, #484
+
+Sjette skive av #476 (Tier 2 LMS, epic #478). Første UI for læringsseksjoner.
+
+D1 (#484): `doc/DESIGN_476_LMS_SECTIONS_IA.md` — godkjent IA + wireframes (editor=laptop,
+deltaker=mobil-først, eksplisitt språk-veksling i editor, «velg fra bibliotek» for seksjoner).
+
+U1 (#488): ny «Seksjoner»-fane (`/admin-content/sections`):
+- Liste over seksjoner (tittel/versjon/sist endret) + opprett/rediger/slett
+- Editor med språk-faner (nb/nn/en-GB) — forfatter redigerer hvert språk manuelt
+- Side-ved-side markdown + **live forhåndsvisning** via nytt
+  `POST /api/admin/content/sections/preview` som rendrer med samme F3/X1-sanitiseringspolicy
+  som deltaker-visningen vil bruke (server-side, ingen klient-side render-stack)
+- «Seksjoner»-lenke lagt til i kurs-sidens content-area-nav
+
+Ren additiv UI + ett lese-endepunkt. `tsc` + `build` rene. Manuell testing følger ved
+staging-deploy sammen med U3 (#490) + P1 (#491).
+
 ## 1.3.4 - 2026-06-15
 
 feat(course): blandet CourseItem-ordering-API — B2 (#486)

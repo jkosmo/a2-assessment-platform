@@ -11,6 +11,7 @@ import {
 import { localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
+import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 
 const adminSectionsRouter = Router();
 
@@ -20,6 +21,7 @@ const createSectionSchema = z.object({
 });
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
+const previewSchema = z.object({ markdown: z.string() });
 
 type SectionWithActiveVersion = {
   id: string;
@@ -55,6 +57,21 @@ adminSectionsRouter.post("/", async (request, response, next) => {
       actorId: request.context?.userId,
     });
     response.status(201).json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Live preview for the editor (U1) — renders markdown to sanitised HTML with the
+// exact same F3/X1 policy the participant view will use, so authors see the truth.
+adminSectionsRouter.post("/preview", async (request, response, next) => {
+  const parsed = previewSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    response.json({ html: renderSectionMarkdown(parsed.data.markdown) });
   } catch (error) {
     next(error);
   }
