@@ -6,6 +6,7 @@ import {
   publishCourse,
   archiveCourse,
   setCourseModules,
+  setCourseItems,
   deleteCourse,
   courseRepository,
 } from "../modules/course/index.js";
@@ -32,6 +33,15 @@ const setCourseModulesBodySchema = z.object({
       moduleId: z.string().min(1),
       sortOrder: z.number().int().min(0),
     }),
+  ),
+});
+
+const setCourseItemsBodySchema = z.object({
+  items: z.array(
+    z.discriminatedUnion("type", [
+      z.object({ type: z.literal("MODULE"), moduleId: z.string().min(1) }),
+      z.object({ type: z.literal("SECTION"), sectionId: z.string().min(1) }),
+    ]),
   ),
 });
 
@@ -237,6 +247,41 @@ adminCoursesRouter.put("/:courseId/modules", async (request, response, next) => 
 
   try {
     await setCourseModules(request.params.courseId, parsed.data.modules);
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Mixed item ordering — modules and learning sections interleaved (#486/B2).
+adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
+  try {
+    const items = await courseRepository.findCourseItems(request.params.courseId);
+    response.json({
+      items: items.map((item) => ({
+        id: item.id,
+        type: item.itemType,
+        sortOrder: item.sortOrder,
+        moduleId: item.moduleId,
+        sectionId: item.sectionId,
+        title: item.module?.title ?? item.section?.title ?? null,
+        archivedAt:
+          (item.module?.archivedAt ?? item.section?.archivedAt)?.toISOString() ?? null,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.put("/:courseId/items", async (request, response, next) => {
+  const parsed = setCourseItemsBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    await setCourseItems(request.params.courseId, parsed.data.items);
     response.status(204).send();
   } catch (error) {
     next(error);

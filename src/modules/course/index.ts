@@ -1,6 +1,7 @@
 export { checkAndIssueCourseCompletions } from "./courseCompletionService.js";
 export { getCourseReport, getCourseLearnerReport } from "./courseReport.js";
-export { createCourse, updateCourse, publishCourse, archiveCourse, setCourseModules, deleteCourse } from "./courseCommands.js";
+export { createCourse, updateCourse, publishCourse, archiveCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
+export type { CourseItemInput } from "./courseCommands.js";
 export {
   createSection,
   updateSectionTitle,

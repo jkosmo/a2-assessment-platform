@@ -6,7 +6,7 @@ import type { DbTransactionClient } from "../../db/transaction.js";
 
 type CompletionTxClient = Pick<
   DbTransactionClient,
-  "course" | "courseModule" | "courseCompletion" | "certificationStatus" | "auditEvent" | "submission"
+  "course" | "courseModule" | "courseItem" | "courseCompletion" | "certificationStatus" | "auditEvent" | "submission"
 >;
 
 export async function checkAndIssueCourseCompletions(

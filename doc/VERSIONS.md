@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.4 - 2026-06-15
+
+feat(course): blandet CourseItem-ordering-API — B2 (#486)
+
+Femte skive av #476 (Tier 2 LMS, epic #478). API for å sette/lese den fulle ordnede
+sekvensen av et kurs — moduler og læringsseksjoner om hverandre:
+- `PUT /api/admin/content/courses/:courseId/items` — sett ordnet liste (sortOrder = posisjon);
+  validerer at ids finnes og at modul/seksjon ikke gjentas
+- `GET /api/admin/content/courses/:courseId/items` — les ordnet liste (med tittel/arkivstatus)
+
+`setCourseItems` re-synker `CourseModule` fra MODULE-items i samme transaksjon, så de
+ikke-cutover-de lese-pathene (#502) fortsatt stemmer under expand-contract. Integrasjonstest
+(`m2-course-items.test.ts`) dekker interleaved sekvens + CourseModule-synk + validering
+(ukjent id, duplikat). `tsc` rent; CI kjører mot Postgres. Ren backend — bygger på F1 (#480)
++ F2 (#481).
+
 ## 1.3.3 - 2026-06-15
 
 feat(course): seksjon-CRUD-API — B1 (#485)
