@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.2 - 2026-06-15
+
+feat(course): CourseItem-polymorfi + backfill + dual-write — F1 expand-fase (#480)
+
+Tredje skive av #476 (Tier 2 LMS, epic #478). Innfører polymorf `CourseItem`
+(courseId, itemType MODULE|SECTION, sortOrder, moduleId?/sectionId?) som skal erstatte
+`CourseModule`-join og la moduler + læringsseksjoner interleaves i ett ordnet forløp.
+
+Expand-contract (trygt, reversibelt): migrering `20260615000002_add_course_item` oppretter
+tabellen, backfiller hver eksisterende `CourseModule` → `CourseItem(type=MODULE)` med bevart
+`sortOrder` (gen_random_uuid for id), og har en XOR-CHECK som sikrer at nøyaktig én av
+moduleId/sectionId er satt per itemType. `CourseModule` beholdes urørt; `setCourseModules`
+dual-writer nå MODULE-items i parallell i samme transaksjon (SECTION-items bevares ved
+re-ordering). Lese-pathene er UENDRET → null regresjon på eksisterende kurs-oppførsel.
+
+Lese-cutover (flytt alle `course.modules`-konsumenter til `CourseItem`) + drop av
+`CourseModule` følger som egen contract-fase. Integrasjonstest dekker dual-write +
+SECTION-bevaring; CI kjører migrering + full suite mot Postgres. `tsc` + `prisma validate` rene.
+
 ## 1.3.1 - 2026-06-15
 
 feat(course): CourseSection + CourseSectionVersion-modeller — F2 (#481)

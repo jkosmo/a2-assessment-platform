@@ -160,6 +160,7 @@ model Module {
   rubricVersions         RubricVersion[]
   promptTemplateVersions PromptTemplateVersion[]
   courseModules          CourseModule[]
+  courseItems            CourseItem[]
 }
 
 model ModuleVersion {
@@ -459,7 +460,8 @@ model Course {
   archivedAt         DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  modules            CourseModule[]
+  modules            CourseModule[]     // deprecated av CourseItem (#480) — beholdt under expand-contract til lese-cutover + drop
+  items              CourseItem[]
   completions        CourseCompletion[]
 }
 
@@ -499,6 +501,33 @@ model CourseSection {
   updatedAt       DateTime               @updatedAt
   versions        CourseSectionVersion[] @relation("CourseSectionVersions")
   activeVersion   CourseSectionVersion?  @relation("ActiveCourseSectionVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  courseItems     CourseItem[]
+}
+
+enum CourseItemType {
+  MODULE
+  SECTION
+}
+
+// Polymorf kurs-element (#480/F1): erstatter CourseModule-join og lar moduler og
+// læringsseksjoner interleaves i ett ordnet forløp. Under expand-contract skrives
+// MODULE-items i parallell med CourseModule (dual-write i setCourseModules) inntil
+// lese-pathene er kuttet over og CourseModule droppes. Nøyaktig én av moduleId/
+// sectionId er satt, styrt av itemType (DB-CHECK i migreringen).
+model CourseItem {
+  id        String         @id @default(cuid())
+  courseId  String
+  itemType  CourseItemType
+  sortOrder Int
+  moduleId  String?
+  sectionId String?
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module    Module?        @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  section   CourseSection? @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+
+  @@index([courseId, sortOrder])
+  @@index([moduleId])
+  @@index([sectionId])
 }
 
 model CourseSectionVersion {
