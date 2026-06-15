@@ -24,3 +24,5 @@ test-results/
 issue*_body.md
 doc/pentest/PENTEST-*.md
 .claude/worktrees/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
