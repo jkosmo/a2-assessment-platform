@@ -103,9 +103,20 @@ export async function setCourseModules(
 ) {
   return runInTransaction(async (tx) => {
     await tx.courseModule.deleteMany({ where: { courseId } });
+    // Dual-write to CourseItem (#480 expand-contract). Only MODULE items are
+    // managed here so any future SECTION items survive a module re-order.
+    await tx.courseItem.deleteMany({ where: { courseId, itemType: "MODULE" } });
     if (modules.length > 0) {
       await tx.courseModule.createMany({
         data: modules.map((m) => ({ courseId, moduleId: m.moduleId, sortOrder: m.sortOrder })),
+      });
+      await tx.courseItem.createMany({
+        data: modules.map((m) => ({
+          courseId,
+          itemType: "MODULE" as const,
+          moduleId: m.moduleId,
+          sortOrder: m.sortOrder,
+        })),
       });
     }
     await tx.course.update({
