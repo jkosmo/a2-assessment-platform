@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seksjoner – A2 Content</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      .content-area-nav {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border-soft);
+        margin-bottom: var(--space-3);
+      }
+      .content-area-nav-link {
+        padding: 10px var(--space-2);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-meta);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        white-space: nowrap;
+      }
+      .content-area-nav-link:hover { color: var(--color-text); }
+      .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+        flex-wrap: wrap;
+      }
+      .page-header h1 { margin: 0; font-size: 22px; }
+      .page-header-back { margin-bottom: var(--space-2); }
+      .back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; }
+      .back-link:hover { color: var(--color-text); }
+
+      .sections-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); max-width: 720px; }
+      .sections-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      .sections-table th, .sections-table td { text-align: left; padding: 10px var(--space-2); border-bottom: 1px solid var(--color-border-soft); }
+      .sections-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); }
+      .sections-table .col-actions { text-align: right; white-space: nowrap; }
+      .row-action-btn { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); padding: 4px 8px; font-size: 13px; cursor: pointer; color: var(--color-text); }
+      .row-action-btn:hover { background: var(--color-row-hover); }
+      .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
+
+      /* Editor */
+      .section-editor { max-width: 720px; }
+      .editor-field { margin-bottom: var(--space-2); }
+      .editor-field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+      .editor-field input[type="text"] { width: 100%; padding: 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 14px; }
+      .lang-tabs { display: flex; gap: 4px; margin-bottom: var(--space-2); }
+      .lang-tab { padding: 6px 12px; font-size: 13px; font-weight: 600; border: 1px solid var(--color-border-soft); background: none; border-radius: var(--radius-btn); cursor: pointer; color: var(--color-meta); }
+      .lang-tab.active { color: var(--color-link-active); border-color: var(--color-blue); background: var(--color-row-hover); }
+      .editor-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+      @media (max-width: 760px) { .editor-cols { grid-template-columns: 1fr; } }
+      .editor-cols textarea { width: 100%; min-height: 320px; padding: var(--space-2); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-family: var(--font-mono, monospace); font-size: 13px; resize: vertical; }
+      .editor-pane-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); margin-bottom: 4px; }
+      .preview-pane { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); min-height: 320px; overflow-y: auto; }
+      .preview-pane img { max-width: 100%; height: auto; }
+      .preview-pane iframe { max-width: 100%; }
+      .editor-actions { margin-top: var(--space-3); display: flex; gap: var(--space-2); align-items: center; }
+      .editor-status { font-size: 13px; color: var(--color-meta); }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
+      <div class="page-top-bar">
+        <nav id="workspaceNav" class="workspace-nav"></nav>
+        <div class="locale-picker">
+          <span id="appVersion" class="version-badge">…</span>
+          <label for="localeSelect" class="sr-only">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+        <a href="/admin-content" class="content-area-nav-link" id="navModuler">Moduler</a>
+        <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs">Kurs</a>
+        <a href="/admin-content/sections" class="content-area-nav-link active" id="navSeksjoner">Seksjoner</a>
+      </nav>
+
+      <div id="pageContent">
+        <div class="page-loading">Laster…</div>
+      </div>
+    </main>
+
+    <script type="module" src="/static/admin-content-sections.js"></script>
+    <script type="module" src="/static/workspace-help.js"></script>
+  </body>
+</html>
