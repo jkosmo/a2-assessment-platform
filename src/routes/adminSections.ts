@@ -1,0 +1,136 @@
+import { Router } from "express";
+import { z } from "zod";
+import {
+  createSection,
+  updateSectionTitle,
+  updateSectionContent,
+  getSection,
+  listSections,
+  deleteSection,
+} from "../modules/course/index.js";
+import { localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { NotFoundError } from "../errors/AppError.js";
+
+const adminSectionsRouter = Router();
+
+const createSectionSchema = z.object({
+  title: localizedTextPatchSchema,
+  bodyMarkdown: localizedTextPatchSchema,
+});
+const titleSchema = z.object({ title: localizedTextPatchSchema });
+const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
+
+type SectionWithActiveVersion = {
+  id: string;
+  title: string;
+  activeVersionId: string | null;
+  archivedAt: Date | null;
+  updatedAt: Date;
+  activeVersion?: { bodyMarkdown?: string; versionNo: number } | null;
+};
+
+function toDetail(section: SectionWithActiveVersion) {
+  return {
+    id: section.id,
+    title: section.title,
+    activeVersionId: section.activeVersionId,
+    versionNo: section.activeVersion?.versionNo ?? null,
+    bodyMarkdown: section.activeVersion?.bodyMarkdown ?? null,
+    updatedAt: section.updatedAt.toISOString(),
+    archivedAt: section.archivedAt?.toISOString() ?? null,
+  };
+}
+
+adminSectionsRouter.post("/", async (request, response, next) => {
+  const parsed = createSectionSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const section = await createSection({
+      title: localizedTextCodec.serialize(parsed.data.title),
+      bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
+      actorId: request.context?.userId,
+    });
+    response.status(201).json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.get("/", async (_request, response, next) => {
+  try {
+    const sections = await listSections();
+    response.json({
+      sections: sections.map((s) => ({
+        id: s.id,
+        title: s.title,
+        versionNo: s.activeVersion?.versionNo ?? null,
+        updatedAt: s.updatedAt.toISOString(),
+        archivedAt: s.archivedAt?.toISOString() ?? null,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
+  try {
+    const section = await getSection(request.params.sectionId);
+    if (!section) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+    }
+    response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.patch("/:sectionId/title", async (request, response, next) => {
+  const parsed = titleSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const section = await updateSectionTitle(
+      request.params.sectionId,
+      localizedTextCodec.serialize(parsed.data.title),
+    );
+    response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.put("/:sectionId/content", async (request, response, next) => {
+  const parsed = contentSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const section = await updateSectionContent(
+      request.params.sectionId,
+      localizedTextCodec.serialize(parsed.data.bodyMarkdown),
+      request.context?.userId,
+    );
+    response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.delete("/:sectionId", async (request, response, next) => {
+  try {
+    await deleteSection(request.params.sectionId);
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+export { adminSectionsRouter };
