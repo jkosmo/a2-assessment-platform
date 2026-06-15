@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.3 - 2026-06-15
+
+feat(course): seksjon-CRUD-API — B1 (#485)
+
+Fjerde skive av #476 (Tier 2 LMS, epic #478). REST-API for kurs-læringsseksjoner under
+`/api/admin/content/sections` (arver `admin_content`-autorisasjon):
+- `POST /` opprett (title + bodyMarkdown, begge lokaliserte) → seksjon + v1
+- `GET /` liste, `GET /:id` detalj (med aktiv versjons bodyMarkdown)
+- `PATCH /:id/title` oppdater tittel
+- `PUT /:id/content` ny innholdsversjon (immutabel, versionNo++, latest-wins)
+- `DELETE /:id` (blokkeres hvis seksjonen er knyttet til et kurs)
+
+Kommandoer i `src/modules/course/sectionCommands.ts` speiler Module/ModuleVersion-mønsteret.
+Integrasjonstest (`m2-admin-sections.test.ts`) dekker create→read→list→re-version→delete +
+delete-blokkering ved kurs-tilknytning. `tsc` rent; CI kjører mot Postgres. Ren backend —
+ingen UI ennå (U1 #488).
+
 ## 1.3.2 - 2026-06-15
 
 feat(course): CourseItem-polymorfi + backfill + dual-write — F1 expand-fase (#480)
