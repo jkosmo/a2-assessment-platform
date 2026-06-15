@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.2 - 2026-05-23
+
+fix(security): stop URL fetch redirects to private/internal addresses
+
+`fetchUrlAsSourceMaterial` followed redirects automatically after validating only the
+initial URL. This allowed SSRF bypass via attacker-controlled redirect targets
+(e.g. `127.0.0.1`, RFC1918, metadata ranges).
+
+Fix: switched to manual redirect handling and re-run `assertSafeUrl` on each
+redirect target before any subsequent fetch. Redirect chains are capped to 5 hops.
+
+Added unit-test coverage for redirect-to-loopback blocking.
+
 ## 1.2.1 - 2026-05-23
 
 fix(admin): flytt `jsdom` til dependencies (#454 Phase 1 hotfix)

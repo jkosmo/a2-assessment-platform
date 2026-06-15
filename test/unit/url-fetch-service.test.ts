@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fetchUrlAsSourceMaterial, UrlFetchError, checkAndConsumeRateLimit } from "../../src/modules/adminContent/urlFetchService.js";
 
 // #454 Phase 1: SSRF-guard tests. These are the critical security tests — they validate
@@ -56,6 +56,25 @@ describe("urlFetchService SSRF protection", () => {
     await expect(fetchUrlAsSourceMaterial("http://[fe80::1]/")).rejects.toMatchObject({
       code: "private_address",
     });
+  });
+
+
+
+  it("rejects redirects to private/internal addresses", async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "http://127.0.0.1/internal" } }));
+    global.fetch = fetchMock as typeof fetch;
+
+    try {
+      await expect(fetchUrlAsSourceMaterial("https://93.184.216.34/start")).rejects.toMatchObject({
+        code: "private_address",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it("rejects hostnames that map to private addresses (localhost variants)", async () => {
