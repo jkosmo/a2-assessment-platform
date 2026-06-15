@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.0 - 2026-06-15
+
+feat(course): markdown-sanitiseringstjeneste for læringsseksjoner — F3 (#482) + embedded-video iframe-allowlist X1 (#493)
+
+Første skive av #476 (Tier 2 LMS — læringstekster mellom moduler, epic #478). Ny ren
+tjeneste `src/modules/course/sectionContent.ts`: `renderSectionMarkdown()` renderer
+SMO-skrevet markdown via `marked` og saniterer server-side med DOMPurify (jsdom) før det
+når en deltaker. `sanitizeSectionHtml()` eksponerer samme policy for live-preview-bruk.
+
+Sikkerhet: script, inline event-handlers og `javascript:`-URLer fjernes. Iframes avvises
+by default; embedded video tillates KUN fra en eksplisitt HTTPS-domene-allowlist
+(`ALLOWED_VIDEO_IFRAME_HOSTS`: YouTube, youtube-nocookie, Vimeo player) via en
+`uponSanitizeElement`-hook. `isAllowedVideoEmbed()` validerer protokoll + host.
+
+`marked` + `dompurify` lagt i `dependencies` (importert i prod-kode), `@types/dompurify` i
+devDeps. 13 vitest-enhetstester (positive + negative), tsc rent. Ingen DB/UI ennå — rent
+backend-fundament, ship-safe alene.
+
 ## 1.2.38 - 2026-06-04
 
 fix(admin-content): «Importer kurs-pakke»-knappen åpner nå fil-velgeren også når kurslisten ikke er tom
