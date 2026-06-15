@@ -97,6 +97,60 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   });
 }
 
+export type CourseItemInput =
+  | { type: "MODULE"; moduleId: string }
+  | { type: "SECTION"; sectionId: string };
+
+// Sets the full ordered sequence of a course's items — modules and learning
+// sections interleaved (#486/B2). sortOrder follows array position. During the
+// expand-contract transition this also re-syncs CourseModule from the MODULE
+// items so the not-yet-cut-over read paths stay correct.
+export async function setCourseItems(courseId: string, items: CourseItemInput[]) {
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+
+  const moduleIds = items.flatMap((i) => (i.type === "MODULE" ? [i.moduleId] : []));
+  const sectionIds = items.flatMap((i) => (i.type === "SECTION" ? [i.sectionId] : []));
+  if (new Set(moduleIds).size !== moduleIds.length) {
+    throw new ValidationError("A module may appear only once in a course.");
+  }
+  if (new Set(sectionIds).size !== sectionIds.length) {
+    throw new ValidationError("A section may appear only once in a course.");
+  }
+  if (moduleIds.length > 0) {
+    const found = await prisma.module.count({ where: { id: { in: moduleIds } } });
+    if (found !== moduleIds.length) throw new ValidationError("One or more modules do not exist.");
+  }
+  if (sectionIds.length > 0) {
+    const found = await prisma.courseSection.count({ where: { id: { in: sectionIds } } });
+    if (found !== sectionIds.length) throw new ValidationError("One or more sections do not exist.");
+  }
+
+  return runInTransaction(async (tx) => {
+    await tx.courseItem.deleteMany({ where: { courseId } });
+    await tx.courseModule.deleteMany({ where: { courseId } });
+    if (items.length > 0) {
+      await tx.courseItem.createMany({
+        data: items.map((item, index) => ({
+          courseId,
+          sortOrder: index,
+          itemType: item.type,
+          moduleId: item.type === "MODULE" ? item.moduleId : null,
+          sectionId: item.type === "SECTION" ? item.sectionId : null,
+        })),
+      });
+      const moduleRows = items
+        .map((item, index) => ({ item, index }))
+        .filter((entry): entry is { item: { type: "MODULE"; moduleId: string }; index: number } => entry.item.type === "MODULE")
+        .map(({ item, index }) => ({ courseId, moduleId: item.moduleId, sortOrder: index }));
+      if (moduleRows.length > 0) {
+        await tx.courseModule.createMany({ data: moduleRows });
+      }
+    }
+    await tx.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
+  });
+}
+
 export async function setCourseModules(
   courseId: string,
   modules: Array<{ moduleId: string; sortOrder: number }>,
