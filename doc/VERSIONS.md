@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.13 - 2026-06-16
+
+feat(course): auto-oversettelse-assist i seksjons-editor (#514)
+
+Eksplisitt LLM-oversettelse av seksjoner (tittel + bodyMarkdown), på linje med kurs/moduler.
+Per teacher-locale-prinsippet: eksplisitt handling, forfatter ser over resultatet før lagring.
+
+- `localizeSectionContent` + `buildSectionLocalizationPrompts` i llmContentGenerationService —
+  markdown-bevarende prompt (bevarer #-overskrifter, lister, lenker, kode, {{asset:...}};
+  oversetter kun lesbar tekst)
+- `POST /api/admin/content/sections/localize` (rate-limited, validerer source≠target)
+- Editor: «Oversett fra dette språket»-knapp fyller de andre språk-fanene fra aktivt språk;
+  forfatter reviewer/redigerer før lagring
+- Unit-tester for prompt-byggeren (markdown/placeholder-bevaring + felt-utelatelse)
+
 ## 1.3.12 - 2026-06-16
 
 feat(course): export/import tar med læringsseksjoner (#512)

@@ -8,10 +8,12 @@ import {
   listSections,
   deleteSection,
 } from "../modules/course/index.js";
-import { localizedTextPatchSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { localizedTextPatchSchema, generationLocaleSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
+import { localizeSectionContent } from "../modules/adminContent/llmContentGenerationService.js";
+import { generateLimiter } from "../middleware/rateLimiting.js";
 
 const adminSectionsRouter = Router();
 
@@ -22,6 +24,12 @@ const createSectionSchema = z.object({
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
 const previewSchema = z.object({ markdown: z.string() });
+const localizeSchema = z.object({
+  title: z.string().trim().min(1).optional(),
+  bodyMarkdown: z.string().trim().min(1).optional(),
+  sourceLocale: generationLocaleSchema,
+  targetLocale: generationLocaleSchema,
+}).refine((v) => Boolean(v.title || v.bodyMarkdown), { message: "At least one field is required." });
 
 type SectionWithActiveVersion = {
   id: string;
@@ -72,6 +80,26 @@ adminSectionsRouter.post("/preview", async (request, response, next) => {
   }
   try {
     response.json({ html: renderSectionMarkdown(parsed.data.markdown) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Explicit LLM translation assist (#514) — translate title + bodyMarkdown from
+// one locale to another; the author reviews/edits the result before saving.
+adminSectionsRouter.post("/localize", generateLimiter, async (request, response, next) => {
+  const parsed = localizeSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    if (parsed.data.sourceLocale === parsed.data.targetLocale) {
+      response.json({ title: parsed.data.title, bodyMarkdown: parsed.data.bodyMarkdown });
+      return;
+    }
+    const result = await localizeSectionContent(parsed.data);
+    response.json(result);
   } catch (error) {
     next(error);
   }
