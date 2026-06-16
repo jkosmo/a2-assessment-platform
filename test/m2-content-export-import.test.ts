@@ -230,7 +230,7 @@ describe("#512 course export-import with learning sections", () => {
       .post("/api/admin/content/courses/import")
       .set(adminHeaders)
       .send({ payload: envelope, mode: "createNew" });
-    expect(importRes.status).toBe(201);
+    expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
     const newCourseId = importRes.body.courseId as string;
     expect(newCourseId).not.toBe(courseId);
 
