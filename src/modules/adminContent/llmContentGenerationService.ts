@@ -126,6 +126,18 @@ export type CourseCopyLocalizationResult = {
   description?: string;
 };
 
+export type SectionLocalizationInput = {
+  title?: string;
+  bodyMarkdown?: string;
+  sourceLocale: GenerationLocale;
+  targetLocale: GenerationLocale;
+};
+
+export type SectionLocalizationResult = {
+  title?: string;
+  bodyMarkdown?: string;
+};
+
 export type BlueprintInput = {
   sourceMaterial: string;
   certificationLevel: CertificationLevel;
@@ -208,6 +220,13 @@ const courseCopyLocalizationResponseCodec = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
 }).refine((value) => Boolean(value.title || value.description), {
+  message: "At least one localized field is required.",
+});
+
+const sectionLocalizationResponseCodec = z.object({
+  title: z.string().min(1).optional(),
+  bodyMarkdown: z.string().optional(),
+}).refine((value) => Boolean(value.title || value.bodyMarkdown), {
   message: "At least one localized field is required.",
 });
 
@@ -1567,6 +1586,62 @@ export async function localizeCourseCopy(input: CourseCopyLocalizationInput): Pr
   const parsed = courseCopyLocalizationResponseCodec.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`Course copy localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
+
+// Markdown-preserving translation of a learning section (#514). Unlike course
+// copy, bodyMarkdown must keep its markdown structure and {{asset:...}}
+// placeholders intact — only human-readable text is translated.
+export function buildSectionLocalizationPrompts(input: SectionLocalizationInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a professional translator for a certification platform. Translate the provided learning-section content faithfully and return strict JSON only - no commentary.";
+
+  const titleSection = typeof input.title === "string" && input.title.trim().length > 0
+    ? `\ntitle:\n${input.title.trim()}\n`
+    : "";
+  const bodySection = typeof input.bodyMarkdown === "string" && input.bodyMarkdown.trim().length > 0
+    ? `\nbodyMarkdown:\n${input.bodyMarkdown.trim()}\n`
+    : "";
+
+  const returnFields: string[] = [];
+  if (titleSection) returnFields.push(`  "title": "translated title in ${LOCALE_DISPLAY[input.targetLocale]}"`);
+  if (bodySection) returnFields.push(`  "bodyMarkdown": "translated markdown body in ${LOCALE_DISPLAY[input.targetLocale]}"`);
+
+  const userPrompt = `Translate the following learning-section content from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+
+${buildLanguageEnforcementDirective(input.targetLocale)}
+
+## Translation rules
+
+- Translate ONLY human-readable text. Preserve meaning, tone and intended audience.
+- Keep ALL markdown formatting exactly: headings (#), lists, links, emphasis, code blocks, tables, images.
+- Do NOT translate or alter URLs, code, or {{asset:...}} placeholders.
+- Do not add or remove content, fields, or markdown structure.
+
+## Source content
+${titleSection}
+${bodySection}
+## Return format
+
+Return a single JSON object (bodyMarkdown value must be a JSON string with escaped newlines):
+{
+${returnFields.join(",\n")}
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+export async function localizeSectionContent(input: SectionLocalizationInput): Promise<SectionLocalizationResult> {
+  const { systemPrompt, userPrompt } = buildSectionLocalizationPrompts(input);
+
+  const raw = await callLlm(systemPrompt, userPrompt);
+  const parsed = sectionLocalizationResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Section localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
   return parsed.data;
 }

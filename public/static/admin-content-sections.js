@@ -24,6 +24,7 @@ const LABELS = {
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Delete this section?", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
+    translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
   },
   nb: {
     heading: "Seksjoner", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -32,6 +33,7 @@ const LABELS = {
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
+    translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
   },
   nn: {
     heading: "Seksjonar", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -40,6 +42,7 @@ const LABELS = {
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
+    translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
   },
 };
 
@@ -214,11 +217,13 @@ async function renderEditorView(sectionId) {
       </div>
       <div class="editor-actions">
         <button type="button" id="saveBtn" class="btn btn-primary">${escapeHtml(L("save"))}</button>
+        <button type="button" id="translateBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("translate"))}</button>
         <span class="editor-status" id="editorStatus"></span>
       </div>
     </div>`;
 
   document.getElementById("backLink")?.addEventListener("click", (e) => { e.preventDefault(); goTo("list"); });
+  document.getElementById("translateBtn")?.addEventListener("click", translateFromCurrent);
   document.getElementById("langTabs")?.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-locale]");
     if (!tab) return;
@@ -309,6 +314,37 @@ async function saveSection() {
     if (status) status.textContent = L("saved");
   } catch (err) {
     showToast(err?.message ?? "Error", "error");
+  }
+}
+
+// Explicit LLM translation (#514): translate the active language's content into
+// the other locales, which the author reviews/edits before saving.
+async function translateFromCurrent() {
+  captureInputs();
+  const src = editing.editLocale;
+  const title = (editing.title[src] ?? "").trim();
+  const body = (editing.body[src] ?? "").trim();
+  if (!title && !body) {
+    showToast(L("needContent"), "error");
+    return;
+  }
+  const btn = document.getElementById("translateBtn");
+  if (btn) { btn.disabled = true; btn.textContent = L("translating"); }
+  try {
+    for (const target of EDITOR_LOCALES.filter((l) => l !== src)) {
+      const res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ title: title || undefined, bodyMarkdown: body || undefined, sourceLocale: src, targetLocale: target }),
+      });
+      if (res.title) editing.title[target] = res.title;
+      if (res.bodyMarkdown) editing.body[target] = res.bodyMarkdown;
+    }
+    showToast(L("translated"));
+    renderEditorFields();
+  } catch (err) {
+    showToast(err?.message ?? "Error", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = L("translate"); }
   }
 }
 

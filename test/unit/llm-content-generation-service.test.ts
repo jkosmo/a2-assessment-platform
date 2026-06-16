@@ -6,6 +6,7 @@ import {
   buildModuleDraftPrompts,
   buildModuleDraftLocalizationPrompts,
   buildModuleDraftRevisionPrompts,
+  buildSectionLocalizationPrompts,
   detectDominantLanguage,
   extractMcqRevisionTargets,
   hasMeaningfulMcqRevision,
@@ -477,6 +478,34 @@ describe("llm content generation prompts", () => {
 
       expect(userPrompt).not.toContain("Assessment blueprint");
     });
+  });
+});
+
+describe("section localization prompts (#514)", () => {
+  it("instructs markdown + placeholder preservation and targets the right locale", () => {
+    const { systemPrompt, userPrompt } = buildSectionLocalizationPrompts({
+      title: "Intro",
+      bodyMarkdown: "# Heading\n\nSee {{asset:fig1}} and [link](https://a-2.no).",
+      sourceLocale: "nb",
+      targetLocale: "en-GB",
+    });
+    expect(systemPrompt.toLowerCase()).toContain("translator");
+    expect(userPrompt).toContain("{{asset:...}}");
+    expect(userPrompt.toLowerCase()).toContain("markdown");
+    expect(userPrompt).toContain('"bodyMarkdown"');
+    expect(userPrompt).toContain('"title"');
+    // The actual content to translate is embedded.
+    expect(userPrompt).toContain("{{asset:fig1}}");
+  });
+
+  it("omits a field that was not provided", () => {
+    const { userPrompt } = buildSectionLocalizationPrompts({
+      title: "Bare tittel",
+      sourceLocale: "nb",
+      targetLocale: "nn",
+    });
+    expect(userPrompt).toContain('"title"');
+    expect(userPrompt).not.toContain('"bodyMarkdown"');
   });
 });
 
