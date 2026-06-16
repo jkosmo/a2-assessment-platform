@@ -2841,9 +2841,9 @@ async function openSectionReader(courseId, sectionId) {
     <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:var(--space-2,12px)">
         <h2 id="sectionReaderTitle" style="margin:0;font-size:20px">…</h2>
-        <button type="button" id="sectionReaderClose" class="btn-secondary" style="flex-shrink:0">${escapeHtmlP(t("common.close") || "Lukk")}</button>
+        <button type="button" id="sectionReaderClose" class="btn-secondary" style="flex-shrink:0">${escapeHtmlP(t("courses.section.close"))}</button>
       </div>
-      <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("common.loading") || "Laster…")}</div>
+      <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
     </div>`;
   document.body.appendChild(overlay);
 
