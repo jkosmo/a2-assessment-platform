@@ -241,6 +241,15 @@
         background: var(--color-row-hover);
         color: var(--color-meta);
       }
+      /* Distinguish sections from modules in the builder (#490 feedback). */
+      .module-list-item[data-item-type="SECTION"] {
+        background: #eef4ff;
+        border-color: #c7dbff;
+      }
+      .module-list-item[data-item-type="SECTION"] .item-type-badge {
+        background: #d6e4ff;
+        color: #1d4ed8;
+      }
       .module-list-item-actions { display: flex; gap: 4px; }
       .module-move-btn, .module-remove-btn {
         padding: 3px 8px;

@@ -131,9 +131,9 @@ async function renderListView() {
   }
 
   const rows = sections.map((s) => `<tr>
-      <td>${escapeHtml(displayTitle(s.title))}</td>
+      <td class="col-title">${escapeHtml(displayTitle(s.title))}</td>
       <td>v${escapeHtml(s.versionNo ?? "1")}</td>
-      <td>${escapeHtml(new Date(s.updatedAt).toLocaleDateString(currentLocale))}</td>
+      <td style="white-space:nowrap">${escapeHtml(new Date(s.updatedAt).toLocaleDateString(currentLocale))}</td>
       <td class="col-actions">
         <button class="row-action-btn" data-action="edit" data-id="${escapeHtml(s.id)}">${escapeHtml(L("edit"))}</button>
         <button class="row-action-btn destructive" data-action="delete" data-id="${escapeHtml(s.id)}">${escapeHtml(L("del"))}</button>
@@ -143,7 +143,7 @@ async function renderListView() {
   pageContent.innerHTML = `
     <div class="page-header">
       <h1>${escapeHtml(L("heading"))}</h1>
-      <button type="button" id="newSectionBtn" class="btn btn-primary">${escapeHtml(L("newSection"))}</button>
+      <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
     </div>
     ${sections.length === 0
       ? `<div class="empty-state"><p class="empty-state-text">${escapeHtml(L("empty"))}</p></div>`

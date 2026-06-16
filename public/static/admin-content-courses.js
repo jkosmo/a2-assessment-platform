@@ -1134,7 +1134,7 @@ function renderModuleList() {
 
   container.innerHTML = `<div class="module-list" id="moduleList">
     ${courseModules.map((m, i) => `
-      <div class="module-list-item" data-ref-id="${escapeHtml(m.refId)}">
+      <div class="module-list-item" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="module-list-item-order">${i + 1}.</span>
         <span class="item-type-badge">${m.type === "SECTION" ? "SEKSJON" : "MODUL"}</span>
         <span class="module-list-item-title">${escapeHtml(m.title)}</span>

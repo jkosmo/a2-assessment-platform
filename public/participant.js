@@ -2842,7 +2842,8 @@ async function openSectionReader(courseId, sectionId) {
     <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;display:flex;flex-direction:column;">
       <h2 id="sectionReaderTitle" style="margin:0 0 var(--space-2,12px) 0;font-size:20px">…</h2>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
-      <div style="margin-top:var(--space-3,16px);padding-top:var(--space-2,12px);border-top:1px solid var(--color-border-soft,#e5e7eb);display:flex;justify-content:center;">
+      <div style="margin-top:var(--space-3,16px);padding-top:var(--space-2,12px);border-top:1px solid var(--color-border-soft,#e5e7eb);display:flex;justify-content:center;gap:var(--space-2,12px);flex-wrap:wrap;">
+        <button type="button" id="sectionReaderMarkRead" class="btn-primary">${escapeHtmlP(t("courses.section.markRead"))}</button>
         <button type="button" id="sectionReaderClose" class="btn-secondary">${escapeHtmlP(t("courses.section.close"))}</button>
       </div>
     </div>`;
@@ -2860,6 +2861,20 @@ async function openSectionReader(courseId, sectionId) {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
   });
 
+  // Explicit "mark as read" (#492 feedback) — clearer than auto-marking on open.
+  const markReadBtn = overlay.querySelector("#sectionReaderMarkRead");
+  markReadBtn?.addEventListener("click", async () => {
+    markReadBtn.disabled = true;
+    try {
+      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}/read`, headers(), { method: "POST" });
+      markedRead = true;
+      markReadBtn.textContent = t("courses.section.doneBadge");
+    } catch (error) {
+      markReadBtn.disabled = false;
+      showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+    }
+  });
+
   try {
     const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}`, headers());
     const titleEl = overlay.querySelector("#sectionReaderTitle");
@@ -2867,11 +2882,6 @@ async function openSectionReader(courseId, sectionId) {
     if (titleEl) titleEl.textContent = body.title ?? "";
     // body.html is already sanitised server-side with the F3/X1 policy.
     if (bodyEl) bodyEl.innerHTML = body.html ?? "";
-    // Opening the reader marks the section as read (#492).
-    try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}/read`, headers(), { method: "POST" });
-      markedRead = true;
-    } catch { /* non-fatal: reading still works if marking fails */ }
   } catch (error) {
     const bodyEl = overlay.querySelector("#sectionReaderBody");
     if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");

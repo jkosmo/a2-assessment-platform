@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.11 - 2026-06-16
+
+fix(course): UI-polish for seksjoner etter testtilbakemelding (#488/#490/#492 follow-up)
+
+Batch av fem tilbakemeldingspunkter fra manuell staging-test:
+1. «Seksjoner»-fanen lagt til i content-area-nav på Moduler- (library) og Kalibrering-sidene
+   (manglet — var kun på Kurs/Seksjoner-sidene).
+2. Seksjons-liste: fjernet 720px-tak som tvang horisontal scroll; tittel-kolonne tar slakk;
+   «Ny seksjon»-knapp er ikke lenger full bredde.
+3. (Auto-oversettelse av seksjoner → eget issue #514; manuell per-språk fungerer, deltaker-
+   fallback gjør at innhold aldri vises tomt.)
+4. Kursbyggeren fargekoder nå SEKSJON-rader (blå tint) for tydelig forskjell fra MODUL.
+5. Seksjons-leser: eksplisitt «Marker som lest»-knapp + «Lukk» (i stedet for auto-marker-ved-
+   åpning, som var utydelig); markering oppdaterer badge + progresjon ved lukk.
+
+Kun front-end (HTML/JS/i18n). `node --check` rent.
+
 ## 1.3.10 - 2026-06-16
 
 feat(course): seksjons-lese-progresjon — alle elementer teller, leste seksjoner markeres (#487/#492)
