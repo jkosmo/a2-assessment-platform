@@ -23,12 +23,10 @@ coursesRouter.get("/", async (request, response, next) => {
 
     const items: CourseListItem[] = await Promise.all(
       courses.map(async (course) => {
-        // Count all elements — modules + sections (#492).
+        // Count all elements — modules + sections (#492). Modules come from the
+        // always-populated CourseModule join; sections only exist in CourseItem.
+        const moduleIds = course.modules.map((m) => m.moduleId);
         const courseItems = await courseRepository.findCourseItems(course.id);
-        const moduleIds = courseItems
-          .filter((i) => i.itemType === "MODULE")
-          .map((i) => i.moduleId)
-          .filter((id): id is string => Boolean(id));
         const sectionIds = courseItems
           .filter((i) => i.itemType === "SECTION")
           .map((i) => i.sectionId)
@@ -45,7 +43,7 @@ coursesRouter.get("/", async (request, response, next) => {
             : Promise.resolve([]),
         ]);
         const readCount = readIds.filter((id) => sectionIds.includes(id)).length;
-        const total = courseItems.length;
+        const total = moduleIds.length + sectionIds.length;
         const completed = passed + readCount;
         const hasStarted = latestSubmissions.length > 0 || readCount > 0;
 
@@ -155,7 +153,9 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     });
 
     // All elements count toward progress: passed modules + read sections (#492).
-    const totalElements = items.length;
+    // Module count from the reliable CourseModule join; sections from CourseItem.
+    const sectionCount = items.filter((i) => i.type === "SECTION").length;
+    const totalElements = moduleIds.length + sectionCount;
     const completedElements = passedCount + readSectionCount;
 
     const detail: CourseDetail = {
