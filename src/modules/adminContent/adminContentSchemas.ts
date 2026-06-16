@@ -315,7 +315,7 @@ export const courseExportPayloadSchema = z.object({
   course: z.object({
     title: localizedTextSchema,
     description: localizedTextSchema.nullable().optional(),
-    certificationLevel: certificationLevelInputSchema,
+    certificationLevel: certificationLevelInputSchema.nullable(),
     audit: exportAuditSchema,
     modules: z.array(z.object({
       sortOrder: z.number().int().min(0),
