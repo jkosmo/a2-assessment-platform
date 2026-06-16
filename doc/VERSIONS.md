@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.9 - 2026-06-16
+
+fix(course): manglende i18n-nøkler for seksjons-rader i deltaker-visning (#491 follow-up)
+
+Deltaker-visningen viste rå nøkler (`courses.section.read`, `courses.section.label`) fordi
+`t()` returnerer nøkkelen når den mangler — `|| fallback` slo aldri inn. La til
+`courses.section.label/read/close/loading` i alle tre locales (en-GB/nb/nn) og pekte
+leser-overlayen til `courses.section.close/loading`. «0/5 moduler» er uendret og korrekt
+(modul-progresjon mot sertifisering; seksjoner vurderes ikke).
+
 ## 1.3.8 - 2026-06-16
 
 fix(course): seksjons-editor sendte tomme språk-strenger → 400 ved lagring (#488 follow-up)
