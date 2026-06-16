@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.7 - 2026-06-16
+
+feat(course): deltaker-visning av læringsseksjoner — P1 (#491)
+
+Åttende skive av #476 (Tier 2 LMS, epic #478). Fullfører forfatter→deltaker-løkka.
+
+Backend:
+- Deltaker-kurs-detalj (`GET /api/courses/:id`) returnerer nå `items` — den blandede
+  modul/seksjon-sekvensen i rekkefølge (modul-status bevart, seksjoner med tittel)
+- Nytt `GET /api/courses/:id/sections/:sectionId` — validerer at seksjonen tilhører det
+  publiserte kurset, returnerer sanitisert HTML (F3/X1) + tittel i deltakerens locale
+
+Front-end (`participant.js`):
+- Kurs-detalj rendrer den blandede sekvensen; seksjons-rader åpner en mobil-først
+  leser-overlay som viser server-rendret, sanitisert innhold (fallback til modul-only)
+
+Integrasjonstest (`m2-course-section-participant.test.ts`): seksjon i sekvensen +
+sanitisert HTML (script strippet) + 404 for seksjon utenfor kurset. `tsc` + `node --check`
++ CI mot Postgres rene.
+
+Closes #491
+
 ## 1.3.6 - 2026-06-16
 
 feat(course): kursbygger med blandede moduler + seksjoner — U3 (#490)

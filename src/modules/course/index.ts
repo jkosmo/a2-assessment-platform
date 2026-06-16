@@ -17,6 +17,7 @@ export type {
   CourseListItem,
   CourseDetail,
   CourseModuleEntry,
+  CourseSequenceItem,
   AdminCourseListItem,
   AdminCourseDetail,
 } from "./courseReadModels.js";

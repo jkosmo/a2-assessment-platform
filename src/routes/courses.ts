@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { courseRepository, computeCourseStatus } from "../modules/course/index.js";
+import { courseRepository, computeCourseStatus, getSection } from "../modules/course/index.js";
+import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { NotFoundError } from "../errors/AppError.js";
-import type { CourseListItem, CourseDetail } from "../modules/course/index.js";
+import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
 
 const coursesRouter = Router();
@@ -110,6 +111,30 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       }
     }
 
+    // Mixed module/section sequence (#491/P1).
+    const courseItems = await courseRepository.findCourseItems(course.id);
+    const items: CourseSequenceItem[] = courseItems.map((item) => {
+      if (item.itemType === "SECTION" && item.section) {
+        return {
+          type: "SECTION",
+          sortOrder: item.sortOrder,
+          sectionId: item.section.id,
+          title: localizeContentText(locale, item.section.title) ?? item.section.title,
+        };
+      }
+      const moduleId = item.moduleId ?? item.module?.id ?? "";
+      const certStatus = certStatusByModuleId.get(moduleId);
+      const passed = certStatus !== undefined && certStatus !== "NOT_CERTIFIED";
+      const hasStarted = latestSubmissionByModuleId.has(moduleId);
+      return {
+        type: "MODULE",
+        sortOrder: item.sortOrder,
+        moduleId,
+        title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
+        moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+      };
+    });
+
     const detail: CourseDetail = {
       id: course.id,
       title: localizeContentText(locale, course.title) ?? course.title,
@@ -133,9 +158,44 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
           moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
         };
       }),
+      items,
     };
 
     response.json({ course: detail });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Rendered learning-section content for a participant (#491/P1). Validates the
+// section belongs to the published course, then returns sanitised HTML in the
+// participant's locale.
+coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+  try {
+    const course = await courseRepository.findCourseById(request.params.courseId);
+    if (!course || !course.publishedAt || course.archivedAt) {
+      throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    }
+    const courseItems = await courseRepository.findCourseItems(course.id);
+    const belongs = courseItems.some(
+      (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
+    );
+    if (!belongs) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
+    }
+    const section = await getSection(request.params.sectionId);
+    if (!section) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Section not found.");
+    }
+    const localizedTitle = localizeContentText(locale, section.title) ?? section.title;
+    const localizedBody = localizeContentText(locale, section.activeVersion?.bodyMarkdown ?? "") ?? "";
+    response.json({ title: localizedTitle, html: renderSectionMarkdown(localizedBody) });
   } catch (error) {
     next(error);
   }

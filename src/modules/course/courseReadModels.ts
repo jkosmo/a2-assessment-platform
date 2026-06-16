@@ -19,10 +19,17 @@ export interface CourseModuleEntry {
   moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS";
 }
 
+// A single step in the participant course sequence — either a module or a
+// learning section (#491/P1), in sortOrder.
+export type CourseSequenceItem =
+  | { type: "MODULE"; sortOrder: number; moduleId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" }
+  | { type: "SECTION"; sortOrder: number; sectionId: string; title: string };
+
 export interface CourseDetail extends CourseListItem {
   certificationLevel: string | null;
   publishedAt: string | null;
   modules: CourseModuleEntry[];
+  items: CourseSequenceItem[];
 }
 
 export interface AdminCourseListItem {
