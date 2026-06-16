@@ -2838,12 +2838,12 @@ async function openSectionReader(courseId, sectionId) {
   overlay.setAttribute("aria-modal", "true");
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;z-index:1000;padding:0;";
   overlay.innerHTML = `
-    <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:var(--space-2,12px)">
-        <h2 id="sectionReaderTitle" style="margin:0;font-size:20px">…</h2>
-        <button type="button" id="sectionReaderClose" class="btn-secondary" style="flex-shrink:0">${escapeHtmlP(t("courses.section.close"))}</button>
-      </div>
+    <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;display:flex;flex-direction:column;">
+      <h2 id="sectionReaderTitle" style="margin:0 0 var(--space-2,12px) 0;font-size:20px">…</h2>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
+      <div style="margin-top:var(--space-3,16px);padding-top:var(--space-2,12px);border-top:1px solid var(--color-border-soft,#e5e7eb);display:flex;justify-content:center;">
+        <button type="button" id="sectionReaderClose" class="btn-secondary">${escapeHtmlP(t("courses.section.close"))}</button>
+      </div>
     </div>`;
   document.body.appendChild(overlay);
 
