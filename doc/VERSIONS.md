@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.6 - 2026-06-16
+
+feat(course): kursbygger med blandede moduler + seksjoner — U3 (#490)
+
+Syvende skive av #476 (Tier 2 LMS, epic #478). Kurs-detalj-byggeren håndterer nå en blandet
+sekvens av moduler og læringsseksjoner:
+- Innholdslista viser type-badge ([MODUL]/[SEKSJON]) og deler rekkefølge/flytt/fjern-kontroller
+- Ny seksjons-velger (dropdown fra seksjons-biblioteket — «velg fra bibliotek», D1-valg a)
+- Lastes via `GET /courses/:id/items`, lagres via `PUT /courses/:id/items` (B2) som også
+  re-synker CourseModule server-side
+- Fallback til legacy modul-only-form hvis items-endepunktet mangler
+
+Kun front-end (`admin-content-courses.js` + badge-CSS). Samtale-baserte ny-kurs-flyten er
+urørt. `node --check` + `tsc` + `build` rene. Manuell testing ved staging-deploy sammen med P1.
+
+Closes #490
+
 ## 1.3.5 - 2026-06-15
 
 feat(course): seksjons-editor (U1) + IA-design (D1) — #488, #484
