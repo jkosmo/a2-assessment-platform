@@ -924,11 +924,15 @@ async function convCreateCourse() {
 let activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
 let initialDetailLocaleValues = cloneCourseLocaleValues();
 
-// Course modules being edited (array of { moduleId, title })
+// Course items being edited — modules and learning sections interleaved (#490/U3).
+// Each entry: { type: "MODULE" | "SECTION", refId, title }
 let courseModules = [];
 
 // All available library modules (for the combobox)
 let allLibraryModules = [];
+
+// All available library sections (for the section picker, #490)
+let allLibrarySections = [];
 
 // Combobox state
 let comboboxQuery = "";
@@ -977,11 +981,27 @@ async function renderDetailView(courseId) {
     allLibraryModules = [];
   }
 
-  // Init course modules list
+  // Load library sections for the section picker (#490)
+  try {
+    const secData = await apiFetch("/api/admin/content/sections", getHeaders);
+    allLibrarySections = secData.sections ?? [];
+  } catch {
+    allLibrarySections = [];
+  }
+
+  // Init course item list from the mixed CourseItem sequence (#490). Falls back
+  // to the legacy module-only shape if the items endpoint is unavailable.
   if (course) {
-    courseModules = (course.modules ?? [])
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map(cm => ({ moduleId: cm.moduleId, title: localizedText(cm.moduleTitle) || cm.moduleId }));
+    try {
+      const itemsData = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/items`, getHeaders);
+      courseModules = (itemsData.items ?? [])
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(it => ({ type: it.type, refId: it.type === "MODULE" ? it.moduleId : it.sectionId, title: localizedText(it.title) || it.moduleId || it.sectionId }));
+    } catch {
+      courseModules = (course.modules ?? [])
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(cm => ({ type: "MODULE", refId: cm.moduleId, title: localizedText(cm.moduleTitle) || cm.moduleId }));
+    }
   } else {
     courseModules = [];
   }
@@ -1005,7 +1025,7 @@ async function renderDetailView(courseId) {
   const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
   const showPublishButton = canPublishCourse({
     ...course,
-    moduleCount: courseModules.length,
+    moduleCount: courseModules.filter(it => it.type === "MODULE").length,
   });
 
   pageContent.innerHTML = `
@@ -1060,7 +1080,7 @@ async function renderDetailView(courseId) {
       </div>
 
       <div class="detail-section">
-        <h2 class="detail-section-title">Moduler i kurset</h2>
+        <h2 class="detail-section-title">Innhold i kurset (moduler og seksjoner)</h2>
         <div id="moduleListContainer"></div>
         <div class="combobox-row" style="margin-top: var(--space-2)">
           <div class="combobox-wrap" id="comboboxWrap">
@@ -1070,7 +1090,12 @@ async function renderDetailView(courseId) {
               aria-autocomplete="list" aria-controls="comboboxDropdown" />
             <div id="comboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
           </div>
-          <button id="addModuleBtn" class="btn btn-secondary" disabled>Legg til</button>
+          <button id="addModuleBtn" class="btn btn-secondary" disabled>Legg til modul</button>
+        </div>
+        <div class="combobox-row" style="margin-top: var(--space-2)">
+          <label for="sectionSelect" class="sr-only">Velg læringsseksjon</label>
+          <select id="sectionSelect" class="combobox-input" style="flex:1 1 auto"></select>
+          <button id="addSectionBtn" class="btn btn-secondary">Legg til seksjon</button>
         </div>
       </div>
 
@@ -1096,6 +1121,8 @@ function renderModuleList() {
   const container = document.getElementById("moduleListContainer");
   if (!container) return;
 
+  renderSectionPicker();
+
   if (courseModules.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="padding: var(--space-3) var(--space-2)">
@@ -1107,8 +1134,9 @@ function renderModuleList() {
 
   container.innerHTML = `<div class="module-list" id="moduleList">
     ${courseModules.map((m, i) => `
-      <div class="module-list-item" data-module-id="${escapeHtml(m.moduleId)}">
+      <div class="module-list-item" data-ref-id="${escapeHtml(m.refId)}">
         <span class="module-list-item-order">${i + 1}.</span>
+        <span class="item-type-badge">${m.type === "SECTION" ? "SEKSJON" : "MODUL"}</span>
         <span class="module-list-item-title">${escapeHtml(m.title)}</span>
         <div class="module-list-item-actions">
           <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
@@ -1150,7 +1178,7 @@ function moveModule(idx, dir) {
 // ---------------------------------------------------------------------------
 
 function getComboboxOptions() {
-  const addedIds = new Set(courseModules.map(m => m.moduleId));
+  const addedIds = new Set(courseModules.filter(m => m.type === "MODULE").map(m => m.refId));
   const q = comboboxQuery.trim().toLowerCase();
   return allLibraryModules.filter(m => {
     if (addedIds.has(m.id)) return false;
@@ -1211,13 +1239,40 @@ function addSelectedModule() {
   if (!comboboxSelectedId) return;
   const mod = allLibraryModules.find(m => m.id === comboboxSelectedId);
   if (!mod) return;
-  courseModules.push({ moduleId: mod.id, title: localizedText(mod.title) || mod.id });
+  courseModules.push({ type: "MODULE", refId: mod.id, title: localizedText(mod.title) || mod.id });
   comboboxSelectedId = null;
   comboboxQuery = "";
   comboboxOpen = false;
   const input = document.getElementById("comboboxInput");
   if (input) input.value = "";
   updateComboboxDropdown();
+  renderModuleList();
+}
+
+// Section picker (#490) — pick a reusable learning section from the library.
+function renderSectionPicker() {
+  const select = document.getElementById("sectionSelect");
+  if (!select) return;
+  const addedIds = new Set(courseModules.filter(m => m.type === "SECTION").map(m => m.refId));
+  const available = allLibrarySections.filter(s => !addedIds.has(s.id));
+  if (available.length === 0) {
+    select.innerHTML = `<option value="">Ingen ledige seksjoner</option>`;
+    select.disabled = true;
+  } else {
+    select.disabled = false;
+    select.innerHTML = available
+      .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(localizedText(s.title) || s.id)}</option>`)
+      .join("");
+  }
+}
+
+function addSelectedSection() {
+  const select = document.getElementById("sectionSelect");
+  const id = select?.value;
+  if (!id) return;
+  const sec = allLibrarySections.find(s => s.id === id);
+  if (!sec) return;
+  courseModules.push({ type: "SECTION", refId: sec.id, title: localizedText(sec.title) || sec.id });
   renderModuleList();
 }
 
@@ -1264,6 +1319,7 @@ function initDetailEventListeners(courseId) {
   });
 
   document.getElementById("addModuleBtn")?.addEventListener("click", addSelectedModule);
+  document.getElementById("addSectionBtn")?.addEventListener("click", addSelectedSection);
 
   // Save
   document.getElementById("saveCourseBtn")?.addEventListener("click", () => saveCourse(courseId));
@@ -1384,11 +1440,14 @@ async function saveCourse(courseId) {
       });
     }
 
-    // Save module order
-    const modules = courseModules.map((m, i) => ({ moduleId: m.moduleId, sortOrder: i }));
-    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(savedCourseId)}/modules`, getHeaders, {
+    // Save the mixed module/section sequence (#490). PUT /items also re-syncs
+    // CourseModule server-side (B2) so legacy read paths stay correct.
+    const items = courseModules.map(m =>
+      m.type === "SECTION" ? { type: "SECTION", sectionId: m.refId } : { type: "MODULE", moduleId: m.refId },
+    );
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(savedCourseId)}/items`, getHeaders, {
       method: "PUT",
-      body: JSON.stringify({ modules }),
+      body: JSON.stringify({ items }),
     });
 
     showToast("Kurs lagret.", "success");
