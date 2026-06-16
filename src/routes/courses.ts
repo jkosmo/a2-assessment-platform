@@ -23,23 +23,37 @@ coursesRouter.get("/", async (request, response, next) => {
 
     const items: CourseListItem[] = await Promise.all(
       courses.map(async (course) => {
-        const moduleIds = course.modules.map((m) => m.moduleId);
-        const [completed, latestSubmissions] = await Promise.all([
+        // Count all elements — modules + sections (#492).
+        const courseItems = await courseRepository.findCourseItems(course.id);
+        const moduleIds = courseItems
+          .filter((i) => i.itemType === "MODULE")
+          .map((i) => i.moduleId)
+          .filter((id): id is string => Boolean(id));
+        const sectionIds = courseItems
+          .filter((i) => i.itemType === "SECTION")
+          .map((i) => i.sectionId)
+          .filter((id): id is string => Boolean(id));
+        const [passed, readIds, latestSubmissions] = await Promise.all([
           moduleIds.length > 0
             ? courseRepository.countPassedModulesForUser(userId, moduleIds)
             : Promise.resolve(0),
+          sectionIds.length > 0
+            ? courseRepository.findReadSectionIds(userId, course.id)
+            : Promise.resolve([] as string[]),
           moduleIds.length > 0
             ? queryLatestSubmissionsForModules(userId, moduleIds)
             : Promise.resolve([]),
         ]);
-        const total = moduleIds.length;
-        const hasStarted = latestSubmissions.length > 0;
+        const readCount = readIds.filter((id) => sectionIds.includes(id)).length;
+        const total = courseItems.length;
+        const completed = passed + readCount;
+        const hasStarted = latestSubmissions.length > 0 || readCount > 0;
 
         return {
           id: course.id,
           title: localizeContentText(locale, course.title) ?? course.title,
           description: localizeContentText(locale, course.description) ?? course.description,
-          moduleCount: total,
+          moduleCount: moduleIds.length,
           progress: {
             completed,
             total,
@@ -111,15 +125,20 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       }
     }
 
-    // Mixed module/section sequence (#491/P1).
+    // Mixed module/section sequence (#491/P1) with per-section read state (#492).
     const courseItems = await courseRepository.findCourseItems(course.id);
+    const readSectionIds = new Set(await courseRepository.findReadSectionIds(userId, course.id));
+    let readSectionCount = 0;
     const items: CourseSequenceItem[] = courseItems.map((item) => {
       if (item.itemType === "SECTION" && item.section) {
+        const read = readSectionIds.has(item.section.id);
+        if (read) readSectionCount += 1;
         return {
           type: "SECTION",
           sortOrder: item.sortOrder,
           sectionId: item.section.id,
           title: localizeContentText(locale, item.section.title) ?? item.section.title,
+          read,
         };
       }
       const moduleId = item.moduleId ?? item.module?.id ?? "";
@@ -135,6 +154,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       };
     });
 
+    // All elements count toward progress: passed modules + read sections (#492).
+    const totalElements = items.length;
+    const completedElements = passedCount + readSectionCount;
+
     const detail: CourseDetail = {
       id: course.id,
       title: localizeContentText(locale, course.title) ?? course.title,
@@ -143,9 +166,9 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       publishedAt: course.publishedAt.toISOString(),
       moduleCount: moduleIds.length,
       progress: {
-        completed: passedCount,
-        total: moduleIds.length,
-        courseStatus: computeCourseStatus(passedCount, moduleIds.length, latestSubmissions.length > 0),
+        completed: completedElements,
+        total: totalElements,
+        courseStatus: computeCourseStatus(completedElements, totalElements, latestSubmissions.length > 0 || readSectionCount > 0),
       },
       modules: course.modules.map((cm) => {
         const certStatus = certStatusByModuleId.get(cm.moduleId);
@@ -196,6 +219,32 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     const localizedTitle = localizeContentText(locale, section.title) ?? section.title;
     const localizedBody = localizeContentText(locale, section.activeVersion?.bodyMarkdown ?? "") ?? "";
     response.json({ title: localizedTitle, html: renderSectionMarkdown(localizedBody) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Mark a section as read for the current participant (#492). Idempotent.
+coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const course = await courseRepository.findCourseById(request.params.courseId);
+    if (!course || !course.publishedAt || course.archivedAt) {
+      throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    }
+    const courseItems = await courseRepository.findCourseItems(course.id);
+    const belongs = courseItems.some(
+      (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
+    );
+    if (!belongs) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
+    }
+    await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

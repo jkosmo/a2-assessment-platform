@@ -89,6 +89,7 @@ model User {
   consents              UserConsent[]
   deletionRequests      DeletionRequest[]
   courseCompletions     CourseCompletion[]
+  courseSectionReads    CourseSectionRead[]
   createdModules        Module[]              @relation("CreatedModules")
 }
 
@@ -463,6 +464,7 @@ model Course {
   modules            CourseModule[]     // deprecated av CourseItem (#480) — beholdt under expand-contract til lese-cutover + drop
   items              CourseItem[]
   completions        CourseCompletion[]
+  sectionReads       CourseSectionRead[]
 }
 
 model CourseModule {
@@ -502,6 +504,24 @@ model CourseSection {
   versions        CourseSectionVersion[] @relation("CourseSectionVersions")
   activeVersion   CourseSectionVersion?  @relation("ActiveCourseSectionVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
   courseItems     CourseItem[]
+  reads           CourseSectionRead[]
+}
+
+// Per-deltaker lese-markering av en læringsseksjon i et kurs (#487/#492). Moduler
+// "fullføres" via CertificationStatus; seksjoner markeres eksplisitt som lest. Begge
+// teller mot kurs-progresjon (alle elementer teller).
+model CourseSectionRead {
+  id        String        @id @default(cuid())
+  userId    String
+  courseId  String
+  sectionId String
+  readAt    DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId, sectionId])
+  @@index([userId, courseId])
 }
 
 enum CourseItemType {

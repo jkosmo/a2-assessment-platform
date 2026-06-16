@@ -23,7 +23,7 @@ export interface CourseModuleEntry {
 // learning section (#491/P1), in sortOrder.
 export type CourseSequenceItem =
   | { type: "MODULE"; sortOrder: number; moduleId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" }
-  | { type: "SECTION"; sortOrder: number; sectionId: string; title: string };
+  | { type: "SECTION"; sortOrder: number; sectionId: string; title: string; read: boolean };
 
 export interface CourseDetail extends CourseListItem {
   certificationLevel: string | null;

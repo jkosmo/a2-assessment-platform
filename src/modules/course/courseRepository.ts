@@ -45,7 +45,7 @@ function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "date
 
 type CourseRepositoryClient = Pick<
   typeof prisma,
-  "course" | "courseModule" | "courseItem" | "courseCompletion" | "certificationStatus" | "submission"
+  "course" | "courseModule" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "submission"
 >;
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {
@@ -103,6 +103,20 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         orderBy: { createdAt: "desc" },
         include: { _count: { select: { modules: true } } },
       });
+    },
+
+    markSectionRead(userId: string, courseId: string, sectionId: string) {
+      return client.courseSectionRead.upsert({
+        where: { userId_courseId_sectionId: { userId, courseId, sectionId } },
+        update: {},
+        create: { userId, courseId, sectionId },
+      });
+    },
+
+    findReadSectionIds(userId: string, courseId: string) {
+      return client.courseSectionRead
+        .findMany({ where: { userId, courseId }, select: { sectionId: true } })
+        .then((rows) => rows.map((r) => r.sectionId));
     },
 
     findCourseItems(courseId: string) {
