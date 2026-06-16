@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.10 - 2026-06-16
+
+feat(course): seksjons-lese-progresjon — alle elementer teller, leste seksjoner markeres (#487/#492)
+
+Snur progresjons-modellen: kurs-progresjon teller nå ALLE elementer (moduler + seksjoner),
+ikke bare moduler. Moduler "fullføres" via bestått vurdering; seksjoner markeres som lest.
+
+- Ny modell `CourseSectionRead` (userId, courseId, sectionId, readAt) + migrering
+- `markSectionRead` (idempotent upsert) + `findReadSectionIds` i repository
+- `POST /api/courses/:courseId/sections/:sectionId/read` (validerer kurs-tilhørighet)
+- Deltaker-kurs-detalj + liste: `progress.total` = antall elementer, `completed` = bestått
+  moduler + leste seksjoner; seksjons-items får `read`-flagg
+- Deltaker-UI: seksjons-rad viser «Lest»/«Ikke lest»-badge; leser-overlay markerer lest ved
+  åpning og oppdaterer visningen ved lukk
+
+`CourseSectionRead` cascade-slettes med bruker/kurs/seksjon. Integrasjonstest dekker
+mark-read (idempotent) + progresjons-opptelling + COMPLETED. `tsc` + CI mot Postgres rene.
+
+Closes #487
+
 ## 1.3.9 - 2026-06-16
 
 fix(course): manglende i18n-nøkler for seksjons-rader i deltaker-visning (#491 follow-up)
