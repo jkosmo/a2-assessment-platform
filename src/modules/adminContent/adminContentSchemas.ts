@@ -299,19 +299,36 @@ export const moduleExportPayloadSchema = z.object({
   }),
 });
 
+// One learning section's payload — title + active-version markdown, both
+// localized. Assets (#483/F4) are not yet inlined; markdown-only for now (#512).
+export const sectionExportPayloadSchema = z.object({
+  title: localizedTextSchema,
+  bodyMarkdown: localizedTextSchema,
+  audit: exportAuditSchema.optional(),
+});
+
 // Course export inlines each module's full payload so the file is
-// self-contained (chosen 2026-05-19 over reference-only).
+// self-contained (chosen 2026-05-19 over reference-only). #512 adds an optional
+// `items` array carrying the full mixed module/section sequence; `modules` is
+// kept (now optional) so v1 importers that only understand modules still work.
 export const courseExportPayloadSchema = z.object({
   course: z.object({
     title: localizedTextSchema,
     description: localizedTextSchema.nullable().optional(),
-    certificationLevel: certificationLevelInputSchema,
+    certificationLevel: certificationLevelInputSchema.nullable(),
     audit: exportAuditSchema,
     modules: z.array(z.object({
       sortOrder: z.number().int().min(0),
       module: moduleExportPayloadSchema,
-    })).min(1),
-  }),
+    })).optional(),
+    items: z.array(z.discriminatedUnion("type", [
+      z.object({ type: z.literal("MODULE"), sortOrder: z.number().int().min(0), module: moduleExportPayloadSchema }),
+      z.object({ type: z.literal("SECTION"), sortOrder: z.number().int().min(0), section: sectionExportPayloadSchema }),
+    ])).optional(),
+  }).refine(
+    (c) => (c.modules?.length ?? 0) > 0 || (c.items?.length ?? 0) > 0,
+    { message: "Course export must contain at least one module or item." },
+  ),
 });
 
 export const exportEnvelopeSchema = z.object({
@@ -332,6 +349,7 @@ export const exportEnvelopeSchema = z.object({
 
 export type ExportEnvelope = z.infer<typeof exportEnvelopeSchema>;
 export type ModuleExportPayload = z.infer<typeof moduleExportPayloadSchema>;
+export type SectionExportPayload = z.infer<typeof sectionExportPayloadSchema>;
 export type CourseExportPayload = z.infer<typeof courseExportPayloadSchema>;
 
 export const importBodySchema = z.object({
