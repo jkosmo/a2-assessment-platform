@@ -23,6 +23,7 @@ const LABELS = {
     back: "← Back", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Delete this section?", loadError: "Could not load sections.",
+    needContent: "Add a title and content in at least one language.",
   },
   nb: {
     heading: "Seksjoner", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -30,6 +31,7 @@ const LABELS = {
     back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
+    needContent: "Fyll inn tittel og innhold på minst ett språk.",
   },
   nn: {
     heading: "Seksjonar", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -37,6 +39,7 @@ const LABELS = {
     back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
+    needContent: "Fyll inn tittel og innhald på minst eitt språk.",
   },
 };
 
@@ -265,25 +268,41 @@ async function refreshPreview() {
   }
 }
 
+// Only send locales the author actually filled — the API rejects empty strings
+// (each present locale must be min 1 char), but accepts a partial object.
+function nonEmptyLocales(obj) {
+  const out = {};
+  for (const loc of EDITOR_LOCALES) {
+    if ((obj[loc] ?? "").trim().length > 0) out[loc] = obj[loc];
+  }
+  return out;
+}
+
 async function saveSection() {
   captureInputs();
   const status = document.getElementById("editorStatus");
+  const title = nonEmptyLocales(editing.title);
+  const bodyMarkdown = nonEmptyLocales(editing.body);
+  if (Object.keys(title).length === 0 || Object.keys(bodyMarkdown).length === 0) {
+    showToast(L("needContent"), "error");
+    return;
+  }
   try {
     if (!editing.id) {
       const data = await apiFetch("/api/admin/content/sections", getHeaders, {
         method: "POST",
-        body: JSON.stringify({ title: editing.title, bodyMarkdown: editing.body }),
+        body: JSON.stringify({ title, bodyMarkdown }),
       });
       editing.id = data.section.id;
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
     } else {
       await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/title`, getHeaders, {
         method: "PATCH",
-        body: JSON.stringify({ title: editing.title }),
+        body: JSON.stringify({ title }),
       });
       await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/content`, getHeaders, {
         method: "PUT",
-        body: JSON.stringify({ bodyMarkdown: editing.body }),
+        body: JSON.stringify({ bodyMarkdown }),
       });
     }
     showToast(L("saved"));

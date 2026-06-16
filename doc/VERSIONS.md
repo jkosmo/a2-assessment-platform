@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.8 - 2026-06-16
+
+fix(course): seksjons-editor sendte tomme språk-strenger → 400 ved lagring (#488 follow-up)
+
+Editoren sendte alle tre locales (nb/nn/en-GB) ved lagring, også de uutfylte med tom
+streng. `localizedTextPatchObjectSchema` er `.partial()` men hver *tilstedeværende* nøkkel må
+ha minst 1 tegn, så tomme strenger ga `too_small`-valideringsfeil (400). La til
+`nonEmptyLocales()` som kun sender locales forfatteren faktisk har fylt ut, + en klient-side
+guard med melding hvis verken tittel eller innhold er fylt på noe språk.
+
 ## 1.3.7 - 2026-06-16
 
 feat(course): deltaker-visning av læringsseksjoner — P1 (#491)
