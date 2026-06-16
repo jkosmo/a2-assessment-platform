@@ -2767,13 +2767,34 @@ async function loadCourseDetail(courseId) {
 
 function renderCourseDetailModules(courseId, course) {
   const container = document.getElementById(`courseDetail_${courseId}`);
-  if (!container || !Array.isArray(course?.modules)) return;
+  if (!container) return;
+  // Prefer the mixed module/section sequence (#491); fall back to modules-only.
+  const sequence = Array.isArray(course?.items) && course.items.length > 0
+    ? course.items
+    : (Array.isArray(course?.modules) ? course.modules.map((m) => ({ type: "MODULE", ...m })) : null);
+  if (!sequence) return;
   container.innerHTML = "";
-  if (course.modules.length === 0) {
+  if (sequence.length === 0) {
     container.innerHTML = `<p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.noModules"))}</p>`;
     return;
   }
-  for (const m of course.modules) {
+  for (const entry of sequence) {
+    if (entry.type === "SECTION") {
+      const sectionRow = document.createElement("button");
+      sectionRow.type = "button";
+      sectionRow.className = "btn-secondary course-module-row course-module-button";
+      sectionRow.addEventListener("click", () => openSectionReader(courseId, entry.sectionId));
+      sectionRow.innerHTML = `
+        <span class="course-module-row-copy">
+          <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(entry.title))}</span>
+          <span class="course-module-row-action">${escapeHtmlP(t("courses.section.read") || "Les")}</span>
+        </span>
+        <span class="module-status-badge" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(t("courses.section.label") || "Seksjon")}</span>
+      `;
+      container.appendChild(sectionRow);
+      continue;
+    }
+    const m = entry;
     const passed = m.moduleStatus === "PASSED";
     const inProgress = m.moduleStatus === "IN_PROGRESS";
     const badgeText = passed ? t("courses.module.passed") : inProgress ? t("courses.module.inProgress") : t("courses.module.notStarted");
@@ -2802,5 +2823,46 @@ function renderCourseDetailModules(courseId, course) {
       <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(badgeText)}</span>
     `;
     container.appendChild(row);
+  }
+}
+
+// #491/P1 — open a learning section in a mobile-friendly reader overlay with
+// server-rendered, sanitised HTML in the participant's locale.
+async function openSectionReader(courseId, sectionId) {
+  const existing = document.getElementById("sectionReaderOverlay");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "sectionReaderOverlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;z-index:1000;padding:0;";
+  overlay.innerHTML = `
+    <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:var(--space-2,12px)">
+        <h2 id="sectionReaderTitle" style="margin:0;font-size:20px">…</h2>
+        <button type="button" id="sectionReaderClose" class="btn-secondary" style="flex-shrink:0">${escapeHtmlP(t("common.close") || "Lukk")}</button>
+      </div>
+      <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("common.loading") || "Laster…")}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector("#sectionReaderClose")?.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", function onKey(e) {
+    if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
+  });
+
+  try {
+    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}`, headers());
+    const titleEl = overlay.querySelector("#sectionReaderTitle");
+    const bodyEl = overlay.querySelector("#sectionReaderBody");
+    if (titleEl) titleEl.textContent = body.title ?? "";
+    // body.html is already sanitised server-side with the F3/X1 policy.
+    if (bodyEl) bodyEl.innerHTML = body.html ?? "";
+  } catch (error) {
+    const bodyEl = overlay.querySelector("#sectionReaderBody");
+    if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
   }
 }
