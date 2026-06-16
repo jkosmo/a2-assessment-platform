@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.12 - 2026-06-16
+
+feat(course): export/import tar med læringsseksjoner (#512)
+
+Tetter datatap-gapet: kurs-eksport/-import håndterte kun moduler, så seksjoner forsvant ved
+overføring mellom miljøer. Nå bevares den fulle modul/seksjon-sekvensen.
+
+- Envelope-format (additivt, bakoverkompatibelt på `v1`): valgfri `items`-sekvens med
+  diskriminert MODULE/SECTION; ny `sectionExportPayloadSchema` (lokalisert title + bodyMarkdown).
+  `modules` beholdt (nå valgfri) som subset for v1-importører.
+- Eksport (`buildCourseExportEnvelope`): bygger `items` fra `CourseItem` i rekkefølge, inliner
+  hver seksjons aktive versjons markdown; emitterer både `items` + `modules`-subset.
+- Import (`importCourseFromEnvelope`): foretrekker `items` (gjenskaper seksjoner via
+  `createSection` + bevarer rekkefølge via `setCourseItems`); faller tilbake til legacy
+  `modules`-vei for v1-filer.
+- Assets (#483/F4) ennå ikke inlinet — markdown-only foreløpig (notert i #512).
+
+Integrasjonstest: round-trip av kurs med interleaved seksjon (eksport → import → ny seksjon
+gjenskapt i rekkefølge). `tsc` + CI mot Postgres rene.
+
+Closes #512
+
 ## 1.3.11 - 2026-06-16
 
 fix(course): UI-polish for seksjoner etter testtilbakemelding (#488/#490/#492 follow-up)

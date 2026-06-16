@@ -183,3 +183,65 @@ describe("#433 module export-import round-trip", () => {
     expect(importResponse.body.error).toBe("validation_error");
   });
 });
+
+describe("#512 course export-import with learning sections", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("round-trips a course containing an interleaved learning section", async () => {
+    const { moduleId } = await setupModule(`sec-${Date.now()}`);
+
+    const sectionRes = await request(app)
+      .post("/api/admin/content/sections")
+      .set(adminHeaders)
+      .send({
+        title: { "en-GB": "Intro section", nb: "Intro-seksjon", nn: "Intro-seksjon" },
+        bodyMarkdown: { "en-GB": "# Hello\n\nRead this first.", nb: "# Hei", nn: "# Hei" },
+      });
+    expect(sectionRes.status).toBe(201);
+    const sectionId = sectionRes.body.section.id as string;
+
+    const courseRes = await request(app)
+      .post("/api/admin/content/courses")
+      .set(adminHeaders)
+      .send({ title: { "en-GB": `Course ${Date.now()}`, nb: "Kurs", nn: "Kurs" } });
+    expect(courseRes.status).toBe(201);
+    const courseId = courseRes.body.course.id as string;
+
+    const itemsRes = await request(app)
+      .put(`/api/admin/content/courses/${courseId}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId }, { type: "MODULE", moduleId }] });
+    expect(itemsRes.status).toBe(204);
+
+    // Export — envelope must carry the full mixed sequence incl. the section.
+    const exportRes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/export-package`)
+      .set(adminHeaders);
+    expect(exportRes.status).toBe(200);
+    const envelope = exportRes.body.envelope;
+    const items = envelope.course.course.items as Array<{ type: string; section?: { bodyMarkdown: unknown } }>;
+    expect(items.map((i) => i.type)).toEqual(["SECTION", "MODULE"]);
+    expect(items[0].section?.bodyMarkdown).toBeTruthy();
+
+    // Import as a new course — the section must be recreated in sequence.
+    const importRes = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(adminHeaders)
+      .send({ payload: envelope, mode: "createNew" });
+    expect(importRes.status).toBe(201);
+    const newCourseId = importRes.body.courseId as string;
+    expect(newCourseId).not.toBe(courseId);
+
+    const newItemsRes = await request(app)
+      .get(`/api/admin/content/courses/${newCourseId}/items`)
+      .set(adminHeaders);
+    expect(newItemsRes.status).toBe(200);
+    const newItems = newItemsRes.body.items as Array<{ type: string; sectionId?: string }>;
+    expect(newItems.map((i) => i.type)).toEqual(["SECTION", "MODULE"]);
+    const recreatedSection = newItems.find((i) => i.type === "SECTION");
+    expect(recreatedSection?.sectionId).toBeTruthy();
+    expect(recreatedSection?.sectionId).not.toBe(sectionId);
+  });
+});

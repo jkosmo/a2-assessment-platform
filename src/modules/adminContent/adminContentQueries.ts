@@ -194,21 +194,36 @@ export async function buildCourseExportEnvelope(
   courseId: string,
   exportedBy: { userId?: string | null; email?: string | null },
 ): Promise<import("./adminContentSchemas.js").ExportEnvelope> {
-  const course = await (await import("../course/courseRepository.js")).courseRepository.findCourseById(courseId);
+  const courseRepo = (await import("../course/courseRepository.js")).courseRepository;
+  const course = await courseRepo.findCourseById(courseId);
   if (!course) {
     throw new Error("Course not found.");
   }
-  if (!course.modules || course.modules.length === 0) {
-    throw new Error("Course has no modules to export.");
+
+  // Full mixed sequence — modules + learning sections in order (#512).
+  const courseItems = await courseRepo.findCourseItems(courseId);
+  if (courseItems.length === 0) {
+    throw new Error("Course has no items to export.");
   }
 
-  const sortedModules = [...course.modules].sort((a, b) => a.sortOrder - b.sortOrder);
-  const modulePayloads = await Promise.all(
-    sortedModules.map(async (cm) => ({
-      sortOrder: cm.sortOrder,
-      module: await buildModuleExportPayload(cm.moduleId),
-    })),
+  const itemPayloads = await Promise.all(
+    [...courseItems]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(async (item) => {
+        if (item.itemType === "SECTION" && item.section) {
+          const sectionVersion = await buildSectionExportPayload(item.section.id);
+          return { type: "SECTION" as const, sortOrder: item.sortOrder, section: sectionVersion };
+        }
+        const moduleId = item.moduleId ?? item.module?.id;
+        if (!moduleId) throw new Error("Course item is missing its module reference.");
+        return { type: "MODULE" as const, sortOrder: item.sortOrder, module: await buildModuleExportPayload(moduleId) };
+      }),
   );
+
+  // Module-only subset for backward-compatible v1 importers.
+  const modulePayloads = itemPayloads
+    .filter((p): p is Extract<typeof p, { type: "MODULE" }> => p.type === "MODULE")
+    .map((p) => ({ sortOrder: p.sortOrder, module: p.module }));
 
   return {
     exportFormat: "a2-content-export/v1",
@@ -228,7 +243,27 @@ export async function buildCourseExportEnvelope(
           sourceVersionNo: null,
         },
         modules: modulePayloads,
+        items: itemPayloads as never,
       },
+    },
+  };
+}
+
+// Inline a learning section's title + active-version markdown for export (#512).
+async function buildSectionExportPayload(sectionId: string): Promise<import("./adminContentSchemas.js").SectionExportPayload> {
+  const { getSection } = await import("../course/sectionCommands.js");
+  const section = await getSection(sectionId);
+  if (!section) throw new Error("Section not found for export.");
+  return {
+    title: (decodeLocalizedText(section.title) as never) ?? (section.title as never),
+    bodyMarkdown: (section.activeVersion?.bodyMarkdown
+      ? decodeLocalizedText(section.activeVersion.bodyMarkdown)
+      : "") as never,
+    audit: {
+      publishedAt: section.activeVersion?.publishedAt ? new Date(section.activeVersion.publishedAt).toISOString() : null,
+      publishedBy: null,
+      publishedByEmail: null,
+      sourceVersionNo: section.activeVersion?.versionNo ?? null,
     },
   };
 }

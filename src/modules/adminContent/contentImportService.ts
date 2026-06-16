@@ -23,7 +23,8 @@ import {
 } from "./adminContentCommands.js";
 import { adminContentRepository } from "./adminContentRepository.js";
 import { courseRepository } from "../course/courseRepository.js";
-import { createCourse, setCourseModules, publishCourse } from "../course/courseCommands.js";
+import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
+import { createSection } from "../course/sectionCommands.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -205,23 +206,43 @@ export async function importCourseFromEnvelope(
 
   // Each inlined module payload is imported via createNew (a course import never
   // tries to replace existing modules — that would conflate two different
-  // collision questions). The resulting module IDs are attached to the course
-  // in the original sortOrder.
-  const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
-  for (const item of payload.course.modules) {
-    const imported = await importModulePayload(item.module, {
-      actorId: options.actorId,
-      mode: "createNew",
-    });
-    importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
-  }
+  // collision questions). Sections are recreated likewise. #512: prefer the full
+  // mixed `items` sequence; fall back to the legacy modules-only list (v1 files).
+  const importedModuleIds: string[] = [];
+  let sectionCount = 0;
 
-  await setCourseModules(
-    courseId,
-    importedModules
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
-  );
+  if (payload.course.items && payload.course.items.length > 0) {
+    const ordered = [...payload.course.items].sort((a, b) => a.sortOrder - b.sortOrder);
+    const courseItemInputs: CourseItemInput[] = [];
+    for (const entry of ordered) {
+      if (entry.type === "SECTION") {
+        const section = await createSection({
+          title: serializeRequired(entry.section.title),
+          bodyMarkdown: serializeRequired(entry.section.bodyMarkdown),
+          actorId: options.actorId,
+        });
+        courseItemInputs.push({ type: "SECTION", sectionId: section.id });
+        sectionCount += 1;
+      } else {
+        const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" });
+        courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
+        importedModuleIds.push(imported.moduleId);
+      }
+    }
+    await setCourseItems(courseId, courseItemInputs);
+  } else {
+    const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
+    for (const item of payload.course.modules ?? []) {
+      const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" });
+      importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
+    }
+    importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
+    importedModuleIds.push(...importedModules.map((m) => m.moduleId));
+    await setCourseModules(
+      courseId,
+      importedModules.map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
+    );
+  }
 
   // Same publish-state-preservation rule as for modules: if source course was
   // published (audit.publishedAt set), publish the destination course too.
@@ -238,10 +259,11 @@ export async function importCourseFromEnvelope(
     metadata: {
       courseId,
       mode: options.mode,
-      moduleCount: importedModules.length,
+      moduleCount: importedModuleIds.length,
+      sectionCount,
       sourcePublishedAt: payload.course.audit.publishedAt ?? null,
     },
   });
 
-  return { courseId, moduleIds: importedModules.map((m) => m.moduleId) };
+  return { courseId, moduleIds: importedModuleIds };
 }
