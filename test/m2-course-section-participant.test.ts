@@ -65,6 +65,8 @@ describe("Participant course section view", () => {
     expect(content.body.html).not.toContain("alert(1)");
 
     await prisma.course.delete({ where: { id: course.id } });
+    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: null } });
+    await prisma.courseSectionVersion.deleteMany({ where: { sectionId: section.id } });
     await prisma.courseSection.delete({ where: { id: section.id } });
   });
 
