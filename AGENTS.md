@@ -69,6 +69,11 @@ These rules exist because their violation caused or worsened the May 2026 produc
 
 - **Always create a PR against `main`** — never push directly to `main`.
 - **Always bump `package.json` version and `doc/VERSIONS.md`** in the same commit as code changes.
+- **Documentation is a MANDATORY step (standing order):** a feature is not "done" until its
+  docs are updated. Any change to user-facing behavior or API/route surface MUST update **both**
+  technical docs (`doc/API_REFERENCE.md`, `doc/route-map.md`, arch notes) **and** user/author
+  docs under `doc/`. If they can't land in the same PR, open tracking doc issues (technical +
+  user) in the same milestone before the feature is complete.
 - **For infra changes**, include in the PR description:
   - Which environments are affected
   - Behavior on first deploy (fresh environment) vs normal deploy

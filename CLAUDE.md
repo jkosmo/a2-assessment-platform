@@ -85,6 +85,20 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 - Create GitHub issue → specify/plan → implement → test → document, in that order.
 - Deploy cadence: staging and production both require manual `workflow_dispatch`. Push to `main` does NOT auto-deploy.
 
+### Documentation is a MANDATORY step — not optional (standing order)
+
+A feature is **not "done" until its documentation is updated**. Any change that adds or alters
+user-facing behavior or API/route surface MUST, within the same feature arc, update **both**:
+
+1. **Technical docs** — `doc/API_REFERENCE.md` (new/changed endpoints), `doc/route-map.md`
+   (new pages/routes), and a short architecture note when a new data model or invariant is added.
+2. **User / author docs** — how a SMO/author uses the feature, and what the participant sees;
+   new user-facing capabilities get a guide (or a section in one) under `doc/`.
+
+If docs cannot land in the same PR, open tracking doc issues (technical + user) in the **same
+milestone** as the feature before it is considered complete. The "document" step must never
+lapse silently — it is part of the definition of done.
+
 ### Which deploy workflow to use
 
 | Type of change | Use workflow | Why |
