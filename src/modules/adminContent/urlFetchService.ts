@@ -11,6 +11,7 @@ import { SOURCE_MATERIAL_MAX_BYTES } from "./sourceMaterialExtractionService.js"
 const FETCH_TIMEOUT_MS = 10_000;
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const ALLOWED_CONTENT_TYPES = ["text/html", "application/xhtml+xml", "text/plain"];
+const MAX_REDIRECTS = 5;
 
 export class UrlFetchError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -126,17 +127,41 @@ async function assertSafeUrl(rawUrl: string): Promise<URL> {
 }
 
 // Fetches the URL with a strict byte cap. Streams response into a buffer; aborts if cap exceeded.
-async function fetchWithLimit(parsedUrl: URL, signal: AbortSignal): Promise<{ buffer: Buffer; contentType: string }> {
-  const response = await fetch(parsedUrl.toString(), {
-    method: "GET",
-    redirect: "follow",
-    signal,
-    headers: {
-      // Be polite: identify ourselves
-      "user-agent": "A2AssessmentPlatform/url-fetch (+https://github.com/jkosmo/a2-assessment-platform)",
-      accept: "text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5",
-    },
-  });
+async function fetchWithLimit(parsedUrl: URL, signal: AbortSignal): Promise<{ buffer: Buffer; contentType: string; finalUrl: string }> {
+  let currentUrl = parsedUrl;
+  let response: Response | undefined;
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    response = await fetch(currentUrl.toString(), {
+      method: "GET",
+      redirect: "manual",
+      signal,
+      headers: {
+        // Be polite: identify ourselves
+        "user-agent": "A2AssessmentPlatform/url-fetch (+https://github.com/jkosmo/a2-assessment-platform)",
+        accept: "text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5",
+      },
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      if (redirectCount === MAX_REDIRECTS) {
+        throw new UrlFetchError("too_many_redirects", `Too many redirects (>${MAX_REDIRECTS}).`);
+      }
+      const location = response.headers.get("location");
+      if (!location) {
+        throw new UrlFetchError("invalid_redirect", "Redirect response missing Location header.");
+      }
+      const nextUrl = new URL(location, currentUrl);
+      currentUrl = await assertSafeUrl(nextUrl.toString());
+      continue;
+    }
+
+    break;
+  }
+
+  if (!response) {
+    throw new UrlFetchError("fetch_failed", "Fetch failed before receiving a response.");
+  }
   if (!response.ok) {
     throw new UrlFetchError("http_error", `Upstream returned ${response.status}.`);
   }
@@ -161,7 +186,7 @@ async function fetchWithLimit(parsedUrl: URL, signal: AbortSignal): Promise<{ bu
     }
     chunks.push(value);
   }
-  return { buffer: Buffer.concat(chunks.map((c) => Buffer.from(c))), contentType: baseType };
+  return { buffer: Buffer.concat(chunks.map((c) => Buffer.from(c))), contentType: baseType, finalUrl: currentUrl.toString() };
 }
 
 async function extractMainText(buffer: Buffer, contentType: string, sourceUrl: string): Promise<string> {
@@ -192,8 +217,8 @@ export async function fetchUrlAsSourceMaterial(rawUrl: string): Promise<UrlFetch
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const { buffer, contentType } = await fetchWithLimit(parsedUrl, controller.signal);
-    const extractedText = await extractMainText(buffer, contentType, parsedUrl.toString());
+    const { buffer, contentType, finalUrl } = await fetchWithLimit(parsedUrl, controller.signal);
+    const extractedText = await extractMainText(buffer, contentType, finalUrl);
     const trimmed = extractedText.trim();
     if (!trimmed) {
       throw new UrlFetchError("empty_extracted_text", "Extracted text is empty.");

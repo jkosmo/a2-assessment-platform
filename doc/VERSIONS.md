@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.2.1 - 2026-05-23
+
+fix(security): block SSRF through redirect chains in URL source-material fetch
+
+- URL fetcher now uses manual redirect handling and validates each `Location` hop with the same SSRF policy as the initial URL.
+- Redirects to private/internal addresses are rejected before any follow-up request is sent.
+- Added a unit test covering redirect-to-loopback blocking.
+
 ## 1.2.0 - 2026-05-23
 
 feat(admin): server-side URL-fetching for kildemateriale (#454 Phase 1)
