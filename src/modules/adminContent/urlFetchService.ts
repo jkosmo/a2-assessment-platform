@@ -126,42 +126,67 @@ async function assertSafeUrl(rawUrl: string): Promise<URL> {
 }
 
 // Fetches the URL with a strict byte cap. Streams response into a buffer; aborts if cap exceeded.
+// Redirects are followed MANUALLY so each hop is re-validated against the SSRF policy
+// (assertSafeUrl) — automatic redirect-following would let an attacker-controlled redirect
+// reach a private/internal address despite the initial host being public (#504).
+const MAX_REDIRECTS = 5;
+
 async function fetchWithLimit(parsedUrl: URL, signal: AbortSignal): Promise<{ buffer: Buffer; contentType: string }> {
-  const response = await fetch(parsedUrl.toString(), {
-    method: "GET",
-    redirect: "follow",
-    signal,
-    headers: {
-      // Be polite: identify ourselves
-      "user-agent": "A2AssessmentPlatform/url-fetch (+https://github.com/jkosmo/a2-assessment-platform)",
-      accept: "text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5",
-    },
-  });
-  if (!response.ok) {
-    throw new UrlFetchError("http_error", `Upstream returned ${response.status}.`);
-  }
-  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-  const baseType = contentType.split(";")[0].trim();
-  if (!ALLOWED_CONTENT_TYPES.includes(baseType)) {
-    throw new UrlFetchError("unsupported_content_type", `Content-Type ${baseType || "(missing)"} is not supported.`);
-  }
-  if (!response.body) {
-    throw new UrlFetchError("empty_response", "Upstream returned no body.");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > SOURCE_MATERIAL_MAX_BYTES) {
-      try { await reader.cancel(); } catch {}
-      throw new UrlFetchError("too_large", `Response exceeds ${SOURCE_MATERIAL_MAX_BYTES} bytes.`);
+  let currentUrl = parsedUrl;
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+    const response = await fetch(currentUrl.toString(), {
+      method: "GET",
+      redirect: "manual",
+      signal,
+      headers: {
+        // Be polite: identify ourselves
+        "user-agent": "A2AssessmentPlatform/url-fetch (+https://github.com/jkosmo/a2-assessment-platform)",
+        accept: "text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5",
+      },
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) {
+        throw new UrlFetchError("invalid_redirect", "Upstream redirect response missing Location header.");
+      }
+      if (redirectCount === MAX_REDIRECTS) {
+        throw new UrlFetchError("too_many_redirects", `Too many redirects (max ${MAX_REDIRECTS}).`);
+      }
+      const redirectedUrl = new URL(location, currentUrl);
+      // Re-validate the redirect target against the full SSRF policy before following.
+      currentUrl = await assertSafeUrl(redirectedUrl.toString());
+      continue;
     }
-    chunks.push(value);
+
+    if (!response.ok) {
+      throw new UrlFetchError("http_error", `Upstream returned ${response.status}.`);
+    }
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    const baseType = contentType.split(";")[0].trim();
+    if (!ALLOWED_CONTENT_TYPES.includes(baseType)) {
+      throw new UrlFetchError("unsupported_content_type", `Content-Type ${baseType || "(missing)"} is not supported.`);
+    }
+    if (!response.body) {
+      throw new UrlFetchError("empty_response", "Upstream returned no body.");
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > SOURCE_MATERIAL_MAX_BYTES) {
+        try { await reader.cancel(); } catch {}
+        throw new UrlFetchError("too_large", `Response exceeds ${SOURCE_MATERIAL_MAX_BYTES} bytes.`);
+      }
+      chunks.push(value);
+    }
+    return { buffer: Buffer.concat(chunks.map((c) => Buffer.from(c))), contentType: baseType };
   }
-  return { buffer: Buffer.concat(chunks.map((c) => Buffer.from(c))), contentType: baseType };
+
+  throw new UrlFetchError("too_many_redirects", `Too many redirects (max ${MAX_REDIRECTS}).`);
 }
 
 async function extractMainText(buffer: Buffer, contentType: string, sourceUrl: string): Promise<string> {

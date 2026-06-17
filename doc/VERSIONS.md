@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.15 - 2026-06-17
+
+sec(ingest): re-valider redirect-mål mot SSRF-policy ved URL-henting (#504)
+
+Tetter en aktiv SSRF-bypass i `fetchUrlAsSourceMaterial`: kun den opprinnelige URL-en ble
+validert, men `redirect: "follow"` fulgte automatisk redirects — en angriper kunne sende inn en
+public URL som redirecter til `127.0.0.1`/intern adresse, som vi så hentet + parset (med `jsdom`
+i prod). Erstattet med `redirect: "manual"` + manuell løkke som re-validerer HVERT redirect-mål
+med `assertSafeUrl` før det følges, capet på `MAX_REDIRECTS = 5` (`invalid_redirect` /
+`too_many_redirects`). Ny unit-test: public start-URL som 302-redirecter til loopback blokkeres
+(`private_address`). 8/8 url-fetch-tester grønne.
+
+Portering av codex-PR #504 (var basert på v1.2.2, konfliktende) rent inn på main. Restrisiko
+DNS-rebinding (fetch re-resolver etter sjekken) spores som eget oppfølger-issue.
+
 ## 1.3.14 - 2026-06-17
 
 fix(course): retest-funn — liste-overflow, import av delvise locales, oversettelse-\n + GUI-lås
