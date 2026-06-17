@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.18 - 2026-06-17
+
+feat(course): bilde-opplasting i seksjons-editor — U2 fase 3 (#489)
+
+UI for asset-opplasting (bygger på F4 backend, #483). I seksjons-editoren:
+- «Last opp bilde»-knapp over markdown-feltet + skjult fil-input (PNG/JPEG/GIF/WebP).
+- Krever at seksjonen er lagret først (assets knyttes til seksjons-id) — ellers melding.
+- Spør om **alt-tekst** (obligatorisk, a11y), laster opp via `POST /sections/:id/assets`,
+  og setter inn `![alt](asset:<id>)` på cursor-posisjon i markdown. Live-preview viser bildet
+  (resolver → `/api/content-assets/<id>`).
+
+Kun front-end (`admin-content-sections.js` + i18n). `node --check` rent. Manuell test på staging
+fullfører forfatter→deltaker-bildeflyten før prod.
+
 ## 1.3.17 - 2026-06-17
 
 feat(course): asset-opplasting backend — F4 fase 2 (#483)

@@ -25,6 +25,7 @@ const LABELS = {
     confirmDelete: "Delete this section?", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
     translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
+    uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
   },
   nb: {
     heading: "Seksjoner", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -34,6 +35,7 @@ const LABELS = {
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
     translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
+    uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
   },
   nn: {
     heading: "Seksjonar", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -43,6 +45,7 @@ const LABELS = {
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
     translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
+    uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
   },
 };
 
@@ -207,7 +210,11 @@ async function renderEditorView(sectionId) {
       </div>
       <div class="editor-cols">
         <div>
-          <div class="editor-pane-label">${escapeHtml(L("markdown"))}</div>
+          <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span>${escapeHtml(L("markdown"))}</span>
+            <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px">${escapeHtml(L("uploadImage"))}</button>
+            <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+          </div>
           <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
         <div>
@@ -234,6 +241,15 @@ async function renderEditorView(sectionId) {
   document.getElementById("titleInput")?.addEventListener("input", captureInputs);
   document.getElementById("markdownInput")?.addEventListener("input", () => { captureInputs(); schedulePreview(); });
   document.getElementById("saveBtn")?.addEventListener("click", saveSection);
+  document.getElementById("uploadImageBtn")?.addEventListener("click", () => {
+    if (!editing.id) { showToast(L("saveFirst"), "error"); return; }
+    document.getElementById("imageFileInput")?.click();
+  });
+  document.getElementById("imageFileInput")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) uploadImage(file);
+  });
   refreshPreview();
 }
 
@@ -356,6 +372,44 @@ async function translateFromCurrent() {
   } finally {
     setLocked(false);
     if (btn) btn.textContent = L("translate");
+  }
+}
+
+// Image upload (#489/U2): upload to the section's blob storage, then insert a markdown
+// image referencing the asset (![alt](asset:<id>)) at the cursor. Requires the section to
+// be saved first (assets attach to a section id). Alt text is mandatory (a11y).
+function insertAtCursor(text) {
+  const ta = document.getElementById("markdownInput");
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+  const pos = start + text.length;
+  ta.setSelectionRange(pos, pos);
+  ta.focus();
+}
+
+async function uploadImage(file) {
+  if (!editing.id) { showToast(L("saveFirst"), "error"); return; }
+  const alt = window.prompt(L("altPrompt"), "");
+  if (alt === null) return; // cancelled
+  const btn = document.getElementById("uploadImageBtn");
+  if (btn) btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/assets`, getHeaders, {
+      method: "POST",
+      body: fd,
+    });
+    insertAtCursor(`![${alt}](${res.asset.ref})`);
+    captureInputs();
+    schedulePreview();
+    showToast(L("imageInserted"));
+  } catch (err) {
+    showToast(err?.message ?? "Error", "error");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
