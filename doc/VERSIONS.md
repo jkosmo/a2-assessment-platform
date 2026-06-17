@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.66 - 2026-05-20
+
+fix(security): lock generated rubric scoring scale to assessor contract
+
+- Normalize generated module rubric criteria to `maxScore: 4` and set `scalingRule.max_total` to `criteria_count * 4` when auto-saving generated rubrics.
+- Tighten rubric generation schema/prompt so generated criteria must use `maxScore: 4` and keep the 3-6 criteria contract.
+- This preserves existing assessor behavior (`rubric_scores` 0..4 per criterion) and prevents LLM-controlled denominator drift.
+
 ## 1.1.65 - 2026-05-20
 
 feat(admin): module-specific rubric generation (#378, closes #368)

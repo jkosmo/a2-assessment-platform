@@ -1071,15 +1071,19 @@ function resolveCurrentRubricPayload() {
 
 function moduleSpecificRubricToStoragePayload(generated) {
   const criteria = Array.isArray(generated?.criteria) ? generated.criteria : [];
-  const totalMax = criteria.reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
+  const normalizedCriteria = criteria.map((c) => ({
+    ...c,
+    maxScore: 4,
+  }));
+  const totalMax = normalizedCriteria.length * 4 || 1;
   const criteriaRecord = Object.fromEntries(
-    criteria.map((c) => [
+    normalizedCriteria.map((c) => [
       String(c?.id ?? "criterion"),
       {
         label: c?.label ?? "",
         description: c?.description ?? "",
-        maxScore: Number(c?.maxScore) || 0,
-        weight: Number(((Number(c?.maxScore) || 0) / totalMax).toFixed(2)),
+        maxScore: 4,
+        weight: normalizedCriteria.length > 0 ? Number((1 / normalizedCriteria.length).toFixed(2)) : 0,
         candidateVisible: Boolean(c?.candidateVisible),
       },
     ]),
