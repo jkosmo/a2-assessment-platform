@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.17 - 2026-06-17
+
+feat(course): asset-opplasting backend — F4 fase 2 (#483)
+
+Backend for bilde-/asset-opplasting til læringsseksjoner. Bygger på fase 1-infra (#483, 1.3.16).
+
+- Ny `SectionAsset`-modell (sectionId, filename, mimeType, blobPath, sizeBytes) + migrering.
+- `assetStorage.ts`: blob-backend via web-app-MSI (`DefaultAzureCredential`, ingen nøkkel) når
+  `COURSE_ASSETS_BLOB_ENDPOINT` er satt; ellers **filsystem-fallback** for lokal/CI.
+- `POST /api/admin/content/sections/:id/assets` (multipart via multer; mime-allowlist **uten SVG**
+  pga XSS; 5 MB cap; feil → 400) + `GET .../assets` (liste).
+- Privat servering: `GET /api/content-assets/:id` (ny `content_assets`-kapabilitet — alle
+  autentiserte innholds-lesere) streamer blob via appen; aldri public blob-tilgang.
+- Resolver: `![alt](asset:<id>)` i markdown → `<img src="/api/content-assets/<id>">` ved render
+  (før sanitisering; portabelt for export/import-remapping).
+
+`@azure/storage-blob` + `@azure/identity` + `multer` i `dependencies`. Integrasjonstest
+(opplasting→liste→servering + mime-avvisning + 404) + resolver-unit-tester. `tsc` rent.
+Deployes app-only etter at fase 1-infra er oppe på staging. U2-UI = fase 3.
+
 ## 1.3.16 - 2026-06-17
 
 feat(infra): course-asset blob storage — F4 fase 1 (#483)

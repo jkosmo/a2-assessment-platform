@@ -46,6 +46,20 @@ export const API_ROUTE_CAPABILITIES = [
     ],
   },
   {
+    // Serve learning-section media assets (#483/F4) to any authenticated content viewer —
+    // participants (in published-course sections) and authors (editor preview).
+    id: "content_assets",
+    prefix: "/api/content-assets",
+    roles: [
+      AppRole.PARTICIPANT,
+      AppRole.SUBJECT_MATTER_OWNER,
+      AppRole.ADMINISTRATOR,
+      AppRole.APPEAL_HANDLER,
+      AppRole.REPORT_READER,
+      AppRole.REVIEWER,
+    ],
+  },
+  {
     id: "submissions",
     prefix: "/api/submissions",
     roles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],

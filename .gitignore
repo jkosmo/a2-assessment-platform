@@ -26,3 +26,6 @@ doc/pentest/PENTEST-*.md
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Local course-asset storage fallback (dev/test)
+.course-assets-local/

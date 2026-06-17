@@ -12,6 +12,7 @@ import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
 import { meRouter } from "./routes/me.js";
 import { coursesRouter } from "./routes/courses.js";
+import { contentAssetsRouter } from "./routes/contentAssets.js";
 import { modulesRouter } from "./routes/modules.js";
 import { submissionsRouter } from "./routes/submissions.js";
 import { assessmentsRouter } from "./routes/assessments.js";
@@ -141,6 +142,7 @@ app.use("/api", authenticate, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
 app.use("/api/courses", requireAnyRole(rolesFor("courses")), coursesRouter);
+app.use("/api/content-assets", requireAnyRole(rolesFor("content_assets")), contentAssetsRouter);
 app.use("/api/modules", requireAnyRole(rolesFor("modules")), modulesRouter);
 app.use("/api/submissions", requireAnyRole(rolesFor("submissions")), submissionsRouter);
 app.use("/api/assessments", requireAnyRole(rolesFor("assessments")), assessmentsRouter);

@@ -92,3 +92,17 @@ describe("embedded video iframe allowlist (X1, #493)", () => {
     expect(ALLOWED_VIDEO_IFRAME_HOSTS).toContain("player.vimeo.com");
   });
 });
+
+describe("asset URL resolution (#483/F4)", () => {
+  it("rewrites asset:<id> image sources to the serve endpoint and keeps alt text", () => {
+    const html = renderSectionMarkdown("![Et bilde](asset:abc123XYZ)");
+    expect(html).toContain('src="/api/content-assets/abc123XYZ"');
+    expect(html).toContain('alt="Et bilde"');
+    expect(html).not.toContain("asset:abc123XYZ");
+  });
+
+  it("leaves normal https image URLs untouched", () => {
+    const html = renderSectionMarkdown("![x](https://a-2.no/f.png)");
+    expect(html).toContain('src="https://a-2.no/f.png"');
+  });
+});
