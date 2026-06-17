@@ -328,8 +328,18 @@ async function translateFromCurrent() {
     showToast(L("needContent"), "error");
     return;
   }
+  // Lock the editor while translating so the author can't edit/navigate mid-call.
+  const controls = ["translateBtn", "saveBtn", "titleInput", "markdownInput", "backLink"]
+    .map((id) => document.getElementById(id))
+    .filter(Boolean);
+  const tabs = Array.from(document.querySelectorAll(".lang-tab"));
+  const setLocked = (locked) => {
+    controls.forEach((el) => { el.disabled = locked; el.style.pointerEvents = locked ? "none" : ""; el.style.opacity = locked ? "0.6" : ""; });
+    tabs.forEach((el) => { el.disabled = locked; el.style.pointerEvents = locked ? "none" : ""; });
+  };
   const btn = document.getElementById("translateBtn");
-  if (btn) { btn.disabled = true; btn.textContent = L("translating"); }
+  setLocked(true);
+  if (btn) btn.textContent = L("translating");
   try {
     for (const target of EDITOR_LOCALES.filter((l) => l !== src)) {
       const res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
@@ -344,7 +354,8 @@ async function translateFromCurrent() {
   } catch (err) {
     showToast(err?.message ?? "Error", "error");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = L("translate"); }
+    setLocked(false);
+    if (btn) btn.textContent = L("translate");
   }
 }
 

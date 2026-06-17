@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.14 - 2026-06-17
+
+fix(course): retest-funn — liste-overflow, import av delvise locales, oversettelse-\n + GUI-lås
+
+Fire funn fra manuell retest:
+1. **Seksjons-liste horisontal scroll:** `row-action-btn` arvet shared.css `button{width:100%}`
+   → full-bredde knapper sprengte tabellen. Satt `width:auto` + flex-actions-celle.
+2. **Import av kurs med seksjon feilet (#512):** seksjons-payloaden brukte `localizedTextSchema`
+   (krever alle tre locales), men seksjoner har ofte delvise locales (kun nb) → union-valideringsfeil
+   ved import. Byttet til `localizedTextPatchSchema` (delvis objekt OK). Round-trip-testen bruker nå
+   en kun-nb-seksjon for å dekke dette.
+3. **Oversettelse la inn literal `\n` (nynorsk):** prompt-instruksjonen om «escaped newlines» fikk
+   modellen til å skrive backslash-n. Forenklet prompten + la til `normaliseLiteralNewlines`-
+   defensiv normalisering. Engelsk var allerede OK.
+4. **GUI ikke låst under oversettelse:** editor-kontroller (input/faner/lagre/tilbake/oversett)
+   deaktiveres nå mens LLM-kallet pågår.
+
+`tsc` + unit-tester (44) rene. Mark-som-lest-404: ruten er bekreftet live (401 uautentisert) — bes
+retestet; kunne ikke reproduseres fra koden.
+
 ## 1.3.13 - 2026-06-16
 
 feat(course): auto-oversettelse-assist i seksjons-editor (#514)

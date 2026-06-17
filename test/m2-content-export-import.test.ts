@@ -195,9 +195,11 @@ describe("#512 course export-import with learning sections", () => {
     const sectionRes = await request(app)
       .post("/api/admin/content/sections")
       .set(adminHeaders)
+      // Partial locales on purpose (only nb) — sections need not have all three;
+      // this exercises the patch-schema export/import path (#512 follow-up).
       .send({
-        title: { "en-GB": "Intro section", nb: "Intro-seksjon", nn: "Intro-seksjon" },
-        bodyMarkdown: { "en-GB": "# Hello\n\nRead this first.", nb: "# Hei", nn: "# Hei" },
+        title: { nb: "Intro-seksjon" },
+        bodyMarkdown: { nb: "# Hei\n\nLes dette først." },
       });
     expect(sectionRes.status).toBe(201);
     const sectionId = sectionRes.body.section.id as string;

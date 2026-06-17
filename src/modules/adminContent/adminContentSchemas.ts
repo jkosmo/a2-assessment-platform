@@ -301,9 +301,12 @@ export const moduleExportPayloadSchema = z.object({
 
 // One learning section's payload — title + active-version markdown, both
 // localized. Assets (#483/F4) are not yet inlined; markdown-only for now (#512).
+// Sections legitimately have partial locales (an author may fill only nb), so
+// the export uses the patch schema (string OR partial object), not the strict
+// all-three-locale localizedTextSchema (#512 follow-up).
 export const sectionExportPayloadSchema = z.object({
-  title: localizedTextSchema,
-  bodyMarkdown: localizedTextSchema,
+  title: localizedTextPatchSchema,
+  bodyMarkdown: localizedTextPatchSchema,
   audit: exportAuditSchema.optional(),
 });
 
