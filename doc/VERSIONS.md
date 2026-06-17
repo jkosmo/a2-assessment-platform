@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.1.64 - 2026-05-20
+
+fix(security): enforce module ownership on replaceExisting imports
+
+- Added an ownership check in `POST /api/admin/content/modules/import` before
+  `replaceExisting` imports proceed.
+- Prevents users from importing a new version into modules they do not own,
+  closing an authorization gap that could be combined with auto-publish.
+
 ## 1.1.63 - 2026-05-20
 
 fix(admin): imported modules/courses auto-publish if source was published + import button styling (#433 follow-up)

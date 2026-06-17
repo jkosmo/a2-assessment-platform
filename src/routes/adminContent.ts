@@ -241,6 +241,9 @@ adminContentRouter.post("/modules/import", async (request, response) => {
     return;
   }
   try {
+    if ((data.mode ?? "createNew") === "replaceExisting" && data.targetId) {
+      await assertModuleOwnership(data.targetId, actorId, request.context?.roles ?? []);
+    }
     // Cast through unknown: zod-inferred OUTPUT types from the import side and the
     // schema-builder side are structurally identical but nominally unrelated when
     // they cross module boundaries via different re-export chains. Runtime payload
