@@ -7,6 +7,7 @@ import {
   buildModuleDraftLocalizationPrompts,
   buildModuleDraftRevisionPrompts,
   buildSectionLocalizationPrompts,
+  normaliseLiteralNewlines,
   detectDominantLanguage,
   extractMcqRevisionTargets,
   hasMeaningfulMcqRevision,
@@ -506,6 +507,13 @@ describe("section localization prompts (#514)", () => {
     });
     expect(userPrompt).toContain('"title"');
     expect(userPrompt).not.toContain('"bodyMarkdown"');
+  });
+
+  it("normalises literal backslash-n back to real newlines", () => {
+    expect(normaliseLiteralNewlines("# Hei\\n\\nLes dette")).toBe("# Hei\n\nLes dette");
+    // Real newlines are left untouched.
+    expect(normaliseLiteralNewlines("# Hei\n\nLes dette")).toBe("# Hei\n\nLes dette");
+    expect(normaliseLiteralNewlines(undefined)).toBeUndefined();
   });
 });
 

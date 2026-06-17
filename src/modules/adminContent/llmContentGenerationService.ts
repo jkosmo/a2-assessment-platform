@@ -1627,12 +1627,21 @@ ${titleSection}
 ${bodySection}
 ## Return format
 
-Return a single JSON object (bodyMarkdown value must be a JSON string with escaped newlines):
+Return a single valid JSON object. Keep real line breaks inside the markdown (do NOT write the
+two characters backslash + n; use actual newlines, which JSON encodes automatically):
 {
 ${returnFields.join(",\n")}
 }`;
 
   return { systemPrompt, userPrompt };
+}
+
+// Defensive: some models emit literal "\n" (backslash + n) instead of real
+// newlines despite instructions (observed for nn but not en-GB). Normalise them
+// back to newlines so markdown renders. Only touches backslash-n sequences.
+export function normaliseLiteralNewlines(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return value;
+  return value.includes("\\n") ? value.replace(/\\r\\n|\\n/g, "\n") : value;
 }
 
 export async function localizeSectionContent(input: SectionLocalizationInput): Promise<SectionLocalizationResult> {
@@ -1643,7 +1652,10 @@ export async function localizeSectionContent(input: SectionLocalizationInput): P
   if (!parsed.success) {
     throw new Error(`Section localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
-  return parsed.data;
+  return {
+    title: parsed.data.title,
+    bodyMarkdown: normaliseLiteralNewlines(parsed.data.bodyMarkdown),
+  };
 }
 
 // ---------------------------------------------------------------------------
