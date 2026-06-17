@@ -223,6 +223,10 @@ var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
 var createAcsEmail = participantNotificationChannel == 'acs_email'
 var postgresHost = '${postgresServerName}.postgres.database.azure.com'
 var keyVaultName = 'a2-${envCode}-kv-${suffix}'
+// Storage account for course learning-section assets (#483/F4). Storage account names must be
+// 3-24 chars, lowercase alphanumeric only (no hyphens), globally unique.
+var courseAssetsStorageName = toLower('a2${envCode}assets${suffix}')
+var courseAssetsContainerName = 'course-assets'
 var postgresConnectionString = 'postgresql://${uriComponent(postgresAdministratorLogin)}:${uriComponent(postgresAdministratorPassword)}@${postgresHost}:5432/${postgresDatabaseName}?schema=public&sslmode=require'
 var llmFailureAlertQuery = '''
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
@@ -532,6 +536,44 @@ resource kvSecretAppRuntime 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   dependsOn: [keyVault]
 }
 
+// Course learning-section assets (#483/F4). Private blob storage; the web app's managed
+// identity authenticates via AAD (Storage Blob Data Contributor), so NO account key or SAS
+// exists — nothing to rotate or leak (consistent with the KV-RBAC invariants). Assets are
+// served through an authenticated app proxy, never via public blob access.
+resource courseAssetsStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: courseAssetsStorageName
+  location: location
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+  }
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+}
+
+resource courseAssetsBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: courseAssetsStorage
+  name: 'default'
+}
+
+resource courseAssetsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: courseAssetsBlobService
+  name: courseAssetsContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   name: webAppName
   location: location
@@ -575,6 +617,16 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'PROCESS_ROLE'
           value: 'web'
+        }
+        {
+          // Course-asset blob storage (#483/F4). Endpoint only — auth is via MSI
+          // (DefaultAzureCredential), so no key/connection-string is stored.
+          name: 'COURSE_ASSETS_BLOB_ENDPOINT'
+          value: courseAssetsStorage.properties.primaryEndpoints.blob
+        }
+        {
+          name: 'COURSE_ASSETS_CONTAINER'
+          value: courseAssetsContainerName
         }
         {
           name: 'SKIP_MIGRATE'
@@ -1085,6 +1137,8 @@ resource parserAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // ---------------------------------------------------------------------------
 
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+// Storage Blob Data Contributor — lets the web app's MSI read/write course-asset blobs (#483/F4).
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
 // #470: grant the deploy service principal read on the DATABASE-URL secret so the
 // deploy-environment.ps1 pre-flight (#410) can compare the existing password and skip the
@@ -1122,6 +1176,18 @@ resource workerAppRuntimeSecretReader 'Microsoft.Authorization/roleAssignments@2
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: workerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Web app MSI → read/write course-asset blobs (#483/F4). No account key exists
+// (allowSharedKeyAccess=false), so this AAD role is the only access path.
+resource webAppCourseAssetsContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
+  scope: courseAssetsStorage
+  name: empty(roleAssignmentSalt) ? guid(subscription().subscriptionId, environmentName, 'webApp-courseAssets-blobContributor') : guid(subscription().subscriptionId, environmentName, 'webApp-courseAssets-blobContributor', roleAssignmentSalt)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    principalId: webApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
