@@ -49,6 +49,20 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 
 ---
 
+## Courses (participant)
+
+All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER.
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/api/courses` | Published courses with progress. `progress.total` counts **all elements** (modules + learning sections); `completed` = passed modules + read sections. |
+| `GET` | `/api/courses/completions` | The user's course completions / certificates |
+| `GET` | `/api/courses/:courseId` | Course detail. Returns `modules[]` (legacy) and `items[]` — the ordered mixed module/section sequence; SECTION items carry a `read` flag (#491/#492). |
+| `GET` | `/api/courses/:courseId/sections/:sectionId` | Sanitised HTML + title of a learning section in the participant's locale. Validates the section belongs to the published course (#491). |
+| `POST` | `/api/courses/:courseId/sections/:sectionId/read` | Mark a section as read (idempotent). `204` on success (#492). |
+
+---
+
 ## Manual Review
 
 | Method | Route | Role(s) |
@@ -118,6 +132,44 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 
 ---
 
+## Admin - Courses & Learning Sections
+
+All routes use the `admin_content` capability: ADMINISTRATOR, SUBJECT_MATTER_OWNER. Localized
+fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` object.
+
+### Courses
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/api/admin/content/courses` | List courses (with module count) |
+| `POST` | `/api/admin/content/courses` | Create a course |
+| `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules) |
+| `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
+| `PUT` | `/api/admin/content/courses/:courseId/modules` | Set module list (legacy; dual-writes CourseItem) |
+| `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
+| `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). |
+| `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course |
+| `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course |
+| `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
+| `GET` | `/api/admin/content/courses/:courseId/export-package` | Export envelope (inlines modules **and** sections in order, #512) |
+| `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1) |
+| `DELETE` | `/api/admin/content/courses/:courseId` | Delete course |
+
+### Learning sections (#476)
+
+| Method | Route | Description |
+|---|---|---|
+| `POST` | `/api/admin/content/sections` | Create a section (`title` + `bodyMarkdown`) → section + version 1 |
+| `GET` | `/api/admin/content/sections` | List sections |
+| `GET` | `/api/admin/content/sections/:sectionId` | Section detail (active version's `bodyMarkdown`) |
+| `PATCH` | `/api/admin/content/sections/:sectionId/title` | Update title |
+| `PUT` | `/api/admin/content/sections/:sectionId/content` | Publish a new immutable content version (latest-wins) |
+| `DELETE` | `/api/admin/content/sections/:sectionId` | Delete (blocked `400` if the section is used in a course) |
+| `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view) |
+| `POST` | `/api/admin/content/sections/localize` | LLM-translate title + bodyMarkdown to another locale (markdown-preserving). Rate-limited. |
+
+---
+
 ## Admin - Modules
 
 | Method | Route | Role(s) |
@@ -156,6 +208,8 @@ These URLs are not role-gated by Express itself; access is enforced by the authe
 | `/review` | REVIEWER, APPEAL_HANDLER, ADMINISTRATOR |
 | `/calibration` | Runtime-configurable via `calibrationWorkspace.accessRoles` (default SUBJECT_MATTER_OWNER, ADMINISTRATOR) |
 | `/admin-content` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
+| `/admin-content/courses` (+ `/courses/new`, `/courses/:id`) | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
+| `/admin-content/sections` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |
 | `/results` | SUBJECT_MATTER_OWNER, ADMINISTRATOR, REPORT_READER |
 | `/profile` | any authenticated |
 | `/admin-platform` | ADMINISTRATOR |

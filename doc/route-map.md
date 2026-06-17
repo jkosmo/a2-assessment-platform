@@ -11,7 +11,9 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | `/admin-content/module/:moduleId/advanced` | Module — advanced editor | `admin-content-advanced.html` | **Canonical** |
 | `/admin-content/courses` | Course list | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/courses/new` | New course (conversational flow) | `admin-content-courses.html` | **Canonical** |
-| `/admin-content/courses/:courseId` | Course detail | `admin-content-courses.html` | **Canonical** |
+| `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections) | `admin-content-courses.html` | **Canonical** |
+| `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |
+| `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/calibration` | Calibration workspace | `admin-content-calibration.html` | **Canonical** |
 
 ### Legacy routes (present during pilot, not primary)
@@ -44,11 +46,11 @@ The conversational and advanced editors are two modes of the same module workspa
 | `/api/submissions` | Participant | Submit work, view results, file appeals |
 | `/api/assessments` | Participant | Trigger assessment, poll job status |
 | `/api/modules` | Participant | Browse available modules, run MCQ |
-| `/api/courses` | Participant | Browse enrolled courses |
+| `/api/courses` | Participant | Browse courses; read learning sections + mark read (#476) |
 | `/api/me` | All | Current user identity and roles |
 | `/api/reviews` | Reviewer / Admin | Manual review queue and override |
 | `/api/appeals` | Appeal Handler / Admin | Appeal queue and resolution |
-| `/api/admin/content` | SMO / Admin | Module and course content management |
+| `/api/admin/content` | SMO / Admin | Module, course, and learning-section content management |
 | `/api/admin/platform` | Admin | Platform administration |
 | `/participant/config` | Public (rate-limited) | Participant console bootstrap config |
 | `/healthz` | Public | Health check (no version info) |
