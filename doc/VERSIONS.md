@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.16 - 2026-06-17
+
+feat(infra): course-asset blob storage — F4 fase 1 (#483)
+
+Infra-fundament for bilde-/asset-opplasting til læringsseksjoner. **Kun infra — ingen app-kode
+bruker det ennå** (fase 2 kommer separat, app-only).
+
+- Ny `Microsoft.Storage/storageAccounts` (`a2<env>assets<suffix>`, Standard_LRS, StorageV2) +
+  privat blob-container `course-assets`.
+- **MSI-only:** `allowSharedKeyAccess=false` + `allowBlobPublicAccess=false` → ingen kontonøkkel
+  eller SAS finnes; web-appens system-assigned MSI får **Storage Blob Data Contributor**
+  (deterministisk-GUID role assignment, betinget på `!skipRoleAssignments`). Ingenting å rotere,
+  i tråd med KV-RBAC-invariantene.
+- App-settings `COURSE_ASSETS_BLOB_ENDPOINT` (endpoint, ikke secret) + `COURSE_ASSETS_CONTAINER`
+  på web-appen.
+
+Full deploy (`deploy-azure.yml`). `az bicep build` rent; ARM what-if (staging + prod) kjøres og
+reviewes før merge (invariant #11).
+
+**Rollback:** revert commit → storage account + container + role assignment + app-settings
+fjernes. Ingen app-kode avhenger av dem ennå, så ingen runtime-påvirkning. (Merk: en allerede
+opprettet storage account med data slettes ikke automatisk av en revert — men i fase 1 er den tom.)
+
 ## 1.3.15 - 2026-06-17
 
 sec(ingest): re-valider redirect-mål mot SSRF-policy ved URL-henting (#504)
