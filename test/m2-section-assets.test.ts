@@ -36,6 +36,14 @@ describe("Section asset upload + serve", () => {
     return res.body.section.id as string;
   }
 
+  // Sections can't be deleted while their version FK (Restrict) holds; detach + drop versions
+  // first. Assets cascade with the section.
+  async function deleteSectionFully(sectionId: string): Promise<void> {
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
+    await prisma.courseSectionVersion.deleteMany({ where: { sectionId } });
+    await prisma.courseSection.delete({ where: { id: sectionId } });
+  }
+
   it("uploads an image, lists it, and serves it back to a participant", async () => {
     const sectionId = await createSection();
 
@@ -61,7 +69,7 @@ describe("Section asset upload + serve", () => {
     expect(served.headers["content-type"]).toContain("image/png");
     expect(served.body.length).toBe(PNG_1PX.length);
 
-    await prisma.courseSection.delete({ where: { id: sectionId } });
+    await deleteSectionFully(sectionId);
   });
 
   it("rejects a disallowed mime type", async () => {
@@ -71,7 +79,7 @@ describe("Section asset upload + serve", () => {
       .set(adminHeaders)
       .attach("file", Buffer.from("hello"), { filename: "x.txt", contentType: "text/plain" });
     expect(res.status).toBe(400);
-    await prisma.courseSection.delete({ where: { id: sectionId } });
+    await deleteSectionFully(sectionId);
   });
 
   it("returns 404 for an unknown asset id", async () => {
