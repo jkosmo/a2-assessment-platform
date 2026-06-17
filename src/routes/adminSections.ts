@@ -1,4 +1,5 @@
-import { Router } from "express";
+import { Router, type Request, type RequestHandler } from "express";
+import multer from "multer";
 import { z } from "zod";
 import {
   createSection,
@@ -7,6 +8,9 @@ import {
   getSection,
   listSections,
   deleteSection,
+  createSectionAsset,
+  listSectionAssets,
+  MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { localizedTextPatchSchema, generationLocaleSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
@@ -16,6 +20,21 @@ import { localizeSectionContent } from "../modules/adminContent/llmContentGenera
 import { generateLimiter } from "../middleware/rateLimiting.js";
 
 const adminSectionsRouter = Router();
+
+// In-memory upload (buffer streamed to blob). Multer errors (incl. file-too-large) → 400.
+const uploadAssetMiddleware = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_ASSET_BYTES, files: 1 },
+}).single("file");
+const uploadAsset: RequestHandler = (request, response, next) => {
+  uploadAssetMiddleware(request, response, (err: unknown) => {
+    if (err) {
+      response.status(400).json({ error: "upload_error", message: err instanceof Error ? err.message : "Upload failed." });
+      return;
+    }
+    next();
+  });
+};
 
 const createSectionSchema = z.object({
   title: localizedTextPatchSchema,
@@ -164,6 +183,35 @@ adminSectionsRouter.put("/:sectionId/content", async (request, response, next) =
       request.context?.userId,
     );
     response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Asset upload (#483/F4) — multipart image upload to a section's blob storage.
+adminSectionsRouter.post("/:sectionId/assets", uploadAsset, async (request: Request<{ sectionId: string }>, response, next) => {
+  const file = request.file;
+  if (!file) {
+    response.status(400).json({ error: "validation_error", message: "Missing file (field name 'file')." });
+    return;
+  }
+  try {
+    const asset = await createSectionAsset({
+      sectionId: request.params.sectionId,
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      buffer: file.buffer,
+    });
+    // The author references the asset in markdown as ![alt](asset:<id>).
+    response.status(201).json({ asset: { ...asset, ref: `asset:${asset.id}` } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) => {
+  try {
+    response.json({ assets: await listSectionAssets(request.params.sectionId) });
   } catch (error) {
     next(error);
   }

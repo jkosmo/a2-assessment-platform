@@ -505,6 +505,24 @@ model CourseSection {
   activeVersion   CourseSectionVersion?  @relation("ActiveCourseSectionVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
   courseItems     CourseItem[]
   reads           CourseSectionRead[]
+  assets          SectionAsset[]
+}
+
+// Media-asset (bilde) for en læringsseksjon (#483/F4). Binæren ligger i Azure Blob
+// (privat container); denne raden er metadata + blob-sti. Refereres fra markdown via
+// `asset:<id>`-URL i et vanlig bilde (`![alt](asset:<id>)`), som resolves til serve-
+// endepunktet ved render.
+model SectionAsset {
+  id        String        @id @default(cuid())
+  sectionId String
+  filename  String
+  mimeType  String
+  blobPath  String
+  sizeBytes Int
+  createdAt DateTime      @default(now())
+  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
 }
 
 // Per-deltaker lese-markering av en læringsseksjon i et kurs (#487/#492). Moduler

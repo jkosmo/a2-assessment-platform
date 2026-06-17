@@ -10,6 +10,13 @@ export {
   listSections,
   deleteSection,
 } from "./sectionCommands.js";
+export {
+  createSectionAsset,
+  listSectionAssets,
+  getSectionAssetContent,
+  ALLOWED_ASSET_MIME_TYPES,
+  MAX_ASSET_BYTES,
+} from "./assetCommands.js";
 export { courseRepository, createCourseRepository } from "./courseRepository.js";
 export { computeCourseStatus } from "./courseQueries.js";
 export type {
