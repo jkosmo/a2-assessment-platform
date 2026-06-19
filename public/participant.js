@@ -2839,6 +2839,10 @@ async function openSectionReader(courseId, sectionId) {
   overlay.setAttribute("aria-modal", "true");
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;z-index:1000;padding:0;";
   overlay.innerHTML = `
+    <style>
+      #sectionReaderBody img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
+      #sectionReaderBody iframe { max-width: 100%; }
+    </style>
     <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;display:flex;flex-direction:column;">
       <h2 id="sectionReaderTitle" style="margin:0 0 var(--space-2,12px) 0;font-size:20px">…</h2>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>

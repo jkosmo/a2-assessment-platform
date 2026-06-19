@@ -13,6 +13,11 @@
         gap: 0;
         border-bottom: 2px solid var(--color-border-soft);
         margin-bottom: var(--space-3);
+        /* Stay visible while editing a (long) section so the workspace tabs don't scroll away. */
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--color-bg, #f7f8fa);
       }
       .content-area-nav-link {
         padding: 10px var(--space-2);
