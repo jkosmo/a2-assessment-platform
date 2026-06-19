@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.19 - 2026-06-19
+
+fix(course): bilde-opplasting 500 — apiFetch sendte FormData med JSON Content-Type (#483)
+
+Bilde-opplasting feilet med 500 fordi `buildConsoleHeaders` setter `Content-Type:
+application/json`, og `apiFetch` slo den inn i FormData-opplastingen. Nettleseren satte da ikke
+multipart-boundary, og server-ens `express.json()` prøvde å parse multipart-kroppen som JSON →
+`SyntaxError: Unexpected token '-', "------WebK"...` → 500 (før requesten nådde multer/blob).
+
+Fiks: `apiFetch` stripper nå `Content-Type` når `body` er `FormData`, så nettleseren setter
+`multipart/form-data` med boundary selv. Klient-only.
+
+CI fanget det ikke fordi integrasjonstesten bruker supertest `.attach` (korrekt multipart) i
+stedet for `apiFetch` — nettopp UI-opplastings-gapet sporet i #524.
+
 ## 1.3.18 - 2026-06-17
 
 feat(course): bilde-opplasting i seksjons-editor — U2 fase 3 (#489)

@@ -145,9 +145,18 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
     baseHeaders["Authorization"] = `Bearer ${token}`;
   }
 
+  const headers = { ...baseHeaders, ...(options.headers ?? {}) };
+  // For multipart/FormData uploads the browser must set Content-Type (with the
+  // boundary) itself. buildConsoleHeaders injects "application/json", which would
+  // otherwise make the server parse the multipart body as JSON and 500 (#483/F4).
+  if (typeof FormData !== "undefined" && options.body instanceof FormData) {
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: { ...baseHeaders, ...(options.headers ?? {}) },
+    headers,
   });
 
   const body = await parseResponseBody(response);
