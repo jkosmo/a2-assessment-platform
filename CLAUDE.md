@@ -99,6 +99,25 @@ If docs cannot land in the same PR, open tracking doc issues (technical + user) 
 milestone** as the feature before it is considered complete. The "document" step must never
 lapse silently — it is part of the definition of done.
 
+### Tests are written WITH the feature, and run locally BEFORE deploy (standing order)
+
+Retroactive tests are only regression guards — they do not prevent the first occurrence of a
+bug. To actually shrink the deploy→manual-test→fix loop, the test must exist **when the feature
+is built**, and must be runnable **without a staging deploy**:
+
+1. **User-facing change ⇒ a browser e2e of the primary flow ships in the same PR.** Server/logic
+   gets unit/integration tests as usual; anything in the **client layer** (i18n key resolution,
+   `fetch`/header behavior incl. multipart, CSP, `<img>`/auth, rendering, CSS/layout) MUST be
+   exercised by a Playwright e2e (`test/e2e/`) written alongside the feature — not afterwards.
+   The class of bugs that cost us 3–4 manual rounds (FormData sent as JSON → 500, raw i18n keys,
+   `<img>` 401, CSP `blob:`) all live in this layer and are invisible to supertest.
+2. **Run the real client→server flow locally before deploying.** A staging deploy is an
+   acceptance gate, not a debugging tool. Use `npm run dev` (local Postgres + `AUTH_MODE=mock`)
+   to exercise the actual browser flow in seconds; deploy only once it passes locally.
+3. A user-facing feature is **not "done"** until its e2e passes locally + in CI. Writing the test
+   first (or at least alongside) forces you to run the real path early, which is where these
+   integration bugs surface.
+
 ### Which deploy workflow to use
 
 | Type of change | Use workflow | Why |

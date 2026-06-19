@@ -74,6 +74,13 @@ These rules exist because their violation caused or worsened the May 2026 produc
   technical docs (`doc/API_REFERENCE.md`, `doc/route-map.md`, arch notes) **and** user/author
   docs under `doc/`. If they can't land in the same PR, open tracking doc issues (technical +
   user) in the same milestone before the feature is complete.
+- **Tests are written WITH the feature, run locally BEFORE deploy (standing order):** retroactive
+  tests are only regression guards. A user-facing change MUST ship a Playwright browser e2e
+  (`test/e2e/`) of its primary flow in the same PR — the client layer (i18n keys, fetch/header
+  behavior incl. multipart, CSP, `<img>`/auth, rendering, CSS) is invisible to supertest and is
+  where the costly bugs hide. Exercise the real client→server flow locally (`npm run dev`, local
+  Postgres + `AUTH_MODE=mock`) before deploying; staging is an acceptance gate, not a debugger.
+  Not "done" until the e2e passes locally + in CI.
 - **For infra changes**, include in the PR description:
   - Which environments are affected
   - Behavior on first deploy (fresh environment) vs normal deploy
