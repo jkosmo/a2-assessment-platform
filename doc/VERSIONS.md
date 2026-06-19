@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.21 - 2026-06-19
+
+fix(course): begrens bilde-størrelse i deltaker-leser + sticky seksjons-nav (#483 follow-up)
+
+To funn fra staging-test:
+- **Bilde-størrelse:** deltaker-leseren manglet `max-width` på bilder → de viste i full
+  px-oppløsning og sprengte visningen. La til `#sectionReaderBody img { max-width:100%; height:auto }`
+  (editor-preview hadde det allerede).
+- **Toppmeny under redigering:** content-area-nav (Moduler/Kurs/Seksjoner) scrollet av toppen i
+  den lange editor-visningen. Gjort `position: sticky; top: 0` på seksjons-siden så den blir værende.
+
+Kun front-end (HTML/JS). `node --check` rent.
+
 ## 1.3.20 - 2026-06-19
 
 fix(course): asset-bilder rendres nå i preview + deltaker-visning (#483)
