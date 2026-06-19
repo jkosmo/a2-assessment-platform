@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.20 - 2026-06-19
+
+fix(course): asset-bilder rendres nå i preview + deltaker-visning (#483)
+
+Etter at opplastings-500-en (1.3.19) var løst, ble bildet satt inn men vist brutt: resolver-en
+lager `<img src="/api/content-assets/<id>">`, men et plain `<img>` kan ikke bære Bearer/console-
+auth-headerne — serve-endepunktet svarte 401 → brutt bilde. (CSP-en manglet også `blob:`.)
+
+- Ny `hydrateContentAssetImages(root, getHeaders)` i `api-client.js`: henter hvert
+  `/api/content-assets/`-bilde via autentisert `fetch` og bytter til en lokal `blob:`-URL.
+  Kalles etter render i seksjons-editorens preview + deltaker-leseren.
+- CSP `img-src` utvidet med `blob:` (lokalt generert av vår egen JS; ingen ekstern last-vektor).
+
+Klient + én CSP-direktiv. Regresjonsvakt i `security-headers.test.ts` (img-src blob:). `tsc` +
+`node --check` rene. App-only deploy.
+
 ## 1.3.19 - 2026-06-19
 
 fix(course): bilde-opplasting 500 — apiFetch sendte FormData med JSON Content-Type (#483)

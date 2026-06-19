@@ -3,7 +3,7 @@ import {
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { showToast } from "/static/toast.js";
@@ -284,6 +284,7 @@ async function refreshPreview() {
       body: JSON.stringify({ markdown: editing.body[editing.editLocale] ?? "" }),
     });
     pane.innerHTML = data.html ?? "";
+    await hydrateContentAssetImages(pane, getHeaders);
   } catch {
     /* leave previous preview on transient error */
   }

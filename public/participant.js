@@ -1,5 +1,5 @@
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
@@ -2881,7 +2881,11 @@ async function openSectionReader(courseId, sectionId) {
     const bodyEl = overlay.querySelector("#sectionReaderBody");
     if (titleEl) titleEl.textContent = body.title ?? "";
     // body.html is already sanitised server-side with the F3/X1 policy.
-    if (bodyEl) bodyEl.innerHTML = body.html ?? "";
+    if (bodyEl) {
+      bodyEl.innerHTML = body.html ?? "";
+      // Private asset images can't carry auth headers as a plain <img>; hydrate them.
+      await hydrateContentAssetImages(bodyEl, headers);
+    }
   } catch (error) {
     const bodyEl = overlay.querySelector("#sectionReaderBody");
     if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
