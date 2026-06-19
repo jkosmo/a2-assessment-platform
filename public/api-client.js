@@ -167,6 +167,37 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
   return body;
 }
 
+// Loads private course-asset images (#483/F4). A plain <img src="/api/content-assets/<id>">
+// can't carry the Bearer/console auth headers, so the server returns 401 and the image breaks.
+// This fetches each such image WITH the authenticated headers and swaps in an object URL.
+// Call after injecting rendered section HTML (editor preview + participant reader).
+export async function hydrateContentAssetImages(root, getHeadersOrFn) {
+  if (!root || typeof root.querySelectorAll !== "function") return;
+  const images = Array.from(root.querySelectorAll('img[src^="/api/content-assets/"]'));
+  if (images.length === 0) return;
+
+  const baseHeaders = typeof getHeadersOrFn === "function" ? { ...getHeadersOrFn() } : { ...(getHeadersOrFn ?? {}) };
+  delete baseHeaders["Content-Type"];
+  delete baseHeaders["content-type"];
+  const token = await getAccessToken();
+  if (token) baseHeaders["Authorization"] = `Bearer ${token}`;
+
+  await Promise.all(
+    images.map(async (img) => {
+      const src = img.getAttribute("src");
+      if (!src) return;
+      try {
+        const response = await fetch(src, { headers: baseHeaders });
+        if (!response.ok) return;
+        const blob = await response.blob();
+        img.src = URL.createObjectURL(blob);
+      } catch {
+        /* leave the broken image; non-fatal */
+      }
+    }),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Queue counts — nav badge helper
 // ---------------------------------------------------------------------------

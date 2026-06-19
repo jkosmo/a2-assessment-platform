@@ -20,6 +20,8 @@ describe("securityHeadersMiddleware", () => {
     expect(csp).toBeDefined();
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'");
+    // blob: is required so authenticated course-asset images can render (#483/F4).
+    expect(csp).toContain("img-src 'self' data: blob:");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
   });

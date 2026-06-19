@@ -10,13 +10,15 @@ import type { NextFunction, Request, Response } from "express";
 //   style="..." attributes. Style injection is far lower risk than script injection.
 // - connect-src / frame-src / form-action allow the Entra (Microsoft) login origin so
 //   MSAL's silent-token iframe, token fetches, and redirect login keep working.
-// - blob: is intentionally NOT listed: the only blob: usage is <a download> CSV/JSON
-//   exports, which are downloads (not CSP-governed resource loads).
+// - img-src allows blob: so course-section asset images (#483/F4) can render: a plain
+//   <img src="/api/content-assets/<id>"> can't carry the auth headers the endpoint requires,
+//   so the client fetches each image with auth and swaps in a locally-created blob: URL.
+//   blob: is same-origin and only constructable by our own JS — no external load vector.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self' https://login.microsoftonline.com https://*.microsoftonline.com",
   "frame-src https://login.microsoftonline.com https://*.microsoftonline.com",
