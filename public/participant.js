@@ -978,7 +978,7 @@ async function ensureParticipantModuleAvailable(moduleId) {
     return loadedModules.some((module) => module?.id === moduleId);
   }
 
-  const body = await apiFetch("/api/modules?includeCompleted=true", headers());
+  const body = await apiFetch("/api/modules?includeCompleted=true", headers);
   loadedModules = Array.isArray(body.modules) ? body.modules : [];
   hasLoadedModules = true;
   syncParticipantModuleWorkspace();
@@ -2670,8 +2670,8 @@ document.getElementById("loadCoursesBtn")?.addEventListener("click", async () =>
 
 async function loadParticipantCourses() {
   const [coursesBody, completionsBody] = await Promise.all([
-    apiFetch("/api/courses", headers()),
-    apiFetch("/api/courses/completions", headers()),
+    apiFetch("/api/courses", headers),
+    apiFetch("/api/courses/completions", headers),
   ]);
   participantCourses = Array.isArray(coursesBody.courses) ? coursesBody.courses : [];
   participantCompletions = {};
@@ -2755,7 +2755,7 @@ function buildCourseAccordionItem(course) {
 async function loadCourseDetail(courseId) {
   const container = document.getElementById(`courseDetail_${courseId}`);
   try {
-    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}`, headers());
+    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}`, headers);
     courseDetailCache[courseId] = body.course;
     renderCourseDetailModules(courseId, body.course);
   } catch (error) {
@@ -2870,7 +2870,7 @@ async function openSectionReader(courseId, sectionId) {
   markReadBtn?.addEventListener("click", async () => {
     markReadBtn.disabled = true;
     try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}/read`, headers(), { method: "POST" });
+      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}/read`, headers, { method: "POST" });
       markedRead = true;
       markReadBtn.textContent = t("courses.section.doneBadge");
     } catch (error) {
@@ -2880,7 +2880,7 @@ async function openSectionReader(courseId, sectionId) {
   });
 
   try {
-    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}`, headers());
+    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}`, headers);
     const titleEl = overlay.querySelector("#sectionReaderTitle");
     const bodyEl = overlay.querySelector("#sectionReaderBody");
     if (titleEl) titleEl.textContent = body.title ?? "";

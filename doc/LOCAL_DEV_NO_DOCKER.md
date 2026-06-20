@@ -35,8 +35,21 @@ Connection (matches `.env.postgres.local`): `127.0.0.1:54329`, user `a2_app`, db
 2. **Run the app:** `npm run dev:local` (app on `http://127.0.0.1:3000`, `AUTH_MODE=mock`).
 3. **Stop Postgres** when done: `C:\Users\<you>\a2-pg-local\stop-pg.cmd`.
 
+### Consent on a fresh database
+
+In mock mode each console page sends a different mock identity (e.g. the section editor uses
+`content-owner-1`, the participant view uses the default `dev-user-1`). Privacy consent is
+stored **per user**, so on a fresh DB every identity hits a `403 consent_required` until it
+accepts the notice. To pre-accept the current consent version for all mock identities at once:
+
+```
+npm run dev:seed:consent
+```
+
+Run it once after a fresh setup or a DB reset. Idempotent.
+
 To reset the local DB: `dotenv -e .env.postgres.local -- npx prisma migrate reset` (then it
-re-applies migrations + seeds).
+re-applies migrations + seeds), followed by `npm run dev:seed:consent`.
 
 ## Notes
 

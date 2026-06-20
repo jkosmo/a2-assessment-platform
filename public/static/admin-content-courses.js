@@ -10,6 +10,7 @@ import {
   fetchQueueCounts,
   applyNavReviewBadge,
 } from "/static/api-client.js";
+import { initConsentGuard } from "/static/consent-guard.js";
 import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
@@ -1562,6 +1563,8 @@ async function init() {
   buildLocaleSelector();
   renderWorkspaceNavigation();
   renderContentAreaNav();
+
+  await initConsentGuard(getHeaders, currentLocale);
 
   try {
     const body = await apiFetch("/version", { headers: {} });

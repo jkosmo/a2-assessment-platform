@@ -4,6 +4,7 @@ import {
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
+import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { showToast } from "/static/toast.js";
@@ -242,7 +243,6 @@ async function renderEditorView(sectionId) {
   document.getElementById("markdownInput")?.addEventListener("input", () => { captureInputs(); schedulePreview(); });
   document.getElementById("saveBtn")?.addEventListener("click", saveSection);
   document.getElementById("uploadImageBtn")?.addEventListener("click", () => {
-    if (!editing.id) { showToast(L("saveFirst"), "error"); return; }
     document.getElementById("imageFileInput")?.click();
   });
   document.getElementById("imageFileInput")?.addEventListener("change", (event) => {
@@ -300,14 +300,17 @@ function nonEmptyLocales(obj) {
   return out;
 }
 
-async function saveSection() {
+// Persist the section (create on first save, otherwise update title + content).
+// Returns true on success. `silent` suppresses the success toast so callers like
+// the image upload can auto-save transparently without a confusing extra toast.
+async function persistSection({ silent } = {}) {
   captureInputs();
   const status = document.getElementById("editorStatus");
   const title = nonEmptyLocales(editing.title);
   const bodyMarkdown = nonEmptyLocales(editing.body);
   if (Object.keys(title).length === 0 || Object.keys(bodyMarkdown).length === 0) {
     showToast(L("needContent"), "error");
-    return;
+    return false;
   }
   try {
     if (!editing.id) {
@@ -327,11 +330,19 @@ async function saveSection() {
         body: JSON.stringify({ bodyMarkdown }),
       });
     }
-    showToast(L("saved"));
-    if (status) status.textContent = L("saved");
+    if (!silent) {
+      showToast(L("saved"));
+      if (status) status.textContent = L("saved");
+    }
+    return true;
   } catch (err) {
     showToast(err?.message ?? "Error", "error");
+    return false;
   }
+}
+
+async function saveSection() {
+  await persistSection();
 }
 
 // Explicit LLM translation (#514): translate the active language's content into
@@ -377,8 +388,9 @@ async function translateFromCurrent() {
 }
 
 // Image upload (#489/U2): upload to the section's blob storage, then insert a markdown
-// image referencing the asset (![alt](asset:<id>)) at the cursor. Requires the section to
-// be saved first (assets attach to a section id). Alt text is mandatory (a11y).
+// image referencing the asset (![alt](asset:<id>)) at the cursor. Assets attach to a
+// section id, so an unsaved section is auto-saved first (transparent to the author).
+// Alt text is mandatory (a11y).
 function insertAtCursor(text) {
   const ta = document.getElementById("markdownInput");
   if (!ta) return;
@@ -391,7 +403,12 @@ function insertAtCursor(text) {
 }
 
 async function uploadImage(file) {
-  if (!editing.id) { showToast(L("saveFirst"), "error"); return; }
+  // Assets need a section id — auto-save first (silently) if this is a new section.
+  // persistSection shows the needContent toast if there's nothing to save yet.
+  if (!editing.id) {
+    const saved = await persistSection({ silent: true });
+    if (!saved || !editing.id) return;
+  }
   const alt = window.prompt(L("altPrompt"), "");
   if (alt === null) return; // cancelled
   const btn = document.getElementById("uploadImageBtn");
@@ -464,6 +481,8 @@ async function init() {
 
   buildLocaleSelector();
   renderWorkspaceNavigation();
+
+  await initConsentGuard(getHeaders, currentLocale);
 
   try {
     const body = await apiFetch("/version", { headers: {} });

@@ -26,7 +26,12 @@ async function mockBaseApis(page: Page) {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "test" }) }),
   );
   await page.route("**/api/me", (route: Route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] } }) }),
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      // The consent guard (#540) reads consent.accepted; without it init throws.
+      body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } }),
+    }),
   );
 }
 
@@ -83,4 +88,97 @@ test("section editor: no raw i18n keys, and image upload is sent as multipart", 
 
   // The asset reference is inserted into the markdown.
   await expect(page.locator("#markdownInput")).toHaveValue(/asset:a1/);
+});
+
+// #540: the section editor must show the blocking consent dialog when consent is not yet
+// accepted — not dump the raw "403 consent_required" JSON into the content area.
+test("section editor: shows consent dialog (not raw 403) when consent not accepted", async ({ page }) => {
+  await mockBaseApis(page);
+  // Override /api/me to report consent NOT accepted.
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: false, currentVersion: "1.0" } }),
+    }),
+  );
+  // The consent text endpoint (GET) the guard fetches to render the modal.
+  await page.route("**/api/me/consent", (route: Route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ version: "1.0", body: "Personvern", platformName: "A2" }),
+      });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/admin/content/sections", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) }),
+  );
+
+  await page.goto("/admin-content/sections");
+
+  // The blocking consent modal must appear …
+  await expect(page.locator("#consent-modal-overlay")).toBeVisible();
+  // … and the raw error must NOT be shown anywhere.
+  await expect(page.locator("#main-content")).not.toContainText("consent_required");
+});
+
+// #542: in mock mode the participant console must send the x-user-* identity headers when
+// loading courses. The bug passed the header OBJECT to apiFetch (which expects a function),
+// so apiFetch silently dropped the headers → backend fell back to a roleless default user → 403.
+// On Entra the Bearer token hid this; only mock mode (local) exposes it.
+test("participant: course load sends x-user-* identity headers in mock mode", async ({ page }) => {
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authMode: "mock",
+        navigation: { items: [], workspaceItems: [] },
+        identityDefaults: {
+          participant: { userId: "participant-1", email: "p@x.no", name: "P", department: "X", roles: ["PARTICIPANT"] },
+        },
+        calibrationWorkspace: { accessRoles: [] },
+        flow: {},
+        output: {},
+      }),
+    }),
+  );
+  await page.route("**/version", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "test" }) }),
+  );
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: { roles: ["PARTICIPANT"] }, consent: { accepted: true, currentVersion: "1.0" } }),
+    }),
+  );
+  await page.route("**/api/queue-counts", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ counts: {} }) }),
+  );
+
+  let coursesUserId: string | undefined;
+  let coursesRoles: string | undefined;
+  await page.route("**/api/courses", (route: Route) => {
+    const h = route.request().headers();
+    coursesUserId = h["x-user-id"];
+    coursesRoles = h["x-user-roles"];
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ courses: [{ id: "c1", title: "Kurs", description: null, moduleCount: 1, progress: { completed: 0, total: 1, courseStatus: "NOT_STARTED" } }] }),
+    });
+  });
+  await page.route("**/api/courses/completions", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ completions: [] }) }),
+  );
+
+  await page.goto("/participant");
+  await page.locator("#loadCoursesBtn").click();
+
+  await expect.poll(() => coursesUserId).toBe("participant-1");
+  expect(coursesRoles).toContain("PARTICIPANT");
 });

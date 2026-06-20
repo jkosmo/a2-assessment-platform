@@ -1645,6 +1645,17 @@ export function normaliseLiteralNewlines(value: string | undefined): string | un
 }
 
 export async function localizeSectionContent(input: SectionLocalizationInput): Promise<SectionLocalizationResult> {
+  // Stub mode (local dev / CI): return a deterministic, clearly-tagged localisation
+  // so the translate client→server flow is exercisable without a live LLM. Real
+  // translation quality is validated against azure_openai on staging.
+  if (env.LLM_MODE !== "azure_openai") {
+    const tag = `[${input.targetLocale}]`;
+    return {
+      title: input.title ? `${tag} ${input.title}` : undefined,
+      bodyMarkdown: input.bodyMarkdown ? `${tag} ${input.bodyMarkdown}` : undefined,
+    };
+  }
+
   const { systemPrompt, userPrompt } = buildSectionLocalizationPrompts(input);
 
   const raw = await callLlm(systemPrompt, userPrompt);
