@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run postgres:setup && dotenv -e .env.postgres.local -- tsx watch src/index.ts",
+    "dev:local": "dotenv -e .env.postgres.local -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/runtime/startup.mjs",
     "postgres:setup": "node scripts/postgres/localSetup.mjs setup",
