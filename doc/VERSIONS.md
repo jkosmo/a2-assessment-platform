@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.22 - 2026-06-20
+
+fix(course): rett opp LMS-flyt avdekket ved lokal mock-testing (#540, #542) + UX/dev-tooling
+
+Første økt med lokal full-stack-kjøring (portable Postgres + `AUTH_MODE=mock`) avdekket to ekte
+feil som var usynlige på staging fordi Entra-Bearer-token skjulte dem:
+
+- **#542 (ekte produktfeil):** `participant.js` sendte header-*objektet* (`headers()`) til
+  `apiFetch`, som forventer en *funksjon*. Objektet ble tolket som `options` og alle `x-user-*`-
+  headere droppet. På Entra bærer Bearer-token identiteten, så det virket; i mock-modus forsvant
+  identiteten → fallback til rolleløs `dev-user-1` → 403 på `/api/courses`, `/api/modules`,
+  seksjons-lesing. Fikset alle 6 kall-steder (`headers()` → `headers`).
+- **#540:** seksjons-/kurs-/bibliotek-konsollene manglet `initConsentGuard` → viste rå
+  `403 consent_required` i innholdsområdet i stedet for samtykke-dialogen. Lagt til på alle tre.
+- **UX:** bilde-opplasting krevde manuell lagring først. Ulagret seksjon auto-lagres nå stille
+  før opplasting (`persistSection({ silent })`).
+- **Dev-tooling:** `localizeSectionContent` returnerer nå deterministisk stub-output i
+  `LLM_MODE=stub` (lokal/CI) i stedet for å kaste, så oversett-*flyten* kan testes uten LLM.
+  Nytt `npm run dev:seed:consent` forhåndsgodkjenner samtykke for alle mock-identiteter på fersk DB.
+
+Tester (skrevet med fiksene, kjørt lokalt): Playwright-e2e for samtykke-dialog (#540) og at
+deltaker-flyten sender `x-user-*` i mock-modus (#542). Static-test-serveren serverer nå
+`/participant`. `tsc` rent, alle 27 e2e grønne. (Dev-konsoll-race #541 logget separat, lav prio.)
+
 ## 1.3.21 - 2026-06-19
 
 fix(course): begrens bilde-størrelse i deltaker-leser + sticky seksjons-nav (#483 follow-up)

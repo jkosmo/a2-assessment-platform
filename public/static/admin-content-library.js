@@ -10,6 +10,7 @@ import {
   fetchQueueCounts,
   applyNavReviewBadge,
 } from "/static/api-client.js";
+import { initConsentGuard } from "/static/consent-guard.js";
 import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
@@ -697,7 +698,7 @@ async function init() {
   }
 
   try {
-    const me = await apiFetch("/api/me", getHeaders);
+    const me = await initConsentGuard(getHeaders, currentLocale);
     activeUserRoles = Array.isArray(me?.user?.roles) ? me.user.roles : [];
   } catch {
     activeUserRoles = [];
