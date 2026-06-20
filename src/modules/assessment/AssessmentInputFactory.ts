@@ -31,17 +31,19 @@ export type AssessmentInputContext = {
 type SubmissionVersionShape = {
   assessmentPolicyJson: string | null;
   submissionSchemaJson?: string | null;
-  taskText: string;
+  // null for MCQ_ONLY modules (#525). buildAssessmentInputContext is only called for
+  // FREETEXT_PLUS_MCQ modules, where these are guaranteed set — guarded at runtime below.
+  taskText: string | null;
   assessorExpectedContent?: string | null;
   promptTemplateVersion: {
     systemPrompt: string;
     userPromptTemplate: string;
     examplesJson: string;
-  };
+  } | null;
   rubricVersion: {
     criteriaJson: string;
     scalingRuleJson: string;
-  };
+  } | null;
 };
 
 type SubmissionShape = {
@@ -59,10 +61,17 @@ export function buildAssessmentInputContext(
   submission: SubmissionShape,
   submissionLocale: SupportedLocale,
 ): AssessmentInputContext {
+  const { taskText, rubricVersion, promptTemplateVersion } = submission.moduleVersion;
+  // Defensive: this builder is only reached for FREETEXT_PLUS_MCQ modules (MCQ_ONLY is gated out
+  // earlier in runAssessment). These must be present for a free-text assessment.
+  if (taskText == null || rubricVersion == null || promptTemplateVersion == null) {
+    throw new Error("Free-text assessment requires taskText, rubric and prompt template configuration.");
+  }
+
   const assessmentPolicy = assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson);
 
-  const rubricCriteriaIds = parseRubricCriteriaIds(submission.moduleVersion.rubricVersion.criteriaJson);
-  const rubricMaxTotal = parseRubricMaxTotal(submission.moduleVersion.rubricVersion.scalingRuleJson);
+  const rubricCriteriaIds = parseRubricCriteriaIds(rubricVersion.criteriaJson);
+  const rubricMaxTotal = parseRubricMaxTotal(rubricVersion.scalingRuleJson);
   const submissionFieldLabels = parseSubmissionFieldLabels(submission.moduleVersion.submissionSchemaJson, submissionLocale);
 
   const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({
@@ -71,8 +80,7 @@ export function buildAssessmentInputContext(
   });
 
   const moduleTaskText =
-    localizeContentText(submissionLocale, submission.moduleVersion.taskText) ??
-    submission.moduleVersion.taskText;
+    localizeContentText(submissionLocale, taskText) ?? taskText;
   const moduleGuidanceText =
     localizeContentText(submissionLocale, submission.moduleVersion.assessorExpectedContent ?? "") ?? undefined;
 
@@ -85,9 +93,9 @@ export function buildAssessmentInputContext(
     sensitiveDataPreprocess,
     moduleTaskText,
     moduleGuidanceText,
-    promptTemplateSystem: submission.moduleVersion.promptTemplateVersion.systemPrompt,
-    promptTemplateUserTemplate: submission.moduleVersion.promptTemplateVersion.userPromptTemplate,
-    promptTemplateExamplesJson: submission.moduleVersion.promptTemplateVersion.examplesJson,
+    promptTemplateSystem: promptTemplateVersion.systemPrompt,
+    promptTemplateUserTemplate: promptTemplateVersion.userPromptTemplate,
+    promptTemplateExamplesJson: promptTemplateVersion.examplesJson,
   };
 }
 

@@ -156,6 +156,84 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   };
 }
 
+// Default MCQ pass threshold (percent) for MCQ-only modules when the author has not set an
+// explicit assessmentPolicy.passRules.mcqMinPercent (#525).
+export const DEFAULT_MCQ_ONLY_MIN_PERCENT = 70;
+
+type BuildMcqOnlyDecisionInput = {
+  submissionId: string;
+  userId: string;
+  moduleVersionId: string;
+  mcqScaledScore: number;
+  mcqPercentScore: number;
+  assessmentPolicy?: ModuleAssessmentPolicy | null;
+};
+
+/**
+ * Decision for an MCQ_ONLY module (#525): no free-text, no LLM evaluation. Pass/fail is decided
+ * purely by the MCQ score against a threshold (author-configurable via
+ * assessmentPolicy.passRules.mcqMinPercent, defaulting to 70%). Always an AUTOMATIC decision —
+ * there is no rubric, red-flag or manual-review path.
+ */
+export function resolveMcqOnlyDecision(
+  mcqPercentScore: number,
+  mcqMinPercent: number,
+): { passFailTotal: boolean; decisionReason: string } {
+  const passFailTotal = mcqPercentScore >= mcqMinPercent;
+  const decisionReason = passFailTotal
+    ? `Automatic pass: MCQ score ${mcqPercentScore}% meets the required minimum of ${mcqMinPercent}%.`
+    : `Automatic fail: MCQ score ${mcqPercentScore}% is below the required minimum of ${mcqMinPercent}%.`;
+  return { passFailTotal, decisionReason };
+}
+
+export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
+  const mcqMinPercent =
+    input.assessmentPolicy?.passRules?.mcqMinPercent ?? DEFAULT_MCQ_ONLY_MIN_PERCENT;
+  const { passFailTotal, decisionReason } = resolveMcqOnlyDecision(input.mcqPercentScore, mcqMinPercent);
+
+  return runInTransaction(async (tx) => {
+    const repo = createDecisionRepository(tx);
+
+    const decision = await repo.createAssessmentDecision({
+      submissionId: input.submissionId,
+      moduleVersionId: input.moduleVersionId,
+      rubricVersionId: null,
+      promptTemplateVersionId: null,
+      mcqScaledScore: input.mcqScaledScore,
+      practicalScaledScore: 0,
+      totalScore: input.mcqScaledScore,
+      redFlagsJson: redFlagsCodec.serialize([]),
+      passFailTotal,
+      decisionType: DecisionType.AUTOMATIC,
+      decisionReason,
+      finalisedById: input.userId,
+    });
+
+    await repo.updateSubmissionStatus(input.submissionId, SubmissionStatus.COMPLETED);
+
+    await upsertRecertificationStatusFromDecision({
+      decisionId: decision.id,
+      actorId: input.userId,
+    }, tx);
+
+    await recordAuditEvent({
+      entityType: auditEntityTypes.assessmentDecision,
+      entityId: decision.id,
+      action: auditActions.assessment.decisionCreated,
+      actorId: input.userId,
+      metadata: {
+        submissionId: input.submissionId,
+        totalScore: input.mcqScaledScore,
+        needsManualReview: false,
+        assessmentMode: "MCQ_ONLY",
+        passFailTotal: decision.passFailTotal,
+      },
+    }, tx);
+
+    return { decision, needsManualReview: false as const };
+  });
+}
+
 export async function createAssessmentDecision(input: BuildDecisionInput) {
   const practicalScoreScaled = input.llmResult.practical_score_scaled;
   const resolved = resolveAssessmentDecision(input);

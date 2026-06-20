@@ -8,8 +8,9 @@ import { prisma } from "../db/prisma.js";
 export type CreateAssessmentDecisionInput = {
   submissionId: string;
   moduleVersionId: string;
-  rubricVersionId: string;
-  promptTemplateVersionId: string;
+  // null for MCQ_ONLY decisions (no rubric/prompt-based LLM evaluation) — #525.
+  rubricVersionId: string | null;
+  promptTemplateVersionId: string | null;
   mcqScaledScore: number;
   practicalScaledScore: number;
   totalScore: number;

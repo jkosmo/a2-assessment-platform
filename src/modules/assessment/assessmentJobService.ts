@@ -5,7 +5,8 @@ import { auditActions, auditEntityTypes } from "../../observability/auditEvents.
 import { normalizeLocale } from "../../i18n/locale.js";
 import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
 import { runLlmEvaluationPipeline } from "./AssessmentEvaluator.js";
-import { applyAssessmentDecision } from "./AssessmentDecisionApplicationService.js";
+import { applyAssessmentDecision, applyMcqOnlyDecision } from "./AssessmentDecisionApplicationService.js";
+import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import {
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
@@ -39,6 +40,33 @@ async function runAssessment(jobId: string) {
 
   await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
+  // MCQ_ONLY modules (#525): no free-text, no LLM evaluation. Decide pass/fail purely from the
+  // MCQ score and finish — skip the rubric/prompt-based pipeline entirely.
+  if (submission.moduleVersion.assessmentMode === "MCQ_ONLY") {
+    await applyMcqOnlyDecision({
+      jobId,
+      submissionId: submission.id,
+      userId: submission.userId,
+      moduleId: submission.moduleId,
+      moduleVersionId: submission.moduleVersionId,
+      mcqScaledScore: mcqAttempt.scaledScore,
+      mcqPercentScore: mcqAttempt.percentScore,
+      assessmentPolicy: assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson),
+      moduleTitle: submission.moduleVersion.module.title,
+      submissionLocale,
+      submittedAt: submission.submittedAt,
+      recipientEmail: submission.user.email,
+      recipientName: submission.user.name,
+    });
+    return;
+  }
+
+  // FREETEXT_PLUS_MCQ path: rubric + prompt are required here (MCQ_ONLY was gated out above).
+  const { rubricVersionId, promptTemplateVersionId } = submission.moduleVersion;
+  if (rubricVersionId == null || promptTemplateVersionId == null) {
+    throw new Error("Free-text module version is missing rubric/prompt configuration.");
+  }
+
   const inputContext = buildAssessmentInputContext(submission, submissionLocale);
 
   await recordAuditEvent({
@@ -62,7 +90,7 @@ async function runAssessment(jobId: string) {
     userId: submission.userId,
     moduleId: submission.moduleId,
     moduleVersionId: submission.moduleVersionId,
-    promptTemplateVersionId: submission.moduleVersion.promptTemplateVersionId,
+    promptTemplateVersionId,
     inputContext,
   });
 
@@ -72,8 +100,8 @@ async function runAssessment(jobId: string) {
     userId: submission.userId,
     moduleId: submission.moduleId,
     moduleVersionId: submission.moduleVersionId,
-    rubricVersionId: submission.moduleVersion.rubricVersionId,
-    promptTemplateVersionId: submission.moduleVersion.promptTemplateVersionId,
+    rubricVersionId,
+    promptTemplateVersionId,
     mcqScaledScore: mcqAttempt.scaledScore,
     mcqPercentScore: mcqAttempt.percentScore,
     llmResult: finalLlmResult,

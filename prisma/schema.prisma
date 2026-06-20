@@ -164,28 +164,39 @@ model Module {
   courseItems            CourseItem[]
 }
 
+// Whether a module bundles a free-text submission (LLM-graded) plus MCQ, or is MCQ-only
+// (no free-text, no LLM evaluation — pass/fail decided purely on the MCQ score). Defaults to
+// FREETEXT_PLUS_MCQ so existing modules are unchanged (#525).
+enum AssessmentMode {
+  FREETEXT_PLUS_MCQ
+  MCQ_ONLY
+}
+
 model ModuleVersion {
-  id                        String                @id @default(cuid())
+  id                        String                 @id @default(cuid())
   moduleId                  String
   versionNo                 Int
-  taskText                  String
+  // taskText / rubricVersionId / promptTemplateVersionId are free-text-assessment specific and
+  // are null for MCQ_ONLY modules (#525). They remain set for FREETEXT_PLUS_MCQ.
+  taskText                  String?
   assessorExpectedContent   String?
   candidateTaskConstraints  String?
   assessmentBlueprint       String?
-  rubricVersionId           String
-  promptTemplateVersionId   String
+  rubricVersionId           String?
+  promptTemplateVersionId   String?
   mcqSetVersionId           String
+  assessmentMode            AssessmentMode         @default(FREETEXT_PLUS_MCQ)
   submissionSchemaJson      String?
   assessmentPolicyJson      String?
   publishedBy               String?
   publishedAt               DateTime?
-  createdAt                 DateTime              @default(now())
-  updatedAt                 DateTime              @updatedAt
-  module                    Module                @relation("ModuleVersions", fields: [moduleId], references: [id], onDelete: Restrict)
-  activeForModules          Module[]              @relation("ActiveModuleVersion")
-  rubricVersion             RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
-  promptTemplateVersion     PromptTemplateVersion @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
-  mcqSetVersion             MCQSetVersion         @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  module                    Module                 @relation("ModuleVersions", fields: [moduleId], references: [id], onDelete: Restrict)
+  activeForModules          Module[]               @relation("ActiveModuleVersion")
+  rubricVersion             RubricVersion?         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  promptTemplateVersion     PromptTemplateVersion? @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+  mcqSetVersion             MCQSetVersion          @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
   submissions               Submission[]
   assessmentDecisions       AssessmentDecision[]
   llmEvaluations            LLMEvaluation[]
@@ -337,11 +348,12 @@ model LLMEvaluation {
 }
 
 model AssessmentDecision {
-  id                      String                @id @default(cuid())
+  id                      String                 @id @default(cuid())
   submissionId            String
   moduleVersionId         String
-  rubricVersionId         String
-  promptTemplateVersionId String
+  // null for MCQ_ONLY decisions — there is no rubric/prompt-based LLM evaluation (#525).
+  rubricVersionId         String?
+  promptTemplateVersionId String?
   mcqScaledScore          Float
   practicalScaledScore    Float
   totalScore              Float
@@ -349,14 +361,14 @@ model AssessmentDecision {
   passFailTotal           Boolean
   decisionType            DecisionType
   decisionReason          String
-  finalisedAt             DateTime              @default(now())
+  finalisedAt             DateTime               @default(now())
   finalisedById           String?
   parentDecisionId        String?
-  createdAt               DateTime              @default(now())
-  submission              Submission            @relation(fields: [submissionId], references: [id], onDelete: Restrict)
-  moduleVersion           ModuleVersion         @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
-  rubricVersion           RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
-  promptTemplateVersion   PromptTemplateVersion @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+  createdAt               DateTime               @default(now())
+  submission              Submission             @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  moduleVersion           ModuleVersion          @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+  rubricVersion           RubricVersion?         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  promptTemplateVersion   PromptTemplateVersion? @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
   finalisedBy             User?                 @relation("FinalisedBy", fields: [finalisedById], references: [id], onDelete: SetNull)
   parentDecision          AssessmentDecision?   @relation("DecisionLineage", fields: [parentDecisionId], references: [id], onDelete: SetNull)
   childDecisions          AssessmentDecision[]  @relation("DecisionLineage")

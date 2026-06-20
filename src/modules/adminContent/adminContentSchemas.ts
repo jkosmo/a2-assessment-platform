@@ -127,17 +127,33 @@ export const assessmentPolicyBodySchema = z.object({
     .optional(),
 });
 
-export const moduleVersionBodySchema = z.object({
-  taskText: localizedTextSchema,
-  assessorExpectedContent: localizedTextSchema.optional(),
-  candidateTaskConstraints: localizedTextSchema.optional(),
-  assessmentBlueprint: z.string().trim().optional(),
-  rubricVersionId: z.string().min(1),
-  promptTemplateVersionId: z.string().min(1),
-  mcqSetVersionId: z.string().min(1),
-  submissionSchema: submissionSchemaBodySchema.optional(),
-  assessmentPolicy: assessmentPolicyBodySchema.optional(),
-});
+export const assessmentModeSchema = z.enum(["FREETEXT_PLUS_MCQ", "MCQ_ONLY"]);
+
+// #525: MCQ_ONLY modules have no free-text task, rubric or prompt — those fields become optional.
+// mcqSetVersionId is always required. FREETEXT_PLUS_MCQ (default) keeps the original requirements.
+export const moduleVersionBodySchema = z
+  .object({
+    assessmentMode: assessmentModeSchema.optional(),
+    taskText: localizedTextSchema.optional(),
+    assessorExpectedContent: localizedTextSchema.optional(),
+    candidateTaskConstraints: localizedTextSchema.optional(),
+    assessmentBlueprint: z.string().trim().optional(),
+    rubricVersionId: z.string().min(1).optional(),
+    promptTemplateVersionId: z.string().min(1).optional(),
+    mcqSetVersionId: z.string().min(1),
+    submissionSchema: submissionSchemaBodySchema.optional(),
+    assessmentPolicy: assessmentPolicyBodySchema.optional(),
+  })
+  .refine(
+    (v) =>
+      v.assessmentMode === "MCQ_ONLY" ||
+      (Boolean(v.taskText) && Boolean(v.rubricVersionId) && Boolean(v.promptTemplateVersionId)),
+    {
+      message:
+        "taskText, rubricVersionId and promptTemplateVersionId are required for FREETEXT_PLUS_MCQ modules.",
+      path: ["assessmentMode"],
+    },
+  );
 
 export const benchmarkExampleVersionBodySchema = z.object({
   basePromptTemplateVersionId: z.string().min(1),

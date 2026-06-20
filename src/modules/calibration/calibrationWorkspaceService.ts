@@ -185,7 +185,12 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
   const averageTotalScore =
     decisionCount > 0 ? round2(decisions.reduce((sum, decision) => sum + decision.totalScore, 0) / decisionCount) : null;
 
-  const outcomePromptTemplateIds = new Set(outcomes.map((outcome) => outcome.promptTemplateVersionId));
+  // MCQ_ONLY decisions have no prompt template (#525) — exclude nulls from coverage stats.
+  const outcomePromptTemplateIds = new Set(
+    outcomes
+      .map((outcome) => outcome.promptTemplateVersionId)
+      .filter((id): id is string => id !== null),
+  );
   const benchmarkPromptTemplateIds = new Set(
     benchmarkAnchors.map((anchor) => anchor.promptTemplateVersionId),
   );

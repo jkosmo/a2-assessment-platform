@@ -12,6 +12,7 @@ const createRubricVersionRecord = vi.fn();
 const createPromptTemplateVersionRecord = vi.fn();
 const createMcqSetVersionRecord = vi.fn();
 const findVersionDependencies = vi.fn();
+const findMcqSetSummary = vi.fn();
 const createModuleVersionRecord = vi.fn();
 const findPromptTemplateSummary = vi.fn();
 const findModuleVersionSummary = vi.fn();
@@ -36,6 +37,7 @@ const adminContentRepositoryMock = {
   createPromptTemplateVersion: createPromptTemplateVersionRecord,
   createMcqSetVersion: createMcqSetVersionRecord,
   findVersionDependencies,
+  findMcqSetSummary,
   createModuleVersion: createModuleVersionRecord,
   findPromptTemplateSummary,
   findModuleVersionSummary,
@@ -74,6 +76,9 @@ describe("admin content service", () => {
     createPromptTemplateVersionRecord.mockReset();
     createMcqSetVersionRecord.mockReset();
     findVersionDependencies.mockReset();
+    findMcqSetSummary.mockReset();
+    // #525: createModuleVersion now validates the MCQ set first; default to a same-module match.
+    findMcqSetSummary.mockImplementation((id: string) => Promise.resolve({ id, moduleId: "module-1" }));
     createModuleVersionRecord.mockReset();
     findPromptTemplateSummary.mockReset();
     findModuleVersionSummary.mockReset();

@@ -63,7 +63,9 @@ export function toCreateModuleVersionInput(data: ModuleVersionBody, moduleId: st
     : undefined;
   return {
     moduleId,
-    taskText: localizedTextCodec.serialize(data.taskText),
+    assessmentMode: data.assessmentMode,
+    // #525: taskText/rubric/prompt are absent for MCQ_ONLY modules.
+    taskText: data.taskText ? localizedTextCodec.serialize(data.taskText) : undefined,
     assessorExpectedContent: data.assessorExpectedContent ? localizedTextCodec.serialize(data.assessorExpectedContent) : undefined,
     candidateTaskConstraints: data.candidateTaskConstraints ? localizedTextCodec.serialize(data.candidateTaskConstraints) : undefined,
     assessmentBlueprint: data.assessmentBlueprint ?? undefined,
