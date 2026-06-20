@@ -1483,6 +1483,11 @@ function renderWorkspaceNavigation() {
 }
 
 async function loadParticipantConsoleConfig() {
+  // #541: identity-dependent actions must wait until the console config has populated the
+  // identity form. Otherwise an early click sends an empty x-user-id, the backend falls back
+  // to the roleless MOCK_DEFAULT_USER_ID, and the request 403s with a confusing role error.
+  const loadCoursesBtn = document.getElementById("loadCoursesBtn");
+  if (loadCoursesBtn) loadCoursesBtn.disabled = true;
   try {
     const body = await getConsoleConfig();
     participantRuntimeConfig = {
@@ -1525,6 +1530,9 @@ async function loadParticipantConsoleConfig() {
   renderWorkspaceNavigation();
   await initConsentGuard(headers, currentLocale);
   fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
+
+  // Identity form is now populated — safe to allow course loading (#541).
+  if (loadCoursesBtn) loadCoursesBtn.disabled = false;
 }
 
 function applyIdentityDefaults() {

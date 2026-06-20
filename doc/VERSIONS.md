@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.23 - 2026-06-20
+
+fix(participant): herd dev-konsoll-race + e2e for deltaker-seksjonsleser (#541)
+
+- **#541:** «Last kurs» var klikkbar før `loadParticipantConsoleConfig()` hadde fylt
+  identitets-skjemaet → tidlig klikk sendte tom `x-user-id` → fallback til rolleløs
+  `dev-user-1` → forvirrende 403. Knappen deaktiveres nå til config er lastet, og aktiveres
+  når identiteten er satt.
+- **Test:** ny Playwright-e2e for hele deltaker-flyten (last kurs → utvid kurs → åpne seksjon →
+  bilde-hydrering til `blob:`-URL → «Marker som lest» POST). Dekker flyten som tidligere bare
+  var manuelt testet.
+
+Kun front-end + test. `tsc` rent, 28 e2e grønne.
+
 ## 1.3.22 - 2026-06-20
 
 fix(course): rett opp LMS-flyt avdekket ved lokal mock-testing (#540, #542) + UX/dev-tooling
