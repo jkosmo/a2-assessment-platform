@@ -12,6 +12,7 @@ const {
   AppealStatus,
   DeletionRequestStatus,
   DeletionTrigger,
+  AssessmentMode,
 } =
   prismaClient;
 
@@ -25,4 +26,5 @@ export {
   AppealStatus,
   DeletionRequestStatus,
   DeletionTrigger,
+  AssessmentMode,
 };

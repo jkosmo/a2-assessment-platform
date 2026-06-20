@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { courseRepository, computeCourseStatus, getSection } from "../modules/course/index.js";
+import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse } from "../modules/course/index.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
@@ -244,6 +244,8 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);
+    // Reading the final section can be the last gate for certification (#476/#525) — re-check.
+    await checkCourseCompletionForCourse({ userId, courseId: course.id });
     response.status(204).send();
   } catch (error) {
     next(error);

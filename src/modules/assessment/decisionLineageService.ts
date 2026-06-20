@@ -15,8 +15,9 @@ export type ParentDecisionSnapshot = {
   id: string;
   submissionId: string;
   moduleVersionId: string;
-  rubricVersionId: string;
-  promptTemplateVersionId: string;
+  // null for decisions on MCQ_ONLY modules (#525).
+  rubricVersionId: string | null;
+  promptTemplateVersionId: string | null;
   mcqScaledScore: number;
   practicalScaledScore: number;
   totalScore: number;

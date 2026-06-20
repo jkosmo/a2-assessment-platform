@@ -125,6 +125,21 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 | `POST` | `/api/admin/content/modules/:moduleId/mcq-set-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+
+#### Module assessment mode (`assessmentMode`) — #525
+
+`POST .../module-versions` accepts an optional `assessmentMode`:
+
+- `FREETEXT_PLUS_MCQ` (default when omitted) — requires `taskText`, `rubricVersionId` and
+  `promptTemplateVersionId` (free-text submission graded by the LLM) plus `mcqSetVersionId`.
+- `MCQ_ONLY` — no free-text/LLM evaluation. `taskText`, `rubricVersionId` and
+  `promptTemplateVersionId` are omitted; only `mcqSetVersionId` is required. Pass/fail is decided
+  purely by the MCQ score against a threshold (`assessmentPolicy.passRules.mcqMinPercent`,
+  default **70%**).
+
+**Certification invariant (#476/#525):** a course completion / certificate is issued only when a
+participant has **passed all modules** in the course **and read all learning sections**. This is
+re-checked both when a module is passed and when a section is marked read.
 | `GET` | `/api/admin/content/modules/:moduleId/export` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `DELETE` | `/api/admin/content/modules/:moduleId` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/generate/module-draft` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |

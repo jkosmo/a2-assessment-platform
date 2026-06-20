@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.24 - 2026-06-20
+
+feat(module): MCQ-only moduler — backend-fundament + sertifiserings-invariant (#525, #476)
+
+Backend-skive (CI-verifisert, ingen UI ennå). assessmentMode-diskriminator gjør at en modul kan
+være ren MCQ uten fritekst/LLM-vurdering:
+
+- **Datamodell:** `AssessmentMode { FREETEXT_PLUS_MCQ | MCQ_ONLY }` på `ModuleVersion`
+  (default FREETEXT_PLUS_MCQ → bakoverkompatibelt). `taskText`/`rubricVersionId`/
+  `promptTemplateVersionId` nullbare (på ModuleVersion + AssessmentDecision). 2 expand-migrasjoner.
+- **Vurdering:** `MCQ_ONLY` hopper helt over LLM-pipelinen; bestått = MCQ-score ≥ terskel
+  (`assessmentPolicy.passRules.mcqMinPercent`, default **70%**, forfatter-justerbar). Egen
+  `resolveMcqOnlyDecision`/`createMcqOnlyDecision` + gate i `assessmentJobService`.
+- **Authoring-API:** `POST .../module-versions` tar `assessmentMode`; validering gjør fritekst-
+  feltene valgfrie for MCQ_ONLY (mcqSet alltid påkrevd).
+- **Sertifiserings-invariant (#476/#525):** kurs-fullføring/sertifikat utstedes kun når
+  **alle moduler er bestått OG alle læringsseksjoner er lest**. Tidligere ble seksjons-lesing
+  ignorert ved sertifiserings-utstedelse — nå gates det, og sjekken trigges både ved modul-
+  bestått og ved at en seksjon merkes lest.
+
+Tester: 8 nye enhetstester (MCQ-only-beslutning + validering). tsc rent, 531 unit + 28 e2e grønne,
+eksisterende kurs-fullføring/deltaker-integrasjonstester uendret.
+
+Gjenstår (egne skiver med e2e): deltaker-UI (hopp over fritekst-steg), forfatter-UI (MCQ-only-
+veksling), import/eksport av assessmentMode, bruker-dokumentasjon.
+
 ## 1.3.23 - 2026-06-20
 
 fix(participant): herd dev-konsoll-race + e2e for deltaker-seksjonsleser (#541)

@@ -4,6 +4,7 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../../errors/AppError.js";
 import {
@@ -44,12 +45,14 @@ type CreateMcqSetVersionInput = {
 
 type CreateModuleVersionInput = {
   moduleId: string;
-  taskText: string;
+  // #525: for MCQ_ONLY modules taskText/rubric/prompt are absent.
+  assessmentMode?: AssessmentMode;
+  taskText?: string | null;
   assessorExpectedContent?: string;
   candidateTaskConstraints?: string;
   assessmentBlueprint?: string;
-  rubricVersionId: string;
-  promptTemplateVersionId: string;
+  rubricVersionId?: string | null;
+  promptTemplateVersionId?: string | null;
   mcqSetVersionId: string;
   submissionSchemaJson?: string;
   assessmentPolicyJson?: string;
@@ -555,33 +558,42 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
   await ensureModuleExists(input.moduleId);
   const versionNo = await getNextVersionNo("module", input.moduleId);
 
-  const [rubric, promptTemplate, mcqSet] = await adminContentRepository.findVersionDependencies({
-    rubricVersionId: input.rubricVersionId,
-    promptTemplateVersionId: input.promptTemplateVersionId,
-    mcqSetVersionId: input.mcqSetVersionId,
-  });
+  const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
 
-  if (!rubric || rubric.moduleId !== input.moduleId) {
-    throw new Error("Rubric version is missing or belongs to another module.");
-  }
-
-  if (!promptTemplate || promptTemplate.moduleId !== input.moduleId) {
-    throw new Error("Prompt template version is missing or belongs to another module.");
-  }
-
+  // MCQ set is always required and must belong to this module.
+  const mcqSet = await adminContentRepository.findMcqSetSummary(input.mcqSetVersionId);
   if (!mcqSet || mcqSet.moduleId !== input.moduleId) {
     throw new Error("MCQ set version is missing or belongs to another module.");
+  }
+
+  // Rubric + prompt are only validated for FREETEXT_PLUS_MCQ modules (#525).
+  if (!isMcqOnly) {
+    if (!input.rubricVersionId || !input.promptTemplateVersionId) {
+      throw new Error("Rubric and prompt template are required for free-text modules.");
+    }
+    const [rubric, promptTemplate] = await adminContentRepository.findVersionDependencies({
+      rubricVersionId: input.rubricVersionId,
+      promptTemplateVersionId: input.promptTemplateVersionId,
+      mcqSetVersionId: input.mcqSetVersionId,
+    });
+    if (!rubric || rubric.moduleId !== input.moduleId) {
+      throw new Error("Rubric version is missing or belongs to another module.");
+    }
+    if (!promptTemplate || promptTemplate.moduleId !== input.moduleId) {
+      throw new Error("Prompt template version is missing or belongs to another module.");
+    }
   }
 
   return adminContentRepository.createModuleVersion({
     moduleId: input.moduleId,
     versionNo,
-    taskText: input.taskText,
+    assessmentMode: input.assessmentMode,
+    taskText: isMcqOnly ? null : input.taskText,
     assessorExpectedContent: input.assessorExpectedContent,
     candidateTaskConstraints: input.candidateTaskConstraints,
     assessmentBlueprint: input.assessmentBlueprint,
-    rubricVersionId: input.rubricVersionId,
-    promptTemplateVersionId: input.promptTemplateVersionId,
+    rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
+    promptTemplateVersionId: isMcqOnly ? null : input.promptTemplateVersionId,
     mcqSetVersionId: input.mcqSetVersionId,
     submissionSchemaJson: input.submissionSchemaJson,
     assessmentPolicyJson: input.assessmentPolicyJson,

@@ -1,4 +1,5 @@
 import { prisma } from "../../db/prisma.js";
+import type { AssessmentMode } from "@prisma/client";
 
 type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseModule">;
 
@@ -460,18 +461,28 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       ]);
     },
 
+    // #525: MCQ_ONLY module versions only depend on an MCQ set (no rubric/prompt).
+    findMcqSetSummary(mcqSetVersionId: string) {
+      return client.mCQSetVersion.findUnique({
+        where: { id: mcqSetVersionId },
+        select: { id: true, moduleId: true },
+      });
+    },
+
     createModuleVersion(data: {
       moduleId: string;
       versionNo: number;
-      taskText: string;
-      assessorExpectedContent?: string;
-      candidateTaskConstraints?: string;
-      assessmentBlueprint?: string;
-      rubricVersionId: string;
-      promptTemplateVersionId: string;
+      // taskText / rubricVersionId / promptTemplateVersionId are null for MCQ_ONLY modules (#525).
+      taskText?: string | null;
+      assessorExpectedContent?: string | null;
+      candidateTaskConstraints?: string | null;
+      assessmentBlueprint?: string | null;
+      rubricVersionId?: string | null;
+      promptTemplateVersionId?: string | null;
       mcqSetVersionId: string;
-      submissionSchemaJson?: string;
-      assessmentPolicyJson?: string;
+      assessmentMode?: AssessmentMode;
+      submissionSchemaJson?: string | null;
+      assessmentPolicyJson?: string | null;
     }) {
       return client.moduleVersion.create({
         data,
@@ -488,6 +499,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           rubricVersionId: true,
           promptTemplateVersionId: true,
           mcqSetVersionId: true,
+          assessmentMode: true,
           publishedBy: true,
           publishedAt: true,
           createdAt: true,
