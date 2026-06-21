@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.47 - 2026-06-21
+
+feat(author): 3-veis modultype-velger i Avansert editor (#578 slice 2b)
+
+Avansert editor støtter nå alle tre modultyper (tidligere bare MCQ-only-checkbox).
+- MCQ-only-checkboxen erstattet av en **3-veis radio**: «Fritekst + flervalg» / «Kun fritekst» /
+  «Kun flervalg».
+- Synlighet styres per modus: MCQ_ONLY skjuler fritekst-felt + rubrikk/prompt/submission + viser
+  terskel; FREETEXT_ONLY skjuler MCQ-kort/-seksjon (beholder fritekst + rubrikk/prompt); FREETEXT_PLUS_MCQ
+  viser alt.
+- **Last leser `assessmentMode`** og setter radioen, så re-lagring bevarer typen (fjerner
+  korrupsjonsrisikoen der en FREETEXT_ONLY-modul ble lagret som FREETEXT_PLUS_MCQ).
+- Lagring: FREETEXT_ONLY hopper over MCQ-sett, sender `assessmentMode=FREETEXT_ONLY` med rubrikk +
+  prompt + oppgavetekst (ingen mcqSet).
+- i18n `adminContent.moduleType.*` i en-GB/nb/nn. **Tester:** MCQ-only-e2e oppdatert til radio + ny
+  FREETEXT_ONLY-avansert-e2e. 42/42 admin-content e2e grønne, tsc rent.
+
 ## 1.3.46 - 2026-06-21
 
 feat(participant): FREETEXT_ONLY deltaker-flyt (#578 slice 3)

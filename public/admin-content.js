@@ -123,9 +123,22 @@ const moduleVersionAssessmentPolicyInput = document.getElementById("moduleVersio
 const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersionRubricVersionId");
 const moduleVersionPromptTemplateVersionIdInput = document.getElementById("moduleVersionPromptTemplateVersionId");
 const moduleVersionMcqSetVersionIdInput = document.getElementById("moduleVersionMcqSetVersionId");
-// #525/#546: MCQ-only authoring controls.
-const moduleVersionMcqOnlyInput = document.getElementById("moduleVersionMcqOnly");
+// #525/#546/#578: module-type authoring controls. The 3-way radio (Free-text + MCQ / Free-text only
+// / MCQ only) replaced the old MCQ-only checkbox.
 const moduleVersionMcqMinPercentInput = document.getElementById("moduleVersionMcqMinPercent");
+
+function getSelectedModuleType() {
+  const checked = document.querySelector('input[name="moduleVersionType"]:checked');
+  const value = checked?.value;
+  return value === "MCQ_ONLY" || value === "FREETEXT_ONLY" ? value : "FREETEXT_PLUS_MCQ";
+}
+
+function setSelectedModuleType(mode) {
+  const value = mode === "MCQ_ONLY" || mode === "FREETEXT_ONLY" ? mode : "FREETEXT_PLUS_MCQ";
+  for (const radio of document.querySelectorAll('input[name="moduleVersionType"]')) {
+    radio.checked = radio.value === value;
+  }
+}
 const moduleVersionFreetextFields = document.getElementById("moduleVersionFreetextFields");
 const moduleVersionMcqThresholdRow = document.getElementById("moduleVersionMcqThresholdRow");
 const saveContentBundleButton = document.getElementById("saveContentBundle");
@@ -1339,6 +1352,10 @@ function populateFormFromModuleExport(moduleExport) {
   moduleVersionMcqSetVersionIdInput.value = mcqSetVersion?.id ?? "";
   publishModuleVersionIdInput.value = moduleVersion?.id ?? "";
 
+  // #578: reflect the loaded version's assessment mode in the 3-way module-type selector so
+  // re-saving preserves the type (FREETEXT_PLUS_MCQ / FREETEXT_ONLY / MCQ_ONLY).
+  setSelectedModuleType(moduleVersion?.assessmentMode);
+
   selectedModuleStatus = moduleExport;
   dirtyCards.clear();
   renderModuleStatus();
@@ -2191,7 +2208,9 @@ async function handleCreateModuleVersion(options = { silent: false }) {
   // #525/#546: MCQ-only modules omit the free-text task, rubric and prompt entirely. Pass/fail is
   // decided purely by the MCQ score against a threshold (default 70%), stored in the assessment
   // policy's mcqMinPercent pass rule.
-  const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
+  const moduleType = getSelectedModuleType();
+  const mcqOnly = moduleType === "MCQ_ONLY";
+  const freetextOnly = moduleType === "FREETEXT_ONLY";
   let payload;
   if (mcqOnly) {
     const minPercentRaw = Number.parseInt(moduleVersionMcqMinPercentInput?.value ?? "", 10);
@@ -2207,8 +2226,10 @@ async function handleCreateModuleVersion(options = { silent: false }) {
       assessmentPolicy,
     };
   } else {
+    // FREETEXT_PLUS_MCQ and FREETEXT_ONLY share the free-text fields. FREETEXT_ONLY (#578) omits
+    // the MCQ set.
     payload = {
-      assessmentMode: "FREETEXT_PLUS_MCQ",
+      assessmentMode: freetextOnly ? "FREETEXT_ONLY" : "FREETEXT_PLUS_MCQ",
       // v1.2.22 (#462): readLocalizedFieldValue merger med lagret locale-objekt for de
       // tre locale-aware moduleVersion-feltene.
       taskText: readLocalizedFieldValue(moduleVersionTaskTextInput, "adminContent.moduleVersion.taskText"),
@@ -2222,7 +2243,7 @@ async function handleCreateModuleVersion(options = { silent: false }) {
       ),
       rubricVersionId: moduleVersionRubricVersionIdInput.value.trim(),
       promptTemplateVersionId: moduleVersionPromptTemplateVersionIdInput.value.trim(),
-      mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
+      ...(freetextOnly ? {} : { mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim() }),
       ...(submissionSchema !== undefined && { submissionSchema }),
       ...(assessmentPolicy !== undefined && { assessmentPolicy }),
     };
@@ -2290,11 +2311,14 @@ async function handleSaveContentBundle() {
     renderModuleMeta();
   }
 
-  // #525/#546: MCQ-only modules have no rubric or evaluation instruction — skip those steps.
-  const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
+  // #525/#546/#578: rubric + prompt are skipped for MCQ-only; the MCQ set is skipped for
+  // free-text-only. Free-text + MCQ creates all of them.
+  const moduleType = getSelectedModuleType();
+  const mcqOnly = moduleType === "MCQ_ONLY";
+  const freetextOnly = moduleType === "FREETEXT_ONLY";
   const rubricBody = mcqOnly ? null : await handleCreateRubricVersion({ silent: true });
   const promptBody = mcqOnly ? null : await handleCreatePromptTemplateVersion({ silent: true });
-  const mcqBody = await handleCreateMcqSetVersion({ silent: true });
+  const mcqBody = freetextOnly ? null : await handleCreateMcqSetVersion({ silent: true });
   const moduleVersionBody = await handleCreateModuleVersion({ silent: true });
 
   setMessage(t("adminContent.message.bundleSaved"), "success");
@@ -2302,7 +2326,7 @@ async function handleSaveContentBundle() {
     module: titleBody.module,
     rubricVersion: rubricBody?.rubricVersion ?? null,
     promptTemplateVersion: promptBody?.promptTemplateVersion ?? null,
-    mcqSetVersion: mcqBody.mcqSetVersion,
+    mcqSetVersion: mcqBody?.mcqSetVersion ?? null,
     moduleVersion: moduleVersionBody.moduleVersion,
   });
   await refreshSelectedModuleStatus();
@@ -2589,8 +2613,8 @@ function renderContentCards() {
 
   updateStateRail();
   renderAdvancedPreview();
-  // #554: keep MCQ-only gating applied after any content refresh.
-  applyMcqOnlyAuthoringVisibility();
+  // #554/#578: keep module-type gating applied after any content refresh.
+  applyModuleTypeVisibility();
 }
 
 // ── Assessment policy helper ───────────────────────────────────────────────────
@@ -3749,31 +3773,44 @@ deleteModuleButton.addEventListener("click", async () => {
   });
 });
 
-// #525/#546: toggle the free-text authoring fields + MCQ threshold based on the MCQ-only switch.
-// #554: free-text-only sections + content cards that should disappear for MCQ-only modules, so the
-// author never deals with rubric/prompt/free-text when the module is MCQ-only.
-const MCQ_ONLY_HIDDEN_ELEMENT_IDS = [
+// #525/#546/#554/#578: toggle authoring sections/cards based on the 3-way module type.
+//   - Free-text-assessment elements (rubric/prompt/submission + the free-text fields) are hidden
+//     for MCQ_ONLY.
+//   - MCQ elements (the MCQ set card + section) are hidden for FREETEXT_ONLY.
+// Sections/cards carry classes (.card, .content-card) whose CSS display overrides the [hidden]
+// attribute, so toggle style.display directly (#554 follow-up — [hidden] left them visible).
+const FREE_TEXT_HIDDEN_FOR_MCQ_ONLY_IDS = [
   "sectionRubric",
   "sectionPrompt",
   "contentCard_rubric",
   "contentCard_prompt",
   "contentCard_submissionSchema",
 ];
+const MCQ_HIDDEN_FOR_FREETEXT_ONLY_IDS = [
+  "contentCard_mcq",
+  "sectionMcq",
+];
 
-function applyMcqOnlyAuthoringVisibility() {
-  const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
+function applyModuleTypeVisibility() {
+  const mode = getSelectedModuleType();
+  const mcqOnly = mode === "MCQ_ONLY";
+  const freetextOnly = mode === "FREETEXT_ONLY";
+  // These two are plain divs (no display-setting class), so the .hidden property is reliable here.
   if (moduleVersionFreetextFields) moduleVersionFreetextFields.hidden = mcqOnly;
   if (moduleVersionMcqThresholdRow) moduleVersionMcqThresholdRow.hidden = !mcqOnly;
-  // The sections/cards carry classes (.card, .content-card) whose CSS display overrides the
-  // [hidden] attribute, so toggle style.display directly (#554 follow-up — the [hidden] approach
-  // left the cards visible on staging).
-  for (const id of MCQ_ONLY_HIDDEN_ELEMENT_IDS) {
+  for (const id of FREE_TEXT_HIDDEN_FOR_MCQ_ONLY_IDS) {
     const el = document.getElementById(id);
     if (el) el.style.display = mcqOnly ? "none" : "";
   }
+  for (const id of MCQ_HIDDEN_FOR_FREETEXT_ONLY_IDS) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = freetextOnly ? "none" : "";
+  }
 }
-moduleVersionMcqOnlyInput?.addEventListener("change", applyMcqOnlyAuthoringVisibility);
-applyMcqOnlyAuthoringVisibility();
+for (const radio of document.querySelectorAll('input[name="moduleVersionType"]')) {
+  radio.addEventListener("change", applyModuleTypeVisibility);
+}
+applyModuleTypeVisibility();
 
 saveContentBundleButton.addEventListener("click", async () => {
   await runWithBusyButton(saveContentBundleButton, async () => {

@@ -1050,9 +1050,9 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeHidden();
     await expect(page.locator("#contentCard_rubric")).toBeVisible();
 
-    // Enable MCQ-only → free-text fields + free-text content cards hidden, threshold shown.
-    // (#554 follow-up: .content-card CSS overrides [hidden], so gating uses style.display.)
-    await page.locator("#moduleVersionMcqOnly").check();
+    // Select MCQ-only → free-text fields + free-text content cards hidden, threshold shown.
+    // (#578: 3-way module-type radio replaced the MCQ-only checkbox.)
+    await page.locator('input[name="moduleVersionType"][value="MCQ_ONLY"]').check();
     await expect(page.locator("#moduleVersionFreetextFields")).toBeHidden();
     await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeVisible();
     await expect(page.locator("#contentCard_rubric")).toBeHidden();
@@ -1066,6 +1066,48 @@ test.describe("admin content browser coverage", () => {
     expect(versionPayload?.rubricVersionId).toBeUndefined();
     expect(versionPayload?.promptTemplateVersionId).toBeUndefined();
     expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(80);
+  });
+
+  // #578: the advanced editor can author a FREETEXT_ONLY module version — selecting "Free-text only"
+  // hides the MCQ card/section + threshold, keeps the free-text fields + rubric/prompt, and the saved
+  // version sends assessmentMode=FREETEXT_ONLY with no mcqSetVersionId.
+  test("advanced editor authors a FREETEXT_ONLY module version", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }),
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let versionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      versionPayload = route.request().postDataJSON();
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }) });
+    });
+    let mcqSetCreated = false;
+    await page.route("**/api/admin/content/modules/*/mcq-set-versions", async (route: Route) => {
+      mcqSetCreated = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ mcqSetVersion: { id: "mcq-1" } }) });
+    });
+
+    await page.goto("/admin-content/module/module-1/advanced");
+    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
+
+    // Select Free-text only → free-text fields + rubric/prompt stay, MCQ card/section + threshold hide.
+    await page.locator('input[name="moduleVersionType"][value="FREETEXT_ONLY"]').check();
+    await expect(page.locator("#moduleVersionFreetextFields")).toBeVisible();
+    await expect(page.locator("#contentCard_rubric")).toBeVisible();
+    await expect(page.locator("#contentCard_mcq")).toBeHidden();
+    await expect(page.locator("#sectionMcq")).toBeHidden();
+    await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeHidden();
+
+    await page.locator("#saveContentBundle").click();
+
+    await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
+    expect(versionPayload?.mcqSetVersionId).toBeUndefined();
+    expect(versionPayload?.taskText).toBeTruthy();
+    expect(mcqSetCreated).toBe(false);
   });
 
   test("advanced editor persists a renamed module title when saving content", async ({ page }) => {

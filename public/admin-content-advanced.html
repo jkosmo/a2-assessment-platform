@@ -419,8 +419,12 @@
     <section class="card" id="sectionModuleType">
       <h2 data-i18n="adminContent.moduleType.title">Module type</h2>
       <div class="module-type-panel">
-        <label class="module-type-toggle"><input type="checkbox" id="moduleVersionMcqOnly" /> <span data-i18n="adminContent.moduleVersion.mcqOnly">MCQ-only module (no free-text answer or LLM assessment)</span></label>
-        <div class="small" data-i18n="adminContent.help.mcqOnly">When enabled, participants only answer multiple-choice questions. No assignment text, scoring rules or evaluation instruction are needed — pass/fail is decided purely by the MCQ score.</div>
+        <fieldset class="module-type-choices" id="moduleVersionTypeChoices" style="border:none;margin:0;padding:0;display:grid;gap:6px">
+          <label class="module-type-toggle"><input type="radio" name="moduleVersionType" value="FREETEXT_PLUS_MCQ" checked /> <span data-i18n="adminContent.moduleType.freetextPlusMcq">Free-text + MCQ</span></label>
+          <label class="module-type-toggle"><input type="radio" name="moduleVersionType" value="FREETEXT_ONLY" /> <span data-i18n="adminContent.moduleType.freetextOnly">Free-text only (no MCQ)</span></label>
+          <label class="module-type-toggle"><input type="radio" name="moduleVersionType" value="MCQ_ONLY" /> <span data-i18n="adminContent.moduleType.mcqOnlyChoice">MCQ only (no free-text)</span></label>
+        </fieldset>
+        <div class="small" data-i18n="adminContent.help.moduleType">Free-text + MCQ: a written answer (assessed by the LLM) plus multiple-choice questions. Free-text only: just the written answer. MCQ only: just multiple-choice questions, scored automatically.</div>
         <div id="moduleVersionMcqThresholdRow" hidden>
           <label for="moduleVersionMcqMinPercent" data-i18n="adminContent.moduleVersion.mcqMinPercent">MCQ pass threshold (%)</label>
           <input id="moduleVersionMcqMinPercent" type="number" min="0" max="100" value="70" style="max-width:120px" />
