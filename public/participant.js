@@ -2816,6 +2816,10 @@ async function loadParticipantCourses() {
       participantCompletions[c.courseId] = c;
     }
   }
+  // Reloading the course list rebuilds the accordion with fresh "loading…" detail containers;
+  // invalidate the per-course detail cache so expanding re-fetches into the new container instead
+  // of skipping the fetch and leaving the placeholder stuck (#550 follow-up).
+  courseDetailCache = {};
   renderParticipantCourseAccordion();
 }
 
