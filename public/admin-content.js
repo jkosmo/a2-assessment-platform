@@ -123,6 +123,11 @@ const moduleVersionAssessmentPolicyInput = document.getElementById("moduleVersio
 const moduleVersionRubricVersionIdInput = document.getElementById("moduleVersionRubricVersionId");
 const moduleVersionPromptTemplateVersionIdInput = document.getElementById("moduleVersionPromptTemplateVersionId");
 const moduleVersionMcqSetVersionIdInput = document.getElementById("moduleVersionMcqSetVersionId");
+// #525/#546: MCQ-only authoring controls.
+const moduleVersionMcqOnlyInput = document.getElementById("moduleVersionMcqOnly");
+const moduleVersionMcqMinPercentInput = document.getElementById("moduleVersionMcqMinPercent");
+const moduleVersionFreetextFields = document.getElementById("moduleVersionFreetextFields");
+const moduleVersionMcqThresholdRow = document.getElementById("moduleVersionMcqThresholdRow");
 const saveContentBundleButton = document.getElementById("saveContentBundle");
 const previewCurrentDraftButton = document.getElementById("previewCurrentDraft");
 
@@ -2179,27 +2184,49 @@ async function handleCreateModuleVersion(options = { silent: false }) {
     );
   }
   const rawAssessmentPolicy = moduleVersionAssessmentPolicyInput.value.trim();
-  const assessmentPolicy = rawAssessmentPolicy
+  let assessmentPolicy = rawAssessmentPolicy
     ? parseJsonField(rawAssessmentPolicy, "adminContent.moduleVersion.assessmentPolicyJson")
     : undefined;
-  const payload = {
-    // v1.2.22 (#462): readLocalizedFieldValue merger med lagret locale-objekt for de
-    // tre locale-aware moduleVersion-feltene.
-    taskText: readLocalizedFieldValue(moduleVersionTaskTextInput, "adminContent.moduleVersion.taskText"),
-    candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput
-      ? readLocalizedFieldValue(moduleVersionCandidateTaskConstraintsInput, "adminContent.moduleVersion.candidateTaskConstraints", { required: false })
-      : undefined,
-    assessorExpectedContent: readLocalizedFieldValue(
-      moduleVersionAssessorExpectedContentInput,
-      "adminContent.moduleVersion.assessorExpectedContent",
-      { required: false },
-    ),
-    rubricVersionId: moduleVersionRubricVersionIdInput.value.trim(),
-    promptTemplateVersionId: moduleVersionPromptTemplateVersionIdInput.value.trim(),
-    mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
-    ...(submissionSchema !== undefined && { submissionSchema }),
-    ...(assessmentPolicy !== undefined && { assessmentPolicy }),
-  };
+
+  // #525/#546: MCQ-only modules omit the free-text task, rubric and prompt entirely. Pass/fail is
+  // decided purely by the MCQ score against a threshold (default 70%), stored in the assessment
+  // policy's mcqMinPercent pass rule.
+  const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
+  let payload;
+  if (mcqOnly) {
+    const minPercentRaw = Number.parseInt(moduleVersionMcqMinPercentInput?.value ?? "", 10);
+    const mcqMinPercent = Number.isFinite(minPercentRaw) ? Math.max(0, Math.min(100, minPercentRaw)) : 70;
+    const basePolicy = assessmentPolicy && typeof assessmentPolicy === "object" ? assessmentPolicy : {};
+    assessmentPolicy = {
+      ...basePolicy,
+      passRules: { ...(basePolicy.passRules ?? {}), mcqMinPercent },
+    };
+    payload = {
+      assessmentMode: "MCQ_ONLY",
+      mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
+      assessmentPolicy,
+    };
+  } else {
+    payload = {
+      assessmentMode: "FREETEXT_PLUS_MCQ",
+      // v1.2.22 (#462): readLocalizedFieldValue merger med lagret locale-objekt for de
+      // tre locale-aware moduleVersion-feltene.
+      taskText: readLocalizedFieldValue(moduleVersionTaskTextInput, "adminContent.moduleVersion.taskText"),
+      candidateTaskConstraints: moduleVersionCandidateTaskConstraintsInput
+        ? readLocalizedFieldValue(moduleVersionCandidateTaskConstraintsInput, "adminContent.moduleVersion.candidateTaskConstraints", { required: false })
+        : undefined,
+      assessorExpectedContent: readLocalizedFieldValue(
+        moduleVersionAssessorExpectedContentInput,
+        "adminContent.moduleVersion.assessorExpectedContent",
+        { required: false },
+      ),
+      rubricVersionId: moduleVersionRubricVersionIdInput.value.trim(),
+      promptTemplateVersionId: moduleVersionPromptTemplateVersionIdInput.value.trim(),
+      mcqSetVersionId: moduleVersionMcqSetVersionIdInput.value.trim(),
+      ...(submissionSchema !== undefined && { submissionSchema }),
+      ...(assessmentPolicy !== undefined && { assessmentPolicy }),
+    };
+  }
 
   const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, headers, {
     method: "POST",
@@ -2263,16 +2290,18 @@ async function handleSaveContentBundle() {
     renderModuleMeta();
   }
 
-  const rubricBody = await handleCreateRubricVersion({ silent: true });
-  const promptBody = await handleCreatePromptTemplateVersion({ silent: true });
+  // #525/#546: MCQ-only modules have no rubric or evaluation instruction — skip those steps.
+  const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
+  const rubricBody = mcqOnly ? null : await handleCreateRubricVersion({ silent: true });
+  const promptBody = mcqOnly ? null : await handleCreatePromptTemplateVersion({ silent: true });
   const mcqBody = await handleCreateMcqSetVersion({ silent: true });
   const moduleVersionBody = await handleCreateModuleVersion({ silent: true });
 
   setMessage(t("adminContent.message.bundleSaved"), "success");
   log({
     module: titleBody.module,
-    rubricVersion: rubricBody.rubricVersion,
-    promptTemplateVersion: promptBody.promptTemplateVersion,
+    rubricVersion: rubricBody?.rubricVersion ?? null,
+    promptTemplateVersion: promptBody?.promptTemplateVersion ?? null,
     mcqSetVersion: mcqBody.mcqSetVersion,
     moduleVersion: moduleVersionBody.moduleVersion,
   });
@@ -3717,6 +3746,17 @@ deleteModuleButton.addEventListener("click", async () => {
     }
   });
 });
+
+// #525/#546: toggle the free-text authoring fields + MCQ threshold based on the MCQ-only switch.
+function applyMcqOnlyAuthoringVisibility() {
+  const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
+  // Use style.display: the threshold row carries the `.row` class whose CSS display overrides the
+  // [hidden] attribute (same gotcha as participant ack), so toggle display directly (#525/#546).
+  if (moduleVersionFreetextFields) moduleVersionFreetextFields.style.display = mcqOnly ? "none" : "";
+  if (moduleVersionMcqThresholdRow) moduleVersionMcqThresholdRow.style.display = mcqOnly ? "" : "none";
+}
+moduleVersionMcqOnlyInput?.addEventListener("change", applyMcqOnlyAuthoringVisibility);
+applyMcqOnlyAuthoringVisibility();
 
 saveContentBundleButton.addEventListener("click", async () => {
   await runWithBusyButton(saveContentBundleButton, async () => {

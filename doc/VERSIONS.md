@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.26 - 2026-06-21
+
+feat(author): MCQ-only forfatter-UI i avansert editor (#546, #525)
+
+Tredje #525-skive (forfatter-UI). I avansert modul-editor (steg 8):
+- Ny «Kun MCQ-modul»-veksling. Når aktivert: fritekst-feltene (oppgavetekst, vurderingsregler,
+  vurderingsinstruks) skjules, og en MCQ-terskel-input (default 70 %) vises.
+- Lagring sender `assessmentMode=MCQ_ONLY` med kun `mcqSetVersionId` +
+  `assessmentPolicy.passRules.mcqMinPercent`; ingen rubric/prompt/taskText.
+- «Save bundle» (steg 5-8) hopper over rubric- + prompt-generering for MCQ-only.
+- Skjuling via `style.display` (klasse-CSS `.row`/`.inline` overstyrer `[hidden]`). Nye i18n-
+  nøkler (en/nb/nn): `adminContent.moduleVersion.mcqOnly`, `adminContent.help.mcqOnly`,
+  `adminContent.moduleVersion.mcqMinPercent`.
+
+Test: ny Playwright-e2e (toggle skjuler fritekst + viser terskel; lagring sender MCQ_ONLY +
+mcqMinPercent=80). tsc rent, 29 e2e grønne, admin-content kontrakt-/i18n-tester grønne.
+
+Gjenstår: import/eksport + bruker-doc (#547).
+
+Merk: bør merges etter #545 (v1.3.25) for å unngå versjons-regresjon.
+
 ## 1.3.24 - 2026-06-20
 
 feat(module): MCQ-only moduler — backend-fundament + sertifiserings-invariant (#525, #476)

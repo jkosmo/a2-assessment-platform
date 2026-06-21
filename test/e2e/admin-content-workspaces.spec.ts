@@ -1008,6 +1008,62 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#moduleStatusLive")).toContainText("No published version");
   });
 
+  // #525/#546: the advanced editor can author an MCQ-only module version — toggling MCQ-only
+  // hides the free-text fields, shows the threshold, and the saved version sends
+  // assessmentMode=MCQ_ONLY with the chosen mcqMinPercent (no rubric/prompt/taskText).
+  test("advanced editor authors an MCQ-only module version", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("A"), localizedText("B"), localizedText("C"), localizedText("D")],
+              correctAnswer: localizedText("B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let versionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      versionPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/advanced");
+    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
+
+    // Free-text fields visible, threshold hidden by default.
+    await expect(page.locator("#moduleVersionFreetextFields")).toBeVisible();
+    await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeHidden();
+
+    // Enable MCQ-only → free-text fields hidden, threshold shown.
+    await page.locator("#moduleVersionMcqOnly").check();
+    await expect(page.locator("#moduleVersionFreetextFields")).toBeHidden();
+    await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeVisible();
+    await page.locator("#moduleVersionMcqMinPercent").fill("80");
+
+    await page.locator("#saveContentBundle").click();
+
+    await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
+    expect(versionPayload?.taskText).toBeUndefined();
+    expect(versionPayload?.rubricVersionId).toBeUndefined();
+    expect(versionPayload?.promptTemplateVersionId).toBeUndefined();
+    expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(80);
+  });
+
   test("advanced editor persists a renamed module title when saving content", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
