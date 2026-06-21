@@ -551,6 +551,12 @@
     <section class="card" id="sectionModuleVersion">
       <h2 data-i18n="adminContent.moduleVersion.title">8) Participant-facing module version</h2>
       <div class="small" data-i18n="adminContent.help.moduleVersionOverview">Binds assignment text + scoring rules + evaluation instruction + test.</div>
+      <div><label><input type="checkbox" id="moduleVersionMcqOnly" class="inline" /> <span data-i18n="adminContent.moduleVersion.mcqOnly">MCQ-only module (no free-text answer or LLM assessment)</span></label></div>
+      <div class="small" data-i18n="adminContent.help.mcqOnly">When enabled, participants only answer multiple-choice questions. No assignment text, scoring rules or evaluation instruction are needed — pass/fail is decided purely by the MCQ score.</div>
+      <div class="row" id="moduleVersionMcqThresholdRow" hidden>
+        <div><label for="moduleVersionMcqMinPercent" data-i18n="adminContent.moduleVersion.mcqMinPercent">MCQ pass threshold (%)</label><input id="moduleVersionMcqMinPercent" type="number" min="0" max="100" value="70" /></div>
+      </div>
+      <div id="moduleVersionFreetextFields">
       <details class="json-fallback-panel">
         <summary data-i18n="adminContent.jsonFallback.versionDetails">Oppgavetekst, veiledning og vurderingspolicy — rå JSON (avansert)</summary>
         <div><label for="moduleVersionTaskText" data-i18n="adminContent.moduleVersion.taskText">Assignment shown to participant (submission task)</label><textarea id="moduleVersionTaskText" rows="3"></textarea></div>
@@ -572,6 +578,7 @@
         <div><label for="moduleVersionPromptTemplateVersionId" data-i18n="adminContent.moduleVersion.promptTemplateVersionId">Evaluation instruction version ID</label><input id="moduleVersionPromptTemplateVersionId" /></div>
       </div>
       <div class="small" data-i18n="adminContent.help.moduleVersionIds">IDs are auto-filled when you save steps 5-8.</div>
+      </div>
       <div><label for="moduleVersionMcqSetVersionId" data-i18n="adminContent.moduleVersion.mcqSetVersionId">Test version ID</label><input id="moduleVersionMcqSetVersionId" /></div>
       <div class="button-row">
         <button id="saveContentBundle" class="btn-primary" data-i18n="adminContent.moduleVersion.saveBundle">Save new draft version (steps 5-8)</button>
