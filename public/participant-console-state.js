@@ -251,20 +251,23 @@ export function upsertModuleDraft(moduleDrafts, moduleId, draftData, nowMs = Dat
   return Object.fromEntries(ordered);
 }
 
-export function deriveParticipantFlowGateState(flowState) {
+export function deriveParticipantFlowGateState(flowState, options = {}) {
   const hasSubmission = flowState?.hasSubmission === true;
   const hasMcqSubmission = flowState?.hasMcqSubmission === true;
   const assessmentQueued = flowState?.assessmentQueued === true;
   const resultStatus = typeof flowState?.resultStatus === "string" ? flowState.resultStatus : null;
+  // #578: FREETEXT_ONLY modules have no MCQ, so the assessment unlocks as soon as the free-text
+  // submission exists — there is no MCQ gate.
+  const requiresMcq = options?.requiresMcq !== false;
 
-  const assessmentUnlocked = hasSubmission && hasMcqSubmission;
+  const assessmentUnlocked = hasSubmission && (!requiresMcq || hasMcqSubmission);
   const checkAssessmentUnlocked = assessmentUnlocked && assessmentQueued;
   const appealUnlocked = resultStatus === "COMPLETED";
 
   let assessmentHintKey = "flow.assessmentReady";
   if (!hasSubmission) {
     assessmentHintKey = "flow.assessmentLockedNeedsSubmission";
-  } else if (!hasMcqSubmission) {
+  } else if (requiresMcq && !hasMcqSubmission) {
     assessmentHintKey = "flow.assessmentLockedNeedsMcq";
   }
 

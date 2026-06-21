@@ -136,3 +136,63 @@ test("participant: MCQ-only auto-pass shows a discreet retry button", async ({ p
   await expect(retry).toBeVisible();
   await expect(retry).toHaveClass(/reset-flow-discreet/);
 });
+
+// #578: FREETEXT_ONLY — the participant fills in free text (no MCQ section) and the assessment runs
+// directly on the submission (no MCQ attempt is started; the server would 400 if one were).
+test("participant: FREETEXT_ONLY module shows free-text, hides MCQ, assesses without MCQ", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  // Override the module list with a FREETEXT_ONLY module.
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        modules: [
+          { id: "m-fto", title: "Essay Modul", description: null, assessmentMode: "FREETEXT_ONLY", submissionSchema: null, assessmentPolicy: null, taskText: "Skriv et essay", activeVersion: { versionNo: 1 }, participantStatus: null },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  let mcqStartCalled = false;
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) => {
+    mcqStartCalled = true;
+    return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "no_mcq" }) });
+  });
+  let runCalled = false;
+  await page.route("**/api/assessments/*/run", (route: Route) => {
+    runCalled = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/submissions/*/result", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "PROCESSING" }) }),
+  );
+
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+
+  // Free-text fields + acknowledgement + task brief are shown; the MCQ section is hidden.
+  await expect(page.locator("#submissionFields textarea").first()).toBeVisible();
+  await expect(page.locator("#ack")).toBeVisible();
+  await expect(page.locator("#selectedModuleBrief")).toBeVisible();
+  await expect(page.locator("#mcqSection")).toBeHidden();
+
+  // Fill the free-text answer(s) + acknowledge, then create the submission.
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("This is a sufficiently long free-text answer for assessment.");
+  }
+  await page.locator("#ack").check();
+  await page.locator("#createSubmission").click();
+
+  // The assessment runs directly; no MCQ attempt is ever started, and the MCQ section stays hidden.
+  await expect.poll(() => runCalled).toBe(true);
+  expect(mcqStartCalled).toBe(false);
+  await expect(page.locator("#mcqSection")).toBeHidden();
+});

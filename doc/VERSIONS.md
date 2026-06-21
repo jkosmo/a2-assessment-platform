@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.46 - 2026-06-21
+
+feat(participant): FREETEXT_ONLY deltaker-flyt (#578 slice 3)
+
+Deltaker kan nå fullføre en «Kun fritekst»-modul ende-til-ende.
+- Deltaker-visningen viser fritekst-felt + bekreftelse + oppgave-brief, og **skjuler MCQ-seksjonen**
+  for FREETEXT_ONLY.
+- **Vurdering uten MCQ-gate:** `deriveParticipantFlowGateState` tar nå `{ requiresMcq }` —
+  FREETEXT_ONLY låser opp vurdering så snart fritekst-innleveringen finnes. Etter innlevering startes
+  ikke et MCQ-forsøk (serveren ville 400); vurderingen kjøres direkte (auto, eller via «Start
+  vurdering»-knappen som nå er tilgjengelig).
+- **Tester:** ny participant-e2e (fritekst vist, MCQ skjult, vurdering kjøres uten MCQ-start) +
+  gate-unit-test for `requiresMcq:false`. tsc rent.
+- Med slice 1+2a+3 er FREETEXT_ONLY brukbar ende-til-ende (backend + samtale-authoring + deltaker).
+  Gjenstår: Avansert editor (3-veis), import/eksport, docs.
+
 ## 1.3.45 - 2026-06-21
 
 feat(author): «Kun fritekst» i samtale-flyten (#578 slice 2a)
