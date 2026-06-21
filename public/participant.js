@@ -993,7 +993,9 @@ function activateParticipantModule(moduleId, options = {}) {
   // #546 feedback: MCQ-only modules have no free-text step — go straight to the questions by
   // creating the (empty) submission + starting the MCQ immediately, so the participant never sees
   // a "create submission" step. Covers both entry points (module card + course → openCourseModule).
-  if (moduleIsMcqOnly(nextModule) && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
+  // #2 fix: don't auto-start for an already-passed module (avoids a needless retake / 409).
+  const alreadyPassed = nextModule.participantStatus?.latestDecision?.passFailTotal === true;
+  if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
     createSubmissionButton.click();
   }
 
@@ -2203,6 +2205,11 @@ function renderResultSummary(body) {
     banner.textContent = t("result.celebratePass");
     resultSummary.prepend(banner);
     launchConfetti();
+    // #550 feedback: passing a module can complete a course — refresh the (possibly off-screen)
+    // course list so its status updates and the course-completion confetti can fire.
+    if (participantCourses.length > 0) {
+      loadParticipantCourses().catch(() => {});
+    }
   }
 
   resultSummary.dataset.hasResult = "true";
@@ -2534,10 +2541,14 @@ submitMcqButton.addEventListener("click", async () => {
       });
       currentQuestions = [];
       renderQuestions();
+      // #2 fix: MCQ-only submissions are finalised synchronously (assessmentComplete) — the
+      // assessment is already done, so we must NOT auto-run it (that 409s against the recert
+      // re-run guard). Just fetch + show the ready result.
+      const alreadyAssessed = body.assessmentComplete === true;
       flowState = {
         ...flowState,
         hasMcqSubmission: true,
-        assessmentQueued: getFlowSettings().autoStartAfterMcq,
+        assessmentQueued: !alreadyAssessed && getFlowSettings().autoStartAfterMcq,
         resultStatus: null,
       };
       assessmentProgressKey = "assessment.progress.idle";
@@ -2545,7 +2556,10 @@ submitMcqButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       renderFlowGating();
       persistCurrentModuleDraft(true);
-      if (getFlowSettings().autoStartAfterMcq) {
+      if (alreadyAssessed) {
+        const resultBody = await apiFetch(`/api/submissions/${submissionId}/result`, headers);
+        renderResultSummary(resultBody);
+      } else if (getFlowSettings().autoStartAfterMcq) {
         await startAutomaticAssessmentFlow(submissionId);
       }
       log(body);
@@ -2995,8 +3009,12 @@ async function openSectionReader(courseId, sectionId) {
   let markedRead = false;
   const close = () => {
     overlay.remove();
-    // Refresh the course detail so the "read" badge + progress update.
-    if (markedRead) loadCourseDetail(courseId);
+    // Refresh both the course detail (read badge) AND the course list (course-level progress +
+    // completion), so status updates and the #550 course-completion confetti can fire (#549/#550).
+    if (markedRead) {
+      loadCourseDetail(courseId);
+      loadParticipantCourses().catch(() => {});
+    }
   };
   overlay.querySelector("#sectionReaderClose")?.addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
@@ -3004,14 +3022,15 @@ async function openSectionReader(courseId, sectionId) {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
   });
 
-  // Explicit "mark as read" (#492 feedback) — clearer than auto-marking on open.
+  // Explicit "mark as read" (#492 feedback). #550 feedback: marking read should also close the
+  // reader (the participant expected it to close) and refresh course status.
   const markReadBtn = overlay.querySelector("#sectionReaderMarkRead");
   markReadBtn?.addEventListener("click", async () => {
     markReadBtn.disabled = true;
     try {
       await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}/read`, headers, { method: "POST" });
       markedRead = true;
-      markReadBtn.textContent = t("courses.section.doneBadge");
+      close();
     } catch (error) {
       markReadBtn.disabled = false;
       showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");

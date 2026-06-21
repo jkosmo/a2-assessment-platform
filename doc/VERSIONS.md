@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.30 - 2026-06-21
+
+fix(participant): MCQ-only 409 ved innlevering + fullførings-flyt (staging-tilbakemelding runde 3)
+
+- **#2 (409 «already completed and passed»):** rotårsak — #8 sync-sensur fullfører MCQ-only-
+  innleveringen ved mcq/submit, men UI kjørte likevel auto-assessment (`/assessments/:id/run`) →
+  409 mot recert-vernet. `mcq/submit` returnerer nå `assessmentComplete`; UI hopper over auto-run
+  og henter resultatet direkte. Auto-start (#7) fyrer heller ikke for en allerede bestått modul.
+- **#3 seksjonsleser lukkes ikke:** «Marker som lest» lukker nå leseren (forventet) + re-laster
+  kurs-oversikten.
+- **#3 modul-status + kurs-konfetti:** kurs-lista re-lastes nå etter bestått modul og etter
+  seksjons-lesing, så status oppdateres i kursoversikten og #550-konfettien fyrer ved fullført kurs.
+
+Test: 30 e2e grønne (oppdatert section-reader-e2e: mark-read lukker leseren), mcq-service unit +
+i18n/contract grønne, tsc rent.
+
+Note: helhetlig forfatter-IA (#554/#555) — omforent design (felles rekkefølge Samtale+Avansert,
+uten nummerering, modultype på topp) er festet på issuene; implementeres som egen runde.
+
 ## 1.3.29 - 2026-06-21
 
 fix+feat(participant): MCQ-only-bugfikser + feiring ved bestått/fullført (#549, #550, +#1/#2-fiks)
