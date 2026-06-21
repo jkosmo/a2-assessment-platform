@@ -145,7 +145,9 @@ describe("AssessmentInputFactory", () => {
       const context = buildAssessmentInputContext(submission, "nb");
 
       expect(context.rubricCriteriaIds).toEqual(["criterion_a", "criterion_b"]);
-      expect(context.rubricMaxTotal).toBe(20);
+      // #578: rubricMaxTotal is derived from the criteria count × 4 (2 × 4 = 8), NOT the stored
+      // scalingRule.max_total (20). The recompute clamps each criterion to [0,4], so this is the true max.
+      expect(context.rubricMaxTotal).toBe(8);
       expect(context.assessmentPolicy).toBeNull();
       expect(context.submissionLocale).toBe("nb");
       expect(context.sensitiveDataPreprocess.maskingEnabled).toBe(false);
@@ -175,6 +177,49 @@ describe("AssessmentInputFactory", () => {
 
       const context = buildAssessmentInputContext(submission, "en-GB");
       expect(context.assessmentPolicy).toEqual(policy);
+    });
+
+    // #578 regression: a generated rubric with 4 criteria but a stale scalingRule.max_total of 24
+    // must score on the real max (4 × 4 = 16), so a perfect answer is 100% — not 16/24 = 66.7%
+    // (which auto-failed FREETEXT_ONLY modules and under-scored FREETEXT_PLUS_MCQ practicals).
+    it("derives rubricMaxTotal from criteria count even when scalingRule.max_total is wrong", async () => {
+      const { buildAssessmentInputContext } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
+      const submission = {
+        moduleId: "module-1",
+        responseJson: JSON.stringify({ answer: "response" }),
+        moduleVersion: {
+          assessmentPolicyJson: null,
+          submissionSchemaJson: null,
+          taskText: "Task",
+          assessorExpectedContent: null,
+          promptTemplateVersion: { systemPrompt: "", userPromptTemplate: "", examplesJson: "" },
+          rubricVersion: {
+            criteriaJson: JSON.stringify({ a: "0-4", b: "0-4", c: "0-4", d: "0-4" }),
+            scalingRuleJson: JSON.stringify({ max_total: 24, practical_weight: 70 }),
+          },
+        },
+      };
+      const context = buildAssessmentInputContext(submission, "nb");
+      expect(context.rubricCriteriaIds).toHaveLength(4);
+      expect(context.rubricMaxTotal).toBe(16);
+    });
+
+    it("falls back to scalingRule.max_total when the rubric has no criteria", async () => {
+      const { buildAssessmentInputContext } = await import("../../src/modules/assessment/AssessmentInputFactory.js");
+      const submission = {
+        moduleId: "module-1",
+        responseJson: JSON.stringify({ answer: "response" }),
+        moduleVersion: {
+          assessmentPolicyJson: null,
+          submissionSchemaJson: null,
+          taskText: "Task",
+          assessorExpectedContent: null,
+          promptTemplateVersion: { systemPrompt: "", userPromptTemplate: "", examplesJson: "" },
+          rubricVersion: { criteriaJson: "{}", scalingRuleJson: JSON.stringify({ max_total: 20 }) },
+        },
+      };
+      const context = buildAssessmentInputContext(submission, "nb");
+      expect(context.rubricMaxTotal).toBe(20);
     });
   });
 });

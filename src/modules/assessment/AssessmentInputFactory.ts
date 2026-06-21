@@ -3,6 +3,10 @@ import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 
+// Each rubric criterion is scored on a 0–4 scale (decisionService clamps every score to [0,4]).
+// The true rubric max is therefore (criteria count × 4) — see buildAssessmentInputContext (#578).
+const RUBRIC_MAX_SCORE_PER_CRITERION = 4;
+
 export type AssessmentInputContext = {
   /** Rubric criterion IDs extracted from the module rubric configuration. */
   rubricCriteriaIds: string[];
@@ -71,7 +75,15 @@ export function buildAssessmentInputContext(
   const assessmentPolicy = assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson);
 
   const rubricCriteriaIds = parseRubricCriteriaIds(rubricVersion.criteriaJson);
-  const rubricMaxTotal = parseRubricMaxTotal(rubricVersion.scalingRuleJson);
+  // #578 fix: the decision recomputes the rubric score by clamping each criterion to [0,4] and
+  // summing, so the TRUE max is (criteria count × 4). A stored scalingRule.max_total can be stale
+  // or wrong — e.g. a generated rubric with 4 criteria but max_total=24 made even a perfect answer
+  // score 16/24 = 66.7%. That under-scored every FREETEXT_PLUS_MCQ practical and was fatal for
+  // FREETEXT_ONLY (no MCQ to compensate → auto-fail of a perfect answer). Derive the max from the
+  // actual criteria; only fall back to scalingRule.max_total when there are no criteria.
+  const rubricMaxTotal = rubricCriteriaIds.length > 0
+    ? rubricCriteriaIds.length * RUBRIC_MAX_SCORE_PER_CRITERION
+    : parseRubricMaxTotal(rubricVersion.scalingRuleJson);
   const submissionFieldLabels = parseSubmissionFieldLabels(submission.moduleVersion.submissionSchemaJson, submissionLocale);
 
   const sensitiveDataPreprocess = preprocessSensitiveDataForLlm({

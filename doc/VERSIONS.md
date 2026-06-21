@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.49 - 2026-06-21
+
+fix(assessment): rubrikk-maks utledes fra kriterier, ikke (utdatert) scalingRule.max_total (#578)
+
+**Bug (funnet ved FREETEXT_ONLY-aksept):** en auto-generert rubrikk hadde 4 kriterier (maks 4×4=16),
+men `scalingRule.max_total = 24`. Vurderingen rekomputerer rubrikk-skåren ved å klampe hvert
+kriterium til [0,4] og summere — så et perfekt svar (16/16 ifølge LLM) ble regnet som 16/24 = 66,7 %.
+For **FREETEXT_ONLY** (ingen MCQ å kompensere med) ga det auto-stryk av et perfekt svar; for
+**FREETEXT_PLUS_MCQ** ble praktisk-skåren undervurdert (maskert av MCQ-bidraget).
+
+**Fix:** `buildAssessmentInputContext` utleder nå `rubricMaxTotal` fra **faktisk kriterie-antall × 4**
+(samme basis som rekomputeringen og som LLM-en bruker), og faller bare tilbake til
+`scalingRule.max_total` når rubrikken ikke har kriterier. Gjelder alle fritekst-modi og alle
+eksisterende rubrikker (ingen migrasjon nødvendig — skåringen er korrekt ved neste vurdering).
+
+- **Tester:** regresjonstest (4 kriterier + max_total 24 → maks 16) + fallback-test; oppdatert
+  eksisterende. 50/50 relevante unit grønne, tsc rent.
+
 ## 1.3.48 - 2026-06-21
 
 feat(content): FREETEXT_ONLY import/eksport + docs (#578 slice 4 — fullfører #578)
