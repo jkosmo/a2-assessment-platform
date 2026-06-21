@@ -90,6 +90,11 @@
       .mcq-option-row input[type="radio"] { margin: 0; }
       /* #546 feedback: checkboxes must not inherit the full-width text-input styling. */
       input[type="checkbox"] { width: auto; display: inline-block; vertical-align: middle; margin: 0 6px 0 0; }
+      /* #546 feedback: group the module-type (MCQ-only) control in a distinct sub-panel so it
+         reads as one choice, separate from the free-text fields. */
+      .module-type-panel { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); margin: var(--space-1) 0; background: var(--color-surface-muted, #f7f8fa); }
+      .module-type-toggle { display: flex; align-items: center; font-weight: 600; }
+      #moduleVersionMcqThresholdRow { margin-top: var(--space-1); }
       .prompt-example-row { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
       .prompt-example-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--color-meta); text-transform: uppercase; letter-spacing: 0.05em; }
       .ss-field-row { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-1); margin-bottom: var(--space-1); }
@@ -553,10 +558,13 @@
     <section class="card" id="sectionModuleVersion">
       <h2 data-i18n="adminContent.moduleVersion.title">8) Participant-facing module version</h2>
       <div class="small" data-i18n="adminContent.help.moduleVersionOverview">Binds assignment text + scoring rules + evaluation instruction + test.</div>
-      <div><label><input type="checkbox" id="moduleVersionMcqOnly" class="inline" /> <span data-i18n="adminContent.moduleVersion.mcqOnly">MCQ-only module (no free-text answer or LLM assessment)</span></label></div>
-      <div class="small" data-i18n="adminContent.help.mcqOnly">When enabled, participants only answer multiple-choice questions. No assignment text, scoring rules or evaluation instruction are needed — pass/fail is decided purely by the MCQ score.</div>
-      <div class="row" id="moduleVersionMcqThresholdRow" hidden>
-        <div><label for="moduleVersionMcqMinPercent" data-i18n="adminContent.moduleVersion.mcqMinPercent">MCQ pass threshold (%)</label><input id="moduleVersionMcqMinPercent" type="number" min="0" max="100" value="70" /></div>
+      <div class="module-type-panel">
+        <label class="module-type-toggle"><input type="checkbox" id="moduleVersionMcqOnly" /> <span data-i18n="adminContent.moduleVersion.mcqOnly">MCQ-only module (no free-text answer or LLM assessment)</span></label>
+        <div class="small" data-i18n="adminContent.help.mcqOnly">When enabled, participants only answer multiple-choice questions. No assignment text, scoring rules or evaluation instruction are needed — pass/fail is decided purely by the MCQ score.</div>
+        <div id="moduleVersionMcqThresholdRow" hidden>
+          <label for="moduleVersionMcqMinPercent" data-i18n="adminContent.moduleVersion.mcqMinPercent">MCQ pass threshold (%)</label>
+          <input id="moduleVersionMcqMinPercent" type="number" min="0" max="100" value="70" style="max-width:120px" />
+        </div>
       </div>
       <div id="moduleVersionFreetextFields">
       <details class="json-fallback-panel">

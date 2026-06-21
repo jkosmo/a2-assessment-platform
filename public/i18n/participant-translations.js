@@ -268,6 +268,8 @@ export const translations = {
     "result.rationaleValue.responsible_use":
       "Responsible-use checks are described in the submission.",
     "result.none": "No result loaded.",
+    "result.celebratePass": "🎉 Congratulations — you passed!",
+    "courses.celebrateComplete": "🎉 Course completed — well done!",
     "history.empty": "No submissions found.",
     "history.entry": "Submission",
     "history.module": "Module",
@@ -561,6 +563,8 @@ export const translations = {
     "result.rationaleValue.responsible_use":
       "Kontroller for ansvarlig bruk er beskrevet i innleveringen.",
     "result.none": "Ingen resultat lastet.",
+    "result.celebratePass": "🎉 Gratulerer — du bestod!",
+    "courses.celebrateComplete": "🎉 Kurs fullført — godt jobbet!",
     "history.empty": "Ingen innleveringer funnet.",
     "history.entry": "Innlevering",
     "history.module": "Modul",
@@ -855,6 +859,8 @@ export const translations = {
     "result.rationaleValue.responsible_use":
       "Kontrollar for ansvarleg bruk er skildra i innleveringa.",
     "result.none": "Ingen resultat lasta.",
+    "result.celebratePass": "🎉 Gratulerer — du bestod!",
+    "courses.celebrateComplete": "🎉 Kurs fullført — godt jobba!",
     "history.empty": "Ingen innleveringar funne.",
     "history.entry": "Innlevering",
     "history.module": "Modul",
