@@ -354,7 +354,15 @@ export async function buildModuleExportEnvelope(
           : (null as never),
         mcqSet: {
           title: mcqSetVersion.title as never,
-          questions: mcqSetVersion.questions as never,
+          // #557: omit rationale entirely when absent instead of emitting `rationale: null`
+          // (which the import schema rejected).
+          questions: (mcqSetVersion.questions as Array<Record<string, unknown>>).map((q) => {
+            if (q.rationale == null) {
+              const { rationale: _drop, ...rest } = q;
+              return rest;
+            }
+            return q;
+          }) as never,
           active: true,
         },
         audit: {

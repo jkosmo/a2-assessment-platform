@@ -274,10 +274,11 @@ describe("#547 MCQ-only module export-import round-trip", () => {
         title: { "en-GB": "MCQ", nb: "MCQ", nn: "MCQ" },
         questions: [
           {
+            // #557: deliberately NO rationale — export must not emit rationale:null and import
+            // must accept its absence (this round-trip previously failed).
             stem: { "en-GB": "2+2?", nb: "2+2?", nn: "2+2?" },
             options: [{ "en-GB": "4", nb: "4", nn: "4" }, { "en-GB": "5", nb: "5", nn: "5" }],
             correctAnswer: { "en-GB": "4", nb: "4", nn: "4" },
-            rationale: { "en-GB": "Math", nb: "Matte", nn: "Matte" },
           },
         ],
       });

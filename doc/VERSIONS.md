@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.34 - 2026-06-21
+
+fix(content): eksport utelater rationale:null → MCQ-spørsmål uten rationale kan re-importeres (#557)
+
+Et MCQ-spørsmål uten `rationale` ble eksportert som `rationale: null`, men import-schemaet godtok
+`string|object|undefined` (ikke null) → `validation_error` ved re-import. Eksporten utelater nå
+`rationale`-nøkkelen når den mangler (i stedet for null), så import (optional) godtar fraværet.
+(Valgte eksport-fiks framfor å nullbar-gjøre det delte `mcqQuestionSchema`, som ville kaskadert til
+MCQ-revisjons-endepunktet.)
+
+Test: export/import-roundtrip-testen bruker nå et spørsmål **uten** rationale (regresjonsvakt).
+6 roundtrip-tester grønne, tsc rent.
+
 ## 1.3.33 - 2026-06-21
 
 fix(author+participant): MCQ-only kort-gating + kurs-cache (staging-tilbakemelding runde 4)
