@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.39 - 2026-06-21
+
+fix(author): «Neste» deaktiveres mens kildemateriale hentes (#555-oppfølging)
+
+- **Bugfiks (forfatter-feedback):** ved URL-henting (og fil-opplasting) var det meste av UI passivt,
+  men **«Neste»-knappen var fortsatt klikkbar** — uklart hva som skjedde ved klikk midt i hentingen.
+  «Neste» deaktiveres nå mens kilde hentes/ekstraheres og re-aktiveres når det er ferdig (begge
+  stier: URL-fetch + fil-opplasting).
+
 ## 1.3.38 - 2026-06-21
 
 feat(participant): utskrivbart kursbevis ved kursfullføring (#550)

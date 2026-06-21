@@ -504,6 +504,9 @@ function _domFormFields(entry) {
       const originalLabel = urlBtn.textContent;
       urlBtn.disabled = true;
       uploadBtn.disabled = true;
+      // #555-oppfølging (forfatter-feedback): «Neste» var fortsatt klikkbar mens URL-en ble hentet
+      // — uklart hva som skjedde. Deaktiver den til hentingen er ferdig.
+      btn.disabled = true;
       urlBtn.textContent = t("shell.source.fetching");
       try {
         const result = await apiFetch(
@@ -526,6 +529,7 @@ function _domFormFields(entry) {
       } finally {
         urlBtn.disabled = false;
         uploadBtn.disabled = false;
+        btn.disabled = false;
         urlBtn.textContent = originalLabel;
       }
     });
@@ -605,6 +609,8 @@ function _domFormFields(entry) {
       const originalLabel = uploadBtn.textContent;
       uploadBtn.disabled = true;
       urlBtn.disabled = true;
+      // #555-oppfølging: hold «Neste» deaktivert mens filer ekstraheres (samme grunn som URL).
+      btn.disabled = true;
 
       // v1.2.3: ekstrahérer filene sekvensielt. Sekvensielt er trygt for parser-worker
       // (én job om gangen, ingen pool-uttømming) og gir tydelig progress-status til bruker.
@@ -660,6 +666,7 @@ function _domFormFields(entry) {
       }
       uploadBtn.disabled = false;
       urlBtn.disabled = false;
+      btn.disabled = false;
       uploadBtn.textContent = originalLabel;
       fileInput.value = "";
       inputEl.focus();
