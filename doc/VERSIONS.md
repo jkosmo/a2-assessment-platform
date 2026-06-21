@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.37 - 2026-06-21
+
+fix(author): regenerer-flyt følger også kilde-først-rekkefølgen (#555)
+
+- **Bugfiks (forfatter-feedback):** «Generer nytt innhold fra kildemateriale» på en *eksisterende*
+  modul spurte fortsatt om scenario **før** kildemateriale — den gamle rekkefølgen #555 skulle
+  fjerne. Regen-flyten følger nå samme enhetlige rekkefølge som ny-modul-flyten: **kilde →
+  scenario → (cert) → vurderingsplan**.
+- `askForScenarioMode` (scenario-først) erstattet av `askForScenarioModeRegen` (scenario etter
+  kilde); `startGenerateDraftFlow` starter nå på kilde-steget.
+- Ekstern-LLM-handoff skjer på kilde-steget, så scenario er ennå ukjent der → defaulter til «auto»
+  (ekstern LLM avgjør). Dokumentert i koden.
+- **Test:** ny e2e «shell regen flow asks for source material before scenario». 32/32 admin-content
+  e2e grønne.
+
 ## 1.3.36 - 2026-06-21
 
 feat(author): samordnet samtale-rekkefølge + MCQ-only via samtale (#555)
