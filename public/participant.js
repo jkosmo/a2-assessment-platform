@@ -132,6 +132,7 @@ let flowState = {
   hasMcqSubmission: false,
   assessmentQueued: false,
   resultStatus: null,
+  resultPassFail: null,
 };
 let latestAppeal = null;
 let assessmentProgressKey = "assessment.progress.idle";
@@ -657,11 +658,13 @@ function renderSelectedModuleSummary() {
   selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
   const constraints = selectedModule?.candidateTaskConstraints ?? "";
   if (selectedModuleCandidateTaskConstraints) selectedModuleCandidateTaskConstraints.textContent = constraints;
-  if (selectedModuleCandidateConstraintsSection) selectedModuleCandidateConstraintsSection.classList.toggle("hidden", !constraints);
-  selectedModuleBrief.classList.toggle(
-    "hidden",
-    !(selectedModule && selectedModule.taskText),
-  );
+  // .module-brief / .module-brief-section set `display: grid`, which overrides the `.hidden`
+  // class (defined earlier in the cascade, no !important). Gate via inline style.display so an
+  // MCQ-only module (taskText == null) doesn't show an empty OPPGAVE/VEILEDNING brief (#525 follow-up).
+  if (selectedModuleCandidateConstraintsSection) {
+    selectedModuleCandidateConstraintsSection.style.display = constraints ? "" : "none";
+  }
+  selectedModuleBrief.style.display = selectedModule && selectedModule.taskText ? "" : "none";
   renderSubmissionFields(getSubmissionFields(selectedModule));
   updateModuleSelectionVisibility(Boolean(selectedModule));
 }
@@ -1088,6 +1091,10 @@ function renderFlowGating() {
 
   const hasResultStatus = isAssessmentResultReady(flowState.resultStatus);
   resetSubmissionFlowButton.classList.toggle("hidden", !hasResultStatus);
+  // Feedback (#549): once the participant has passed, retry/«delete & start over» should be a
+  // discreet secondary action — not compete with the pass celebration. A failed result keeps it
+  // at normal prominence so a retake is easy.
+  resetSubmissionFlowButton.classList.toggle("reset-flow-discreet", hasResultStatus && flowState.resultPassFail === true);
 
   const createSubmissionBusy = createSubmissionButton.dataset.busy === "true";
   const submitMcqBusy = submitMcqButton.dataset.busy === "true";
@@ -2149,6 +2156,9 @@ function renderResultSummary(body) {
   );
   renderAssessmentProgress();
 
+  // Track the outcome so renderFlowGating can de-emphasise the retry button once passed.
+  flowState.resultPassFail = body?.decision?.passFailTotal ?? null;
+
   clearSummaryContainer(resultSummary);
   const summaryCard = createSummaryCard("");
   const summaryGrid = document.createElement("div");
@@ -2558,7 +2568,14 @@ submitMcqButton.addEventListener("click", async () => {
       persistCurrentModuleDraft(true);
       if (alreadyAssessed) {
         const resultBody = await apiFetch(`/api/submissions/${submissionId}/result`, headers);
+        // Sync resultStatus from the fetched result so the flow knows the assessment is ready —
+        // otherwise hasResultStatus stays false and the retry button never appears (also on fail).
+        flowState = {
+          ...flowState,
+          resultStatus: typeof resultBody.status === "string" ? resultBody.status : "COMPLETED",
+        };
         renderResultSummary(resultBody);
+        renderFlowGating();
       } else if (getFlowSettings().autoStartAfterMcq) {
         await startAutomaticAssessmentFlow(submissionId);
       }

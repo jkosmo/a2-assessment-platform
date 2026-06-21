@@ -73,13 +73,66 @@ test("participant: MCQ-only module hides the free-text step; free-text module ke
   await expect(page.locator("#submissionFields textarea")).toHaveCount(0);
   await expect(page.locator("#submissionFields")).toContainText("flervalgsspørsmål");
   await expect(page.locator("#ack")).toBeHidden();
+  // #525 follow-up: MCQ-only has no taskText, so the OPPGAVE/VEILEDNING brief must be hidden
+  // (regression guard for the .module-brief display:grid vs .hidden cascade bug).
+  await expect(page.locator("#selectedModuleBrief")).toBeHidden();
   // #546: submission auto-created on select (MCQ shown directly, no extra click).
   await expect.poll(() => submissionCreated).toBe(true);
 
-  // Switch to the free-text module → the answer textarea + acknowledgement come back.
+  // Switch to the free-text module → the answer textarea + acknowledgement + brief come back.
   // (Selecting a module collapses the list, so re-expand it first.)
   await page.locator("#loadModules").click();
   await page.locator(".module-card", { hasText: "Fritekst Modul" }).click();
   await expect(page.locator("#submissionFields textarea")).not.toHaveCount(0);
   await expect(page.locator("#ack")).toBeVisible();
+  await expect(page.locator("#selectedModuleBrief")).toBeVisible();
+});
+
+// Feedback (#549/#525): after an MCQ-only auto-pass the result is ready, so the retry button must
+// be present (not "completely gone") and de-emphasised (discreet) rather than a prominent danger
+// button. Regression guard for the resultStatus-never-synced bug.
+test("participant: MCQ-only auto-pass shows a discreet retry button", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ attemptId: "a1", questions: [{ id: "q1", stem: "Spørsmål 1", options: ["A", "B"] }] }),
+    }),
+  );
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assessmentComplete: true }) }),
+  );
+  await page.route("**/api/submissions/*/result", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "COMPLETED",
+        decision: { passFailTotal: true, decisionType: "AUTOMATIC" },
+        scoreComponents: { totalScore: 100, mcqScaledScore: 100, practicalScaledScore: 0 },
+        participantGuidance: {},
+      }),
+    }),
+  );
+
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "MCQ Modul" }).click();
+
+  // Answer the question and submit the MCQ.
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("#submitMcq").click();
+
+  // The retry button is visible (result is ready) and discreet (passed) — not the prominent danger button.
+  const retry = page.locator("#resetSubmissionFlow");
+  await expect(retry).toBeVisible();
+  await expect(retry).toHaveClass(/reset-flow-discreet/);
 });
