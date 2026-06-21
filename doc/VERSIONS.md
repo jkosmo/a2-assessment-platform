@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.45 - 2026-06-21
+
+feat(author): «Kun fritekst» i samtale-flyten (#578 slice 2a)
+
+Tredje modultype-valg i samtalen (bygger på FREETEXT_ONLY-fundamentet i 1.3.44).
+- **Ny-modul + regen:** modultype-boblen får et tredje valg **«Kun fritekst»** (i tillegg til
+  «Fritekst + flervalg» og «Kun flervalg»). Velges det, kjører scenario + vurderingsplan + fritekst-
+  generering som normalt, men **MCQ-genereringen hoppes over**, og lagring sender
+  `assessmentMode=FREETEXT_ONLY` med rubrikk + prompt + oppgavetekst, **uten mcqSet**.
+- `freetextOnly` trådes gjennom scenario→cert→blueprint→confirmAndGenerate; `saveDraftBundleInBackground`
+  hopper over MCQ-kravet og mcqSet-opprettelse for FREETEXT_ONLY.
+- i18n `shell.moduleType.freetextOnly` (+ utvidet hint) i en-GB/nb/nn.
+- **Tester:** to nye e2e (ny-modul + regen → «Kun fritekst» → ingen MCQ-steg, lagrer FREETEXT_ONLY
+  uten mcqSet). 40/40 admin-content e2e grønne, tsc rent.
+- Gjenstår i #578: forfatter-UI i Avansert editor (3-veis), deltaker-UI (fritekst u/MCQ), import/eksport, docs.
+
 ## 1.3.44 - 2026-06-21
 
 feat(module): FREETEXT_ONLY — datamodell + vurderings-pipeline (#578 slice 1)

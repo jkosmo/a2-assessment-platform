@@ -1823,6 +1823,8 @@ async function saveDraftBundleInBackground(options = {}) {
   // version with a pass-mark policy. assessmentMode/mcqMinPercent are flagged on sessionDraft by
   // createMcqOnlyModuleThenGenerate.
   const isMcqOnly = sessionDraft?.assessmentMode === "MCQ_ONLY";
+  // #578: FREETEXT_ONLY drafts have taskText + rubric + prompt but NO MCQ set.
+  const isFreetextOnly = sessionDraft?.assessmentMode === "FREETEXT_ONLY";
   const mcqMinPercent = Number.isFinite(sessionDraft?.mcqMinPercent) ? sessionDraft.mcqMinPercent : SHELL_MCQ_ONLY_MIN_PERCENT;
   // v1.1.95: when save fails on pre-save validation, attach recovery actions to the error
   // message. Previously the bot message had no choices and the chat menu was deactivated
@@ -1852,7 +1854,8 @@ async function saveDraftBundleInBackground(options = {}) {
     logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
     return;
   }
-  if (!mcqQuestions.length) {
+  // #578: FREETEXT_ONLY modules have no MCQ — skip the MCQ-required guard for them.
+  if (!isFreetextOnly && !mcqQuestions.length) {
     logBot(() => t("shell.save.mcqRequired"), buildSaveRecoveryActions({ includeGenerateMcq: true }));
     return;
   }
@@ -1945,24 +1948,28 @@ async function saveDraftBundleInBackground(options = {}) {
       body: JSON.stringify(promptPayload),
     });
 
-    const mcqBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/mcq-set-versions`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify({
-        title: resolveMcqTitlePayload(),
-        questions: mcqQuestions,
-      }),
-    });
+    // #578: FREETEXT_ONLY has no MCQ set — skip MCQ creation and omit mcqSetVersionId.
+    const mcqBody = isFreetextOnly
+      ? null
+      : await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/mcq-set-versions`, getHeaders, {
+          method: "POST",
+          body: JSON.stringify({
+            title: resolveMcqTitlePayload(),
+            questions: mcqQuestions,
+          }),
+        });
 
     const moduleVersionBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, getHeaders, {
       method: "POST",
       body: JSON.stringify({
+        assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : undefined,
         taskText: translateLocalizedText(taskText),
         assessorExpectedContent: translateLocalizedText(assessorExpectedContent),
         candidateTaskConstraints: translateLocalizedText(candidateTaskConstraints) || undefined,
         assessmentBlueprint: assessmentBlueprint || undefined,
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
-        mcqSetVersionId: mcqBody?.mcqSetVersion?.id,
+        mcqSetVersionId: isFreetextOnly ? undefined : mcqBody?.mcqSetVersion?.id,
         submissionSchema: resolveSubmissionSchemaPayload(),
       }),
     });
@@ -3844,20 +3851,20 @@ function startNewModuleFlow() {
 // som forfatter-feedback (skjermbilde 2026-06-21) bekreftet føltes feil også her. knownCertLevel
 // videreføres fra regen så vi ikke spør om cert-nivå på nytt. scenarioMode brukes server-side
 // (prompt) og i ekstern-LLM-handoff.
-function askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel = null) {
+function askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel = null, freetextOnly = false) {
   logBot(() => `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`, [
-    { labelKey: "shell.scenario.auto", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "auto") },
-    { labelKey: "shell.scenario.include", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "include") },
-    { labelKey: "shell.scenario.exclude", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "exclude") },
+    { labelKey: "shell.scenario.auto", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "auto", freetextOnly) },
+    { labelKey: "shell.scenario.include", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "include", freetextOnly) },
+    { labelKey: "shell.scenario.exclude", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "exclude", freetextOnly) },
   ]);
 }
 
-function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, scenarioMode) {
+function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, scenarioMode, freetextOnly = false) {
   if (knownCertLevel) {
     // Hard-default "thorough" — se askForCertLevel-kommentaren.
-    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough", scenarioMode);
+    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough", scenarioMode, freetextOnly);
   } else {
-    askForCertLevel(null, existingModuleId, sourceMaterial, scenarioMode);
+    askForCertLevel(null, existingModuleId, sourceMaterial, scenarioMode, freetextOnly);
   }
 }
 
@@ -3872,7 +3879,8 @@ function askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel)
       `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
       + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
     [
-      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel) },
+      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel, false) },
+      { labelKey: "shell.moduleType.freetextOnly", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel, true) },
       { labelKey: "shell.moduleType.mcqOnly", action: () => startMcqOnlyRegen(sourceMaterial, knownCertLevel) },
     ],
   );
@@ -3915,13 +3923,13 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, sce
   );
 }
 
-function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode = "auto") {
+function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode = "auto", freetextOnly = false) {
   // Generation mode is always "thorough" — author feedback (2026-05-18) confirmed the
   // "Vanlig" option was never selected in practice. Removed to reduce conversation friction.
   logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale, "thorough", scenarioMode) },
-    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough", scenarioMode) },
-    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough", scenarioMode) },
+    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale, "thorough", scenarioMode, freetextOnly) },
+    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough", scenarioMode, freetextOnly) },
+    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough", scenarioMode, freetextOnly) },
   ]);
 }
 
@@ -3935,7 +3943,8 @@ function askForModuleType(moduleTitle, sourceMaterial) {
       `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
       + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
     [
-      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial) },
+      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial, false) },
+      { labelKey: "shell.moduleType.freetextOnly", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial, true) },
       { labelKey: "shell.moduleType.mcqOnly", action: () => askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) },
     ],
   );
@@ -3943,15 +3952,15 @@ function askForModuleType(moduleTitle, sourceMaterial) {
 
 // Free-text branch of the new-module flow: scenario choice now follows source+module-type
 // (not before source as in the legacy order). Routes into the unchanged cert → blueprint path.
-function askForScenarioModeForFreetext(moduleTitle, sourceMaterial) {
+function askForScenarioModeForFreetext(moduleTitle, sourceMaterial, freetextOnly = false) {
   logBot(
     () =>
       `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong>`
       + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`,
     [
-      { labelKey: "shell.scenario.auto", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "auto") },
-      { labelKey: "shell.scenario.include", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "include") },
-      { labelKey: "shell.scenario.exclude", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "exclude") },
+      { labelKey: "shell.scenario.auto", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "auto", freetextOnly) },
+      { labelKey: "shell.scenario.include", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "include", freetextOnly) },
+      { labelKey: "shell.scenario.exclude", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "exclude", freetextOnly) },
     ],
   );
 }
@@ -4059,7 +4068,7 @@ async function maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale) {
   }
 }
 
-async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, scenarioMode = "auto") {
+async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, scenarioMode = "auto", freetextOnly = false) {
   // v1.2.4: condense source material if over threshold. Condensed result replaces raw
   // for ALL downstream calls (blueprint → draft → MCQ → rubric).
   const effectiveSourceMaterial = await maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale);
@@ -4087,7 +4096,7 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
       return;
     }
     logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.errorFallback")));
-    confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null, scenarioMode);
+    confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null, scenarioMode, freetextOnly);
     return;
   }
 
@@ -4098,7 +4107,7 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
   // v1.2.4: pass effectiveSourceMaterial (possibly condensed) so all downstream LLM calls
   // (draft, MCQ, rubric) get the same condensed view rather than re-paying for raw.
   // v1.2.8: scenarioMode forwarded through to draft generation.
-  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode });
+  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode, freetextOnly });
 }
 
 // B1 (#448): editable Vurderingsplan card replaces the static accept/skip preview. Lærer
@@ -4179,7 +4188,7 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
             return;
           }
           const blueprintJson = JSON.stringify(working);
-          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode);
+          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode, ctx.freetextOnly);
         },
       },
       {
@@ -4278,7 +4287,19 @@ function slugifyLabel(label) {
 }
 
 
-async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null, scenarioMode = "auto") {
+async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, blueprint = null, scenarioMode = "auto", freetextOnly = false) {
+  // #578: after the free-text draft is generated, FREETEXT_ONLY skips MCQ generation entirely and
+  // flags the draft so saveDraftBundleInBackground emits a FREETEXT_ONLY version (no mcqSet).
+  const onDraftReady = () => {
+    if (freetextOnly) {
+      sessionDraft = { ...(sessionDraft ?? {}), assessmentMode: "FREETEXT_ONLY", mcqQuestions: [] };
+      renderPreview();
+      showDraftReadyActions();
+    } else {
+      askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
+    }
+  };
+
   if (existingModuleId) {
     const capturedTitle = localizeValue(bundle?.module?.title) || existingModuleId;
     const levelKey = `shell.certLevel.${certLevel}`;
@@ -4287,9 +4308,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       `${escapeHtml(t("shell.generating.startingFor"))} <strong>${escapeHtml(capturedTitle)}</strong>…<br>` +
       `<span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.certLevel.label"))}: ${escapeHtml(t(levelKey) || certLevel)} · ${escapeHtml(t("shell.locale.label"))}: ${escapeHtml(localeLabels[genLocale] ?? genLocale)}</span>`,
     );
-    generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
-      askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
-    }, blueprint, scenarioMode);
+    generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onDraftReady, blueprint, scenarioMode);
     return;
   }
 
@@ -4315,7 +4334,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
         // v1.2.18 (#352): legacy /admin-content/advanced retired — send brukeren tilbake til
         // modul-bibliotek der de kan velge en eksisterende modul eller opprette en ny.
         { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content"; } },
-        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode) },
+        { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode, freetextOnly) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],
     );
@@ -4329,12 +4348,10 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
     `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
   );
 
-  sessionDraft = { title: moduleTitle, taskText: "", assessorExpectedContent: "", candidateTaskConstraints: "", assessmentBlueprint: blueprint ?? undefined, mcqQuestions: [] };
+  sessionDraft = { title: moduleTitle, taskText: "", assessorExpectedContent: "", candidateTaskConstraints: "", assessmentBlueprint: blueprint ?? undefined, mcqQuestions: [], ...(freetextOnly ? { assessmentMode: "FREETEXT_ONLY" } : {}) };
   renderPreview();
 
-  generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, () => {
-    askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
-  }, blueprint, scenarioMode);
+  generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onDraftReady, blueprint, scenarioMode);
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {
