@@ -3861,6 +3861,38 @@ function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertL
   }
 }
 
+// #579: modultype-valg i regen-flyten. Den anbefalte opprett-veien (biblioteks-dialogen, #348)
+// oppretter modulen og lander her, så dette er stedet forfatter faktisk velger type. Etter kilde,
+// før scenario. Tillater typebytte: lagring skriver en ny versjon i valgt modus.
+//   - «Fritekst + flervalg» → uendret regen (scenario → cert/vurderingsplan → MCQ)
+//   - «Kun flervalg» → MCQ-only-generering, lagres som MCQ_ONLY (ingen scenario/rubrikk/prompt)
+function askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel) {
+  logBot(
+    () =>
+      `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
+      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
+    [
+      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel) },
+      { labelKey: "shell.moduleType.mcqOnly", action: () => startMcqOnlyRegen(sourceMaterial, knownCertLevel) },
+    ],
+  );
+}
+
+function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
+  // Flag the in-progress draft as MCQ_ONLY so saveDraftBundleInBackground emits the MCQ_ONLY
+  // module version (no rubric/prompt/taskText). Cert level is reused from the existing module.
+  sessionDraft = {
+    ...(sessionDraft ?? {}),
+    title: sessionDraft?.title ?? bundle?.module?.title,
+    assessmentMode: "MCQ_ONLY",
+    mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT,
+    mcqQuestions: [],
+  };
+  renderPreview();
+  const certLevel = knownCertLevel ?? bundle?.module?.certificationLevel ?? "intermediate";
+  askForMcqQuestionCount(sourceMaterial, certLevel, currentLocale, "thorough", () => showDraftReadyActions());
+}
+
 function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, scenarioMode = "auto") {
   logForm(
     "source-material",
@@ -3875,7 +3907,8 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, sce
         askForModuleType(moduleTitle, sourceMaterial);
         return;
       }
-      askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel);
+      // #579: regen spør også modultype etter kilde (forfatter kan bytte type ved regenerering).
+      askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel);
     },
     "",
     {},
