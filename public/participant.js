@@ -88,6 +88,9 @@ const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale();
 let latestResult = null;
+// #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
+// result poll. Reset when the module context changes / a new submission starts.
+let celebrationShown = false;
 let latestHistory = null;
 let participantRuntimeConfig = {
   authMode: "mock",
@@ -845,12 +848,6 @@ function renderModules() {
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
       activateParticipantModule(module.id);
-      // #546 feedback: MCQ-only modules have no free-text step — go straight to the questions by
-      // creating the (empty) submission + starting the MCQ immediately, instead of requiring the
-      // participant to click "Create submission" first.
-      if (moduleIsMcqOnly(module) && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
-        createSubmissionButton.click();
-      }
     });
 
     const title = document.createElement("div");
@@ -993,6 +990,13 @@ function activateParticipantModule(moduleId, options = {}) {
   restoreDraftForSelectedModule(true);
   updateCreateSubmissionAvailability();
 
+  // #546 feedback: MCQ-only modules have no free-text step — go straight to the questions by
+  // creating the (empty) submission + starting the MCQ immediately, so the participant never sees
+  // a "create submission" step. Covers both entry points (module card + course → openCourseModule).
+  if (moduleIsMcqOnly(nextModule) && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
+    createSubmissionButton.click();
+  }
+
   // v1.2.22 (#465): kollaps modullisten så modul-innholdet får mer plass. Bruker kan
   // ekspandere igjen ved å klikke «Last moduler»-knappen.
   document.getElementById("moduleListSection")?.classList.add("module-list-collapsed");
@@ -1051,6 +1055,7 @@ function resetFlowStateForModuleContext() {
     assessmentQueued: false,
     resultStatus: null,
   };
+  celebrationShown = false;
   latestAppeal = null;
   assessmentProgressKey = "assessment.progress.idle";
   setAssessmentProgressDetail();
@@ -2078,6 +2083,52 @@ function formatHistoryModuleValue(module) {
   return `${moduleTitle} (${t("modules.debugId")}: ${moduleId})`;
 }
 
+// #549/#550: lightweight, dependency-free confetti for celebrating a pass / course completion.
+// Decorative only — wrapped so it can never throw into the calling flow.
+function launchConfetti() {
+  try {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const canvas = document.createElement("canvas");
+    canvas.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9998";
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+    const colors = ["#2563eb", "#16a34a", "#f59e0b", "#db2777", "#7c3aed"];
+    const pieces = Array.from({ length: 140 }, () => ({
+      x: Math.random() * canvas.width,
+      y: -20 - Math.random() * canvas.height * 0.3,
+      r: 4 + Math.random() * 6,
+      c: colors[Math.floor(Math.random() * colors.length)],
+      vy: 2 + Math.random() * 3.5,
+      vx: -1.5 + Math.random() * 3,
+      rot: Math.random() * Math.PI,
+      vr: -0.12 + Math.random() * 0.24,
+    }));
+    const start = performance.now();
+    function frame(now) {
+      const elapsed = now - start;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of pieces) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r);
+        ctx.restore();
+      }
+      if (elapsed < 2600) requestAnimationFrame(frame);
+      else canvas.remove();
+    }
+    requestAnimationFrame(frame);
+  } catch {
+    /* confetti is decorative; never block the result flow on it */
+  }
+}
+
 function renderResultSummary(body) {
   latestResult = body;
   latestAppeal = body?.latestAppeal ?? latestAppeal;
@@ -2140,6 +2191,18 @@ function renderResultSummary(body) {
 
     rationaleCard.appendChild(rationaleList);
     resultSummary.appendChild(rationaleCard);
+  }
+
+  // #549: celebrate an automatic/confirmed pass — confetti + a clear "passed" banner, shown once
+  // per result (the result view re-renders on each poll). De-emphasising retry is handled in
+  // renderFlowGating.
+  if (body.decision?.passFailTotal === true && !celebrationShown) {
+    celebrationShown = true;
+    const banner = document.createElement("div");
+    banner.className = "celebrate-banner";
+    banner.textContent = t("result.celebratePass");
+    resultSummary.prepend(banner);
+    launchConfetti();
   }
 
   resultSummary.dataset.hasResult = "true";
@@ -2705,6 +2768,11 @@ if (previewModeEnabled) {
 
 let participantCourses = [];
 let participantCompletions = {};   // courseId -> completion
+// #550: celebrate a course completion only when it happens during the session (e.g. the
+// participant just passed the last module / read the last section), not for already-completed
+// courses on first load.
+const celebratedCompletedCourses = new Set();
+let courseAccordionInitialized = false;
 let courseDetailCache = {};        // courseId -> CourseDetail
 
 function escapeHtmlP(str) {
@@ -2748,6 +2816,23 @@ function renderParticipantCourseAccordion() {
   for (const course of participantCourses) {
     container.appendChild(buildCourseAccordionItem(course));
   }
+
+  // #550: confetti when a course becomes completed during this session.
+  let newlyCompleted = false;
+  for (const course of participantCourses) {
+    const isCompleted = Boolean(participantCompletions[course.id]) || course.progress?.courseStatus === "COMPLETED";
+    if (!isCompleted) continue;
+    if (!celebratedCompletedCourses.has(course.id)) {
+      celebratedCompletedCourses.add(course.id);
+      if (courseAccordionInitialized) newlyCompleted = true;
+    }
+  }
+  if (newlyCompleted) {
+    launchConfetti();
+    showToast(t("courses.celebrateComplete"), "success");
+  }
+  courseAccordionInitialized = true;
+
   // Deep link: ?courseId=xxx opens that course
   const linkedCourseId = new URLSearchParams(window.location.search).get("courseId");
   if (linkedCourseId) {

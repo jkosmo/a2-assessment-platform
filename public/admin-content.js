@@ -3750,10 +3750,10 @@ deleteModuleButton.addEventListener("click", async () => {
 // #525/#546: toggle the free-text authoring fields + MCQ threshold based on the MCQ-only switch.
 function applyMcqOnlyAuthoringVisibility() {
   const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
-  // Use style.display: the threshold row carries the `.row` class whose CSS display overrides the
-  // [hidden] attribute (same gotcha as participant ack), so toggle display directly (#525/#546).
-  if (moduleVersionFreetextFields) moduleVersionFreetextFields.style.display = mcqOnly ? "none" : "";
-  if (moduleVersionMcqThresholdRow) moduleVersionMcqThresholdRow.style.display = mcqOnly ? "" : "none";
+  // Both are plain <div>s (no class overriding the [hidden] attribute after the #546 layout
+  // cleanup), so the hidden property works directly (#525/#546).
+  if (moduleVersionFreetextFields) moduleVersionFreetextFields.hidden = mcqOnly;
+  if (moduleVersionMcqThresholdRow) moduleVersionMcqThresholdRow.hidden = !mcqOnly;
 }
 moduleVersionMcqOnlyInput?.addEventListener("change", applyMcqOnlyAuthoringVisibility);
 applyMcqOnlyAuthoringVisibility();

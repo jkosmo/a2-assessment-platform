@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.29 - 2026-06-21
+
+fix+feat(participant): MCQ-only-bugfikser + feiring ved bestått/fullført (#549, #550, +#1/#2-fiks)
+
+Andre runde med staging-tilbakemelding på MCQ-only:
+- **#1-fiks (auto-start):** «MCQ vises direkte» fungerte ikke via kurs-stien — auto-start-hooken lå
+  bare i modul-kort-klikket, ikke i `openCourseModule`. Flyttet inn i `activateParticipantModule`
+  så begge stier (kort + kurs) auto-oppretter besvarelse + starter MCQ.
+- **#2-fiks (layout):** seksjon 8 var visuelt entangled — MCQ-only-vekslingen + terskel grupperes
+  nå i et avgrenset «modultype»-delpanel, adskilt fra fritekst-feltene. (Full omlegging kommer i
+  #554 der modultype velges ved opprettelse.)
+- **#549 feiring bestått modul:** konfetti (lettvekts, dependency-fri, respekterer reduced-motion)
+  + «🎉 Gratulerer — du bestod!»-banner på resultatet (én gang per innlevering).
+- **#550 feiring fullført kurs:** konfetti + toast når et kurs blir fullført i økten (ikke for
+  allerede-fullførte kurs ved innlasting). E-post ved kurs-fullføring gjenstår (backend/ACS) —
+  sporet i #550; modul-bestått sender allerede resultat-e-post.
+
+Test: 30 e2e grønne (inkl. oppdatert MCQ-only-author-e2e), i18n-nøkkel-vakt dekker de nye nøklene,
+55 kontrakt-tester. tsc rent. (Feirings-banneret er dekorativt + i18n-vakt-dekket; visuell
+verifisering på staging.)
+
 ## 1.3.28 - 2026-06-21
 
 feat(content): MCQ-only import/eksport + bruker-doc (#547, #525)
