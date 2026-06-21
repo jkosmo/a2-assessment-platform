@@ -2893,7 +2893,7 @@ function buildCourseAccordionItem(course) {
     </button>
     <div class="course-accordion-body">
       <div class="course-progress-bar"><div class="course-progress-fill${completed ? " completed" : ""}" style="width:${pct}%"></div></div>
-      ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} - <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span></div>` : ""}
+      ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} - <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span> · <a href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.view"))}</a></div>` : ""}
       <div id="courseDetail_${course.id}"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
     </div>
   `;

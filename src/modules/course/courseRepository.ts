@@ -190,6 +190,18 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
+    // #550: single completion by certificate ID, including course + participant name, for the
+    // printable certificate view. certificateId is unique. Caller must scope to the owner.
+    findCourseCompletionByCertificateId(certificateId: string) {
+      return client.courseCompletion.findUnique({
+        where: { certificateId },
+        include: {
+          course: { select: { id: true, title: true, certificationLevel: true } },
+          user: { select: { id: true, name: true } },
+        },
+      });
+    },
+
     countCourseCompletions(courseId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
       return client.courseCompletion.count({
         where: {

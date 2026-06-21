@@ -91,6 +91,48 @@ coursesRouter.get("/completions", async (request, response, next) => {
   }
 });
 
+// #550: single completion by certificate ID, for the printable certificate view. Owner-scoped —
+// returns 404 (not 403) for someone else's certificate so existence isn't leaked.
+coursesRouter.get("/completions/:certificateId", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
+
+  try {
+    const completion = await courseRepository.findCourseCompletionByCertificateId(
+      request.params.certificateId,
+    );
+    if (!completion || completion.userId !== userId) {
+      response.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    let moduleCount = 0;
+    try {
+      const snapshot = JSON.parse(completion.moduleSnapshotJson);
+      moduleCount = Array.isArray(snapshot) ? snapshot.length : 0;
+    } catch {
+      moduleCount = 0;
+    }
+
+    response.json({
+      certificateId: completion.certificateId,
+      courseId: completion.courseId,
+      courseTitle: localizeContentText(locale, completion.course.title) ?? completion.course.title,
+      certificationLevel: completion.course.certificationLevel,
+      completedAt: completion.completedAt.toISOString(),
+      participantName: completion.user.name,
+      moduleCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 coursesRouter.get("/:courseId", async (request, response, next) => {
   const userId = request.context?.userId;
   if (!userId) {

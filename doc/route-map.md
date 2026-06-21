@@ -32,7 +32,8 @@ The conversational and advanced editors are two modes of the same module workspa
 | Route | Workspace |
 |---|---|
 | `/participant` | Participant submission workspace |
-| `/participant/completed` | Completed assessment result view |
+| `/participant/completed` | Completed assessment result view (incl. course certificates list) |
+| `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
 | `/review` | Manual review queue and workspace |
 | `/calibration` | Calibration reviewer workspace |
 | `/results` | Results / history view |
