@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.32 - 2026-06-21
+
+sec(ingest): lukk DNS-rebinding/TOCTOU i URL-henting (#520)
+
+`assertSafeUrl` validerte hostnavnets IP-er på forhånd, men `fetch` gjorde sitt eget DNS-oppslag —
+en angriper med kort-TTL-record kunne returnere public IP ved sjekken og privat IP ved selve
+tilkoblingen (DNS-rebinding) → SSRF-bypass.
+
+- Ny `createValidatingLookup` brukes som `connect.lookup` i en undici `Agent` (dispatcher). Det er
+  oppslaget fetch faktisk kobler til med, og det re-validerer hver resolved IP (avviser private/
+  metadata/loopback) ved tilkoblingstidspunktet → rebinding-vinduet lukket.
+- Global `fetch` beholdes (test-mockbar) med `dispatcher`-opsjon; `assertSafeUrl` (forhånds-sjekk)
+  beholdt som første lag (defense-in-depth).
+- `undici` lagt eksplisitt i `dependencies` (var transitiv).
+
+Test: 8 nye unit-tester (rebinding/metadata/IPv6/mixed/fail-closed). Eksisterende url-fetch-tester
+uendret (16 grønne totalt). tsc rent.
+
 ## 1.3.31 - 2026-06-21
 
 feat(author): avansert-editor IA — fjern nummerering + modultype på topp (#554, del 1)
