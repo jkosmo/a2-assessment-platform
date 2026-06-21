@@ -533,8 +533,8 @@ function _domFormFields(entry) {
     // #455: external-LLM-handoff. Copies prompt + opens import modal. On successful
     // import, marks the form submitted (skipping the normal source→cert→generate path)
     // and lands user in draft-ready with module + sessionDraft populated.
-    // v1.2.8: scenarioMode plukkes opp fra form-entry-context (satt av askForScenarioMode
-    // før kildemateriale-steget) og injiseres i prompten.
+    // #555: scenario velges nå ETTER kilde, så ved ekstern-LLM-handoff (som skjer på kilde-
+    // steget) er scenario ennå ukjent — vi defaulter til "auto" og lar ekstern LLM avgjøre.
     externalLlmBtn.addEventListener("click", async () => {
       const scenarioMode = entry.context?.scenarioMode ?? "auto";
       const promptText = buildExternalLlmAuthoringPrompt(scenarioMode);
@@ -3832,16 +3832,26 @@ function startNewModuleFlow() {
 // Scenario mode → source material → cert level → locale → generate
 // ---------------------------------------------------------------------------
 
-// v1.2.8: scenario-valg plassert mellom tittel og kildemateriale slik at samme valg
-// styrer både normal Samtale-generering (server-side prompt) og ekstern-LLM-handoff
-// (klient-side prompt). Gjelder både ny modul og regen-flyt på eksisterende modul.
-// knownCertLevel videreføres fra regen-flyten så vi ikke spør om cert-level på nytt.
-function askForScenarioMode(moduleTitle, existingModuleId, knownCertLevel = null) {
+// #555: regen på en eksisterende modul følger samme rekkefølge som ny-modul-flyten — KILDE
+// først, så scenario, så (cert hvis ukjent →) vurderingsplan. Tidligere kom scenario før kilde,
+// som forfatter-feedback (skjermbilde 2026-06-21) bekreftet føltes feil også her. knownCertLevel
+// videreføres fra regen så vi ikke spør om cert-nivå på nytt. scenarioMode brukes server-side
+// (prompt) og i ekstern-LLM-handoff.
+function askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel = null) {
   logBot(() => `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`, [
-    { labelKey: "shell.scenario.auto", action: () => askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, "auto") },
-    { labelKey: "shell.scenario.include", action: () => askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, "include") },
-    { labelKey: "shell.scenario.exclude", action: () => askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, "exclude") },
+    { labelKey: "shell.scenario.auto", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "auto") },
+    { labelKey: "shell.scenario.include", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "include") },
+    { labelKey: "shell.scenario.exclude", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "exclude") },
   ]);
+}
+
+function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, scenarioMode) {
+  if (knownCertLevel) {
+    // Hard-default "thorough" — se askForCertLevel-kommentaren.
+    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough", scenarioMode);
+  } else {
+    askForCertLevel(null, existingModuleId, sourceMaterial, scenarioMode);
+  }
 }
 
 function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, scenarioMode = "auto") {
@@ -3851,24 +3861,17 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, sce
     "shell.source.placeholder",
     "shell.action.next",
     (sourceMaterial) => {
-      // #555: new-module flow asks module-type after source (existingModuleId == null). The
-      // regen flow (askForScenarioMode → here, existingModuleId set) keeps its scenario-first
-      // order — scenario is already chosen by the time we reach this callback.
+      // #555: unified order — KILDE kommer først i begge flytene.
+      //  - Ny modul (existingModuleId == null): spør modultype etter kilde.
+      //  - Regen (existingModuleId satt): spør scenario etter kilde, så cert/vurderingsplan.
       if (!existingModuleId) {
         askForModuleType(moduleTitle, sourceMaterial);
         return;
       }
-      if (knownCertLevel) {
-        // Hard-default "thorough" — see askForCertLevel comment. v1.1.54 removed the
-        // intermediate askForGenerationMode step; calling it directly here would
-        // ReferenceError silently in the callback. (v1.1.54 regression caught 2026-05-18)
-        generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough", scenarioMode);
-      } else {
-        askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode);
-      }
+      askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel);
     },
     "",
-    { scenarioMode },
+    {},
   );
 }
 
@@ -4400,7 +4403,8 @@ function showDraftReadyActions() {
 // — samme intent som ved ny modul-flyten. Tidligere antakelse om at eksisterende moduler
 // bevarer egen stil var feil; forfatter vil styre per regenerering.
 function startGenerateDraftFlow() {
-  askForScenarioMode(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
+  // #555: KILDE først også ved regenerering (var: scenario først).
+  askForSourceMaterial(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
 }
 
 function startGenerateMcqFlow() {

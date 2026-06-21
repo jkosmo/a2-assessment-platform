@@ -1512,6 +1512,32 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator(".module-list .module-list-item")).toHaveCount(0);
   });
 
+  // #555: regen on an existing module follows the unified order too — source material BEFORE
+  // scenario (forfatter-feedback 2026-06-21: scenario-first felt wrong here as well).
+  test("shell regen flow asks for source material before scenario", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, "Generate new content from source material");
+
+    // Source material is asked first; the scenario prompt must NOT be shown yet.
+    await expect(page.getByText("Paste source material")).toBeVisible();
+    await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
+
+    // After submitting source, the scenario prompt appears.
+    await submitActiveChatInput(page, "Updated source notes about labour rights and organising.");
+    await expect(page.getByText("Should the task use a scenario?")).toBeVisible();
+  });
+
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
     const state = await mockCommonApis(page);
 
