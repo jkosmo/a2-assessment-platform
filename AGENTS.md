@@ -81,6 +81,17 @@ These rules exist because their violation caused or worsened the May 2026 produc
   where the costly bugs hide. Exercise the real client→server flow locally (`npm run dev`, local
   Postgres + `AUTH_MODE=mock`) before deploying; staging is an acceptance gate, not a debugger.
   Not "done" until the e2e passes locally + in CI.
+- **Map the full UI surface before building/fixing (standing order):** most of our deploy→bug→deploy
+  churn is *"correct fix, incomplete surface"* — fixing the one path in the screenshot while sibling
+  paths break next. Before coding a UI feature/fix: (1) `grep` the feature/i18n label across **all**
+  pages and enumerate every entry point + surface (e.g. module creation has two entries; a
+  certificate shows in three places), fixing them in the same PR; (2) write the e2e for the
+  **documented/recommended user journey**, not the code path you built; (3) for "move/reorder a step"
+  changes, grep where else that sequence occurs; (4) for conditional visibility use
+  `setHidden(el, on)` (`public/static/dom-visibility.js`) / inline `style.display` — **never** the
+  `.hidden` class or `[hidden]` on an element with a `display`-setting class
+  (`.row`/`.card`/`.content-card`/`.module-brief`/grid…), since `.hidden` (no `!important`) loses the
+  cascade and the element never hides. Recurring trap.
 - **For infra changes**, include in the PR description:
   - Which environments are affected
   - Behavior on first deploy (fresh environment) vs normal deploy
