@@ -110,8 +110,8 @@ test("participant: open a course section, render its image, and mark it read", a
   await expect(img).toHaveCount(1);
   await expect.poll(async () => (await img.getAttribute("src")) ?? "").toMatch(/^blob:/);
 
-  // Mark as read fires the POST and updates the button.
+  // Mark as read fires the POST and closes the reader (#550 feedback).
   await page.locator("#sectionReaderMarkRead").click();
   await expect.poll(() => markReadCalled).toBe(true);
-  await expect(page.locator("#sectionReaderMarkRead")).not.toBeEnabled();
+  await expect(page.locator("#sectionReaderOverlay")).toHaveCount(0);
 });

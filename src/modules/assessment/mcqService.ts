@@ -139,9 +139,11 @@ export async function submitMcqAttempt(input: {
   // #546 feedback: MCQ-only modules are graded deterministically (no LLM). Process the assessment
   // synchronously so the participant gets the result immediately, instead of waiting for the async
   // worker + poll cycle. Falls back to the enqueued job if synchronous processing fails.
+  let assessmentComplete = false;
   if (submission.moduleVersion?.assessmentMode === "MCQ_ONLY") {
     try {
       await processSubmissionJobNow(submission.id);
+      assessmentComplete = true;
     } catch (error) {
       console.warn("Synchronous MCQ-only assessment failed; leaving job for async worker.", error);
     }
@@ -166,6 +168,9 @@ export async function submitMcqAttempt(input: {
     percentScore,
     scaledScore,
     passFailMcq,
+    // #546/#2: when true the assessment was already finalised synchronously (MCQ-only) — the client
+    // must NOT auto-run the assessment again (that would 409 against the recert re-run guard).
+    assessmentComplete,
   };
 }
 
