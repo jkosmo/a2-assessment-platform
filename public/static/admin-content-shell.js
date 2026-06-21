@@ -1812,6 +1812,11 @@ async function saveDraftBundleInBackground(options = {}) {
   }
 
   const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria } = resolveDraftForSave();
+  // #555: MCQ-only drafts have no taskText/rubric/prompt — they save a single MCQ_ONLY module
+  // version with a pass-mark policy. assessmentMode/mcqMinPercent are flagged on sessionDraft by
+  // createMcqOnlyModuleThenGenerate.
+  const isMcqOnly = sessionDraft?.assessmentMode === "MCQ_ONLY";
+  const mcqMinPercent = Number.isFinite(sessionDraft?.mcqMinPercent) ? sessionDraft.mcqMinPercent : SHELL_MCQ_ONLY_MIN_PERCENT;
   // v1.1.95: when save fails on pre-save validation, attach recovery actions to the error
   // message. Previously the bot message had no choices and the chat menu was deactivated
   // (because the user just clicked Lagre utkast and _deactivateAll fired), so users were
@@ -1836,7 +1841,7 @@ async function saveDraftBundleInBackground(options = {}) {
     }
     return actions;
   };
-  if (!localizeValueForLocale(taskText, currentLocale).trim()) {
+  if (!isMcqOnly && !localizeValueForLocale(taskText, currentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
     return;
   }
@@ -1857,6 +1862,38 @@ async function saveDraftBundleInBackground(options = {}) {
         method: "PATCH",
         body: JSON.stringify({ title: titlePatch }),
       });
+    }
+
+    // #555: MCQ-only save path — create the MCQ set and a MCQ_ONLY module version with a
+    // pass-mark policy, skipping rubric/prompt/taskText entirely. The server's module-version
+    // schema accepts assessmentMode + assessmentPolicy.passRules.mcqMinPercent for this mode.
+    if (isMcqOnly) {
+      const mcqBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/mcq-set-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          title: resolveMcqTitlePayload(),
+          questions: mcqQuestions,
+        }),
+      });
+
+      const moduleVersionBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          assessmentMode: "MCQ_ONLY",
+          mcqSetVersionId: mcqBody?.mcqSetVersion?.id,
+          assessmentPolicy: { passRules: { mcqMinPercent } },
+        }),
+      });
+
+      latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
+      sessionDraft = null;
+      previewDraft = null;
+      await loadModule(moduleId);
+      logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
+      showToast(t("shell.save.success"), "success");
+      announceStatus(t("shell.save.success"));
+      if (afterSave) afterSave();
+      return;
     }
 
     // Rubric-save: two paths.
@@ -3784,7 +3821,10 @@ function startNewModuleFlow() {
     () => t("shell.newModule.titlePrompt"),
     "shell.newModule.titlePlaceholder",
     "shell.action.next",
-    (title) => askForScenarioMode(title, null),
+    // #555: unified authoring order — Kilde → Modultype → Innhold → Publiser. Source material
+    // is now the first question; module-type (free-text+MCQ vs MCQ-only) is asked after source,
+    // and scenario/cert only follow for the free-text branch. Matches the Avansert IA (#554).
+    (title) => askForSourceMaterial(title, null, null),
   );
 }
 
@@ -3811,6 +3851,13 @@ function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, sce
     "shell.source.placeholder",
     "shell.action.next",
     (sourceMaterial) => {
+      // #555: new-module flow asks module-type after source (existingModuleId == null). The
+      // regen flow (askForScenarioMode → here, existingModuleId set) keeps its scenario-first
+      // order — scenario is already chosen by the time we reach this callback.
+      if (!existingModuleId) {
+        askForModuleType(moduleTitle, sourceMaterial);
+        return;
+      }
       if (knownCertLevel) {
         // Hard-default "thorough" — see askForCertLevel comment. v1.1.54 removed the
         // intermediate askForGenerationMode step; calling it directly here would
@@ -3833,6 +3880,102 @@ function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenario
     { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough", scenarioMode) },
     { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough", scenarioMode) },
   ]);
+}
+
+// #555: module-type fork in the new-module flow. Asked after source material, before any
+// content generation. "Fritekst + flervalg" continues into the existing scenario → cert →
+// blueprint pipeline; "Kun flervalg" creates an MCQ_ONLY module and skips straight to MCQ
+// generation (no scenario, no rubric/prompt). Mirrors the Avansert editor's Modultype panel.
+function askForModuleType(moduleTitle, sourceMaterial) {
+  logBot(
+    () =>
+      `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
+      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
+    [
+      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial) },
+      { labelKey: "shell.moduleType.mcqOnly", action: () => askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) },
+    ],
+  );
+}
+
+// Free-text branch of the new-module flow: scenario choice now follows source+module-type
+// (not before source as in the legacy order). Routes into the unchanged cert → blueprint path.
+function askForScenarioModeForFreetext(moduleTitle, sourceMaterial) {
+  logBot(
+    () =>
+      `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong>`
+      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`,
+    [
+      { labelKey: "shell.scenario.auto", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "auto") },
+      { labelKey: "shell.scenario.include", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "include") },
+      { labelKey: "shell.scenario.exclude", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "exclude") },
+    ],
+  );
+}
+
+// MCQ-only branch of the new-module flow: ask cert level, then create the module shell and
+// hand off to the existing MCQ-generation chain. The shell is created up-front (like the
+// free-text confirmAndGenerate path) so selectedModuleId exists when MCQ is attached and saved.
+function askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) {
+  logBot(() => t("shell.mcqCertLevel.prompt"), [
+    { labelKey: "shell.certLevel.basic", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "basic") },
+    { labelKey: "shell.certLevel.intermediate", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "intermediate") },
+    { labelKey: "shell.certLevel.advanced", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "advanced") },
+  ]);
+}
+
+// Default pass mark for MCQ-only modules created via the conversation (author can override in
+// Avansert). Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
+const SHELL_MCQ_ONLY_MIN_PERCENT = 70;
+
+async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, certLevel) {
+  const slot = logProgress(() => `${t("shell.newModule.creating").replace(/…$/, "")} «${moduleTitle}»…`);
+  slot.abortBtn.remove(); // creation is not abortable
+
+  let newModule;
+  try {
+    const titleLocalized = { nb: moduleTitle, nn: moduleTitle, "en-GB": moduleTitle };
+    const body = await apiFetch(
+      "/api/admin/content/modules",
+      getHeaders,
+      { method: "POST", body: JSON.stringify({ title: titleLocalized, certificationLevel: certLevel }) },
+    );
+    newModule = body?.module ?? body;
+  } catch (err) {
+    logResolveSlot(
+      slot,
+      () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
+      [
+        { labelKey: "shell.action.retry", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, certLevel) },
+        { labelKey: "shell.action.cancel", action: startIdle },
+      ],
+    );
+    return;
+  }
+
+  selectedModuleId = newModule?.id ?? newModule?.moduleId;
+  const capturedId = selectedModuleId;
+  logResolveSlot(slot, () =>
+    `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(moduleTitle)}</strong>` +
+    `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
+  );
+
+  // MCQ-only draft: no taskText/rubric/prompt. assessmentMode + mcqMinPercent flagged here so
+  // saveDraftBundleInBackground emits the MCQ_ONLY module version (see that function's branch).
+  sessionDraft = {
+    title: moduleTitle,
+    assessmentMode: "MCQ_ONLY",
+    mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT,
+    taskText: "",
+    assessorExpectedContent: "",
+    candidateTaskConstraints: "",
+    mcqQuestions: [],
+  };
+  renderPreview();
+
+  // Reuse the existing MCQ-generation chain; on accept go straight to the draft-ready actions
+  // (no draft/criteria generation step, which is free-text-only).
+  askForMcqQuestionCount(sourceMaterial, certLevel, currentLocale, "thorough", () => showDraftReadyActions());
 }
 
 // #454 Phase 4 (v1.2.4): condense source material once before blueprint generation if it
