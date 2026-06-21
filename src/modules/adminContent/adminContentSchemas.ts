@@ -129,7 +129,7 @@ export const assessmentPolicyBodySchema = z.object({
     .optional(),
 });
 
-export const assessmentModeSchema = z.enum(["FREETEXT_PLUS_MCQ", "MCQ_ONLY"]);
+export const assessmentModeSchema = z.enum(["FREETEXT_PLUS_MCQ", "MCQ_ONLY", "FREETEXT_ONLY"]);
 
 // #525: MCQ_ONLY modules have no free-text task, rubric or prompt — those fields become optional.
 // mcqSetVersionId is always required. FREETEXT_PLUS_MCQ (default) keeps the original requirements.
@@ -142,17 +142,27 @@ export const moduleVersionBodySchema = z
     assessmentBlueprint: z.string().trim().optional(),
     rubricVersionId: z.string().min(1).optional(),
     promptTemplateVersionId: z.string().min(1).optional(),
-    mcqSetVersionId: z.string().min(1),
+    // #578: optional — FREETEXT_ONLY modules have no MCQ set. Required for the other two modes
+    // via the refine below.
+    mcqSetVersionId: z.string().min(1).optional(),
     submissionSchema: submissionSchemaBodySchema.optional(),
     assessmentPolicy: assessmentPolicyBodySchema.optional(),
   })
   .refine(
-    (v) =>
-      v.assessmentMode === "MCQ_ONLY" ||
-      (Boolean(v.taskText) && Boolean(v.rubricVersionId) && Boolean(v.promptTemplateVersionId)),
+    (v) => {
+      const hasFreeText = Boolean(v.taskText) && Boolean(v.rubricVersionId) && Boolean(v.promptTemplateVersionId);
+      // FREETEXT_ONLY (#578): free-text fields required, no MCQ set.
+      if (v.assessmentMode === "FREETEXT_ONLY") return hasFreeText;
+      // MCQ_ONLY (#525): MCQ set required, no free-text fields.
+      if (v.assessmentMode === "MCQ_ONLY") return Boolean(v.mcqSetVersionId);
+      // FREETEXT_PLUS_MCQ (default): both free-text fields and an MCQ set required.
+      return hasFreeText && Boolean(v.mcqSetVersionId);
+    },
     {
       message:
-        "taskText, rubricVersionId and promptTemplateVersionId are required for FREETEXT_PLUS_MCQ modules.",
+        "FREETEXT_PLUS_MCQ requires taskText, rubricVersionId, promptTemplateVersionId and mcqSetVersionId; " +
+        "FREETEXT_ONLY requires taskText, rubricVersionId and promptTemplateVersionId (no mcqSet); " +
+        "MCQ_ONLY requires mcqSetVersionId.",
       path: ["assessmentMode"],
     },
   );

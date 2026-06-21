@@ -24,6 +24,8 @@ type ApplyDecisionInput = {
   assessmentPolicy: ModuleAssessmentPolicy | null;
   rubricMaxTotal: number;
   rubricCriteriaIds: string[];
+  /** #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. */
+  freetextOnly?: boolean;
   /** Localized module title text (may be a raw localization JSON string). */
   moduleTitle: string;
   submissionLocale: SupportedLocale;
@@ -55,6 +57,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     assessmentPolicy: input.assessmentPolicy,
     rubricMaxTotal: input.rubricMaxTotal,
     rubricCriteriaIds: input.rubricCriteriaIds,
+    freetextOnly: input.freetextOnly,
   });
 
   if (!decisionResult.needsManualReview) {

@@ -29,6 +29,9 @@ type BuildDecisionInput = {
   assessmentPolicy?: ModuleAssessmentPolicy | null;
   rubricMaxTotal?: number;
   rubricCriteriaIds?: string[];
+  // #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. The rubric score spans the
+  // full 0–100 and there is no MCQ gate.
+  freetextOnly?: boolean;
 };
 
 export type ResolvedAssessmentDecision = {
@@ -44,7 +47,7 @@ export type ResolvedAssessmentDecision = {
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly"
 >;
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
@@ -68,17 +71,23 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   const recomputedRubricTotal = Object.values(validatedScores).reduce((sum, s) => sum + s, 0);
   const totalsInconsistent = recomputedRubricTotal !== input.llmResult.rubric_total;
 
+  // #578: FREETEXT_ONLY has no MCQ component, so the rubric/practical score spans the full 0–100
+  // (instead of the 0–70 practical band that leaves 30 for MCQ in FREETEXT_PLUS_MCQ).
+  const freetextOnly = input.freetextOnly === true;
+  const practicalScaleMax = freetextOnly ? 100 : 70;
   const recomputedPracticalScoreScaled =
-    rubricMaxTotal > 0 ? Number(((recomputedRubricTotal / rubricMaxTotal) * 70).toFixed(2)) : 0;
+    rubricMaxTotal > 0 ? Number(((recomputedRubricTotal / rubricMaxTotal) * practicalScaleMax).toFixed(2)) : 0;
 
   const effectivePracticalScaledScore =
-    input.assessmentPolicy?.scoring?.practicalWeight != null
+    !freetextOnly && input.assessmentPolicy?.scoring?.practicalWeight != null
       ? (recomputedPracticalScoreScaled / rules.weights.practicalMaxScore) * input.assessmentPolicy.scoring.practicalWeight
       : recomputedPracticalScoreScaled;
   const effectiveMcqScaledScore =
-    input.assessmentPolicy?.scoring?.mcqWeight != null
-      ? (input.mcqPercentScore / 100) * input.assessmentPolicy.scoring.mcqWeight
-      : input.mcqScaledScore;
+    freetextOnly
+      ? 0
+      : input.assessmentPolicy?.scoring?.mcqWeight != null
+        ? (input.mcqPercentScore / 100) * input.assessmentPolicy.scoring.mcqWeight
+        : input.mcqScaledScore;
   const totalScore = Number((effectivePracticalScaledScore + effectiveMcqScaledScore).toFixed(2));
   const practicalPercent = rubricMaxTotal > 0 ? (recomputedRubricTotal / rubricMaxTotal) * 100 : null;
 
@@ -88,7 +97,8 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   const hasOpenRedFlag = hasForcingRedFlag(input.llmResult, rules.manualReview.redFlagSeverities);
   const hasOnlyInsufficientEvidenceFlags = hasOnlyInsufficientEvidenceRedFlags(input.llmResult);
 
-  const mcqGatePasses = mcqMinPercent === null || input.mcqPercentScore >= mcqMinPercent;
+  // FREETEXT_ONLY has no MCQ gate.
+  const mcqGatePasses = freetextOnly || mcqMinPercent === null || input.mcqPercentScore >= mcqMinPercent;
   const practicalGatePasses =
     practicalMinPercent === null ||
     (practicalPercent !== null && practicalPercent >= practicalMinPercent);

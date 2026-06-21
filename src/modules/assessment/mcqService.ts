@@ -41,9 +41,14 @@ export async function startMcqAttempt(
     if (submission.submissionStatus === SubmissionStatus.PROCESSING) {
       throw new Error("MCQ attempt cannot be started: submission has already been processed.");
     }
+    // #578: FREETEXT_ONLY modules have no MCQ set — they should never reach the MCQ flow.
+    const mcqSetVersionId = submission.moduleVersion.mcqSetVersionId;
+    if (mcqSetVersionId == null) {
+      throw new Error("This module has no multiple-choice component.");
+    }
     attempt = await mcqRepository.createAttempt({
       submissionId: submission.id,
-      mcqSetVersionId: submission.moduleVersion.mcqSetVersionId,
+      mcqSetVersionId,
       startedAt: new Date(),
     });
   }

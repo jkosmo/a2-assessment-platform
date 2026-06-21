@@ -936,3 +936,69 @@ describe("decision service", () => {
     expect(result.needsManualReview).toBe(false);
   });
 });
+
+// #578 — FREETEXT_ONLY: free-text + LLM assessment, no MCQ. The rubric spans the full 0–100
+// (vs the 0–70 practical band in FREETEXT_PLUS_MCQ) and there is no MCQ gate.
+describe("resolveAssessmentDecision — FREETEXT_ONLY (#578)", () => {
+  const criteriaIds = [
+    "relevance_for_case",
+    "quality_and_utility",
+    "iteration_and_improvement",
+    "human_quality_assurance",
+    "responsible_use",
+  ];
+
+  it("scales the rubric to 0–100 (no MCQ band) and ignores MCQ scores", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const resolved = resolveAssessmentDecision({
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult(), // rubric_total 14 / max 20
+      rubricMaxTotal: 20,
+      rubricCriteriaIds: criteriaIds,
+      freetextOnly: true,
+    });
+    // (14/20)*100 = 70 — the whole score is practical; no +30 MCQ band.
+    expect(resolved.totalScore).toBe(70);
+    expect(resolved.passFailTotal).toBe(true);
+  });
+
+  it("has no MCQ gate — passes even with mcqMinPercent set and a 0 MCQ score", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const policy = { passRules: { mcqMinPercent: 100 } } as never;
+    const freetext = resolveAssessmentDecision({
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult(),
+      rubricMaxTotal: 20,
+      rubricCriteriaIds: criteriaIds,
+      assessmentPolicy: policy,
+      freetextOnly: true,
+    });
+    expect(freetext.passFailTotal).toBe(true);
+
+    // Contrast: the same inputs WITHOUT freetextOnly fail the MCQ gate (0% < 100%).
+    const withMcqGate = resolveAssessmentDecision({
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult(),
+      rubricMaxTotal: 20,
+      rubricCriteriaIds: criteriaIds,
+      assessmentPolicy: policy,
+    });
+    expect(withMcqGate.passFailTotal).toBe(false);
+  });
+
+  it("still routes free-text submissions to manual review when the LLM recommends it", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const resolved = resolveAssessmentDecision({
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({ manual_review_recommended: true }),
+      rubricMaxTotal: 20,
+      rubricCriteriaIds: criteriaIds,
+      freetextOnly: true,
+    });
+    expect(resolved.needsManualReview).toBe(true);
+  });
+});
