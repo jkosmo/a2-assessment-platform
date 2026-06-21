@@ -1181,6 +1181,51 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
   });
 
+  // #578: the conversation can author a FREETEXT_ONLY module — free-text + LLM assessment, no MCQ.
+  // After source the author picks "Free-text only"; the scenario/blueprint steps run but the MCQ
+  // step is skipped, and the saved version sends assessmentMode=FREETEXT_ONLY with no mcqSetVersionId.
+  test("shell can create a FREETEXT_ONLY module via the conversation", async ({ page }) => {
+    await mockCommonApis(page);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let versionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      versionPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
+      });
+    });
+    // A free-text-only module must never create an MCQ set.
+    let mcqSetCreated = false;
+    await page.route("**/api/admin/content/modules/*/mcq-set-versions", async (route: Route) => {
+      mcqSetCreated = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ mcqSetVersion: { id: "mcq-1" } }) });
+    });
+
+    await page.goto("/admin-content");
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Essay module");
+    await submitActiveChatInput(page, "Source notes for a free-text-only essay module.");
+    await clickEnabledButton(page, "Free-text only");
+    // Free-text-only keeps the scenario + blueprint steps (it is LLM-assessed free text).
+    await clickEnabledButton(page, "Let the LLM decide");
+    await clickEnabledButton(page, "Basic");
+    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
+
+    // No MCQ question-count step on the free-text-only path.
+    await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
+    await expect(page.getByText("Module created.")).toBeVisible();
+    await clickEnabledButton(page, "Save draft");
+
+    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
+    await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
+    expect(versionPayload?.mcqSetVersionId).toBeUndefined();
+    expect(versionPayload?.taskText).toBeTruthy();
+    expect(mcqSetCreated).toBe(false);
+  });
+
   // #555: the conversation can author an MCQ-only module. After source material the author
   // picks "MCQ only", skips scenario/blueprint entirely, and the saved version sends
   // assessmentMode=MCQ_ONLY with the default 70% pass mark (no rubric/prompt/taskText).
@@ -1566,6 +1611,49 @@ test.describe("admin content browser coverage", () => {
     // No scenario on the MCQ-only branch — straight to the question-count question.
     await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
     await expect(page.getByText(/How many MCQ questions/i)).toBeVisible();
+  });
+
+  // #578: regen can switch an existing module to FREETEXT_ONLY — scenario/blueprint run, MCQ is
+  // skipped, and the saved version is FREETEXT_ONLY with no mcqSetVersionId.
+  test("shell regen flow can switch the module to FREETEXT_ONLY", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let versionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      versionPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, "Generate new content from source material");
+    await submitActiveChatInput(page, "Updated source for a free-text-only version.");
+    await expect(page.getByText("What kind of module is this?")).toBeVisible();
+    await clickEnabledButton(page, "Free-text only");
+
+    // Scenario + blueprint run; cert level is reused (known) so it is not asked again.
+    await clickEnabledButton(page, "Let the LLM decide");
+    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
+
+    // No MCQ step on the free-text-only path.
+    await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
+    await clickEnabledButton(page, "Save draft");
+
+    await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
+    expect(versionPayload?.mcqSetVersionId).toBeUndefined();
   });
 
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
