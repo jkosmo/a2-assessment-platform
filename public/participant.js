@@ -494,7 +494,21 @@ function populateLocaleSelect() {
   }
 }
 
+// #525: a module taken by the participant is MCQ-only when its active version has no free-text
+// assessment. Such modules skip the submission/free-text step entirely (module → MCQ → result).
+function moduleIsMcqOnly(module) {
+  return module?.assessmentMode === "MCQ_ONLY";
+}
+
+function selectedModuleIsMcqOnly() {
+  return moduleIsMcqOnly(resolveSelectedModule(loadedModules, selectedModuleId));
+}
+
 function getSubmissionFields(selectedModule) {
+  // MCQ-only modules have no free-text deliverable — no submission fields to fill (#525).
+  if (moduleIsMcqOnly(selectedModule)) {
+    return [];
+  }
   const schemaFields = selectedModule?.submissionSchema?.fields;
   if (Array.isArray(schemaFields) && schemaFields.length > 0) {
     return schemaFields.map((f) => ({
@@ -532,14 +546,20 @@ function applySubmissionReadMode() {
     }
   }
 
+  // MCQ-only modules have no free-text deliverable, so the acknowledgement + draft + validation
+  // affordances stay hidden regardless of read mode (#525).
+  const mcqOnly = selectedModuleIsMcqOnly();
+  const hideAck = readOnly || mcqOnly;
   if (ackCheckbox) {
     ackCheckbox.disabled = readOnly;
-    ackCheckbox.hidden = readOnly;
+    ackCheckbox.hidden = hideAck;
   }
-  if (draftStatus) draftStatus.hidden = readOnly;
-  if (draftBrowserNote) draftBrowserNote.hidden = readOnly;
-  if (submissionValidationHint) submissionValidationHint.hidden = readOnly;
-  if (submissionAckLabel) submissionAckLabel.hidden = readOnly;
+  if (draftStatus) draftStatus.hidden = hideAck;
+  if (draftBrowserNote) draftBrowserNote.hidden = hideAck;
+  if (submissionValidationHint) submissionValidationHint.hidden = hideAck;
+  // The ack <input> carries the `.inline` class whose CSS display overrides the [hidden]
+  // attribute, so hide the wrapping <label> via style.display (beats the class rule) — #525.
+  if (submissionAckLabel) submissionAckLabel.style.display = hideAck ? "none" : "";
   if (submissionIdRow) submissionIdRow.hidden = readOnly;
 }
 
@@ -561,6 +581,18 @@ function renderSubmissionFields(fields) {
 
   submissionFieldsContainer.innerHTML = "";
   currentSubmissionFields = fields;
+
+  // MCQ-only modules (#525): no free-text fields — show a short note and the participant proceeds
+  // straight to the multiple-choice questions. Acknowledgement/validation affordances are hidden
+  // centrally in applySubmissionReadMode().
+  if (selectedModuleIsMcqOnly()) {
+    const note = document.createElement("p");
+    note.className = "small";
+    note.textContent = t("submission.mcqOnlyNote");
+    submissionFieldsContainer.appendChild(note);
+    return;
+  }
+
   for (const field of fields) {
     const wrapper = document.createElement("div");
     const label = document.createElement("label");
@@ -668,6 +700,12 @@ function validateSubmissionInputState() {
       invalidFieldElement: selectedModuleDisplay,
       invalidHintElement: moduleSelectionHint,
     };
+  }
+
+  // MCQ-only modules have no free-text deliverable and no acknowledgement step (#525) — ready to
+  // start the MCQ as soon as a module is selected.
+  if (moduleIsMcqOnly(selectedModule)) {
+    return { valid: true, hintKey: "submission.validation.ready" };
   }
 
   for (const field of currentSubmissionFields) {
@@ -2327,13 +2365,15 @@ createSubmissionButton.addEventListener("click", async () => {
         const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
         responseJson[field.id] = element?.value ?? "";
       }
+      // MCQ-only modules send an empty submission (no free-text); acknowledgement is implicit
+      // since there is no deliverable to take responsibility for (#525).
       const body = await apiFetch("/api/submissions", headers, {
         method: "POST",
         body: JSON.stringify({
           moduleId,
           deliveryType: "text",
           responseJson,
-          responsibilityAcknowledged: ackCheckbox.checked,
+          responsibilityAcknowledged: selectedModuleIsMcqOnly() ? true : ackCheckbox.checked,
         }),
       });
       submissionIdLabel.textContent = body.submission.id;

@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.25 - 2026-06-21
+
+feat(participant): MCQ-only deltaker-flyt — hopp over fritekst-steg (#545, #525)
+
+Andre #525-skive (deltaker-UI). For moduler med assessmentMode=MCQ_ONLY:
+- Modul-lesemodellen eksponerer nå `assessmentMode` til deltakeren (moduleRepository-select +
+  de tre byggerne i moduleService).
+- Deltaker-konsollet skjuler fritekst-feltene + ansvars-bekreftelsen og viser en kort note;
+  «Opprett besvarelse» sender en tom besvarelse (ack implisitt) → rett til MCQ → resultat.
+- Fritekst-moduler (FREETEXT_PLUS_MCQ) er uendret.
+
+Detalj: ack-`<input>` har `.inline`-klasse hvis CSS overstyrer `[hidden]`, så labelen skjules via
+`style.display` (avdekket av e2e-en). Ny i18n-nøkkel `submission.mcqOnlyNote` (en/nb/nn).
+
+Test: ny Playwright-e2e (MCQ-only skjuler fritekst+ack; fritekst-modul beholder dem). tsc rent,
+29 e2e grønne, i18n-nøkkel-vakt grønn.
+
+Gjenstår: forfatter-UI (#546), import/eksport + bruker-doc (#547).
+
 ## 1.3.24 - 2026-06-20
 
 feat(module): MCQ-only moduler — backend-fundament + sertifiserings-invariant (#525, #476)

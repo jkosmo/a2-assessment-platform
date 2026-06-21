@@ -56,6 +56,7 @@ export async function listModules(
       candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
+      assessmentMode: module.activeVersion?.assessmentMode ?? null,
     }));
   }
 
@@ -96,6 +97,7 @@ export async function listModules(
       candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
+      assessmentMode: module.activeVersion?.assessmentMode ?? null,
       participantStatus: latest
         ? {
             latestSubmissionId: latest.id,
@@ -180,6 +182,7 @@ export async function getModuleById(
     taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
     ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
     candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
+    assessmentMode: module.activeVersion?.assessmentMode ?? null,
   };
 }
 
