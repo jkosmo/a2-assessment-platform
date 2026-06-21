@@ -21,6 +21,23 @@ answer that is graded by the LLM in addition to the MCQ.
 4. Save the draft version (steps 5–8) and **publish** it. Rubric and evaluation instruction are
    skipped automatically for MCQ-only modules.
 
+## Create an MCQ-only module (conversation)
+
+You can also create an MCQ-only module in the **conversational workspace** (`/admin-content`).
+Since v1.3.36 (#555) the conversation follows the same order as the advanced editor —
+**source → module type → content → publish**:
+
+1. Choose **“Create new module”** and enter a title.
+2. Paste or upload the **source material** (this is now the first question).
+3. At **“What kind of module is this?”**, pick **“MCQ only”**.
+4. Choose the certification level, number of questions, and options per question.
+5. The questions are generated — there is **no scenario or assessment-plan step** for MCQ-only.
+6. Review in the preview and **save**. The version is saved with a default **70 %** pass mark;
+   change it later in the advanced editor if you need a different threshold.
+
+Picking **“Free-text + MCQ”** instead keeps the full flow (scenario → certification level →
+assessment plan → questions).
+
 ## What the participant sees
 
 - Selecting an MCQ-only module goes **straight to the questions** — there is no “create

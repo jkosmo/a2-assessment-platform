@@ -1152,10 +1152,11 @@ test.describe("admin content browser coverage", () => {
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Trade unions");
-    // v1.2.8: scenario-step inserted between title and source-material. Pick "auto" so
-    // the LLM decides (same behaviour as before the step existed).
-    await clickEnabledButton(page, "Let the LLM decide");
+    // #555: unified order — source material is the first question, then module-type, then
+    // (for free-text) scenario → cert level. Pick "Free-text + MCQ" and "auto" scenario.
     await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
+    await clickEnabledButton(page, "Free-text + MCQ");
+    await clickEnabledButton(page, "Let the LLM decide");
     await clickEnabledButton(page, "Basic");
 
     // v1.1.54 removed the "Vanlig/Grundig" (Ordinary/Thorough) generation-mode prompt
@@ -1178,6 +1179,49 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
     await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
+  });
+
+  // #555: the conversation can author an MCQ-only module. After source material the author
+  // picks "MCQ only", skips scenario/blueprint entirely, and the saved version sends
+  // assessmentMode=MCQ_ONLY with the default 70% pass mark (no rubric/prompt/taskText).
+  test("shell can create an MCQ-only module via the conversation", async ({ page }) => {
+    await mockCommonApis(page);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let versionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      versionPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
+      });
+    });
+
+    await page.goto("/admin-content");
+
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Quiz module");
+    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz about safety rules.");
+    // #555: pick MCQ-only — no scenario or blueprint step should follow, straight to cert level.
+    await clickEnabledButton(page, "MCQ only");
+    await clickEnabledButton(page, "Basic");
+
+    // No scenario or blueprint buttons exist on the MCQ-only path.
+    await expect(page.getByRole("button", { name: /Let the LLM decide|Use this plan/i })).toHaveCount(0);
+
+    await clickEnabledButton(page, "3 questions");
+    await clickEnabledButton(page, "4 options");
+
+    await expect(page.getByText("Module created.")).toBeVisible();
+    await clickEnabledButton(page, "Save draft");
+
+    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
+    await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
+    expect(versionPayload?.taskText).toBeUndefined();
+    expect(versionPayload?.rubricVersionId).toBeUndefined();
+    expect(versionPayload?.promptTemplateVersionId).toBeUndefined();
+    expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(70);
   });
 
   test("shell locale switching updates the rendered task text", async ({ page }) => {
@@ -1475,8 +1519,7 @@ test.describe("admin content browser coverage", () => {
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Upload module");
-    // v1.2.8: scenario-step inserted between title and source-material.
-    await clickEnabledButton(page, "Let the LLM decide");
+    // #555: source material is now the first question (before module-type/scenario/cert).
 
     const fileInput = page.locator('input[type="file"]').last();
     await fileInput.setInputFiles({
@@ -1489,6 +1532,9 @@ test.describe("admin content browser coverage", () => {
     const sourceTextarea = page.locator(".chat-textarea:enabled").last();
     await sourceTextarea.fill("Use a practical workplace framing.");
     await clickEnabledButton(page, /Next|Neste|Næste/i);
+    // #555: module-type then scenario then cert follow the source step.
+    await clickEnabledButton(page, "Free-text + MCQ");
+    await clickEnabledButton(page, "Let the LLM decide");
     await clickEnabledButton(page, "Basic");
 
     // v1.1.54 removed Ordinary/Thorough generation-mode buttons — the flow goes

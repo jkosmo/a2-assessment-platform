@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.36 - 2026-06-21
+
+feat(author): samordnet samtale-rekkefølge + MCQ-only via samtale (#555)
+
+- **#555 enhetlig forfatter-rekkefølge:** samtale-shellen (`admin-content-shell.js`) følger nå
+  samme IA som Avansert-editoren (#554): **Kilde → Modultype → Innhold → Publiser**. Kildemateriale
+  er nå første spørsmål etter tittel; deretter velger forfatteren modultype.
+- **Modultype-steg:** nytt valg «Fritekst + flervalg» vs «Kun flervalg» rett etter kilde.
+  Fritekst-grenen fortsetter inn i den uendrede scenario → cert → vurderingsplan-flyten; scenario-
+  spørsmålet er flyttet til *etter* kilde (var før kilde).
+- **MCQ-only via samtale:** «Kun flervalg» oppretter en `MCQ_ONLY`-modul, hopper over
+  scenario/vurderingsplan/rubrikk/prompt og går rett til MCQ-generering. Lagring sender
+  `assessmentMode=MCQ_ONLY` + `assessmentPolicy.passRules.mcqMinPercent` (standard 70 %, kan
+  overstyres i Avansert) — ingen taskText/rubrikk/prompt.
+- **Tester:** to nye/oppdaterte samtale-e2e (ny rekkefølge for fritekst, samt ny MCQ-only-samtale
+  som verifiserer `MCQ_ONLY`-payload). i18n-nøkler lagt til i alle tre locales (en-GB, nb, nn).
+- Regen-flyten på eksisterende moduler er uendret (beholder scenario-først-rekkefølgen).
+
 ## 1.3.35 - 2026-06-21
 
 feat+fix(author): MCQ length-cue-deteksjon (#551) + kurs-pakke-guard i modul-import
