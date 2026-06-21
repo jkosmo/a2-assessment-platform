@@ -344,7 +344,8 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain("function syncSubmissionFieldReadHeight(textarea)");
     expect(participantJsResponse.text).toContain('submission-field-readonly');
     expect(participantJsResponse.text).toContain("ackCheckbox.disabled = readOnly");
-    expect(participantJsResponse.text).toContain("ackCheckbox.hidden = readOnly");
+    // #525: ack hidden in read mode OR for MCQ-only modules (hideAck = readOnly || mcqOnly).
+    expect(participantJsResponse.text).toContain("ackCheckbox.hidden = hideAck");
     expect(participantJsResponse.text).toContain("el.rows = 1");
 
     const resultsJsResponse = await request(app).get("/static/results.js");
