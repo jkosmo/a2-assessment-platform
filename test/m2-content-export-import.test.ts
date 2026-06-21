@@ -247,3 +247,84 @@ describe("#512 course export-import with learning sections", () => {
     expect(recreatedSection?.sectionId).not.toBe(sectionId);
   });
 });
+
+// #525/#547: MCQ-only modules have no rubric/prompt/taskText. Export must not require them, and
+// the round-trip must preserve assessmentMode=MCQ_ONLY.
+describe("#547 MCQ-only module export-import round-trip", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function setupMcqOnlyModule(suffix: string) {
+    const createResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: { "en-GB": `MCQ-only source ${suffix}`, nb: `Kun-MCQ kilde ${suffix}`, nn: `Kun-MCQ kjelde ${suffix}` },
+        description: { "en-GB": "MCQ-only source", nb: "Kun-MCQ", nn: "Kun-MCQ" },
+        certificationLevel: "basic",
+      });
+    expect(createResponse.status).toBe(201);
+    const moduleId = createResponse.body.module.id as string;
+
+    const mcq = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/mcq-set-versions`)
+      .set(adminHeaders)
+      .send({
+        title: { "en-GB": "MCQ", nb: "MCQ", nn: "MCQ" },
+        questions: [
+          {
+            stem: { "en-GB": "2+2?", nb: "2+2?", nn: "2+2?" },
+            options: [{ "en-GB": "4", nb: "4", nn: "4" }, { "en-GB": "5", nb: "5", nn: "5" }],
+            correctAnswer: { "en-GB": "4", nb: "4", nn: "4" },
+            rationale: { "en-GB": "Math", nb: "Matte", nn: "Matte" },
+          },
+        ],
+      });
+    expect(mcq.status).toBe(201);
+    const mcqSetVersionId = mcq.body.mcqSetVersion.id as string;
+
+    const moduleVersion = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions`)
+      .set(adminHeaders)
+      .send({
+        assessmentMode: "MCQ_ONLY",
+        mcqSetVersionId,
+        assessmentPolicy: { passRules: { mcqMinPercent: 70 } },
+      });
+    expect(moduleVersion.status).toBe(201);
+    expect(moduleVersion.body.moduleVersion.assessmentMode).toBe("MCQ_ONLY");
+    return { moduleId, mcqSetVersionId };
+  }
+
+  it("exports an MCQ-only module (no rubric/prompt/taskText) and re-imports it preserving the mode", async () => {
+    const { moduleId } = await setupMcqOnlyModule("A");
+
+    const exportResponse = await request(app)
+      .get(`/api/admin/content/modules/${moduleId}/export-package`)
+      .set(adminHeaders);
+    expect(exportResponse.status).toBe(200);
+    const envelope = exportResponse.body.envelope;
+    expect(envelope.module.activeVersion.assessmentMode).toBe("MCQ_ONLY");
+    expect(envelope.module.activeVersion.rubric ?? null).toBeNull();
+    expect(envelope.module.activeVersion.promptTemplate ?? null).toBeNull();
+    expect(envelope.module.activeVersion.taskText ?? null).toBeNull();
+    expect(envelope.module.activeVersion.mcqSet.questions).toHaveLength(1);
+
+    const importResponse = await request(app)
+      .post("/api/admin/content/modules/import")
+      .set(otherAdminHeaders)
+      .send({ mode: "createNew", payload: envelope });
+    expect(importResponse.status).toBe(201);
+    const newModuleId = importResponse.body.moduleId as string;
+    expect(newModuleId).not.toBe(moduleId);
+
+    const verifyResponse = await request(app)
+      .get(`/api/admin/content/modules/${newModuleId}/export-package`)
+      .set(adminHeaders);
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.envelope.module.activeVersion.assessmentMode).toBe("MCQ_ONLY");
+    expect(verifyResponse.body.envelope.module.activeVersion.rubric ?? null).toBeNull();
+    expect(verifyResponse.body.envelope.module.activeVersion.mcqSet.questions).toHaveLength(1);
+  });
+});

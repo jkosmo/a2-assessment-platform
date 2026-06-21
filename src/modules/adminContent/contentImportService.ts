@@ -78,20 +78,29 @@ async function importModulePayload(
     moduleId = newModule.id;
   }
 
-  const rubric = await createRubricVersion({
-    moduleId,
-    criteria: payload.activeVersion.rubric.criteria,
-    scalingRule: payload.activeVersion.rubric.scalingRule,
-    active: true,
-  });
+  // #525/#547: MCQ_ONLY modules have no rubric or prompt template — skip them on import.
+  const isMcqOnly = payload.activeVersion.assessmentMode === "MCQ_ONLY";
 
-  const promptTemplate = await createPromptTemplateVersion({
-    moduleId,
-    systemPrompt: serializeRequired(payload.activeVersion.promptTemplate.systemPrompt),
-    userPromptTemplate: serializeRequired(payload.activeVersion.promptTemplate.userPromptTemplate),
-    examples: payload.activeVersion.promptTemplate.examples ?? [],
-    active: true,
-  });
+  const rubric =
+    isMcqOnly || !payload.activeVersion.rubric
+      ? null
+      : await createRubricVersion({
+          moduleId,
+          criteria: payload.activeVersion.rubric.criteria,
+          scalingRule: payload.activeVersion.rubric.scalingRule,
+          active: true,
+        });
+
+  const promptTemplate =
+    isMcqOnly || !payload.activeVersion.promptTemplate
+      ? null
+      : await createPromptTemplateVersion({
+          moduleId,
+          systemPrompt: serializeRequired(payload.activeVersion.promptTemplate.systemPrompt),
+          userPromptTemplate: serializeRequired(payload.activeVersion.promptTemplate.userPromptTemplate),
+          examples: payload.activeVersion.promptTemplate.examples ?? [],
+          active: true,
+        });
 
   const mcqSet = await createMcqSetVersion({
     moduleId,
@@ -107,12 +116,15 @@ async function importModulePayload(
 
   const moduleVersion = await createModuleVersion({
     moduleId,
-    taskText: serializeRequired(payload.activeVersion.taskText),
+    assessmentMode: payload.activeVersion.assessmentMode,
+    taskText: isMcqOnly || !payload.activeVersion.taskText
+      ? undefined
+      : serializeRequired(payload.activeVersion.taskText),
     assessorExpectedContent: serializeLocalized(payload.activeVersion.assessorExpectedContent),
     candidateTaskConstraints: serializeLocalized(payload.activeVersion.candidateTaskConstraints),
     assessmentBlueprint: payload.activeVersion.assessmentBlueprint ?? undefined,
-    rubricVersionId: rubric.id,
-    promptTemplateVersionId: promptTemplate.id,
+    rubricVersionId: rubric?.id,
+    promptTemplateVersionId: promptTemplate?.id,
     mcqSetVersionId: mcqSet.id,
     submissionSchemaJson: payload.activeVersion.submissionSchema
       ? JSON.stringify(payload.activeVersion.submissionSchema)
