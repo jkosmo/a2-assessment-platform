@@ -1045,14 +1045,18 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/advanced");
     await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
 
-    // Free-text fields visible, threshold hidden by default.
+    // Free-text fields + content cards visible, threshold hidden by default.
     await expect(page.locator("#moduleVersionFreetextFields")).toBeVisible();
     await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeHidden();
+    await expect(page.locator("#contentCard_rubric")).toBeVisible();
 
-    // Enable MCQ-only → free-text fields hidden, threshold shown.
+    // Enable MCQ-only → free-text fields + free-text content cards hidden, threshold shown.
+    // (#554 follow-up: .content-card CSS overrides [hidden], so gating uses style.display.)
     await page.locator("#moduleVersionMcqOnly").check();
     await expect(page.locator("#moduleVersionFreetextFields")).toBeHidden();
     await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeVisible();
+    await expect(page.locator("#contentCard_rubric")).toBeHidden();
+    await expect(page.locator("#contentCard_prompt")).toBeHidden();
     await page.locator("#moduleVersionMcqMinPercent").fill("80");
 
     await page.locator("#saveContentBundle").click();

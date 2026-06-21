@@ -2589,6 +2589,8 @@ function renderContentCards() {
 
   updateStateRail();
   renderAdvancedPreview();
+  // #554: keep MCQ-only gating applied after any content refresh.
+  applyMcqOnlyAuthoringVisibility();
 }
 
 // ── Assessment policy helper ───────────────────────────────────────────────────
@@ -3760,13 +3762,14 @@ const MCQ_ONLY_HIDDEN_ELEMENT_IDS = [
 
 function applyMcqOnlyAuthoringVisibility() {
   const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
-  // Plain elements (no class overriding the [hidden] attribute after the #546 layout cleanup),
-  // so the hidden property works directly (#525/#546/#554).
   if (moduleVersionFreetextFields) moduleVersionFreetextFields.hidden = mcqOnly;
   if (moduleVersionMcqThresholdRow) moduleVersionMcqThresholdRow.hidden = !mcqOnly;
+  // The sections/cards carry classes (.card, .content-card) whose CSS display overrides the
+  // [hidden] attribute, so toggle style.display directly (#554 follow-up — the [hidden] approach
+  // left the cards visible on staging).
   for (const id of MCQ_ONLY_HIDDEN_ELEMENT_IDS) {
     const el = document.getElementById(id);
-    if (el) el.hidden = mcqOnly;
+    if (el) el.style.display = mcqOnly ? "none" : "";
   }
 }
 moduleVersionMcqOnlyInput?.addEventListener("change", applyMcqOnlyAuthoringVisibility);

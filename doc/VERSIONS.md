@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.33 - 2026-06-21
+
+fix(author+participant): MCQ-only kort-gating + kurs-cache (staging-tilbakemelding runde 4)
+
+- **#554 kort-gating:** «Vurderingskriterier»/«LLM-prompt»/«Innleveringsskjema»-kortene + rubric/
+  prompt-seksjonene vistes fortsatt ved Kun MCQ — `.content-card`/`.card`-CSS overstyrer
+  `[hidden]`-attributtet. Bruker nå `style.display` (samme gotcha som `.row`/`.inline` tidligere),
+  + re-applyer gatingen etter innholds-refresh. e2e utvidet til å sjekke at kort faktisk skjules.
+- **Kurs-cache (D):** etter bestått modul re-lastet kurs-lista accordion med ferske «Laster…»-
+  containere, men `courseDetailCache` beholdt gammel oppføring → expand hoppet over ny-henting →
+  placeholder hang. `loadParticipantCourses` tømmer nå cachen.
+
+Logget: #563 (konsistens — kurs publiseres ikke vs modul krever publisering).
+
+Test: 30 e2e (utvidet MCQ-only-author + section-reader), 49 kontrakt/i18n, tsc rent.
+
 ## 1.3.32 - 2026-06-21
 
 sec(ingest): lukk DNS-rebinding/TOCTOU i URL-henting (#520)
