@@ -480,7 +480,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       assessmentBlueprint?: string | null;
       rubricVersionId?: string | null;
       promptTemplateVersionId?: string | null;
-      mcqSetVersionId: string;
+      mcqSetVersionId?: string | null;
       assessmentMode?: AssessmentMode;
       submissionSchemaJson?: string | null;
       assessmentPolicyJson?: string | null;

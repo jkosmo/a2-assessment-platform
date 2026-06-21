@@ -170,6 +170,7 @@ model Module {
 enum AssessmentMode {
   FREETEXT_PLUS_MCQ
   MCQ_ONLY
+  FREETEXT_ONLY
 }
 
 model ModuleVersion {
@@ -177,14 +178,15 @@ model ModuleVersion {
   moduleId                  String
   versionNo                 Int
   // taskText / rubricVersionId / promptTemplateVersionId are free-text-assessment specific and
-  // are null for MCQ_ONLY modules (#525). They remain set for FREETEXT_PLUS_MCQ.
+  // are null for MCQ_ONLY modules (#525). They remain set for FREETEXT_PLUS_MCQ and FREETEXT_ONLY.
   taskText                  String?
   assessorExpectedContent   String?
   candidateTaskConstraints  String?
   assessmentBlueprint       String?
   rubricVersionId           String?
   promptTemplateVersionId   String?
-  mcqSetVersionId           String
+  // mcqSetVersionId is null for FREETEXT_ONLY modules (#578) — no multiple-choice component.
+  mcqSetVersionId           String?
   assessmentMode            AssessmentMode         @default(FREETEXT_PLUS_MCQ)
   submissionSchemaJson      String?
   assessmentPolicyJson      String?
@@ -196,7 +198,7 @@ model ModuleVersion {
   activeForModules          Module[]               @relation("ActiveModuleVersion")
   rubricVersion             RubricVersion?         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
   promptTemplateVersion     PromptTemplateVersion? @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
-  mcqSetVersion             MCQSetVersion          @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
+  mcqSetVersion             MCQSetVersion?         @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
   submissions               Submission[]
   assessmentDecisions       AssessmentDecision[]
   llmEvaluations            LLMEvaluation[]

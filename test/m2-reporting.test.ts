@@ -402,13 +402,13 @@ async function createPublishedModule(title: string) {
     data: {
       moduleId: module.id,
       versionNo: 1,
-      title: sourceModuleVersion!.mcqSetVersion.title,
+      title: sourceModuleVersion!.mcqSetVersion!.title,
     },
     select: { id: true },
   });
 
   await prisma.mCQQuestion.createMany({
-    data: sourceModuleVersion!.mcqSetVersion.questions.map((question) => ({
+    data: sourceModuleVersion!.mcqSetVersion!.questions.map((question) => ({
       mcqSetVersionId: mcqSetVersion.id,
       moduleId: module.id,
       stem: question.stem,

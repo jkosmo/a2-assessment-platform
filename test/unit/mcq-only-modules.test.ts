@@ -66,4 +66,32 @@ describe("moduleVersionBodySchema (assessmentMode)", () => {
     });
     expect(parsed.success).toBe(true);
   });
+
+  // #578 — FREETEXT_ONLY: free-text fields required, no MCQ set.
+  it("accepts a FREETEXT_ONLY module with free-text fields and no MCQ set", () => {
+    const parsed = moduleVersionBodySchema.safeParse({
+      assessmentMode: "FREETEXT_ONLY",
+      taskText: "Do the task",
+      rubricVersionId: "rub-1",
+      promptTemplateVersionId: "prompt-1",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a FREETEXT_ONLY module missing taskText/rubric/prompt", () => {
+    const parsed = moduleVersionBodySchema.safeParse({
+      assessmentMode: "FREETEXT_ONLY",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a FREETEXT_PLUS_MCQ module missing the MCQ set", () => {
+    const parsed = moduleVersionBodySchema.safeParse({
+      assessmentMode: "FREETEXT_PLUS_MCQ",
+      taskText: "Do the task",
+      rubricVersionId: "rub-1",
+      promptTemplateVersionId: "prompt-1",
+    });
+    expect(parsed.success).toBe(false);
+  });
 });

@@ -53,7 +53,8 @@ type CreateModuleVersionInput = {
   assessmentBlueprint?: string;
   rubricVersionId?: string | null;
   promptTemplateVersionId?: string | null;
-  mcqSetVersionId: string;
+  // #578: absent for FREETEXT_ONLY modules.
+  mcqSetVersionId?: string | null;
   submissionSchemaJson?: string;
   assessmentPolicyJson?: string;
 };
@@ -559,14 +560,21 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
   const versionNo = await getNextVersionNo("module", input.moduleId);
 
   const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
+  const isFreetextOnly = input.assessmentMode === "FREETEXT_ONLY";
 
-  // MCQ set is always required and must belong to this module.
-  const mcqSet = await adminContentRepository.findMcqSetSummary(input.mcqSetVersionId);
-  if (!mcqSet || mcqSet.moduleId !== input.moduleId) {
-    throw new Error("MCQ set version is missing or belongs to another module.");
+  // MCQ set is required for every mode except FREETEXT_ONLY (#578), and must belong to this module.
+  if (!isFreetextOnly) {
+    if (!input.mcqSetVersionId) {
+      throw new Error("MCQ set version is required for this module type.");
+    }
+    const mcqSet = await adminContentRepository.findMcqSetSummary(input.mcqSetVersionId);
+    if (!mcqSet || mcqSet.moduleId !== input.moduleId) {
+      throw new Error("MCQ set version is missing or belongs to another module.");
+    }
   }
 
-  // Rubric + prompt are only validated for FREETEXT_PLUS_MCQ modules (#525).
+  // Rubric + prompt are validated for the free-text modes (FREETEXT_PLUS_MCQ + FREETEXT_ONLY),
+  // not for MCQ_ONLY (#525/#578).
   if (!isMcqOnly) {
     if (!input.rubricVersionId || !input.promptTemplateVersionId) {
       throw new Error("Rubric and prompt template are required for free-text modules.");
@@ -574,7 +582,8 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     const [rubric, promptTemplate] = await adminContentRepository.findVersionDependencies({
       rubricVersionId: input.rubricVersionId,
       promptTemplateVersionId: input.promptTemplateVersionId,
-      mcqSetVersionId: input.mcqSetVersionId,
+      // mcqSet is validated above; "" yields a null 3rd result which we ignore here.
+      mcqSetVersionId: input.mcqSetVersionId ?? "",
     });
     if (!rubric || rubric.moduleId !== input.moduleId) {
       throw new Error("Rubric version is missing or belongs to another module.");
@@ -594,7 +603,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     assessmentBlueprint: input.assessmentBlueprint,
     rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
     promptTemplateVersionId: isMcqOnly ? null : input.promptTemplateVersionId,
-    mcqSetVersionId: input.mcqSetVersionId,
+    mcqSetVersionId: isFreetextOnly ? null : input.mcqSetVersionId,
     submissionSchemaJson: input.submissionSchemaJson,
     assessmentPolicyJson: input.assessmentPolicyJson,
   });

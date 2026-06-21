@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.44 - 2026-06-21
+
+feat(module): FREETEXT_ONLY — datamodell + vurderings-pipeline (#578 slice 1)
+
+Fundamentet for «Kun Fritekst»-modultype (fritekst + LLM-vurdering, ingen MCQ). Kun backend —
+forfatter-/deltaker-UI kommer i senere skiver.
+- **Datamodell:** `AssessmentMode` += `FREETEXT_ONLY`; `ModuleVersion.mcqSetVersionId` (+ relasjon)
+  gjort nullable (migrasjon `20260621120000_freetext_only_modules`, expand-contract).
+- **Validering:** `moduleVersionBodySchema` — `mcqSetVersionId` valgfri + refine per modus
+  (FREETEXT_ONLY krever taskText+rubrikk+prompt, ingen mcqSet; FREETEXT_PLUS_MCQ krever begge).
+- **Pipeline:** `runAssessment` slipper MCQ-kravet for FREETEXT_ONLY og kjører LLM-stien;
+  `resolveAssessmentDecision` får `freetextOnly`-flagg → rubrikk skaleres til 0–100, ingen
+  MCQ-gate, rødflagg/manuell-vurdering beholdt. `createModuleVersion` validerer mcqSet kun for
+  modi som har det.
+- **Tester:** enhetstester for FREETEXT_ONLY-skåring (0–100, ingen MCQ-gate, manuell-vurdering
+  bevart) + schema-validering. tsc rent. (Ende-til-ende-integrasjon + UI i senere skiver.)
+
 ## 1.3.43 - 2026-06-21
 
 chore(process): `setHidden`-helper + «kartlegg full UI-flate»-stående ordre (retro)
