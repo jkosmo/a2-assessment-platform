@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.31 - 2026-06-21
+
+feat(author): avansert-editor IA — fjern nummerering + modultype på topp (#554, del 1)
+
+Første del av den omforente forfatter-IA-en (avansert-editoren):
+- **Fjernet «N)»-nummereringen** fra alle seksjonstitler (import/modul/åpne/status/rubric/prompt/
+  MCQ/modulversjon/publiser + JSON-fallback) på tvers av en/nb/nn. Nummereringen var hullete
+  (betinget skjulte seksjoner) og fantes ikke andre steder i UI-et.
+- **«Modultype» som egen topp-seksjon** (etter status, før innhold): MCQ-only-vekslingen + terskel
+  flyttet ut av «Modulversjon»-seksjonen hit. Modultype gater nå innholdet.
+- **MCQ-only skjuler fritekst-innhold:** rubric- og prompt-seksjonene (rå JSON) + rubric/prompt/
+  innleveringsskjema-kortene i Innholdsoversikt skjules når Kun MCQ er valgt.
+
+Test: 30 e2e grønne (inkl. MCQ-only-author-e2e), 63 admin-content kontrakt-/i18n-tester, tsc rent.
+
+Gjenstår av omleggingen: #555 (samtale-shell skal følge samme rekkefølge — egen runde, krever
+arbeid i tilstandsmaskinen `admin-content-shell.js`).
+
 ## 1.3.30 - 2026-06-21
 
 fix(participant): MCQ-only 409 ved innlevering + fullførings-flyt (staging-tilbakemelding runde 3)

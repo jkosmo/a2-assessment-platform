@@ -3748,12 +3748,26 @@ deleteModuleButton.addEventListener("click", async () => {
 });
 
 // #525/#546: toggle the free-text authoring fields + MCQ threshold based on the MCQ-only switch.
+// #554: free-text-only sections + content cards that should disappear for MCQ-only modules, so the
+// author never deals with rubric/prompt/free-text when the module is MCQ-only.
+const MCQ_ONLY_HIDDEN_ELEMENT_IDS = [
+  "sectionRubric",
+  "sectionPrompt",
+  "contentCard_rubric",
+  "contentCard_prompt",
+  "contentCard_submissionSchema",
+];
+
 function applyMcqOnlyAuthoringVisibility() {
   const mcqOnly = moduleVersionMcqOnlyInput?.checked === true;
-  // Both are plain <div>s (no class overriding the [hidden] attribute after the #546 layout
-  // cleanup), so the hidden property works directly (#525/#546).
+  // Plain elements (no class overriding the [hidden] attribute after the #546 layout cleanup),
+  // so the hidden property works directly (#525/#546/#554).
   if (moduleVersionFreetextFields) moduleVersionFreetextFields.hidden = mcqOnly;
   if (moduleVersionMcqThresholdRow) moduleVersionMcqThresholdRow.hidden = !mcqOnly;
+  for (const id of MCQ_ONLY_HIDDEN_ELEMENT_IDS) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = mcqOnly;
+  }
 }
 moduleVersionMcqOnlyInput?.addEventListener("change", applyMcqOnlyAuthoringVisibility);
 applyMcqOnlyAuthoringVisibility();
