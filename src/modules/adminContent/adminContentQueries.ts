@@ -289,9 +289,9 @@ export async function buildModuleExportEnvelope(
     throw new Error("Module has no versions to export.");
   }
 
-  // #525/#547: MCQ_ONLY modules have no rubric or prompt template — those are only required for
-  // free-text (FREETEXT_PLUS_MCQ) modules.
+  // #525/#547/#578: MCQ_ONLY modules have no rubric/prompt; FREETEXT_ONLY modules have no MCQ set.
   const isMcqOnly = moduleVersion.assessmentMode === "MCQ_ONLY";
+  const isFreetextOnly = moduleVersion.assessmentMode === "FREETEXT_ONLY";
 
   const rubricVersion =
     bundle.versions.rubricVersions.find((v) => v.id === moduleVersion.rubricVersionId)
@@ -313,7 +313,7 @@ export async function buildModuleExportEnvelope(
     bundle.versions.mcqSetVersions.find((v) => v.id === moduleVersion.mcqSetVersionId)
     ?? bundle.versions.mcqSetVersions[0]
     ?? null;
-  if (!mcqSetVersion) {
+  if (!mcqSetVersion && !isFreetextOnly) {
     throw new Error("Module has no MCQ-set versions to export.");
   }
 
@@ -352,19 +352,22 @@ export async function buildModuleExportEnvelope(
               active: true,
             }
           : (null as never),
-        mcqSet: {
-          title: mcqSetVersion.title as never,
-          // #557: omit rationale entirely when absent instead of emitting `rationale: null`
-          // (which the import schema rejected).
-          questions: (mcqSetVersion.questions as Array<Record<string, unknown>>).map((q) => {
-            if (q.rationale == null) {
-              const { rationale: _drop, ...rest } = q;
-              return rest;
+        // #578: FREETEXT_ONLY modules have no MCQ set — emit null.
+        mcqSet: mcqSetVersion
+          ? {
+              title: mcqSetVersion.title as never,
+              // #557: omit rationale entirely when absent instead of emitting `rationale: null`
+              // (which the import schema rejected).
+              questions: (mcqSetVersion.questions as Array<Record<string, unknown>>).map((q) => {
+                if (q.rationale == null) {
+                  const { rationale: _drop, ...rest } = q;
+                  return rest;
+                }
+                return q;
+              }) as never,
+              active: true,
             }
-            return q;
-          }) as never,
-          active: true,
-        },
+          : (null as never),
         audit: {
           publishedAt: moduleVersion.publishedAt ? new Date(moduleVersion.publishedAt).toISOString() : null,
           publishedBy: moduleVersion.publishedBy ?? null,

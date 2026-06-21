@@ -1,12 +1,24 @@
-# MCQ-only modules — author guide
+# Module types — author guide
 
-A module can be **MCQ-only**: the participant answers multiple-choice questions only, with **no
-free-text answer and no LLM evaluation**. Pass/fail is decided purely by the MCQ score against a
-threshold. Use this for knowledge checks where a written deliverable isn't needed — it is faster
-and cheaper (deterministic grading, no LLM call).
+A module has one of **three assessment types**, chosen at creation (and changeable when you
+regenerate / re-save):
 
-The alternative (and default) mode is **free-text + MCQ**, where the participant submits a written
-answer that is graded by the LLM in addition to the MCQ.
+- **Free-text + MCQ** (default) — the participant submits a written answer graded by the LLM **and**
+  answers multiple-choice questions.
+- **Free-text only** (#578) — a written answer graded by the LLM, **no MCQ**. The score spans the
+  full 0–100 from the rubric; there is no MCQ component. Use it for essay/reflection modules.
+- **MCQ-only** — multiple-choice questions only, **no free-text and no LLM evaluation**. Pass/fail is
+  decided purely by the MCQ score against a threshold (default 70%). Fast and cheap (deterministic
+  grading, no LLM call) — use it for knowledge checks.
+
+You pick the type in the **conversation** («Hva slags modul er dette?» after the source step) or in
+the **advanced editor** (the *Module type* radio). The rest of this guide focuses on the two
+non-default types.
+
+## MCQ-only modules
+
+The participant answers multiple-choice questions only, with **no free-text answer and no LLM
+evaluation** — pass/fail is decided purely by the MCQ score against a threshold.
 
 ## Create an MCQ-only module (advanced editor)
 
@@ -43,7 +55,25 @@ assessment plan → questions).
 > asks the module-type question after the source step — so you can pick or switch to **“MCQ only”**
 > there too. Saving then writes a new MCQ-only version.
 
-## What the participant sees
+## Free-text-only modules (#578)
+
+A **free-text-only** module is like free-text + MCQ but **without the MCQ**: the participant writes
+an answer that the LLM assesses against the rubric, and that's it.
+
+- **Create (conversation):** choose **“Free-text only”** at the module-type question. The flow runs
+  scenario → certification level → assessment plan → draft, then goes straight to save (no MCQ
+  generation step). The saved version has `assessmentMode=FREETEXT_ONLY` and no MCQ set.
+- **Create (advanced editor):** pick **“Free-text only”** in the *Module type* radio. The free-text
+  fields + rubric + evaluation instruction stay; the MCQ card/section and pass-threshold disappear.
+- **Scoring:** the rubric score spans the full **0–100** (there is no MCQ band), and there is no MCQ
+  gate. Red flags and manual-review routing work exactly as for free-text + MCQ.
+
+### What the participant sees (free-text-only)
+
+- The free-text answer fields are shown (no MCQ section). After submitting, the assessment runs
+  directly on the written answer — there is no MCQ step.
+
+## What the participant sees (MCQ-only)
 
 - Selecting an MCQ-only module goes **straight to the questions** — there is no “create
   submission” / free-text step.

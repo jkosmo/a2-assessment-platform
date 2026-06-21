@@ -329,3 +329,82 @@ describe("#547 MCQ-only module export-import round-trip", () => {
     expect(verifyResponse.body.envelope.module.activeVersion.mcqSet.questions).toHaveLength(1);
   });
 });
+
+// #578: FREETEXT_ONLY modules have taskText + rubric + prompt but NO MCQ set. Export must not
+// require the MCQ set, and the round-trip must preserve assessmentMode=FREETEXT_ONLY with mcqSet null.
+describe("#578 FREETEXT_ONLY module export-import round-trip", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function setupFreetextOnlyModule(suffix: string) {
+    const createResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: { "en-GB": `Free-text-only source ${suffix}`, nb: `Kun-fritekst kilde ${suffix}`, nn: `Berre-fritekst kjelde ${suffix}` },
+        description: { "en-GB": "Free-text-only source", nb: "Kun fritekst", nn: "Berre fritekst" },
+        certificationLevel: "basic",
+      });
+    expect(createResponse.status).toBe(201);
+    const moduleId = createResponse.body.module.id as string;
+
+    const rubric = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/rubric-versions`)
+      .set(adminHeaders)
+      .send({ criteria: { relevance: "0-4", quality: "0-4" }, scalingRule: { practical_weight: 100, max_total: 20 } });
+    expect(rubric.status).toBe(201);
+    const rubricVersionId = rubric.body.rubricVersion.id as string;
+
+    const prompt = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/prompt-template-versions`)
+      .set(adminHeaders)
+      .send({ systemPrompt: { "en-GB": "Sys", nb: "Sys", nn: "Sys" }, userPromptTemplate: { "en-GB": "Eval", nb: "Eval", nn: "Eval" }, examples: [] });
+    expect(prompt.status).toBe(201);
+    const promptTemplateVersionId = prompt.body.promptTemplateVersion.id as string;
+
+    const moduleVersion = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions`)
+      .set(adminHeaders)
+      .send({
+        assessmentMode: "FREETEXT_ONLY",
+        taskText: { "en-GB": "Write an essay", nb: "Skriv et essay", nn: "Skriv eit essay" },
+        assessorExpectedContent: { "en-GB": "Depth", nb: "Dybde", nn: "Djupne" },
+        rubricVersionId,
+        promptTemplateVersionId,
+      });
+    expect(moduleVersion.status).toBe(201);
+    expect(moduleVersion.body.moduleVersion.assessmentMode).toBe("FREETEXT_ONLY");
+    return { moduleId };
+  }
+
+  it("exports a FREETEXT_ONLY module (no MCQ set) and re-imports it preserving the mode", async () => {
+    const { moduleId } = await setupFreetextOnlyModule("A");
+
+    const exportResponse = await request(app)
+      .get(`/api/admin/content/modules/${moduleId}/export-package`)
+      .set(adminHeaders);
+    expect(exportResponse.status).toBe(200);
+    const envelope = exportResponse.body.envelope;
+    expect(envelope.module.activeVersion.assessmentMode).toBe("FREETEXT_ONLY");
+    expect(envelope.module.activeVersion.mcqSet ?? null).toBeNull();
+    expect(envelope.module.activeVersion.taskText).toEqual(expect.objectContaining({ "en-GB": "Write an essay" }));
+    expect(envelope.module.activeVersion.rubric).not.toBeNull();
+
+    const importResponse = await request(app)
+      .post("/api/admin/content/modules/import")
+      .set(otherAdminHeaders)
+      .send({ mode: "createNew", payload: envelope });
+    expect(importResponse.status).toBe(201);
+    const newModuleId = importResponse.body.moduleId as string;
+    expect(newModuleId).not.toBe(moduleId);
+
+    const verifyResponse = await request(app)
+      .get(`/api/admin/content/modules/${newModuleId}/export-package`)
+      .set(adminHeaders);
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.envelope.module.activeVersion.assessmentMode).toBe("FREETEXT_ONLY");
+    expect(verifyResponse.body.envelope.module.activeVersion.mcqSet ?? null).toBeNull();
+    expect(verifyResponse.body.envelope.module.activeVersion.taskText).toEqual(expect.objectContaining({ "en-GB": "Write an essay" }));
+  });
+});
