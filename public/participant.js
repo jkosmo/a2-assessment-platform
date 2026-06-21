@@ -3,6 +3,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, appl
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
@@ -662,9 +663,9 @@ function renderSelectedModuleSummary() {
   // class (defined earlier in the cascade, no !important). Gate via inline style.display so an
   // MCQ-only module (taskText == null) doesn't show an empty OPPGAVE/VEILEDNING brief (#525 follow-up).
   if (selectedModuleCandidateConstraintsSection) {
-    selectedModuleCandidateConstraintsSection.style.display = constraints ? "" : "none";
+    setHidden(selectedModuleCandidateConstraintsSection, !constraints);
   }
-  selectedModuleBrief.style.display = selectedModule && selectedModule.taskText ? "" : "none";
+  setHidden(selectedModuleBrief, !(selectedModule && selectedModule.taskText));
   renderSubmissionFields(getSubmissionFields(selectedModule));
   updateModuleSelectionVisibility(Boolean(selectedModule));
 }

@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.43 - 2026-06-21
+
+chore(process): `setHidden`-helper + «kartlegg full UI-flate»-stående ordre (retro)
+
+Etter retrospektiv på 6 bugger/5 deploys (1.3.37→1.3.42), de fleste «riktig fiks, ufullstendig flate»:
+- **Ny `public/static/dom-visibility.js` med `setHidden(el, hidden)`** — bruker `style.display`, robust
+  mot den tilbakevendende `.hidden`/display-klasse-cascade-fellen. `participant.js` bruker den nå for
+  oppgave-brief (adferds-identisk; e2e uendret grønn).
+- **Ny stående ordre i CLAUDE.md + AGENTS.md:** «Map the full UI surface before building/fixing» —
+  enumerér alle innganger/flater (grep label på tvers), e2e følger anbefalt brukerreise ikke kode-sti,
+  grep søsken-sekvenser ved «flytt et steg», og bruk `setHidden` for betinget synlighet.
+- Ingen brukerendring (refaktor + docs).
+
 ## 1.3.42 - 2026-06-21
 
 fix(participant): MCQ-only resultat-visning — skjul tom oppgave-brief + diskret retry (#525-oppfølging)

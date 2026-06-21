@@ -118,6 +118,30 @@ is built**, and must be runnable **without a staging deploy**:
    first (or at least alongside) forces you to run the real path early, which is where these
    integration bugs surface.
 
+### Map the full UI surface before building/fixing (standing order)
+
+Established 2026-06-21 after a retrospective: a wave of authoring/MCQ-only work produced **6 bugs
+across 5 deploys (v1.3.37→1.3.42)**, almost all of the form *"correct fix, incomplete surface"* —
+the fix landed in the one code path in the screenshot, while sibling paths produced the next bug.
+
+1. **Enumerate every entry point and every surface before coding.** A behaviour usually appears in
+   more than one place. Module creation has **two** entries (the library "create module" dialog
+   `#348` → conversation regen, AND the conversation idle "new module"); a course certificate shows
+   in **three** places (result banner, `/participant/completed`, `/profile`). `grep` the feature
+   name / i18n label across **all** pages first, list the paths, and fix them in the same PR.
+2. **E2e must follow the documented/recommended user journey — not the code path you happened to
+   build.** A green e2e that exercises the convenient path gives false confidence when users take a
+   different one. (We shipped a module-type step into a flow users don't use; the e2e passed.)
+3. **For "move/reorder a step" changes, grep where else that sequence occurs** before editing
+   (scenario/source ordering lived in new-module + regen + external-LLM handoff — only one was
+   fixed at first).
+4. **Conditional visibility: use `setHidden(el, on)` (`public/static/dom-visibility.js`), never the
+   `.hidden` class or `[hidden]` attribute on an element that has a `display`-setting class**
+   (`.row`/`.inline`/`.card`/`.content-card`/`.module-brief`/`.summary-grid`…). `.hidden` is
+   `display:none` without `!important` and loses the cascade to those class rules, so the element
+   never hides. This is a **recurring** trap — assume any `.row`/`.card`/grid element needs
+   `setHidden` / inline `style.display`, and assert it actually hides in the e2e.
+
 ### Which deploy workflow to use
 
 | Type of change | Use workflow | Why |
