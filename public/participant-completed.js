@@ -531,6 +531,7 @@ function renderCourseCertificates(completions) {
       ${cc.certificationLevel ? `<div class="small" style="margin-top:2px">${escapeHtmlC(t("courseCert.certLevel"))}: ${escapeHtmlC(cc.certificationLevel)}</div>` : ""}
       <div class="small" style="margin-top:4px">${escapeHtmlC(t("courseCert.completedAt"))}: ${formatDateTime(cc.completedAt)}</div>
       <div class="small" style="color:var(--color-text-soft)">${escapeHtmlC(t("courseCert.certificateId"))}: <code>${escapeHtmlC(cc.certificateId)}</code></div>
+      <div style="margin-top:6px"><a href="/certificate?id=${encodeURIComponent(cc.certificateId)}" target="_blank" rel="noopener" class="workspace-nav-link">${escapeHtmlC(t("courseCert.view"))}</a></div>
     `;
     courseCertList.appendChild(card);
   }

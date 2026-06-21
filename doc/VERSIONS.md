@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.38 - 2026-06-21
+
+feat(participant): utskrivbart kursbevis ved kursfullføring (#550)
+
+- **Nytt bevis-view:** `/certificate?id=<bevis-ID>` viser et rent, utskrivbart kursbevis (kursnavn,
+  deltakernavn, fullføringsdato, sertifiseringsnivå, antall moduler, bevis-ID) med «Skriv ut / lagre
+  som PDF» (`window.print()` + print-CSS — dependency-fritt).
+- **Backend:** `GET /api/courses/completions/:certificateId` (eier-scopet — 404 for andres bevis).
+  Ny repo-metode `findCourseCompletionByCertificateId`.
+- **Lenker:** «Vis bevis» fra bevis-banneret i kursvisningen (`participant.js`) og «Vis / skriv ut
+  bevis» fra «Mine kursbevis» (`participant-completed.js`).
+- Feiringen (konfetti + completion-toast + bevis-banner) fra #549/#550 var allerede på plass; denne
+  skiva legger til selve det visbare/utskrivbare beviset.
+- **Test:** 3 nye Playwright-e2e (render, ikke-funnet, manglende id) + backend-integrasjonstest
+  (eier 200 + annen bruker 404). i18n i en-GB/nb/nn. Bruker-doc: `COURSE_CERTIFICATES_GUIDE.md`.
+
 ## 1.3.37 - 2026-06-21
 
 fix(author): regenerer-flyt følger også kilde-først-rekkefølgen (#555)

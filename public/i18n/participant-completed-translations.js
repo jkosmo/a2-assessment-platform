@@ -40,6 +40,7 @@ const extraTranslations = {
     "courseCert.completedAt": "Completed",
     "courseCert.certificateId": "Certificate ID",
     "courseCert.certLevel": "Level",
+    "courseCert.view": "View / print certificate",
   },
   nb: {
     "nav.profile": "Profil",
@@ -73,6 +74,7 @@ const extraTranslations = {
     "courseCert.completedAt": "Fullført",
     "courseCert.certificateId": "Bevis-ID",
     "courseCert.certLevel": "Nivå",
+    "courseCert.view": "Vis / skriv ut bevis",
   },
   nn: {
     "nav.profile": "Profil",
@@ -106,6 +108,7 @@ const extraTranslations = {
     "courseCert.completedAt": "Fullført",
     "courseCert.certificateId": "Bevis-ID",
     "courseCert.certLevel": "Nivå",
+    "courseCert.view": "Vis / skriv ut bevis",
   },
 };
 

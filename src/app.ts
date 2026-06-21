@@ -59,6 +59,11 @@ app.get("/participant/completed", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant-completed.html"));
 });
 
+// #550: printable course certificate view (reads ?id=<certificateId>).
+app.get("/certificate", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "certificate.html"));
+});
+
 // v1.2.18 (#352): retire transitional routes.
 // - GET /admin-content?moduleId=X → 301 to canonical /admin-content/module/X/conversation
 // - GET /admin-content/advanced (no module context) → 301 to /admin-content (library)

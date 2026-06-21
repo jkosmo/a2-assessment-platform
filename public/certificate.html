@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A2 Course Certificate</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <style>
+      .cert-toolbar { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; margin-bottom: calc(var(--space-1) * 1.5); }
+      .cert-toolbar .spacer { flex: 1; }
+      .cert-wrap { display: flex; justify-content: center; }
+      .certificate {
+        width: 100%;
+        max-width: 720px;
+        border: 2px solid var(--color-border, #cbd5e1);
+        border-radius: 12px;
+        padding: 48px 56px;
+        text-align: center;
+        background: var(--color-bg, #fff);
+        box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+      }
+      .cert-kicker { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-meta, #64748b); }
+      .cert-heading { font-size: 30px; margin: 8px 0 28px; font-weight: 700; }
+      .cert-label { font-size: 14px; color: var(--color-meta, #64748b); margin: 18px 0 6px; }
+      .cert-name { font-size: 28px; font-weight: 700; margin: 4px 0; }
+      .cert-course { font-size: 22px; font-weight: 600; margin: 4px 0 8px; }
+      .cert-meta { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin-top: 28px; }
+      .cert-meta div { font-size: 14px; }
+      .cert-meta .cert-meta-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-meta, #64748b); }
+      .cert-id { margin-top: 28px; font-size: 11px; color: var(--color-meta, #64748b); }
+      .cert-id code { font-family: monospace; font-size: 12px; }
+      .cert-rule { border: none; border-top: 1px solid var(--color-border, #e2e8f0); margin: 24px 0; }
+      .cert-state { text-align: center; padding: 40px; color: var(--color-meta, #64748b); }
+      @media print {
+        .no-print { display: none !important; }
+        body { background: #fff; }
+        .layout-container { max-width: none; margin: 0; padding: 0; }
+        .certificate { border-color: #333; box-shadow: none; max-width: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="main-content" class="layout-container">
+      <div class="cert-toolbar no-print">
+        <a href="/participant" class="workspace-nav-link" data-i18n="certificate.back">Back to courses</a>
+        <span class="spacer"></span>
+        <button id="printBtn" class="btn-primary" data-i18n="certificate.print">Print / save as PDF</button>
+        <span id="appVersion" class="version-badge">…</span>
+        <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
+        <select id="localeSelect" class="locale-select-compact"></select>
+      </div>
+
+      <div class="cert-wrap">
+        <div id="certState" class="cert-state" data-i18n="certificate.loading">Loading certificate…</div>
+        <div id="certificate" class="certificate" hidden>
+          <div class="cert-kicker">A2 Assessment Platform</div>
+          <div class="cert-heading" data-i18n="certificate.heading">Certificate of completion</div>
+          <div class="cert-label" data-i18n="certificate.awardedTo">This certifies that</div>
+          <div class="cert-name" id="certName"></div>
+          <div class="cert-label" data-i18n="certificate.completedCourse">has successfully completed the course</div>
+          <div class="cert-course" id="certCourse"></div>
+          <hr class="cert-rule" />
+          <div class="cert-meta">
+            <div>
+              <div class="cert-meta-label" data-i18n="certificate.completedAt">Completed</div>
+              <div id="certCompletedAt"></div>
+            </div>
+            <div>
+              <div class="cert-meta-label" data-i18n="certificate.certLevel">Certification level</div>
+              <div id="certLevel"></div>
+            </div>
+            <div id="certModulesWrap">
+              <div class="cert-meta-label" data-i18n="certificate.modules">Modules completed</div>
+              <div id="certModules"></div>
+            </div>
+          </div>
+          <div class="cert-id"><span data-i18n="certificate.certId">Certificate ID</span>: <code id="certId"></code></div>
+        </div>
+      </div>
+    </main>
+    <script src="/static/i18n/certificate-translations.js" type="module"></script>
+    <script src="/static/certificate.js" type="module"></script>
+  </body>
+</html>

@@ -100,6 +100,85 @@ describe("Course completion issuance", () => {
       }),
     ]);
   });
+
+  // #550: printable certificate view backs onto GET /completions/:certificateId, owner-scoped.
+  it("returns a single completion by certificate id for the owner and 404 for others", async () => {
+    const suffix = Date.now();
+    const ownerHeaders = {
+      "x-user-id": `cert-owner-${suffix}`,
+      "x-user-email": `cert.owner.${suffix}@company.com`,
+      "x-user-name": "Cert Owner",
+      "x-user-department": "Learning",
+      "x-user-roles": "PARTICIPANT",
+      "x-locale": "nb",
+    };
+
+    const owner = await prisma.user.create({
+      data: {
+        externalId: ownerHeaders["x-user-id"],
+        email: ownerHeaders["x-user-email"],
+        name: ownerHeaders["x-user-name"],
+        department: ownerHeaders["x-user-department"],
+      },
+      select: { id: true },
+    });
+
+    const moduleA = await createPublishedModule(`Cert Module A ${suffix}`);
+    const moduleB = await createPublishedModule(`Cert Module B ${suffix}`);
+
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify({ "en-GB": `Cert Course ${suffix}`, nb: `Beviskurs ${suffix}`, nn: `Beviskurs ${suffix}` }),
+        certificationLevel: "intermediate",
+        publishedAt: new Date(),
+        modules: {
+          create: [
+            { moduleId: moduleA.module.id, sortOrder: 1 },
+            { moduleId: moduleB.module.id, sortOrder: 2 },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    await createPassedCertification(owner.id, moduleA);
+    await createPassedCertification(owner.id, moduleB);
+    await checkAndIssueCourseCompletions({ userId: owner.id, moduleId: moduleB.module.id });
+
+    const completion = await prisma.courseCompletion.findFirstOrThrow({
+      where: { userId: owner.id, courseId: course.id },
+      select: { certificateId: true },
+    });
+
+    const ownerResponse = await request(app)
+      .get(`/api/courses/completions/${completion.certificateId}`)
+      .set(ownerHeaders);
+    expect(ownerResponse.status).toBe(200);
+    expect(ownerResponse.body).toEqual(
+      expect.objectContaining({
+        certificateId: completion.certificateId,
+        courseId: course.id,
+        courseTitle: `Beviskurs ${suffix}`,
+        certificationLevel: "intermediate",
+        participantName: "Cert Owner",
+        moduleCount: 2,
+      }),
+    );
+    expect(typeof ownerResponse.body.completedAt).toBe("string");
+
+    // A different participant must not be able to read someone else's certificate.
+    const otherResponse = await request(app)
+      .get(`/api/courses/completions/${completion.certificateId}`)
+      .set({
+        "x-user-id": `cert-other-${suffix}`,
+        "x-user-email": `cert.other.${suffix}@company.com`,
+        "x-user-name": "Cert Other",
+        "x-user-department": "Learning",
+        "x-user-roles": "PARTICIPANT",
+        "x-locale": "nb",
+      });
+    expect(otherResponse.status).toBe(404);
+  });
 });
 
 async function createPublishedModule(title: string) {

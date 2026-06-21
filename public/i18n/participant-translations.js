@@ -300,6 +300,7 @@ export const translations = {
     "courses.module.notStarted": "Not started",
     "courses.module.unavailable": "Module is not available in the participant workspace.",
     "courses.certificate.earned": "Certificate issued",
+    "courses.certificate.view": "View certificate",
   },
   nb: {
     "page.title": "Deltaker testkonsoll",
@@ -596,6 +597,7 @@ export const translations = {
     "courses.module.notStarted": "Ikke startet",
     "courses.module.unavailable": "Modulen er ikke tilgjengelig i deltakerflaten.",
     "courses.certificate.earned": "Sertifikat utstedt",
+    "courses.certificate.view": "Vis bevis",
   },
   nn: {
     "page.title": "Deltakar testkonsoll",
@@ -892,5 +894,6 @@ export const translations = {
     "courses.module.notStarted": "Ikkje starta",
     "courses.module.unavailable": "Modulen er ikkje tilgjengeleg i deltakarflata.",
     "courses.certificate.earned": "Sertifikat utstedt",
+    "courses.certificate.view": "Vis bevis",
   },
 };
