@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.35 - 2026-06-21
+
+feat+fix(author): MCQ length-cue-deteksjon (#551) + kurs-pakke-guard i modul-import
+
+- **#551 MCQ-lengde-cue:** ny deterministisk `detectCorrectAnswerLengthBias` flagger sett der
+  fasiten er lengst i ≥70 % av spørsmålene. Koblet inn i `generateMcqQuestions` (legges i
+  `validationWarnings`), generate-MCQ-ruten returnerer det i `validation.issues`, og samtale-shellen
+  viser nå MCQ-kvalitets-advarsler i «MCQ klar»-boblen (tidligere ble validation-issues ikke vist).
+  Prompten hadde allerede en grundig «Option parity»-regel — den deterministiske sjekken fanger når
+  LLM-en likevel bryter den.
+- **Import-guard:** å importere en **kurs**-pakke via «Importer modul-pakke» ga rå
+  `scope_mismatch`-400. Modul-importen sjekker nå `scope` klient-side og gir en handlingsbar
+  melding («Dette er en kurs-pakke. Importer den fra Kurs-siden …»).
+
+Test: 5 nye unit-tester (lengde-bias-heuristikk), eksisterende llm-gen (44) uendret, 30 e2e, tsc rent.
+
 ## 1.3.34 - 2026-06-21
 
 fix(content): eksport utelater rationale:null → MCQ-spørsmål uten rationale kan re-importeres (#557)

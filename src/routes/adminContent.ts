@@ -985,7 +985,8 @@ adminContentRouter.post("/generate/mcq", generateLimiter, async (request, respon
       questions: result.questions,
       validation: {
         valid: validation.valid,
-        issues: validation.issues,
+        // #551: include the deterministic length-cue warning alongside distractor-quality issues.
+        issues: [...validation.issues, ...(result.validationWarnings ?? [])],
       },
     });
   } catch (err) {

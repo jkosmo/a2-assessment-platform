@@ -1364,6 +1364,47 @@ export async function generateModuleDraft(input: ModuleDraftInput): Promise<Modu
 // MCQ generation (#246)
 // ---------------------------------------------------------------------------
 
+// #551: deterministic guard against the "correct answer is almost always the longest" length cue.
+// The generation prompt already mandates option parity, but the LLM doesn't always comply — this
+// flags sets where the correct option is the longest in a high proportion of questions so the
+// author is prompted to review/regenerate. Exported for unit testing.
+export function detectCorrectAnswerLengthBias(
+  questions: Array<{ options: string[]; correctAnswer: string }>,
+  { minQuestions = 3, ratioThreshold = 0.7 }: { minQuestions?: number; ratioThreshold?: number } = {},
+): { biased: boolean; longestCorrectRatio: number; consideredCount: number } {
+  const considered = questions.filter(
+    (q) => Array.isArray(q.options) && q.options.length >= 2 && typeof q.correctAnswer === "string",
+  );
+  if (considered.length < minQuestions) {
+    return { biased: false, longestCorrectRatio: 0, consideredCount: considered.length };
+  }
+  let longestCorrect = 0;
+  for (const q of considered) {
+    const correct = q.correctAnswer.trim();
+    const correctLen = correct.length;
+    const distractorLengths = q.options
+      .map((o) => o.trim())
+      .filter((o) => o !== correct)
+      .map((o) => o.length);
+    const maxDistractor = distractorLengths.length > 0 ? Math.max(...distractorLengths) : 0;
+    if (correctLen > maxDistractor) longestCorrect++;
+  }
+  const longestCorrectRatio = longestCorrect / considered.length;
+  return {
+    biased: longestCorrectRatio >= ratioThreshold,
+    longestCorrectRatio,
+    consideredCount: considered.length,
+  };
+}
+
+function appendLengthBiasWarning(result: McqGenerationResult): McqGenerationResult {
+  const { biased, longestCorrectRatio } = detectCorrectAnswerLengthBias(result.questions);
+  if (!biased) return result;
+  const pct = Math.round(longestCorrectRatio * 100);
+  const warning = `Length cue: the correct answer is the longest option in ${pct}% of questions — review option parity so the answer isn't guessable by length (#551).`;
+  return { ...result, validationWarnings: [...(result.validationWarnings ?? []), warning] };
+}
+
 export async function generateMcqQuestions(input: McqGenerationInput): Promise<McqGenerationResult> {
   const { systemPrompt, userPrompt } = buildMcqGenerationPrompts(input);
 
@@ -1396,7 +1437,7 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   const first = await attempt(null);
   const sampleText = mcqSampleForLanguageCheck(first);
   if (!isLikelyWrongLocale(sampleText, input.locale)) {
-    return first;
+    return appendLengthBiasWarning(first);
   }
   console.warn(
     `[#444] generateMcqQuestions language mismatch: expected ${input.locale}, detected ${detectDominantLanguage(sampleText)}. Retrying with stronger directive.`,
@@ -1408,7 +1449,7 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
       `[#444] generateMcqQuestions language retry also produced wrong language (expected ${input.locale}). Returning result anyway — operator must verify.`,
     );
   }
-  return second;
+  return appendLengthBiasWarning(second);
 }
 
 function mcqSampleForLanguageCheck(result: McqGenerationResult): string {
