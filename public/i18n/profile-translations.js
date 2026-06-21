@@ -63,6 +63,7 @@ export const translations = {
     "profile.courses.table.completedAt": "Completed",
     "profile.courses.table.level": "Level",
     "profile.courses.table.certificateId": "Certificate ID",
+    "profile.courses.view": "View certificate",
 
     // GDPR rights
     "profile.section.rights": "Your rights",
@@ -149,6 +150,7 @@ export const translations = {
     "profile.courses.table.completedAt": "Fullført",
     "profile.courses.table.level": "Nivå",
     "profile.courses.table.certificateId": "Bevis-ID",
+    "profile.courses.view": "Vis bevis",
 
     "profile.section.rights": "Dine rettigheter",
     "profile.rights.view": "Se mine data",
@@ -232,6 +234,7 @@ export const translations = {
     "profile.courses.table.completedAt": "Fullført",
     "profile.courses.table.level": "Nivå",
     "profile.courses.table.certificateId": "Bevis-ID",
+    "profile.courses.view": "Vis bevis",
 
     "profile.section.rights": "Rettane dine",
     "profile.rights.view": "Sjå dataa mine",

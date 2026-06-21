@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.40 - 2026-06-21
+
+fix(participant): «Vis bevis»-lenke i Profil → Fullførte kurs (#550-oppfølging)
+
+- **Bugfiks (bruker-feedback):** Profil-sidens «Fullførte kurs»-tabell viste Bevis-ID som ren tekst
+  uten lenke. Bevis-ID-kolonnen lenker nå til `/certificate?id=<id>` (åpnes i ny fane), på linje med
+  bevis-banneret og «Mine kursbevis». i18n `profile.courses.view` i en-GB/nb/nn.
+- **Test:** ny Playwright-e2e (profil-tabell → bevis-lenke med riktig href + i18n-label).
+
 ## 1.3.39 - 2026-06-21
 
 fix(author): «Neste» deaktiveres mens kildemateriale hentes (#555-oppfølging)

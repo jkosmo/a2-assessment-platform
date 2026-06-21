@@ -47,6 +47,9 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/certificate") {
     return path.join(publicRoot, "certificate.html");
   }
+  if (requestPath === "/profile") {
+    return path.join(publicRoot, "profile.html");
+  }
   if (/^\/admin-content\/courses\/[^/]+$/.test(requestPath)) {
     return path.join(publicRoot, "admin-content-courses.html");
   }
