@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.42 - 2026-06-21
+
+fix(participant): MCQ-only resultat-visning — skjul tom oppgave-brief + diskret retry (#525-oppfølging)
+
+To funn ved forfatter-test av MCQ-only-modul:
+- **Tom OPPGAVE/VEILEDNING vist:** `selectedModuleBrief` (`.module-brief{display:grid}`) ble skjult
+  via `.hidden`-klassen, men grid-regelen (definert senere i cascaden, ingen `!important`) overstyrte
+  → en tom oppgave-brief vistes for MCQ-only (som ikke har `taskText`). Skjules nå via
+  `style.display` (samme klasse-overstyrings-felle som tidligere). Gjelder også VEILEDNING-seksjonen.
+- **Retry-knapp «helt borte»:** i MCQ-only-stien ble `flowState.resultStatus` satt til `null` og
+  aldri synket etter at resultatet ble hentet → `hasResultStatus` forble false → «Slett innlevering
+  og start på nytt» ble alltid skjult (også ved **stryk**). Nå synkes status + gating re-rendres, så
+  knappen finnes igjen. Ved **bestått** nedtones den til en diskret sekundær-handling
+  (`.reset-flow-discreet`) i stedet for prominent rød knapp.
+- **Test:** utvidet `participant-mcq-only.spec.ts` (brief skjult for MCQ-only / synlig for fritekst;
+  MCQ-only auto-bestått → diskret retry-knapp). 6/6 participant-e2e grønne.
+
 ## 1.3.41 - 2026-06-21
 
 feat(author): modultype-valg i regenerer-flyten (#579)
