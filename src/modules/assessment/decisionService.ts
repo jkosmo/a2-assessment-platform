@@ -180,9 +180,11 @@ export function resolveMcqOnlyDecision(
   mcqMinPercent: number,
 ): { passFailTotal: boolean; decisionReason: string } {
   const passFailTotal = mcqPercentScore >= mcqMinPercent;
+  // Round the displayed score to 2 decimals (raw can be e.g. 66.6666… ) — #546 feedback.
+  const shownScore = Math.round(mcqPercentScore * 100) / 100;
   const decisionReason = passFailTotal
-    ? `Automatic pass: MCQ score ${mcqPercentScore}% meets the required minimum of ${mcqMinPercent}%.`
-    : `Automatic fail: MCQ score ${mcqPercentScore}% is below the required minimum of ${mcqMinPercent}%.`;
+    ? `Automatic pass: MCQ score ${shownScore}% meets the required minimum of ${mcqMinPercent}%.`
+    : `Automatic fail: MCQ score ${shownScore}% is below the required minimum of ${mcqMinPercent}%.`;
   return { passFailTotal, decisionReason };
 }
 

@@ -54,6 +54,17 @@ test("participant: MCQ-only module hides the free-text step; free-text module ke
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
   });
 
+  // #546: selecting an MCQ-only module auto-creates the (empty) submission + starts the MCQ — no
+  // manual "create submission" click. Capture the auto-creation.
+  let submissionCreated = false;
+  await page.route("**/api/submissions", (route: Route) => {
+    submissionCreated = true;
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) });
+  });
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ attemptId: "a1", questions: [] }) }),
+  );
+
   await page.goto("/participant");
   await page.locator("#loadModules").click();
 
@@ -62,6 +73,8 @@ test("participant: MCQ-only module hides the free-text step; free-text module ke
   await expect(page.locator("#submissionFields textarea")).toHaveCount(0);
   await expect(page.locator("#submissionFields")).toContainText("flervalgsspørsmål");
   await expect(page.locator("#ack")).toBeHidden();
+  // #546: submission auto-created on select (MCQ shown directly, no extra click).
+  await expect.poll(() => submissionCreated).toBe(true);
 
   // Switch to the free-text module → the answer textarea + acknowledgement come back.
   // (Selecting a module collapses the list, so re-expand it first.)
