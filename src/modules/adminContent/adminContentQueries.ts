@@ -97,6 +97,7 @@ export async function getModuleContentBundle(moduleId: string) {
     rubricVersionId: version.rubricVersionId,
     promptTemplateVersionId: version.promptTemplateVersionId,
     mcqSetVersionId: version.mcqSetVersionId,
+    assessmentMode: version.assessmentMode,
     publishedBy: version.publishedBy,
     publishedAt: version.publishedAt,
     createdAt: version.createdAt,
@@ -288,11 +289,15 @@ export async function buildModuleExportEnvelope(
     throw new Error("Module has no versions to export.");
   }
 
+  // #525/#547: MCQ_ONLY modules have no rubric or prompt template — those are only required for
+  // free-text (FREETEXT_PLUS_MCQ) modules.
+  const isMcqOnly = moduleVersion.assessmentMode === "MCQ_ONLY";
+
   const rubricVersion =
     bundle.versions.rubricVersions.find((v) => v.id === moduleVersion.rubricVersionId)
     ?? bundle.versions.rubricVersions[0]
     ?? null;
-  if (!rubricVersion) {
+  if (!rubricVersion && !isMcqOnly) {
     throw new Error("Module has no rubric versions to export.");
   }
 
@@ -300,7 +305,7 @@ export async function buildModuleExportEnvelope(
     bundle.versions.promptTemplateVersions.find((v) => v.id === moduleVersion.promptTemplateVersionId)
     ?? bundle.versions.promptTemplateVersions[0]
     ?? null;
-  if (!promptTemplateVersion) {
+  if (!promptTemplateVersion && !isMcqOnly) {
     throw new Error("Module has no prompt-template versions to export.");
   }
 
@@ -325,23 +330,28 @@ export async function buildModuleExportEnvelope(
         certificationLevel: bundle.module.certificationLevel as never,
       },
       activeVersion: {
-        taskText: moduleVersion.taskText as never,
+        assessmentMode: moduleVersion.assessmentMode as never,
+        taskText: (moduleVersion.taskText ?? null) as never,
         assessorExpectedContent: (moduleVersion.assessorExpectedContent ?? null) as never,
         candidateTaskConstraints: (moduleVersion.candidateTaskConstraints ?? null) as never,
         assessmentBlueprint: null,
         submissionSchema: (moduleVersion.submissionSchema ?? null) as never,
         assessmentPolicy: (moduleVersion.assessmentPolicy ?? null) as never,
-        rubric: {
-          criteria: rubricVersion.criteria as Record<string, unknown>,
-          scalingRule: rubricVersion.scalingRule as Record<string, unknown>,
-          active: true,
-        },
-        promptTemplate: {
-          systemPrompt: promptTemplateVersion.systemPrompt as never,
-          userPromptTemplate: promptTemplateVersion.userPromptTemplate as never,
-          examples: (promptTemplateVersion.examples ?? []) as Array<Record<string, unknown>>,
-          active: true,
-        },
+        rubric: rubricVersion
+          ? {
+              criteria: rubricVersion.criteria as Record<string, unknown>,
+              scalingRule: rubricVersion.scalingRule as Record<string, unknown>,
+              active: true,
+            }
+          : (null as never),
+        promptTemplate: promptTemplateVersion
+          ? {
+              systemPrompt: promptTemplateVersion.systemPrompt as never,
+              userPromptTemplate: promptTemplateVersion.userPromptTemplate as never,
+              examples: (promptTemplateVersion.examples ?? []) as Array<Record<string, unknown>>,
+              active: true,
+            }
+          : (null as never),
         mcqSet: {
           title: mcqSetVersion.title as never,
           questions: mcqSetVersion.questions as never,

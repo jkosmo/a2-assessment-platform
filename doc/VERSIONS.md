@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.28 - 2026-06-21
+
+feat(content): MCQ-only import/eksport + bruker-doc (#547, #525)
+
+Siste #525-skive. Modul-pakker støtter nå MCQ-only-moduler ende-til-ende:
+- **Eksport** (`buildModuleExportEnvelope`): kaster ikke lenger på manglende rubric/prompt for
+  MCQ-only; emitter `assessmentMode` + null rubric/prompt/taskText. Bundle-select + transform
+  bærer `assessmentMode`.
+- **Import** (`contentImportService`): MCQ-only-gren — hopper over rubric/prompt-opprettelse,
+  valgfri taskText, setter `assessmentMode`.
+- **Schema:** `moduleExportPayloadSchema.activeVersion` får `assessmentMode` + gjør
+  `taskText`/`rubric`/`promptTemplate` valgfrie/nullbare.
+- **Bonusfiks:** `assessmentPolicy.passRules.totalMin` gjort valgfri — MCQ-only-policy setter kun
+  `mcqMinPercent`, og decisionService defaulter `totalMin`. (Dette var også en latent #546-bug:
+  forfatter-lagring av MCQ-only sendte policy uten totalMin → ville blitt avvist.)
+- **Bruker-doc:** `doc/MCQ_ONLY_MODULES_GUIDE.md` (forfatter-guide: opprett, deltaker-opplevelse,
+  sertifisering, import/eksport).
+
+Test: ny integrasjons-roundtrip-test (MCQ-only eksport→import bevarer assessmentMode, ingen
+rubric/prompt). tsc rent. Logget separat: #557 (rationale:null eksport/import-bug, pre-eksisterende).
+
 ## 1.3.27 - 2026-06-21
 
 fix(mcq-only): UX-batch fra staging-akseptanse + deterministisk MCQ-sensur (#525-oppfølging)

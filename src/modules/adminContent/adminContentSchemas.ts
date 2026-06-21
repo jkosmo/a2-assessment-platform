@@ -114,7 +114,9 @@ export const assessmentPolicyBodySchema = z.object({
     .optional(),
   passRules: z
     .object({
-      totalMin: z.number().min(0).max(100),
+      // #547: optional — MCQ-only policies set only mcqMinPercent; decisionService defaults
+      // totalMin from assessmentRules when absent.
+      totalMin: z.number().min(0).max(100).optional(),
       mcqMinPercent: z.number().min(0).max(100).optional(),
       practicalMinPercent: z.number().min(0).max(100).optional(),
       borderlineWindow: z
@@ -302,14 +304,16 @@ export const moduleExportPayloadSchema = z.object({
     certificationLevel: certificationLevelInputSchema,
   }),
   activeVersion: z.object({
-    taskText: localizedTextSchema,
+    // #525/#547: MCQ_ONLY exports omit taskText/rubric/promptTemplate (no free-text assessment).
+    assessmentMode: assessmentModeSchema.optional(),
+    taskText: localizedTextSchema.nullable().optional(),
     assessorExpectedContent: localizedTextSchema.nullable().optional(),
     candidateTaskConstraints: localizedTextSchema.nullable().optional(),
     assessmentBlueprint: z.string().nullable().optional(),
     submissionSchema: submissionSchemaBodySchema.nullable().optional(),
     assessmentPolicy: assessmentPolicyBodySchema.nullable().optional(),
-    rubric: rubricBodySchema,
-    promptTemplate: promptTemplateBodySchema,
+    rubric: rubricBodySchema.nullable().optional(),
+    promptTemplate: promptTemplateBodySchema.nullable().optional(),
     mcqSet: mcqSetBodySchema,
     audit: exportAuditSchema,
   }),

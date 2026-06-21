@@ -228,6 +228,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               assessmentBlueprint: true,
               submissionSchemaJson: true,
               assessmentPolicyJson: true,
+              assessmentMode: true,
               rubricVersionId: true,
               promptTemplateVersionId: true,
               mcqSetVersionId: true,
