@@ -4,7 +4,9 @@
 // LLM kun for å fetche URL-er.
 
 import { lookup as dnsLookup } from "node:dns/promises";
+import { lookup as dnsLookupCallback } from "node:dns";
 import { isIPv4, isIPv6 } from "node:net";
+import { Agent } from "undici";
 
 import { SOURCE_MATERIAL_MAX_BYTES } from "./sourceMaterialExtractionService.js";
 
@@ -20,10 +22,9 @@ export class UrlFetchError extends Error {
 }
 
 // SSRF: block requests against private IP ranges, loopback, link-local, and cloud
-// metadata endpoints. Resolves hostname via DNS and checks the resulting IP. There's a
-// known TOCTOU window between resolve and fetch where DNS could change (DNS rebinding) —
-// for v1 we accept that risk; mitigation (resolve-once-then-connect-to-IP-with-Host-header)
-// can be added in Phase 1.1 if needed.
+// metadata endpoints. Two layers: (1) assertSafeUrl validates the hostname's resolved IPs up
+// front; (2) the fetch uses ssrfSafeDispatcher whose connect-time lookup re-validates the IP it
+// actually connects to — closing the DNS-rebinding / TOCTOU window (#520).
 const PRIVATE_IPV4_RANGES: Array<[number, number, number]> = [
   // [first-octet, second-octet-min, second-octet-max]
   // RFC 1918 + loopback + link-local + CGNAT
@@ -71,6 +72,58 @@ function isPrivateIp(ip: string): boolean {
   if (isIPv6(ip)) return isPrivateIpv6(ip);
   return false;
 }
+
+// #520: close the DNS-rebinding / TOCTOU window. assertSafeUrl validates the hostname's resolved
+// IPs up front, but a low-TTL attacker record could return a public IP then (the check) and a
+// private IP at connect time (the fetch's own resolve). This custom lookup is the resolution the
+// fetch actually uses to connect, and it re-validates every resolved address — so the IP we connect
+// to is guaranteed public. Exported for unit testing.
+export function createValidatingLookup(
+  resolver: typeof dnsLookupCallback = dnsLookupCallback,
+) {
+  return function validatingLookup(
+    hostname: string,
+    options: Parameters<typeof dnsLookupCallback>[1],
+    callback: (err: NodeJS.ErrnoException | null, address: unknown, family?: number) => void,
+  ): void {
+    const opts = typeof options === "object" && options !== null ? options : {};
+    resolver(hostname, { ...opts, all: true, verbatim: true }, (err, addresses) => {
+      if (err) {
+        callback(err, "", 0);
+        return;
+      }
+      const list = Array.isArray(addresses) ? addresses : [];
+      if (list.length === 0) {
+        callback(new UrlFetchError("dns_failed", `Could not resolve hostname (${hostname}).`), "", 0);
+        return;
+      }
+      for (const entry of list) {
+        if (isPrivateIp(entry.address)) {
+          callback(
+            new UrlFetchError(
+              "private_address",
+              `URL hostname (${hostname}) resolved to a private address (${entry.address}) at connect time.`,
+            ),
+            "",
+            0,
+          );
+          return;
+        }
+      }
+      // All resolved addresses validated as public — hand them to undici (pinned).
+      if ((opts as { all?: boolean }).all) {
+        callback(null, list);
+      } else {
+        callback(null, list[0].address, list[0].family);
+      }
+    });
+  };
+}
+
+// Shared dispatcher whose connect step re-validates the resolved IP (#520).
+const ssrfSafeDispatcher = new Agent({
+  connect: { lookup: createValidatingLookup() as never },
+});
 
 export interface UrlFetchResult {
   extractedText: string;
@@ -134,16 +187,20 @@ const MAX_REDIRECTS = 5;
 async function fetchWithLimit(parsedUrl: URL, signal: AbortSignal): Promise<{ buffer: Buffer; contentType: string }> {
   let currentUrl = parsedUrl;
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+    // Node's global fetch is undici under the hood and honors a `dispatcher` option (not in the
+    // TS RequestInit type), so we keep using global fetch (test-mockable) while routing through the
+    // SSRF-safe dispatcher for connect-time IP re-validation (#520).
     const response = await fetch(currentUrl.toString(), {
       method: "GET",
       redirect: "manual",
       signal,
+      dispatcher: ssrfSafeDispatcher,
       headers: {
         // Be polite: identify ourselves
         "user-agent": "A2AssessmentPlatform/url-fetch (+https://github.com/jkosmo/a2-assessment-platform)",
         accept: "text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5",
       },
-    });
+    } as RequestInit & { dispatcher: unknown });
 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
