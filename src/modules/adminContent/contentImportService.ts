@@ -78,8 +78,9 @@ async function importModulePayload(
     moduleId = newModule.id;
   }
 
-  // #525/#547: MCQ_ONLY modules have no rubric or prompt template — skip them on import.
+  // #525/#547/#578: MCQ_ONLY has no rubric/prompt; FREETEXT_ONLY has no MCQ set — skip on import.
   const isMcqOnly = payload.activeVersion.assessmentMode === "MCQ_ONLY";
+  const isFreetextOnly = payload.activeVersion.assessmentMode === "FREETEXT_ONLY";
 
   const rubric =
     isMcqOnly || !payload.activeVersion.rubric
@@ -102,17 +103,20 @@ async function importModulePayload(
           active: true,
         });
 
-  const mcqSet = await createMcqSetVersion({
-    moduleId,
-    title: serializeRequired(payload.activeVersion.mcqSet.title),
-    active: true,
-    questions: payload.activeVersion.mcqSet.questions.map((question) => ({
-      stem: serializeRequired(question.stem),
-      options: question.options.map((option) => serializeRequired(option)),
-      correctAnswer: serializeRequired(question.correctAnswer),
-      rationale: question.rationale ? serializeRequired(question.rationale) : undefined,
-    })),
-  });
+  const mcqSet =
+    isFreetextOnly || !payload.activeVersion.mcqSet
+      ? null
+      : await createMcqSetVersion({
+          moduleId,
+          title: serializeRequired(payload.activeVersion.mcqSet.title),
+          active: true,
+          questions: payload.activeVersion.mcqSet.questions.map((question) => ({
+            stem: serializeRequired(question.stem),
+            options: question.options.map((option) => serializeRequired(option)),
+            correctAnswer: serializeRequired(question.correctAnswer),
+            rationale: question.rationale ? serializeRequired(question.rationale) : undefined,
+          })),
+        });
 
   const moduleVersion = await createModuleVersion({
     moduleId,
@@ -125,7 +129,7 @@ async function importModulePayload(
     assessmentBlueprint: payload.activeVersion.assessmentBlueprint ?? undefined,
     rubricVersionId: rubric?.id,
     promptTemplateVersionId: promptTemplate?.id,
-    mcqSetVersionId: mcqSet.id,
+    mcqSetVersionId: mcqSet?.id,
     submissionSchemaJson: payload.activeVersion.submissionSchema
       ? JSON.stringify(payload.activeVersion.submissionSchema)
       : undefined,

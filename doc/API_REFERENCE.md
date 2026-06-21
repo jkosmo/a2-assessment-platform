@@ -127,7 +127,7 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 
-#### Module assessment mode (`assessmentMode`) — #525
+#### Module assessment mode (`assessmentMode`) — #525/#578
 
 `POST .../module-versions` accepts an optional `assessmentMode`:
 
@@ -137,6 +137,11 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
   `promptTemplateVersionId` are omitted; only `mcqSetVersionId` is required. Pass/fail is decided
   purely by the MCQ score against a threshold (`assessmentPolicy.passRules.mcqMinPercent`,
   default **70%**).
+- `FREETEXT_ONLY` (#578) — free-text submission graded by the LLM, **no MCQ**. Requires `taskText`,
+  `rubricVersionId` and `promptTemplateVersionId`; `mcqSetVersionId` is omitted. The rubric/practical
+  score spans the full **0–100** (no MCQ band) and there is no MCQ gate. Red-flag / manual-review
+  routing applies as for FREETEXT_PLUS_MCQ. The assessment runs on the free-text submission directly
+  (no MCQ step). Export/import omit the MCQ set (`activeVersion.mcqSet` is `null`).
 
 **Certification invariant (#476/#525):** a course completion / certificate is issued only when a
 participant has **passed all modules** in the course **and read all learning sections**. This is

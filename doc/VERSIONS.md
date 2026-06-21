@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.48 - 2026-06-21
+
+feat(content): FREETEXT_ONLY import/eksport + docs (#578 slice 4 — fullfører #578)
+
+- **Eksport:** `buildModuleExportEnvelope` krever ikke lenger MCQ-sett for FREETEXT_ONLY; emitter
+  `activeVersion.mcqSet = null`. **Import:** `moduleExportPayloadSchema.activeVersion.mcqSet` er
+  nullable; `contentImportService` hopper over MCQ-opprettelse for FREETEXT_ONLY og setter
+  `mcqSetVersionId = null`.
+- **Tester:** ny export-import-roundtrip for FREETEXT_ONLY (bevarer modus + mcqSet null; kjøres i CI
+  verify mot fersk Postgres). tsc rent.
+- **Docs:** `MCQ_ONLY_MODULES_GUIDE.md` generalisert til modultyper (3 typer) med egen Free-text-only-
+  seksjon; `API_REFERENCE.md` dokumenterer `FREETEXT_ONLY`.
+- **#578 «Kun Fritekst» er nå komplett** (backend + samtale + deltaker + Avansert + import/eksport +
+  docs). Klar for samlet deploy.
+
 ## 1.3.47 - 2026-06-21
 
 feat(author): 3-veis modultype-velger i Avansert editor (#578 slice 2b)

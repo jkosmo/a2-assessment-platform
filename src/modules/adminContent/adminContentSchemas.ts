@@ -324,7 +324,8 @@ export const moduleExportPayloadSchema = z.object({
     assessmentPolicy: assessmentPolicyBodySchema.nullable().optional(),
     rubric: rubricBodySchema.nullable().optional(),
     promptTemplate: promptTemplateBodySchema.nullable().optional(),
-    mcqSet: mcqSetBodySchema,
+    // #578: FREETEXT_ONLY exports have no MCQ set.
+    mcqSet: mcqSetBodySchema.nullable().optional(),
     audit: exportAuditSchema,
   }),
 });
