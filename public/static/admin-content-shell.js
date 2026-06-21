@@ -1617,10 +1617,15 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
   sessionDraft = buildPreviewCandidate({ mcqQuestions: localizedQuestions });
   clearPreviewCandidate();
   scrollPreviewToBottom();
+  // #551: surface MCQ quality warnings (incl. the length-cue check) so the author can review.
+  const mcqWarnings = Array.isArray(result?.validation?.issues) ? result.validation.issues : [];
+  const mcqWarningsHtml = mcqWarnings.length > 0
+    ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map(escapeHtml).join("<br>")}</p>`
+    : "";
   logResolveSlot(
     slot,
     () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
-      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
+      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>${mcqWarningsHtml}`,
   );
   onAccept?.(questions);
 }

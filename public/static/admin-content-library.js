@@ -784,6 +784,11 @@ async function init() {
       } catch (parseError) {
         throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
       }
+      // Friendly guard: a course package can't be imported here — point the author to the Kurs page
+      // instead of surfacing the raw scope_mismatch 400 (#563-relatert UX-funn).
+      if (payload?.scope === "course") {
+        throw new Error("Dette er en kurs-pakke. Importer den fra Kurs-siden med «Importer kurs-pakke».");
+      }
       const result = await apiFetch("/api/admin/content/modules/import", getHeaders, {
         method: "POST",
         body: JSON.stringify({ payload, mode: "createNew" }),
