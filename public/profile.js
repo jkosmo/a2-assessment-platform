@@ -334,18 +334,38 @@ function renderCourses(body) {
 
   for (const course of courses) {
     const row = document.createElement("tr");
-    const cells = [
-      { text: localizeContentValue(course.courseTitle ?? course.courseId) },
-      { text: formatDateTime(course.completedAt) },
-      { text: localizeContentValue(course.certificationLevel) },
-      { text: course.certificateId ?? "â€”" },
-    ];
 
-    for (const { text } of cells) {
-      const td = document.createElement("td");
-      td.textContent = text;
-      row.appendChild(td);
+    const titleTd = document.createElement("td");
+    titleTd.textContent = localizeContentValue(course.courseTitle ?? course.courseId);
+    row.appendChild(titleTd);
+
+    const dateTd = document.createElement("td");
+    dateTd.textContent = formatDateTime(course.completedAt);
+    row.appendChild(dateTd);
+
+    const levelTd = document.createElement("td");
+    levelTd.textContent = localizeContentValue(course.certificationLevel);
+    row.appendChild(levelTd);
+
+    // #550: certificate ID + link to the printable certificate view (was ID text only).
+    const certTd = document.createElement("td");
+    if (course.certificateId) {
+      const idSpan = document.createElement("span");
+      idSpan.textContent = course.certificateId;
+      idSpan.style.cssText = "font-family:monospace;font-size:12px";
+      const link = document.createElement("a");
+      link.href = `/certificate?id=${encodeURIComponent(course.certificateId)}`;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = t("profile.courses.view");
+      link.style.cssText = "margin-left:8px";
+      certTd.appendChild(idSpan);
+      certTd.appendChild(link);
+    } else {
+      certTd.textContent = "—";
     }
+    row.appendChild(certTd);
+
     coursesBody.appendChild(row);
   }
 }
