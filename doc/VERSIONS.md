@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.27 - 2026-06-21
+
+fix(mcq-only): UX-batch fra staging-akseptanse + deterministisk MCQ-sensur (#525-oppfølging)
+
+Tilbakemeldinger fra forfatter-/deltaker-test av MCQ-only på staging:
+- **#4 Avrunding:** MCQ-resultat viser nå skår med 2 desimaler (66.67 % i stedet for 66.666…).
+- **#5 Toppmeny-rekkefølge:** content-area-nav er nå **Kurs, Moduler, Seksjoner, Kalibrering**
+  (4 admin-content-sider).
+- **#3 Layout:** «Kun MCQ-modul»-avkrysningen arvet full-bredde tekst-input-styling →
+  checkbox-reset i avansert editor.
+- **#7 MCQ direkte:** å velge en MCQ-only-modul oppretter nå besvarelsen + starter MCQ automatisk
+  (ingen «Opprett besvarelse»-klikk) — MCQ vises direkte.
+- **#8 Deterministisk sensur:** MCQ-only-innlevering behandles nå **synkront** i submit
+  (`processSubmissionJobNow`) — ingen LLM (var allerede skippet) og ingen async-jobb/poll-venting
+  → umiddelbart resultat, lavere kost.
+
+Design-saker logget for avklaring (ikke i denne): #554 (MCQ-only som førsteklasses opprettelses-
+valg), #555 (samtale-rekkefølge scenario/kilde).
+
+Test: oppdatert Playwright-e2e (auto-start ved MCQ-only-valg). tsc rent, 30 e2e + full vitest-suite
+grønn.
+
 ## 1.3.26 - 2026-06-21
 
 feat(author): MCQ-only forfatter-UI i avansert editor (#546, #525)

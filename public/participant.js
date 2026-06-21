@@ -845,6 +845,12 @@ function renderModules() {
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
       activateParticipantModule(module.id);
+      // #546 feedback: MCQ-only modules have no free-text step — go straight to the questions by
+      // creating the (empty) submission + starting the MCQ immediately, instead of requiring the
+      // participant to click "Create submission" first.
+      if (moduleIsMcqOnly(module) && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
+        createSubmissionButton.click();
+      }
     });
 
     const title = document.createElement("div");

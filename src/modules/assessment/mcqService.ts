@@ -2,7 +2,7 @@ import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { mcqRepository } from "./mcqRepository.js";
-import { enqueueAssessmentJob } from "./assessmentJobService.js";
+import { enqueueAssessmentJob, processSubmissionJobNow } from "./assessmentJobService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -135,6 +135,17 @@ export async function submitMcqAttempt(input: {
   await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
   await enqueueAssessmentJob(submission.id);
+
+  // #546 feedback: MCQ-only modules are graded deterministically (no LLM). Process the assessment
+  // synchronously so the participant gets the result immediately, instead of waiting for the async
+  // worker + poll cycle. Falls back to the enqueued job if synchronous processing fails.
+  if (submission.moduleVersion?.assessmentMode === "MCQ_ONLY") {
+    try {
+      await processSubmissionJobNow(submission.id);
+    } catch (error) {
+      console.warn("Synchronous MCQ-only assessment failed; leaving job for async worker.", error);
+    }
+  }
 
   await recordAuditEvent({
     entityType: auditEntityTypes.mcqAttempt,
