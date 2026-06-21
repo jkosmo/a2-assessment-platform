@@ -38,6 +38,11 @@ Since v1.3.36 (#555) the conversation follows the same order as the advanced edi
 Picking **“Free-text + MCQ”** instead keeps the full flow (scenario → certification level →
 assessment plan → questions).
 
+> Since v1.3.41 (#579) the **“Generate new content from source material”** flow (used when you
+> create a module from the library and land in the conversation, or reopen an existing module) also
+> asks the module-type question after the source step — so you can pick or switch to **“MCQ only”**
+> there too. Saving then writes a new MCQ-only version.
+
 ## What the participant sees
 
 - Selecting an MCQ-only module goes **straight to the questions** — there is no “create

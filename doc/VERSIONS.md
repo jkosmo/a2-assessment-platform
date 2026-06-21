@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.41 - 2026-06-21
+
+feat(author): modultype-valg i regenerer-flyten (#579)
+
+- **Bugfiks/feature (forfatter-feedback):** Den anbefalte opprett-veien (biblioteks-dialogen, #348)
+  oppretter modulen og lander i samtalens **«Generer nytt innhold»**-flyt — som *ikke* hadde
+  modultype-steget fra #555. Forfatter så derfor aldri modultype i praksis. Regen-flyten spør nå
+  modultype etter kilde, før scenario — samme som ny-modul-flyten.
+- **Typebytte:** «Fritekst + flervalg» → uendret regen (scenario → vurderingsplan → MCQ).
+  «Kun flervalg» → MCQ-only-generering, lagres som ny `MCQ_ONLY`-versjon (ingen scenario/rubrikk/
+  prompt). Cert-nivå gjenbrukes fra modulen.
+- «Kun Fritekst» kommer når #578 lander (tredje valg).
+- **Test:** to nye e2e (regen: kilde → modultype → scenario; regen → «Kun flervalg» → MCQ-count
+  uten scenario). 37/37 admin-content e2e grønne.
+
 ## 1.3.40 - 2026-06-21
 
 fix(participant): «Vis bevis»-lenke i Profil → Fullførte kurs (#550-oppfølging)
