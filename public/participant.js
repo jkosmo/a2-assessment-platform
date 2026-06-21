@@ -509,6 +509,17 @@ function selectedModuleIsMcqOnly() {
   return moduleIsMcqOnly(resolveSelectedModule(loadedModules, selectedModuleId));
 }
 
+// #578: FREETEXT_ONLY — free-text + LLM assessment, no MCQ. The participant fills in the free-text
+// answer (like FREETEXT_PLUS_MCQ) but there is no MCQ section, and the assessment can run as soon
+// as the submission exists (no MCQ gate).
+function moduleIsFreetextOnly(module) {
+  return module?.assessmentMode === "FREETEXT_ONLY";
+}
+
+function selectedModuleIsFreetextOnly() {
+  return moduleIsFreetextOnly(resolveSelectedModule(loadedModules, selectedModuleId));
+}
+
 function getSubmissionFields(selectedModule) {
   // MCQ-only modules have no free-text deliverable — no submission fields to fill (#525).
   if (moduleIsMcqOnly(selectedModule)) {
@@ -1075,20 +1086,24 @@ function resetFlowStateForModuleContext() {
 }
 
 function renderFlowGating() {
-  const gate = deriveParticipantFlowGateState(flowState);
+  // #578: FREETEXT_ONLY has no MCQ — the assessment unlocks on the free-text submission alone.
+  const freetextOnly = selectedModuleIsFreetextOnly();
+  const gate = deriveParticipantFlowGateState(flowState, { requiresMcq: !freetextOnly });
   const hasAssessmentContext =
-    flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus);
+    flowState.hasMcqSubmission || flowState.assessmentQueued || Boolean(flowState.resultStatus)
+    || (freetextOnly && flowState.hasSubmission);
   const autoAssessmentEnabled = getFlowSettings().autoStartAfterMcq;
   const hasSelectedModule = Boolean(resolveSelectedModule(loadedModules, selectedModuleId));
   const hasPreviewQuestions = currentQuestions.length > 0;
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
-  mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission);
+  // FREETEXT_ONLY has no MCQ section.
+  mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission || freetextOnly);
   setSectionLocked(assessmentSection, !gate.assessmentUnlocked);
   setSectionLocked(appealSection, !gate.appealUnlocked);
   queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
   createSubmissionButton.classList.toggle("hidden", flowState.hasSubmission);
-  submitMcqButton.classList.toggle("hidden", !flowState.hasSubmission || flowState.hasMcqSubmission);
+  submitMcqButton.classList.toggle("hidden", !flowState.hasSubmission || flowState.hasMcqSubmission || freetextOnly);
 
   const hasResultStatus = isAssessmentResultReady(flowState.resultStatus);
   resetSubmissionFlowButton.classList.toggle("hidden", !hasResultStatus);
@@ -2478,14 +2493,22 @@ createSubmissionButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       renderAppealState();
       renderFlowGating();
-      const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id);
-      log({
-        submission: body.submission,
-        mcqStarted: {
-          attemptId: mcqStartBody.attemptId,
-          questionCount: Array.isArray(mcqStartBody.questions) ? mcqStartBody.questions.length : 0,
-        },
-      });
+      // #578: FREETEXT_ONLY has no MCQ — don't start an MCQ attempt (the server would 400). The
+      // assessment runs directly on the free-text submission (auto if enabled, otherwise via the
+      // now-unlocked "Start assessment" button).
+      if (selectedModuleIsFreetextOnly()) {
+        await startAutomaticAssessmentFlow(body.submission.id);
+        log({ submission: body.submission });
+      } else {
+        const mcqStartBody = await startMcqForSubmission(moduleId, body.submission.id);
+        log({
+          submission: body.submission,
+          mcqStarted: {
+            attemptId: mcqStartBody.attemptId,
+            questionCount: Array.isArray(mcqStartBody.questions) ? mcqStartBody.questions.length : 0,
+          },
+        });
+      }
     } catch (error) {
       log(error.message);
     }

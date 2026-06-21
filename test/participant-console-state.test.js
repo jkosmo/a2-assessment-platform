@@ -156,6 +156,26 @@ describe("participant console state helpers", () => {
     expect(completed.appealHintKey).toBe("flow.appealReady");
   });
 
+  it("unlocks assessment without MCQ for FREETEXT_ONLY modules (#578)", () => {
+    // requiresMcq:false → assessment unlocks on the free-text submission alone (no MCQ gate).
+    const freetextOnly = deriveParticipantFlowGateState(
+      { hasSubmission: true, hasMcqSubmission: false, assessmentQueued: false, resultStatus: null },
+      { requiresMcq: false },
+    );
+    expect(freetextOnly.assessmentUnlocked).toBe(true);
+    expect(freetextOnly.assessmentHintKey).toBe("flow.assessmentReady");
+
+    // The default (requiresMcq) still gates on MCQ.
+    const requiresMcq = deriveParticipantFlowGateState({
+      hasSubmission: true,
+      hasMcqSubmission: false,
+      assessmentQueued: false,
+      resultStatus: null,
+    });
+    expect(requiresMcq.assessmentUnlocked).toBe(false);
+    expect(requiresMcq.assessmentHintKey).toBe("flow.assessmentLockedNeedsMcq");
+  });
+
   it("sanitizes configured appeal workspace statuses", () => {
     const statuses = sanitizeAppealStatuses(["open", "IN_REVIEW", "INVALID", "OPEN"], [
       "OPEN",
