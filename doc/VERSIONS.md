@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.55 - 2026-06-22
+
+fix(authoring): chunket komprimering så LLM-forespørsler holder seg under TPM-kvoten (#479)
+
+Retry (v1.3.54) var nødvendig men ikke nok: en *enkelt* for stor forespørsel får aldri plass i
+deployment-ets tokens-per-minutt-kvote (staging **20K**, prod **40K** TPM), så den 429-er for alltid
+uansett retry. Frontend tillater opptil 1M tegn kildemateriale ≈ 250K tokens — komprimerings-kallet
+sendte alt i **ett** kall (12× over kvoten) og kvalte seg selv før det fikk krympet noe; fallbacken
+sendte da det fulle materialet videre → garantert 429 i vurderingsplan + utkast.
+
+`condenseSourceMaterial` deler nå materiale > 30K tegn i biter (~7,5K tokens hver, trygt under TPM),
+komprimerer hver bit sekvensielt (callLlm-retryen sprer dem over minutter så minuttbudsjettet
+respekteres), og slår sammen — med ett ekstra pass hvis summen fortsatt er stor. Da lykkes
+komprimeringen, og de nedstrøms kallene (vurderingsplan/utkast/MCQ) får et lite, krympet input.
+
+`splitIntoChunks` (grense-bevisst splitter) eksportert + unit-testet; chunked condense dekket
+ende-til-ende med mocket fetch. **Anbefaling:** hev TPM-kapasiteten (staging 20→ ?, prod 40→ ?) for
+raskere authoring — chunking gjør store crawls *mulige*, men trege ved 20K TPM.
+
 ## 1.3.54 - 2026-06-22
 
 fix(authoring): retry Azure OpenAI 429/5xx i innholds-genereringen (#479)
