@@ -59,7 +59,10 @@ async function loadPptParser() {
   return pptParserPromise;
 }
 
-export const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
+// #479 (Slice A): raised from 2 MB → 10 MB per file. Sent as base64 in JSON, so the upload route
+// gets a larger express.json body limit (see app.ts). Files above this should use a future
+// multipart path rather than base64-in-JSON.
+export const SOURCE_MATERIAL_MAX_BYTES = 10 * 1024 * 1024;
 
 export const SUPPORTED_SOURCE_MATERIAL_EXTENSIONS = [
   ".txt",

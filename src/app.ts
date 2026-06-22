@@ -35,6 +35,10 @@ const publicStaticPath = path.resolve(publicRootPath, "static");
 app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
 app.use(securityHeadersMiddleware);
+// #479 (Slice A): source-material upload sends files as base64 in JSON (10 MB max → ~13.3 MB
+// encoded). Give just that route a larger body limit; registered before the global parser so it
+// parses first (express.json skips once req._body is set), keeping every other endpoint at 5 MB.
+app.use("/api/admin/content/source-material/extract", express.json({ limit: "16mb" }));
 app.use(express.json({ limit: "5mb" }));
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));

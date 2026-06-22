@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.50 - 2026-06-22
+
+feat(ingest): kildemateriale-grense 2 → 10 MB (#479 Slice A) + skjul irrelevante skåre-rader (#591)
+
+**#479 Slice A — større filer:** per-fil-grensen for kildemateriale-opplasting er hevet fra 2 MB
+til 10 MB (`SOURCE_MATERIAL_MAX_BYTES`). Base64-kodet JSON-body blir ~13,3 MB, så `/api/admin/content/
+source-material/extract` får en egen `express.json({ limit: "16mb" })` registrert før den globale
+5 MB-parseren — alle andre endepunkter beholder 5 MB. UI-hint og feilmeldinger (`admin-content-
+translations.js`, alle locales) oppdatert til «10 MB».
+
+**#591 — skjul irrelevante skåre-komponenter:** resultatsammendraget viser ikke lenger MCQ-poeng for
+FREETEXT_ONLY-moduler eller praktisk poeng for MCQ_ONLY-moduler (alltid 0 → forvirrende). Prinsipp:
+ikke vis brukeren informasjon hen ikke trenger.
+
 ## 1.3.49 - 2026-06-21
 
 fix(assessment): rubrikk-maks utledes fra kriterier, ikke (utdatert) scalingRule.max_total (#578)

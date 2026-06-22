@@ -2182,8 +2182,15 @@ function renderResultSummary(body) {
   appendSummaryRow(summaryGrid, t("result.status"), localizeSubmissionStatus(body.status));
   appendSummaryRow(summaryGrid, t("result.statusExplanation"), localizeStatusExplanation(body.status));
   appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
-  appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
-  appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
+  // #591: only show the score components that actually count for the module type — a 0 from a
+  // component the module doesn't have (MCQ for free-text-only, practical for MCQ-only) just confuses
+  // the participant. Principle: don't show information the user doesn't need.
+  if (!selectedModuleIsFreetextOnly()) {
+    appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
+  }
+  if (!selectedModuleIsMcqOnly()) {
+    appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
+  }
   appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status, body.decision?.passFailTotal), outcomeClass(body.decision?.passFailTotal, body.status));
   appendSummaryRow(
     summaryGrid,
