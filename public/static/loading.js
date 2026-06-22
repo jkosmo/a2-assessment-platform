@@ -1,4 +1,4 @@
-import { escapeHtml } from "/static/html-escape.js";
+import { escapeHtml } from "./html-escape.js";
 
 function clearState(container) {
   container.classList.remove("loading-target", "empty-state");

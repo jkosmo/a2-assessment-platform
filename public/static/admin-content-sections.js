@@ -6,7 +6,7 @@ import {
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
-import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
-import { createDateFormatter } from "/static/format-display.js";
+import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
-import { escapeHtml } from "/static/html-escape.js";
+import { escapeHtml } from "./html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -23,7 +23,7 @@ import {
   buildCourseDeleteDialogText,
   deriveCourseListRows,
 } from "/static/admin-content-courses-state.js";
-import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n

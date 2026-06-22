@@ -1,4 +1,4 @@
-import { escapeHtml } from "/static/html-escape.js";
+import { escapeHtml } from "./html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -16,7 +16,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
-import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";

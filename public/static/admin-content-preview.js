@@ -1,4 +1,4 @@
-import { escapeHtml } from "/static/html-escape.js";
+import { escapeHtml } from "./html-escape.js";
 /**
  * admin-content-preview.js
  *
