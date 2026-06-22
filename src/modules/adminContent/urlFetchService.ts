@@ -304,15 +304,310 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const rateLimitBuckets = new Map<string, number[]>();
 
 export function checkAndConsumeRateLimit(userId: string): { allowed: boolean; retryAfterMs?: number } {
+  return consumeBucket(rateLimitBuckets, userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+}
+
+function consumeBucket(
+  buckets: Map<string, number[]>,
+  userId: string,
+  max: number,
+  windowMs: number,
+): { allowed: boolean; retryAfterMs?: number } {
   const now = Date.now();
-  const cutoff = now - RATE_LIMIT_WINDOW_MS;
-  const previous = rateLimitBuckets.get(userId) ?? [];
+  const cutoff = now - windowMs;
+  const previous = buckets.get(userId) ?? [];
   const recent = previous.filter((ts) => ts > cutoff);
-  if (recent.length >= RATE_LIMIT_MAX) {
+  if (recent.length >= max) {
     const oldest = recent[0];
-    return { allowed: false, retryAfterMs: oldest + RATE_LIMIT_WINDOW_MS - now };
+    return { allowed: false, retryAfterMs: oldest + windowMs - now };
   }
   recent.push(now);
-  rateLimitBuckets.set(userId, recent);
+  buckets.set(userId, recent);
   return { allowed: true };
+}
+
+// ---------------------------------------------------------------------------
+// #479 Slice B: same-domain crawl. Given a start URL, fetch up to CRAWL_MAX_PAGES
+// pages within CRAWL_MAX_DEPTH hops, restricted to the start hostname, honouring
+// robots.txt, with a politeness delay between fetches. Every page is independently
+// SSRF-revalidated (assertSafeUrl + the pinned dispatcher) and byte-capped via the same
+// fetchWithLimit primitive as the single-URL path. A single page failure is skipped,
+// not fatal — the crawl returns whatever it gathered.
+// ---------------------------------------------------------------------------
+
+const CRAWL_MAX_PAGES = 20;
+const CRAWL_MAX_DEPTH = 2;
+const CRAWL_DELAY_MS = 300;
+// Combined byte budget across all crawled pages (each page is also individually capped at
+// SOURCE_MATERIAL_MAX_BYTES by fetchWithLimit).
+const CRAWL_TOTAL_BYTE_BUDGET = SOURCE_MATERIAL_MAX_BYTES;
+const ROBOTS_FETCH_TIMEOUT_MS = 5_000;
+// Robots agent token: a robots `User-agent:` line matches us if it is a case-insensitive
+// substring of this token. Matches the product token in the fetch User-Agent header.
+const CRAWL_USER_AGENT_TOKEN = "a2assessmentplatform";
+const CRAWL_UA_HEADER =
+  "A2AssessmentPlatform/url-crawl (+https://github.com/jkosmo/a2-assessment-platform)";
+
+export interface CrawlPage {
+  url: string;
+  title: string | null;
+  extractedText: string;
+  fetchedBytes: number;
+}
+
+export interface CrawlResult {
+  startHostname: string;
+  pages: CrawlPage[];
+  pagesCrawled: number;
+  pagesSkipped: number;
+  totalBytes: number;
+  truncated: boolean;
+}
+
+export interface RobotsRules {
+  disallow: string[];
+  allow: string[];
+}
+
+// Minimal robots.txt parser (no external dependency). Groups directives by User-agent,
+// then selects the most specific group that applies to us: a group naming our token wins
+// over the wildcard `*` group. Returns the merged Disallow/Allow paths for that group.
+export function parseRobotsTxt(txt: string, userAgentToken: string): RobotsRules {
+  const groups: Array<{ agents: string[]; disallow: string[]; allow: string[] }> = [];
+  let current: { agents: string[]; disallow: string[]; allow: string[] } | null = null;
+  let lastWasAgent = false;
+  for (const raw of txt.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    if (!line) continue;
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const field = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (field === "user-agent") {
+      // Consecutive User-agent lines share one group; a non-agent line closes the group.
+      if (!current || !lastWasAgent) {
+        current = { agents: [], disallow: [], allow: [] };
+        groups.push(current);
+      }
+      current.agents.push(value.toLowerCase());
+      lastWasAgent = true;
+    } else if (field === "disallow" || field === "allow") {
+      if (!current) {
+        current = { agents: ["*"], disallow: [], allow: [] };
+        groups.push(current);
+      }
+      if (field === "disallow") current.disallow.push(value);
+      else current.allow.push(value);
+      lastWasAgent = false;
+    } else {
+      lastWasAgent = false;
+    }
+  }
+  const token = userAgentToken.toLowerCase();
+  const specific = groups.filter((g) => g.agents.some((a) => a !== "*" && token.includes(a)));
+  const wildcard = groups.filter((g) => g.agents.includes("*"));
+  const chosen = specific.length > 0 ? specific : wildcard;
+  const rules: RobotsRules = { disallow: [], allow: [] };
+  for (const g of chosen) {
+    rules.disallow.push(...g.disallow);
+    rules.allow.push(...g.allow);
+  }
+  return rules;
+}
+
+// Translates a robots path pattern (supporting `*` wildcards and a trailing `$` anchor)
+// into an anchored RegExp and tests it against the request path.
+function matchesRobotsPattern(pattern: string, pathname: string): boolean {
+  let regex = "^";
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === "*") regex += ".*";
+    else if (ch === "$" && i === pattern.length - 1) regex += "$";
+    else regex += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  try {
+    return new RegExp(regex).test(pathname);
+  } catch {
+    return pathname.startsWith(pattern.split("*")[0]);
+  }
+}
+
+// Google-style longest-match semantics: the longest matching rule wins; on an equal-length
+// tie, Allow beats Disallow. An empty Disallow value means "allow everything".
+export function isPathAllowedByRobots(rules: RobotsRules, pathname: string): boolean {
+  let bestDisallow = -1;
+  let bestAllow = -1;
+  for (const rule of rules.disallow) {
+    if (rule === "") continue;
+    if (matchesRobotsPattern(rule, pathname)) bestDisallow = Math.max(bestDisallow, rule.length);
+  }
+  for (const rule of rules.allow) {
+    if (rule === "") continue;
+    if (matchesRobotsPattern(rule, pathname)) bestAllow = Math.max(bestAllow, rule.length);
+  }
+  if (bestDisallow === -1) return true;
+  return bestAllow >= bestDisallow;
+}
+
+// Canonical key for dedup: scheme + host(:port) + path (no trailing slash) + query, fragment dropped.
+export function normaliseUrlKey(u: URL): string {
+  const path = u.pathname.replace(/\/+$/, "") || "/";
+  const port = u.port ? `:${u.port}` : "";
+  return `${u.protocol}//${u.hostname.toLowerCase()}${port}${path}${u.search}`;
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Fetches robots.txt for an origin. Any failure (network, non-2xx, redirect, parse) yields
+// permissive rules — standard crawler behaviour when robots.txt is absent or unreachable.
+async function fetchRobotsRules(origin: string): Promise<RobotsRules> {
+  const permissive: RobotsRules = { disallow: [], allow: [] };
+  let robotsUrl: URL;
+  try {
+    robotsUrl = await assertSafeUrl(new URL("/robots.txt", origin).toString());
+  } catch {
+    return permissive;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ROBOTS_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(robotsUrl.toString(), {
+      method: "GET",
+      redirect: "manual",
+      signal: controller.signal,
+      dispatcher: ssrfSafeDispatcher,
+      headers: { "user-agent": CRAWL_UA_HEADER, accept: "text/plain, */*;q=0.5" },
+    } as RequestInit & { dispatcher: unknown });
+    if (!response.ok) return permissive;
+    const txt = await response.text();
+    return parseRobotsTxt(txt, CRAWL_USER_AGENT_TOKEN);
+  } catch {
+    return permissive;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Extracts both main text (Readability) and same-document links from an HTML page. Links are
+// collected BEFORE Readability runs because Readability mutates/strips the DOM.
+async function extractTextAndLinks(
+  buffer: Buffer,
+  contentType: string,
+  sourceUrl: string,
+): Promise<{ text: string; title: string | null; links: string[] }> {
+  if (contentType === "text/plain") {
+    return { text: buffer.toString("utf8"), title: null, links: [] };
+  }
+  const html = buffer.toString("utf8");
+  const [{ JSDOM }, readabilityModule] = await Promise.all([
+    import("jsdom"),
+    import("@mozilla/readability"),
+  ]);
+  const dom = new JSDOM(html, { url: sourceUrl });
+  const doc = dom.window.document;
+  const links: string[] = [];
+  for (const anchor of Array.from(doc.querySelectorAll("a[href]"))) {
+    const href = anchor.getAttribute("href");
+    if (!href) continue;
+    try {
+      links.push(new URL(href, sourceUrl).toString());
+    } catch {
+      // skip unparseable href
+    }
+  }
+  const reader = new readabilityModule.Readability(doc);
+  const article = reader.parse();
+  const title = article?.title ?? null;
+  const body = article?.textContent?.trim() ?? "";
+  const text = title ? `${title}\n\n${body}` : body;
+  return { text, title, links };
+}
+
+export async function crawlUrlAsSourceMaterial(rawUrl: string): Promise<CrawlResult> {
+  const startUrl = await assertSafeUrl(rawUrl);
+  const startHostname = startUrl.hostname;
+  const robots = await fetchRobotsRules(startUrl.origin);
+
+  const visited = new Set<string>();
+  const queue: Array<{ url: URL; depth: number }> = [{ url: startUrl, depth: 0 }];
+  const pages: CrawlPage[] = [];
+  let pagesSkipped = 0;
+  let totalBytes = 0;
+  let truncated = false;
+
+  while (queue.length > 0) {
+    if (pages.length >= CRAWL_MAX_PAGES) {
+      truncated = true;
+      break;
+    }
+    const { url, depth } = queue.shift() as { url: URL; depth: number };
+    const key = normaliseUrlKey(url);
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (url.hostname !== startHostname) continue;
+    if (!isPathAllowedByRobots(robots, url.pathname + url.search)) {
+      pagesSkipped++;
+      continue;
+    }
+
+    let safeUrl: URL;
+    try {
+      safeUrl = await assertSafeUrl(url.toString());
+    } catch {
+      pagesSkipped++;
+      continue;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const { buffer, contentType } = await fetchWithLimit(safeUrl, controller.signal);
+      const { text, title, links } = await extractTextAndLinks(buffer, contentType, safeUrl.toString());
+      const trimmed = text.trim();
+      if (trimmed) {
+        if (totalBytes + buffer.byteLength > CRAWL_TOTAL_BYTE_BUDGET) {
+          truncated = true;
+          break;
+        }
+        totalBytes += buffer.byteLength;
+        pages.push({ url: safeUrl.toString(), title, extractedText: trimmed, fetchedBytes: buffer.byteLength });
+      }
+      if (depth < CRAWL_MAX_DEPTH) {
+        for (const link of links) {
+          let linkUrl: URL;
+          try {
+            linkUrl = new URL(link);
+          } catch {
+            continue;
+          }
+          if (!ALLOWED_PROTOCOLS.has(linkUrl.protocol)) continue;
+          if (linkUrl.hostname !== startHostname) continue;
+          if (visited.has(normaliseUrlKey(linkUrl))) continue;
+          queue.push({ url: linkUrl, depth: depth + 1 });
+        }
+      }
+    } catch {
+      pagesSkipped++;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (queue.length > 0 && pages.length < CRAWL_MAX_PAGES) {
+      await delay(CRAWL_DELAY_MS);
+    }
+  }
+
+  if (pages.length === 0) {
+    throw new UrlFetchError("crawl_empty", "No pages could be crawled from the start URL.");
+  }
+  return { startHostname, pages, pagesCrawled: pages.length, pagesSkipped, totalBytes, truncated };
+}
+
+// Crawl is far heavier than a single fetch (up to CRAWL_MAX_PAGES requests), so it gets its
+// own, stricter per-user budget.
+const CRAWL_RATE_LIMIT_MAX = 3;
+const crawlRateLimitBuckets = new Map<string, number[]>();
+
+export function checkAndConsumeCrawlRateLimit(userId: string): { allowed: boolean; retryAfterMs?: number } {
+  return consumeBucket(crawlRateLimitBuckets, userId, CRAWL_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
 }

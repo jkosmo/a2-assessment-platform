@@ -450,6 +450,13 @@ function _domFormFields(entry) {
     urlBtn.className = "btn-secondary chat-choice-btn";
     urlBtn.textContent = t("shell.source.fetchUrlBtn");
 
+    // #479 Slice B: crawl a whole site section (same-domain, up to 20 pages, 2 hops) instead of a
+    // single page. Adds the combined main text of every crawled page as one source.
+    const crawlBtn = document.createElement("button");
+    crawlBtn.type = "button";
+    crawlBtn.className = "btn-secondary chat-choice-btn";
+    crawlBtn.textContent = t("shell.source.crawlUrlBtn");
+
     // #455: external-LLM handoff. Copies authoring prompt to clipboard and opens modal
     // where the user pastes the JSON the LLM produced. Bypasses the normal source-material
     // submit path — the module is created directly from the imported JSON.
@@ -534,6 +541,58 @@ function _domFormFields(entry) {
       }
     });
 
+    // #479 Slice B: crawl from a start URL. Combines every crawled page's main text into one
+    // source entry, labelled with the hostname and page count.
+    crawlBtn.addEventListener("click", async () => {
+      const url = window.prompt(t("shell.source.crawlPrompt"));
+      if (!url || !url.trim()) return;
+      const originalLabel = crawlBtn.textContent;
+      crawlBtn.disabled = true;
+      urlBtn.disabled = true;
+      uploadBtn.disabled = true;
+      btn.disabled = true;
+      crawlBtn.textContent = t("shell.source.crawling");
+      try {
+        const result = await apiFetch(
+          "/api/admin/content/source-material/crawl-url",
+          getHeaders,
+          { method: "POST", body: JSON.stringify({ url: url.trim() }) },
+        );
+        const pages = Array.isArray(result?.pages) ? result.pages : [];
+        if (pages.length === 0) {
+          throw new Error(t("shell.source.crawlEmpty"));
+        }
+        const combined = pages
+          .map((p) => `[${String(p.url ?? "")}]\n${String(p.extractedText ?? "").trim()}`)
+          .join("\n\n---\n\n")
+          .trim();
+        if (!combined) {
+          throw new Error(t("shell.source.crawlEmpty"));
+        }
+        const host = String(result.startHostname ?? new URL(url.trim()).hostname);
+        fetchedUrlSources.push({
+          hostname: tf("shell.source.crawlChip", { host, count: pages.length }),
+          extractedText: combined,
+        });
+        refreshUploadHint();
+        showToast(
+          result.truncated
+            ? tf("shell.source.crawlReadyTruncated", { count: pages.length })
+            : tf("shell.source.crawlReady", { count: pages.length }),
+          "success",
+        );
+        inputEl.focus();
+      } catch (error) {
+        showToast(parseApiErrorMessage(error, "shell.source.crawlError"), "error");
+      } finally {
+        crawlBtn.disabled = false;
+        urlBtn.disabled = false;
+        uploadBtn.disabled = false;
+        btn.disabled = false;
+        crawlBtn.textContent = originalLabel;
+      }
+    });
+
     // #455: external-LLM-handoff. Copies prompt + opens import modal. On successful
     // import, marks the form submitted (skipping the normal source→cert→generate path)
     // and lands user in draft-ready with module + sessionDraft populated.
@@ -559,6 +618,7 @@ function _domFormFields(entry) {
           inputEl.disabled = true;
           uploadBtn.disabled = true;
           urlBtn.disabled = true;
+          crawlBtn.disabled = true;
           externalLlmBtn.disabled = true;
         },
       });
@@ -674,6 +734,7 @@ function _domFormFields(entry) {
 
     uploadRow.appendChild(uploadBtn);
     uploadRow.appendChild(urlBtn);
+    uploadRow.appendChild(crawlBtn);
     uploadRow.appendChild(externalLlmBtn);
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);

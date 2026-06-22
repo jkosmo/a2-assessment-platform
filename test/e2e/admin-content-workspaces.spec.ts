@@ -1268,6 +1268,47 @@ test.describe("admin content browser coverage", () => {
     expect(mcqSetCreated).toBe(false);
   });
 
+  // #479 Slice B: the source step can crawl a whole site section. Clicking "Crawl site" prompts
+  // for a start URL, POSTs to /source-material/crawl-url, and adds ONE combined source chip
+  // labelled with the hostname + page count. Client-layer behaviour (prompt → fetch → combine →
+  // chip) invisible to supertest, so it ships as an e2e alongside the feature.
+  test("shell source step can crawl a site and adds a combined source chip", async ({ page }) => {
+    await mockCommonApis(page);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let crawlBody: any = null;
+    await page.route("**/api/admin/content/source-material/crawl-url", async (route: Route) => {
+      crawlBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          startHostname: "example.com",
+          pages: [
+            { url: "https://example.com/", title: "Home", extractedText: "Home page text", fetchedBytes: 100 },
+            { url: "https://example.com/a", title: "A", extractedText: "Page A text", fetchedBytes: 100 },
+          ],
+          pagesCrawled: 2,
+          pagesSkipped: 0,
+          totalBytes: 200,
+          truncated: false,
+        }),
+      });
+    });
+
+    await page.goto("/admin-content");
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Crawl module");
+
+    // At the source step: accept the URL prompt, then click "Crawl site".
+    page.once("dialog", (dialog) => dialog.accept("https://example.com/start"));
+    await clickEnabledButton(page, "Crawl site");
+
+    // One combined source chip appears, labelled host + page count.
+    await expect(page.locator(".source-chip-label")).toContainText("example.com (2 pages)");
+    expect(crawlBody?.url).toBe("https://example.com/start");
+  });
+
   // #555: the conversation can author an MCQ-only module. After source material the author
   // picks "MCQ only", skips scenario/blueprint entirely, and the saved version sends
   // assessmentMode=MCQ_ONLY with the default 70% pass mark (no rubric/prompt/taskText).

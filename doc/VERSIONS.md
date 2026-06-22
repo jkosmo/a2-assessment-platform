@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.51 - 2026-06-22
+
+feat(ingest): same-domain crawl av kildemateriale (#479 Slice B)
+
+Ny «Crawl nettsted»-knapp på kilde-steget i Samtale. Gitt en start-URL følges lenker på **samme
+vertsnavn**, inntil **20 sider** og **2 hopp**, og hovedteksten fra hver side slås sammen til
+**én** kilde-chip merket med vertsnavn + antall sider.
+
+- **Backend:** `crawlUrlAsSourceMaterial` i `urlFetchService.ts` — BFS med dedup, robots.txt-
+  respekt (egen minimal parser, longest-match + Allow-vinner-ved-lik-lengde), 300 ms høflighets-
+  pause, samlet 10 MB byte-budsjett. Hver side re-valideres mot private/interne IP-er (gjenbruker
+  `assertSafeUrl` + den pinnede SSRF-dispatcheren fra #520). Egen, strengere rate-limit (3/min).
+- **Route:** `POST /api/admin/content/source-material/crawl-url` → `{ startHostname, pages[],
+  pagesCrawled, pagesSkipped, totalBytes, truncated }`; `422 crawl_empty` når ingenting kunne hentes.
+- **Tester:** unit (robots-parser, longest-match, url-normalisering, crawl-orkestrering med mocket
+  fetch + jsdom, rate-limit) + Playwright-e2e (kilde-steg → prompt → crawl → kombinert chip).
+- **Docs:** `doc/SOURCE_MATERIAL_INGEST_GUIDE.md` (ny bruker-guide) + API_REFERENCE source-ingest-tabell.
+
 ## 1.3.50 - 2026-06-22
 
 feat(ingest): kildemateriale-grense 2 → 10 MB (#479 Slice A) + skjul irrelevante skåre-rader (#591)
