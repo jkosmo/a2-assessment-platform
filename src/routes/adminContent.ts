@@ -822,6 +822,59 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
   }
 });
 
+// #479 Slice B: same-domain crawl. Given a start URL, fetches up to 20 pages within 2 hops on
+// the same hostname, honouring robots.txt, and returns the combined main text per page. Heavier
+// than a single fetch, so it has its own stricter per-user rate-limit (3/min). SSRF-protected:
+// every page is re-validated against private IP ranges before fetching (same as fetch-url).
+adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const url = typeof request.body?.url === "string" ? request.body.url.trim() : "";
+  if (!url) {
+    response.status(400).json({ error: "validation_error", message: "url is required" });
+    return;
+  }
+  const { crawlUrlAsSourceMaterial, UrlFetchError, checkAndConsumeCrawlRateLimit } = await import(
+    "../modules/adminContent/urlFetchService.js"
+  );
+  const rateCheck = checkAndConsumeCrawlRateLimit(actorId);
+  if (!rateCheck.allowed) {
+    const retryAfterSec = Math.ceil((rateCheck.retryAfterMs ?? 60_000) / 1000);
+    response.setHeader("Retry-After", String(retryAfterSec));
+    response.status(429).json({
+      error: "rate_limited",
+      message: `Too many crawls. Retry in ~${retryAfterSec}s.`,
+    });
+    return;
+  }
+  try {
+    const result = await crawlUrlAsSourceMaterial(url);
+    response.json(result);
+  } catch (err) {
+    if (err instanceof UrlFetchError) {
+      const status =
+        err.code === "private_address" || err.code === "unsupported_protocol" || err.code === "invalid_url"
+          ? 400
+          : err.code === "timeout" || err.code === "dns_failed"
+            ? 504
+            : err.code === "crawl_empty"
+              ? 422
+              : err.code === "too_large" || err.code === "unsupported_content_type"
+                ? 415
+                : err.code === "http_error"
+                  ? 502
+                  : 500;
+      response.status(status).json({ error: err.code, message: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Unknown error";
+    response.status(500).json({ error: "url_crawl_failed", message });
+  }
+});
+
 // #454 Phase 4 (v1.2.4): condensation step before blueprint/draft/MCQ pipeline. Frontend
 // calls this automatically when combined source material exceeds 50K chars. Trades one
 // LLM call (~10-30s) for significantly reduced context cost in the 4 downstream LLM calls.
