@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.57 - 2026-06-22
+
+refactor(frontend): single source of truth for formatNumber — #596 skive 2 (EPIC #595)
+
+Andre skive i frontend-dedupliseringen. Ny ES-modul `public/static/format-display.js` med en
+**factory** `createNumberFormatter(getLocale, placeholder = "-")`. De 7 nær-identiske `formatNumber`-
+kopiene (`participant.js`, `participant-completed.js`, `profile.js`, `calibration.js`,
+`admin-content.js`, `review.js`, `static/admin-content-calibration.js`) erstattes av
+`const formatNumber = createNumberFormatter(() => currentLocale)` — kall-stedene er urørt.
+
+Factory fordi `formatNumber` er koblet til hver fils egen muterbare `currentLocale`: getteren leses
+**lazy** ved kall-tid, så locale-byttet fortsatt reflekteres. No-op: alle 7 gjorde
+`Intl.NumberFormat(currentLocale,{min:0,max})` + ikke-tall-guard; eneste forskjell var placeholderen
+(6 brukte `"-"`, `profile.js` brukte em-dash `"—"` — bevart via placeholder-param). Unit-test pinner
+factory + lazy locale + placeholder.
+
+(Locale-koblingen her motiverer en kommende `i18n-resolve`-skive — `currentLocale`/locale-fallback
+er selv duplisert på tvers av filene.)
+
 ## 1.3.56 - 2026-06-22
 
 refactor(frontend): single source of truth for HTML-escaping — #596 skive 1 (EPIC #595)

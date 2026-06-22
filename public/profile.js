@@ -1,3 +1,4 @@
+import { createNumberFormatter } from "/static/format-display.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import {
@@ -194,13 +195,7 @@ function formatDate(value) {
   }
 }
 
-function formatNumber(value, maxFractionDigits = 2) {
-  if (typeof value !== "number") return "—";
-  return new Intl.NumberFormat(currentLocale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value);
-}
+const formatNumber = createNumberFormatter(() => currentLocale, "—");
 
 function localizeContentValue(value) {
   if (!value) return "â€”";

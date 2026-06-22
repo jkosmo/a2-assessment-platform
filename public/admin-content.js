@@ -1,3 +1,5 @@
+import { createNumberFormatter } from "/static/format-display.js";
+const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml } from "/static/html-escape.js";
 import {
   localeLabels,
@@ -4340,16 +4342,7 @@ function enablePillArrowNavigation(container) {
   });
 }
 
-function formatNumber(value, maxFractionDigits = 2) {
-  if (typeof value !== "number") {
-    return "-";
-  }
-
-  return new Intl.NumberFormat(currentLocale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value);
-}
+$CONST
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
