@@ -1,3 +1,5 @@
+import { createNumberFormatter } from "/static/format-display.js";
+const formatNumber = createNumberFormatter(() => currentLocale);
 import {
   supportedLocales,
   localeLabels,
@@ -131,13 +133,6 @@ function renderAccessDenied() {
 // Formatters
 // ---------------------------------------------------------------------------
 
-function formatNumber(value, maxFractionDigits = 2) {
-  if (typeof value !== "number") return "-";
-  return new Intl.NumberFormat(currentLocale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value);
-}
 
 function formatDateTimeValue(value) {
   if (!value) return "-";

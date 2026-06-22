@@ -1,3 +1,5 @@
+import { createNumberFormatter } from "/static/format-display.js";
+const formatNumber = createNumberFormatter(() => currentLocale);
 import { localeLabels, supportedLocales, translations } from "/static/i18n/calibration-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -239,16 +241,6 @@ function formatDateTime(value) {
   }
 }
 
-function formatNumber(value, maxFractionDigits = 2) {
-  if (typeof value !== "number") {
-    return "-";
-  }
-
-  return new Intl.NumberFormat(currentLocale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value);
-}
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";

@@ -1,3 +1,5 @@
+import { createNumberFormatter } from "/static/format-display.js";
+const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
@@ -1732,16 +1734,6 @@ function formatModuleStatusSummary(module) {
   return parts.join(" · ");
 }
 
-function formatNumber(value, maxFractionDigits = 2) {
-  if (typeof value !== "number") {
-    return "-";
-  }
-
-  return new Intl.NumberFormat(currentLocale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value);
-}
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
