@@ -241,7 +241,6 @@ function formatDateTime(value) {
   }
 }
 
-$CONST
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";

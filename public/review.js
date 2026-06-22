@@ -247,7 +247,6 @@ function formatDateTime(value) {
   }
 }
 
-$CONST
 
 function normalizeMultilineText(value) {
   if (typeof value !== "string") return "-";

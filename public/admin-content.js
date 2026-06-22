@@ -4342,7 +4342,6 @@ function enablePillArrowNavigation(container) {
   });
 }
 
-$CONST
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";

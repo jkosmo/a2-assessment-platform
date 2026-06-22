@@ -1734,7 +1734,6 @@ function formatModuleStatusSummary(module) {
   return parts.join(" · ");
 }
 
-$CONST
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";

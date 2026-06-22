@@ -133,7 +133,6 @@ function renderAccessDenied() {
 // Formatters
 // ---------------------------------------------------------------------------
 
-$CONST
 
 function formatDateTimeValue(value) {
   if (!value) return "-";
