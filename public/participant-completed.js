@@ -1,5 +1,6 @@
 import { resolveInitialLocale } from "/static/i18n-locale.js";
-import { createNumberFormatter } from "/static/format-display.js";
+import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
+const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlC } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-completed-translations.js";
@@ -173,20 +174,6 @@ async function runWithBusyButton(button, action) {
   }
 }
 
-function formatDateTime(value) {
-  if (!value) {
-    return "-";
-  }
-
-  try {
-    return new Intl.DateTimeFormat(currentLocale, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
-}
 
 
 function localizeSubmissionStatus(value) {

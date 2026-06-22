@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.59 - 2026-06-22
+
+refactor(frontend): single source of truth for date-time formatting — #596 skive 4 (EPIC #595)
+
+Fjerde skive. `public/static/format-display.js` får `createDateTimeFormatter(getLocale, placeholder)`
+(samme lazy-locale-factory som tall). De 7 `formatDateTime`/`formatDateTimeValue`-kopiene
+(`participant.js`, `participant-completed.js`, `profile.js`, `calibration.js`, `review.js`,
+`results.js`, `static/admin-content-calibration.js`) erstattes av
+`const formatDateTime = createDateTimeFormatter(() => currentLocale)`.
+
+No-op: alle 7 gjorde `Intl.DateTimeFormat(currentLocale,{dateStyle:"medium",timeStyle:"short"})` med
+falsy-guard + `try/catch → String(value)`. Eneste forskjell var placeholderen (`"-"` for 5, em-dash
+`"—"` for results/profile — bevart via param). Dato-varianter med annen form (`dateStyle`
+long/medium-only, `toLocaleDateString` numerisk, og admin-content.js sin NaN-guard-variant) er
+bevisst latt stå til senere skiver. Unit-test pinner factory + placeholder + catch-fallback.
+
 ## 1.3.58 - 2026-06-22
 
 refactor(frontend): single source of truth for resolveInitialLocale — #596 skive 3 (EPIC #595)
