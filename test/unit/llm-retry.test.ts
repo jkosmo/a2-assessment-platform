@@ -72,6 +72,31 @@ describe("callLlm Azure OpenAI retry (via condenseSourceMaterial)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it("condenses oversized source in chunks (one request per chunk, then combines)", async () => {
+    // 3 chunks at 30K-char chunking → 3 condense calls; combined stays small so no extra pass.
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(okPayload("Sammendrag bit 1."))
+      .mockResolvedValueOnce(okPayload("Sammendrag bit 2."))
+      .mockResolvedValueOnce(okPayload("Sammendrag bit 3."));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { condenseSourceMaterial } = await import(
+      "../../src/modules/adminContent/llmContentGenerationService.js"
+    );
+    const result = await condenseSourceMaterial({
+      sourceMaterial: "Avsnitt med innhold.\n\n".repeat(4000), // ~88K chars → 3 chunks
+      certificationLevel: "intermediate",
+      locale: "nb",
+    });
+
+    // One LLM request per chunk; no single request carried the whole oversized payload.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.condensedText).toContain("Sammendrag bit 1.");
+    expect(result.condensedText).toContain("Sammendrag bit 3.");
+    expect(result.originalLength).toBeGreaterThan(30_000);
+  });
+
   it("does not retry a non-retryable 400", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

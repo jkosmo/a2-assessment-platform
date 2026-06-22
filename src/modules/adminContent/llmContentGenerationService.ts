@@ -1838,9 +1838,38 @@ Return one JSON object:
   return { systemPrompt, userPrompt };
 }
 
-export async function condenseSourceMaterial(
-  input: CondenseSourceMaterialInput,
-): Promise<CondenseSourceMaterialResult> {
+// #479: every LLM request must fit the deployment's tokens-per-minute quota (staging 20K, prod
+// 40K TPM). ~30K chars ≈ 7.5K input tokens; with the 8K-token output budget that's ~15.5K
+// tokens/request — safely under 20K TPM. The frontend allows up to 1M chars of source, which as a
+// single condense request is ~250K tokens — 12× over quota, so it 429s FOREVER (no retry can help).
+// Source larger than one chunk is therefore condensed in chunks: each chunk fits a single request,
+// they run sequentially (callLlm's 429 retry/backoff spaces them across minutes so the per-minute
+// budget is respected), and the condensed chunks are combined — with one final pass if still large.
+const CONDENSE_CHUNK_CHARS = 30_000;
+
+// Splits text into <=maxChars chunks, preferring a paragraph/sentence boundary near the end of each
+// chunk so we don't cut mid-sentence (which would degrade the LLM's condensation).
+export function splitIntoChunks(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return text.trim() ? [text] : [];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + maxChars, text.length);
+    if (end < text.length) {
+      const window = text.slice(start, end);
+      const paraBreak = window.lastIndexOf("\n\n");
+      const sentenceBreak = window.lastIndexOf(". ");
+      const breakAt = paraBreak > maxChars * 0.8 ? paraBreak : sentenceBreak;
+      if (breakAt > maxChars * 0.8) end = start + breakAt + 1;
+    }
+    const piece = text.slice(start, end).trim();
+    if (piece) chunks.push(piece);
+    start = end;
+  }
+  return chunks;
+}
+
+async function condenseOnce(input: CondenseSourceMaterialInput): Promise<string> {
   const { systemPrompt, userPrompt } = buildCondensationPrompts(input);
   // 8000 tokens ≈ 30K-40K chars output budget; matches default target of 30K.
   const raw = await callLlm(systemPrompt, userPrompt, 8000);
@@ -1850,11 +1879,43 @@ export async function condenseSourceMaterial(
   if (!condensedText) {
     throw new Error("Condensation LLM response missing condensedText.");
   }
-  return {
-    condensedText,
-    originalLength: input.sourceMaterial.length,
-    condensedLength: condensedText.length,
-  };
+  return condensedText;
+}
+
+export async function condenseSourceMaterial(
+  input: CondenseSourceMaterialInput,
+): Promise<CondenseSourceMaterialResult> {
+  const originalLength = input.sourceMaterial.length;
+  const targetMax = input.targetMaxChars ?? 30_000;
+
+  // Small enough for a single request — original single-pass behaviour.
+  if (originalLength <= CONDENSE_CHUNK_CHARS) {
+    const condensedText = await condenseOnce(input);
+    return { condensedText, originalLength, condensedLength: condensedText.length };
+  }
+
+  // Too large for one request: condense each chunk to a proportional share of the target budget,
+  // then combine. Each chunk request fits the TPM quota; callLlm spaces them via 429 backoff.
+  const chunks = splitIntoChunks(input.sourceMaterial, CONDENSE_CHUNK_CHARS);
+  const perChunkTarget = Math.max(2_000, Math.floor(targetMax / Math.max(1, chunks.length)));
+  const condensedChunks: string[] = [];
+  for (const chunk of chunks) {
+    condensedChunks.push(
+      await condenseOnce({ ...input, sourceMaterial: chunk, targetMaxChars: perChunkTarget }),
+    );
+  }
+  let combined = condensedChunks.join("\n\n").trim();
+
+  // If the combined condensate is itself still larger than one chunk, condense it once more so the
+  // downstream blueprint/draft calls also stay within the token budget.
+  if (combined.length > CONDENSE_CHUNK_CHARS) {
+    combined = await condenseOnce({ ...input, sourceMaterial: combined, targetMaxChars: targetMax });
+  }
+
+  if (!combined) {
+    throw new Error("Condensation produced empty output.");
+  }
+  return { condensedText: combined, originalLength, condensedLength: combined.length };
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,37 @@ import {
   isLikelyWrongLocale,
   parseRetryAfterMs,
   computeLlmBackoffMs,
+  splitIntoChunks,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
+
+// #479: chunking for condensation. Source larger than one TPM-safe request must be split so each
+// chunk fits the deployment's tokens-per-minute quota (staging 20K / prod 40K). Pins the splitter.
+describe("splitIntoChunks", () => {
+  it("returns a single chunk when text fits", () => {
+    expect(splitIntoChunks("short text", 1000)).toEqual(["short text"]);
+  });
+
+  it("returns no chunks for empty/whitespace", () => {
+    expect(splitIntoChunks("   ", 1000)).toEqual([]);
+  });
+
+  it("splits oversized text into chunks each within the limit", () => {
+    const text = "a".repeat(2500);
+    const chunks = splitIntoChunks(text, 1000);
+    expect(chunks.length).toBeGreaterThanOrEqual(3);
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(1000);
+    // No content lost (modulo trimming).
+    expect(chunks.join("").length).toBe(2500);
+  });
+
+  it("prefers a paragraph boundary near the chunk end", () => {
+    const para = "x".repeat(850);
+    const text = `${para}\n\n${"y".repeat(850)}`;
+    const chunks = splitIntoChunks(text, 1000);
+    // First chunk ends at the paragraph break, not mid-run.
+    expect(chunks[0]).toBe(para);
+  });
+});
 
 // #479: Azure OpenAI 429/5xx retry helpers. A single un-retried 429 used to abort the whole
 // authoring pipeline (condense → blueprint → draft), which crawl made easy to trigger via large
