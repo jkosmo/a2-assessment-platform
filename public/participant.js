@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter } from "/static/format-display.js";
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
@@ -90,7 +91,7 @@ const PARTICIPANT_PREVIEW_STORAGE_KEY = "adminContent.participantPreview.v1";
 const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let latestResult = null;
 // #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
 // result poll. Reset when the module context changes / a new submission starts.
@@ -158,28 +159,6 @@ const DEFAULT_SUBMISSION_FIELDS = [
 
 let currentSubmissionFields = DEFAULT_SUBMISSION_FIELDS;
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) {
-    return stored;
-  }
-
-  const browser = navigator.language;
-  if (!browser) {
-    return "en-GB";
-  }
-  const normalized = browser.toLowerCase();
-  if (normalized.startsWith("nb")) {
-    return "nb";
-  }
-  if (normalized.startsWith("nn")) {
-    return "nn";
-  }
-  if (normalized.startsWith("en")) {
-    return "en-GB";
-  }
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;

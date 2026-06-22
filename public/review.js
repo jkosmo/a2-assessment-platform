@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter } from "/static/format-display.js";
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { localeLabels, supportedLocales, translations } from "/static/i18n/review-translations.js";
@@ -86,7 +87,7 @@ const defaultResolutionPassFailValue = "true";
 const reviewStatusOptions = ["OPEN", "IN_REVIEW", "RESOLVED"];
 const actionableQueueStatuses = new Set(["OPEN", "IN_REVIEW"]);
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let activeReviewTab = "manualReview";
 
 // MR state
@@ -131,16 +132,6 @@ let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 
 // ── Locale ─────────────────────────────────────────────────────────────────────
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const browser = navigator.language ?? "";
-  const normalized = browser.toLowerCase();
-  if (normalized.startsWith("nb")) return "nb";
-  if (normalized.startsWith("nn")) return "nn";
-  if (normalized.startsWith("en")) return "en-GB";
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale]?.[key] ?? translations["en-GB"]?.[key] ?? key;

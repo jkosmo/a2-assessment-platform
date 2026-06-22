@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.58 - 2026-06-22
+
+refactor(frontend): single source of truth for resolveInitialLocale — #596 skive 3 (EPIC #595)
+
+Tredje skive i frontend-dedupliseringen. Ny ES-modul `public/static/i18n-locale.js` med
+`resolveInitialLocale(supportedLocales)`. De **9** kopiene (`review.js`, `admin-content.js`,
+`calibration.js`, `participant.js`, `participant-completed.js`, `profile.js`, `results.js`,
+`certificate.js`, `admin-platform.js`) erstattes av importen + `resolveInitialLocale(supportedLocales)`
+(supportedLocales sendes inn siden hver side importerer sin egen identiske liste).
+
+No-op for de 8 atferdslike (lagret locale > browser-prefix nb/nn/en > en-GB; `certificate.js` sin
+manglende `en`-gren ga samme output som default). `results.js` brukte en `find()`-match uten
+null-guard — folding inn her fjerner en latent throw på null `navigator.language` (samme output for
+enhver reell browser-streng). Unit-test pinner resolusjonen.
+
 ## 1.3.57 - 2026-06-22
 
 refactor(frontend): single source of truth for formatNumber — #596 skive 2 (EPIC #595)

@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/certificate-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 
@@ -7,7 +8,7 @@ const printBtn = document.getElementById("printBtn");
 const certState = document.getElementById("certState");
 const certificateEl = document.getElementById("certificate");
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 // Identity used for mock-mode headers; in entra mode the Bearer token (added by apiFetch)
 // authenticates and these x-user-* values are ignored.
 let identity = {
@@ -18,14 +19,6 @@ let identity = {
   roles: ["PARTICIPANT"],
 };
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const normalized = (navigator.language ?? "").toLowerCase();
-  if (normalized.startsWith("nb")) return "nb";
-  if (normalized.startsWith("nn")) return "nn";
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale]?.[key] ?? translations["en-GB"][key] ?? key;

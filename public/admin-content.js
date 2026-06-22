@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter } from "/static/format-display.js";
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml } from "/static/html-escape.js";
@@ -431,7 +432,7 @@ Return JSON in this exact shape:
 Source material follows:
 [PASTE SOURCE MATERIAL HERE]`;
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let modules = [];
 let selectedModuleId = "";
 let activeContentTab = "modules";
@@ -476,28 +477,6 @@ let _dialogTriggerRef = null;
 let advPreviewLocale = null; // set to currentLocale on first open
 let advPreviewOpen = false;
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) {
-    return stored;
-  }
-
-  const browser = navigator.language;
-  if (!browser) {
-    return "en-GB";
-  }
-  const normalized = browser.toLowerCase();
-  if (normalized.startsWith("nb")) {
-    return "nb";
-  }
-  if (normalized.startsWith("nn")) {
-    return "nn";
-  }
-  if (normalized.startsWith("en")) {
-    return "en-GB";
-  }
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;
