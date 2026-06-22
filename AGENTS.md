@@ -83,9 +83,11 @@ These rules exist because their violation caused or worsened the May 2026 produc
   Not "done" until the e2e passes locally + in CI.
 - **Map the full UI surface before building/fixing (standing order):** most of our deploy→bug→deploy
   churn is *"correct fix, incomplete surface"* — fixing the one path in the screenshot while sibling
-  paths break next. Before coding a UI feature/fix: (1) `grep` the feature/i18n label across **all**
-  pages and enumerate every entry point + surface (e.g. module creation has two entries; a
-  certificate shows in three places), fixing them in the same PR; (2) write the e2e for the
+  paths break next. Before coding a UI feature/fix: (1) **check `doc/FEATURE_SURFACE_MAP.md`** (a
+  catalogue of the known distributed behaviours with every surface + guard test) — change all listed
+  surfaces in the same PR; if the behaviour isn't there, `grep` the feature/i18n label across **all**
+  pages, enumerate every entry point + surface (e.g. module creation has two entries; a certificate
+  shows in three places), fix them in the same PR, and **add the entry to the map**; (2) write the e2e for the
   **documented/recommended user journey**, not the code path you built; (3) for "move/reorder a step"
   changes, grep where else that sequence occurs; (4) for conditional visibility use
   `setHidden(el, on)` (`public/static/dom-visibility.js`) / inline `style.display` — **never** the
