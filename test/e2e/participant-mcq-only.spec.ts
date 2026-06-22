@@ -274,3 +274,60 @@ test("participant: FREETEXT_ONLY result hides the MCQ score row, shows the pract
   await expect(result).toContainText("Praktisk poeng");
   await expect(result).not.toContainText("MCQ-poeng");
 });
+
+// #591/#599 characterization: the default FREETEXT_PLUS_MCQ journey shows BOTH score rows — the
+// third branch of renderResultSummary (neither freetext-only nor mcq-only). Completes the triad
+// (MCQ_ONLY hides practical; FREETEXT_ONLY hides mcq; FREETEXT_PLUS_MCQ shows both). Deterministic
+// via the MCQ-submit → already-assessed → fetch-result path (no auto-poll race).
+test("participant: FREETEXT_PLUS_MCQ result shows both the MCQ and practical score rows", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ attemptId: "a1", questions: [{ id: "q1", stem: "Spørsmål 1", options: ["A", "B"] }] }),
+    }),
+  );
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assessmentComplete: true }) }),
+  );
+  await page.route("**/api/submissions/*/result", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "COMPLETED",
+        decision: { passFailTotal: true, decisionType: "AUTOMATIC" },
+        scoreComponents: { totalScore: 88, mcqScaledScore: 90, practicalScaledScore: 86 },
+        participantGuidance: {},
+      }),
+    }),
+  );
+
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  // m-ft is FREETEXT_PLUS_MCQ with task text → free-text fields are shown.
+  await page.locator(".module-card", { hasText: "Fritekst Modul" }).click();
+
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
+  }
+  await page.locator("#ack").check();
+  await page.locator("#createSubmission").click();
+
+  // MCQ auto-started after the submission; answer it and submit.
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("#submitMcq").click();
+
+  // Both score rows are shown for the combined free-text + MCQ mode.
+  const result = page.locator("#resultSummary");
+  await expect(result).toContainText("MCQ-poeng");
+  await expect(result).toContainText("Praktisk poeng");
+});
