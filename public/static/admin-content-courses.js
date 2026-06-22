@@ -1,4 +1,6 @@
-import { escapeHtml } from "/static/html-escape.js";
+import { createDateFormatter } from "./format-display.js";
+const formatDate = createDateFormatter(() => currentLocale);
+import { escapeHtml } from "./html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -21,7 +23,7 @@ import {
   buildCourseDeleteDialogText,
   deriveCourseListRows,
 } from "/static/admin-content-courses-state.js";
-import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -74,13 +76,6 @@ const deleteCancelBtn = document.getElementById("deleteCancelBtn");
 // ---------------------------------------------------------------------------
 
 
-function formatDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(
-    currentLocale === "en-GB" ? "en-GB" : currentLocale,
-    { day: "numeric", month: "short", year: "numeric" },
-  );
-}
 
 function localizedText(value) {
   if (!value) return "";

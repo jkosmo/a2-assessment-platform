@@ -1,10 +1,4 @@
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+import { escapeHtml } from "./html-escape.js";
 
 function clearState(container) {
   container.classList.remove("loading-target", "empty-state");

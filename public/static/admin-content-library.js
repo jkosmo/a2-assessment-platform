@@ -1,4 +1,6 @@
-import { escapeHtml } from "/static/html-escape.js";
+import { createDateFormatter } from "./format-display.js";
+const formatDate = createDateFormatter(() => currentLocale);
+import { escapeHtml } from "./html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -17,7 +19,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
-import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -163,10 +165,6 @@ function certBadge(level) {
 }
 
 
-function formatDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(currentLocale === "en-GB" ? "en-GB" : currentLocale, { day: "numeric", month: "short", year: "numeric" });
-}
 
 function resolveContentAdminDefaults() {
   const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;

@@ -1,4 +1,4 @@
-import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
+import { createNumberFormatter, createDateTimeFormatter } from "./format-display.js";
 const formatDateTimeValue = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import {
@@ -19,7 +19,7 @@ import {
 } from "/static/participant-console-state.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
-import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
 // ---------------------------------------------------------------------------
 // i18n
