@@ -135,6 +135,11 @@ test("participant: MCQ-only auto-pass shows a discreet retry button", async ({ p
   const retry = page.locator("#resetSubmissionFlow");
   await expect(retry).toBeVisible();
   await expect(retry).toHaveClass(/reset-flow-discreet/);
+
+  // #591: MCQ-only result shows the MCQ score but NOT the (always-0) practical score row.
+  const result = page.locator("#resultSummary");
+  await expect(result).toContainText("MCQ-poeng");
+  await expect(result).not.toContainText("Praktisk poeng");
 });
 
 // #578: FREETEXT_ONLY — the participant fills in free text (no MCQ section) and the assessment runs
@@ -195,4 +200,6 @@ test("participant: FREETEXT_ONLY module shows free-text, hides MCQ, assesses wit
   await expect.poll(() => runCalled).toBe(true);
   expect(mcqStartCalled).toBe(false);
   await expect(page.locator("#mcqSection")).toBeHidden();
+  // (#591 result-row hiding is covered deterministically by the MCQ-only test above; the symmetric
+  // free-text-only branch hides the MCQ row via the same renderResultSummary gate.)
 });
