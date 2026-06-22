@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter } from "/static/format-display.js";
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlC } from "/static/html-escape.js";
@@ -33,7 +34,7 @@ const completedAppealFeedback = document.getElementById("completedAppealFeedback
 
 let pendingAppealSubmissionId = null;
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
@@ -52,28 +53,6 @@ let participantRuntimeConfig = {
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) {
-    return stored;
-  }
-
-  const browser = navigator.language;
-  if (!browser) {
-    return "en-GB";
-  }
-  const normalized = browser.toLowerCase();
-  if (normalized.startsWith("nb")) {
-    return "nb";
-  }
-  if (normalized.startsWith("nn")) {
-    return "nn";
-  }
-  if (normalized.startsWith("en")) {
-    return "en-GB";
-  }
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale][key] ?? translations["en-GB"][key] ?? key;

@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -31,7 +32,7 @@ const consentVersionBadge = document.getElementById("consentVersion");
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let participantRuntimeConfig = {
   authMode: "mock",
   mockRolePresets: [],
@@ -50,16 +51,6 @@ let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 
 // ── Locale ────────────────────────────────────────────────────────────────────
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const browser = navigator.language ?? "";
-  const normalized = browser.toLowerCase();
-  if (normalized.startsWith("nb")) return "nb";
-  if (normalized.startsWith("nn")) return "nn";
-  if (normalized.startsWith("en")) return "en-GB";
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale]?.[key] ?? translations["en-GB"]?.[key] ?? key;

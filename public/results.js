@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml as escapeHtmlR } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
@@ -33,7 +34,7 @@ const exportPassRatesButton = document.getElementById("exportPassRates");
 const participantBody = document.getElementById("participantBody");
 const moduleDetailMeta = document.getElementById("moduleDetailMeta");
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let participantRuntimeConfig = {
   authMode: "mock",
   mockRolePresets: [],
@@ -52,12 +53,6 @@ let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let selectedModuleRow = null;
 let selectedCourseRow = null;
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const browser = navigator.language;
-  return supportedLocales.find((l) => browser.startsWith(l)) ?? "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale]?.[key] ?? translations["en-GB"]?.[key] ?? key;

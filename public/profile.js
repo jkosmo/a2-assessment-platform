@@ -1,3 +1,4 @@
+import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter } from "/static/format-display.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
@@ -41,7 +42,7 @@ const deletionFeedback = document.getElementById("deletionFeedback");
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let currentLocale = resolveInitialLocale();
+let currentLocale = resolveInitialLocale(supportedLocales);
 let participantRuntimeConfig = {
   authMode: "mock",
   debugMode: true,
@@ -64,16 +65,6 @@ let cachedDataExport = null;
 
 // ── Locale ────────────────────────────────────────────────────────────────────
 
-function resolveInitialLocale() {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const browser = navigator.language ?? "";
-  const normalized = browser.toLowerCase();
-  if (normalized.startsWith("nb")) return "nb";
-  if (normalized.startsWith("nn")) return "nn";
-  if (normalized.startsWith("en")) return "en-GB";
-  return "en-GB";
-}
 
 function t(key) {
   return translations[currentLocale]?.[key] ?? translations["en-GB"]?.[key] ?? key;
