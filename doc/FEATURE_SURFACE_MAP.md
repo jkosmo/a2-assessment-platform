@@ -111,9 +111,17 @@ import; do not re-add a local copy.**
 
 **Guards:** `test/unit/html-escape.test.js`, `test/unit/format-display.test.js`, `test/unit/i18n-locale.test.js`. Nav rendering exercised across e2e page loads. **Rule:** never re-add a local `renderWorkspaceNavigation` body — call the shared helper; pass `localePicker: null` on pages that intentionally omit the profile link (e.g. `profile.js`).
 
-### Still duplicated (future #596 slices — do NOT fix one copy in isolation)
-- **`escapeHtml` divergent variants** — `admin-content-preview.js`/`admin-content-shell.js`/`static/loading.js` (`String(x)` without `?? ""`), `static/admin-content-sections.js` (also escapes `'`). Behaviour differs → each needs a decision, not a blind merge.
-- **Date variants** not in slice 4: `dateStyle:"long"` (certificate), medium-only (`profile.formatDate`), `toLocaleDateString` numeric (courses/library), and `admin-content.js`'s NaN-guard `formatDateTimeValue`.
+### Intentionally distinct (NOT duplicates — do not force-merge)
+`#596` consolidation is complete. The following look similar but are genuinely different and stay
+separate:
+- **`escapeHtml` in `static/admin-content-sections.js`** also escapes `'` (`&#39;`) for
+  attribute-context safety — a real superset, not a copy of the text-escape canonical.
+- **Single-of-a-kind date formatters:** `certificate.js` (`dateStyle:"long"`), `profile.js`
+  `formatDate` (`dateStyle:"medium"`), `admin-content.js` `formatDateTimeValue` (NaN-guard form).
+  Distinct formats, not duplication.
+
+The 3 `String(x)` `escapeHtml` variants (preview/shell/loading) and the 2 identical numeric
+`formatDate` copies (courses/library) were consolidated in slice 6 (v1.3.61).
 
 ## 10. Assessment LLM pipeline — 429/oversize chain (#479)
 

@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.61 - 2026-06-22
+
+refactor(frontend): siste #596-rester — escapeHtml-varianter + kort-dato (EPIC #595)
+
+Avslutter #596-dedupliseringen.
+
+- **escapeHtml (divergerende):** `static/admin-content-preview.js`, `static/admin-content-shell.js`,
+  `static/loading.js` brukte `String(x)` uten `?? ""`. Nå importert fra `html-escape.js` (kanonisk).
+  Eneste atferdsendring: null/undefined → `""` i stedet for `"null"`/`"undefined"` (latent bugfix).
+  `static/admin-content-sections.js` lar vi stå — den escaper også `'` (attributt-kontekst-sikkerhet),
+  som er en legitim forskjell, ikke et duplikat.
+- **Kort-dato:** ny `createDateFormatter` i `format-display.js`; de **2 identiske** `formatDate`-kopiene
+  (`static/admin-content-courses.js`, `static/admin-content-library.js`, `toLocaleDateString` numerisk)
+  bruker den nå. (Ternæren `currentLocale === "en-GB" ? "en-GB" : currentLocale` var == `currentLocale`.)
+  Én-av-sitt-slag-formaterne (certificate `dateStyle:"long"`, profile.formatDate `medium`,
+  admin-content NaN-guard) er distinkte formater, ikke duplikater — bevisst latt stå.
+
+**#596 ferdig:** ~40 dupliserte kopier eliminert på tvers av 6 skiver (1.3.56–1.3.61), hver bak én
+testet kilde-til-sannhet. Surface-map oppdatert.
+
 ## 1.3.60 - 2026-06-22
 
 refactor(frontend): konsolider renderWorkspaceNavigation — #596 skive 5 (EPIC #595)

@@ -1,3 +1,4 @@
+import { escapeHtml } from "/static/html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -210,13 +211,6 @@ const SOURCE_MATERIAL_ALLOWED_MIME_TYPES = new Set([
 // Chat rendering — low-level DOM helpers (no logging)
 // ---------------------------------------------------------------------------
 
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function htmlToPlainText(html) {
   const fragment = document.createElement("div");

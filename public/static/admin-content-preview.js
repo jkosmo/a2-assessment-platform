@@ -1,3 +1,4 @@
+import { escapeHtml } from "/static/html-escape.js";
 /**
  * admin-content-preview.js
  *
@@ -9,13 +10,6 @@
  *   buildPreviewHtml(data, opts)          → HTML string
  */
 
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /**
  * Resolve a potentially-localized field value to a plain string for the given locale.

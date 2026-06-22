@@ -1,3 +1,5 @@
+import { createDateFormatter } from "/static/format-display.js";
+const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "/static/html-escape.js";
 import {
   supportedLocales,
@@ -163,10 +165,6 @@ function certBadge(level) {
 }
 
 
-function formatDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(currentLocale === "en-GB" ? "en-GB" : currentLocale, { day: "numeric", month: "short", year: "numeric" });
-}
 
 function resolveContentAdminDefaults() {
   const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;

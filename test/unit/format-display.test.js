@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createNumberFormatter, createDateTimeFormatter } from "../../public/static/format-display.js";
+import { createNumberFormatter, createDateTimeFormatter, createDateFormatter } from "../../public/static/format-display.js";
 
 // #596 slice 2: pins the consolidated number formatter, including the lazy locale getter and the
 // configurable non-number placeholder (the one behaviour that differed across the 7 copies).
@@ -53,5 +53,19 @@ describe("createDateTimeFormatter (shared, #596)", () => {
   it("falls back to String(value) when the date cannot be formatted", () => {
     // An unparseable date → new Date("nope") is Invalid Date → Intl throws → catch → String(value).
     expect(createDateTimeFormatter(() => "en-GB")("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("createDateFormatter (shared, #596)", () => {
+  it("formats a short numeric date (day/short-month/year) with the lazy locale", () => {
+    const out = createDateFormatter(() => "en-GB")("2026-06-22T00:00:00Z");
+    expect(out).toContain("2026");
+    expect(out).toMatch(/Jun/i);
+  });
+
+  it("returns the placeholder (default em-dash) for falsy input", () => {
+    expect(createDateFormatter(() => "en-GB")(null)).toBe("—");
+    expect(createDateFormatter(() => "en-GB")("")).toBe("—");
+    expect(createDateFormatter(() => "en-GB", "-")(undefined)).toBe("-");
   });
 });

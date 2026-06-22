@@ -40,3 +40,22 @@ export function createDateTimeFormatter(getLocale, placeholder = "-") {
     }
   };
 }
+
+// #596 slice 6 — short numeric date (no time). Consolidates the two identical `formatDate` copies
+// in static/admin-content-courses.js and static/admin-content-library.js, which used
+// `toLocaleDateString(currentLocale, { day: "numeric", month: "short", year: "numeric" })` with the
+// em-dash placeholder. (The originals wrote `currentLocale === "en-GB" ? "en-GB" : currentLocale`,
+// which is just `currentLocale` — both ternary branches are equal — so `getLocale()` is identical.)
+// Single-of-a-kind date formatters elsewhere (certificate `dateStyle:"long"`, profile.formatDate
+// `dateStyle:"medium"`, admin-content's NaN-guard variant) are distinct formats, not duplicates,
+// and are intentionally left in place.
+export function createDateFormatter(getLocale, placeholder = "—") {
+  return function formatDate(iso) {
+    if (!iso) return placeholder;
+    return new Date(iso).toLocaleDateString(getLocale(), {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+}
