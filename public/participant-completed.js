@@ -1,3 +1,4 @@
+import { escapeHtml as escapeHtmlC } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-completed-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -509,13 +510,6 @@ rolesInput.addEventListener("input", () => {
 
 const courseCertList = document.getElementById("courseCertList");
 
-function escapeHtmlC(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function renderCourseCertificates(completions) {
   courseCertList.innerHTML = "";

@@ -1,3 +1,4 @@
+import { escapeHtml } from "/static/html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -161,9 +162,6 @@ function certBadge(level) {
   return `<span class="cert-badge">${escapeHtml(label)}</span>`;
 }
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
 
 function formatDate(iso) {
   if (!iso) return "—";

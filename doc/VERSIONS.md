@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.56 - 2026-06-22
+
+refactor(frontend): single source of truth for HTML-escaping — #596 skive 1 (EPIC #595)
+
+Første skive i frontend-dedupliseringen (jf. arkitekturgjennomgangen #598/#611): ny ES-modul
+`public/static/html-escape.js` med én `escapeHtml`, importert av de **6 byte-identiske** kopiene
+(`admin-content.js`, `participant.js` (escapeHtmlP), `participant-completed.js` (escapeHtmlC),
+`results.js` (escapeHtmlR), `static/admin-content-courses.js`, `static/admin-content-library.js`).
+Ren no-op: alle seks gjorde `String(x ?? "")` + samme 4-tegns escape, og kanonisk versjon matcher
+eksakt (importert med alias så kall-stedene er urørt). Unit-test pinner oppførselen.
+
+**Bevisst utenfor skiven (hver er en reell atferdsforskjell → egen oppfølging):**
+`admin-content-preview.js`/`admin-content-shell.js`/`static/loading.js` bruker `String(x)` uten
+`?? ""`-vakten (null→"null"), og `static/admin-content-sections.js` escaper også `'`. Disse 4
+kopiene står igjen til senere skiver.
+
 ## 1.3.55 - 2026-06-22
 
 fix(authoring): chunket komprimering så LLM-forespørsler holder seg under TPM-kvoten (#479)

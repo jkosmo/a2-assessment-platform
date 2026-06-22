@@ -1,3 +1,4 @@
+import { escapeHtml } from "/static/html-escape.js";
 import {
   supportedLocales,
   localeLabels,
@@ -72,9 +73,6 @@ const deleteCancelBtn = document.getElementById("deleteCancelBtn");
 // Helpers
 // ---------------------------------------------------------------------------
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 function formatDate(iso) {
   if (!iso) return "—";
