@@ -1264,6 +1264,37 @@ Return a single JSON object:
   return { systemPrompt, userPrompt };
 }
 
+// #479: Azure OpenAI returns 429 ("too_many_requests") when the deployment's tokens-per-minute
+// quota is exceeded — easy to hit now that crawl can produce large source material fanning into
+// several big calls (condense → blueprint → draft → MCQ) within seconds. A single un-retried 429
+// aborted the whole pipeline (and the condense fallback then sent the FULL oversized material
+// downstream, guaranteeing more 429s). These calls are now retried with backoff that honours the
+// server's Retry-After. 5xx are transient gateway errors and are retried too.
+const LLM_MAX_ATTEMPTS = 4;
+const LLM_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const LLM_BACKOFF_BASE_MS = 1_000;
+const LLM_BACKOFF_MAX_MS = 20_000;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Parses a Retry-After header (delta-seconds or HTTP-date). Returns null when absent/unparseable.
+export function parseRetryAfterMs(header: string | null | undefined): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return null;
+}
+
+// Backoff for attempt N (0-based): honour Retry-After if the server sent one, otherwise exponential
+// (1s, 2s, 4s, …) capped, with jitter to avoid thundering-herd retries across concurrent calls.
+export function computeLlmBackoffMs(attempt: number, retryAfterMs: number | null): number {
+  if (retryAfterMs !== null) return Math.min(retryAfterMs, LLM_BACKOFF_MAX_MS);
+  const exponential = Math.min(LLM_BACKOFF_BASE_MS * 2 ** attempt, LLM_BACKOFF_MAX_MS);
+  return Math.round(exponential * (0.5 + Math.random() * 0.5));
+}
+
 async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 4000): Promise<unknown> {
   if (env.LLM_MODE !== "azure_openai") {
     throw new Error("LLM content generation requires LLM_MODE=azure_openai.");
@@ -1285,18 +1316,33 @@ async function callLlm(systemPrompt: string, userPrompt: string, maxTokens = 400
     [tokenParam]: maxTokens,
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": env.AZURE_OPENAI_API_KEY ?? "",
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < LLM_MAX_ATTEMPTS; attempt++) {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": env.AZURE_OPENAI_API_KEY ?? "",
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Azure OpenAI generation failed (${response.status}): ${text.slice(0, 200)}`);
+    if (response.ok || !LLM_RETRYABLE_STATUSES.has(response.status)) break;
+
+    // Retryable (429/5xx). Back off and retry unless this was the last attempt.
+    if (attempt < LLM_MAX_ATTEMPTS - 1) {
+      const waitMs = computeLlmBackoffMs(attempt, parseRetryAfterMs(response.headers.get("retry-after")));
+      console.warn(
+        `[#479] Azure OpenAI ${response.status} — retrying in ${waitMs}ms (attempt ${attempt + 1}/${LLM_MAX_ATTEMPTS}).`,
+      );
+      await sleep(waitMs);
+    }
+  }
+
+  if (!response || !response.ok) {
+    const status = response?.status ?? 0;
+    const text = response ? await response.text().catch(() => "") : "";
+    throw new Error(`Azure OpenAI generation failed (${status}): ${text.slice(0, 200)}`);
   }
 
   const payload = (await response.json()) as {

@@ -12,7 +12,49 @@ import {
   extractMcqRevisionTargets,
   hasMeaningfulMcqRevision,
   isLikelyWrongLocale,
+  parseRetryAfterMs,
+  computeLlmBackoffMs,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
+
+// #479: Azure OpenAI 429/5xx retry helpers. A single un-retried 429 used to abort the whole
+// authoring pipeline (condense → blueprint → draft), which crawl made easy to trigger via large
+// source material. These pin the Retry-After parsing + backoff bounds.
+describe("LLM retry backoff", () => {
+  it("parses Retry-After as delta-seconds", () => {
+    expect(parseRetryAfterMs("2")).toBe(2000);
+    expect(parseRetryAfterMs("0")).toBe(0);
+  });
+
+  it("parses Retry-After as an HTTP-date (future → positive ms)", () => {
+    const future = new Date(Date.now() + 5000).toUTCString();
+    const ms = parseRetryAfterMs(future);
+    expect(ms).not.toBeNull();
+    expect(ms as number).toBeGreaterThanOrEqual(0);
+    expect(ms as number).toBeLessThanOrEqual(5000);
+  });
+
+  it("returns null for missing/garbage Retry-After", () => {
+    expect(parseRetryAfterMs(null)).toBeNull();
+    expect(parseRetryAfterMs(undefined)).toBeNull();
+    expect(parseRetryAfterMs("not-a-date")).toBeNull();
+  });
+
+  it("honours Retry-After when present (capped)", () => {
+    expect(computeLlmBackoffMs(0, 3000)).toBe(3000);
+    // Capped at the 20s ceiling even if the server asks for more.
+    expect(computeLlmBackoffMs(0, 999_999)).toBe(20_000);
+  });
+
+  it("falls back to exponential backoff with jitter, bounded", () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const ms = computeLlmBackoffMs(attempt, null);
+      expect(ms).toBeGreaterThan(0);
+      expect(ms).toBeLessThanOrEqual(20_000);
+    }
+    // Later attempts trend larger (jitter floor of attempt 3 ≥ attempt 0 ceiling here).
+    expect(computeLlmBackoffMs(3, null)).toBeGreaterThanOrEqual(computeLlmBackoffMs(0, null));
+  });
+});
 
 describe("llm content generation prompts", () => {
   it("treats source material as hidden author background for module drafts", () => {

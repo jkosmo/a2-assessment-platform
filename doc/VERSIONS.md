@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.54 - 2026-06-22
+
+fix(authoring): retry Azure OpenAI 429/5xx i innholds-genereringen (#479)
+
+Utløst av Slice B (crawl): crawl kan produsere mye større kildemateriale, som fanner ut i flere
+store LLM-kall (komprimer → vurderingsplan → utkast → MCQ) på sekunder og sprenger Azure OpenAI sin
+tokens-per-minutt-kvote → `429 too_many_requests`. `callLlm` gjorde **ett** kall og kastet umiddelbart,
+så en transient 429 stoppet hele pipelinen — og komprimerings-fallbacken sendte da det **fulle**
+(for store) materialet nedstrøms, som garanterte flere 429.
+
+`callLlm` retryer nå 429/500/502/503/504 med opptil 4 forsøk: ærer serverens `Retry-After`-header,
+ellers eksponentiell backoff (1→2→4→8 s, cap 20 s) med jitter. Eksporterte `parseRetryAfterMs` +
+`computeLlmBackoffMs` er unit-testet. Samme mangel i assessment-LLM-klienten spores i #603.
+
 ## 1.3.53 - 2026-06-22
 
 feat(ingest): same-domain crawl av kildemateriale (#479 Slice B)
