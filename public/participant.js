@@ -1,3 +1,4 @@
+import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -2837,9 +2838,6 @@ const celebratedCompletedCourses = new Set();
 let courseAccordionInitialized = false;
 let courseDetailCache = {};        // courseId -> CourseDetail
 
-function escapeHtmlP(str) {
-  return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 document.getElementById("loadCoursesBtn")?.addEventListener("click", async () => {
   const btn = document.getElementById("loadCoursesBtn");

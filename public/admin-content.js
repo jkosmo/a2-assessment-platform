@@ -1,3 +1,4 @@
+import { escapeHtml } from "/static/html-escape.js";
 import {
   localeLabels,
   supportedLocales,
@@ -4866,9 +4867,6 @@ function renderCourseList() {
   }
 }
 
-function escapeHtml(str) {
-  return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 function buildCourseCard(course) {
   const card = document.createElement("div");

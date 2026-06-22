@@ -1,3 +1,4 @@
+import { escapeHtml as escapeHtmlR } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -521,13 +522,6 @@ const courseReportBody = document.getElementById("courseReportBody");
 const courseLearnerBody = document.getElementById("courseLearnerBody");
 const courseDetailMeta = document.getElementById("courseDetailMeta");
 
-function escapeHtmlR(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function renderCourseReport(rows) {
   courseReportBody.innerHTML = "";
