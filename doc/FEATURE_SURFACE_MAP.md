@@ -107,12 +107,12 @@ import; do not re-add a local copy.**
 | `formatNumber` | `public/static/format-display.js` (`createNumberFormatter`) | 7 files (slice 2) |
 | `resolveInitialLocale` | `public/static/i18n-locale.js` | 9 files (slice 3) |
 | `formatDateTime` | `public/static/format-display.js` (`createDateTimeFormatter`) | 7 files (slice 4) |
+| `renderWorkspaceNavigation` | `public/static/workspace-nav.js` (`renderWorkspaceNavigationWithProfile`) | 13 page scripts (slice 5) — all now thin wrappers |
 
-**Guards:** `test/unit/html-escape.test.js`, `test/unit/format-display.test.js`, `test/unit/i18n-locale.test.js`.
+**Guards:** `test/unit/html-escape.test.js`, `test/unit/format-display.test.js`, `test/unit/i18n-locale.test.js`. Nav rendering exercised across e2e page loads. **Rule:** never re-add a local `renderWorkspaceNavigation` body — call the shared helper; pass `localePicker: null` on pages that intentionally omit the profile link (e.g. `profile.js`).
 
 ### Still duplicated (future #596 slices — do NOT fix one copy in isolation)
 - **`escapeHtml` divergent variants** — `admin-content-preview.js`/`admin-content-shell.js`/`static/loading.js` (`String(x)` without `?? ""`), `static/admin-content-sections.js` (also escapes `'`). Behaviour differs → each needs a decision, not a blind merge.
-- **`renderWorkspaceNavigation` — ×14 files.** Biggest single duplication; DOM/state-coupled (needs `workspaceNav`, config, roles, `t`). Needs characterization e2e first, then careful extraction.
 - **Date variants** not in slice 4: `dateStyle:"long"` (certificate), medium-only (`profile.formatDate`), `toLocaleDateString` numeric (courses/library), and `admin-content.js`'s NaN-guard `formatDateTimeValue`.
 
 ## 10. Assessment LLM pipeline — 429/oversize chain (#479)

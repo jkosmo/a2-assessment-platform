@@ -1,3 +1,4 @@
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
@@ -130,23 +131,20 @@ function renderRolePresetControl() {
 }
 
 function renderWorkspaceNavigation() {
-  if (!workspaceNav) return;
+  if (!workspaceNav) {
+    return;
+  }
   const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-  ).filter((item) => item.visible && item.id !== "profile");
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  for (const item of items) {
-    const link = document.createElement("a");
-    link.href = item.path;
-    link.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    link.textContent = t(item.labelKey);
-    if (item.active) link.setAttribute("aria-current", "page");
-    workspaceNav.appendChild(link);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker: null,
+    items,
+    buildLabel: (item) => t(item.labelKey),
+  });
 }
 
 // ── Headers ───────────────────────────────────────────────────────────────────
