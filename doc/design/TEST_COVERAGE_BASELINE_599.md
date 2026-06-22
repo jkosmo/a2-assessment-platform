@@ -58,9 +58,8 @@ skje i e2e, **og** et selvstendig argument for #598 (ekstraher rene funksjoner �
    er en *importerbar* ren funksjon i `public/participant-console-state.js` (ikke begravd i
    monolitten) og er unit-testet i `test/participant-console-state.test.js` (initial/afterMcq/
    completed + `requiresMcq:false`-grenen). Ingen ny test nødvendig.
-   - *Gjenstår (lav risiko):* `renderResultSummary`-grenen for **FREETEXT_PLUS_MCQ** som viser
-     *begge* skåre-rader. MCQ_ONLY (skjul praktisk) og FREETEXT_ONLY (skjul MCQ) er pinnet; «vis
-     begge» er strukturelt bare «ingen av betingelsene true», så restrisikoen er lav.
+   - ✅ `renderResultSummary`-triaden er nå komplett: MCQ_ONLY (skjul praktisk), FREETEXT_ONLY
+     (skjul MCQ) og **FREETEXT_PLUS_MCQ** (vis begge) er alle pinnet i `participant-mcq-only.spec.ts`.
 4. **Modul-opprettelse, biblioteks-inngangen (#348):** verifiser at e2e dekker *begge* innganger
    (Samtale-idle + biblioteks-dialog), ikke bare Samtale. *(gjenstår)*
 5. **Kvantitativ server-baseline:** installer `@vitest/coverage-v8` og fest et tall på `src/modules/*`
