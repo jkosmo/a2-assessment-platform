@@ -10,6 +10,7 @@ import {
   SourceMaterialTooLargeError,
   SourceMaterialPolicyError,
   SourceMaterialTimeoutError,
+  SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES,
 } from "./modules/adminContent/sourceMaterialExtractionService.js";
 
 const parserEnvSchema = z.object({
@@ -107,7 +108,12 @@ const parseRequestSchema = z.object({
 });
 
 const parserApp = express();
-parserApp.use(express.json({ limit: "4mb" }));
+// #479: the parser worker receives the SAME base64-in-JSON upload as the main app, so it must use
+// the SAME shared body limit. A hardcoded 4 MB here caused a 413 ("Payload Too Large") on a 5.6 MB
+// file after the per-file cap was raised to 10 MB (#479 Slice A) — the cap was raised in the
+// extraction service and main app, but this separate service's limit was missed. Deriving from the
+// shared constant prevents that drift.
+parserApp.use(express.json({ limit: SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES }));
 
 // Health endpoint — no auth (used by Azure App Service probes)
 parserApp.get("/health", (_req, res) => {
