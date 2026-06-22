@@ -1,3 +1,4 @@
+import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
@@ -243,48 +244,17 @@ function renderWorkspaceNavigation() {
   if (!workspaceNav) {
     return;
   }
-
-  const allItems = resolveWorkspaceNavigationItems(
+  const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
     rolesInput.value,
     window.location.pathname,
-  ).filter((item) => item.visible);
-
-  const profileItem = allItems.find((item) => item.id === "profile");
-  const items = allItems.filter((item) => item.id !== "profile");
-
-  const localePicker = document.querySelector(".locale-picker");
-  if (localePicker && profileItem) {
-    localePicker.style.display = "flex";
-    localePicker.style.alignItems = "center";
-    localePicker.style.gap = "8px";
-    let profileLink = document.getElementById("profileNavLink");
-    if (!profileLink) {
-      profileLink = document.createElement("a");
-      profileLink.id = "profileNavLink";
-      localePicker.appendChild(profileLink);
-    }
-    profileLink.href = profileItem.path;
-    profileLink.textContent = t(profileItem.labelKey);
-    profileLink.className = profileItem.active ? "workspace-nav-link active" : "workspace-nav-link";
-  }
-
-  workspaceNav.innerHTML = "";
-  workspaceNav.hidden = items.length === 0;
-  if (items.length === 0) {
-    return;
-  }
-
-  for (const item of items) {
-    const link = document.createElement("a");
-    link.href = item.path;
-    link.className = item.active ? "workspace-nav-link active" : "workspace-nav-link";
-    link.textContent = t(item.labelKey);
-    if (item.active) {
-      link.setAttribute("aria-current", "page");
-    }
-    workspaceNav.appendChild(link);
-  }
+  );
+  renderWorkspaceNavigationWithProfile({
+    workspaceNav,
+    localePicker: document.querySelector(".locale-picker"),
+    items,
+    buildLabel: (item) => t(item.labelKey),
+  });
 }
 
 function getCheckedPillValues(container) {

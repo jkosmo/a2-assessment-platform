@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.60 - 2026-06-22
+
+refactor(frontend): konsolider renderWorkspaceNavigation — #596 skive 5 (EPIC #595)
+
+Den største enkelt-dupliseringen fra arkitektur-gjennomgangen (#611): `renderWorkspaceNavigation` lå
+i 14 filer. En delt `renderWorkspaceNavigationWithProfile` fantes allerede i
+`public/static/workspace-nav.js`, men kun 6 filer brukte den. De resterende **7** (`participant.js`,
+`participant-completed.js`, `profile.js`, `calibration.js`, `results.js`, `review.js`,
+`admin-platform.js`) hadde egne fulle implementasjoner — nå erstattet av tynne wrappere som kaller
+den delte funksjonen. Alle 13 sider deler nå én implementasjon.
+
+No-op: de lokale versjonene satte inline `.locale-picker`-styling (display:flex/align/gap) som
+allerede ligger i `shared.css` (redundant). `profile.js` utelot bevisst profil-lenken → migrert med
+`localePicker: null` (samme oppførsel). Den delte funksjonen legger i tillegg til `aria-current` på
+profil-lenken og rydder en foreldet lenke — rene a11y-forbedringer. Surface-map §9 oppdatert.
+
 ## 1.3.59 - 2026-06-22
 
 refactor(frontend): single source of truth for date-time formatting — #596 skive 4 (EPIC #595)
