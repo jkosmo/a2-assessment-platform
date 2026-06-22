@@ -1,4 +1,5 @@
-import { createNumberFormatter } from "/static/format-display.js";
+import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
+const formatDateTimeValue = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import {
   supportedLocales,
@@ -134,17 +135,6 @@ function renderAccessDenied() {
 // ---------------------------------------------------------------------------
 
 
-function formatDateTimeValue(value) {
-  if (!value) return "-";
-  try {
-    return new Intl.DateTimeFormat(currentLocale, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
-}
 
 function localizeSubmissionStatus(value) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";

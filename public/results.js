@@ -1,3 +1,5 @@
+import { createDateTimeFormatter } from "/static/format-display.js";
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml as escapeHtmlR } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
@@ -102,17 +104,6 @@ function pct(value) {
   return `${Math.round(value * 100)} %`;
 }
 
-function formatDateTime(value) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat(currentLocale, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
-}
 
 function formatScore(value) {
   if (typeof value !== "number") return "—";

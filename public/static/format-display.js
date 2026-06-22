@@ -18,3 +18,25 @@ export function createNumberFormatter(getLocale, placeholder = "-") {
     }).format(value);
   };
 }
+
+// #596 slice 4 — date-time formatting. Replaces 7 copies of `formatDateTime`/`formatDateTimeValue`
+// (participant.js, participant-completed.js, profile.js, calibration.js, review.js, results.js,
+// static/admin-content-calibration.js) that all did `Intl.DateTimeFormat(currentLocale,
+// { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))` with a falsy guard and a
+// try/catch → String(value) fallback. Same lazy-locale factory as numbers; the only difference was
+// the falsy placeholder ("-" vs the em-dash "—", kept via the param). Date variants that differ in
+// shape (dateStyle long/medium-only, the toLocaleDateString numeric form, and admin-content.js's
+// NaN-guard variant) are intentionally left for later slices.
+export function createDateTimeFormatter(getLocale, placeholder = "-") {
+  return function formatDateTime(value) {
+    if (!value) return placeholder;
+    try {
+      return new Intl.DateTimeFormat(getLocale(), {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(value));
+    } catch {
+      return String(value);
+    }
+  };
+}

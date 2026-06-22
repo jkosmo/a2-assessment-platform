@@ -1,5 +1,6 @@
 import { resolveInitialLocale } from "/static/i18n-locale.js";
-import { createNumberFormatter } from "/static/format-display.js";
+import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import {
@@ -168,14 +169,6 @@ function headers() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDateTime(value) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat(currentLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
-}
 
 function formatDate(value) {
   if (!value) return "—";
