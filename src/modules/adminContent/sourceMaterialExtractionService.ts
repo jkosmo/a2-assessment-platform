@@ -60,9 +60,19 @@ async function loadPptParser() {
 }
 
 // #479 (Slice A): raised from 2 MB → 10 MB per file. Sent as base64 in JSON, so the upload route
-// gets a larger express.json body limit (see app.ts). Files above this should use a future
-// multipart path rather than base64-in-JSON.
+// gets a larger express.json body limit (see SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES). Files above
+// this should use a future multipart path rather than base64-in-JSON.
 export const SOURCE_MATERIAL_MAX_BYTES = 10 * 1024 * 1024;
+
+// #479: SINGLE SOURCE OF TRUTH for the upload-request body limit. The file is sent base64-encoded
+// inside a JSON envelope, which inflates the payload by 4/3, plus headroom for the JSON keys
+// (fileName, mimeType) and whitespace. BOTH express services that receive the upload must use this
+// — the main app's /source-material/extract route (app.ts) AND the parser worker (parserApp.ts).
+// Deriving it from SOURCE_MATERIAL_MAX_BYTES is what stops these limits from silently drifting
+// apart again (the parser worker's hardcoded 4 MB caused a 413 on a 5.6 MB file after the file cap
+// was raised to 10 MB). A sync-guard test asserts this can hold a max-size file's base64.
+export const SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES =
+  Math.ceil((SOURCE_MATERIAL_MAX_BYTES * 4) / 3) + 2 * 1024 * 1024;
 
 export const SUPPORTED_SOURCE_MATERIAL_EXTENSIONS = [
   ".txt",

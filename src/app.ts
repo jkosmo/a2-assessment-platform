@@ -2,6 +2,7 @@ import express from "express";
 import path from "node:path";
 import { appName, appVersion } from "./config/appMetadata.js";
 import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.js";
+import { SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES } from "./modules/adminContent/sourceMaterialExtractionService.js";
 import { rolesFor } from "./config/capabilities.js";
 import { authenticate } from "./auth/authenticate.js";
 import { requireAnyRole } from "./auth/authorization.js";
@@ -36,9 +37,14 @@ app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
 app.use(securityHeadersMiddleware);
 // #479 (Slice A): source-material upload sends files as base64 in JSON (10 MB max → ~13.3 MB
-// encoded). Give just that route a larger body limit; registered before the global parser so it
-// parses first (express.json skips once req._body is set), keeping every other endpoint at 5 MB.
-app.use("/api/admin/content/source-material/extract", express.json({ limit: "16mb" }));
+// encoded). Give just that route a larger body limit, derived from the shared single-source-of-
+// truth constant so it can never be smaller than a max-size file's base64. Registered before the
+// global parser so it parses first (express.json skips once req._body is set), keeping every other
+// endpoint at 5 MB. The parser worker (parserApp.ts) uses the SAME constant.
+app.use(
+  "/api/admin/content/source-material/extract",
+  express.json({ limit: SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES }),
+);
 app.use(express.json({ limit: "5mb" }));
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));

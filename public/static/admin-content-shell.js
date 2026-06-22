@@ -165,7 +165,10 @@ const srChanges = document.getElementById("srChanges");
 const srPreview = document.getElementById("srPreview");
 const srLang = document.getElementById("srLang");
 
-const SOURCE_MATERIAL_MAX_BYTES = 2 * 1024 * 1024;
+// #479 Slice A: must match SOURCE_MATERIAL_MAX_BYTES in
+// src/modules/adminContent/sourceMaterialExtractionService.ts (server). Keep both at 10 MB —
+// the client guard rejects oversize files before upload; the server enforces the real cap.
+const SOURCE_MATERIAL_MAX_BYTES = 10 * 1024 * 1024;
 // #454 Phase 3 (v1.2.3): 50K → 200K. v1.2.5: 200K → 1M. Begrunnelse: Phase 4 (auto-condense)
 // komprimerer enhver source > 50K til ~30K før LLM-pipeline, så reell LLM-kost er bundet
 // uavhengig av input-størrelse. 1M-cap'en eksisterer bare som sanity-grense for å unngå at

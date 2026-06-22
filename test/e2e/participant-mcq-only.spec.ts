@@ -200,6 +200,77 @@ test("participant: FREETEXT_ONLY module shows free-text, hides MCQ, assesses wit
   await expect.poll(() => runCalled).toBe(true);
   expect(mcqStartCalled).toBe(false);
   await expect(page.locator("#mcqSection")).toBeHidden();
-  // (#591 result-row hiding is covered deterministically by the MCQ-only test above; the symmetric
-  // free-text-only branch hides the MCQ row via the same renderResultSummary gate.)
+});
+
+// #591/#599 characterization: the FREETEXT_ONLY branch of renderResultSummary must show the
+// practical score but HIDE the (always-0) MCQ score — the mirror of the MCQ-only case above. Made
+// deterministic by disabling auto-assessment (config autoStartAfterMcq=false) so the "View result"
+// button is enabled and we render a mocked COMPLETED result directly, instead of racing the poll.
+test("participant: FREETEXT_ONLY result hides the MCQ score row, shows the practical score", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  // Override config: disable auto-assessment so #checkResult is clickable (not gated by the loop).
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authMode: "mock",
+        navigation: { items: [], workspaceItems: [] },
+        identityDefaults: {
+          participant: { userId: "participant-1", email: "p@x.no", name: "P", department: "X", roles: ["PARTICIPANT"] },
+        },
+        calibrationWorkspace: { accessRoles: [] },
+        flow: { autoStartAfterMcq: false },
+        output: {},
+      }),
+    }),
+  );
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        modules: [
+          { id: "m-fto", title: "Essay Modul", description: null, assessmentMode: "FREETEXT_ONLY", submissionSchema: null, assessmentPolicy: null, taskText: "Skriv et essay", activeVersion: { versionNo: 1 }, participantStatus: null },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  // Completed result with a 0 MCQ component (as FREETEXT_ONLY always has).
+  await page.route("**/api/submissions/*/result", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "COMPLETED",
+        decision: { passFailTotal: true, decisionType: "AUTOMATIC" },
+        scoreComponents: { totalScore: 85, mcqScaledScore: 0, practicalScaledScore: 85 },
+        participantGuidance: {},
+      }),
+    }),
+  );
+
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "Essay Modul" }).click();
+
+  // Submit the free-text answer (no auto-assessment now), then view the result.
+  for (const ta of await page.locator("#submissionFields textarea").all()) {
+    await ta.fill("This is a sufficiently long free-text answer for assessment.");
+  }
+  await page.locator("#ack").check();
+  await page.locator("#createSubmission").click();
+  await page.locator("#checkResult").click();
+
+  // The practical score row is shown; the (always-0) MCQ score row is hidden.
+  const result = page.locator("#resultSummary");
+  await expect(result).toContainText("Praktisk poeng");
+  await expect(result).not.toContainText("MCQ-poeng");
 });

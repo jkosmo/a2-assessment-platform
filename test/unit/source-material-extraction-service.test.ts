@@ -4,6 +4,7 @@ import {
   extractSourceMaterialText,
   SourceMaterialExtractionError,
   SOURCE_MATERIAL_MAX_BYTES,
+  SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES,
   SourceMaterialTooLargeError,
   UnsupportedSourceMaterialFormatError,
 } from "../../src/modules/adminContent/sourceMaterialExtractionService.js";
@@ -33,6 +34,19 @@ function fakeOoxmlBuffer() {
     0x00, 0x00,
   ]);
 }
+
+// #479/#596 sync-guard: the upload body limit shared by the main app (app.ts) and the parser
+// worker (parserApp.ts) MUST be able to hold a max-size file's base64 envelope. A hardcoded parser
+// limit (4 MB) that was smaller than this caused a 413 on a 5.6 MB file after the cap rose to 10 MB.
+// Deriving the limit from SOURCE_MATERIAL_MAX_BYTES makes this an invariant; this test pins it.
+describe("source material upload body limit (sync guard)", () => {
+  it("can hold a max-size file's base64 payload plus JSON envelope headroom", () => {
+    const base64Bytes = Math.ceil((SOURCE_MATERIAL_MAX_BYTES * 4) / 3);
+    expect(SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES).toBeGreaterThan(base64Bytes);
+    // Headroom is bounded too — not absurdly large.
+    expect(SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES).toBeLessThan(base64Bytes + 8 * 1024 * 1024);
+  });
+});
 
 describe("source material extraction service", () => {
   it("detects the expanded minimum file-type set", () => {

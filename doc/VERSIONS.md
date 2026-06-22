@@ -2,7 +2,7 @@
 
 This document tracks release versions and what each version includes.
 
-## 1.3.51 - 2026-06-22
+## 1.3.53 - 2026-06-22
 
 feat(ingest): same-domain crawl av kildemateriale (#479 Slice B)
 
@@ -19,6 +19,34 @@ vertsnavn**, inntil **20 sider** og **2 hopp**, og hovedteksten fra hver side sl
 - **Tester:** unit (robots-parser, longest-match, url-normalisering, crawl-orkestrering med mocket
   fetch + jsdom, rate-limit) + Playwright-e2e (kilde-steg → prompt → crawl → kombinert chip).
 - **Docs:** `doc/SOURCE_MATERIAL_INGEST_GUIDE.md` (ny bruker-guide) + API_REFERENCE source-ingest-tabell.
+
+## 1.3.52 - 2026-06-22
+
+fix(ingest): parser-worker body-grense delt med hoved-app (#479 Slice A oppfølging)
+
+Tredje «ufullstendig flate» i samme kjede: parser-workeren (`src/parserApp.ts`) er en **egen
+tjeneste** med sin egen `express.json`-grense som sto hardkodet på 4 MB. En 5,6 MB PPTX (base64
+~7,5 MB) ble derfor avvist med `413 Payload Too Large` fra parser-workeren, selv om klient + hoved-
+app + fil-cap var hevet til 10 MB.
+
+**Strukturell fiks (såer #596):** ny delt konstant `SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES`,
+**utledet** fra `SOURCE_MATERIAL_MAX_BYTES` (base64 4/3 + JSON-envelope-headroom), konsumert av
+**både** hoved-appens extract-rute (`app.ts`) og parser-workeren (`parserApp.ts`). De tre tallene
+kan ikke lenger drifte fra hverandre. En **synk-vakt-test** asserterer at grensen alltid rommer en
+maks-fil sin base64.
+
+## 1.3.51 - 2026-06-22
+
+fix(ingest): klient-filgrense 2 → 10 MB (#479 Slice A oppfølging)
+
+Slice A (v1.3.50) hevet server-grensen, express-body-grensen og UI-tekstene til 10 MB, men
+**klient-vakten** `SOURCE_MATERIAL_MAX_BYTES` i `public/static/admin-content-shell.js` sto igjen
+på 2 MB. Resultat: en 2,6 MB-fil ble avvist i nettleseren med meldingen «… opptil 10 MB» (riktig
+tekst, feil grense) før opplasting i det hele tatt skjedde. Konstanten er nå 10 MB, med en
+kommentar som binder den til server-konstanten. Regresjons-e2e laster opp en ~3 MB-fil og krever
+at den aksepteres.
+
+Klassisk «riktig fiks, ufullstendig flate» — fanget av e2e-laget.
 
 ## 1.3.50 - 2026-06-22
 

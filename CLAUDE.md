@@ -142,6 +142,22 @@ the fix landed in the one code path in the screenshot, while sibling paths produ
    never hides. This is a **recurring** trap — assume any `.row`/`.card`/grid element needs
    `setHidden` / inline `style.display`, and assert it actually hides in the e2e.
 
+### Use deploy-wait time to improve test coverage (standing order)
+
+Established 2026-06-22. A deploy cycle is ~16–22 min of otherwise-idle waiting. **By default, while
+waiting for any deploy (or other long-running background job) to finish, work on improving test
+coverage** — unless the user has given a different instruction for that wait.
+
+- Writing tests is a **safe, additive** activity: it does not change production behaviour, so it
+  never destabilises an in-flight deploy or the change being verified.
+- Prefer **characterization tests that pin current behaviour** on the highest-risk *untested*
+  surfaces — especially the client layer (invisible to supertest), per the surface map / coverage
+  baseline (`doc/design/TEST_COVERAGE_BASELINE_599.md`, EPIC #595).
+- Test-only changes need **no version bump** (nothing shipped changes) and can land in their own
+  small PR; they must still pass CI before merge.
+- Do **not** start a refactor or behavioural change as a "wait filler" — only tests (and test-
+  adjacent docs). Refactoring during a wait reintroduces the very risk this avoids.
+
 ### Which deploy workflow to use
 
 | Type of change | Use workflow | Why |
