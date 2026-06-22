@@ -1268,6 +1268,29 @@ test.describe("admin content browser coverage", () => {
     expect(mcqSetCreated).toBe(false);
   });
 
+  // #479 Slice A regression: the CLIENT file-size guard must allow files up to 10 MB. It was
+  // left at 2 MB while the toast message + server cap already said 10 MB, so a 2.6 MB upload was
+  // rejected client-side ("Filen er for stor … opptil 10 MB"). Upload a ~3 MB file and assert it
+  // is accepted (extracted into a source chip), not rejected as too large.
+  test("shell source step accepts a file between 2 and 10 MB", async ({ page }) => {
+    await mockCommonApis(page);
+
+    await page.goto("/admin-content");
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Big file module");
+
+    const threeMb = Buffer.alloc(3 * 1024 * 1024, 0x41);
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "big.pdf",
+      mimeType: "application/pdf",
+      buffer: threeMb,
+    });
+
+    // Accepted: a source chip with the filename appears and no "too large" toast is shown.
+    await expect(page.locator(".source-chip-label")).toContainText("big.pdf");
+    await expect(page.getByText(/too large/i)).toHaveCount(0);
+  });
+
   // #555: the conversation can author an MCQ-only module. After source material the author
   // picks "MCQ only", skips scenario/blueprint entirely, and the saved version sends
   // assessmentMode=MCQ_ONLY with the default 70% pass mark (no rubric/prompt/taskText).
