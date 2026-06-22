@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.52 - 2026-06-22
+
+fix(ingest): parser-worker body-grense delt med hoved-app (#479 Slice A oppfølging)
+
+Tredje «ufullstendig flate» i samme kjede: parser-workeren (`src/parserApp.ts`) er en **egen
+tjeneste** med sin egen `express.json`-grense som sto hardkodet på 4 MB. En 5,6 MB PPTX (base64
+~7,5 MB) ble derfor avvist med `413 Payload Too Large` fra parser-workeren, selv om klient + hoved-
+app + fil-cap var hevet til 10 MB.
+
+**Strukturell fiks (såer #596):** ny delt konstant `SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES`,
+**utledet** fra `SOURCE_MATERIAL_MAX_BYTES` (base64 4/3 + JSON-envelope-headroom), konsumert av
+**både** hoved-appens extract-rute (`app.ts`) og parser-workeren (`parserApp.ts`). De tre tallene
+kan ikke lenger drifte fra hverandre. En **synk-vakt-test** asserterer at grensen alltid rommer en
+maks-fil sin base64.
+
 ## 1.3.51 - 2026-06-22
 
 fix(ingest): klient-filgrense 2 → 10 MB (#479 Slice A oppfølging)
