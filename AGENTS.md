@@ -92,6 +92,14 @@ These rules exist because their violation caused or worsened the May 2026 produc
   `.hidden` class or `[hidden]` on an element with a `display`-setting class
   (`.row`/`.card`/`.content-card`/`.module-brief`/grid…), since `.hidden` (no `!important`) loses the
   cascade and the element never hides. Recurring trap.
+- **Use deploy-wait time to improve test coverage (standing order, 2026-06-22):** while waiting for
+  any deploy or long-running background job, default to improving test coverage unless told
+  otherwise. Tests are safe/additive (no runtime change, can't destabilise the in-flight deploy).
+  Prefer **characterization tests** that pin current behaviour on the highest-risk *untested*
+  surfaces — especially the client layer (invisible to supertest), per
+  `doc/design/TEST_COVERAGE_BASELINE_599.md` (EPIC #595). Test-only changes need no version bump and
+  land in their own small PR (still must pass CI). Do **not** start a refactor/behavioural change as
+  a wait-filler — only tests reintroduce zero risk.
 - **For infra changes**, include in the PR description:
   - Which environments are affected
   - Behavior on first deploy (fresh environment) vs normal deploy
