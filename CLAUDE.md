@@ -127,8 +127,11 @@ the fix landed in the one code path in the screenshot, while sibling paths produ
 1. **Enumerate every entry point and every surface before coding.** A behaviour usually appears in
    more than one place. Module creation has **two** entries (the library "create module" dialog
    `#348` → conversation regen, AND the conversation idle "new module"); a course certificate shows
-   in **three** places (result banner, `/participant/completed`, `/profile`). `grep` the feature
-   name / i18n label across **all** pages first, list the paths, and fix them in the same PR.
+   in **three** places (result banner, `/participant/completed`, `/profile`). **First check
+   `doc/FEATURE_SURFACE_MAP.md`** — it catalogues the known distributed behaviours with every
+   surface + guard test. If the behaviour is there, change all listed surfaces in the same PR; if
+   not, `grep` the feature name / i18n label across **all** pages, fix them together, and **add the
+   entry to the map**.
 2. **E2e must follow the documented/recommended user journey — not the code path you happened to
    build.** A green e2e that exercises the convenient path gives false confidence when users take a
    different one. (We shipped a module-type step into a flow users don't use; the e2e passed.)
