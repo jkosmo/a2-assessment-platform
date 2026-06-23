@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.62 - 2026-06-23
+
+feat(certificate): plattform-bredt diplom-bakgrunnsbilde (#580)
+
+En ADMINISTRATOR kan laste opp ett felles bakgrunnsbilde som vises bak alle kursbevis (diplom-
+identitet). Reuser F4 blob-lagring (`putAsset`/`getAsset`) + plattform-KV-config for referansen —
+**ingen ny modell/migrasjon**.
+
+- **Backend:** `certificateBackgroundService` (set/get/clear, mime+5 MB-validering).
+  `POST`/`DELETE /api/admin/platform/certificate-background` (ADMINISTRATOR, multipart). Bildet
+  serveres **uautentisert** på `GET /certificate-background` (ikke-sensitiv branding; 404 når ikke
+  satt) så CSS-`background-image`/`<img>` kan laste det uten auth-headers. `GET /api/admin/platform`
+  får `certificateBackground: boolean`; completions-responsen får `certificateBackgroundUrl`.
+- **Frontend:** admin-platform-side får opplasting + forhåndsvisning + fjern (umiddelbar effekt).
+  `certificate.js`/`.html` rendrer bildet bak teksten, print-trygt (`print-color-adjust: exact`).
+  i18n en-GB/nb/nn.
+- **Test:** unit (service, mocket blob+KV, 5) + e2e (bevis rendrer bakgrunn + negativ-assertion).
+- **Docs:** API_REFERENCE + COURSE_CERTIFICATES_GUIDE (admin-seksjon).
+
 ## 1.3.61 - 2026-06-22
 
 refactor(frontend): siste #596-rester — escapeHtml-varianter + kort-dato (EPIC #595)

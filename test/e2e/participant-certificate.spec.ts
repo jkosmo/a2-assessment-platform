@@ -62,6 +62,50 @@ test("certificate: renders the completion as a printable document", async ({ pag
 
   // Print control is available (no-print in the printed output, visible on screen).
   await expect(page.locator("#printBtn")).toBeVisible();
+
+  // #580: with no background configured the card stays plain (no diploma background class).
+  await expect(page.locator("#certificate")).not.toHaveClass(/has-background/);
+});
+
+// #580: when a platform diploma background is configured, the completion response carries its URL
+// and the certificate card renders it behind the text (class + background-image). Client-layer
+// behaviour — the served image is unauthenticated so a CSS url() can load it.
+test("certificate: renders the platform diploma background when configured", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "en-GB"); } catch { /* ignore */ }
+  });
+
+  await page.route("**/api/courses/completions/cert-bg", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        certificateId: "cert-bg",
+        courseId: "c1",
+        courseTitle: "Labour Law",
+        certificationLevel: "intermediate",
+        completedAt: "2026-06-20T10:00:00.000Z",
+        participantName: "Kari Nordmann",
+        moduleCount: 3,
+        certificateBackgroundUrl: "/certificate-background",
+      }),
+    }),
+  );
+  // The unauthenticated background image — fulfil with a 1x1 PNG so the CSS background loads.
+  const onePngixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await page.route("**/certificate-background**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: onePngixel }),
+  );
+
+  await page.goto("/certificate?id=cert-bg");
+
+  await expect(page.locator("#certificate")).toBeVisible();
+  await expect(page.locator("#certificate")).toHaveClass(/has-background/);
+  await expect(page.locator("#certificate")).toHaveCSS("background-image", /certificate-background/);
 });
 
 test("certificate: shows a not-found state for someone else's / missing certificate", async ({ page }) => {

@@ -172,6 +172,7 @@ async function loadSettings() {
     consentBodyNn.value = data.consentBody?.nn ?? "";
     consentBodyEnGb.value = data.consentBody?.["en-GB"] ?? "";
     if (data.consentVersion) consentVersionBadge.textContent = data.consentVersion;
+    renderCertBackground(Boolean(data.certificateBackground));
     settingsContent.style.display = "";
   } catch (err) {
     if (settingsContent) {
@@ -180,6 +181,72 @@ async function loadSettings() {
     }
   }
 }
+
+// ── #580 Certificate background ────────────────────────────────────────────────
+
+const certBgFile = document.getElementById("certBgFile");
+const certBgUpload = document.getElementById("certBgUpload");
+const certBgRemove = document.getElementById("certBgRemove");
+const certBgPreview = document.getElementById("certBgPreview");
+const certBgPreviewWrap = document.getElementById("certBgPreviewWrap");
+const certBgFeedback = document.getElementById("certBgFeedback");
+
+function renderCertBackground(present) {
+  certBgRemove.style.display = present ? "" : "none";
+  certBgPreviewWrap.style.display = present ? "" : "none";
+  if (present) {
+    // Cache-bust so a freshly uploaded image replaces a stale preview. Served unauthenticated.
+    certBgPreview.src = `/certificate-background?t=${Date.now()}`;
+  } else {
+    certBgPreview.removeAttribute("src");
+  }
+}
+
+function showCertBgFeedback(message, isError) {
+  certBgFeedback.textContent = message;
+  certBgFeedback.style.color = isError ? "var(--color-error, red)" : "var(--color-meta)";
+  certBgFeedback.style.display = "";
+}
+
+async function uploadCertBackground() {
+  const file = certBgFile.files?.[0];
+  if (!file) {
+    showCertBgFeedback(t("adminPlatform.certBackground.noFile"), true);
+    return;
+  }
+  certBgUpload.disabled = true;
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    // Multipart upload: pass the auth headers but let the browser set the multipart Content-Type.
+    const h = headers();
+    delete h["Content-Type"];
+    await apiFetch("/api/admin/platform/certificate-background", () => h, { method: "POST", body: form });
+    certBgFile.value = "";
+    renderCertBackground(true);
+    showCertBgFeedback(t("adminPlatform.certBackground.uploaded"), false);
+  } catch (err) {
+    showCertBgFeedback(String(err?.message ?? err), true);
+  } finally {
+    certBgUpload.disabled = false;
+  }
+}
+
+async function removeCertBackground() {
+  certBgRemove.disabled = true;
+  try {
+    await apiFetch("/api/admin/platform/certificate-background", headers, { method: "DELETE" });
+    renderCertBackground(false);
+    showCertBgFeedback(t("adminPlatform.certBackground.removed"), false);
+  } catch (err) {
+    showCertBgFeedback(String(err?.message ?? err), true);
+  } finally {
+    certBgRemove.disabled = false;
+  }
+}
+
+certBgUpload?.addEventListener("click", uploadCertBackground);
+certBgRemove?.addEventListener("click", removeCertBackground);
 
 async function saveSettings() {
   saveBtn.disabled = true;

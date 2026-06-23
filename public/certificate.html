@@ -19,6 +19,14 @@
         background: var(--color-bg, #fff);
         box-shadow: 0 2px 16px rgba(0,0,0,0.06);
       }
+      /* #580: platform-wide diploma background image, sized to cover the card behind the text. */
+      .certificate.has-background {
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
       .cert-kicker { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-meta, #64748b); }
       .cert-heading { font-size: 30px; margin: 8px 0 28px; font-weight: 700; }
       .cert-label { font-size: 14px; color: var(--color-meta, #64748b); margin: 18px 0 6px; }
@@ -33,9 +41,11 @@
       .cert-state { text-align: center; padding: 40px; color: var(--color-meta, #64748b); }
       @media print {
         .no-print { display: none !important; }
-        body { background: #fff; }
+        body { background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         .layout-container { max-width: none; margin: 0; padding: 0; }
         .certificate { border-color: #333; box-shadow: none; max-width: none; }
+        /* #580: keep the diploma background image in the printed/PDF output. */
+        .certificate.has-background { border-color: transparent; }
       }
     </style>
   </head>

@@ -6,6 +6,7 @@ import { normalizeLocale } from "../i18n/locale.js";
 import { NotFoundError } from "../errors/AppError.js";
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
+import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
 
 const coursesRouter = Router();
 
@@ -127,6 +128,9 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
       completedAt: completion.completedAt.toISOString(),
       participantName: completion.user.name,
       moduleCount,
+      // #580: URL of the platform-wide diploma background, or null when none is configured.
+      // Served unauthenticated (branding image) so <img>/CSS background can load it without headers.
+      certificateBackgroundUrl: (await hasCertificateBackground()) ? "/certificate-background" : null,
     });
   } catch (error) {
     next(error);

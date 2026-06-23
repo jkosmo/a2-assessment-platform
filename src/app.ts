@@ -61,6 +61,27 @@ app.get("/version", generalApiLimiter, (_request, response) => {
   response.json({ app: appName, version: appVersion });
 });
 
+// #580: platform-wide diploma background image, served UNAUTHENTICATED (non-sensitive branding) so
+// the certificate page's CSS background and the admin preview <img> can load it without auth
+// headers — which a CSS url()/<img> cannot send. 404 when none is configured.
+app.get("/certificate-background", generalApiLimiter, async (_request, response, next) => {
+  try {
+    const { getCertificateBackgroundContent } = await import(
+      "./modules/platformConfig/certificateBackgroundService.js"
+    );
+    const background = await getCertificateBackgroundContent();
+    if (!background) {
+      response.status(404).json({ error: "not_found" });
+      return;
+    }
+    response.setHeader("Content-Type", background.mimeType);
+    response.setHeader("Cache-Control", "public, max-age=300");
+    response.send(background.buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/participant", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant.html"));
 });
