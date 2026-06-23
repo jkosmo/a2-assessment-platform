@@ -80,6 +80,15 @@ function renderCertificate(data) {
   }
   document.getElementById("certId").textContent = data.certificateId ?? "-";
 
+  // #580: render the platform-wide diploma background behind the text when one is configured.
+  if (data.certificateBackgroundUrl) {
+    certificateEl.style.backgroundImage = `url("${data.certificateBackgroundUrl}")`;
+    certificateEl.classList.add("has-background");
+  } else {
+    certificateEl.style.backgroundImage = "";
+    certificateEl.classList.remove("has-background");
+  }
+
   certState.hidden = true;
   certificateEl.hidden = false;
 }

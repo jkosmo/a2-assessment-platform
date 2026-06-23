@@ -109,6 +109,21 @@
           </div>
         </section>
 
+        <!-- #580: platform-wide certificate (diploma) background image -->
+        <section class="card">
+          <h2 data-i18n="adminPlatform.section.certBackground">Certificate background</h2>
+          <p class="small" style="color:var(--color-meta)" data-i18n="adminPlatform.certBackground.hint">A platform-wide diploma background shown behind every course certificate. PNG, JPEG, GIF or WebP, max 5 MB. Uploads and removals take effect immediately (no Save needed).</p>
+          <div id="certBgPreviewWrap" style="display:none; margin:12px 0;">
+            <img id="certBgPreview" alt="" style="max-width:340px; max-height:190px; border:1px solid var(--color-border); border-radius:8px;" />
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <input id="certBgFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+            <button id="certBgUpload" class="btn-secondary" data-i18n="adminPlatform.certBackground.upload">Upload background</button>
+            <button id="certBgRemove" class="btn-secondary" style="display:none" data-i18n="adminPlatform.certBackground.remove">Remove</button>
+            <span id="certBgFeedback" class="small" style="display:none"></span>
+          </div>
+        </section>
+
         <div class="save-bar">
           <button id="saveBtn" class="btn-primary" data-i18n="adminPlatform.save">Save settings</button>
           <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">

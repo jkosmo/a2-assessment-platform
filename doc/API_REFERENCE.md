@@ -216,8 +216,17 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 
 | Method | Route | Role(s) |
 |---|---|---|
-| `GET` | `/api/admin/platform` | ADMINISTRATOR |
+| `GET` | `/api/admin/platform` | ADMINISTRATOR — includes `certificateBackground: boolean` (#580) |
 | `PUT` | `/api/admin/platform` | ADMINISTRATOR |
+| `POST` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — multipart `file` (PNG/JPEG/GIF/WebP, max 5 MB). Sets the platform-wide diploma background (#580). |
+| `DELETE` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — clears the diploma background (#580). |
+
+**Certificate background image (#580):** the uploaded image is stored in blob (reusing F4 asset
+storage) and referenced from platform key-value config — no new model. It is served
+**unauthenticated** at `GET /certificate-background` (a non-sensitive branding image; `404` when
+none is set), so the certificate page's CSS background and the admin preview `<img>` can load it
+without auth headers. `GET /api/courses/completions/:certificateId` returns
+`certificateBackgroundUrl` (`/certificate-background` or `null`).
 
 ---
 

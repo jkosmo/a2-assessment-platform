@@ -36,6 +36,20 @@ ut eller lagre beviset som PDF via nettleseren.
 > Et bevis er **personlig**: du kan bare åpne dine egne bevis. Forsøk på å åpne et annet bevis gir
 > «fant ikke beviset».
 
+## Diplom-bakgrunn (administrator) — #580
+
+En **administrator** kan laste opp et **plattform-bredt bakgrunnsbilde** som vises bak alle kursbevis,
+så de ser ut som ekte diplomer.
+
+1. Gå til **Plattforminnstillinger** (`/admin-platform`) → seksjonen **«Kursbevis-bakgrunn»**.
+2. Velg et bilde (PNG, JPEG, GIF eller WebP, maks 5 MB) og klikk **«Last opp bakgrunn»**.
+3. En forhåndsvisning vises. **«Fjern»** tar bort bildet igjen. Endringer trer i kraft umiddelbart —
+   ingen «Lagre» nødvendig.
+
+Bildet legges bak teksten (skalert til å dekke beviset) og kommer med i **«Skriv ut / lagre som PDF»**.
+Velg et bilde med rolig bakgrunn / god kontrast så bevis-teksten forblir lesbar. Det er **ett** felles
+bilde for hele plattformen (per-kurs-maler kan komme senere).
+
 ## Merknader
 
 - Beviset gjenspeiler kurset slik det var ved fullføring (modulene som inngikk fryses i beviset).
