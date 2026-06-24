@@ -358,7 +358,13 @@ async function loadParticipantConsoleConfig() {
   }
 
   renderWorkspaceNavigation();
-  await initConsentGuard(headers, currentLocale);
+  // A consent-guard failure must not abort the rest of init (it previously rejected the whole
+  // config promise, so anything chained after it — e.g. auto-loading course certificates — never ran).
+  try {
+    await initConsentGuard(headers, currentLocale);
+  } catch {
+    /* non-fatal — continue initialising the page */
+  }
   fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
 }
 
