@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.63 - 2026-06-24
+
+fix(certificate): hev diplom-bakgrunn-grense 5 → 15 MB (#580)
+
+5 MB avviste legitime print-kvalitets-diplomer (A4 @ 300 DPI). Hevet til 15 MB
+(`CERTIFICATE_BACKGROUND_MAX_BYTES` — samme konstant binder både service-validering og multer-
+opplastingsgrensen). UI-hint + docs oppdatert. Merk: bildet lastes av hver deltaker som åpner
+beviset, så et optimalisert bilde laster raskere.
+
 ## 1.3.62 - 2026-06-23
 
 feat(certificate): plattform-bredt diplom-bakgrunnsbilde (#580)

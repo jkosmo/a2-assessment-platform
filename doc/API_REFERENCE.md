@@ -218,7 +218,7 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 |---|---|---|
 | `GET` | `/api/admin/platform` | ADMINISTRATOR — includes `certificateBackground: boolean` (#580) |
 | `PUT` | `/api/admin/platform` | ADMINISTRATOR |
-| `POST` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — multipart `file` (PNG/JPEG/GIF/WebP, max 5 MB). Sets the platform-wide diploma background (#580). |
+| `POST` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — multipart `file` (PNG/JPEG/GIF/WebP, max 15 MB). Sets the platform-wide diploma background (#580). |
 | `DELETE` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — clears the diploma background (#580). |
 
 **Certificate background image (#580):** the uploaded image is stored in blob (reusing F4 asset
