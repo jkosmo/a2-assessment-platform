@@ -626,6 +626,10 @@ resource openAiModelDeployment 'Microsoft.CognitiveServices/accounts/deployments
       name: azureOpenAiModelName
       version: azureOpenAiModelVersion
     }
+    // #607: pin the live content-filter policy and version-upgrade behaviour so adoption does NOT
+    // strip them (what-if confirmed both staging and prod currently have exactly these values).
+    raiPolicyName: 'Microsoft.DefaultV2'
+    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
   }
 }
 
