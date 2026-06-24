@@ -80,20 +80,23 @@ jobs:
               deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
               skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
             2>&1 || true)
-          echo "result<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$output" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          # #472: large diffs (hundreds of KB) blow the E2BIG limit when passed via env to
+          # github-script. Write to a file; the comment/log steps read it instead.
+          printf '%s' "$output" > "$RUNNER_TEMP/whatif-prod.txt"
 
       - name: Post what-if result as PR comment
         if: inputs.pr_number != ''
         uses: actions/github-script@v9.0.0
-        # #472: pass the diff via env, not template-literal interpolation — large diffs with
-        # backticks/${ /control chars otherwise break the script.
+        # #472: read the diff from a file (not env/template-literal) — avoids both control-char
+        # breakage and E2BIG "Argument list too long" on large diffs.
         env:
-          WHATIF_RESULT: ${{ steps.whatif.outputs.result }}
+          WHATIF_FILE: ${{ runner.temp }}/whatif-prod.txt
         with:
           script: |
-            const result = process.env.WHATIF_RESULT || '';
+            const fs = require('fs');
+            let result = '';
+            try { result = fs.readFileSync(process.env.WHATIF_FILE, 'utf8'); }
+            catch { result = '(what-if output unavailable — see the workflow logs)'; }
             const body = [
               '## Bicep what-if — production (manual)',
               '',
@@ -134,10 +137,7 @@ jobs:
 
       - name: Log what-if to job output (no PR)
         if: inputs.pr_number == ''
-        # #472: pass via env, not inline interpolation — echo '${{ ... }}' breaks on single
-        # quotes / special chars in the diff (e.g. KQL in alert rules).
-        env:
-          WHATIF_RESULT: ${{ steps.whatif.outputs.result }}
+        # #472: read from the file written by the what-if step (avoids oversized-env issues).
         run: |
           echo "Production what-if output:"
-          printf '%s\n' "$WHATIF_RESULT"
+          cat "$RUNNER_TEMP/whatif-prod.txt"
