@@ -89,3 +89,21 @@ export async function checkCourseCompletionForCourse(
 
   await evaluateCourseCompletion(repo, input.userId, course, tx);
 }
+
+/**
+ * Idempotent reconciliation across ALL published courses for a user. Completion + certificate
+ * issuance is event-driven (fired when the last module passes or the last section is read); if that
+ * event was ever missed — data created before the logic existed, a dropped fire-and-forget, or a
+ * completion path that didn't trigger it — a course can show "completed" in the progress view yet
+ * have no certificate. This sweep, run when the user opens their certificates page, backfills any
+ * completion whose gates (all modules passed + all sections read) are now satisfied.
+ */
+export async function reconcileCourseCompletionsForUser(userId: string, tx?: CompletionTxClient) {
+  const client = (tx ?? prisma) as Parameters<typeof createCourseRepository>[0];
+  const repo = createCourseRepository(client);
+
+  const courses = await repo.findPublishedCourses();
+  for (const course of courses) {
+    await evaluateCourseCompletion(repo, userId, course, tx);
+  }
+}

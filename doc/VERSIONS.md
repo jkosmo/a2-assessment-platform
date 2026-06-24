@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.64 - 2026-06-24
+
+fix(course): backfill manglende kursbevis + «Fullførte moduler» i menyen (#580)
+
+**Bug (bruker-rapportert):** kurs viste «Fullført» i kurs-lista, men ingen kursbevis fantes → 404
+ved åpning av bevis, og «Ingen kursbevis ennå». Årsak: kurs-listas «Fullført» er seksjons-inklusiv
+(alle moduler bestått + alle seksjoner lest) — nøyaktig samme porter som bevis-utstedelse — men
+utstedelsen er **hendelsesdrevet** (fyres når siste modul bestås / siste seksjon leses) **uten
+avstemming**. Om hendelsen ble bommet (data fra før logikken, en sti som ikke fyrte, eller en
+svelget fire-and-forget) ble beviset aldri opprettet.
+
+- **Avstemming:** ny idempotent `reconcileCourseCompletionsForUser` kjøres når deltakeren åpner
+  «Mine kursbevis» (`GET /api/courses/completions`) og backfiller alle bevis hvis porter er møtt.
+- **Nav:** la til «Fullførte moduler» (`/participant/completed`) i workspace-navigasjonen (manglet;
+  `nav.completedModules`-labelen fantes allerede ubrukt).
+- **Test:** integrasjonstest (porter møtt uten utløser → `GET /completions` backfiller); nav-config-
+  kontrakt grønn.
+
 ## 1.3.63 - 2026-06-24
 
 fix(certificate): hev diplom-bakgrunn-grense 5 → 15 MB (#580)
