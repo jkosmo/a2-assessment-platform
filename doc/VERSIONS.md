@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.69 - 2026-06-24
+
+fix(infra): backup-vault role-assignment feiler hardt på ekte feil (#468, invariant #6)
+
+De to `az role assignment create | Out-Null` i backup-vault-seksjonen av
+`deploy-environment.ps1` undertrykte både success-JSON OG feil — et brudd på infra-invariant #6.
+Erstattet med `Invoke-IdempotentRoleAssignment` som fanger stdout+stderr og feiler deployen hardt
+på ekte feil, men tolererer den idempotente `RoleAssignmentExists`-re-runen (samme unntak som
+ARM-siden via `Test-DeploymentFailureIsIdempotent`). Beslutningslogikken er den unit-testede
+`Test-RoleAssignmentSucceeded`-helperen. PS-4-oppføringene fjernet fra `.lint-infra-allowlist`.
+
 ## 1.3.68 - 2026-06-24
 
 fix(assessment): 429/5xx-retry i assessment-LLM-klienten (#603)

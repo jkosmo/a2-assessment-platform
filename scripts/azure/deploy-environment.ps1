@@ -148,6 +148,19 @@ function Assert-LastExitCode([string]$stepName) {
   }
 }
 
+# Creates a role assignment, tolerating the idempotent RoleAssignmentExists re-run but failing the
+# deploy hard on any genuine error (#468 / invariant #6). Captures stdout+stderr so the decision can
+# distinguish the two — decision logic is the unit-tested Test-RoleAssignmentSucceeded helper.
+function Invoke-IdempotentRoleAssignment([string]$Role, [string]$Assignee, [string]$Scope, [string]$StepName) {
+  $output = az role assignment create --role $Role --assignee $Assignee --scope $Scope 2>&1 | Out-String
+  if (-not (Test-RoleAssignmentSucceeded -ExitCode $LASTEXITCODE -Output $output)) {
+    throw "$StepName failed with exit code $LASTEXITCODE.`n$output"
+  }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARN: $StepName -- role already assigned (RoleAssignmentExists); idempotent, continuing."
+  }
+}
+
 function Refresh-AzureCliOidcLogin([string]$reason = "") {
   if (
     [string]::IsNullOrWhiteSpace($AzureFederatedClientId) -or
@@ -1040,12 +1053,15 @@ if ($EnvironmentName -eq "production" -and -not $skipInfraBool) {
 
   $pgServerId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.DBforPostgreSQL/flexibleServers/$postgresServerName"
   Write-Host "Assigning backup roles to vault MSI $vaultPrincipalId on $postgresServerName..."
-  # Suppress success JSON output only -- stderr (errors) still surfaces.
-  az role assignment create --role "Reader" --assignee $vaultPrincipalId --scope $pgServerId | Out-Null
-  az role assignment create `
-    --role "PostgreSQL Flexible Server Long Term Retention Backup Role" `
-    --assignee $vaultPrincipalId `
-    --scope $pgServerId | Out-Null
+  # #468: a failed assignment now fails the deploy hard (invariant #6) but tolerates the idempotent
+  # RoleAssignmentExists re-run — no longer silently swallowed with | Out-Null.
+  Invoke-IdempotentRoleAssignment -Role "Reader" -Assignee $vaultPrincipalId -Scope $pgServerId `
+    -StepName "az role assignment create (Reader on PG for backup-vault MSI)"
+  Invoke-IdempotentRoleAssignment `
+    -Role "PostgreSQL Flexible Server Long Term Retention Backup Role" `
+    -Assignee $vaultPrincipalId `
+    -Scope $pgServerId `
+    -StepName "az role assignment create (LTR Backup Role on PG for backup-vault MSI)"
   Write-Host "Backup role assignments applied."
 
   $existingBkpInstance = (az dataprotection backup-instance list `

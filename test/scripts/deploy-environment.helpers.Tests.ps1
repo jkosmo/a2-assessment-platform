@@ -223,3 +223,24 @@ Describe 'Resolve-PostgresSkipForCredentialSafety' {
     { Resolve-PostgresSkipForCredentialSafety -RequestedSkip $true -ExistingPassword $null -DesiredPassword 'x' } | Should -Not -Throw
   }
 }
+
+Describe 'Test-RoleAssignmentSucceeded' {
+  It 'returns $true when az exited 0 (regardless of output)' {
+    Test-RoleAssignmentSucceeded -ExitCode 0 -Output '' | Should -BeTrue
+    Test-RoleAssignmentSucceeded -ExitCode 0 -Output 'created' | Should -BeTrue
+  }
+
+  It 'returns $true on the idempotent RoleAssignmentExists failure (non-zero exit)' {
+    $msg = "ERROR: (RoleAssignmentExists) The role assignment already exists.`nCode: RoleAssignmentExists"
+    Test-RoleAssignmentSucceeded -ExitCode 1 -Output $msg | Should -BeTrue
+  }
+
+  It 'returns $false on a genuine failure (non-zero exit, no RoleAssignmentExists)' {
+    Test-RoleAssignmentSucceeded -ExitCode 1 -Output 'ERROR: (AuthorizationFailed) does not have authorization' | Should -BeFalse
+    Test-RoleAssignmentSucceeded -ExitCode 2 -Output '' | Should -BeFalse
+  }
+
+  It 'does NOT treat empty output with a non-zero exit as success (invariant #6)' {
+    Test-RoleAssignmentSucceeded -ExitCode 1 -Output $null | Should -BeFalse
+  }
+}
