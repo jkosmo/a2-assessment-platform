@@ -1,7 +1,16 @@
 # Enrollment / tildeling / frister (#496, Tier 2 / EPIC #478) — designdokument
 
-> Status: **beslutningsdokument** — venter på retningsvalg før dekomponering i issues + implementering.
-> Låser opp #497 (påminnelser), #498 (lærer-dashboard). Relatert: #495 (Q&A, uavhengig).
+> Status: **retning besluttet** (2026-06-24). Dekomponeres i EN-1…EN-5. Låser opp #497, #498.
+>
+> **Beslutninger (eier):**
+> 1. Synlighet: **A — per-kurs `OPEN`/`RESTRICTED`** (eksisterende kurs default OPEN, bakoverkompat).
+> 2. Avdelings-tildeling: **A — materialiser ved tildeling**.
+> 3. Selv-påmelding på OPEN: **ja** (source=SELF, dueAt=null).
+>
+> **Praktisk caveat (eier):** `User.department` er per i dag **ikke populert** (kommer fra Entra-SSO,
+> ikke mappet). Avdelings-tildeling bygges i modell+API per 2A, men finner ingen brukere før
+> department-data finnes. **Individuell tildeling er primær/brukbar sti for første deploy**;
+> avdelings-tildeling er sekundær til data finnes (mulig egen sak: populere department fra Entra-claims).
 
 ## Problem / mål
 I dag returnerer `GET /api/courses` **alle publiserte kurs til alle deltakere** — ingen tildeling,
@@ -66,12 +75,13 @@ meningsfullt også for åpne kurs.
 4. Kurs-admin: ny tildelings-UI (velg brukere / avdeling, sett frist).
 5. (#497) påminnelser leser `dueAt`. (#498) dashboard aggregerer enrollment-status per cohort.
 
-## Foreslått dekomponering (issues, opprettes etter godkjent retning)
-- **EN-1 datamodell + migrasjon:** `CourseEnrollment` + `enrollmentPolicy` på Course + repo.
-- **EN-2 backend API + authz:** assign (individuell + avdeling), revoke, list-mine, list-per-kurs; synlighets-filter i `GET /api/courses`.
-- **EN-3 admin tildelings-UI:** velg deltakere/avdeling + frist, se/fjern tildelte.
-- **EN-4 deltaker-UI:** «mine tildelte kurs» m/ frist + status-badge; OVERDUE-markering; (evt. selv-påmelding).
-- **EN-5 docs + e2e:** API_REFERENCE + route-map + brukerguide; e2e for tildel→deltaker-ser→frist-status.
+## Dekomponering (issues opprettet)
+- **EN-1 (#640) datamodell + migrasjon:** `CourseEnrollment` + `enrollmentPolicy` på Course + repo.
+- **EN-2 (#641) backend API + authz:** assign (individuell + avdeling), revoke, list-mine, list-per-kurs; synlighets-filter i `GET /api/courses`.
+- **EN-3 (#642) admin tildelings-UI:** velg deltakere/avdeling + frist, se/fjern tildelte.
+- **EN-4 (#643) deltaker-UI:** «mine tildelte kurs» m/ frist + status-badge; OVERDUE-markering; selv-påmelding.
+- **EN-5 (#644) docs + e2e:** API_REFERENCE + route-map + brukerguide; e2e for tildel→deltaker-ser→frist-status.
+- **(#645) ops:** populer `User.department` fra Entra-claims — forutsetning for avdelings-tildeling.
 
 ## Hensyn
 - **Bakoverkompat:** eksisterende kurs default `enrollmentPolicy=OPEN` → dagens «alle ser alt» bevares; ingen backfill av enrollments nødvendig.
