@@ -380,6 +380,43 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/too large/i)).toHaveCount(0);
   });
 
+  // #601 Fase 1: when extraction reports lowTextDensity (image-heavy / sparse text), the author
+  // gets a warning toast — otherwise the thin source would silently produce a thin module. The
+  // file is still accepted (chip appears); the author is just informed. Client-layer behaviour.
+  test("shell source step warns when an uploaded file is image-heavy (low text density)", async ({ page }) => {
+    await mockCommonApis(page);
+
+    // Override the extract poll to report low text density (registered after mockCommonApis so it wins).
+    await page.route("**/api/admin/content/source-material/extract/*", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "done",
+          fileName: "deck.pptx",
+          format: "pptx",
+          extractedText: "Title slide only",
+          extractedChars: 16,
+          lowTextDensity: true,
+        }),
+      });
+    });
+
+    await page.goto("/admin-content");
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Image-heavy module");
+
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "deck.pptx",
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      buffer: Buffer.alloc(2 * 1024 * 1024, 0x41),
+    });
+
+    // The file is accepted (chip appears) AND the image-heavy warning toast is shown.
+    await expect(page.locator(".source-chip-label")).toContainText("deck.pptx");
+    await expect(page.locator(".toast--warning")).toContainText(/image-heavy/i);
+  });
+
   // #454/#599 characterization: the source step can fetch a single URL. Clicking "Fetch from URL"
   // prompts for a URL, POSTs to /source-material/fetch-url, and adds a source chip labelled with
   // the returned hostname. This client fetch-layer flow had no e2e (baseline gap §4.1); pins

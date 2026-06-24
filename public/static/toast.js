@@ -7,6 +7,7 @@ const MAX_VISIBLE_TOASTS = 4;
 const AUTO_DISMISS_MS = {
   success: 8000,
   info: 8000,
+  warning: 0, // 0 = no auto-dismiss — a warning needs the user to acknowledge it (#601)
   error: 0, // 0 = no auto-dismiss
 };
 
@@ -44,7 +45,7 @@ function ensureToastRegion() {
 }
 
 function normalizeType(type) {
-  return ["success", "error", "info"].includes(type) ? type : "info";
+  return ["success", "error", "warning", "info"].includes(type) ? type : "info";
 }
 
 export function showToast(message, type = "info", detail = "") {
@@ -53,7 +54,7 @@ export function showToast(message, type = "info", detail = "") {
 
   const toast = document.createElement("section");
   toast.className = `toast toast--${normalizedType}`;
-  toast.setAttribute("role", normalizedType === "error" ? "alert" : "status");
+  toast.setAttribute("role", normalizedType === "error" || normalizedType === "warning" ? "alert" : "status");
 
   const header = document.createElement("div");
   header.className = "toast__header";

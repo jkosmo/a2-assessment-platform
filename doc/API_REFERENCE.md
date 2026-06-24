@@ -159,7 +159,7 @@ material for draft generation. All routes use the `admin_content` capability.
 | Method | Path | Notes |
 |--------|------|-------|
 | `POST` | `/api/admin/content/source-material/extract` | Upload a file (base64 JSON) → async parse job. Per-file cap **10 MB** (#479 Slice A); this route alone accepts a 16 MB JSON body. |
-| `GET` | `/api/admin/content/source-material/extract/:jobId` | Poll parse-job status (`pending`/`done`/`failed`). |
+| `GET` | `/api/admin/content/source-material/extract/:jobId` | Poll parse-job status (`pending`/`done`/`failed`). On `done`: `{ extractedText, fileName, format, extractedChars, lowTextDensity }`. **#601 Fase 1:** `lowTextDensity=true` flags an image-heavy / sparse-text upload so the author is warned the module would be thin. |
 | `POST` | `/api/admin/content/source-material/fetch-url` | Fetch a single URL (HTML→Readability / `text/plain`) → main text. SSRF-protected; 10/min per user. Body `{ url }`. |
 | `POST` | `/api/admin/content/source-material/crawl-url` | **#479 Slice B.** Crawl a start URL: same-hostname only, ≤20 pages, ≤2 hops, honouring `robots.txt`, 300 ms politeness delay. Each page is independently SSRF-revalidated and byte-capped. **3/min per user.** Body `{ url }` → `{ startHostname, pages: [{ url, title, extractedText, fetchedBytes }], pagesCrawled, pagesSkipped, totalBytes, truncated }`. `422 crawl_empty` if nothing could be crawled. |
 | `POST` | `/api/admin/content/source-material/condense` | LLM-condense combined source material when it exceeds ~50K chars. |

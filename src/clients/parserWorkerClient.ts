@@ -16,6 +16,8 @@ export type ParseJobStatus = {
   fileName?: string;
   format?: string;
   extractedChars?: number;
+  // #601 Fase 1: surfaced to the author so an image-heavy / low-text upload is flagged.
+  lowTextDensity?: boolean;
   error?: string;
 };
 
@@ -134,5 +136,6 @@ function getLocalJobStatus(jobId: string): ParseJobStatus | null {
     fileName: job.result!.fileName,
     format: job.result!.format,
     extractedChars: job.result!.extractedChars,
+    lowTextDensity: job.result!.lowTextDensity,
   };
 }

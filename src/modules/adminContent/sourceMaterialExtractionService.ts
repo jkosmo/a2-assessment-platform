@@ -112,7 +112,47 @@ export type SourceMaterialExtractionResult = {
   fileName: string;
   format: SupportedSourceMaterialFormat;
   extractedChars: number;
+  // #601 Fase 1: file size + a low-text-density flag so the author is warned when an image-heavy
+  // deck yields sparse text (which would otherwise silently produce a thin module).
+  fileSizeBytes: number;
+  lowTextDensity: boolean;
 };
+
+// #601 Fase 1: binary document formats whose bytes are mostly NOT text — they can embed images,
+// diagrams and screenshots whose content is dropped by text-run extraction. Plain text/markdown
+// are ~100% text, so a density warning never applies to them.
+const BINARY_DOC_FORMATS: ReadonlySet<SupportedSourceMaterialFormat> = new Set([
+  "pdf",
+  "docx",
+  "pptx",
+  "doc",
+  "ppt",
+  "rtf",
+  "odt",
+  "odp",
+  "ods",
+]);
+
+// Heuristic thresholds (tunable). Small files never warn; otherwise a binary doc is flagged when it
+// yields very little text overall, or little text relative to its byte size (the image-heavy case).
+const LOW_TEXT_MIN_FILE_BYTES = 100_000;
+const LOW_TEXT_ABSOLUTE_CHARS = 800;
+const LOW_TEXT_MIN_CHARS_PER_BYTE = 0.0015;
+
+/**
+ * #601 Fase 1: detects image-heavy / low-text source material so the author can be warned that the
+ * extracted text is too sparse to build a good module. Pure + unit-tested; thresholds are heuristic.
+ */
+export function assessSourceMaterialTextDensity(args: {
+  format: SupportedSourceMaterialFormat;
+  extractedChars: number;
+  fileSizeBytes: number;
+}): boolean {
+  if (!BINARY_DOC_FORMATS.has(args.format)) return false;
+  if (args.fileSizeBytes < LOW_TEXT_MIN_FILE_BYTES) return false;
+  if (args.extractedChars < LOW_TEXT_ABSOLUTE_CHARS) return true;
+  return args.extractedChars / args.fileSizeBytes < LOW_TEXT_MIN_CHARS_PER_BYTE;
+}
 
 export type SourceMaterialExtractionAdapters = {
   parseOffice: (buffer: Buffer, format: Exclude<SupportedSourceMaterialFormat, "txt" | "md" | "doc" | "ppt">) => Promise<string>;
@@ -319,6 +359,12 @@ export async function extractSourceMaterialText(
     fileName,
     format,
     extractedChars: normalized.length,
+    fileSizeBytes: content.byteLength,
+    lowTextDensity: assessSourceMaterialTextDensity({
+      format,
+      extractedChars: normalized.length,
+      fileSizeBytes: content.byteLength,
+    }),
   };
 }
 

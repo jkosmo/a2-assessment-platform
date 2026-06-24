@@ -37,6 +37,14 @@
   background: #ffeded;
 }
 
+/* #601: warnings (e.g. image-heavy source material) don't auto-dismiss — amber, prominent
+   left edge so the author registers and acts on them, but visually distinct from errors. */
+.toast--warning {
+  border-left-color: #b5860b;
+  border-left-width: 6px;
+  background: #fdf6e3;
+}
+
 .toast--info {
   border-left-color: var(--color-blue);
   background: #f5f8ff;

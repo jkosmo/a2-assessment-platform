@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessSourceMaterialTextDensity,
   detectSourceMaterialFormat,
   extractSourceMaterialText,
   SourceMaterialExtractionError,
@@ -179,5 +180,32 @@ describe("source material extraction service", () => {
         },
       ),
     ).rejects.toBeInstanceOf(SourceMaterialExtractionError);
+  });
+});
+
+// #601 Fase 1: low-text-density detection so the author is warned about image-heavy uploads.
+describe("assessSourceMaterialTextDensity", () => {
+  it("never flags plain text/markdown (they are ~100% text)", () => {
+    expect(assessSourceMaterialTextDensity({ format: "txt", extractedChars: 5, fileSizeBytes: 5_000_000 })).toBe(false);
+    expect(assessSourceMaterialTextDensity({ format: "md", extractedChars: 5, fileSizeBytes: 5_000_000 })).toBe(false);
+  });
+
+  it("never flags small binary files (below the size floor)", () => {
+    expect(assessSourceMaterialTextDensity({ format: "pptx", extractedChars: 0, fileSizeBytes: 50_000 })).toBe(false);
+  });
+
+  it("flags a large binary doc with almost no extracted text (image-heavy deck)", () => {
+    expect(assessSourceMaterialTextDensity({ format: "pptx", extractedChars: 120, fileSizeBytes: 5_000_000 })).toBe(true);
+    expect(assessSourceMaterialTextDensity({ format: "pdf", extractedChars: 300, fileSizeBytes: 2_000_000 })).toBe(true);
+  });
+
+  it("flags a large binary doc whose text is sparse relative to its byte size", () => {
+    // 3000 chars over a 5 MB file → ratio 0.0006 < 0.0015 ⇒ flagged.
+    expect(assessSourceMaterialTextDensity({ format: "pptx", extractedChars: 3_000, fileSizeBytes: 5_000_000 })).toBe(true);
+  });
+
+  it("does NOT flag a text-rich binary doc", () => {
+    // 40k chars over a 2 MB PDF → ratio 0.02, well above the floor ⇒ not flagged.
+    expect(assessSourceMaterialTextDensity({ format: "pdf", extractedChars: 40_000, fileSizeBytes: 2_000_000 })).toBe(false);
   });
 });

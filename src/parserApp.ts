@@ -202,6 +202,7 @@ parserApp.get("/parse/:jobId", (req, res) => {
     fileName: job.result!.fileName,
     format: job.result!.format,
     extractedChars: job.result!.extractedChars,
+    lowTextDensity: job.result!.lowTextDensity,
   });
 });
 

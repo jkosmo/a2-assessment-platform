@@ -1,7 +1,17 @@
 # Visuell tolkning av bildetungt kildemateriale (#601) — designanbefaling
 
-> Status: **beslutningsdokument** — venter på retningsvalg fra SMO/eier før implementering.
+> Status: retning valgt (hybrid, faset). **Fase 1 levert** (v1.3.70) — deteksjon + forfatter-advarsel.
+> **Fase 2** (vision + rasterizer + personvern-gate) gjenstår som eget arbeid.
 > Relatert: #479 (kildemateriale-ingest), pilot-funn om ingest som flaskehals.
+
+## Levert i Fase 1 (v1.3.70)
+- `assessSourceMaterialTextDensity` i `sourceMaterialExtractionService.ts` — flagger binær-doc
+  (pdf/pptx/doc(x)/…) som er stor men gir lite tekst (absolutt < 800 tegn, eller < 0.0015 tegn/byte).
+- `lowTextDensity` bæres gjennom `SourceMaterialExtractionResult` → parser-worker → `ParseJobStatus`
+  → `GET …/extract/:jobId`.
+- Forfatter-advarsel: ny **warning**-toast (`shell.source.lowTextWarning`) ved opplasting; fila
+  aksepteres fortsatt. Ny `toast--warning`-type (persisterer til bruker lukker).
+- Tester: unit (`assessSourceMaterialTextDensity`) + Playwright-e2e (advarsel vises ved bildetung fil).
 
 ## Problemet (kort)
 
