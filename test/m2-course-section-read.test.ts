@@ -51,6 +51,9 @@ describe("Participant section read progress", () => {
     expect(sectionAfter?.read).toBe(true);
     expect(after.body.course.progress).toMatchObject({ completed: 1, total: 1, courseStatus: "COMPLETED" });
 
+    // Reading the only section of a module-less course now issues a course completion (#580):
+    // remove it first since CourseCompletion → Course is onDelete: Restrict.
+    await prisma.courseCompletion.deleteMany({ where: { courseId: course.id } });
     await prisma.course.delete({ where: { id: course.id } });
     await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: null } });
     await prisma.courseSectionVersion.deleteMany({ where: { sectionId: section.id } });
