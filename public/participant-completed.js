@@ -468,16 +468,19 @@ async function loadCourseCertificates() {
   }
 }
 
-// Also load course certs when the completed button is clicked
+// Refresh course certs when the completed button is clicked too.
 loadCompletedButton.addEventListener("click", () => {
   loadCourseCertificates();
 });
 
-// Auto-render empty state on page load
+// Initial placeholder until the fetch resolves.
 renderCourseCertificates([]);
 
 populateLocaleSelect();
 setLocale(currentLocale);
 loadVersion();
-loadParticipantConsoleConfig();
+// Auto-load course certificates on page open — they must NOT require clicking the
+// "load completed modules" button (which is about modules). Chained after the console config
+// so identity/headers are ready in mock-auth mode (in entra apiFetch adds the Bearer token).
+loadParticipantConsoleConfig().then(loadCourseCertificates);
 renderCompletedModules(null);

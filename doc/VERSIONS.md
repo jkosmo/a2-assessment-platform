@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.67 - 2026-06-24
+
+fix(participant): auto-last kursbevis på «Fullførte moduler»-siden (#580)
+
+«Mine kursbevis» på `/participant/completed` viste alltid «Ingen kursbevis ennå», selv når et
+bevis fantes (Profil viste det). Årsak: `loadCourseCertificates()` ble kun kalt ved klikk på
+«Last fullførte moduler»-knappen (som gjelder moduler) — aldri ved sidelasting. Bevis hentes nå
+automatisk når siden åpnes (etter console-config så identitet/headers er klare i mock-auth; entra
+bruker Bearer via apiFetch). Ny Playwright-e2e dekker auto-last + tom-tilstand.
+
 ## 1.3.66 - 2026-06-24
 
 fix(certificate): hold midten-nederst fri for diplom-segl (#580)
