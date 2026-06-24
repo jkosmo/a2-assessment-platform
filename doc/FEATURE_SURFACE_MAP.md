@@ -71,13 +71,32 @@ Creating a module is reachable from **two** places; a flow/step change must cove
 
 **Guards (`test/e2e/participant-mcq-only.spec.ts`):** the triad — "MCQ-only result … not practical", "FREETEXT_ONLY result hides the MCQ score row", "FREETEXT_PLUS_MCQ result shows both …".
 
-## 6. Course certificate display — multiple places (#550)
+## 6. Course certificate display — multiple places (#550 / #580)
 
-A completed-course certificate surfaces in several views; a rendering change must hit all:
+A completed-course certificate surfaces in **four** views. All of them fetch
+`GET /api/courses/completions` and turn a completion into a link to the printable view — a
+change to issuance, fetch-wiring, or rendering must be verified on all four:
 
-- Participant result banner + `/participant` (`public/participant.js`), `/participant/completed` (`public/participant-completed.js`), `/profile` (`public/profile.js`), and the printable `/certificate` view (`public/certificate.js`).
+| Surface | File | How completions load |
+|---------|------|----------------------|
+| Result banner in the course accordion | `public/participant.js` (`participantCompletions`, ~L2784) | `/api/courses` + `/api/courses/completions` together on render (`Promise.all`) |
+| `/participant/completed` → "Mine kursbevis" | `public/participant-completed.js` (`loadCourseCertificates`) | auto-loaded on page open after console config (#580) — **was previously button-only** |
+| `/profile` → "Fullførte kurs" | `public/profile.js` | on profile render |
+| Printable `/certificate?id=…` | `public/certificate.js` | fetches `/api/courses/completions/:id` |
 
-**Guards:** `test/e2e/participant-certificate.spec.ts`, `test/e2e/profile-certificate-link.spec.ts`.
+**Issuance gates (server):** a completion is issued when **all modules passed AND all sections
+read**, for any course with ≥1 element — including **module-less reading courses** (#476/#580).
+`reconcileCourseCompletionsForUser` (run on `GET /api/courses/completions`) backfills any missed
+event-driven issuance. See `src/modules/course/courseCompletionService.ts`.
+
+**Guards (all run locally with no DB — static-server + mocked routes):**
+`test/e2e/participant-certificate.spec.ts`, `test/e2e/participant-completed-certificates.spec.ts`,
+`test/e2e/profile-certificate-link.spec.ts`, plus server-side
+`test/m2-course-completions.test.ts` (issuance + reconcile, incl. module-less). **Gap:** the
+result-banner surface (`participant.js`) has no dedicated e2e yet — see #630.
+
+**Pre-deploy gate:** run the journey locally before deploying any cert change —
+`npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/participant-completed-certificates.spec.ts test/e2e/profile-certificate-link.spec.ts` (~9s, no Docker/Postgres).
 
 ## 7. Conditional visibility — the `.hidden` cascade trap
 
