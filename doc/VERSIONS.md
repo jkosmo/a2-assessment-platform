@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.71 - 2026-06-24
+
+infra(openai): ta Azure OpenAI-konto + modell-deployment inn i Bicep (#607)
+
+Azure OpenAI-kontoen + `gpt-4.1-mini`-deploymentet var ikke i IaC — TPM-kapasiteten (hevet manuelt
+til 100 via `az` under #479) var verken dokumentert eller reproduserbar. `main.bicep` deklarerer nå
+`Microsoft.CognitiveServices/accounts` + `/deployments` med navn som matcher de eksisterende
+ressursene EKSAKT (`a2-assessment-<stg|prod>-openai-weu-<suffix>` — eget env-token `stg`/`prod`, ikke
+envCode `stg`/`prd`), så en Incremental-deploy ADOPTERER dem. `capacity` er nå en parameter
+(default 100). **Deployes ikke før what-if er gjennomgått** (verifiser Modify/NoChange, aldri Create).
+
 ## 1.3.70 - 2026-06-24
 
 feat(admin): advarsel ved bildetungt/lav-tekst kildemateriale (#601 Fase 1)

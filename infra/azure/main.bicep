@@ -137,6 +137,23 @@ param azureOpenAiTokenLimitParameter string = 'auto'
 ])
 param azureOpenAiAuthoringTokenLimitParameter string = ''
 
+// #607: the Azure OpenAI account + model deployment, brought into IaC so the TPM capacity is
+// codified/reproducible (previously provisioned + capacity-bumped manually via az).
+@description('Azure OpenAI model deployment short name (appended after the env token: a2-assessment-<stg|prod>-<this>). Matches the existing deployment.')
+param azureOpenAiModelDeploymentShortName string = 'gpt-4.1-mini'
+
+@description('Azure OpenAI model name.')
+param azureOpenAiModelName string = 'gpt-4.1-mini'
+
+@description('Azure OpenAI model version.')
+param azureOpenAiModelVersion string = '2025-04-14'
+
+@description('Azure OpenAI deployment SKU (capacity tier).')
+param azureOpenAiDeploymentSkuName string = 'GlobalStandard'
+
+@description('Azure OpenAI deployment capacity (TPM units; 1 unit ~= 1K TPM). Raised to 100 during #479 so authoring stays fast with larger crawl source material.')
+param azureOpenAiDeploymentCapacity int = 100
+
 @description('Skip Key Vault secret role assignments. Set to true when the deployment SP lacks roleAssignments/write (e.g. has Contributor but not Owner). Existing assignments are preserved; missing ones will not be created. Default false.')
 param skipRoleAssignments bool = false
 
@@ -223,6 +240,12 @@ var acsName = toLower('${appNamePrefix}-${envCode}-acs-${suffix}')
 var createAcsEmail = participantNotificationChannel == 'acs_email'
 var postgresHost = '${postgresServerName}.postgres.database.azure.com'
 var keyVaultName = 'a2-${envCode}-kv-${suffix}'
+// #607: the Azure OpenAI account uses a DISTINCT env token (stg / prod) — NOT envCode (stg / prd) —
+// plus a -weu region tag, matching the names it was provisioned with before being brought into IaC.
+// Reproduces a2-assessment-stg-openai-weu-x6eyx4 (staging) and a2-assessment-prod-openai-weu-hea5kl (prod).
+var openAiEnvToken = environmentName == 'production' ? 'prod' : 'stg'
+var openAiAccountName = toLower('a2-assessment-${openAiEnvToken}-openai-weu-${suffix}')
+var openAiModelDeploymentName = 'a2-assessment-${openAiEnvToken}-${azureOpenAiModelDeploymentShortName}'
 // Storage account for course learning-section assets (#483/F4). Storage account names must be
 // 3-24 chars, lowercase alphanumeric only (no hyphens), globally unique.
 var courseAssetsStorageName = toLower('a2${envCode}assets${suffix}')
@@ -564,6 +587,50 @@ resource courseAssetsStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 resource courseAssetsBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: courseAssetsStorage
   name: 'default'
+}
+
+// #607: Azure OpenAI account + model deployment, brought into IaC so the TPM capacity is codified
+// and reproducible (previously provisioned + capacity-bumped manually via az). The names match the
+// already-deployed resources EXACTLY (see openAiAccountName/openAiModelDeploymentName), so an
+// Incremental deploy ADOPTS them rather than creating new ones. location/sku/customSubDomain are
+// pinned to the live values (westeurope, S0) — ALWAYS verify via what-if before deploying that the
+// diff is "Modify/NoChange", never "Create", which would mean a name mismatch.
+resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+  name: openAiAccountName
+  location: 'westeurope'
+  kind: 'OpenAI'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: openAiAccountName
+    publicNetworkAccess: 'Enabled'
+  }
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+}
+
+resource openAiModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: openAiAccount
+  name: openAiModelDeploymentName
+  sku: {
+    name: azureOpenAiDeploymentSkuName
+    capacity: azureOpenAiDeploymentCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: azureOpenAiModelName
+      version: azureOpenAiModelVersion
+    }
+    // #607: pin the live content-filter policy and version-upgrade behaviour so adoption does NOT
+    // strip them (what-if confirmed both staging and prod currently have exactly these values).
+    raiPolicyName: 'Microsoft.DefaultV2'
+    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
+  }
 }
 
 resource courseAssetsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
