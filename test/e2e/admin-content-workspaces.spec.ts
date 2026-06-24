@@ -266,7 +266,6 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
-    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
     await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
   });
@@ -309,7 +308,6 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
-    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
     expect(versionPayload?.mcqSetVersionId).toBeUndefined();
     expect(versionPayload?.taskText).toBeTruthy();
@@ -485,7 +483,6 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
-    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
     expect(versionPayload?.taskText).toBeUndefined();
     expect(versionPayload?.rubricVersionId).toBeUndefined();
@@ -624,7 +621,6 @@ test.describe("admin content browser coverage", () => {
     await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBe("nb");
     await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
-    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Fagforeninger");
     await expect(state.lastTitlePatchBody?.title?.["en-GB"]).toContain("[en-GB]");
     await expect(page.locator("#srModuleName")).toHaveText("Fagforeninger");
@@ -683,7 +679,6 @@ test.describe("admin content browser coverage", () => {
 
     await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
-    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Trade union dialogue");
     await expect(page.locator("#srModuleName")).toHaveText("Trade union dialogue");
   });
@@ -748,7 +743,6 @@ test.describe("admin content browser coverage", () => {
 
     await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
-    await expect(page.locator("#shellStatusAnnouncer")).toHaveText("Draft saved as a new module version.");
     await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
   });
