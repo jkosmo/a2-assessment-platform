@@ -91,9 +91,9 @@ event-driven issuance. See `src/modules/course/courseCompletionService.ts`.
 
 **Guards (all run locally with no DB — static-server + mocked routes):**
 `test/e2e/participant-certificate.spec.ts`, `test/e2e/participant-completed-certificates.spec.ts`,
-`test/e2e/profile-certificate-link.spec.ts`, plus server-side
-`test/m2-course-completions.test.ts` (issuance + reconcile, incl. module-less). **Gap:** the
-result-banner surface (`participant.js`) has no dedicated e2e yet — see #630.
+`test/e2e/profile-certificate-link.spec.ts`, `test/e2e/participant-course-banner.spec.ts` (#630 —
+result-banner surface), plus server-side `test/m2-course-completions.test.ts` (issuance + reconcile,
+incl. module-less). All four surfaces now have guards.
 
 **Pre-deploy gate:** run the journey locally before deploying any cert change —
 `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/participant-completed-certificates.spec.ts test/e2e/profile-certificate-link.spec.ts` (~9s, no Docker/Postgres).
