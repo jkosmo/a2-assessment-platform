@@ -42,6 +42,22 @@ function Test-DeploymentFailureIsIdempotent {
   return ($nonIdempotent.Count -eq 0)
 }
 
+# Decides whether an `az role assignment create` invocation should be treated as success.
+# Returns $true when it exited 0, OR when it failed solely because the assignment already exists
+# (RoleAssignmentExists) — the same idempotency exemption applied to the ARM-side role assignments
+# in Test-DeploymentFailureIsIdempotent, so a re-deploy on a principal that already has the role
+# does not fail. Returns $false for ANY genuine failure (e.g. auth, missing scope), which the
+# caller MUST treat as fatal — never silently swallowed (CLAUDE.md infra invariant #6, #468).
+function Test-RoleAssignmentSucceeded {
+  param(
+    [int]$ExitCode,
+    [string]$Output
+  )
+  if ($ExitCode -eq 0) { return $true }
+  if ($Output -and $Output -match 'RoleAssignmentExists') { return $true }
+  return $false
+}
+
 # Resolves the 3 App Service names (web/worker/parser) from a mix of ARM deployment
 # outputs and a fallback list of existing app names in the target resource group.
 # Output values from ARM are preferred; any missing name is filled in by matching
