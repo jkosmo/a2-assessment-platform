@@ -31,8 +31,12 @@
       .cert-heading { font-size: 30px; margin: 8px 0 28px; font-weight: 700; }
       .cert-label { font-size: 14px; color: var(--color-meta, #64748b); margin: 18px 0 6px; }
       .cert-name { font-size: 28px; font-weight: 700; margin: 4px 0; }
-      .cert-course { font-size: 22px; font-weight: 600; margin: 4px 0 8px; }
-      .cert-meta { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin-top: 28px; }
+      .cert-course { font-size: 22px; font-weight: 600; margin: 4px 0 4px; }
+      .cert-sublabel { font-size: 14px; color: var(--color-meta, #64748b); margin: 0 0 8px; }
+      .cert-sublabel #certLevel { font-weight: 600; color: var(--color-text, #0f172a); }
+      /* #580: push the two remaining stats to the left/right edges so the diploma seal
+         (baked into the background image, bottom-centre) is never overlapped by text. */
+      .cert-meta { display: flex; justify-content: space-between; gap: 40px; flex-wrap: wrap; margin-top: 28px; padding: 0 8px; }
       .cert-meta div { font-size: 14px; }
       .cert-meta .cert-meta-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-meta, #64748b); }
       .cert-id { margin-top: 28px; font-size: 11px; color: var(--color-meta, #64748b); }
@@ -69,15 +73,16 @@
           <div class="cert-name" id="certName"></div>
           <div class="cert-label" data-i18n="certificate.completedCourse">has successfully completed the course</div>
           <div class="cert-course" id="certCourse"></div>
+          <div class="cert-sublabel">
+            <span data-i18n="certificate.certLevel">Certification level</span>: <span id="certLevel"></span>
+          </div>
           <hr class="cert-rule" />
+          <!-- #580: only edge items in the bottom band — the center is kept clear for the
+               diploma seal/logo baked into the platform background image. -->
           <div class="cert-meta">
             <div>
               <div class="cert-meta-label" data-i18n="certificate.completedAt">Completed</div>
               <div id="certCompletedAt"></div>
-            </div>
-            <div>
-              <div class="cert-meta-label" data-i18n="certificate.certLevel">Certification level</div>
-              <div id="certLevel"></div>
             </div>
             <div id="certModulesWrap">
               <div class="cert-meta-label" data-i18n="certificate.modules">Modules completed</div>

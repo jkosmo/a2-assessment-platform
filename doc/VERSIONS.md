@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.66 - 2026-06-24
+
+fix(certificate): hold midten-nederst fri for diplom-segl (#580)
+
+Diplom-bakgrunnen har et sentrert A2-segl nederst i midten. Bevis-malens meta-rad
+hadde tre sentrerte kolonner, og den midterste (sertifiseringsnivå) lå rett oppå
+seglet. Sertifiseringsnivå er flyttet opp som en linje under kurstittelen, og
+bunn-raden har nå kun to elementer (fullført-dato til venstre, moduler til høyre)
+med `space-between` — midten-nederst holdes fri for seglet. Bilde-uavhengig.
+
 ## 1.3.65 - 2026-06-24
 
 fix(course): utsted kursbevis for lese-/seksjonskurs uten moduler (#580)
