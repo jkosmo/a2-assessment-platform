@@ -123,6 +123,18 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 - CI/CD: `.github/workflows/deploy-azure.yml`
 - Environments runbook: `doc/AZURE_ENVIRONMENTS.md`
 
+### Promoting a verified version to prod while `main` advances
+
+Both deploy workflows accept a `git_ref` input. The workflow is still triggered from `main` (gating + prod
+approval gate intact), but checkout/build uses the pinned ref instead of `main` HEAD — so prod can be
+promoted to a stage-verified tag without dragging unverified `main` commits along:
+
+1. `git tag v1.3.67 <sha> && git push origin v1.3.67`
+2. `gh workflow run deploy-app.yml --ref main -f git_ref=v1.3.67 -f deploy_production=true -f skip_staging=true`
+
+`main`/stage keep moving (empty `git_ref` = `main` HEAD). Use `deploy-app.yml` for code-only promotions; for
+infra leave `git_ref` empty (an old tag would re-apply that ref's Bicep). Verify `/version` on prod after.
+
 ### Pre-merge Bicep what-if (production)
 
 Before merging a PR that touches `infra/azure/*.bicep` or `scripts/azure/deploy-environment.ps1`, run a production what-if to see the ARM diff:

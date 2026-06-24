@@ -14,6 +14,10 @@ on:
         description: "Skip staging deploy — use only when staging is already verified green"
         required: false
         default: "false"
+      git_ref:
+        description: "Git ref (tag/SHA) to build & deploy. Empty = main HEAD. Pin a verified tag to promote it while main advances. NOTE: for infra this also applies that ref's Bicep — usually leave empty for infra deploys."
+        required: false
+        default: ""
 
 permissions:
   id-token: write
@@ -37,6 +41,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          # Empty input → triggering commit (main HEAD); a tag/SHA pins the build to that ref.
+          ref: ${{ github.event.inputs.git_ref || github.sha }}
 
       - name: Build deployment package
         id: package
@@ -138,6 +145,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          # Empty input → triggering commit (main HEAD); a tag/SHA pins the build to that ref.
+          ref: ${{ github.event.inputs.git_ref || github.sha }}
 
       - name: Build deployment package
         id: package
