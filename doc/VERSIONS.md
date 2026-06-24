@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.70 - 2026-06-24
+
+feat(admin): advarsel ved bildetungt/lav-tekst kildemateriale (#601 Fase 1)
+
+Bildetunge PPT/PDF (der innholdet *er* diagrammer/skjermbilder) ga nesten ingen tekst, og
+forfatteren fikk ingen indikasjon på hvorfor modulen ble tynn. Ny `assessSourceMaterialTextDensity`
+flagger stor binær-doc med lite tekst; `lowTextDensity` bæres gjennom parse-resultatet til frontend,
+som viser en (ny) warning-toast ved opplasting — fila aksepteres fortsatt. Deteksjon-først; ingen
+LLM-kost. Fase 2 (Claude multimodal vision bak terskel + rasterizer + personvern-gate) gjenstår.
+Se doc/design/SOURCE_MATERIAL_VISION_601.md. Tester: unit + Playwright-e2e (begge grønne lokalt).
+
 ## 1.3.69 - 2026-06-24
 
 fix(infra): backup-vault role-assignment feiler hardt på ekte feil (#468, invariant #6)

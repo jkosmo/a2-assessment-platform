@@ -713,6 +713,11 @@ function _domFormFields(entry) {
             extractedText: trimmedText,
           });
           refreshUploadHint();
+          // #601 Fase 1: warn when the upload is image-heavy / low on text — the extraction only
+          // captures text runs, so the generated module would otherwise be silently thin.
+          if (poll.lowTextDensity) {
+            showToast(`${t("shell.source.lowTextWarning")} (${file.name})`, "warning");
+          }
         } catch (error) {
           showToast(`${parseApiErrorMessage(error, "shell.source.fileReadError")} (${file.name})`, "error");
         }
