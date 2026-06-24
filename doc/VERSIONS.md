@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.68 - 2026-06-24
+
+fix(assessment): 429/5xx-retry i assessment-LLM-klienten (#603)
+
+`llmAssessmentService` manglet retry på transient Azure OpenAI 429 (TPM-kvote) / 5xx — en
+forbigående rate-limit feilet en deltaker-vurdering. Retry-policyen fra authoring-pipelinen
+(#479, v1.3.54) er ekstrahert til en delt `src/modules/llm/azureOpenAiRetry.ts`
+(`fetchAzureOpenAiWithRetry` + Retry-After-parsing + capped exponential backoff m/ jitter) og
+brukes nå av begge klientene. Parameter-fallbacken (token-param/temperatur) i assessment-klienten
+er urørt; den overordnede timeout-signalen begrenser total tid på tvers av retries. Ny unit-test
+dekker Retry-After-parsing, backoff-grenser og retry/exhaust-oppførsel.
+
 ## 1.3.67 - 2026-06-24
 
 fix(participant): auto-last kursbevis på «Fullførte moduler»-siden (#580)

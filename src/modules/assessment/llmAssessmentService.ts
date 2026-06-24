@@ -1,4 +1,5 @@
 import { env } from "../../config/env.js";
+import { fetchAzureOpenAiWithRetry } from "../llm/azureOpenAiRetry.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { buildAllowedRedFlagCodesForPrompt, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
 import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
@@ -69,15 +70,28 @@ export async function evaluatePracticalWithAzureOpenAi(
       const tokenParameter = tokenParameterSequence[index];
 
       for (const includeTemperature of [true, false]) {
-        const response = await fetch(buildAzureOpenAiCompletionsUrl(config), {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "api-key": config.apiKey,
+        // #603: retry transient 429 (TPM-quota) / 5xx with Retry-After-aware backoff — same policy
+        // as the authoring client. Non-retryable statuses (incl. the 400-class unsupported-param /
+        // unsupported-temperature signals) return on the first attempt so the fallback loop below
+        // still drives them. The overall timeout signal bounds total time across retries.
+        const response = await fetchAzureOpenAiWithRetry(
+          buildAzureOpenAiCompletionsUrl(config),
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "api-key": config.apiKey,
+            },
+            body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature)),
+            signal: timeoutController.signal,
           },
-          body: JSON.stringify(buildAzureOpenAiRequestBody(input, config, tokenParameter, includeTemperature)),
-          signal: timeoutController.signal,
-        });
+          {
+            onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
+              console.warn(
+                `[#603] Azure OpenAI assessment ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`,
+              ),
+          },
+        );
 
         const rawBody = await response.text();
         const responseBody = parseJsonBody(rawBody);
