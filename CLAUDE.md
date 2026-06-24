@@ -171,6 +171,23 @@ coverage** — unless the user has given a different instruction for that wait.
 | Changes to `scripts/azure/deploy-environment.ps1` | Either | Both workflows use the same script; the change auto-picks via main |
 | Secret rotation requiring KV-ref refresh | `.github/workflows/deploy-azure.yml` | KV-ref propagation + container restart needed |
 
+### Promoting a verified version to prod while `main` advances
+
+Both deploy workflows accept a `git_ref` input. The workflow is still **triggered from `main`** (all
+`ref_name == default_branch` gating and the production-environment approval gate stay intact), but the
+checkout/build uses the pinned ref instead of `main` HEAD. This decouples "what's verified on stage and
+promoted to prod" from "what's currently on `main`" — so feature work can keep flowing to local/stage on
+`main` without dragging unverified commits into a prod promotion.
+
+**Flow:**
+1. Tag the stage-verified commit: `git tag v1.3.67 <sha> && git push origin v1.3.67`.
+2. Promote that tag to prod (skipping a redundant stage redeploy):
+   `gh workflow run deploy-app.yml --ref main -f git_ref=v1.3.67 -f deploy_production=true -f skip_staging=true`
+3. `main` keeps moving; stage deploys still default to `main` HEAD (empty `git_ref`).
+
+Use `deploy-app.yml` for code-only promotions. For infra, leave `git_ref` empty (pinning an old tag would
+also re-apply that ref's Bicep). `/version` on prod reflects the deployed tag — verify it after promotion.
+
 ### Pre-merge Bicep what-if (production)
 
 Before merging a PR that touches `infra/azure/*.bicep` or `scripts/azure/deploy-environment.ps1`, run a production what-if to see the ARM diff:
