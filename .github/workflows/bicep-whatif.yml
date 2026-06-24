@@ -52,19 +52,23 @@ jobs:
               deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
               skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
             2>&1 || true)
-          echo "result<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$output" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          # #472: the diff can be hundreds of KB. Passing it through an env var to github-script
+          # spawns node with an oversized environment → "Argument list too long" (E2BIG). Write it
+          # to a file and have the comment step read it via fs (only the small path goes through env).
+          printf '%s' "$output" > "$RUNNER_TEMP/whatif-staging.txt"
 
       - name: Post what-if result as PR comment
         uses: actions/github-script@v9.0.0
-        # #472: pass the diff via env, not template-literal interpolation — large diffs with
-        # backticks/${ /control chars (e.g. KQL in alert rules) otherwise break the script.
+        # #472: read the diff from a file (not env/template-literal). Env passing broke twice —
+        # first on backticks/${ /control chars, then on E2BIG for large diffs (KQL alert rules).
         env:
-          WHATIF_RESULT: ${{ steps.whatif.outputs.result }}
+          WHATIF_FILE: ${{ runner.temp }}/whatif-staging.txt
         with:
           script: |
-            const result = process.env.WHATIF_RESULT || '';
+            const fs = require('fs');
+            let result = '';
+            try { result = fs.readFileSync(process.env.WHATIF_FILE, 'utf8'); }
+            catch { result = '(what-if output unavailable — see the workflow logs)'; }
             const body = [
               '## Bicep what-if — staging',
               '',
