@@ -22,17 +22,26 @@ async function evaluateCourseCompletion(
   tx?: CompletionTxClient,
 ): Promise<void> {
   const moduleIds = course.modules.map((m) => m.moduleId);
-  const total = moduleIds.length;
-  if (total === 0) return;
 
-  const passedCount = await repo.countPassedModulesForUser(userId, moduleIds);
-  if (passedCount < total) return;
-
-  // All learning sections must be read before the certificate is issued.
+  // A course can be pure-reading (no assessment modules) — the LMS Tier 2 markdown-first
+  // courses (#476). For those, reading every learning section is the only certification gate,
+  // so we must NOT bail on `moduleIds.length === 0`. Gates are computed over BOTH modules and
+  // sections, exactly matching the "completed" definition the progress view uses
+  // (passed === all modules AND read === all sections). The old `if (total === 0) return` only
+  // counted modules, so reading-only courses showed "Fullført" in the list yet never issued a
+  // certificate (#580 follow-up).
   const courseItems = await repo.findCourseItems(course.id);
   const requiredSectionIds = courseItems
     .filter((item) => item.itemType === "SECTION" && item.section != null && item.section.archivedAt == null)
     .map((item) => item.section!.id);
+
+  // Truly empty course (no modules AND no sections) is never completable.
+  if (moduleIds.length === 0 && requiredSectionIds.length === 0) return;
+
+  if (moduleIds.length > 0) {
+    const passedCount = await repo.countPassedModulesForUser(userId, moduleIds);
+    if (passedCount < moduleIds.length) return;
+  }
 
   if (requiredSectionIds.length > 0) {
     const readSectionIds = new Set(await repo.findReadSectionIds(userId, course.id));
@@ -104,6 +113,15 @@ export async function reconcileCourseCompletionsForUser(userId: string, tx?: Com
 
   const courses = await repo.findPublishedCourses();
   for (const course of courses) {
-    await evaluateCourseCompletion(repo, userId, course, tx);
+    // Per-course isolation: a single malformed course must never blank the user's entire
+    // certificate list (or 500 the page that triggers this sweep). Backfill is best-effort.
+    try {
+      await evaluateCourseCompletion(repo, userId, course, tx);
+    } catch (error) {
+      console.warn(
+        `[course-completion] reconcile skipped course ${course.id} for user ${userId}:`,
+        error,
+      );
+    }
   }
 }
