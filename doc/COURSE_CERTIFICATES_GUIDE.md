@@ -42,7 +42,7 @@ En **administrator** kan laste opp et **plattform-bredt bakgrunnsbilde** som vis
 så de ser ut som ekte diplomer.
 
 1. Gå til **Plattforminnstillinger** (`/admin-platform`) → seksjonen **«Kursbevis-bakgrunn»**.
-2. Velg et bilde (PNG, JPEG, GIF eller WebP, maks 5 MB) og klikk **«Last opp bakgrunn»**.
+2. Velg et bilde (PNG, JPEG, GIF eller WebP, maks 15 MB) og klikk **«Last opp bakgrunn»**.
 3. En forhåndsvisning vises. **«Fjern»** tar bort bildet igjen. Endringer trer i kraft umiddelbart —
    ingen «Lagre» nødvendig.
 

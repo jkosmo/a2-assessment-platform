@@ -8,7 +8,11 @@ import { ValidationError } from "../../errors/AppError.js";
 // Reuses the F4 blob primitives (putAsset/getAsset) for storage and the platform key-value config
 // for the reference — so no new Prisma model/migration is needed. (Per-course templates would be a
 // later slice.)
-export const CERTIFICATE_BACKGROUND_MAX_BYTES = 5 * 1024 * 1024;
+// 15 MB: print-quality diploma backgrounds (e.g. A4 @ 300 DPI PNG) legitimately run large. The same
+// constant bounds both the service validation and the multer upload limit (adminPlatform.ts). Note
+// the image is downloaded by every participant viewing their certificate, so an optimised file loads
+// faster — but the cap is generous so a real diploma export is not rejected.
+export const CERTIFICATE_BACKGROUND_MAX_BYTES = 15 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 const KEY_BLOB_PATH = "certificate.background.blobPath";
 const KEY_MIME_TYPE = "certificate.background.mimeType";
