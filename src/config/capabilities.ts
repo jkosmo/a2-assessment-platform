@@ -153,6 +153,12 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
     },
     {
+      id: "completed",
+      path: "/participant/completed",
+      labelKey: "nav.completedModules",
+      requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
+    },
+    {
       id: "review",
       path: "/review",
       labelKey: "nav.review",

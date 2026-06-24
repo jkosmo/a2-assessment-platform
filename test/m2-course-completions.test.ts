@@ -101,6 +101,64 @@ describe("Course completion issuance", () => {
     ]);
   });
 
+  // #580 follow-up: a course can meet every certification gate (all modules passed + all sections
+  // read) without a certificate if the event-driven issuance was ever missed. Opening the
+  // certificates page reconciles and backfills the missing completion.
+  it("backfills a missing completion when gates are met but the issuance event never fired", async () => {
+    const suffix = Date.now();
+    const headers = {
+      "x-user-id": `reconcile-user-${suffix}`,
+      "x-user-email": `reconcile.${suffix}@company.com`,
+      "x-user-name": "Reconcile User",
+      "x-user-department": "Learning",
+      "x-user-roles": "PARTICIPANT",
+      "x-locale": "nb",
+    };
+    const participant = await prisma.user.create({
+      data: {
+        externalId: headers["x-user-id"],
+        email: headers["x-user-email"],
+        name: headers["x-user-name"],
+        department: headers["x-user-department"],
+      },
+      select: { id: true },
+    });
+
+    const moduleA = await createPublishedModule(`Reconcile Module A ${suffix}`);
+    const moduleB = await createPublishedModule(`Reconcile Module B ${suffix}`);
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify({ "en-GB": `Reconcile Course ${suffix}`, nb: `Avstemmingskurs ${suffix}`, nn: `Avstemmingskurs ${suffix}` }),
+        description: JSON.stringify({ "en-GB": "x", nb: "x", nn: "x" }),
+        publishedAt: new Date(),
+        modules: {
+          create: [
+            { moduleId: moduleA.module.id, sortOrder: 1 },
+            { moduleId: moduleB.module.id, sortOrder: 2 },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    // Pass BOTH modules (all gates met) but never fire the issuance event → no completion exists.
+    await createPassedCertification(participant.id, moduleA);
+    await createPassedCertification(participant.id, moduleB);
+    expect(
+      await prisma.courseCompletion.count({ where: { userId: participant.id, courseId: course.id } }),
+    ).toBe(0);
+
+    // Opening the certificates page reconciles and backfills the missing completion.
+    const response = await request(app).get("/api/courses/completions").set(headers);
+    expect(response.status).toBe(200);
+    expect(response.body.completions).toEqual([
+      expect.objectContaining({ courseId: course.id, courseTitle: `Avstemmingskurs ${suffix}` }),
+    ]);
+    expect(
+      await prisma.courseCompletion.count({ where: { userId: participant.id, courseId: course.id } }),
+    ).toBe(1);
+  });
+
   // #550: printable certificate view backs onto GET /completions/:certificateId, owner-scoped.
   it("returns a single completion by certificate id for the owner and 404 for others", async () => {
     const suffix = Date.now();

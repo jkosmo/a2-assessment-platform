@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse } from "../modules/course/index.js";
+import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
@@ -78,6 +78,9 @@ coursesRouter.get("/completions", async (request, response, next) => {
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
 
   try {
+    // #580 follow-up: backfill any completion whose gates are met but whose certificate was never
+    // issued (event-driven issuance can miss). Idempotent — only creates genuinely-missing ones.
+    await reconcileCourseCompletionsForUser(userId);
     const completions = await courseRepository.findUserCourseCompletions(userId);
     const items = completions.map((cc) => ({
       courseId: cc.courseId,
