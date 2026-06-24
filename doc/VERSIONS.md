@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.65 - 2026-06-24
+
+fix(course): utsted kursbevis for lese-/seksjonskurs uten moduler (#580)
+
+**Bug (bruker-rapportert, forts.):** etter 1.3.64 vistes fortsatt ingen kursbevis for «Fullførte»
+kurs. Årsak: et kurs **uten assessment-moduler** (LMS Tier 2, markdown-først, #476) vises som
+«Fullført» når alle seksjoner er lest, men `evaluateCourseCompletion` bailet på
+`moduleIds.length === 0` (gammel `if (total === 0) return` telte kun moduler) og utstedte aldri
+bevis. Porten regner nå **både moduler og seksjoner**: bevis utstedes når alle moduler er bestått
+OG alle seksjoner lest, så lenge kurset har minst ett element. Dette fikser både live-utstedelse
+(seksjon-lest-event) og backfill via avstemmingen. Avstemmingen isolerer nå hvert kurs i try/catch
+så ett dårlig kurs ikke kan blanke hele bevis-lista eller 500-e `/api/courses/completions`.
+
 ## 1.3.64 - 2026-06-24
 
 fix(course): backfill manglende kursbevis + «Fullførte moduler» i menyen (#580)

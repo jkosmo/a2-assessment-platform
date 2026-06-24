@@ -159,6 +159,69 @@ describe("Course completion issuance", () => {
     ).toBe(1);
   });
 
+  // #580 follow-up: a reading-only course (LMS Tier 2, #476 — sections, NO assessment modules)
+  // must issue a certificate once every section is read. The old gate bailed on
+  // `moduleIds.length === 0`, so such courses showed "Fullført" in the progress view yet never
+  // got a certificate. Here the section-read event is never fired (data predates the fix) — the
+  // reconcile sweep on the certificates page must backfill it.
+  it("backfills a reading-only (module-less) course once all sections are read", async () => {
+    const suffix = Date.now();
+    const headers = {
+      "x-user-id": `reading-user-${suffix}`,
+      "x-user-email": `reading.${suffix}@company.com`,
+      "x-user-name": "Reading User",
+      "x-user-department": "Learning",
+      "x-user-roles": "PARTICIPANT",
+      "x-locale": "nb",
+    };
+    const participant = await prisma.user.create({
+      data: {
+        externalId: headers["x-user-id"],
+        email: headers["x-user-email"],
+        name: headers["x-user-name"],
+        department: headers["x-user-department"],
+      },
+      select: { id: true },
+    });
+
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify({ "en-GB": `Reading Course ${suffix}`, nb: `Lesekurs ${suffix}`, nn: `Lesekurs ${suffix}` }),
+        description: JSON.stringify({ "en-GB": "x", nb: "x", nn: "x" }),
+        publishedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Only section", nb: "Eneste seksjon" }) },
+      select: { id: true },
+    });
+    const version = await prisma.courseSectionVersion.create({
+      data: { sectionId: section.id, versionNo: 1, bodyMarkdown: JSON.stringify({ "en-GB": "Body." }), publishedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: version.id } });
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: section.id, sortOrder: 0 } });
+
+    // Read the section directly (no event fired) → gates met, but no completion exists yet.
+    await prisma.courseSectionRead.create({
+      data: { userId: participant.id, courseId: course.id, sectionId: section.id },
+    });
+    expect(
+      await prisma.courseCompletion.count({ where: { userId: participant.id, courseId: course.id } }),
+    ).toBe(0);
+
+    // Opening the certificates page reconciles and backfills the module-less course.
+    const response = await request(app).get("/api/courses/completions").set(headers);
+    expect(response.status).toBe(200);
+    expect(response.body.completions).toEqual([
+      expect.objectContaining({ courseId: course.id, courseTitle: `Lesekurs ${suffix}` }),
+    ]);
+    expect(
+      await prisma.courseCompletion.count({ where: { userId: participant.id, courseId: course.id } }),
+    ).toBe(1);
+  });
+
   // #550: printable certificate view backs onto GET /completions/:certificateId, owner-scoped.
   it("returns a single completion by certificate id for the owner and 404 for others", async () => {
     const suffix = Date.now();
