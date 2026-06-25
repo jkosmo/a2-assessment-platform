@@ -70,6 +70,44 @@ describe("Admin course-section management", () => {
     expect(gone.status).toBe(404);
   });
 
+  // #494 AC: localisation of section subfields is an EXPLICIT author action via the
+  // /localize endpoint — translation never happens implicitly on save. The endpoint returns
+  // the translated title + bodyMarkdown for the target locale, which the author reviews and
+  // then saves separately. (LLM stub mode tags output as "[<locale>] …".)
+  it("explicitly localises section title + body to another locale without mutating the source", async () => {
+    const create = await request(app)
+      .post("/api/admin/content/sections")
+      .set(adminHeaders)
+      .send({
+        title: { "en-GB": `Localise me ${Date.now()}` },
+        bodyMarkdown: { "en-GB": "# Heading\n\nBody text." },
+      });
+    const sectionId = create.body.section.id as string;
+
+    const localized = await request(app)
+      .post("/api/admin/content/sections/localize")
+      .set(adminHeaders)
+      .send({
+        title: "Localise me",
+        bodyMarkdown: "# Heading\n\nBody text.",
+        sourceLocale: "en-GB",
+        targetLocale: "nb",
+      });
+    expect(localized.status).toBe(200);
+    expect(localized.body.title).toContain("[nb]");
+    expect(localized.body.bodyMarkdown).toContain("[nb]");
+
+    // The localize call must NOT have persisted anything: the stored nb field is still empty
+    // until the author explicitly saves the reviewed translation.
+    const detail = await request(app)
+      .get(`/api/admin/content/sections/${sectionId}`)
+      .set(adminHeaders);
+    const storedBody = JSON.parse(detail.body.section.bodyMarkdown) as Record<string, string>;
+    expect(storedBody.nb ?? "").toBe("");
+
+    await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
+  });
+
   it("refuses to delete a section that is attached to a course", async () => {
     const create = await request(app)
       .post("/api/admin/content/sections")
