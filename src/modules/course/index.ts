@@ -18,6 +18,9 @@ export {
   MAX_ASSET_BYTES,
 } from "./assetCommands.js";
 export { courseRepository, createCourseRepository } from "./courseRepository.js";
+export { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";
+export { deriveEnrollmentStatus } from "./enrollmentStatus.js";
+export type { EnrollmentStatus } from "./enrollmentStatus.js";
 export { computeCourseStatus } from "./courseQueries.js";
 export type {
   CourseStatus,

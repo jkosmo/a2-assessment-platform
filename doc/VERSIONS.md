@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.72 - 2026-06-25
+
+feat(course): CourseEnrollment datamodel foundation (#640 / #496 EN-1)
+
+Adds the enrollment persistence foundation for Tier 2 course assignment: `Course.enrollmentPolicy`
+(`OPEN` by default for backward compatibility), `CourseEnrollment` with individual/department/self
+sources, optional due date, soft revoke, and cascade cleanup for user/course deletion. Enrollment
+status remains derived, not stored, using completion/progress/due-date precedence. The new repository
+and status helper are exported from the course module and covered by unit tests.
+
 ## 1.3.71 - 2026-06-24
 
 infra(openai): ta Azure OpenAI-konto + modell-deployment inn i Bicep (#607)
