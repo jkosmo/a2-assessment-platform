@@ -1505,12 +1505,22 @@ function createSessionDraftFromLoadedModule() {
     return false;
   }
 
+  // #555/#578: carry over the loaded module's type so a conversational revision of an
+  // MCQ-only / free-text-only module saves under the right mode. Without this, assessmentMode
+  // is undefined and saveDraftBundleInBackground treats it as FREETEXT_PLUS_MCQ — which wrongly
+  // demands scenario/task text and blocks saving an MCQ-only revision. mcqMinPercent is carried
+  // too, else the pass threshold silently resets to the default on save.
+  const assessmentMode = moduleVersion?.assessmentMode;
+  const loadedMcqMinPercent = moduleVersion?.assessmentPolicy?.passRules?.mcqMinPercent;
+
   sessionDraft = buildPreviewCandidate({
     title: moduleTitle,
     taskText: moduleVersion?.taskText ?? "",
     assessorExpectedContent: moduleVersion?.assessorExpectedContent ?? "",
     candidateTaskConstraints: moduleVersion?.candidateTaskConstraints ?? "",
     mcqQuestions,
+    ...(assessmentMode ? { assessmentMode } : {}),
+    ...(Number.isFinite(loadedMcqMinPercent) ? { mcqMinPercent: loadedMcqMinPercent } : {}),
   });
   previewDraft = null;
   sessionState = "draft-pending";

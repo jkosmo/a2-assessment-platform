@@ -88,8 +88,10 @@
       .mcq-q-remove:hover, .mcq-opt-remove:hover, .prompt-ex-remove:hover, .ss-field-remove:hover { opacity: 1; }
       .mcq-option-row { display: grid; grid-template-columns: 20px 1fr 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
       .mcq-option-row input[type="radio"] { margin: 0; }
-      /* #546 feedback: checkboxes must not inherit the full-width text-input styling. */
-      input[type="checkbox"] { width: auto; display: inline-block; vertical-align: middle; margin: 0 6px 0 0; }
+      /* #546 feedback: checkboxes must not inherit the full-width text-input styling.
+         Radios need the same guard, else the module-type radios stretch full-width inside
+         their flex row and push the label to the far right (centred dot, label drifting). */
+      input[type="checkbox"], input[type="radio"] { width: auto; display: inline-block; vertical-align: middle; margin: 0 6px 0 0; }
       /* #546 feedback: group the module-type (MCQ-only) control in a distinct sub-panel so it
          reads as one choice, separate from the free-text fields. */
       .module-type-panel { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); margin: var(--space-1) 0; background: var(--color-surface-muted, #f7f8fa); }
