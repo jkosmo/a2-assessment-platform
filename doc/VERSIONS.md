@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.79 - 2026-06-25
+
+feat(course): Enrollment backend API + authz + synlighetsfilter (#641 / #496 EN-2)
+
+Bygger videre på EN-1-datamodellen. Nye endepunkter: admin (SMO/ADMINISTRATOR) kan tildele kurs til
+deltakere — enten en eksplisitt brukerliste (source=INDIVIDUAL) eller alle aktive i en avdeling
+(source=DEPARTMENT, materialisert til individuelle rader ved tildeling) — med valgfri frist, samt
+fjerne (soft-revoke) og liste tildelinger per kurs. Deltakere ser egne tildelinger
+(`GET /api/courses/enrollments`, med derivert status) og kan selv-melde seg på OPEN-kurs
+(`POST /api/courses/:courseId/enroll`, source=SELF; RESTRICTED avvises). `GET /api/courses` har nå et
+**synlighetsfilter**: RESTRICTED-kurs vises kun for tildelte; OPEN for alle. Tildeling/fjerning
+auditeres. Status er alltid DERIVERT (aldri lagret). Integrasjonstester dekker tildel/list/revoke,
+synlighet, selv-påmelding, og at deltaker ikke kan tildele (403). NB (#645): avdelings-tildeling
+finner ingen brukere før `User.department` er populert; individuell er primær til da.
+
 ## 1.3.78 - 2026-06-25
 
 fix(course): «Arkiver»-knapp i kurslista (#660-oppfølging)
