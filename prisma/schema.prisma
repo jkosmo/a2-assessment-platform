@@ -91,6 +91,8 @@ model User {
   courseCompletions     CourseCompletion[]
   courseSectionReads    CourseSectionRead[]
   createdModules        Module[]              @relation("CreatedModules")
+  courseEnrollments     CourseEnrollment[]    @relation("EnrolledUser")
+  enrollmentsAssigned   CourseEnrollment[]    @relation("EnrollmentAssignedBy")
 }
 
 model UserConsent {
@@ -471,6 +473,9 @@ model Course {
   title              String             // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
   description        String?            // lokalisert JSON
   certificationLevel String?
+  // #496/EN-1: OPEN = visible to everyone (current behavior, default for existing courses);
+  // RESTRICTED = visible/available only to enrolled users.
+  enrollmentPolicy   CourseEnrollmentPolicy @default(OPEN)
   publishedAt        DateTime?
   archivedAt         DateTime?
   createdAt          DateTime           @default(now())
@@ -479,6 +484,7 @@ model Course {
   items              CourseItem[]
   completions        CourseCompletion[]
   sectionReads       CourseSectionRead[]
+  enrollments        CourseEnrollment[]
 }
 
 model CourseModule {
@@ -503,6 +509,38 @@ model CourseCompletion {
   course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
   @@unique([userId, courseId])
+}
+
+// #496/EN-1: assignment of a course to a participant (individual, department, or self-enrollment),
+// with an optional due date. Status (ASSIGNED/IN_PROGRESS/OVERDUE/COMPLETED) is NOT STORED; it is
+// derived from CourseCompletion + section/module progress + dueAt to avoid status drift.
+enum CourseEnrollmentPolicy {
+  OPEN
+  RESTRICTED
+}
+
+enum CourseEnrollmentSource {
+  INDIVIDUAL
+  DEPARTMENT
+  SELF
+}
+
+model CourseEnrollment {
+  id           String                 @id @default(cuid())
+  userId       String
+  courseId     String
+  assignedById String? // SMO/admin who assigned; null for self-enrollment (source=SELF)
+  source       CourseEnrollmentSource
+  dueAt        DateTime? // optional due date
+  assignedAt   DateTime               @default(now())
+  revokedAt    DateTime? // soft revoke: keep history/audit
+  user         User                   @relation("EnrolledUser", fields: [userId], references: [id], onDelete: Cascade)
+  course       Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignedBy   User?                  @relation("EnrollmentAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([userId, revokedAt])
 }
 
 // Læringsseksjon i et kurs (#476/#481). Speiler Module/ModuleVersion: innholdet
