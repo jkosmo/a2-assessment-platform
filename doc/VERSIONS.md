@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.80 - 2026-06-25
+
+fix(sections): markdown-input vokser til å matche forhåndsvisningens høyde (#662)
+
+I seksjonseditoren sto markdown-`<textarea>` fast på sin 320px-minimumshøyde mens forhåndsvisnings-
+panelet vokste med innholdet — så forfatteren redigerte i en liten boks ved siden av en høy preview.
+Hver kolonne er nå en flex-kolonne, og textarea + preview fyller grid-raden (som strekker seg til den
+høyeste). Resultat: input-feltet vokser til å matche forhåndsvisningen (og kan fortsatt dra-justeres).
+Dekket av en Playwright-e2e som måler at textarea-høyden følger en høy preview.
+
 ## 1.3.79 - 2026-06-25
 
 feat(course): Enrollment backend API + authz + synlighetsfilter (#641 / #496 EN-2)
