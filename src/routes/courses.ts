@@ -267,7 +267,7 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     }
     const localizedTitle = localizeContentText(locale, section.title) ?? section.title;
     const localizedBody = localizeContentText(locale, section.activeVersion?.bodyMarkdown ?? "") ?? "";
-    response.json({ title: localizedTitle, html: renderSectionMarkdown(localizedBody) });
+    response.json({ title: localizedTitle, html: renderSectionMarkdown(localizedBody, locale) });
   } catch (error) {
     next(error);
   }

@@ -10,6 +10,7 @@ import {
   deleteSection,
   createSectionAsset,
   listSectionAssets,
+  localizeSectionAssets,
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { localizedTextPatchSchema, generationLocaleSchema } from "../modules/adminContent/adminContentSchemas.js";
@@ -42,7 +43,7 @@ const createSectionSchema = z.object({
 });
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
-const previewSchema = z.object({ markdown: z.string() });
+const previewSchema = z.object({ markdown: z.string(), locale: generationLocaleSchema.optional() });
 const localizeSchema = z.object({
   title: z.string().trim().min(1).optional(),
   bodyMarkdown: z.string().trim().min(1).optional(),
@@ -98,7 +99,7 @@ adminSectionsRouter.post("/preview", async (request, response, next) => {
     return;
   }
   try {
-    response.json({ html: renderSectionMarkdown(parsed.data.markdown) });
+    response.json({ html: renderSectionMarkdown(parsed.data.markdown, parsed.data.locale) });
   } catch (error) {
     next(error);
   }
@@ -212,6 +213,23 @@ adminSectionsRouter.post("/:sectionId/assets", uploadAsset, async (request: Requ
 adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) => {
   try {
     response.json({ assets: await listSectionAssets(request.params.sectionId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #657: generate translated SVG variants for the section's SVG assets. Triggered explicitly by the
+// author's "Translate" action (never implicit on save), consistent with module/MCQ localisation.
+const localizeAssetsSchema = z.object({ sourceLocale: generationLocaleSchema });
+adminSectionsRouter.post("/:sectionId/assets/localize", generateLimiter, async (request: Request<{ sectionId: string }>, response, next) => {
+  const parsed = localizeAssetsSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await localizeSectionAssets(request.params.sectionId, parsed.data.sourceLocale);
+    response.json(result);
   } catch (error) {
     next(error);
   }

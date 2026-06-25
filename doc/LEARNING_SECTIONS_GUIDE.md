@@ -38,12 +38,24 @@ rekkefølgen forfatteren bestemmer.
 - En deltaker ser seksjonen på sitt profilspråk; mangler et språk, faller visningen tilbake til
   et utfylt språk (aldri tomt).
 
-### 3. Embedded video
+### 3. Bilder og SVG-tegninger
+
+- **«Last opp bilde»** legger et bilde inn i seksjonen (`![alt](asset:…)`). Støttede formater:
+  **PNG, JPEG, GIF, WebP og SVG** (maks 5 MB). Alt-tekst er påkrevd (universell utforming).
+- **SVG saneres automatisk** ved opplasting: skript, hendelseshåndterere og utrygge elementer
+  fjernes, så bare selve tegningen lagres. Du trenger ikke gjøre noe — det skjer i bakgrunnen.
+- **Tekst i SVG oversettes med «Oversett fra dette språket».** Når en SVG-tegning har tekst-etiketter,
+  genererer oversett-handlingen lokaliserte varianter (én per språk) der etikettene er oversatt.
+  Deltakeren ser tegningen på sitt eget språk. **Verifiser hvert språk visuelt** i forhåndsvisningen:
+  oversatt tekst kan bli lengre/kortere, og SVG-tekst flyter ikke om automatisk — kontroller at den
+  fortsatt får plass. (Tegningen må være lagret før den kan oversettes.)
+
+### 4. Embedded video
 
 Du kan lime inn en `<iframe>` mot **betrodde video-verter** (YouTube, youtube-nocookie, Vimeo).
 Andre iframes fjernes av sikkerhetshensyn.
 
-### 4. Legg seksjonen inn i et kurs
+### 5. Legg seksjonen inn i et kurs
 
 1. **Innholdsforvaltning → Kurs** → åpne kurset.
 2. Under **«Innhold i kurset»**: bruk nedtrekkslista nederst og **«Legg til seksjon»** (velg fra
@@ -51,7 +63,7 @@ Andre iframes fjernes av sikkerhetshensyn.
 3. Bruk **↑/↓** for å plassere seksjonen i ønsket rekkefølge mellom modulene.
 4. **«Lagre kurs»**, deretter **«Publiser kurs»**.
 
-### 5. Eksport / import
+### 6. Eksport / import
 
 Kurs-eksport (**«Eksporter»** på et kurs) tar med seksjonene og rekkefølgen i pakkefila, og
 **«Importer kurs-pakke»** gjenskaper dem i målmiljøet. (Eldre pakker uten seksjoner importeres
@@ -71,7 +83,7 @@ fortsatt.)
 
 ## Begrensninger / på vei
 
-- **Bilde-opplasting** (`{{asset:...}}`) i seksjoner er under arbeid (#483/#489) — foreløpig
-  refereres bilder via URL.
+- **SVG-tekstlayout per språk:** oversatte SVG-etiketter flyter ikke om — ved store lengdeforskjeller
+  må tegningen justeres manuelt. Verifiser hvert språk visuelt (#657).
 - **Versjons-pinning per deltaker** (at en deltaker midt i kurset beholder en bestemt versjon)
   kommer senere; nå vises siste versjon.

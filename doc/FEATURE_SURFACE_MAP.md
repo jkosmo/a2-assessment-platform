@@ -154,3 +154,22 @@ quota; one un-retried/oversize call cascades.
 - Deployment TPM capacity is **not** in IaC (#607); current capacity recorded there.
 
 **Guards:** `test/unit/llm-retry.test.ts` (retry + chunked condense), `test/unit/llm-content-generation-service.test.ts` (backoff helpers + `splitIntoChunks`).
+
+## 11. Section SVG assets — sanitisation + localisation (#657)
+
+SVG section drawings touch upload (sanitise), serving (CSP/nosniff + per-locale variant), and
+rendering (preview + participant must thread the locale). A fix in one path (e.g. accept SVG in the
+upload mime list) silently leaves the others wrong (an unsanitised serve, or a translated variant
+that never reaches the viewer because the locale isn't threaded).
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Allowlist + sanitise on upload | `src/modules/course/assetCommands.ts` → `ALLOWED_ASSET_MIME_TYPES`, `createSectionAsset` | SVG sanitised before `putAsset` |
+| Sanitiser (source of truth) | `src/modules/course/svgSanitizer.ts` → `sanitizeSvg` + text helpers | strips script/handlers/`foreignObject`/`<a>` |
+| Localise command | `assetCommands.ts` → `localizeSectionAssets`; LLM `localizeSvgTexts` | per-locale variants → `localizedBlobPaths` |
+| Localise route (explicit) | `src/routes/adminSections.ts` `POST /:sectionId/assets/localize` | author "Translate" action only |
+| Serve (headers + variant) | `src/routes/contentAssets.ts`; `getSectionAssetContent(assetId, locale)` | CSP `sandbox` + nosniff for SVG; `?locale=` picks variant |
+| Locale threading (render) | `src/modules/course/sectionContent.ts` → `renderSectionMarkdown(md, locale)` → `resolveAssetUrls` appends `?locale=` | participant: `src/routes/courses.ts`; preview: `adminSections.ts /preview` |
+| Client upload + translate trigger | `public/static/admin-content-sections.js` (`accept` incl. svg; translate loop calls `/assets/localize`; preview sends `locale`) | `hydrateContentAssetImages` preserves the `?locale=` query |
+
+**Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant).

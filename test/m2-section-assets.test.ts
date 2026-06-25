@@ -72,6 +72,68 @@ describe("Section asset upload + serve", () => {
     await deleteSectionFully(sectionId);
   });
 
+  // #657: SVG is accepted but sanitised before storage; the served bytes must be inert and the
+  // serve endpoint must add hardening headers.
+  it("sanitises an uploaded SVG and serves it with hardening headers", async () => {
+    const sectionId = await createSection();
+    const dirtySvg = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><script>alert(1)</script><rect onload="x()" width="50" height="20"/><text x="2" y="12">Hei</text></svg>`,
+      "utf8",
+    );
+
+    const upload = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", dirtySvg, { filename: "drawing.svg", contentType: "image/svg+xml" });
+    expect(upload.status).toBe(201);
+    const assetId = upload.body.asset.id as string;
+
+    const served = await request(app)
+      .get(`/api/content-assets/${assetId}`)
+      .set(participantHeaders);
+    expect(served.status).toBe(200);
+    expect(served.headers["content-type"]).toContain("image/svg+xml");
+    expect(served.headers["x-content-type-options"]).toBe("nosniff");
+    expect(served.headers["content-security-policy"]).toContain("sandbox");
+    const body = served.text ?? served.body.toString();
+    expect(body).not.toMatch(/<script/i);
+    expect(body).not.toMatch(/onload/i);
+    expect(body).toMatch(/Hei/);
+
+    await deleteSectionFully(sectionId);
+  });
+
+  // #657: the explicit localize action generates a translated SVG variant per other locale; the
+  // serve endpoint returns the variant for `?locale=`. LLM stub mode tags text as `[<locale>] …`.
+  it("localises SVG text and serves the per-locale variant", async () => {
+    const sectionId = await createSection();
+    const svg = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><text x="2" y="12">Start</text></svg>`,
+      "utf8",
+    );
+    const upload = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", svg, { filename: "d.svg", contentType: "image/svg+xml" });
+    const assetId = upload.body.asset.id as string;
+
+    const localize = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
+      .set(adminHeaders)
+      .send({ sourceLocale: "nb" });
+    expect(localize.status).toBe(200);
+    expect(localize.body.localizedAssetCount).toBe(1);
+
+    // Source locale → original text; another locale → stub-translated text.
+    const original = await request(app).get(`/api/content-assets/${assetId}?locale=nb`).set(participantHeaders);
+    expect((original.text ?? original.body.toString())).toMatch(/>Start</);
+
+    const english = await request(app).get(`/api/content-assets/${assetId}?locale=en-GB`).set(participantHeaders);
+    expect((english.text ?? english.body.toString())).toMatch(/\[en-GB\] Start/);
+
+    await deleteSectionFully(sectionId);
+  });
+
   it("rejects a disallowed mime type", async () => {
     const sectionId = await createSection();
     const res = await request(app)

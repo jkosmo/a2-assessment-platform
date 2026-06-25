@@ -572,7 +572,12 @@ model SectionAsset {
   blobPath  String
   sizeBytes Int
   createdAt DateTime      @default(now())
-  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  // #657: localized SVG variants. sourceLocale is the language of the text baked into the
+  // original (blobPath); localizedBlobPaths maps each OTHER supported locale → the blob path of
+  // a variant whose <text> has been translated. Both null for raster images and untranslated SVGs.
+  sourceLocale       String?
+  localizedBlobPaths Json?
+  section            CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@index([sectionId])
 }

@@ -26,6 +26,7 @@ const LABELS = {
     confirmDelete: "Delete this section?", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
     translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
+    translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
     uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
   },
   nb: {
@@ -36,6 +37,7 @@ const LABELS = {
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
     translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
+    translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
     uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
   },
   nn: {
@@ -46,6 +48,7 @@ const LABELS = {
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
     translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
+    translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
     uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
   },
 };
@@ -214,7 +217,7 @@ async function renderEditorView(sectionId) {
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span>${escapeHtml(L("markdown"))}</span>
             <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px">${escapeHtml(L("uploadImage"))}</button>
-            <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+            <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
           </div>
           <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
@@ -281,7 +284,7 @@ async function refreshPreview() {
   try {
     const data = await apiFetch("/api/admin/content/sections/preview", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ markdown: editing.body[editing.editLocale] ?? "" }),
+      body: JSON.stringify({ markdown: editing.body[editing.editLocale] ?? "", locale: editing.editLocale }),
     });
     pane.innerHTML = data.html ?? "";
     await hydrateContentAssetImages(pane, getHeaders);
@@ -376,6 +379,21 @@ async function translateFromCurrent() {
       });
       if (res.title) editing.title[target] = res.title;
       if (res.bodyMarkdown) editing.body[target] = res.bodyMarkdown;
+    }
+    // #657: also generate translated SVG-drawing variants for this section's SVG assets, so a
+    // drawing's baked-in labels follow the same language as the surrounding text. Only possible on
+    // a saved section (assets need a section id); non-fatal if it fails — text is already translated.
+    if (editing.id) {
+      try {
+        if (btn) btn.textContent = L("translatingImages");
+        const assetRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/assets/localize`, getHeaders, {
+          method: "POST",
+          body: JSON.stringify({ sourceLocale: src }),
+        });
+        if (assetRes?.localizedAssetCount > 0) showToast(L("imagesTranslated"));
+      } catch (assetErr) {
+        showToast(assetErr?.message ?? "Image translation failed", "error");
+      }
     }
     showToast(L("translated"));
     renderEditorFields();
