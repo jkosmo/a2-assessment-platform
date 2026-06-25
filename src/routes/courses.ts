@@ -4,6 +4,7 @@ import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { NotFoundError } from "../errors/AppError.js";
+import { listUserEnrollments, selfEnroll, filterVisibleCourseIds } from "../modules/course/index.js";
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
@@ -20,7 +21,10 @@ coursesRouter.get("/", async (request, response, next) => {
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
 
   try {
-    const courses = await courseRepository.findPublishedCourses();
+    const allCourses = await courseRepository.findPublishedCourses();
+    // #496/EN-2: RESTRICTED courses are only visible to enrolled users; OPEN courses to everyone.
+    const visibleIds = await filterVisibleCourseIds(userId, allCourses);
+    const courses = allCourses.filter((course) => visibleIds.has(course.id));
 
     const items: CourseListItem[] = await Promise.all(
       courses.map(async (course) => {
@@ -63,6 +67,21 @@ coursesRouter.get("/", async (request, response, next) => {
     );
 
     response.json({ courses: items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #496/EN-2: a participant's own active enrolments (assigned courses) with due date + derived
+// status. Registered before "/:courseId" so the literal path is not captured as a course id.
+coursesRouter.get("/enrollments", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    response.json({ enrollments: await listUserEnrollments(userId) });
   } catch (error) {
     next(error);
   }
@@ -295,6 +314,25 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);
     // Reading the final section can be the last gate for certification (#476/#525) — re-check.
     await checkCourseCompletionForCourse({ userId, courseId: course.id });
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #496/EN-2: self-enrolment on an OPEN course (source=SELF). RESTRICTED courses reject with 400.
+coursesRouter.post("/:courseId/enroll", async (request, response, next) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const course = await courseRepository.findCourseById(request.params.courseId);
+    if (!course || !course.publishedAt || course.archivedAt) {
+      throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    }
+    await selfEnroll(request.params.courseId, userId);
     response.status(204).send();
   } catch (error) {
     next(error);
