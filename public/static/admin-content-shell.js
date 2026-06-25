@@ -3431,6 +3431,15 @@ function enterPreviewEditMode() {
     editingLocale,
   );
   const currentMcqQuestions = resolveEditableMcqQuestions(editingLocale);
+  // #665: the module type must survive direct-edit. For a loaded MCQ-only/free-text-only module
+  // sessionDraft is null, so read assessmentMode (and the MCQ pass threshold) from the loaded
+  // module version. Without this the rebuilt draft loses its mode → save/publish wrongly demands
+  // scenario text, and the editor shows free-text fields that an MCQ-only module never has.
+  const editAssessmentMode = sessionDraft?.assessmentMode ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentMode;
+  const editIsMcqOnly = editAssessmentMode === "MCQ_ONLY";
+  const editMcqMinPercent = Number.isFinite(sessionDraft?.mcqMinPercent)
+    ? sessionDraft.mcqMinPercent
+    : bundle?.selectedConfiguration?.moduleVersion?.assessmentPolicy?.passRules?.mcqMinPercent;
   // B2 (#449 redesign): pull criteria from sessionDraft override OR existing rubric. Stored
   // as record (id-keyed) — normalize to an ordered array for the editor. Mutated locally;
   // captured back into a record on confirm. Tolerates rich + sparse shapes (#378 vs default).
@@ -3554,20 +3563,19 @@ function enterPreviewEditMode() {
   };
   // Show criteria section if existing rubric OR editor has criteria OR generation in flight.
   // The last branch is what makes the placeholder visible in the race-condition scenario.
-  const showCriteriaSection = bundle?.selectedConfiguration?.rubricVersion
+  // #665: never for MCQ-only — those modules have no rubric/criteria.
+  const showCriteriaSection = !editIsMcqOnly && (bundle?.selectedConfiguration?.rubricVersion
     || criteriaEditorState.length > 0
-    || criteriaGenerationInFlight;
+    || criteriaGenerationInFlight);
   const criteriaSectionHtml = showCriteriaSection
     ? `<div class="preview-section-label">${escapeHtml(tf("shell.criteria.title", { count: criteriaEditorState.length }))}</div>
        <div id="previewEditCriteriaContainer">${renderCriteriaEditor()}</div>`
     : "";
 
-  previewContent.innerHTML = `
-    <div class="preview-module-header">
-      <input id="previewEditTitle" class="preview-edit-title" value="${escapedTitle}"
-        aria-label="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
-      <span class="module-status-badge draft">${escapeHtml(t("shell.directEdit.editingBadge"))}</span>
-    </div>
+  // #665: free-text fields (task / candidate constraints / assessor guidance) only apply to
+  // FREETEXT_PLUS_MCQ and FREETEXT_ONLY. For MCQ-only they are omitted entirely so the author
+  // cannot edit fields the module does not have.
+  const freetextFieldsHtml = editIsMcqOnly ? "" : `
     <div class="preview-section-label">${labelTask}</div>
     <textarea id="previewEditTaskText" class="preview-edit-textarea"
       aria-label="${labelTask}">${escapedTask}</textarea>
@@ -3576,7 +3584,15 @@ function enterPreviewEditMode() {
       aria-label="${labelCandidateConstraints}">${escapedCandidateConstraints}</textarea>
     <div class="preview-section-label">${labelGuidance}</div>
     <textarea id="previewEditGuidanceText" class="preview-edit-textarea preview-edit-textarea--secondary"
-      aria-label="${labelGuidance}">${escapedGuidance}</textarea>
+      aria-label="${labelGuidance}">${escapedGuidance}</textarea>`;
+
+  previewContent.innerHTML = `
+    <div class="preview-module-header">
+      <input id="previewEditTitle" class="preview-edit-title" value="${escapedTitle}"
+        aria-label="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
+      <span class="module-status-badge draft">${escapeHtml(t("shell.directEdit.editingBadge"))}</span>
+    </div>
+    ${freetextFieldsHtml}
     ${mcqHtml}
     ${criteriaSectionHtml}
     <div class="preview-edit-actions">
@@ -3711,9 +3727,10 @@ function enterPreviewEditMode() {
 
   document.getElementById("previewEditConfirm").addEventListener("click", () => {
     const newTitle = document.getElementById("previewEditTitle").value.trim() || currentTitle;
-    const newTaskText = document.getElementById("previewEditTaskText").value.trim() || currentTaskText;
-    const newGuidanceText = document.getElementById("previewEditGuidanceText").value.trim() || currentGuidanceText;
-    const newCandidateTaskConstraints = document.getElementById("previewEditCandidateTaskConstraints").value.trim() || currentCandidateTaskConstraints;
+    // #665: free-text inputs are absent for MCQ-only — guard the reads and keep the fields empty.
+    const newTaskText = editIsMcqOnly ? "" : (document.getElementById("previewEditTaskText")?.value.trim() || currentTaskText);
+    const newGuidanceText = editIsMcqOnly ? "" : (document.getElementById("previewEditGuidanceText")?.value.trim() || currentGuidanceText);
+    const newCandidateTaskConstraints = editIsMcqOnly ? "" : (document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() || currentCandidateTaskConstraints);
     // B2 (#449 redesign): capture criteria-editor state into a normalized record before
     // exitEditMode tears down the DOM. transform to storage shape (id-keyed) with weight
     // derived from maxScore. Empty/blank labels are dropped (matching the validation in
@@ -3758,7 +3775,11 @@ function enterPreviewEditMode() {
           assessorExpectedContent: localizedDraft.assessorExpectedContent,
           candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
           mcqQuestions: localizedMcqQuestions,
-          criteria: newCriteriaRecord,
+          criteria: editIsMcqOnly ? null : newCriteriaRecord,
+          // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
+          // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
+          ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
+          ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
@@ -3773,7 +3794,10 @@ function enterPreviewEditMode() {
           assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
           candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
           mcqQuestions: buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
-          criteria: newCriteriaRecord,
+          criteria: editIsMcqOnly ? null : newCriteriaRecord,
+          // #665: preserve module type (and MCQ threshold) on the fallback path too.
+          ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
+          ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();

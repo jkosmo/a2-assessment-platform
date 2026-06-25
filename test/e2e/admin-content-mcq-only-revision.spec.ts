@@ -9,13 +9,61 @@ import {
   type MockModuleExport,
 } from "./admin-content-helpers.js";
 
-// Regression coverage for #655 — two client-layer bugs in Advanced authoring that are
-// invisible to supertest:
+// Regression coverage for #655 / #665 — client-layer bugs in Advanced/Conversation authoring
+// of MCQ-only modules, invisible to supertest:
 //   1. Module-type radios stretched full width (inherited width:100% from the base input
 //      style; only checkboxes were exempted). Pinned by measuring the radio's box width.
 //   2. A conversational revision of an MCQ-only module could not be saved: the loaded draft
 //      dropped assessmentMode, so save-validation treated it as FREETEXT_PLUS_MCQ and demanded
 //      scenario text (shell.save.taskRequired) that MCQ-only modules never have.
+//   3. Direct-edit ("Edit directly") of an MCQ-only module exposed editable free-text fields and
+//      dropped assessmentMode, so the subsequent save/publish hit the same scenario guard (#665).
+
+// An existing, published MCQ-only module: a module version flagged MCQ_ONLY with NO free-text
+// (empty taskText) plus a saved MCQ set — the shape the export endpoint returns for the MCQ-only
+// authoring path.
+function buildMcqOnlyExport(): MockModuleExport {
+  const mcqQuestions = [
+    {
+      stem: localizedText("Question 1"),
+      options: [localizedText("A"), localizedText("B"), localizedText("C"), localizedText("D")],
+      correctAnswer: localizedText("B"),
+      rationale: localizedText("Rationale"),
+    },
+  ];
+  const moduleVersion = {
+    id: "module-1-version-1",
+    versionNo: 1,
+    assessmentMode: "MCQ_ONLY",
+    taskText: {},
+    assessorExpectedContent: {},
+    candidateTaskConstraints: {},
+    assessmentPolicy: { passRules: { mcqMinPercent: 60 } },
+  };
+  const mcqSetVersion = { id: "module-1-mcq-1", title: localizedText("Trade unions"), questions: mcqQuestions };
+  return {
+    module: {
+      id: "module-1",
+      title: localizedText("Trade unions"),
+      certificationLevel: "basic",
+      activeVersionId: "module-1-version-1",
+      archivedAt: null,
+    },
+    selectedConfiguration: {
+      source: "draftModuleVersion",
+      moduleVersion,
+      rubricVersion: null,
+      promptTemplateVersion: null,
+      mcqSetVersion,
+    },
+    versions: {
+      moduleVersions: [moduleVersion],
+      rubricVersions: [],
+      promptTemplateVersions: [],
+      mcqSetVersions: [mcqSetVersion],
+    },
+  };
+}
 
 test.describe("admin content — module-type bugs (#655)", () => {
   test("module-type radios are not stretched full width", async ({ page }) => {
@@ -43,57 +91,9 @@ test.describe("admin content — module-type bugs (#655)", () => {
   });
 
   test("an MCQ-only module can be revised in chat and saved without scenario text", async ({ page }) => {
-    // An existing, published MCQ-only module: a module version flagged MCQ_ONLY with NO
-    // free-text (empty taskText) plus a saved MCQ set. This is the shape the export endpoint
-    // returns for a module authored via the MCQ-only path.
-    const mcqQuestions = [
-      {
-        stem: localizedText("Question 1"),
-        options: [localizedText("A"), localizedText("B"), localizedText("C"), localizedText("D")],
-        correctAnswer: localizedText("B"),
-        rationale: localizedText("Rationale"),
-      },
-    ];
-    const moduleVersion = {
-      id: "module-1-version-1",
-      versionNo: 1,
-      assessmentMode: "MCQ_ONLY",
-      taskText: {},
-      assessorExpectedContent: {},
-      candidateTaskConstraints: {},
-      assessmentPolicy: { passRules: { mcqMinPercent: 60 } },
-    };
-    const mcqSetVersion = {
-      id: "module-1-mcq-1",
-      title: localizedText("Trade unions"),
-      questions: mcqQuestions,
-    };
-    const mcqOnlyExport: MockModuleExport = {
-      module: {
-        id: "module-1",
-        title: localizedText("Trade unions"),
-        certificationLevel: "basic",
-        activeVersionId: "module-1-version-1",
-        archivedAt: null,
-      },
-      selectedConfiguration: {
-        source: "draftModuleVersion",
-        moduleVersion,
-        rubricVersion: null,
-        promptTemplateVersion: null,
-        mcqSetVersion,
-      },
-      versions: {
-        moduleVersions: [moduleVersion],
-        rubricVersions: [],
-        promptTemplateVersions: [],
-        mcqSetVersions: [mcqSetVersion],
-      },
-    };
-
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
-      moduleExports: { "module-1": mcqOnlyExport },
+      moduleExports: { "module-1": buildMcqOnlyExport() },
     });
 
     // Capture the saved module-version payload to prove the MCQ-only save path ran.
@@ -128,6 +128,48 @@ test.describe("admin content — module-type bugs (#655)", () => {
     // And the version that was saved carries the MCQ-only mode + the loaded pass threshold.
     expect(savedVersionPayload?.assessmentMode).toBe("MCQ_ONLY");
     expect(savedVersionPayload?.taskText).toBeUndefined();
+    expect(savedVersionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(60);
+  });
+
+  test("an MCQ-only module edited via 'Edit directly' hides free-text fields and still saves (#665)", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: { "module-1": buildMcqOnlyExport() },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let savedVersionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      savedVersionPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Module actions → "Edit directly" (directEdit → enterPreviewEditMode).
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+
+    // The free-text editor fields must NOT exist for an MCQ-only module, but the MCQ editor must.
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.locator("#previewEditGuidanceText")).toHaveCount(0);
+    await expect(page.locator("#previewEditMcqStem0")).toBeVisible();
+
+    // Confirm the direct edit, then save.
+    await page.locator("#previewEditConfirm").click();
+    await clickEnabledButton(page, /^Save draft$|^Lagre utkast$/);
+
+    // Save must not hit the scenario-required guard, and must persist MCQ_ONLY.
+    await expect(
+      page.getByText(/The draft needs scenario text|Utkastet må ha scenario\/oppgavetekst|Utkastet må ha scenario\/oppgåvetekst/),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon|Utkastet er lagra som ein ny modulversjon/).first(),
+    ).toBeVisible();
+    expect(savedVersionPayload?.assessmentMode).toBe("MCQ_ONLY");
     expect(savedVersionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(60);
   });
 });

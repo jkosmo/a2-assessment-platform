@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.77 - 2026-06-25
+
+fix(shell): MCQ-only direkte-redigering bevarer modultype + skjuler fritekst-felt (#665)
+
+Oppfølging til #655. I samtale-flyten mistet «Rediger direkte» modulens `assessmentMode` for en
+lastet MCQ-only-modul (sessionDraft er null → den rekonstruerte draften falt tilbake til
+FREETEXT_PLUS_MCQ), så påfølgende lagring/publisering feilet med «Utkastet må ha scenario/
+oppgavetekst». Samtidig viste edit-skjemaet alltid tomme, redigerbare fritekst-felt (oppgavetekst/
+føringer/veiledning) som en MCQ-only-modul ikke har. `enterPreviewEditMode` utleder nå
+`assessmentMode` (+ MCQ-terskel) fra `sessionDraft ?? bundle.moduleVersion`, skjuler fritekst-felt +
+kriterier for MCQ-only, og bevarer modustypen på den rekonstruerte draften. Ny Playwright-e2e dekker
+direkte-redigerings-stien. (Rydder også bort en utilsiktet tom fil `0`.)
+
 ## 1.3.76 - 2026-06-25
 
 fix(sections): SVG-localize hopper over uendrede tegninger (#663)
