@@ -996,6 +996,49 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator(".page-loading")).toHaveCount(0);
   });
 
+  // #660 follow-up: the course list exposes an "Arkiver" action (the delete-blocked error tells
+  // authors to archive instead). Archiving marks the course and removes the archive button.
+  test("course list can archive a course, which shows the Arkivert badge and hides the archive button", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: "Labour rights",
+          description: null,
+          certificationLevel: "basic",
+          moduleCount: 0,
+          updatedAt: "2026-04-18T12:00:00.000Z",
+          publishedAt: "2026-04-18T12:00:00.000Z",
+          archivedAt: null,
+          modules: [],
+        },
+      ],
+    });
+    // The shared harness's `courses/*` glob does not match the two-segment archive path, so
+    // register the archive endpoint here: mark the course archived in the mock state so the
+    // list re-render reflects it.
+    await page.route("**/api/admin/content/courses/*/archive", async (route: Route) => {
+      const segments = new URL(route.request().url()).pathname.split("/");
+      const courseId = decodeURIComponent(segments[segments.length - 2] ?? "");
+      const course = state.mutableCourses.find((c) => c.id === courseId);
+      if (course) course.archivedAt = "2026-04-18T12:00:00.000Z";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+    });
+
+    await page.goto("/admin-content/courses");
+    const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
+    await expect(row).toBeVisible();
+    await expect(row.locator('[data-action="archive"]')).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await row.locator('[data-action="archive"]').click();
+
+    // After archiving: the row carries the Arkivert badge and the archive action is gone.
+    const archivedRow = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
+    await expect(archivedRow).toContainText("Arkivert");
+    await expect(archivedRow.locator('[data-action="archive"]')).toHaveCount(0);
+  });
+
   test("shell idle flow opens the module picker and renders existing module choices", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [

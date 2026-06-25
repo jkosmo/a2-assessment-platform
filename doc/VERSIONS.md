@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.78 - 2026-06-25
+
+fix(course): «Arkiver»-knapp i kurslista (#660-oppfølging)
+
+Slette-blokkeringen i #660 ber forfatteren arkivere kurset i stedet, men arkiv-funksjonen var ikke
+eksponert i UI-et (kun i backend). Kurslista har nå en **«Arkiver»**-handling per kurs (wiret til det
+eksisterende `POST /:courseId/archive`), med en lett bekreftelse. Arkiverte kurs vises med et
+**«Arkivert»**-merke, og arkiver-knappen skjules for dem. Dekket av en Playwright-e2e.
+
 ## 1.3.77 - 2026-06-25
 
 fix(shell): MCQ-only direkte-redigering bevarer modultype + skjuler fritekst-felt (#665)
