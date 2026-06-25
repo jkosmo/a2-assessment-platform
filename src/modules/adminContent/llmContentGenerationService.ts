@@ -1726,6 +1726,74 @@ export async function localizeSectionContent(input: SectionLocalizationInput): P
 }
 
 // ---------------------------------------------------------------------------
+// SVG text localisation (#657)
+// ---------------------------------------------------------------------------
+// Translates the short, ordered text runs extracted from a section SVG drawing. Strings are
+// translated as a batch so the model sees sibling labels together (better consistency for a
+// diagram's terminology). The response MUST preserve order and count so the caller can map each
+// translation back to its source run by index.
+
+export interface SvgTextLocalizationInput {
+  texts: string[];
+  sourceLocale: GenerationLocale;
+  targetLocale: GenerationLocale;
+}
+
+const svgTextLocalizationResponseCodec = z.object({
+  translations: z.array(z.string()),
+});
+
+export function buildSvgTextLocalizationPrompts(input: SvgTextLocalizationInput): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const systemPrompt =
+    "You are a professional translator for a certification platform. You translate the short text labels found inside a vector drawing (SVG). Return strict JSON only - no commentary.";
+  const userPrompt = `Translate each text label of an SVG diagram from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+
+${buildLanguageEnforcementDirective(input.targetLocale)}
+
+## Rules
+- Translate ONLY the human-readable label text. Preserve meaning and terminology consistency across labels.
+- Keep translations concise — these render inside fixed-size drawings and do not reflow.
+- Do NOT translate numbers, units, codes, or proper nouns that should stay as-is.
+- Return EXACTLY one translation per input label, in the SAME order. Never add, drop, merge, or reorder.
+
+## Labels (JSON array, in order)
+${JSON.stringify(input.texts)}
+
+## Return format
+A single valid JSON object with a "translations" array of the same length and order:
+{
+  "translations": ["translated label 1", "translated label 2"]
+}`;
+  return { systemPrompt, userPrompt };
+}
+
+export async function localizeSvgTexts(input: SvgTextLocalizationInput): Promise<string[]> {
+  if (input.texts.length === 0) return [];
+
+  // Stub mode (local dev / CI): deterministic, clearly-tagged output that preserves order/count so
+  // the apply-back round-trip is exercisable without a live LLM.
+  if (env.LLM_MODE !== "azure_openai") {
+    return input.texts.map((text) => `[${input.targetLocale}] ${text}`);
+  }
+
+  const { systemPrompt, userPrompt } = buildSvgTextLocalizationPrompts(input);
+  const raw = await callLlm(systemPrompt, userPrompt, 2000);
+  const parsed = svgTextLocalizationResponseCodec.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`SVG text localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  if (parsed.data.translations.length !== input.texts.length) {
+    throw new Error(
+      `SVG text localization returned ${parsed.data.translations.length} translations for ${input.texts.length} labels.`,
+    );
+  }
+  return parsed.data.translations;
+}
+
+// ---------------------------------------------------------------------------
 // Assessment blueprint generation (#372)
 // ---------------------------------------------------------------------------
 

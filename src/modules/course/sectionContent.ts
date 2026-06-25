@@ -77,16 +77,20 @@ export function sanitizeSectionHtml(html: string): string {
 // authenticated serve endpoint. Runs BEFORE sanitisation so DOMPurify sees a normal relative
 // URL (the `asset:` scheme would otherwise be stripped as an unknown protocol). The indirection
 // keeps references portable for cross-environment export/import (ids can be remapped).
-function resolveAssetUrls(html: string): string {
-  return html.replace(/(<img\b[^>]*\bsrc=")asset:([a-zA-Z0-9]+)(")/gi, "$1/api/content-assets/$2$3");
+// When a locale is supplied (#657), it is appended as `?locale=` so the serve endpoint can return
+// the translated SVG variant for that language pane (raster/untranslated assets ignore it).
+function resolveAssetUrls(html: string, locale?: string): string {
+  const suffix = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+  return html.replace(/(<img\b[^>]*\bsrc=")asset:([a-zA-Z0-9]+)(")/gi, `$1/api/content-assets/$2${suffix}$3`);
 }
 
 /**
  * Renders SMO-authored markdown to sanitised HTML safe to inject into the
  * participant view. Returns an empty string for empty / non-string input.
+ * `locale` (optional) selects translated SVG asset variants for that language.
  */
-export function renderSectionMarkdown(markdownInput: string): string {
+export function renderSectionMarkdown(markdownInput: string, locale?: string): string {
   if (typeof markdownInput !== "string" || markdownInput.length === 0) return "";
   const rawHtml = marked.parse(markdownInput, { async: false }) as string;
-  return sanitizeSectionHtml(resolveAssetUrls(rawHtml));
+  return sanitizeSectionHtml(resolveAssetUrls(rawHtml, locale));
 }

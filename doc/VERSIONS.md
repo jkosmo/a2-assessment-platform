@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.74 - 2026-06-25
+
+feat(sections): trygg SVG-opplasting + lokaliserte SVG-tegninger (#657)
+
+Seksjonsbilder støtter nå SVG. SVG var tidligere bevisst utelatt (XSS-vektor, #483/F4); det er nå
+tillatt fordi hver opplastede SVG **saneres server-side** med DOMPurify (`<script>`, `on*`-handlere,
+`<foreignObject>`, `<a>`, `javascript:` fjernes) før den lagres, så bytene på disk er inerte. Bilder
+rendres som `<img>` (kjører ikke script), og serve-endepunktet legger på `Content-Security-Policy: …;
+sandbox` + `X-Content-Type-Options: nosniff` som dybdeforsvar mot direkte-navigering.
+
+I tillegg: når en SVG inneholder tekst, genererer forfatterens **«Oversett»**-handling lokaliserte
+varianter — `<text>`/`<tspan>`-etiketter ekstraheres, oversettes til hvert støttede språk (nb/nn/en-GB)
+via samme LLM-localize som modultekst, og lagres som per-språk-varianter. Oversettelse er en **eksplisitt
+handling** (aldri implisitt ved lagring), konsistent med lærer-locale-kontroll. Servering velger variant
+etter leserens språk (`?locale=`, fallback til original). Geometrien er uendret, så forfatter må
+verifisere layout per språk (oversatt tekst reflower ikke). Datamodell: `SectionAsset.sourceLocale` +
+`localizedBlobPaths`. Dekket av unit-tester (sanering + XSS-vektorer + tekst-round-trip) og
+integrasjonstester (opplasting saneres, serve-headers, localize→variant).
+
 ## 1.3.73 - 2026-06-25
 
 fix(admin): MCQ-only-modul kan revideres i samtale + Modultype-radioer (#655)

@@ -201,6 +201,11 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 | `DELETE` | `/api/admin/content/sections/:sectionId` | Delete (blocked `400` if the section is used in a course) |
 | `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view) |
 | `POST` | `/api/admin/content/sections/localize` | LLM-translate title + bodyMarkdown to another locale (markdown-preserving). Rate-limited. |
+| `POST` | `/api/admin/content/sections/:sectionId/assets` | Upload a section image (multipart `file`). PNG/JPEG/GIF/WebP/SVG, max 5 MB. SVG is sanitised server-side before storage (scripts/handlers/`foreignObject`/`<a>` stripped, #657). Returns `asset` + `ref` (`asset:<id>`). |
+| `GET` | `/api/admin/content/sections/:sectionId/assets` | List section assets. |
+| `POST` | `/api/admin/content/sections/:sectionId/assets/localize` | Generate translated SVG variants for the section's SVG drawings. Body `{ sourceLocale }`. Extracts `<text>`/`<tspan>` labels, translates to each other supported locale, stores a per-locale variant. Explicit author action (never implicit). Rate-limited (#657). |
+
+The participant/preview serve endpoint `GET /api/content-assets/:assetId` accepts an optional `?locale=` query: when a translated SVG variant exists for that locale it is returned, else the original. SVG responses carry `Content-Security-Policy: …; sandbox` + `X-Content-Type-Options: nosniff` as defence-in-depth for direct navigation (#657).
 
 ---
 

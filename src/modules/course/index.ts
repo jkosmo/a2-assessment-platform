@@ -14,6 +14,7 @@ export {
   createSectionAsset,
   listSectionAssets,
   getSectionAssetContent,
+  localizeSectionAssets,
   ALLOWED_ASSET_MIME_TYPES,
   MAX_ASSET_BYTES,
 } from "./assetCommands.js";
