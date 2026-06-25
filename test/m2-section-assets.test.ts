@@ -124,6 +124,15 @@ describe("Section asset upload + serve", () => {
     expect(localize.status).toBe(200);
     expect(localize.body.localizedAssetCount).toBe(1);
 
+    // #663: re-running with the same source locale must NOT re-translate the unchanged drawing.
+    const localizeAgain = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
+      .set(adminHeaders)
+      .send({ sourceLocale: "nb" });
+    expect(localizeAgain.status).toBe(200);
+    expect(localizeAgain.body.localizedAssetCount).toBe(0);
+    expect(localizeAgain.body.skippedAssetCount).toBe(1);
+
     // Source locale → original text; another locale → stub-translated text.
     const original = await request(app).get(`/api/content-assets/${assetId}?locale=nb`).set(participantHeaders);
     expect((original.text ?? original.body.toString())).toMatch(/>Start</);
