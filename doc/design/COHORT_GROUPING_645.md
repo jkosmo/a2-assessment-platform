@@ -1,11 +1,17 @@
 # Kohort-/gruppemodell for kurstildeling (#645, #496 / Tier 2, EPIC #478) — designnotat
 
-> Status: **utforsket, beslutning åpen** (2026-06-25). Erstatter premisset i #645 («populer
+> Status: **retning besluttet** (2026-06-25). Erstatter premisset i #645 («populer
 > `User.department` fra Entra») fordi organisasjonen ikke har avdelinger, men **overlappende
 > grupper** (mange-til-mange). Påvirker EN-2 (#641) sin `DEPARTMENT`-gren og EN-3 (#642) tildelings-UI.
 >
-> **Eier-beslutninger som trengs** (se §7): (1) kilde til medlemskap, (2) dynamisk vs materialisert,
-> (3) Entra-synk vs manuelle klasser vs hybrid, (4) skjebne for `User.department`.
+> **Beslutninger (eier, 2026-06-25):**
+> 1. **C — hybrid** (`Class.kind: MANUAL | ENTRA`), men **bygg manuelle klasser (B) først**. Entra-kobling
+>    skal være **konfigurerbar av Administrator** (kan slås av/på via plattform-config) — når av finnes kun
+>    manuelle klasser.
+> 2. **Dynamisk** tildeling (medlemskap evalueres ved lesetid; ingen snapshot).
+> 3. **Slett `User.department`** helt (unngå bloat) — kolonne + kode + orgSync-bruk fjernes.
+> 4. **Egen systemklasse «Alle deltakere»** med eksplisitt populasjon (PARTICIPANT-rolle).
+> 5. **Administrator** kuraterer hvilke Entra-grupper som er tildelbare — **OK å utsette** fra v1.
 
 ## 1. Problem / mål
 EN-2 (#641) lar admin tildele kurs **individuelt** (per bruker) eller per **avdeling** — der avdeling
@@ -93,7 +99,7 @@ Begge mekanismer, samme tildelings-abstraksjon:
   bryr seg ikke om kilden.
 
 ```
-Class { id, name, kind: MANUAL | ENTRA, entraGroupId?, description?, archivedAt? }
+Class { id, name, kind: MANUAL | ENTRA, entraGroupId?, description?, isSystem?, archivedAt? }
 ClassMember { classId, userId }            // kun for kind=MANUAL
 CourseGroupAssignment { courseId, classId, dueAt? }
 ```
@@ -101,6 +107,16 @@ CourseGroupAssignment { courseId, classId, dueAt? }
 Medlemskap-evaluering: `kind=MANUAL` → `ClassMember`; `kind=ENTRA` → `principal.groupIds`. Dette gir
 organisasjonen Entra-gjenbruk *der det passer* og manuelle ad-hoc-kull *der det trengs*, uten to
 separate tildelings-stier.
+
+**Konfigurerbar Entra-kobling (eier-beslutning 1).** En plattform-config (`PlatformConfig`-nøkkel,
+f.eks. `classEntraLinkingEnabled`, **default av**) styrer om `kind=ENTRA`-klasser i det hele tatt er
+tilgjengelig. Når av: kun manuelle klasser kan opprettes/brukes, og evaluering av eksisterende
+ENTRA-klasser kan deaktiveres. Administrator slår dette på når Graph-app-permission er på plass og
+gruppene er kuratert. Dette holder v1 (kun manuelle klasser) ren og lar Entra-kobling aktiveres senere
+uten kodeendring.
+
+**Systemklasse «Alle deltakere» (eier-beslutning 4).** En `isSystem`-klasse med eksplisitt populasjon
+= alle med PARTICIPANT-rolle (ikke en AD-gruppe), så «tildel til alle deltakere» betyr noe entydig.
 
 ## 6. Sammenligning
 | Kriterium | A: Entra-synk | B: Manuelle klasser | C: Hybrid |
@@ -113,28 +129,38 @@ separate tildelings-stier.
 | UX-kompleksitet | ➖ kuratere AD-støy | ✅ enkel | ➖ to typer |
 | Byggekostnad (agent-timer) | middels | lav–middels | middels–høy |
 
-## 7. Anbefaling og åpne beslutninger
-**Anbefaling:** start med **Alt B (manuelle klasser)** som første skive — null eksterne avhengigheter,
-rask å bygge, dekker «definer klasse + legg til studenter» direkte slik eieren foreslo — og design
-datamodellen **hybrid-klar** (`Class.kind` + `entraGroupId`) slik at Entra-kobling (Alt A) kan legges
-til senere uten migrasjon av tildelings-stien. Dette unngår å låse oss til Graph-permissions før vi vet
-hvilke av de 198 gruppene som faktisk skal være kurs-tildelbare.
+## 7. Besluttet retning + dekomponering
+**Retning (besluttet 2026-06-25):** hybrid datamodell (`Class.kind: MANUAL | ENTRA`), men **v1
+implementerer kun manuelle klasser**. Entra-kobling er gated bak en Administrator-config (default av)
+og bygges som egen senere skive. Tildeling er **dynamisk**, `User.department` **slettes**, og «Alle
+deltakere» er en **systemklasse** (PARTICIPANT-populasjon).
 
-**Beslutninger som trengs før EN-3 (#642) bygges:**
-1. **Kilde nå:** manuelle klasser først (B), Entra-kobling senere (A) — eller rett på Entra?
-2. **Materialisert vs dynamisk** tildeling (anbefalt: dynamisk fra medlemskap, unngår snapshot-drift).
-3. **`User.department`:** utfase helt, eller beholde read-only for rapportering?
-4. **«Alle deltakere»-kohort:** egen systemklasse, og hvilken populasjon (ansatte vs. inkl. eksterne)?
-5. (Hvis A/Entra) hvem **kuraterer** hvilke AD-grupper som er tildelbare, og hvor lever Graph-app-perm?
+**Foreslått dekomponering (nye CL-skiver under #496/EPIC #478):**
+- **CL-1 Datamodell:** `Class` + `ClassMember` + `CourseGroupAssignment` + migrasjon; seed «Alle
+  deltakere»-systemklasse; `PlatformConfig.classEntraLinkingEnabled` (default av).
+- **CL-2 API + authz:** opprett/arkiver klasse, legg til/fjern medlem, tildel/avtildel kurs til klasse;
+  dynamisk synlighet + «mine kurs» utvides til klasse-medlemskap; audit.
+- **CL-3 Admin-UI:** klasse-administrasjon (opprett, søk+legg til studenter) + tildel kurs til klasse
+  (erstatter/avløser EN-3 #642 sin avdelings-tanke).
+- **CL-4 Fjern `User.department`:** drop-kolonne-migrasjon + fjern fra schema/principal/orgSync + fjern
+  EN-2 sin `DEPARTMENT`-gren (kilde-enum beholdes for historikk, ny kilde `CLASS`). *Egen liten skive
+  siden den rører allerede levert EN-2 og er en schema-drop — ikke buntes med en pågående release.*
+- **CL-5 (senere) Entra-kobling:** Graph `Group.Read.All` app-perm + admin-consent, gruppe-katalog-synk,
+  `kind=ENTRA`-klasser, Administrator-kuratering. Aktiveres via config-toggle.
 
 ## 8. Konsekvens for allerede levert kode (EN-1/EN-2)
 - `CourseEnrollment` (individuell + selv-påmelding) **beholdes** uendret.
-- EN-2 sin **`DEPARTMENT`-gren** (`assignEnrollments({ department })` mot `User.department`) blir
-  **erstattet** av klasse-/gruppe-tildeling. Den er allerede dokumentert som «sekundær til data finnes»;
-  ingen produksjonsbruk avhenger av den. Fjernes eller deprecates når klasse-modellen lander.
-- `CourseEnrollmentSource.DEPARTMENT` i enum-et kan bli stående (historikk) eller utvides med `CLASS`.
+- EN-2 sin **`DEPARTMENT`-gren** (`assignEnrollments({ department })` mot `User.department`) **fjernes**
+  (CL-4) — `User.department`-kolonnen slettes (beslutning 3), og den grenen har uansett ingen
+  produksjonsbruk («sekundær til data finnes»).
+- `CourseEnrollmentSource.DEPARTMENT` beholdes i enum for historikk; ny kilde for klasse-tildeling er
+  `CLASS`.
 - Synlighetsfilteret (`filterVisibleCourseIds`) utvides til å også slippe gjennom kurs tildelt en klasse
   brukeren er medlem av.
+- **`User.department`-sletting (CL-4)** rører: `prisma/schema.prisma` (drop column + migrasjon),
+  `src/auth/principal.ts` + `authenticate.ts` (`x-user-department` / claim), `orgSyncService.ts`
+  (department-felt + `allowDepartmentOverwrite`), EN-2 `assignEnrollments`. Egen skive, ikke i en
+  pågående release.
 
 ## 9. Sikkerhet / personvern
 - AD-utforskningen var **read-only** (gruppe-metadata + medlemskaps-antall), kjørt mot prod-tenanten med
