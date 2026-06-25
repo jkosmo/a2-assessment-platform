@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.76 - 2026-06-25
+
+fix(sections): SVG-localize hopper over uendrede tegninger (#663)
+
+`localizeSectionAssets` re-oversatte alle SVG-tegninger hver gang «Oversett» ble trykket, selv om
+tegningen var uendret — bortkastede LLM-kall og en mulig kilde til drift (LLM kan gi litt ulik
+oversettelse). En asset sin base-SVG er uforanderlig (re-opplasting lager ny asset), så en asset som
+allerede har varianter for alle målspråk fra samme kildespråk hoppes nå over. Endepunktet returnerer
+`skippedAssetCount`, og frontend melder kun «oversatt» når noe faktisk ble oversatt. Integrasjonstest
+dekker at andre localize-kall med samme kildespråk gir `localizedAssetCount=0` / `skippedAssetCount=1`.
+
 ## 1.3.75 - 2026-06-25
 
 fix(course): tydelig feil ved sletting av kurs med fullføringer (#660)

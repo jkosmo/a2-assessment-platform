@@ -100,6 +100,7 @@ export async function getSectionAssetContent(
 
 export interface LocalizeSectionAssetsResult {
   localizedAssetCount: number;
+  skippedAssetCount: number;
   targetLocales: SupportedLocale[];
 }
 
@@ -108,7 +109,11 @@ export interface LocalizeSectionAssetsResult {
  * The text runs are extracted from the original, translated into each OTHER supported locale, and
  * written back into a positional copy (geometry preserved). Each variant is sanitised again and
  * stored as a sibling blob; the asset row records the source locale and the per-locale blob map.
- * Idempotent: re-running re-translates from the (new) source locale and overwrites the variants.
+ *
+ * Idempotent (#663): an asset's base SVG is immutable (a re-upload makes a new asset), so an asset
+ * that already has variants for every target locale FROM THE SAME source locale is left untouched —
+ * re-translating unchanged drawings wastes LLM calls and risks introducing drift. Only newly
+ * uploaded SVGs, or assets being translated from a different source locale, are (re)generated.
  */
 export async function localizeSectionAssets(
   sectionId: string,
@@ -121,13 +126,21 @@ export async function localizeSectionAssets(
 
   const assets = await prisma.sectionAsset.findMany({
     where: { sectionId, mimeType: SVG_MIME_TYPE },
-    select: { id: true, blobPath: true, filename: true },
+    select: { id: true, blobPath: true, filename: true, sourceLocale: true, localizedBlobPaths: true },
   });
 
   const targetLocales = SUPPORTED_LOCALES.filter((l) => l !== sourceLocale);
   let localizedAssetCount = 0;
+  let skippedAssetCount = 0;
 
   for (const asset of assets) {
+    // Already up to date for this source locale → skip (immutable base, nothing to re-translate).
+    const existingVariants = readLocalizedBlobPaths(asset.localizedBlobPaths);
+    if (asset.sourceLocale === sourceLocale && targetLocales.every((t) => existingVariants[t])) {
+      skippedAssetCount += 1;
+      continue;
+    }
+
     const baseSvg = (await getAsset(asset.blobPath)).toString("utf8");
     if (!svgHasText(baseSvg)) continue;
 
@@ -161,5 +174,5 @@ export async function localizeSectionAssets(
     localizedAssetCount += 1;
   }
 
-  return { localizedAssetCount, targetLocales };
+  return { localizedAssetCount, skippedAssetCount, targetLocales };
 }
