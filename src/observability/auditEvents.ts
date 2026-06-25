@@ -69,6 +69,11 @@ export const auditActions = {
     archived: "course_archived",
     completionIssued: "course_completion_issued",
   },
+  enrollment: {
+    assigned: "course_enrollment_assigned",
+    revoked: "course_enrollment_revoked",
+    selfEnrolled: "course_self_enrolled",
+  },
   certification: {
     recertificationStatusUpserted: "recertification_status_upserted",
     recertificationReminderSent: "recertification_reminder_sent",
@@ -256,6 +261,13 @@ export type AuditMetadataByAction = {
     courseId: string;
     certificateId: string;
   }>;
+  [auditActions.enrollment.assigned]: EventMetadata<{
+    userId: string;
+    courseId: string;
+    source: string;
+  }>;
+  [auditActions.enrollment.revoked]: EventMetadata<{ userId: string; courseId: string }>;
+  [auditActions.enrollment.selfEnrolled]: EventMetadata<{ userId: string; courseId: string }>;
   [auditActions.manualReview.opened]: EventMetadata<{
     submissionId: string;
     decisionId: string;

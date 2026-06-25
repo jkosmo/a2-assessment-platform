@@ -22,6 +22,20 @@ export { courseRepository, createCourseRepository } from "./courseRepository.js"
 export { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";
 export { deriveEnrollmentStatus } from "./enrollmentStatus.js";
 export type { EnrollmentStatus } from "./enrollmentStatus.js";
+export {
+  assignEnrollments,
+  revokeEnrollment,
+  selfEnroll,
+  listUserEnrollments,
+  listCourseEnrollments,
+  filterVisibleCourseIds,
+} from "./enrollmentService.js";
+export type {
+  AssignEnrollmentsInput,
+  AssignEnrollmentsResult,
+  UserEnrollmentView,
+  CourseEnrollmentView,
+} from "./enrollmentService.js";
 export { computeCourseStatus } from "./courseQueries.js";
 export type {
   CourseStatus,

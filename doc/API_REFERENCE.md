@@ -61,6 +61,10 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 | `GET` | `/api/courses/:courseId` | Course detail. Returns `modules[]` (legacy) and `items[]` — the ordered mixed module/section sequence; SECTION items carry a `read` flag (#491/#492). |
 | `GET` | `/api/courses/:courseId/sections/:sectionId` | Sanitised HTML + title of a learning section in the participant's locale. Validates the section belongs to the published course (#491). |
 | `POST` | `/api/courses/:courseId/sections/:sectionId/read` | Mark a section as read (idempotent). `204` on success (#492). |
+| `GET` | `/api/courses/enrollments` | The user's own active enrollments (assigned courses) with `dueAt` + derived `status` (ASSIGNED/IN_PROGRESS/OVERDUE/COMPLETED) (#496/EN-2). |
+| `POST` | `/api/courses/:courseId/enroll` | Self-enrol on an **OPEN** course (source=SELF). `204`; `400` if the course is RESTRICTED (#496/EN-2). |
+
+`GET /api/courses` hides **RESTRICTED** courses from users without an active enrollment; OPEN courses are visible to everyone (#496/EN-2).
 
 ---
 
@@ -184,6 +188,9 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course |
 | `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course |
+| `GET` | `/api/admin/content/courses/:courseId/enrollments` | List active enrollments for a course, each with the participant + derived status (#496/EN-2) |
+| `POST` | `/api/admin/content/courses/:courseId/enrollments` | Assign — body `{ userIds?: string[], department?: string, dueAt?: string\|null }`. Individual list and/or department materialisation. Idempotent per user; audited (#496/EN-2) |
+| `DELETE` | `/api/admin/content/courses/:courseId/enrollments/:userId` | Revoke (soft) a participant's enrollment; audited (#496/EN-2) |
 | `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
 | `GET` | `/api/admin/content/courses/:courseId/export-package` | Export envelope (inlines modules **and** sections in order, #512) |
 | `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1) |

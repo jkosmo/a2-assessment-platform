@@ -9,6 +9,9 @@ import {
   setCourseItems,
   deleteCourse,
   courseRepository,
+  assignEnrollments,
+  revokeEnrollment,
+  listCourseEnrollments,
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest } from "../modules/adminContent/adminContentSchemas.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
@@ -309,6 +312,57 @@ adminCoursesRouter.post("/:courseId/archive", async (request, response, next) =>
 adminCoursesRouter.delete("/:courseId", async (request, response, next) => {
   try {
     await deleteCourse(request.params.courseId, request.context?.userId);
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #496/EN-2: enrollment management (SMO/ADMINISTRATOR — gated by the /api/admin/content mount).
+const assignEnrollmentsSchema = z
+  .object({
+    userIds: z.array(z.string().min(1)).optional(),
+    department: z.string().trim().min(1).optional(),
+    dueAt: z.string().datetime().nullish(),
+  })
+  .refine((v) => (v.userIds?.length ?? 0) > 0 || !!v.department, {
+    message: "Provide userIds or a department.",
+  });
+
+adminCoursesRouter.get("/:courseId/enrollments", async (request, response, next) => {
+  try {
+    const enrollments = await listCourseEnrollments(request.params.courseId);
+    response.json({ enrollments });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.post("/:courseId/enrollments", async (request, response, next) => {
+  const parsed = assignEnrollmentsSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await assignEnrollments(
+      request.params.courseId,
+      {
+        userIds: parsed.data.userIds,
+        department: parsed.data.department ?? null,
+        dueAt: parsed.data.dueAt ? new Date(parsed.data.dueAt) : null,
+      },
+      request.context?.userId ?? null,
+    );
+    response.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminCoursesRouter.delete("/:courseId/enrollments/:userId", async (request, response, next) => {
+  try {
+    await revokeEnrollment(request.params.courseId, request.params.userId, request.context?.userId ?? null);
     response.status(204).send();
   } catch (error) {
     next(error);
