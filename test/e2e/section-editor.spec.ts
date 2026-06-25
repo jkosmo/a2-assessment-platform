@@ -90,6 +90,41 @@ test("section editor: no raw i18n keys, and image upload is sent as multipart", 
   await expect(page.locator("#markdownInput")).toHaveValue(/asset:a1/);
 });
 
+// #662: the markdown input must grow to match the (taller) preview pane instead of staying pinned
+// at its 320px minimum, so the author isn't editing in a small box beside a tall preview.
+test("section editor: markdown input grows to match a taller preview pane", async ({ page }) => {
+  await mockBaseApis(page);
+  await page.route("**/api/admin/content/sections", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) }),
+  );
+  // A deliberately tall preview (well over the 320px min-height).
+  const tallHtml = "<p>Preview line that takes vertical space.</p>".repeat(60);
+  await page.route("**/api/admin/content/sections/preview", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ html: tallHtml }) }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  await page.goto("/admin-content/sections");
+  await page.getByRole("button", { name: /Ny seksjon/ }).click();
+  await page.locator("#markdownInput").fill("# Hei\n\nNoe innhold.");
+
+  // Preview renders the tall mocked HTML.
+  await expect(page.locator("#previewPane")).toContainText("Preview line", { timeout: 5000 });
+
+  // The preview is taller than the 320px floor, and the textarea has grown to (about) match it —
+  // not stuck at 320. Allow a small tolerance for the label-row height difference between columns.
+  await expect
+    .poll(async () => {
+      const ta = await page.locator("#markdownInput").boundingBox();
+      const pv = await page.locator("#previewPane").boundingBox();
+      if (!ta || !pv) return -1;
+      return pv.height > 320 && Math.abs(ta.height - pv.height) <= 48 ? 1 : 0;
+    })
+    .toBe(1);
+});
+
 // #540: the section editor must show the blocking consent dialog when consent is not yet
 // accepted — not dump the raw "403 consent_required" JSON into the content area.
 test("section editor: shows consent dialog (not raw 403) when consent not accepted", async ({ page }) => {
