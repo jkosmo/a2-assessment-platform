@@ -371,7 +371,7 @@ async function renderListView() {
     localizeTitle: localizedText,
     formatDate,
   }).map((course) => `<tr>
-      <td class="col-title">${escapeHtml(course.title)}</td>
+      <td class="col-title">${escapeHtml(course.title)}${course.archivedAt ? ` <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#f0f0f0;color:#666;font-size:11px;font-weight:600;vertical-align:middle;">Arkivert</span>` : ""}</td>
       <td class="col-level">${certBadge(course.certificationLevel)}</td>
       <td class="col-module-count">${course.moduleCount}</td>
       <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
@@ -382,6 +382,9 @@ async function renderListView() {
             ? `<button class="row-action-btn" data-action="publish" data-course-id="${escapeHtml(course.courseId)}">Publiser</button>`
             : ""}
           <button class="row-action-btn" data-action="export" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Eksporter</button>
+          ${course.archivedAt
+            ? ""
+            : `<button class="row-action-btn" data-action="archive" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Arkiver</button>`}
           <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Slett</button>
         </div>
       </td>
@@ -481,8 +484,29 @@ function handleListTableClick(event) {
     exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle);
     return;
   }
+  if (btn.dataset.action === "archive") {
+    archiveCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
+    return;
+  }
   if (btn.dataset.action === "delete") {
     openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
+  }
+}
+
+// Archive (soft-delete) a course. Archiving is the alternative to deleting when a course has
+// completions/certificates that must be preserved (#660). Reversible, so a lightweight confirm.
+async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null) {
+  if (!window.confirm(`Arkivere kurset «${courseTitle}»? Det skjules for deltakere, men beholdes med fullføringer.`)) {
+    return;
+  }
+  if (triggerButton) triggerButton.disabled = true;
+  try {
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/archive`, getHeaders, { method: "POST" });
+    showToast("Kurset ble arkivert.", "success");
+    await renderListView();
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke arkivere kurs.", "error");
+    if (triggerButton) triggerButton.disabled = false;
   }
 }
 
