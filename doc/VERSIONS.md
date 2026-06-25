@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.73 - 2026-06-25
+
+fix(admin): MCQ-only-modul kan revideres i samtale + Modultype-radioer (#655)
+
+To klient-lags-bugs i Avansert innholdsforfatting. (1) Radioknappene under «Modultype» arvet
+`width:100%` fra base-input-stilen — bare `input[type=checkbox]` var unntatt (#546) — så radioen
+strakk seg over hele panelet og dyttet labelen til høyre; nå får `input[type=radio]` samme
+`width:auto`. (2) En MCQ-only-modul kunne ikke lagres når den ble revidert via «Fortsett å redigere
+i chat»: `createSessionDraftFromLoadedModule` kopierte ikke `assessmentMode` fra den lastede modulen,
+så lagrings-valideringen behandlet den som «Fritekst+flervalg» og krevde scenario/oppgavetekst som
+MCQ-only aldri har. Draften bærer nå over `assessmentMode` + `mcqMinPercent`. Begge dekket av en ny
+Playwright-e2e (`admin-content-mcq-only-revision.spec.ts`).
+
 ## 1.3.72 - 2026-06-25
 
 feat(course): CourseEnrollment datamodel foundation (#640 / #496 EN-1)
