@@ -83,6 +83,18 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
+  // #660: CourseCompletion.course is onDelete: Restrict (issued certificates are achievement
+  // records we never silently destroy). Without this guard, course.delete fails with a raw FK
+  // violation and the route surfaces a generic 500. Block with a clear message and point the
+  // author at archiving (the soft-delete) instead.
+  const completionCount = await prisma.courseCompletion.count({ where: { courseId } });
+  if (completionCount > 0) {
+    throw new ValidationError(
+      `Cannot delete a course that has ${completionCount} completion${completionCount === 1 ? "" : "s"} ` +
+        `(issued certificates). Archive the course instead to keep the completion records.`,
+    );
+  }
+
   await runInTransaction(async (tx) => {
     await tx.courseModule.deleteMany({ where: { courseId } });
     await tx.course.delete({ where: { id: courseId } });

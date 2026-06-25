@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.75 - 2026-06-25
+
+fix(course): tydelig feil ved sletting av kurs med fullføringer (#660)
+
+Å slette et kurs som hadde fullføringer (utstedte kursbevis) ga en generisk 500 «An unexpected
+error occurred» — `CourseCompletion.course` er `onDelete: Restrict` (bevisst — kursbevis er
+prestasjons-poster), men `deleteCourse` slettet ikke completions, så `course.delete` feilet med
+FK-violation. `deleteCourse` blokkerer nå med en tydelig 400-melding når kurset har fullføringer, og
+peker på arkivering (soft-delete) i stedet for å slette kursbevis stilltiende. Integrasjonstest
+dekker både blokkering (med completions) og vanlig sletting (uten).
+
 ## 1.3.74 - 2026-06-25
 
 feat(sections): trygg SVG-opplasting + lokaliserte SVG-tegninger (#657)
