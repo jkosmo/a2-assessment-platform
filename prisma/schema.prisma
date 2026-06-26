@@ -93,6 +93,10 @@ model User {
   createdModules        Module[]              @relation("CreatedModules")
   courseEnrollments     CourseEnrollment[]    @relation("EnrolledUser")
   enrollmentsAssigned   CourseEnrollment[]    @relation("EnrollmentAssignedBy")
+  classMemberships      ClassMember[]         @relation("ClassMembership")
+  classMembersAdded     ClassMember[]         @relation("ClassMemberAddedBy")
+  classesCreated        Class[]               @relation("ClassCreatedBy")
+  courseGroupAssignmentsCreated CourseGroupAssignment[] @relation("CourseGroupAssignedBy")
 }
 
 model UserConsent {
@@ -485,6 +489,7 @@ model Course {
   completions        CourseCompletion[]
   sectionReads       CourseSectionRead[]
   enrollments        CourseEnrollment[]
+  groupAssignments   CourseGroupAssignment[]
 }
 
 model CourseModule {
@@ -541,6 +546,63 @@ model CourseEnrollment {
   @@unique([userId, courseId])
   @@index([courseId])
   @@index([userId, revokedAt])
+}
+
+// #645/CL-1: a "class" (klasse) — a platform-owned, many-to-many cohort used to assign courses to a
+// group of participants. kind=MANUAL classes have explicit ClassMember rows; kind=ENTRA classes
+// (CL-5, gated by PlatformConfig.classEntraLinkingEnabled) derive membership from the user's Entra
+// group claims instead. isSystem marks built-in classes like "Alle deltakere" (all PARTICIPANTs).
+enum ClassKind {
+  MANUAL
+  ENTRA
+}
+
+model Class {
+  id                String                  @id @default(cuid())
+  name              String
+  description       String?
+  kind              ClassKind               @default(MANUAL)
+  entraGroupId      String? // set only for kind=ENTRA (CL-5)
+  isSystem          Boolean                 @default(false)
+  createdById       String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  archivedAt        DateTime?
+  createdBy         User?                   @relation("ClassCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members           ClassMember[]
+  courseAssignments CourseGroupAssignment[]
+
+  @@index([archivedAt])
+}
+
+model ClassMember {
+  classId   String
+  userId    String
+  addedById String?
+  addedAt   DateTime @default(now())
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  user      User     @relation("ClassMembership", fields: [userId], references: [id], onDelete: Cascade)
+  addedBy   User?    @relation("ClassMemberAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@id([classId, userId])
+  @@index([userId])
+}
+
+// Dynamic assignment of a course to a class (#645/CL-1). A participant is assigned the course if they
+// are a member of any assigned class — evaluated at read time, never materialised to CourseEnrollment.
+model CourseGroupAssignment {
+  id           String    @id @default(cuid())
+  courseId     String
+  classId      String
+  dueAt        DateTime?
+  assignedById String?
+  createdAt    DateTime  @default(now())
+  course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  assignedBy   User?     @relation("CourseGroupAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([courseId, classId])
+  @@index([classId])
 }
 
 // Læringsseksjon i et kurs (#476/#481). Speiler Module/ModuleVersion: innholdet
