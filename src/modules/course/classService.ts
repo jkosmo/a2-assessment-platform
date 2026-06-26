@@ -2,6 +2,9 @@ import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { env } from "../../config/env.js";
+import { localizeContentText } from "../../i18n/content.js";
+import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 
@@ -90,8 +93,8 @@ export async function listClassCourseAssignments(classId: string) {
 }
 
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
-  await requireClass(classId);
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  const klass = await requireClass(classId);
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true, title: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   await classRepository.assignCourseToClass(courseId, classId, dueAt, actorId);
   await recordAuditEvent({
@@ -101,6 +104,42 @@ export async function assignCourseToClass(courseId: string, classId: string, due
     actorId: actorId ?? undefined,
     metadata: { classId, courseId },
   });
+
+  // #684: email the members that their class was assigned a course. Skipped for the "Alle deltakere"
+  // system class (would email the whole org) and for ENTRA classes (no stored member rows). Fire-and-
+  // forget so the assignment is not blocked or failed by email delivery.
+  if (klass.kind === "MANUAL" && !klass.isSystem) {
+    void notifyClassMembersOfCourseAssignment(classId, klass.name, course.title, dueAt);
+  }
+}
+
+async function notifyClassMembersOfCourseAssignment(
+  classId: string,
+  className: string,
+  courseTitleJson: string,
+  dueAt: Date | null,
+): Promise<void> {
+  try {
+    const courseTitle = localizeContentText("nb", courseTitleJson) ?? courseTitleJson;
+    const courseUrl = env.PUBLIC_APP_BASE_URL ? `${env.PUBLIC_APP_BASE_URL.replace(/\/+$/, "")}/participant` : null;
+    const members = await classRepository.listMembers(classId);
+    await Promise.allSettled(
+      members
+        .filter((m) => m.user.email)
+        .map((m) =>
+          sendCourseAssignmentNotification({
+            recipientEmail: m.user.email,
+            recipientName: m.user.name,
+            courseTitle,
+            className,
+            dueAt,
+            courseUrl,
+          }),
+        ),
+    );
+  } catch {
+    /* never let notification failure surface — assignment already succeeded */
+  }
 }
 
 export async function unassignCourseFromClass(courseId: string, classId: string, actorId: string | null) {

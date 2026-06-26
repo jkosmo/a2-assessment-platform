@@ -354,3 +354,52 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
     },
   });
 }
+
+// #684: notify a participant that their class was assigned a course. Reuses the same channel
+// dispatch (disabled/log/acs_email) as other participant notifications. Webhook is treated as a
+// log for this notification type. Norwegian copy (primary locale).
+export interface CourseAssignmentNotificationInput {
+  recipientEmail: string;
+  recipientName?: string | null;
+  courseTitle: string;
+  className: string;
+  dueAt?: Date | null;
+  courseUrl?: string | null;
+}
+
+export async function sendCourseAssignmentNotification(
+  input: CourseAssignmentNotificationInput,
+): Promise<NotificationResult> {
+  const subject = `Nytt kurs tildelt: ${input.courseTitle}`;
+  const dueLine = input.dueAt ? `\nFrist: ${input.dueAt.toISOString().slice(0, 10)}.` : "";
+  const linkLine = input.courseUrl
+    ? `\n\nGå til kurset: ${input.courseUrl}`
+    : "\n\nLogg inn på plattformen for å starte.";
+  const body = `Hei!\n\nKlassen din «${input.className}» har blitt tildelt kurset «${input.courseTitle}».${dueLine}${linkLine}`;
+
+  const payload = {
+    notificationType: "class_course_assignment",
+    courseTitle: input.courseTitle,
+    className: input.className,
+    recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
+    subject,
+    emittedAt: new Date().toISOString(),
+  };
+
+  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+  if (channel === "disabled") {
+    return { delivered: false, channel, subject, nextStepGuidance: body, failureReason: "channel_disabled" };
+  }
+  if (channel === "acs_email") {
+    return sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject,
+      body,
+      logPayload: payload,
+    });
+  }
+  // log channel (and webhook → log for this notification type).
+  logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
+  return { delivered: true, channel, subject, nextStepGuidance: body };
+}
