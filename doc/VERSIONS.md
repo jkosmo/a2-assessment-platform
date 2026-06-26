@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.84 - 2026-06-26
+
+feat(course): synlighets-kontroll (Åpen / Begrenset) på kurs (#645/#496)
+
+`enrollmentPolicy` (OPEN/RESTRICTED) lå i datamodellen (#646) men var ikke eksponert noe sted —
+`updateCourse` ignorerte feltet, så alle kurs var låst til OPEN, og klasse-/enrollment-synlighet kunne
+ikke testes ende-til-ende. Kurs-redigeringsskjemaet har nå en **«Synlighet: Åpen / Begrenset»**-velger
+(create + update), API-et (`POST`/`PUT /courses`) tar imot `enrollmentPolicy`, og kurs-detalj-responsen
+returnerer den. Et RESTRICTED-kurs er kun synlig for individuelt tildelte eller medlemmer av en klasse
+kurset er tildelt (#645/CL-2). Playwright-e2e dekker å sette Begrenset.
+
 ## 1.3.83 - 2026-06-26
 
 fix(authoring): samtale-basert MCQ-endring krasjet med 500 i prod (#682)

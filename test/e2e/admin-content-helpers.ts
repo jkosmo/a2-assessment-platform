@@ -21,6 +21,7 @@ type MockCourse = {
   id: string;
   title: Record<string, string> | string;
   certificationLevel: string | null;
+  enrollmentPolicy?: "OPEN" | "RESTRICTED";
   moduleCount?: number;
   updatedAt?: string;
   publishedAt?: string | null;

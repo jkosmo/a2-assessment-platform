@@ -28,6 +28,8 @@ const courseBodySchema = z.object({
   title: localizedTextPatchSchema,
   description: localizedTextPatchSchema.optional(),
   certificationLevel: localizedTextPatchSchema.optional(),
+  // #645/#496: course visibility — OPEN (everyone) or RESTRICTED (only enrolled / class-assigned).
+  enrollmentPolicy: z.enum(["OPEN", "RESTRICTED"]).optional(),
 });
 
 const setCourseModulesBodySchema = z.object({
@@ -69,6 +71,7 @@ adminCoursesRouter.post("/", async (request, response, next) => {
       title: localizedTextCodec.serialize(parsed.data.title),
       description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : null,
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : null,
+      enrollmentPolicy: parsed.data.enrollmentPolicy,
       actorId: request.context?.userId,
     });
     response.status(201).json({ course });
@@ -206,6 +209,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       title: course.title,
       description: course.description,
       certificationLevel: course.certificationLevel,
+      enrollmentPolicy: course.enrollmentPolicy,
       updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
@@ -234,6 +238,7 @@ adminCoursesRouter.put("/:courseId", async (request, response, next) => {
       title: parsed.data.title ? localizedTextCodec.serialize(parsed.data.title) : undefined,
       description: parsed.data.description ? localizedTextCodec.serialize(parsed.data.description) : undefined,
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
+      enrollmentPolicy: parsed.data.enrollmentPolicy,
     });
     response.json({ course });
   } catch (error) {
