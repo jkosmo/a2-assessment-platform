@@ -202,12 +202,16 @@ const mcqDistractorMetadataCodec = z.object({
   wouldBeCorrectIf: z.string(),
 });
 
+// #682: hard cap on MCQ options. Shared by the codec and the coercion step below so a single source
+// of truth governs both validation and the "trim over-produced options" repair.
+const MCQ_MAX_OPTIONS = 6;
+
 const mcqGenerationResponseCodec = z.object({
   questions: z
     .array(
       z.object({
         stem: z.string().min(1),
-        options: z.array(z.string().min(1)).min(2).max(6),
+        options: z.array(z.string().min(1)).min(2).max(MCQ_MAX_OPTIONS),
         correctAnswer: z.string().min(1),
         rationale: z.string().min(1),
         distractorMetadata: z.array(mcqDistractorMetadataCodec).optional(),
@@ -216,6 +220,40 @@ const mcqGenerationResponseCodec = z.object({
     )
     .min(1),
 });
+
+// #682: LLMs occasionally emit a question with MORE than the allowed options (observed in MCQ
+// revision: a 7-option question failed validation and hard-500'd the edit). Coerce the raw response
+// into a valid shape BEFORE strict validation: trim each question's options to the cap, keeping the
+// correctAnswer within the kept set. A recoverable hallucination should not block authoring.
+export function clampMcqOptionCount(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const obj = raw as { questions?: unknown };
+  if (!Array.isArray(obj.questions)) return raw;
+  for (const entry of obj.questions) {
+    if (!entry || typeof entry !== "object") continue;
+    const question = entry as { options?: unknown; correctAnswer?: unknown };
+    if (Array.isArray(question.options) && question.options.length > MCQ_MAX_OPTIONS) {
+      const correct = question.correctAnswer;
+      let kept = question.options.slice(0, MCQ_MAX_OPTIONS);
+      if (typeof correct === "string" && !kept.includes(correct) && question.options.includes(correct)) {
+        // Ensure the correct answer survives the trim by seating it first.
+        kept = [correct, ...question.options.filter((option) => option !== correct)].slice(0, MCQ_MAX_OPTIONS);
+      }
+      question.options = kept;
+    }
+  }
+  return raw;
+}
+
+// Coerce-then-validate an MCQ generation/revision/localization response. Throws a descriptive error
+// only when the response is still invalid after coercion.
+function parseMcqGenerationResponse(raw: unknown, context: string) {
+  const parsed = mcqGenerationResponseCodec.safeParse(clampMcqOptionCount(raw));
+  if (!parsed.success) {
+    throw new Error(`${context} failed validation: ${JSON.stringify(parsed.error.issues)}`);
+  }
+  return parsed.data;
+}
 
 const courseCopyLocalizationResponseCodec = z.object({
   title: z.string().min(1).optional(),
@@ -1430,10 +1468,7 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   const attempt = async (extraDirective: string | null): Promise<McqGenerationResult> => {
     const promptToUse = extraDirective ? `${userPrompt}\n\n${extraDirective}` : userPrompt;
     const raw = await callLlm(systemPrompt, promptToUse, maxTokens);
-    const parsed = mcqGenerationResponseCodec.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error(`MCQ generation LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
-    }
+    const parsed = { data: parseMcqGenerationResponse(raw, "MCQ generation LLM response") };
     // Defensive guard: the LLM occasionally returns one extra question even when the prompt
     // says "exactly N". Truncate to the requested count. If it returned fewer, leave as-is
     // and let downstream validation surface that. See #424.
@@ -1493,11 +1528,7 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
 
   const parseRevision = async (promptText: string) => {
     const raw = await callLlm(systemPrompt, promptText);
-    const parsed = mcqGenerationResponseCodec.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error(`MCQ revision LLM response failed validation: ${JSON.stringify(parsed.error.issues)}`);
-    }
-    return parsed.data;
+    return parseMcqGenerationResponse(raw, "MCQ revision LLM response");
   };
 
   const sourceQuestions: GeneratedMcqQuestion[] = input.questions.map((question) => ({
@@ -1519,8 +1550,13 @@ Your previous attempt did not apply the requested change concretely enough.
 If the instruction names a specific question or option reference such as "question 3", "Q3", "3b", or "option B in question 3", you must change that exact target in a clearly visible way.
 Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`;
   const secondAttempt = await parseRevision(retryPrompt);
-  if (!hasMeaningfulMcqRevision(sourceQuestions, secondAttempt.questions, input.instruction)) {
-    throw new Error("MCQ revision did not produce a material change. Please request a more specific change and try again.");
+
+  // #682: the "meaningful revision" heuristic drives the RETRY, but it must not hard-fail the edit
+  // with a 500 on a false negative (e.g. the change landed but not on the exact parsed target). Only
+  // a genuine no-op — a revision byte-identical to the source — is worth surfacing as an error.
+  // Otherwise return the revision; the author reviews it and can re-instruct if it missed.
+  if (normalizeGeneratedMcqQuestions(sourceQuestions) === normalizeGeneratedMcqQuestions(secondAttempt.questions)) {
+    throw new Error("MCQ revision produced no change. Please describe the change you want and try again.");
   }
 
   return secondAttempt;
@@ -1541,11 +1577,7 @@ export async function localizeMcqQuestions(input: McqLocalizationInput): Promise
   const { systemPrompt, userPrompt } = buildMcqLocalizationPrompts(input);
 
   const raw = await callLlm(systemPrompt, userPrompt);
-  const parsed = mcqGenerationResponseCodec.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`MCQ localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
-  }
-  return parsed.data;
+  return parseMcqGenerationResponse(raw, "MCQ localization");
 }
 
 // ---------------------------------------------------------------------------

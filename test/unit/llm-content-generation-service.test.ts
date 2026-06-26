@@ -15,6 +15,7 @@ import {
   parseRetryAfterMs,
   computeLlmBackoffMs,
   splitIntoChunks,
+  clampMcqOptionCount,
 } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
 // #479: chunking for condensation. Source larger than one TPM-safe request must be split so each
@@ -684,5 +685,28 @@ describe("isLikelyWrongLocale (#444)", () => {
     const ambiguous = "JSON HTTP API REST OAuth SAML XML YAML";
     expect(isLikelyWrongLocale(ambiguous, "nb")).toBe(false);
     expect(isLikelyWrongLocale(ambiguous, "en-GB")).toBe(false);
+  });
+});
+
+// #682: an MCQ revision where the LLM over-produced options (7) hard-500'd the edit because the
+// codec caps options at 6. Coercion trims to the cap before validation, keeping the correct answer.
+describe("clampMcqOptionCount (#682)", () => {
+  it("trims a question's options to the cap of 6", () => {
+    const raw = { questions: [{ stem: "Q", options: ["a", "b", "c", "d", "e", "f", "g"], correctAnswer: "b", rationale: "r" }] };
+    const out = clampMcqOptionCount(raw) as typeof raw;
+    expect(out.questions[0].options).toHaveLength(6);
+  });
+
+  it("keeps the correct answer even when it was beyond the cap", () => {
+    const raw = { questions: [{ stem: "Q", options: ["a", "b", "c", "d", "e", "f", "CORRECT"], correctAnswer: "CORRECT", rationale: "r" }] };
+    const out = clampMcqOptionCount(raw) as typeof raw;
+    expect(out.questions[0].options).toHaveLength(6);
+    expect(out.questions[0].options).toContain("CORRECT");
+  });
+
+  it("leaves a valid question (≤6 options) untouched", () => {
+    const raw = { questions: [{ stem: "Q", options: ["a", "b", "c"], correctAnswer: "a", rationale: "r" }] };
+    const out = clampMcqOptionCount(raw) as typeof raw;
+    expect(out.questions[0].options).toEqual(["a", "b", "c"]);
   });
 });
