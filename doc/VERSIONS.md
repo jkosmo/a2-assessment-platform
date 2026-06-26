@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.83 - 2026-06-26
+
+fix(authoring): samtale-basert MCQ-endring krasjet med 500 i prod (#682)
+
+To kode-bugs i MCQ-revise-stien (`reviseMcqQuestions`), observert i prod:
+1. **Over-produksjon av alternativer:** LLM-en returnerte av og til et spørsmål med >6 svaralternativer;
+   codec-en tillater maks 6 → hard 500 («Array must contain at most 6 element(s)»), ingen retry. Nå
+   **coerces** rå-svaret før validering — alternativer klippes til maks (riktig svar beholdes) via
+   `clampMcqOptionCount`, rutet inn i generate/revise/localize.
+2. **Heuristikk-hard-fail:** `hasMeaningfulMcqRevision` ga 500 («did not produce a material change») på
+   falske negativer (endringen landet, men ikke på det parsede målet). Heuristikken styrer nå kun
+   *retry*; bare en ekte no-op (revisjon identisk med kilden) gir feil — ellers returneres revisjonen
+   for forfatter-gjennomgang.
+
+Unit-tester for coercion (>6 → 6, riktig svar bevart). `tsc` rent.
+
 ## 1.3.82 - 2026-06-26
 
 fix(nav): «Klasser»-fane på alle innholdsforvaltnings-sider (#645/CL-3 oppfølging)
