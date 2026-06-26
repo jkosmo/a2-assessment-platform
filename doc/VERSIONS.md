@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.88 - 2026-06-26
+
+fix(admin-content): prod-bugs på Klasser/Seksjoner — admin-knapper skjult + topp-nav borte (#690)
+
+To prod-bugs oppdaget rett etter v1.3.87, begge fordi klient-koden leste roller/identitet fra
+`identityDefaults` som KUN finnes i mock-rolle-modus (`participantConsole.ts` sender `undefined` i
+prod/Entra):
+
+1. **Admin-knapper skjult i prod** (Klasser): «Importer brukere fra fil» og «Synk brukere fra Entra»
+   gates på `isAdministrator`, utledet fra `identityDefaults.contentAdmin.roles` → alltid `false` i
+   prod. Nå hentes rollen fra `/api/me` (tokenets `user.roles`).
+2. **Topp-menyen (workspace-nav) borte på Klasser OG Seksjoner**: nav-items filtreres på brukerroller.
+   Klasser sendte feil argument (hele config-objektet som `navItems` → sanitert til `[]`); Seksjoner
+   sendte `roles=""` (fra fraværende identityDefaults) → alle rolle-gatede nav-items skjult →
+   `workspaceNav.hidden`. Begge henter nå roller fra `/api/me` og sender riktig `navigation.items`,
+   som courses/library/calibration allerede gjorde.
+
+**Hvorfor lokal test ikke fanget #1:** e2e-mock satte BÅDE identityDefaults OG /api/me, så prod-formen
+(uten identityDefaults) ble aldri kjørt — testen tok den bekvemme stien, ikke den ekte brukerreisen.
+Nye regresjonstester pinner prod-formen (identityDefaults fraværende, roller fra /api/me) for både
+admin-knappene og topp-nav (classes + section-editor e2e).
+
 ## 1.3.87 - 2026-06-26
 
 feat(orgsync): automatisk Entra-brukersynk for klasse-tildeling (#690)

@@ -71,6 +71,16 @@ function tNav(key) {
 
 let participantRuntimeConfig = {};
 let _headerValues = {};
+let activeUserRoles = [];
+
+// Workspace nav items are filtered by the signed-in user's roles. Prefer live /api/me roles; fall
+// back to mock identityDefaults; finally SUBJECT_MATTER_OWNER so the top nav is never empty (in prod
+// identityDefaults is undefined, so passing "" hid every role-gated nav item).
+function resolveActiveWorkspaceRoles() {
+  if (Array.isArray(activeUserRoles) && activeUserRoles.length > 0) return activeUserRoles;
+  const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin ?? participantRuntimeConfig?.identityDefaults ?? {};
+  return Array.isArray(defaults.roles) && defaults.roles.length > 0 ? defaults.roles : ["SUBJECT_MATTER_OWNER"];
+}
 function getHeaders() { return _headerValues; }
 
 const pageContent = document.getElementById("pageContent");
@@ -474,7 +484,7 @@ function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
   const items = resolveWorkspaceNavigationItems(
     participantRuntimeConfig?.navigation?.items,
-    "",
+    resolveActiveWorkspaceRoles().join(","),
     window.location.pathname,
   );
   renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker, items, buildLabel: (item) => tNav(item.labelKey) || item.id });
@@ -493,6 +503,13 @@ async function init() {
       roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
       locale: currentLocale,
     });
+    // Live roles drive the workspace nav filter (identityDefaults is undefined in prod).
+    try {
+      const me = await apiFetch("/api/me", getHeaders);
+      activeUserRoles = Array.isArray(me?.user?.roles) ? me.user.roles : [];
+    } catch {
+      activeUserRoles = [];
+    }
   } catch {
     _headerValues = {};
   }

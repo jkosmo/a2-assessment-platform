@@ -217,3 +217,39 @@ test("participant: course load sends x-user-* identity headers in mock mode", as
   await expect.poll(() => coursesUserId).toBe("participant-1");
   expect(coursesRoles).toContain("PARTICIPANT");
 });
+
+// #690 regression: the Sections page top workspace nav was empty in prod because role filtering used
+// identityDefaults (undefined in prod) → roles "" hid every role-gated nav item. The fix reads live
+// roles from /api/me. Guards the prod shape: no identityDefaults, role-gated nav item, role via /api/me.
+test("section editor: top workspace nav renders in prod-shaped config (roles from /api/me)", async ({ page }) => {
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authMode: "mock",
+        navigation: {
+          items: [
+            { id: "dashboard", path: "/dashboard", labelKey: "Oversikt", requiredRoles: [] },
+            { id: "review", path: "/review", labelKey: "Vurdering", requiredRoles: ["SUBJECT_MATTER_OWNER"] },
+          ],
+          workspaceItems: [],
+        },
+        calibrationWorkspace: { accessRoles: [] },
+      }),
+    }),
+  );
+  await page.route("**/version", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "test" }) }),
+  );
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } }) }),
+  );
+  await page.route("**/api/admin/content/sections**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) }),
+  );
+  await page.goto("/admin-content/sections");
+  await expect(page.locator("#workspaceNav")).toBeVisible();
+  await expect(page.locator('#workspaceNav a', { hasText: "Oversikt" })).toBeVisible();
+  await expect(page.locator('#workspaceNav a', { hasText: "Vurdering" })).toBeVisible();
+});
