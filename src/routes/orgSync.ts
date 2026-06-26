@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import { applyOrgDeltaSync } from "../modules/orgSync/index.js";
+import { applyOrgDeltaSync, syncEntraUsersFromGroup } from "../modules/orgSync/index.js";
+import { AppError } from "../errors/AppError.js";
 
 const orgSyncRouter = Router();
 
@@ -39,6 +40,25 @@ orgSyncRouter.post("/delta", async (request, response, next) => {
     });
     response.json({ run: result });
   } catch (error) {
+    next(error);
+  }
+});
+
+// #690: import the configured Entra group's members (Graph-backed) as platform users.
+orgSyncRouter.post("/entra", async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const result = await syncEntraUsersFromGroup(actorId);
+    response.json(result);
+  } catch (error) {
+    if (error instanceof AppError) {
+      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      return;
+    }
     next(error);
   }
 });

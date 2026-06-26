@@ -12,6 +12,7 @@ const appVersionLabel = document.getElementById("appVersion");
 
 let _headerValues = {};
 let participantRuntimeConfig = {};
+let isAdministrator = false;
 function getHeaders() { return _headerValues; }
 
 function escapeHtml(s) {
@@ -50,19 +51,36 @@ async function renderListView() {
       </td>
     </tr>`).join("");
   pageContent.innerHTML = `
-    <div class="page-header"><h1>Klasser</h1><button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div>
+    <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div></div>
     <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
     <table class="classes-table">
       <thead><tr><th>Navn</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
       <tbody id="classesTableBody">${rows || `<tr><td colspan="4" style="color:var(--color-meta)">Ingen klasser ennå.</td></tr>`}</tbody>
     </table>`;
   document.getElementById("newClassBtn").addEventListener("click", createClassFlow);
+  document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
   document.getElementById("classesTableBody").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
     if (btn.dataset.action === "open") openClass(btn.dataset.id);
     if (btn.dataset.action === "archive") archiveClass(btn.dataset.id, btn.dataset.name);
   });
+}
+
+// #690: import users from the configured Entra group ("Alle i A-2 Norge") so they are searchable
+// for class membership before their first login. ADMINISTRATOR only.
+async function syncEntraUsers() {
+  const btn = document.getElementById("syncEntraBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Synker…"; }
+  try {
+    const res = await apiFetch("/api/admin/sync/org/entra", getHeaders, { method: "POST" });
+    const imported = res?.importedUsers ?? res?.run?.createdCount ?? 0;
+    showToast(`Synk fullført — ${imported} brukere importert/oppdatert.`, "success");
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke synke brukere fra Entra.", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Synk brukere fra Entra"; }
+  }
 }
 
 async function createClassFlow() {
@@ -195,6 +213,7 @@ async function init() {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
     const defaults = cfg?.identityDefaults?.contentAdmin ?? cfg?.identityDefaults ?? {};
+    isAdministrator = Array.isArray(defaults.roles) && defaults.roles.includes("ADMINISTRATOR");
     _headerValues = buildConsoleHeaders({
       userId: defaults.userId,
       email: defaults.email,

@@ -3,7 +3,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 // #645/CL-3: browser e2e for the classes (cohort) admin page — runs the real front-end JS against
 // mocked APIs, covering the client wiring (list, create, add student via search, assign course).
 
-async function mockBaseApis(page: Page) {
+async function mockBaseApis(page: Page, roles: string[] = ["SUBJECT_MATTER_OWNER"]) {
   await page.route("**/participant/config", (route: Route) =>
     route.fulfill({
       status: 200,
@@ -11,7 +11,7 @@ async function mockBaseApis(page: Page) {
       body: JSON.stringify({
         authMode: "mock",
         navigation: { items: [], workspaceItems: [] },
-        identityDefaults: { contentAdmin: { userId: "smo-1", email: "smo@x.no", name: "SMO", roles: ["SUBJECT_MATTER_OWNER"] } },
+        identityDefaults: { contentAdmin: { userId: "smo-1", email: "smo@x.no", name: "SMO", roles } },
         calibrationWorkspace: { accessRoles: [] },
       }),
     }),
@@ -23,7 +23,7 @@ async function mockBaseApis(page: Page) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } }),
+      body: JSON.stringify({ user: { roles }, consent: { accepted: true, currentVersion: "1.0" } }),
     }),
   );
 }
@@ -111,4 +111,33 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.locator("#courseSelect").selectOption("course-1");
   await page.locator("#assignCourseBtn").click();
   await expect.poll(() => coursePosted).toBe(true);
+});
+
+// #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.
+test("classes admin: Entra user-sync button is admin-only and posts to the sync endpoint", async ({ page }) => {
+  // SUBJECT_MATTER_OWNER must NOT see the button.
+  await mockBaseApis(page, ["SUBJECT_MATTER_OWNER"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("h1")).toContainText("Klasser");
+  await expect(page.locator("#syncEntraBtn")).toHaveCount(0);
+});
+
+test("classes admin: ADMINISTRATOR sees the Entra sync button and clicking it posts", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  let syncPosted = false;
+  await page.route("**/api/admin/sync/org/entra", (route: Route) => {
+    syncPosted = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ importedUsers: 61, fetchedMembers: 61 }) });
+  });
+
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("#syncEntraBtn")).toBeVisible();
+  await page.locator("#syncEntraBtn").click();
+  await expect.poll(() => syncPosted).toBe(true);
 });
