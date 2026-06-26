@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.85 - 2026-06-26
+
+feat(classes): e-postvarsel til studenter når klassen tildeles et kurs (#684)
+
+Når en MANUAL-klasse tildeles et kurs (#675), får hvert medlem en e-post med kursnavn, evt. frist og
+lenke til deltaker-arbeidsflaten. **Unntak:** systemklassen «Alle deltakere» (ville spammet hele
+organisasjonen) og ENTRA-klasser (ingen lagrede medlemsrader). Gjenbruker
+`participantNotificationService` (kanal-dispatch: `log` i dev/test, `acs_email` på stage/prod).
+**Fire-and-forget:** tildelingen lykkes og blokkeres aldri av e-post. Ny valgfri config
+`PUBLIC_APP_BASE_URL` for absolutt kurs-lenke (uten den: e-posten ber bruker logge inn). Unit-tester
+for varsel-bygging (emne/tekst/lenke + login-fallback).
+
 ## 1.3.84 - 2026-06-26
 
 feat(course): synlighets-kontroll (Åpen / Begrenset) på kurs (#645/#496)
