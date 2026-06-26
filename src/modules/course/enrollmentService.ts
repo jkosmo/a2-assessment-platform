@@ -143,7 +143,7 @@ async function hasUserStartedCourse(userId: string, courseId: string): Promise<b
   return submissions > 0;
 }
 
-async function deriveStatus(userId: string, courseId: string, dueAt: Date | null, now: Date): Promise<EnrollmentStatus> {
+export async function deriveStatus(userId: string, courseId: string, dueAt: Date | null, now: Date): Promise<EnrollmentStatus> {
   const completion = await prisma.courseCompletion.findUnique({
     where: { userId_courseId: { userId, courseId } },
     select: { id: true },
@@ -205,14 +205,23 @@ export async function listCourseEnrollments(courseId: string, now: Date = new Da
 
 /**
  * Course visibility (#496): OPEN courses are visible to everyone; RESTRICTED courses only to users
- * with an active enrolment. Returns the set of course ids the user may see, given a candidate list.
+ * with an active enrolment OR a class assignment (#645/CL-2). `classAssignedCourseIds` is the set of
+ * course ids assigned to a class the user belongs to — computed by the caller via classService.
  */
-export async function filterVisibleCourseIds(userId: string, courses: Array<{ id: string; enrollmentPolicy: string }>): Promise<Set<string>> {
+export async function filterVisibleCourseIds(
+  userId: string,
+  courses: Array<{ id: string; enrollmentPolicy: string }>,
+  classAssignedCourseIds: Set<string> = new Set(),
+): Promise<Set<string>> {
   const restrictedIds = courses.filter((c) => c.enrollmentPolicy !== "OPEN").map((c) => c.id);
   const visible = new Set<string>(courses.filter((c) => c.enrollmentPolicy === "OPEN").map((c) => c.id));
-  if (restrictedIds.length > 0) {
+  for (const id of restrictedIds) {
+    if (classAssignedCourseIds.has(id)) visible.add(id);
+  }
+  const stillRestricted = restrictedIds.filter((id) => !visible.has(id));
+  if (stillRestricted.length > 0) {
     const enrolled = await prisma.courseEnrollment.findMany({
-      where: { userId, revokedAt: null, courseId: { in: restrictedIds } },
+      where: { userId, revokedAt: null, courseId: { in: stillRestricted } },
       select: { courseId: true },
     });
     for (const row of enrolled) visible.add(row.courseId);

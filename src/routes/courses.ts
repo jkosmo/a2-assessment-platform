@@ -4,7 +4,14 @@ import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { NotFoundError } from "../errors/AppError.js";
-import { listUserEnrollments, selfEnroll, filterVisibleCourseIds } from "../modules/course/index.js";
+import {
+  listUserEnrollments,
+  selfEnroll,
+  filterVisibleCourseIds,
+  getUserClassIds,
+  getClassAssignedCourseDueDates,
+  deriveStatus,
+} from "../modules/course/index.js";
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
@@ -22,8 +29,15 @@ coursesRouter.get("/", async (request, response, next) => {
 
   try {
     const allCourses = await courseRepository.findPublishedCourses();
-    // #496/EN-2: RESTRICTED courses are only visible to enrolled users; OPEN courses to everyone.
-    const visibleIds = await filterVisibleCourseIds(userId, allCourses);
+    // #496/EN-2 + #645/CL-2: RESTRICTED courses are visible to users with an individual enrolment OR
+    // a class assignment (member of a class the course is assigned to); OPEN courses to everyone.
+    const classIds = await getUserClassIds({
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+    const visibleIds = await filterVisibleCourseIds(userId, allCourses, new Set(classCourseDue.keys()));
     const courses = allCourses.filter((course) => visibleIds.has(course.id));
 
     const items: CourseListItem[] = await Promise.all(
@@ -81,7 +95,31 @@ coursesRouter.get("/enrollments", async (request, response, next) => {
     return;
   }
   try {
-    response.json({ enrollments: await listUserEnrollments(userId) });
+    const now = new Date();
+    const individual = await listUserEnrollments(userId, now);
+    const seen = new Set(individual.map((e) => e.courseId));
+
+    // #645/CL-2: also surface courses assigned via a class the user belongs to (dynamic, not stored).
+    // Individual enrolments win on overlap (they carry the explicit assignedAt/source).
+    const classIds = await getUserClassIds({
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+    const classEntries = await Promise.all(
+      [...classCourseDue.entries()]
+        .filter(([courseId]) => !seen.has(courseId))
+        .map(async ([courseId, dueAt]) => ({
+          courseId,
+          source: "CLASS" as const,
+          dueAt: dueAt ? dueAt.toISOString() : null,
+          assignedAt: null,
+          status: await deriveStatus(userId, courseId, dueAt, now),
+        })),
+    );
+
+    response.json({ enrollments: [...individual, ...classEntries] });
   } catch (error) {
     next(error);
   }

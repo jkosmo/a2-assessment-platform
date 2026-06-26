@@ -9,6 +9,7 @@ export const auditEntityTypes = {
   calibrationWorkspace: "calibration_workspace",
   certificationStatus: "certification_status",
   course: "course",
+  class: "class",
   llmEvaluation: "llm_evaluation",
   manualReview: "manual_review",
   mcqAttempt: "mcq_attempt",
@@ -73,6 +74,14 @@ export const auditActions = {
     assigned: "course_enrollment_assigned",
     revoked: "course_enrollment_revoked",
     selfEnrolled: "course_self_enrolled",
+  },
+  class: {
+    created: "class_created",
+    archived: "class_archived",
+    memberAdded: "class_member_added",
+    memberRemoved: "class_member_removed",
+    courseAssigned: "class_course_assigned",
+    courseUnassigned: "class_course_unassigned",
   },
   certification: {
     recertificationStatusUpserted: "recertification_status_upserted",
@@ -268,6 +277,12 @@ export type AuditMetadataByAction = {
   }>;
   [auditActions.enrollment.revoked]: EventMetadata<{ userId: string; courseId: string }>;
   [auditActions.enrollment.selfEnrolled]: EventMetadata<{ userId: string; courseId: string }>;
+  [auditActions.class.created]: EventMetadata<{ classId: string; name: string }>;
+  [auditActions.class.archived]: EventMetadata<{ classId: string }>;
+  [auditActions.class.memberAdded]: EventMetadata<{ classId: string; userId: string }>;
+  [auditActions.class.memberRemoved]: EventMetadata<{ classId: string; userId: string }>;
+  [auditActions.class.courseAssigned]: EventMetadata<{ classId: string; courseId: string }>;
+  [auditActions.class.courseUnassigned]: EventMetadata<{ classId: string; courseId: string }>;
   [auditActions.manualReview.opened]: EventMetadata<{
     submissionId: string;
     decisionId: string;
