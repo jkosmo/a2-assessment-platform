@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.82 - 2026-06-26
+
+fix(nav): «Klasser»-fane på alle innholdsforvaltnings-sider (#645/CL-3 oppfølging)
+
+CL-3 la «Klasser»-fanen kun til på kurs- og seksjons-sidene; den manglet på modul-biblioteket
+(«Moduler») og kalibrering, så klasse-siden var uoppdagbar derfra. Fanen er nå på alle fem
+content-area-nav-flatene (kurs, moduler/bibliotek, seksjoner, klasser, kalibrering). E2e i
+modul-bibliotek-spec-en låser at fanen finnes.
+
 ## 1.3.81 - 2026-06-26
 
 feat(course): klasser (kohorter) for kurstildeling (#645 / CL-1..CL-3)
