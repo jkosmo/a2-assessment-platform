@@ -51,7 +51,7 @@ async function renderListView() {
       </td>
     </tr>`).join("");
   pageContent.innerHTML = `
-    <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div></div>
+    <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere fra fil</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div></div>
     <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
     <table class="classes-table">
       <thead><tr><th>Navn</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
@@ -59,6 +59,10 @@ async function renderListView() {
     </table>`;
   document.getElementById("newClassBtn").addEventListener("click", createClassFlow);
   document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
+  const importBtn = document.getElementById("importUsersBtn");
+  const importFile = document.getElementById("importUsersFile");
+  importBtn?.addEventListener("click", () => importFile?.click());
+  importFile?.addEventListener("change", () => importUsersFromFile(importFile));
   document.getElementById("classesTableBody").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
@@ -80,6 +84,42 @@ async function syncEntraUsers() {
     showToast(err?.message ?? "Kunne ikke synke brukere fra Entra.", "error");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Synk brukere fra Entra"; }
+  }
+}
+
+// #690 fallback: when the managed identity lacks Graph permission (admin consent pending), an
+// ADMINISTRATOR can still seed users with their own delegated access — export the group members
+// (e.g. `az ad group member list`) to a JSON file shaped `{ source, users: [{externalId,email,name}] }`
+// and import it here. Routes through the same admin-only delta endpoint as the automatic sync.
+async function importUsersFromFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const btn = document.getElementById("importUsersBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Importerer…"; }
+  try {
+    const text = await file.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error("Fila er ikke gyldig JSON.");
+    }
+    const users = Array.isArray(payload) ? payload : payload?.users;
+    if (!Array.isArray(users) || users.length === 0) {
+      throw new Error('Fila må inneholde et "users"-array med minst én bruker.');
+    }
+    const body = { source: typeof payload?.source === "string" && payload.source.trim() ? payload.source.trim() : "manual_file_import", users };
+    const res = await apiFetch("/api/admin/sync/org/delta", getHeaders, { method: "POST", body: JSON.stringify(body) });
+    const run = res?.run ?? {};
+    const created = run.createdCount ?? 0;
+    const updated = run.updatedCount ?? 0;
+    const failed = run.failedCount ?? 0;
+    showToast(`Import fullført — ${created} opprettet, ${updated} oppdatert${failed ? `, ${failed} feilet` : ""}.`, failed ? "error" : "success");
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke importere brukere.", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Importer brukere fra fil"; }
+    input.value = ""; // allow re-selecting the same file
   }
 }
 

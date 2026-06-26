@@ -12,9 +12,12 @@ før hen har logget inn første gang. Ny **Entra-brukersynk** importerer medlemm
 Microsoft Graph (managed identity) → `applyOrgDeltaSync` (upsert, `externalId = oid`). On-demand:
 admin-knapp **«Synk brukere fra Entra»** på Klasser-siden + `POST /api/admin/sync/org/entra`
 (ADMINISTRATOR). Planlagt: `EntraUserSyncMonitor` i worker (default 24h), kun aktiv når
-`ENTRA_USER_SYNC_GROUP_ID` er satt. ⚠️ Krever ett Entra-admin-steg: gi app-ens managed identity
-Graph-permission `GroupMember.Read.All` (+ `User.Read.All`) med consent — se
-`doc/ops/ENTRA_USER_SYNC_690.md`. Mapping-unit-tester + e2e (admin-only knapp + POST).
+`ENTRA_USER_SYNC_GROUP_ID` er satt. ⚠️ Den automatiske Graph-pullen krever ett Entra-admin-steg: gi
+app-ens managed identity Graph-permission `GroupMember.Read.All` (+ `User.Read.All`) med consent
+(katalogrolle, ikke subscription-Owner). **Stopgap som virker uten consent:** admin-knapp **«Importer
+brukere fra fil»** på Klasser-siden tar imot en JSON eksportert med admins egen delegerte tilgang
+(`az ad group member list`) og kjører samme upsert via `POST /api/admin/sync/org/delta`. Se
+`doc/ops/ENTRA_USER_SYNC_690.md`. Mapping-unit-tester + e2e (admin-only Graph-knapp + POST, fil-import).
 
 ## 1.3.86 - 2026-06-26
 

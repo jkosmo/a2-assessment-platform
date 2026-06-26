@@ -54,6 +54,29 @@ az rest --method POST --uri "https://graph.microsoft.com/v1.0/servicePrincipals/
 `df021288-bdef-4463-88db-98f22de89214` — verify against the Graph SP's `appRoles` if Microsoft
 changes them.) Repeat for the worker app's managed identity if the scheduled monitor runs there.
 
+## Stopgap: manual export + import (no Graph consent needed) ✅ works today
+Granting the managed identity the Graph app role requires an Entra **directory** role (Privileged
+Role Administrator / Global Admin) — **subscription Owner is NOT enough** (verified 2026-06-26: the
+`az rest` POST returned `Authorization_RequestDenied` for a subscription-Owner). Until that consent
+is granted, seed the users with an **admin's own delegated access**:
+
+1. **Export** the group's members (any directory member can read group membership):
+   ```bash
+   az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086   # prod
+   az ad group member list --group 8bab5ab4-c7db-4c9c-baad-316e1ff63504 \
+     --query "[].{externalId:id, email:mail, name:displayName, upn:userPrincipalName}" -o json > members.json
+   ```
+   Shape the file as `{ "source": "entra_manual_export", "users": [ {externalId, email, name, activeStatus:true}, … ] }`
+   (use `upn` as `email` when `mail` is null). `externalId` MUST be the Entra object id (`oid`) so a
+   later SSO login reconciles to the same row. (Note: `az` on Windows writes the file as cp1252 — re-
+   encode to UTF-8 so names with æ/ø/å/é survive.)
+2. **Import** in the app: Innholdsforvaltning → **Klasser** → **«Importer brukere fra fil»**
+   (ADMINISTRATOR), pick the JSON. It POSTs to the existing admin-only `POST /api/admin/sync/org/delta`
+   (same `applyOrgDeltaSync` upsert as the automatic path) — no managed-identity Graph permission needed.
+
+This is a manual stopgap (re-run when the roster changes). The automatic Graph sync below is the
+durable path once consent is granted.
+
 ## Run it
 - **On demand:** Innholdsforvaltning → **Klasser** → **«Synk brukere fra Entra»** (admin), or
   `POST /api/admin/sync/org/entra`.

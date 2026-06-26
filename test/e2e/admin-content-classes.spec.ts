@@ -141,3 +141,38 @@ test("classes admin: ADMINISTRATOR sees the Entra sync button and clicking it po
   await page.locator("#syncEntraBtn").click();
   await expect.poll(() => syncPosted).toBe(true);
 });
+
+// #690 fallback: ADMINISTRATOR imports users from a JSON file → POST /api/admin/sync/org/delta.
+test("classes admin: importing a users file posts to the delta sync endpoint", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  let deltaBody: unknown = null;
+  await page.route("**/api/admin/sync/org/delta", (route: Route) => {
+    deltaBody = route.request().postDataJSON();
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { createdCount: 2, updatedCount: 0, failedCount: 0 } }) });
+  });
+
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("#importUsersBtn")).toBeVisible();
+
+  // Provide the file directly to the hidden input (no OS picker).
+  await page.locator("#importUsersFile").setInputFiles({
+    name: "entra-export.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        source: "entra_manual_export",
+        users: [
+          { externalId: "oid-1", email: "a@x.no", name: "A", activeStatus: true },
+          { externalId: "oid-2", email: "b@x.no", name: "B", activeStatus: true },
+        ],
+      }),
+    ),
+  });
+
+  await expect.poll(() => deltaBody).not.toBeNull();
+  expect((deltaBody as { source: string }).source).toBe("entra_manual_export");
+  expect((deltaBody as { users: unknown[] }).users).toHaveLength(2);
+});
