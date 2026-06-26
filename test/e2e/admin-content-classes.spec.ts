@@ -3,7 +3,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 // #645/CL-3: browser e2e for the classes (cohort) admin page — runs the real front-end JS against
 // mocked APIs, covering the client wiring (list, create, add student via search, assign course).
 
-async function mockBaseApis(page: Page) {
+async function mockBaseApis(page: Page, roles: string[] = ["SUBJECT_MATTER_OWNER"]) {
   await page.route("**/participant/config", (route: Route) =>
     route.fulfill({
       status: 200,
@@ -11,7 +11,7 @@ async function mockBaseApis(page: Page) {
       body: JSON.stringify({
         authMode: "mock",
         navigation: { items: [], workspaceItems: [] },
-        identityDefaults: { contentAdmin: { userId: "smo-1", email: "smo@x.no", name: "SMO", roles: ["SUBJECT_MATTER_OWNER"] } },
+        identityDefaults: { contentAdmin: { userId: "smo-1", email: "smo@x.no", name: "SMO", roles } },
         calibrationWorkspace: { accessRoles: [] },
       }),
     }),
@@ -23,7 +23,7 @@ async function mockBaseApis(page: Page) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } }),
+      body: JSON.stringify({ user: { roles }, consent: { accepted: true, currentVersion: "1.0" } }),
     }),
   );
 }
@@ -111,4 +111,68 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.locator("#courseSelect").selectOption("course-1");
   await page.locator("#assignCourseBtn").click();
   await expect.poll(() => coursePosted).toBe(true);
+});
+
+// #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.
+test("classes admin: Entra user-sync button is admin-only and posts to the sync endpoint", async ({ page }) => {
+  // SUBJECT_MATTER_OWNER must NOT see the button.
+  await mockBaseApis(page, ["SUBJECT_MATTER_OWNER"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("h1")).toContainText("Klasser");
+  await expect(page.locator("#syncEntraBtn")).toHaveCount(0);
+});
+
+test("classes admin: ADMINISTRATOR sees the Entra sync button and clicking it posts", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  let syncPosted = false;
+  await page.route("**/api/admin/sync/org/entra", (route: Route) => {
+    syncPosted = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ importedUsers: 61, fetchedMembers: 61 }) });
+  });
+
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("#syncEntraBtn")).toBeVisible();
+  await page.locator("#syncEntraBtn").click();
+  await expect.poll(() => syncPosted).toBe(true);
+});
+
+// #690 fallback: ADMINISTRATOR imports users from a JSON file → POST /api/admin/sync/org/delta.
+test("classes admin: importing a users file posts to the delta sync endpoint", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  let deltaBody: unknown = null;
+  await page.route("**/api/admin/sync/org/delta", (route: Route) => {
+    deltaBody = route.request().postDataJSON();
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { createdCount: 2, updatedCount: 0, failedCount: 0 } }) });
+  });
+
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("#importUsersBtn")).toBeVisible();
+
+  // Provide the file directly to the hidden input (no OS picker).
+  await page.locator("#importUsersFile").setInputFiles({
+    name: "entra-export.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        source: "entra_manual_export",
+        users: [
+          { externalId: "oid-1", email: "a@x.no", name: "A", activeStatus: true },
+          { externalId: "oid-2", email: "b@x.no", name: "B", activeStatus: true },
+        ],
+      }),
+    ),
+  });
+
+  await expect.poll(() => deltaBody).not.toBeNull();
+  expect((deltaBody as { source: string }).source).toBe("entra_manual_export");
+  expect((deltaBody as { users: unknown[] }).users).toHaveLength(2);
 });

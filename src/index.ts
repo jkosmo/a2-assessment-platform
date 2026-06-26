@@ -6,6 +6,7 @@ import { AssessmentWorker } from "./modules/assessment/index.js";
 import { AppealSlaMonitor } from "./modules/appeal/index.js";
 import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.js";
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
+import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -23,6 +24,7 @@ const assessmentWorker = startWorkers ? new AssessmentWorker(env.ASSESSMENT_JOB_
 const appealSlaMonitor = startWorkers ? new AppealSlaMonitor(env.APPEAL_SLA_MONITOR_INTERVAL_MS) : null;
 const pseudonymizationMonitor = startWorkers ? new PseudonymizationMonitor() : null;
 const auditRetentionMonitor = startWorkers ? new AuditRetentionMonitor() : null;
+const entraUserSyncMonitor = startWorkers ? new EntraUserSyncMonitor() : null;
 
 const gracefulShutdown = (exitCode = 0) => {
   if (shuttingDown) {
@@ -34,6 +36,7 @@ const gracefulShutdown = (exitCode = 0) => {
   assessmentWorker?.stop();
   pseudonymizationMonitor?.stop();
   auditRetentionMonitor?.stop();
+  entraUserSyncMonitor?.stop();
 
   if (!server) {
     process.exit(exitCode);
@@ -70,6 +73,7 @@ async function startServer() {
           appealSlaMonitor: appealSlaMonitor?.getStatus() ?? null,
           pseudonymizationMonitor: pseudonymizationMonitor?.getStatus() ?? null,
           auditRetentionMonitor: auditRetentionMonitor?.getStatus() ?? null,
+          entraUserSyncMonitor: entraUserSyncMonitor?.getStatus() ?? null,
         },
       }));
     }).listen(env.PORT, () => {
@@ -83,6 +87,7 @@ async function startServer() {
     appealSlaMonitor!.start();
     pseudonymizationMonitor!.start();
     auditRetentionMonitor!.start();
+    entraUserSyncMonitor!.start();
   }
 }
 

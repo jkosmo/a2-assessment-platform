@@ -45,6 +45,17 @@ const envSchema = z.object({
     .string()
     .transform((value) => value.toLowerCase() === "true")
     .default("false"),
+  // #690: Entra security/M365 group whose members are imported into the platform as users
+  // (e.g. "Alle i A-2 Norge"). When set, an admin can run a Graph-backed sync that upserts these
+  // users so they are searchable/assignable before their first login. Requires the app's managed
+  // identity to hold the Graph application permission GroupMember.Read.All (+ User.Read.All).
+  ENTRA_USER_SYNC_GROUP_ID: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  ),
+  // #690: how often the scheduled Entra user sync runs (worker). Default 24h. Only active when
+  // ENTRA_USER_SYNC_GROUP_ID is set.
+  ENTRA_USER_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
   MOCK_DEFAULT_USER_ID: z.string().default("dev-user-1"),
   MOCK_DEFAULT_EMAIL: z.string().email().default("dev.user@company.com"),
   MOCK_DEFAULT_NAME: z.string().default("Dev User"),

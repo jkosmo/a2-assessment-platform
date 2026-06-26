@@ -260,6 +260,7 @@ without auth headers. `GET /api/courses/completions/:certificateId` returns
 |---|---|---|
 | `POST` | `/api/admin/sync/org` | ADMINISTRATOR |
 | `POST` | `/api/admin/sync/org/delta` | ADMINISTRATOR |
+| `POST` | `/api/admin/sync/org/entra` | ADMINISTRATOR — import the configured Entra group's members (Graph, managed identity) as platform users so they're searchable before first login. `400` if `ENTRA_USER_SYNC_GROUP_ID` is unset. Runbook: `doc/ops/ENTRA_USER_SYNC_690.md` (#690). |
 
 ---
 

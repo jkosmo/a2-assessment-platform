@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.87 - 2026-06-26
+
+feat(orgsync): automatisk Entra-brukersynk for klasse-tildeling (#690)
+
+Plattformen provisjonerer brukere just-in-time ved innlogging, så en ansatt er ikke søkbar/tildelbar
+før hen har logget inn første gang. Ny **Entra-brukersynk** importerer medlemmene av ansatt-gruppa
+«Alle i A-2 Norge» (~61, ikke de 246 tenant-objektene som mest er gjester) til `User`-tabellen via
+Microsoft Graph (managed identity) → `applyOrgDeltaSync` (upsert, `externalId = oid`). On-demand:
+admin-knapp **«Synk brukere fra Entra»** på Klasser-siden + `POST /api/admin/sync/org/entra`
+(ADMINISTRATOR). Planlagt: `EntraUserSyncMonitor` i worker (default 24h), kun aktiv når
+`ENTRA_USER_SYNC_GROUP_ID` er satt. ⚠️ Den automatiske Graph-pullen krever ett Entra-admin-steg: gi
+app-ens managed identity Graph-permission `GroupMember.Read.All` (+ `User.Read.All`) med consent
+(katalogrolle, ikke subscription-Owner). **Stopgap som virker uten consent:** admin-knapp **«Importer
+brukere fra fil»** på Klasser-siden tar imot en JSON eksportert med admins egen delegerte tilgang
+(`az ad group member list`) og kjører samme upsert via `POST /api/admin/sync/org/delta`. Se
+`doc/ops/ENTRA_USER_SYNC_690.md`. Mapping-unit-tester + e2e (admin-only Graph-knapp + POST, fil-import).
+
 ## 1.3.86 - 2026-06-26
 
 fix: stage-funn for v1.3.85 — MCQ-revise datatap, arkiverte kurs, e-post-lenke (#688)
