@@ -173,3 +173,27 @@ that never reaches the viewer because the locale isn't threaded).
 | Client upload + translate trigger | `public/static/admin-content-sections.js` (`accept` incl. svg; translate loop calls `/assets/localize`; preview sends `locale`) | `hydrateContentAssetImages` preserves the `?locale=` query |
 
 **Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant).
+
+## 12. Admin-content client gating — roles & identity from /api/me, NOT identityDefaults (#690)
+
+Every admin-content page (`/admin-content/*`) decides what to show based on the signed-in user's
+**roles**: admin-only buttons, and the top **workspace nav** (items are filtered by `requiredRoles`).
+The trap: `participantRuntimeConfig.identityDefaults` is populated **only in mock-role mode** —
+`participantConsole.ts` sends it as `undefined` in prod/Entra. So any page that reads roles/identity
+from `identityDefaults` works locally and silently shows **nothing** (hidden admin controls, empty
+top nav) in prod. The live roles come from `GET /api/me` (`user.roles`, the token's roles). A fix on
+one page leaves siblings broken — this bit Klasser + Seksjoner together (v1.3.87→1.3.88).
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Live roles source | `GET /api/me` → `user.roles` (`src/routes/me.ts`) | token roles via `request.context.roles` |
+| Roles helper (per page) | `resolveActiveWorkspaceRoles()` in each `admin-content-*.js` | live `/api/me` → identityDefaults → `["SUBJECT_MATTER_OWNER"]` |
+| Admin-button gating | `admin-content-classes.js` `isAdministrator` (from `/api/me`) | gates import/sync buttons |
+| Workspace nav filter | `resolveWorkspaceNavigationItems(navigation.items, rolesCsv, path)` | empty `navItems` OR empty roles ⇒ `workspaceNav.hidden` |
+| Correct reference impls | `admin-content-courses.js`, `-library.js`, `-calibration.js` | already fetch `/api/me` into `activeUserRoles` |
+| Was broken (now fixed) | `admin-content-classes.js`, `admin-content-sections.js` | classes passed whole config as navItems; sections passed `roles=""` |
+
+**Guards (must mock the PROD shape — no identityDefaults, roles only via `/api/me`):**
+`test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config";
+`test/e2e/section-editor.spec.ts` "top workspace nav renders in prod-shaped config". A mock that sets
+**both** identityDefaults and `/api/me` hides this class of bug — always include a prod-shape case.

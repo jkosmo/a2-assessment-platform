@@ -13,7 +13,16 @@ const appVersionLabel = document.getElementById("appVersion");
 let _headerValues = {};
 let participantRuntimeConfig = {};
 let isAdministrator = false;
+let activeUserRoles = [];
 function getHeaders() { return _headerValues; }
+
+// Workspace nav items are filtered by the signed-in user's roles. Prefer the live /api/me roles;
+// fall back to mock identityDefaults; finally to SUBJECT_MATTER_OWNER so the nav is never empty.
+function resolveActiveWorkspaceRoles() {
+  if (Array.isArray(activeUserRoles) && activeUserRoles.length > 0) return activeUserRoles;
+  const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin ?? participantRuntimeConfig?.identityDefaults ?? {};
+  return Array.isArray(defaults.roles) && defaults.roles.length > 0 ? defaults.roles : ["SUBJECT_MATTER_OWNER"];
+}
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -244,7 +253,13 @@ async function openClass(id) {
 
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
-  const items = resolveWorkspaceNavigationItems(participantRuntimeConfig);
+  // resolveWorkspaceNavigationItems(navItems, rolesCsv, currentPath) — previously the whole config
+  // object was passed as navItems, so it sanitized to [] and the top nav never rendered.
+  const items = resolveWorkspaceNavigationItems(
+    participantRuntimeConfig?.navigation?.items,
+    resolveActiveWorkspaceRoles().join(","),
+    window.location.pathname,
+  );
   renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker: null, items, buildLabel: (item) => item.labelKey || item.id });
 }
 
@@ -253,13 +268,23 @@ async function init() {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
     const defaults = cfg?.identityDefaults?.contentAdmin ?? cfg?.identityDefaults ?? {};
-    isAdministrator = Array.isArray(defaults.roles) && defaults.roles.includes("ADMINISTRATOR");
     _headerValues = buildConsoleHeaders({
       userId: defaults.userId,
       email: defaults.email,
       name: defaults.name,
       roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
     });
+    // Admin gating must use the *live* signed-in user's roles. identityDefaults is only populated
+    // in mock-role mode (undefined in prod/Entra — see participantConsole.ts), so reading roles
+    // from it hides admin controls for real admins in prod. /api/me returns the token's roles.
+    try {
+      const me = await apiFetch("/api/me", getHeaders);
+      activeUserRoles = Array.isArray(me?.user?.roles) ? me.user.roles : [];
+      isAdministrator = activeUserRoles.includes("ADMINISTRATOR") ||
+        (Array.isArray(defaults.roles) && defaults.roles.includes("ADMINISTRATOR"));
+    } catch {
+      isAdministrator = Array.isArray(defaults.roles) && defaults.roles.includes("ADMINISTRATOR");
+    }
   } catch {
     _headerValues = {};
   }

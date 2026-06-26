@@ -142,6 +142,48 @@ test("classes admin: ADMINISTRATOR sees the Entra sync button and clicking it po
   await expect.poll(() => syncPosted).toBe(true);
 });
 
+// #690 regression: in prod (Entra auth) `identityDefaults` is undefined — admin gating AND the
+// workspace nav role filter MUST come from /api/me's live roles. Guards two prod bugs: (1) import/sync
+// buttons hidden because isAdministrator read absent identityDefaults; (2) the top workspace nav never
+// rendered because the whole config object was passed as navItems (→ sanitized to []) and roles were "".
+test("classes admin: admin buttons + top nav render in prod-shaped config (role from /api/me)", async ({ page }) => {
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      // Prod shape: mockRoleSwitch disabled → identityDefaults omitted entirely. Two nav items: one
+      // open, one role-gated (only visible if the live roles include SUBJECT_MATTER_OWNER).
+      body: JSON.stringify({
+        authMode: "mock",
+        navigation: {
+          items: [
+            { id: "dashboard", path: "/dashboard", labelKey: "Oversikt", requiredRoles: [] },
+            { id: "review", path: "/review", labelKey: "Vurdering", requiredRoles: ["SUBJECT_MATTER_OWNER"] },
+          ],
+          workspaceItems: [],
+        },
+        calibrationWorkspace: { accessRoles: [] },
+      }),
+    }),
+  );
+  await page.route("**/version", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "test" }) }),
+  );
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { roles: ["ADMINISTRATOR", "SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } }) }),
+  );
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("#importUsersBtn")).toBeVisible();
+  await expect(page.locator("#syncEntraBtn")).toBeVisible();
+  // Top workspace nav renders both the open item and the role-gated one (live roles applied).
+  await expect(page.locator("#workspaceNav")).toBeVisible();
+  await expect(page.locator('#workspaceNav a', { hasText: "Oversikt" })).toBeVisible();
+  await expect(page.locator('#workspaceNav a', { hasText: "Vurdering" })).toBeVisible();
+});
+
 // #690 fallback: ADMINISTRATOR imports users from a JSON file → POST /api/admin/sync/org/delta.
 test("classes admin: importing a users file posts to the delta sync endpoint", async ({ page }) => {
   await mockBaseApis(page, ["ADMINISTRATOR"]);
