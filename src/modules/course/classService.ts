@@ -2,7 +2,6 @@ import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { env } from "../../config/env.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
@@ -94,8 +93,10 @@ export async function listClassCourseAssignments(classId: string) {
 
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
   const klass = await requireClass(classId);
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true, title: true } });
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true, title: true, archivedAt: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+  // #688: archived courses are retired and must not be assignable to a class.
+  if (course.archivedAt) throw new ValidationError("Cannot assign an archived course.");
   await classRepository.assignCourseToClass(courseId, classId, dueAt, actorId);
   await recordAuditEvent({
     entityType: auditEntityTypes.class,
@@ -121,7 +122,6 @@ async function notifyClassMembersOfCourseAssignment(
 ): Promise<void> {
   try {
     const courseTitle = localizeContentText("nb", courseTitleJson) ?? courseTitleJson;
-    const courseUrl = env.PUBLIC_APP_BASE_URL ? `${env.PUBLIC_APP_BASE_URL.replace(/\/+$/, "")}/participant` : null;
     const members = await classRepository.listMembers(classId);
     await Promise.allSettled(
       members
@@ -133,7 +133,6 @@ async function notifyClassMembersOfCourseAssignment(
             courseTitle,
             className,
             dueAt,
-            courseUrl,
           }),
         ),
     );

@@ -106,4 +106,21 @@ describe("Class (cohort) management + dynamic assignment (#645/CL-2)", () => {
     expect((await request(app).delete(`/api/admin/content/classes/${SYSTEM_ALL_PARTICIPANTS_CLASS_ID}`).set(adminHeaders)).status).toBe(400);
     expect((await request(app).post("/api/admin/content/classes").set(participantHeaders(`cls-forbid-${Date.now()}`)).send({ name: "Nope" })).status).toBe(403);
   });
+
+  // #688: archived courses must not be assignable to a class.
+  it("refuses to assign an archived course to a class", async () => {
+    const courseId = await createRestrictedCourse();
+    await prisma.course.update({ where: { id: courseId }, data: { archivedAt: new Date() } });
+    const created = await request(app).post("/api/admin/content/classes").set(adminHeaders).send({ name: "Kull arch" });
+    const classId = created.body.class.id as string;
+
+    const res = await request(app)
+      .post(`/api/admin/content/classes/${classId}/courses`)
+      .set(adminHeaders)
+      .send({ courseId });
+    expect(res.status).toBe(400);
+
+    await prisma.class.delete({ where: { id: classId } });
+    await prisma.course.delete({ where: { id: courseId } });
+  });
 });

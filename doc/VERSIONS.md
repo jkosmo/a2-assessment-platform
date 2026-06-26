@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.86 - 2026-06-26
+
+fix: stage-funn for v1.3.85 — MCQ-revise datatap, arkiverte kurs, e-post-lenke (#688)
+
+Tre funn under stage-verifisering: (1) **MCQ-revise reduserte spørsmål** — «Endre alternativ 1b»
+kollapset 10 → 1 spørsmål (LLM droppet de andre, heuristikken godtok det). For en målrettet endring
+(eksplisitt mål) MÅ antallet nå bevares; ellers retry, så avvis med tydelig melding (ikke stille
+datatap). (2) **Arkiverte kurs var tildelbare** i klasse-oversikten — nå filtrert bort i UI + backend-
+vakt (`assignCourseToClass` avviser arkivert kurs med 400). (3) **E-post-lenke fjernet** —
+firmapolicy forbyr e-post med lenker (spoofing); varselet ber nå bruker logge inn selv, og
+`PUBLIC_APP_BASE_URL`-config er fjernet (#687 lukket). Unit-/integrasjons-/e2e-tester dekker alle tre.
+
 ## 1.3.85 - 2026-06-26
 
 feat(classes): e-postvarsel til studenter når klassen tildeles et kurs (#684)

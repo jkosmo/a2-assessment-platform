@@ -358,13 +358,15 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
 // #684: notify a participant that their class was assigned a course. Reuses the same channel
 // dispatch (disabled/log/acs_email) as other participant notifications. Webhook is treated as a
 // log for this notification type. Norwegian copy (primary locale).
+//
+// #688: the email contains NO link. Company policy forbids emails with links (phishing / spoofing
+// risk) — the participant is told to log in to the platform themselves.
 export interface CourseAssignmentNotificationInput {
   recipientEmail: string;
   recipientName?: string | null;
   courseTitle: string;
   className: string;
   dueAt?: Date | null;
-  courseUrl?: string | null;
 }
 
 export async function sendCourseAssignmentNotification(
@@ -372,10 +374,7 @@ export async function sendCourseAssignmentNotification(
 ): Promise<NotificationResult> {
   const subject = `Nytt kurs tildelt: ${input.courseTitle}`;
   const dueLine = input.dueAt ? `\nFrist: ${input.dueAt.toISOString().slice(0, 10)}.` : "";
-  const linkLine = input.courseUrl
-    ? `\n\nGå til kurset: ${input.courseUrl}`
-    : "\n\nLogg inn på plattformen for å starte.";
-  const body = `Hei!\n\nKlassen din «${input.className}» har blitt tildelt kurset «${input.courseTitle}».${dueLine}${linkLine}`;
+  const body = `Hei!\n\nKlassen din «${input.className}» har blitt tildelt kurset «${input.courseTitle}».${dueLine}\n\nLogg inn på plattformen for å starte.`;
 
   const payload = {
     notificationType: "class_course_assignment",

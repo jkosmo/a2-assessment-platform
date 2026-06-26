@@ -104,7 +104,8 @@ async function openClass(id) {
   const memberChips = members.map((m) => `<span class="chip">${escapeHtml(m.name)} <button data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">×</button></span>`).join("");
   const courseChips = courses.map((c) => `<span class="chip">${escapeHtml(courseTitle(c.title))} <button data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">×</button></span>`).join("");
   const assignedIds = new Set(courses.map((c) => c.courseId));
-  const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id)).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.title))}</option>`).join("");
+  // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
+  const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.title))}</option>`).join("");
   pageContent.innerHTML = `
     <a class="back-link" id="backToClasses">← Tilbake til klasser</a>
     <div class="page-header"><h1>Klasse</h1></div>

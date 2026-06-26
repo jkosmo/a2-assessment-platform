@@ -710,3 +710,15 @@ describe("clampMcqOptionCount (#682)", () => {
     expect(out.questions[0].options).toEqual(["a", "b", "c"]);
   });
 });
+
+// #688: a targeted edit like "endre alternativ 1b" must engage the question-count guard so the LLM
+// cannot collapse 10 questions to 1. The guard keys off extractMcqRevisionTargets being non-empty.
+describe("extractMcqRevisionTargets — count-guard trigger (#688)", () => {
+  it("finds an explicit target for a Norwegian 'alternativ 1b' instruction", () => {
+    expect(extractMcqRevisionTargets("Endre alternativ 1b").length).toBeGreaterThan(0);
+  });
+
+  it("returns no targets for an open-ended instruction (count may change)", () => {
+    expect(extractMcqRevisionTargets("Gjør spørsmålene vanskeligere")).toHaveLength(0);
+  });
+});
