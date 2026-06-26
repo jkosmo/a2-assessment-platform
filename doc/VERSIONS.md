@@ -16,8 +16,9 @@ Admin-UI på `/admin-content/classes` (CL-3): opprett klasse, søk+legg til stud
 frist. Entra-koblede klasser (`kind=ENTRA`) er forberedt men gated bak `classEntraLinkingEnabled`
 (default av, CL-5 — senere). Dekket av unit- + integrasjons- + Playwright-e2e-tester.
 
-NB: `User.department`-sletting (CL-4) er **utsatt** — feltet viste seg å være en kjerne-dimensjon i
-rapportering (orgUnit-filter, cohort-analyse); se egen avklaring.
+NB: `User.department`-sletting (CL-4, #677) ble **kansellert** — feltet er en kjerne-dimensjon i
+rapportering (orgUnit-filter, cohort-analyse) og beholdes. Klasser dekker tildeling; department dekker
+analyse. CL-5 (Entra-koblede klasser) er forberedt men utsatt (#678).
 
 ## 1.3.80 - 2026-06-25
 

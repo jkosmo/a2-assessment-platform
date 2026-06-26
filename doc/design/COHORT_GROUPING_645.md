@@ -9,7 +9,11 @@
 >    skal være **konfigurerbar av Administrator** (kan slås av/på via plattform-config) — når av finnes kun
 >    manuelle klasser.
 > 2. **Dynamisk** tildeling (medlemskap evalueres ved lesetid; ingen snapshot).
-> 3. **Slett `User.department`** helt (unngå bloat) — kolonne + kode + orgSync-bruk fjernes.
+> 3. ~~Slett `User.department` helt~~ → **REVIDERT 2026-06-26: BEHOLD `User.department`.** Ved
+>    implementering (CL-4) viste feltet seg å være en **kjerne-rapporterings-dimensjon** (orgUnit-filter,
+>    `participantDepartment`, `cohortBy: "department"`) brukt i 11 filer på tvers av
+>    reporting/review/appeal. «Bloat»-bekymringen gjaldt enrollment-*tildeling* (løst av klasser), ikke
+>    rapportering. Department beholdes for rapportering; klasser dekker tildeling. (#677 lukket «keep».)
 > 4. **Egen systemklasse «Alle deltakere»** med eksplisitt populasjon (PARTICIPANT-rolle).
 > 5. **Administrator** kuraterer hvilke Entra-grupper som er tildelbare — **OK å utsette** fra v1.
 
@@ -142,9 +146,10 @@ deltakere» er en **systemklasse** (PARTICIPANT-populasjon).
   dynamisk synlighet + «mine kurs» utvides til klasse-medlemskap; audit.
 - **CL-3 Admin-UI:** klasse-administrasjon (opprett, søk+legg til studenter) + tildel kurs til klasse
   (erstatter/avløser EN-3 #642 sin avdelings-tanke).
-- **CL-4 Fjern `User.department`:** drop-kolonne-migrasjon + fjern fra schema/principal/orgSync + fjern
-  EN-2 sin `DEPARTMENT`-gren (kilde-enum beholdes for historikk, ny kilde `CLASS`). *Egen liten skive
-  siden den rører allerede levert EN-2 og er en schema-drop — ikke buntes med en pågående release.*
+- **CL-4 ~~Fjern `User.department`~~ → KANSELLERT (2026-06-26).** Feltet er en rapporterings-dimensjon
+  (se revidert beslutning 3) og beholdes. EN-2 sin `DEPARTMENT`-enrollment-gren står som en superseded
+  no-op (uskadelig; klasser er den nye tildelings-mekanismen) — ikke verdt churn på prod-EN-2 å fjerne.
+  #677 lukket som «keep».
 - **CL-5 (senere) Entra-kobling:** Graph `Group.Read.All` app-perm + admin-consent, gruppe-katalog-synk,
   `kind=ENTRA`-klasser, Administrator-kuratering. Aktiveres via config-toggle.
 
@@ -157,10 +162,9 @@ deltakere» er en **systemklasse** (PARTICIPANT-populasjon).
   `CLASS`.
 - Synlighetsfilteret (`filterVisibleCourseIds`) utvides til å også slippe gjennom kurs tildelt en klasse
   brukeren er medlem av.
-- **`User.department`-sletting (CL-4)** rører: `prisma/schema.prisma` (drop column + migrasjon),
-  `src/auth/principal.ts` + `authenticate.ts` (`x-user-department` / claim), `orgSyncService.ts`
-  (department-felt + `allowDepartmentOverwrite`), EN-2 `assignEnrollments`. Egen skive, ikke i en
-  pågående release.
+- **`User.department` beholdes** (CL-4 kansellert): det er org-enhets-dimensjonen i rapportering
+  (`orgUnit`-filter, `participantDepartment`, `cohortBy: "department"`). Klasser dekker tildeling;
+  department dekker analyse. EN-2 sin `DEPARTMENT`-gren står som superseded no-op.
 
 ## 9. Sikkerhet / personvern
 - AD-utforskningen var **read-only** (gruppe-metadata + medlemskaps-antall), kjørt mot prod-tenanten med
