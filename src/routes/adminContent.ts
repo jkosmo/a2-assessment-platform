@@ -72,6 +72,8 @@ import {
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
+import { adminClassesRouter } from "./adminClasses.js";
+import { adminUsersRouter } from "./adminUsers.js";
 import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
@@ -91,6 +93,8 @@ async function assertModuleOwnership(moduleId: string, actorId: string, roles: s
 }
 
 adminContentRouter.use("/courses", adminCoursesRouter);
+adminContentRouter.use("/classes", adminClassesRouter);
+adminContentRouter.use("/users", adminUsersRouter);
 adminContentRouter.use("/sections", adminSectionsRouter);
 
 adminContentRouter.post("/modules", async (request, response) => {

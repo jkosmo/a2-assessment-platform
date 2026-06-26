@@ -14,6 +14,7 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new) | `admin-content-sections.html` | **Canonical** |
+| `/admin-content/classes` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3) | `admin-content-classes.html` | **Canonical** |
 | `/admin-content/calibration` | Calibration workspace | `admin-content-calibration.html` | **Canonical** |
 
 ### Legacy routes (present during pilot, not primary)

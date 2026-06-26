@@ -38,6 +38,9 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/admin-content/sections") {
     return path.join(publicRoot, "admin-content-sections.html");
   }
+  if (requestPath === "/admin-content/classes") {
+    return path.join(publicRoot, "admin-content-classes.html");
+  }
   if (requestPath === "/participant") {
     return path.join(publicRoot, "participant.html");
   }

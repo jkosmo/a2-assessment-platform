@@ -191,6 +191,18 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 | `GET` | `/api/admin/content/courses/:courseId/enrollments` | List active enrollments for a course, each with the participant + derived status (#496/EN-2) |
 | `POST` | `/api/admin/content/courses/:courseId/enrollments` | Assign — body `{ userIds?: string[], department?: string, dueAt?: string\|null }`. Individual list and/or department materialisation. Idempotent per user; audited (#496/EN-2) |
 | `DELETE` | `/api/admin/content/courses/:courseId/enrollments/:userId` | Revoke (soft) a participant's enrollment; audited (#496/EN-2) |
+| `GET` | `/api/admin/content/classes` | List classes (cohorts) with member + assigned-course counts (#645/CL-2) |
+| `POST` | `/api/admin/content/classes` | Create a class — body `{ name, description? }` (#645/CL-2) |
+| `DELETE` | `/api/admin/content/classes/:classId` | Archive a class (soft). System classes rejected `400` (#645/CL-2) |
+| `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) |
+| `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2) |
+| `DELETE` | `/api/admin/content/classes/:classId/members/:userId` | Remove a member (#645/CL-2) |
+| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2) |
+| `POST` | `/api/admin/content/classes/:classId/courses` | Assign a course — body `{ courseId, dueAt?\|null }` (#645/CL-2) |
+| `DELETE` | `/api/admin/content/classes/:classId/courses/:courseId` | Unassign a course (#645/CL-2) |
+| `GET` | `/api/admin/content/users/search?q=` | Search users by name/email (min 2 chars, capped 20) for class membership (#645/CL-3) |
+
+Classes (cohorts) assign a course to a group of participants dynamically: a participant is assigned a course if they belong to a class it is assigned to (evaluated at read time, never materialised). The built-in **"Alle deltakere"** system class covers all PARTICIPANT users. `GET /api/courses` and `GET /api/courses/enrollments` reflect class assignments (the latter with `source: "CLASS"`). Entra-linked classes (`kind=ENTRA`) are gated by the `classEntraLinkingEnabled` platform config (default off, CL-5).
 | `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
 | `GET` | `/api/admin/content/courses/:courseId/export-package` | Export envelope (inlines modules **and** sections in order, #512) |
 | `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1) |

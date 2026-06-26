@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.81 - 2026-06-26
+
+feat(course): klasser (kohorter) for kurstildeling (#645 / CL-1..CL-3)
+
+Innfører **klasser** — plattform-eide, mange-til-mange grupper man tildeler kurs til samlet (#645,
+besluttet i `doc/design/COHORT_GROUPING_645.md`). Datamodell `Class` + `ClassMember` +
+`CourseGroupAssignment` (CL-1), service + admin-API + audit + **dynamisk** synlighet (CL-2): en
+deltaker er tildelt et kurs hvis hen er medlem av en tildelt klasse, evaluert ved lesetid (aldri
+materialisert). `GET /api/courses` og `/enrollments` reflekterer klasse-tildelinger (sistnevnte med
+`source: "CLASS"`). Innebygd systemklasse **«Alle deltakere»** (alle med PARTICIPANT-rolle).
+Admin-UI på `/admin-content/classes` (CL-3): opprett klasse, søk+legg til studenter, tildel kurs med
+frist. Entra-koblede klasser (`kind=ENTRA`) er forberedt men gated bak `classEntraLinkingEnabled`
+(default av, CL-5 — senere). Dekket av unit- + integrasjons- + Playwright-e2e-tester.
+
+NB: `User.department`-sletting (CL-4, #677) ble **kansellert** — feltet er en kjerne-dimensjon i
+rapportering (orgUnit-filter, cohort-analyse) og beholdes. Klasser dekker tildeling; department dekker
+analyse. CL-5 (Entra-koblede klasser) er forberedt men utsatt (#678).
+
 ## 1.3.80 - 2026-06-25
 
 fix(sections): markdown-input vokser til å matche forhåndsvisningens høyde (#662)

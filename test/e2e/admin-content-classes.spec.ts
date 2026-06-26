@@ -1,0 +1,100 @@
+import { test, expect, type Page, type Route } from "@playwright/test";
+
+// #645/CL-3: browser e2e for the classes (cohort) admin page — runs the real front-end JS against
+// mocked APIs, covering the client wiring (list, create, add student via search, assign course).
+
+async function mockBaseApis(page: Page) {
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authMode: "mock",
+        navigation: { items: [], workspaceItems: [] },
+        identityDefaults: { contentAdmin: { userId: "smo-1", email: "smo@x.no", name: "SMO", roles: ["SUBJECT_MATTER_OWNER"] } },
+        calibrationWorkspace: { accessRoles: [] },
+      }),
+    }),
+  );
+  await page.route("**/version", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "test" }) }),
+  );
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: { roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true, currentVersion: "1.0" } }),
+    }),
+  );
+}
+
+test("classes admin: list, create, add a student via search, and assign a course", async ({ page }) => {
+  await mockBaseApis(page);
+
+  const state = {
+    classes: [{ id: "cls_all_participants", name: "Alle deltakere", isSystem: true, _count: { members: 0, courseAssignments: 0 } }],
+    members: [] as Array<{ userId: string; name: string; email: string; addedAt: string }>,
+    assignedCourses: [] as Array<{ courseId: string; title: string; dueAt: string | null }>,
+  };
+  let memberPosted = false;
+  let coursePosted = false;
+
+  await page.route("**/api/admin/content/classes", (route: Route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { name: string };
+      const created = { id: "cls-new", name: body.name, isSystem: false, _count: { members: 0, courseAssignments: 0 } };
+      state.classes.push(created);
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ class: created }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: state.classes }) });
+  });
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) => {
+    if (route.request().method() === "POST") {
+      memberPosted = true;
+      state.members.push({ userId: "u1", name: "Kari Nordmann", email: "kari@x.no", addedAt: new Date(0).toISOString() });
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: state.members }) });
+  });
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) => {
+    if (route.request().method() === "POST") {
+      coursePosted = true;
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: state.assignedCourses }) });
+  });
+  await page.route("**/api/admin/content/users/search**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ users: [{ id: "u1", name: "Kari Nordmann", email: "kari@x.no" }] }) }),
+  );
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [{ id: "course-1", title: JSON.stringify({ nb: "Arbeidsmiljø" }) }] }) }),
+  );
+
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/admin-content/classes");
+
+  // List renders the system class with a real heading (no raw i18n keys).
+  await expect(page.locator("h1")).toContainText("Klasser");
+  await expect(page.locator("#classesTableBody")).toContainText("Alle deltakere");
+
+  // Create a class.
+  page.once("dialog", (dialog) => dialog.accept("Kull 2026"));
+  await page.locator("#newClassBtn").click();
+  await expect(page.locator("#classesTableBody")).toContainText("Kull 2026");
+
+  // Open the new class → detail view.
+  await page.locator('[data-action="open"][data-id="cls-new"]').click();
+  await expect(page.locator("#studentSearch")).toBeVisible();
+
+  // Search a student and add them.
+  await page.locator("#studentSearch").fill("kari");
+  await expect(page.locator("#searchResults")).toContainText("Kari Nordmann");
+  await page.locator('[data-add-user="u1"]').click();
+  await expect.poll(() => memberPosted).toBe(true);
+  await expect(page.locator("#memberChips")).toContainText("Kari Nordmann");
+
+  // Assign a course.
+  await page.locator("#courseSelect").selectOption("course-1");
+  await page.locator("#assignCourseBtn").click();
+  await expect.poll(() => coursePosted).toBe(true);
+});
