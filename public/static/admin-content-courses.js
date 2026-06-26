@@ -1040,6 +1040,7 @@ async function renderDetailView(courseId) {
   });
 
   const certLevel = course?.certificationLevel ?? "";
+  const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
   const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
   const showPublishButton = canPublishCourse({
     ...course,
@@ -1093,6 +1094,14 @@ async function renderDetailView(courseId) {
             <option value="basic"${certLevel === "basic" ? " selected" : ""}>${escapeHtml(certLabel("basic"))}</option>
             <option value="intermediate"${certLevel === "intermediate" ? " selected" : ""}>${escapeHtml(certLabel("intermediate"))}</option>
             <option value="advanced"${certLevel === "advanced" ? " selected" : ""}>${escapeHtml(certLabel("advanced"))}</option>
+          </select>
+        </div>
+
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label for="enrollmentPolicy">Synlighet</label>
+          <select id="enrollmentPolicy">
+            <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>Åpen – synlig for alle deltakere</option>
+            <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>Begrenset – kun tildelte (individuelt eller via klasse)</option>
           </select>
         </div>
       </div>
@@ -1397,6 +1406,7 @@ async function saveCourse(courseId) {
 
   const collectedValues = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
+  const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
     ? await localizeCourseCopyAcrossLocales({
@@ -1442,6 +1452,7 @@ async function saveCourse(courseId) {
           title: normalizedTitle,
           description: normalizedDescription,
           certificationLevel: certLevel || undefined,
+          enrollmentPolicy,
         }),
       });
       savedCourseId = body.course?.id;
@@ -1454,6 +1465,7 @@ async function saveCourse(courseId) {
           title: normalizedTitle,
           description: normalizedDescription,
           certificationLevel: certLevel || undefined,
+          enrollmentPolicy,
         }),
       });
     }

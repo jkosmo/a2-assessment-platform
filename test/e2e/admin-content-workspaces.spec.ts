@@ -1039,6 +1039,47 @@ test.describe("admin content browser coverage", () => {
     await expect(archivedRow.locator('[data-action="archive"]')).toHaveCount(0);
   });
 
+  // #645/#496: the course detail form exposes a visibility (enrollmentPolicy) control so an author
+  // can make a course RESTRICTED (only visible to enrolled / class-assigned participants).
+  test("course detail can set visibility (enrollmentPolicy) to RESTRICTED", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: "Labour rights",
+          description: null,
+          certificationLevel: "basic",
+          enrollmentPolicy: "OPEN",
+          moduleCount: 0,
+          updatedAt: "2026-04-18T12:00:00.000Z",
+          publishedAt: null,
+          archivedAt: null,
+          modules: [],
+        },
+      ],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let putBody: any = null;
+    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+      const course = state.mutableCourses.find((c) => c.id === "course-1");
+      if (route.request().method() === "PUT") {
+        putBody = route.request().postDataJSON();
+        if (course) course.enrollmentPolicy = putBody.enrollmentPolicy;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+    });
+
+    await page.goto("/admin-content/courses/course-1");
+
+    const select = page.locator("#enrollmentPolicy");
+    await expect(select).toBeVisible();
+    await expect(select).toHaveValue("OPEN");
+    await select.selectOption("RESTRICTED");
+    await page.locator("#saveCourseBtn").click();
+
+    await expect.poll(() => putBody?.enrollmentPolicy).toBe("RESTRICTED");
+  });
+
   test("shell idle flow opens the module picker and renders existing module choices", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [
