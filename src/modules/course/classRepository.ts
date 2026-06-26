@@ -108,7 +108,11 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
     },
 
     listCourseAssignmentsForClass(classId: string) {
-      return client.courseGroupAssignment.findMany({ where: { classId } });
+      return client.courseGroupAssignment.findMany({
+        where: { classId },
+        orderBy: { createdAt: "desc" },
+        include: { course: { select: { id: true, title: true } } },
+      });
     },
   };
 }

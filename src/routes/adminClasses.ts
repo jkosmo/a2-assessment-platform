@@ -7,6 +7,7 @@ import {
   removeMember,
   listClasses,
   listClassMembers,
+  listClassCourseAssignments,
   assignCourseToClass,
   unassignCourseFromClass,
 } from "../modules/course/index.js";
@@ -79,6 +80,14 @@ adminClassesRouter.delete("/:classId/members/:userId", async (request: Request<{
   try {
     await removeMember(request.params.classId, request.params.userId, request.context?.userId ?? null);
     response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminClassesRouter.get("/:classId/courses", async (request: Request<{ classId: string }>, response, next) => {
+  try {
+    response.json({ courses: await listClassCourseAssignments(request.params.classId) });
   } catch (error) {
     next(error);
   }

@@ -29,6 +29,7 @@ export {
   removeMember,
   listClasses,
   listClassMembers,
+  listClassCourseAssignments,
   assignCourseToClass,
   unassignCourseFromClass,
   getUserClassIds,

@@ -83,6 +83,12 @@ export async function listClassMembers(classId: string) {
   return members.map((m) => ({ userId: m.userId, name: m.user.name, email: m.user.email, addedAt: m.addedAt.toISOString() }));
 }
 
+export async function listClassCourseAssignments(classId: string) {
+  await requireClass(classId);
+  const rows = await classRepository.listCourseAssignmentsForClass(classId);
+  return rows.map((r) => ({ courseId: r.courseId, title: r.course.title, dueAt: r.dueAt ? r.dueAt.toISOString() : null }));
+}
+
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
   await requireClass(classId);
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });

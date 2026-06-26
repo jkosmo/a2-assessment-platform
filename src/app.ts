@@ -145,6 +145,11 @@ app.get("/admin-content/sections", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-sections.html"));
 });
 
+// Classes workspace (#645 / CL-3)
+app.get("/admin-content/classes", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-classes.html"));
+});
+
 // Calibration workspace (Issue #326)
 app.get("/admin-content/calibration", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-calibration.html"));
