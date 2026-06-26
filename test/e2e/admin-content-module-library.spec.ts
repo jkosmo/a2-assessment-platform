@@ -29,6 +29,9 @@ test.describe("admin content module library", () => {
 
     await page.goto(LIBRARY_PATH);
 
+    // #645/CL-3: the content-area nav must expose the "Klasser" tab on every admin-content page.
+    await expect(page.locator('a.content-area-nav-link[href="/admin-content/classes"]')).toHaveText("Klasser");
+
     const table = page.locator(".library-table");
     await expect(table).toBeVisible();
     await expect(table).toContainText("Trade unions");
