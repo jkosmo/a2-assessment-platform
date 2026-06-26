@@ -89,13 +89,6 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),
   ),
-  // #684: public base URL of the participant app, used to build absolute course links in
-  // notification emails (e.g. class course-assignment). Optional — when unset, emails omit the
-  // clickable link and ask the participant to log in instead.
-  PUBLIC_APP_BASE_URL: z.preprocess(
-    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
-    z.string().url().optional(),
-  ),
   ACS_EMAIL_SENDER_DISPLAY_NAME: z.string().default("A2 Assessment Platform"),
   PARTICIPANT_CONSOLE_CONFIG_FILE: z.string().default("config/participant-console.json"),
   PARTICIPANT_CONSOLE_DEBUG_MODE: z.enum(["auto", "true", "false"]).default("auto"),

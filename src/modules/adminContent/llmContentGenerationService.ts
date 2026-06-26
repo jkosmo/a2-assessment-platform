@@ -1537,8 +1537,18 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
     correctAnswer: localizeForPrompt(question.correctAnswer, input.locale),
     rationale: localizeForPrompt(question.rationale, input.locale),
   }));
+  // #688: a TARGETED edit (e.g. "endre alternativ 1b") must edit one question in place and keep the
+  // rest — it must NOT change the question count. The LLM sometimes collapses to just the edited
+  // question (10 → 1, silent data loss). For instructions with an explicit target, require the count
+  // to be preserved; for open-ended instructions, allow the count to change.
+  const hasExplicitTarget = extractMcqRevisionTargets(input.instruction).length > 0;
+  const countPreserved = (revised: GeneratedMcqQuestion[]) =>
+    !hasExplicitTarget || revised.length === sourceQuestions.length;
+  const isAcceptable = (revised: GeneratedMcqQuestion[]) =>
+    hasMeaningfulMcqRevision(sourceQuestions, revised, input.instruction) && countPreserved(revised);
+
   const firstAttempt = await parseRevision(userPrompt);
-  if (hasMeaningfulMcqRevision(sourceQuestions, firstAttempt.questions, input.instruction)) {
+  if (isAcceptable(firstAttempt.questions)) {
     return firstAttempt;
   }
 
@@ -1548,13 +1558,21 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
 
 Your previous attempt did not apply the requested change concretely enough.
 If the instruction names a specific question or option reference such as "question 3", "Q3", "3b", or "option B in question 3", you must change that exact target in a clearly visible way.
+You MUST return ALL ${sourceQuestions.length} questions — edit only the targeted one(s) and keep every other question unchanged. Do not drop, merge, or add questions.
 Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`;
   const secondAttempt = await parseRevision(retryPrompt);
 
-  // #682: the "meaningful revision" heuristic drives the RETRY, but it must not hard-fail the edit
-  // with a 500 on a false negative (e.g. the change landed but not on the exact parsed target). Only
-  // a genuine no-op — a revision byte-identical to the source — is worth surfacing as an error.
-  // Otherwise return the revision; the author reviews it and can re-instruct if it missed.
+  // A targeted edit that still dropped/changed the question count is wrong — reject rather than
+  // silently lose questions (#688).
+  if (!countPreserved(secondAttempt.questions)) {
+    throw new Error(
+      `MCQ revision unexpectedly changed the number of questions (${sourceQuestions.length} → ${secondAttempt.questions.length}). ` +
+        `Please make the instruction more specific (e.g. name the exact question and option) and try again.`,
+    );
+  }
+
+  // #682: the "meaningful revision" heuristic drives the RETRY, but must not hard-fail on a false
+  // negative. Only a genuine no-op — byte-identical to the source — is surfaced as an error.
   if (normalizeGeneratedMcqQuestions(sourceQuestions) === normalizeGeneratedMcqQuestions(secondAttempt.questions)) {
     throw new Error("MCQ revision produced no change. Please describe the change you want and try again.");
   }

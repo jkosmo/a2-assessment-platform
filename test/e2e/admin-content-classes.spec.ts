@@ -67,7 +67,17 @@ test("classes admin: list, create, add a student via search, and assign a course
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ users: [{ id: "u1", name: "Kari Nordmann", email: "kari@x.no" }] }) }),
   );
   await page.route("**/api/admin/content/courses", (route: Route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [{ id: "course-1", title: JSON.stringify({ nb: "Arbeidsmiljø" }) }] }) }),
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { id: "course-1", title: JSON.stringify({ nb: "Arbeidsmiljø" }), archivedAt: null },
+          // #688: archived courses must NOT be offered for assignment.
+          { id: "course-arch", title: JSON.stringify({ nb: "Gammelt kurs" }), archivedAt: "2026-01-01T00:00:00.000Z" },
+        ],
+      }),
+    }),
   );
 
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
@@ -92,6 +102,10 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.locator('[data-add-user="u1"]').click();
   await expect.poll(() => memberPosted).toBe(true);
   await expect(page.locator("#memberChips")).toContainText("Kari Nordmann");
+
+  // #688: the archived course must not be an assignable option; the active one must.
+  await expect(page.locator('#courseSelect option[value="course-arch"]')).toHaveCount(0);
+  await expect(page.locator('#courseSelect option[value="course-1"]')).toHaveCount(1);
 
   // Assign a course.
   await page.locator("#courseSelect").selectOption("course-1");
