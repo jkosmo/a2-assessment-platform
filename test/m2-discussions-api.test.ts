@@ -242,4 +242,27 @@ describe("Discussions API (#495/T-QA-2)", () => {
     const smoRes = await request(app).get(`/api/courses/${course.id}/discussions`).set(smo);
     expect(smoRes.status).toBe(200);
   });
+
+  it("admin/SMO kan skru av og på diskusjon på kurset (round-trip via admin-API) (#495/T-QA-4)", async () => {
+    const title = { "en-GB": `Disc toggle ${ts}`, nb: "Av/på", nn: "Av/på" };
+    const create = await request(app)
+      .post("/api/admin/content/courses")
+      .set(smo)
+      .send({ title, discussionsEnabled: false });
+    expect(create.status).toBe(201);
+    const id = create.body.course.id as string;
+    createdCourseIds.push(id);
+
+    const detailOff = await request(app).get(`/api/admin/content/courses/${id}`).set(smo);
+    expect(detailOff.body.course.discussionsEnabled).toBe(false);
+
+    const update = await request(app)
+      .put(`/api/admin/content/courses/${id}`)
+      .set(smo)
+      .send({ title, discussionsEnabled: true });
+    expect(update.status).toBe(200);
+
+    const detailOn = await request(app).get(`/api/admin/content/courses/${id}`).set(smo);
+    expect(detailOn.body.course.discussionsEnabled).toBe(true);
+  });
 });

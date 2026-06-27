@@ -1041,6 +1041,8 @@ async function renderDetailView(courseId) {
 
   const certLevel = course?.certificationLevel ?? "";
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
+  // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
+  const discussionsEnabled = course?.discussionsEnabled !== false;
   const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
   const showPublishButton = canPublishCourse({
     ...course,
@@ -1103,6 +1105,13 @@ async function renderDetailView(courseId) {
             <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>Åpen – synlig for alle deltakere</option>
             <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>Begrenset – kun tildelte (individuelt eller via klasse)</option>
           </select>
+        </div>
+
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="discussionsEnabled"${discussionsEnabled ? " checked" : ""} />
+            Diskusjon på dette kurset (deltakere kan stille spørsmål og diskutere)
+          </label>
         </div>
       </div>
 
@@ -1407,6 +1416,7 @@ async function saveCourse(courseId) {
   const collectedValues = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
+  const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
     ? await localizeCourseCopyAcrossLocales({
@@ -1453,6 +1463,7 @@ async function saveCourse(courseId) {
           description: normalizedDescription,
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
+          discussionsEnabled,
         }),
       });
       savedCourseId = body.course?.id;
@@ -1466,6 +1477,7 @@ async function saveCourse(courseId) {
           description: normalizedDescription,
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
+          discussionsEnabled,
         }),
       });
     }

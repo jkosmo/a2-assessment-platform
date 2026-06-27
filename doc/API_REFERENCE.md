@@ -66,6 +66,29 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 
 `GET /api/courses` hides **RESTRICTED** courses from users without an active enrollment; OPEN courses are visible to everyone (#496/EN-2).
 
+`GET /api/courses/:courseId` also returns `discussionsEnabled` (course master toggle) and, per `items[]` element, `courseItemId` + `discussionsEnabled` — used by the discussion panel (#495).
+
+---
+
+## Discussions / Q&A (#495)
+
+Threads hang on the course (course-level board, `courseItemId` absent) or on a specific `CourseItem` (per section/module). Mounted under the course path so access reuses "has access to the published course": read/write require published-course access (OPEN to all, RESTRICTED to enrolled/class-assigned); SMO/ADMIN always. Moderation (pin/lock/delete others') requires SMO/ADMIN; accepting an answer requires the asker or a moderator. Writing is blocked when `discussionsEnabled` is off for the course/item or the thread is `LOCKED`. Posts are **soft-deleted** (never hard-deleted). UGC is single-language plain text, returned as server-sanitised `bodyHtml` rendered with a **strict** allowlist (no iframe/raw HTML/images). All write routes use `discussionWriteLimiter` (30/min).
+
+| Method | Route | Role | Description |
+|---|---|---|---|
+| `GET` | `/api/courses/:courseId/discussions?itemId=` | participant+ | List threads (course-level when `itemId` absent), pinned first then latest activity |
+| `POST` | `/api/courses/:courseId/discussions` | participant+ | Create thread (`kind`, `title`, `bodyMarkdown`, optional `courseItemId`) |
+| `GET` | `/api/courses/:courseId/discussions/:threadId` | participant+ | Thread + flat reply list |
+| `PATCH` | `/api/courses/:courseId/discussions/:threadId` | author / SMO | Edit own (`title`/`bodyMarkdown`); moderate (`pinned`, `lock`); accept answer (`acceptedReplyId`, asker/SMO) |
+| `DELETE` | `/api/courses/:courseId/discussions/:threadId` | author / SMO | Soft-delete thread. `204` |
+| `POST` | `/api/courses/:courseId/discussions/:threadId/replies` | participant+ | Reply (auto-subscribes the author) |
+| `PATCH` | `/api/courses/:courseId/discussions/:threadId/replies/:replyId` | author | Edit own reply |
+| `DELETE` | `/api/courses/:courseId/discussions/:threadId/replies/:replyId` | author / SMO | Soft-delete reply. `204` |
+| `PUT` | `/api/courses/:courseId/discussions/:threadId/subscription` | participant+ | Subscribe to the thread (idempotent) |
+| `DELETE` | `/api/courses/:courseId/discussions/:threadId/subscription` | participant+ | Unsubscribe |
+
+The course master toggle is set via the admin course API: `POST`/`PUT /api/admin/content/courses[/:courseId]` accept `discussionsEnabled` (boolean, default `true`); the admin course detail returns it.
+
 ---
 
 ## Manual Review

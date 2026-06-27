@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.92 - 2026-06-27
+
+feat(discussions): forfatter av/på-toggle på kurset + API-dokumentasjon (#495/T-QA-4, T-QA-6)
+
+- Kurs-master-toggle `discussionsEnabled` eksponert i admin-kurs-API-et (`POST`/`PUT
+  /api/admin/content/courses`) + admin-kurs-detalj, og en avkrysningsboks i kurs-editoren
+  (`admin-content-courses.js`). Default på.
+- Integrasjonstest for admin round-trip (av → på).
+- Docs: `doc/API_REFERENCE.md` (Discussions/Q&A-seksjon) + `doc/route-map.md`.
+
+Merknad: per-element (per modul/seksjon) av/på-toggle i editoren gjenstår som en avgrenset
+videreføring — datamodell/API støtter `CourseItem.discussionsEnabled` allerede (default på), og
+deltaker-panelet respekterer det; kun forfatter-UI for per-element-bryteren mangler.
+
 ## 1.3.91 - 2026-06-27
 
 feat(discussions): deltaker-UI i course player + inline moderering (#495/T-QA-3, delvis T-QA-4)

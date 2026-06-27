@@ -52,6 +52,7 @@ export interface AdminCourseDetail {
   description: string | null;
   certificationLevel: string | null;
   enrollmentPolicy: string;
+  discussionsEnabled: boolean;
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;

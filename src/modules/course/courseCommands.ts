@@ -9,6 +9,7 @@ export async function createCourse(input: {
   description?: string | null;
   certificationLevel?: string | null;
   enrollmentPolicy?: "OPEN" | "RESTRICTED";
+  discussionsEnabled?: boolean;
   actorId?: string;
 }) {
   const course = await prisma.course.create({
@@ -17,6 +18,7 @@ export async function createCourse(input: {
       description: input.description ?? null,
       certificationLevel: input.certificationLevel ?? null,
       ...(input.enrollmentPolicy ? { enrollmentPolicy: input.enrollmentPolicy } : {}),
+      ...(input.discussionsEnabled !== undefined ? { discussionsEnabled: input.discussionsEnabled } : {}),
     },
   });
 
@@ -38,6 +40,7 @@ export async function updateCourse(
     description?: string | null;
     certificationLevel?: string | null;
     enrollmentPolicy?: "OPEN" | "RESTRICTED";
+    discussionsEnabled?: boolean;
   },
 ) {
   return prisma.course.update({ where: { id: courseId }, data: input });
