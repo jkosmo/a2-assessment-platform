@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.93 - 2026-06-27
+
+feat(discussions): varsler + per-element toggle + brukerguide — #495 komplett (T-QA-5, T-QA-4, T-QA-6)
+
+- **Varsler (T-QA-5):** nytt spørsmål → kursets SMO-er (aktive SUBJECT_MATTER_OWNER); nytt svar →
+  trådens abonnenter. Locale-keyed templates (en-GB/nb/nn) i `notificationMessages.ts`, sendt via
+  ACS-kanalen (`sendDiscussionNotification`). Best-effort (svelger feil), audit per varsel.
+  Ingen lenker i e-post (#688). Preferanse-styring overlatt til #497.
+- **Per-element toggle (resten av T-QA-4):** `CourseItem.discussionsEnabled` bæres i `PUT /items`
+  + avkrysning per modul/seksjon i kurs-editoren. Default på.
+- **Docs (T-QA-6):** `doc/DISCUSSIONS_GUIDE.md` (deltaker + forfatter); design-status satt til
+  implementert.
+- Tester: discussion-notifications (unit) + varsel-/per-element-audit (integrasjon).
+
+Med dette er hele #495 (T-QA-1..6) implementert og lokalt verifisert.
+
 ## 1.3.92 - 2026-06-27
 
 feat(discussions): forfatter av/på-toggle på kurset + API-dokumentasjon (#495/T-QA-4, T-QA-6)

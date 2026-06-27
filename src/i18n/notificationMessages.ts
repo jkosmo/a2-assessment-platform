@@ -191,3 +191,54 @@ export function getAssessmentResultNotificationMessage(
     nextStepGuidance: `${header}\n\n${template.nextStepGuidance}`,
   };
 }
+
+// #495/T-QA-5: diskusjons-varsler. Ingen lenker i e-post (#688) — mottakeren bes logge inn selv.
+type DiscussionMessageLabels = {
+  questionSubject: string; // {course}
+  questionGuidance: string; // {title}
+  replySubject: string; // {title}
+  replyGuidance: string;
+};
+
+const discussionMessages: Record<SupportedLocale, DiscussionMessageLabels> = {
+  "en-GB": {
+    questionSubject: "New question in {course}",
+    questionGuidance: "A participant asked a question: «{title}».\n\nLog in to the platform to view and answer it.",
+    replySubject: "New reply in: {title}",
+    replyGuidance: "There is a new reply in a discussion you follow: «{title}».\n\nLog in to the platform to read it.",
+  },
+  nb: {
+    questionSubject: "Nytt spørsmål i {course}",
+    questionGuidance: "En deltaker stilte et spørsmål: «{title}».\n\nLogg inn på plattformen for å se og svare.",
+    replySubject: "Nytt svar i: {title}",
+    replyGuidance: "Det er kommet et nytt svar i en diskusjon du følger: «{title}».\n\nLogg inn på plattformen for å lese det.",
+  },
+  nn: {
+    questionSubject: "Nytt spørsmål i {course}",
+    questionGuidance: "Ein deltakar stilte eit spørsmål: «{title}».\n\nLogg inn på plattforma for å sjå og svare.",
+    replySubject: "Nytt svar i: {title}",
+    replyGuidance: "Det har kome eit nytt svar i ein diskusjon du følgjer: «{title}».\n\nLogg inn på plattforma for å lese det.",
+  },
+};
+
+export function getDiscussionQuestionNotificationMessage(
+  locale: SupportedLocale,
+  context: { courseTitle: string; threadTitle: string },
+): NotificationMessage {
+  const t = discussionMessages[locale];
+  return {
+    subject: t.questionSubject.replace("{course}", context.courseTitle),
+    nextStepGuidance: t.questionGuidance.replace("{title}", context.threadTitle),
+  };
+}
+
+export function getDiscussionReplyNotificationMessage(
+  locale: SupportedLocale,
+  context: { threadTitle: string },
+): NotificationMessage {
+  const t = discussionMessages[locale];
+  return {
+    subject: t.replySubject.replace("{title}", context.threadTitle),
+    nextStepGuidance: t.replyGuidance.replace("{title}", context.threadTitle),
+  };
+}

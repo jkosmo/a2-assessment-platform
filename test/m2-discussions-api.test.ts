@@ -265,4 +265,80 @@ describe("Discussions API (#495/T-QA-2)", () => {
     const detailOn = await request(app).get(`/api/admin/content/courses/${id}`).set(smo);
     expect(detailOn.body.course.discussionsEnabled).toBe(true);
   });
+
+  it("varsler kursets SMO ved nytt spørsmål (#495/T-QA-5)", async () => {
+    // En aktiv SMO med rolle via RoleAssignment (varsel-mottaker-spørringen bruker RoleAssignment).
+    const smoUser = await prisma.user.create({
+      data: {
+        externalId: `${idPrefix}-smo-recipient`,
+        name: "SMO Mottaker",
+        email: `${idPrefix}-smo-recipient@example.com`,
+        roleAssignments: { create: { appRole: "SUBJECT_MATTER_OWNER", validFrom: new Date("2020-01-01") } },
+      },
+      select: { id: true },
+    });
+
+    const courseId = await makeOpenCourse();
+    const q = await request(app)
+      .post(`/api/courses/${courseId}/discussions`)
+      .set(asker)
+      .send({ kind: "QUESTION", title: "Trenger hjelp", bodyMarkdown: "Forklar?" });
+    const threadId = q.body.thread.id as string;
+
+    const events = await prisma.auditEvent.findMany({
+      where: { entityId: threadId, action: "participant_notification_sent" },
+    });
+    expect(events.some((e) => e.metadataJson.includes("discussion_question_created"))).toBe(true);
+
+    // rydd opp denne SMO-en (cascader RoleAssignment)
+    await prisma.user.deleteMany({ where: { id: smoUser.id } });
+  });
+
+  it("varsler trådabonnenter ved nytt svar (#495/T-QA-5)", async () => {
+    const courseId = await makeOpenCourse();
+    // asker oppretter (auto-abonnent), helper svarer → asker skal varsles.
+    const q = await request(app)
+      .post(`/api/courses/${courseId}/discussions`)
+      .set(asker)
+      .send({ kind: "DISCUSSION", title: "Diskutér", bodyMarkdown: "x" });
+    const threadId = q.body.thread.id as string;
+
+    await request(app)
+      .post(`/api/courses/${courseId}/discussions/${threadId}/replies`)
+      .set(helper)
+      .send({ bodyMarkdown: "Mitt svar" });
+
+    const events = await prisma.auditEvent.findMany({
+      where: { entityId: threadId, action: "participant_notification_sent" },
+    });
+    expect(events.some((e) => e.metadataJson.includes("discussion_reply_created"))).toBe(true);
+  });
+
+  it("per-element toggle: admin skrur av diskusjon på et element → deltaker blokkeres (#495/T-QA-4)", async () => {
+    const courseId = await makeOpenCourse();
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "S", nb: "S", nn: "S" }) },
+      select: { id: true },
+    });
+    createdSectionIds.push(section.id);
+
+    // Admin lagrer sekvensen med diskusjon AV for seksjonen.
+    await request(app)
+      .put(`/api/admin/content/courses/${courseId}/items`)
+      .set(smo)
+      .send({ items: [{ type: "SECTION", sectionId: section.id, discussionsEnabled: false }] })
+      .expect(204);
+
+    const itemsRes = await request(app).get(`/api/admin/content/courses/${courseId}/items`).set(smo);
+    const item = itemsRes.body.items[0];
+    expect(item.discussionsEnabled).toBe(false);
+
+    // Deltaker blokkeres fra å opprette tråd på elementet.
+    const res = await request(app)
+      .post(`/api/courses/${courseId}/discussions`)
+      .set(asker)
+      .send({ kind: "QUESTION", title: "q", bodyMarkdown: "b", courseItemId: item.id });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("discussions_disabled");
+  });
 });

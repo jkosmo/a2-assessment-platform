@@ -16,6 +16,7 @@ import {
   type DiscussionThreadSummaryDto,
   type ViewerContext,
 } from "./discussionReadModels.js";
+import { notifyNewQuestion, notifyNewReply } from "./discussionNotificationService.js";
 
 /**
  * Diskusjon / Q&A — forretningslogikk (#495/T-QA-2).
@@ -206,6 +207,21 @@ export async function createThread(params: {
     actorId: params.access.userId,
     metadata: { courseId: course.id, courseItemId: params.courseItemId, kind: params.kind },
   });
+
+  // #495/T-QA-5: nytt spørsmål varsler kursets SMO-er. Svelg feil — varsling skal aldri velte
+  // tråd-opprettelsen.
+  if (params.kind === "QUESTION") {
+    try {
+      await notifyNewQuestion({
+        courseId: course.id,
+        threadId: thread.id,
+        threadTitle: params.title,
+        authorId: params.access.userId,
+      });
+    } catch {
+      /* notification best-effort */
+    }
+  }
 
   return toThreadDetailDto(thread, viewerOf(params.access));
 }
@@ -426,6 +442,17 @@ export async function createReply(params: {
     actorId: params.access.userId,
     metadata: { courseId: course.id, threadId: thread.id },
   });
+
+  // #495/T-QA-5: nytt svar varsler trådens abonnenter (ekskl. svarets forfatter). Best-effort.
+  try {
+    await notifyNewReply({
+      threadId: thread.id,
+      threadTitle: thread.title,
+      replyAuthorId: params.access.userId,
+    });
+  } catch {
+    /* notification best-effort */
+  }
 
   const updated = await loadThreadInCourse(course.id, thread.id);
   return toThreadDetailDto(updated, viewerOf(params.access));

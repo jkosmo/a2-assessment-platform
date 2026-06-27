@@ -1,7 +1,8 @@
 # Discussions / Q&A — design (#495)
 
-> Status: **design** (godkjent retning 2026-06-21). Tier-2-kapabilitet under epic #478.
-> Implementeres i sub-issues (se nederst). Ikke bygg utenfor en sub-issue.
+> Status: **implementert** (2026-06-27, v1.3.89–1.3.93). Tier-2-kapabilitet under epic #478.
+> Datamodell, API, deltaker-UI, moderering, av/på-toggles og varsler er på plass.
+> Brukerguide: `doc/DISCUSSIONS_GUIDE.md`. API: `doc/API_REFERENCE.md`.
 
 ## Mål
 

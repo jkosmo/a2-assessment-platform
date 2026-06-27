@@ -120,8 +120,8 @@ export async function deleteCourse(courseId: string, actorId?: string) {
 }
 
 export type CourseItemInput =
-  | { type: "MODULE"; moduleId: string }
-  | { type: "SECTION"; sectionId: string };
+  | { type: "MODULE"; moduleId: string; discussionsEnabled?: boolean }
+  | { type: "SECTION"; sectionId: string; discussionsEnabled?: boolean };
 
 // Sets the full ordered sequence of a course's items — modules and learning
 // sections interleaved (#486/B2). sortOrder follows array position. During the
@@ -159,6 +159,9 @@ export async function setCourseItems(courseId: string, items: CourseItemInput[])
           itemType: item.type,
           moduleId: item.type === "MODULE" ? item.moduleId : null,
           sectionId: item.type === "SECTION" ? item.sectionId : null,
+          // #495/T-QA-4: per-element diskusjons-toggle. Editoren sender full ønsket tilstand;
+          // default true når feltet ikke er med (bakoverkompatibelt).
+          discussionsEnabled: item.discussionsEnabled ?? true,
         })),
       });
       const moduleRows = items

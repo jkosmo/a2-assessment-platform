@@ -46,8 +46,8 @@ const setCourseModulesBodySchema = z.object({
 const setCourseItemsBodySchema = z.object({
   items: z.array(
     z.discriminatedUnion("type", [
-      z.object({ type: z.literal("MODULE"), moduleId: z.string().min(1) }),
-      z.object({ type: z.literal("SECTION"), sectionId: z.string().min(1) }),
+      z.object({ type: z.literal("MODULE"), moduleId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
+      z.object({ type: z.literal("SECTION"), sectionId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
     ]),
   ),
 });
@@ -278,6 +278,7 @@ adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
         moduleId: item.moduleId,
         sectionId: item.sectionId,
         title: item.module?.title ?? item.section?.title ?? null,
+        discussionsEnabled: item.discussionsEnabled,
         archivedAt:
           (item.module?.archivedAt ?? item.section?.archivedAt)?.toISOString() ?? null,
       })),
