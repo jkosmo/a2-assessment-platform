@@ -66,37 +66,42 @@ enum DeletionTrigger {
 }
 
 model User {
-  id                    String                @id @default(cuid())
-  externalId            String                @unique
-  name                  String
-  email                 String                @unique
-  department            String?
-  manager               String?
-  activeStatus          Boolean               @default(true)
-  lastLoginAt           DateTime?
-  isAnonymized          Boolean               @default(false)
-  anonymizedAt          DateTime?
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  roleAssignments       RoleAssignment[]
-  submissions           Submission[]
-  appealsCreated        Appeal[]              @relation("AppealedBy")
-  appealsResolved       Appeal[]              @relation("AppealResolvedBy")
-  manualReviewsAssigned ManualReview[]        @relation("Reviewer")
-  decisionsFinalised    AssessmentDecision[]  @relation("FinalisedBy")
-  auditEventsAsActor    AuditEvent[]          @relation("AuditActor")
-  certifications        CertificationStatus[]
-  consents              UserConsent[]
-  deletionRequests      DeletionRequest[]
-  courseCompletions     CourseCompletion[]
-  courseSectionReads    CourseSectionRead[]
-  createdModules        Module[]              @relation("CreatedModules")
-  courseEnrollments     CourseEnrollment[]    @relation("EnrolledUser")
-  enrollmentsAssigned   CourseEnrollment[]    @relation("EnrollmentAssignedBy")
-  classMemberships      ClassMember[]         @relation("ClassMembership")
-  classMembersAdded     ClassMember[]         @relation("ClassMemberAddedBy")
-  classesCreated        Class[]               @relation("ClassCreatedBy")
-  courseGroupAssignmentsCreated CourseGroupAssignment[] @relation("CourseGroupAssignedBy")
+  id                            String                   @id @default(cuid())
+  externalId                    String                   @unique
+  name                          String
+  email                         String                   @unique
+  department                    String?
+  manager                       String?
+  activeStatus                  Boolean                  @default(true)
+  lastLoginAt                   DateTime?
+  isAnonymized                  Boolean                  @default(false)
+  anonymizedAt                  DateTime?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
+  roleAssignments               RoleAssignment[]
+  submissions                   Submission[]
+  appealsCreated                Appeal[]                 @relation("AppealedBy")
+  appealsResolved               Appeal[]                 @relation("AppealResolvedBy")
+  manualReviewsAssigned         ManualReview[]           @relation("Reviewer")
+  decisionsFinalised            AssessmentDecision[]     @relation("FinalisedBy")
+  auditEventsAsActor            AuditEvent[]             @relation("AuditActor")
+  certifications                CertificationStatus[]
+  consents                      UserConsent[]
+  deletionRequests              DeletionRequest[]
+  courseCompletions             CourseCompletion[]
+  courseSectionReads            CourseSectionRead[]
+  createdModules                Module[]                 @relation("CreatedModules")
+  courseEnrollments             CourseEnrollment[]       @relation("EnrolledUser")
+  enrollmentsAssigned           CourseEnrollment[]       @relation("EnrollmentAssignedBy")
+  classMemberships              ClassMember[]            @relation("ClassMembership")
+  classMembersAdded             ClassMember[]            @relation("ClassMemberAddedBy")
+  classesCreated                Class[]                  @relation("ClassCreatedBy")
+  courseGroupAssignmentsCreated CourseGroupAssignment[]  @relation("CourseGroupAssignedBy")
+  discussionThreadsAuthored     DiscussionThread[]       @relation("DiscussionThreadAuthor")
+  discussionThreadsDeleted      DiscussionThread[]       @relation("DiscussionThreadDeletedBy")
+  discussionRepliesAuthored     DiscussionReply[]        @relation("DiscussionReplyAuthor")
+  discussionRepliesDeleted      DiscussionReply[]        @relation("DiscussionReplyDeletedBy")
+  discussionSubscriptions       DiscussionSubscription[]
 }
 
 model UserConsent {
@@ -133,20 +138,20 @@ model PlatformConfig {
 }
 
 model RoleAssignment {
-  id         String   @id @default(cuid())
-  userId     String
-  appRole    AppRole
-  validFrom  DateTime
-  validTo    DateTime?
-  createdAt  DateTime @default(now())
-  createdBy  String?
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String
+  appRole   AppRole
+  validFrom DateTime
+  validTo   DateTime?
+  createdAt DateTime  @default(now())
+  createdBy String?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, validFrom, validTo])
 }
 
 model Module {
-  id                     String          @id @default(cuid())
+  id                     String                  @id @default(cuid())
   title                  String
   description            String?
   certificationLevel     String?
@@ -154,12 +159,12 @@ model Module {
   validTo                DateTime?
   activeVersionId        String?
   archivedAt             DateTime?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
   createdById            String?
-  createdBy              User?           @relation("CreatedModules", fields: [createdById], references: [id], onDelete: SetNull)
-  versions               ModuleVersion[] @relation("ModuleVersions")
-  activeVersion          ModuleVersion?  @relation("ActiveModuleVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  createdBy              User?                   @relation("CreatedModules", fields: [createdById], references: [id], onDelete: SetNull)
+  versions               ModuleVersion[]         @relation("ModuleVersions")
+  activeVersion          ModuleVersion?          @relation("ActiveModuleVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
   submissions            Submission[]
   mcqQuestions           MCQQuestion[]
   mcqSetVersions         MCQSetVersion[]
@@ -180,78 +185,78 @@ enum AssessmentMode {
 }
 
 model ModuleVersion {
-  id                        String                 @id @default(cuid())
-  moduleId                  String
-  versionNo                 Int
+  id                       String                 @id @default(cuid())
+  moduleId                 String
+  versionNo                Int
   // taskText / rubricVersionId / promptTemplateVersionId are free-text-assessment specific and
   // are null for MCQ_ONLY modules (#525). They remain set for FREETEXT_PLUS_MCQ and FREETEXT_ONLY.
-  taskText                  String?
-  assessorExpectedContent   String?
-  candidateTaskConstraints  String?
-  assessmentBlueprint       String?
-  rubricVersionId           String?
-  promptTemplateVersionId   String?
+  taskText                 String?
+  assessorExpectedContent  String?
+  candidateTaskConstraints String?
+  assessmentBlueprint      String?
+  rubricVersionId          String?
+  promptTemplateVersionId  String?
   // mcqSetVersionId is null for FREETEXT_ONLY modules (#578) — no multiple-choice component.
-  mcqSetVersionId           String?
-  assessmentMode            AssessmentMode         @default(FREETEXT_PLUS_MCQ)
-  submissionSchemaJson      String?
-  assessmentPolicyJson      String?
-  publishedBy               String?
-  publishedAt               DateTime?
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
-  module                    Module                 @relation("ModuleVersions", fields: [moduleId], references: [id], onDelete: Restrict)
-  activeForModules          Module[]               @relation("ActiveModuleVersion")
-  rubricVersion             RubricVersion?         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
-  promptTemplateVersion     PromptTemplateVersion? @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
-  mcqSetVersion             MCQSetVersion?         @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
-  submissions               Submission[]
-  assessmentDecisions       AssessmentDecision[]
-  llmEvaluations            LLMEvaluation[]
+  mcqSetVersionId          String?
+  assessmentMode           AssessmentMode         @default(FREETEXT_PLUS_MCQ)
+  submissionSchemaJson     String?
+  assessmentPolicyJson     String?
+  publishedBy              String?
+  publishedAt              DateTime?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  module                   Module                 @relation("ModuleVersions", fields: [moduleId], references: [id], onDelete: Restrict)
+  activeForModules         Module[]               @relation("ActiveModuleVersion")
+  rubricVersion            RubricVersion?         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  promptTemplateVersion    PromptTemplateVersion? @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+  mcqSetVersion            MCQSetVersion?         @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
+  submissions              Submission[]
+  assessmentDecisions      AssessmentDecision[]
+  llmEvaluations           LLMEvaluation[]
 
   @@unique([moduleId, versionNo])
   @@index([moduleId, publishedAt])
 }
 
 model Submission {
-  id                String             @id @default(cuid())
-  userId            String
-  moduleId          String
-  moduleVersionId   String
-  locale            String             @default("en-GB")
-  deliveryType      String
-  responseJson      String             @default("{}")
-  attachmentUri     String?
-  submittedAt       DateTime           @default(now())
-  submissionStatus  SubmissionStatus   @default(SUBMITTED)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
-  module            Module             @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  moduleVersion     ModuleVersion      @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
-  mcqAttempts       MCQAttempt[]
-  llmEvaluations    LLMEvaluation[]
-  decisions         AssessmentDecision[]
-  appeals           Appeal[]
-  manualReviews     ManualReview[]
-  assessmentJobs    AssessmentJob[]
+  id               String               @id @default(cuid())
+  userId           String
+  moduleId         String
+  moduleVersionId  String
+  locale           String               @default("en-GB")
+  deliveryType     String
+  responseJson     String               @default("{}")
+  attachmentUri    String?
+  submittedAt      DateTime             @default(now())
+  submissionStatus SubmissionStatus     @default(SUBMITTED)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  module           Module               @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  moduleVersion    ModuleVersion        @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+  mcqAttempts      MCQAttempt[]
+  llmEvaluations   LLMEvaluation[]
+  decisions        AssessmentDecision[]
+  appeals          Appeal[]
+  manualReviews    ManualReview[]
+  assessmentJobs   AssessmentJob[]
 
   @@index([userId, submittedAt])
   @@index([moduleId, submittedAt])
 }
 
 model MCQSetVersion {
-  id          String       @id @default(cuid())
-  moduleId    String
-  versionNo   Int
-  title       String
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  questions   MCQQuestion[]
-  attempts    MCQAttempt[]
-  versions    ModuleVersion[]
+  id        String          @id @default(cuid())
+  moduleId  String
+  versionNo Int
+  title     String
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  module    Module          @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  questions MCQQuestion[]
+  attempts  MCQAttempt[]
+  versions  ModuleVersion[]
 
   @@unique([moduleId, versionNo])
 }
@@ -275,7 +280,7 @@ model MCQQuestion {
 }
 
 model MCQAttempt {
-  id              String       @id @default(cuid())
+  id              String        @id @default(cuid())
   submissionId    String
   mcqSetVersionId String
   startedAt       DateTime
@@ -284,33 +289,33 @@ model MCQAttempt {
   scaledScore     Float?
   percentScore    Float?
   passFailMcq     Boolean?
-  createdAt       DateTime     @default(now())
-  submission      Submission   @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+  submission      Submission    @relation(fields: [submissionId], references: [id], onDelete: Restrict)
   mcqSetVersion   MCQSetVersion @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
   responses       MCQResponse[]
 }
 
 model MCQResponse {
-  id           String     @id @default(cuid())
-  mcqAttemptId String
-  questionId   String
+  id             String      @id @default(cuid())
+  mcqAttemptId   String
+  questionId     String
   selectedAnswer String
-  isCorrect    Boolean
-  createdAt    DateTime   @default(now())
-  mcqAttempt   MCQAttempt @relation(fields: [mcqAttemptId], references: [id], onDelete: Restrict)
-  question     MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  isCorrect      Boolean
+  createdAt      DateTime    @default(now())
+  mcqAttempt     MCQAttempt  @relation(fields: [mcqAttemptId], references: [id], onDelete: Restrict)
+  question       MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 }
 
 model RubricVersion {
-  id              String          @id @default(cuid())
+  id              String               @id @default(cuid())
   moduleId        String
   versionNo       Int
   criteriaJson    String
   scalingRuleJson String
-  active          Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  module          Module          @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  active          Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  module          Module               @relation(fields: [moduleId], references: [id], onDelete: Restrict)
   moduleVersions  ModuleVersion[]
   decisions       AssessmentDecision[]
 
@@ -318,19 +323,19 @@ model RubricVersion {
 }
 
 model PromptTemplateVersion {
-  id               String          @id @default(cuid())
-  moduleId         String
-  versionNo        Int
-  systemPrompt     String
+  id                 String               @id @default(cuid())
+  moduleId           String
+  versionNo          Int
+  systemPrompt       String
   userPromptTemplate String
-  examplesJson     String
-  active           Boolean         @default(true)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  module           Module          @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  moduleVersions   ModuleVersion[]
-  llmEvaluations   LLMEvaluation[]
-  decisions        AssessmentDecision[]
+  examplesJson       String
+  active             Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  module             Module               @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  moduleVersions     ModuleVersion[]
+  llmEvaluations     LLMEvaluation[]
+  decisions          AssessmentDecision[]
 
   @@unique([moduleId, versionNo])
 }
@@ -377,28 +382,28 @@ model AssessmentDecision {
   moduleVersion           ModuleVersion          @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
   rubricVersion           RubricVersion?         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
   promptTemplateVersion   PromptTemplateVersion? @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
-  finalisedBy             User?                 @relation("FinalisedBy", fields: [finalisedById], references: [id], onDelete: SetNull)
-  parentDecision          AssessmentDecision?   @relation("DecisionLineage", fields: [parentDecisionId], references: [id], onDelete: SetNull)
-  childDecisions          AssessmentDecision[]  @relation("DecisionLineage")
+  finalisedBy             User?                  @relation("FinalisedBy", fields: [finalisedById], references: [id], onDelete: SetNull)
+  parentDecision          AssessmentDecision?    @relation("DecisionLineage", fields: [parentDecisionId], references: [id], onDelete: SetNull)
+  childDecisions          AssessmentDecision[]   @relation("DecisionLineage")
   certifications          CertificationStatus[]
 
   @@index([submissionId, finalisedAt])
 }
 
 model Appeal {
-  id              String       @id @default(cuid())
-  submissionId    String
-  appealedById    String
-  appealReason    String
-  appealStatus    AppealStatus @default(OPEN)
-  createdAt       DateTime     @default(now())
-  claimedAt       DateTime?
-  resolvedAt      DateTime?
-  resolvedById    String?
-  resolutionNote  String?
-  submission      Submission   @relation(fields: [submissionId], references: [id], onDelete: Restrict)
-  appealedBy      User         @relation("AppealedBy", fields: [appealedById], references: [id], onDelete: Restrict)
-  resolvedBy      User?        @relation("AppealResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  id             String       @id @default(cuid())
+  submissionId   String
+  appealedById   String
+  appealReason   String
+  appealStatus   AppealStatus @default(OPEN)
+  createdAt      DateTime     @default(now())
+  claimedAt      DateTime?
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolutionNote String?
+  submission     Submission   @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  appealedBy     User         @relation("AppealedBy", fields: [appealedById], references: [id], onDelete: Restrict)
+  resolvedBy     User?        @relation("AppealResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([appealStatus, createdAt])
   @@index([appealStatus, claimedAt])
@@ -421,19 +426,19 @@ model ManualReview {
 }
 
 model CertificationStatus {
-  id               String             @id @default(cuid())
-  userId           String
-  moduleId         String
-  latestDecisionId String
-  status           String
-  passedAt         DateTime?
-  expiryDate       DateTime?
+  id                     String             @id @default(cuid())
+  userId                 String
+  moduleId               String
+  latestDecisionId       String
+  status                 String
+  passedAt               DateTime?
+  expiryDate             DateTime?
   recertificationDueDate DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  user             User               @relation(fields: [userId], references: [id], onDelete: Restrict)
-  module           Module             @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  latestDecision   AssessmentDecision @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  module                 Module             @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  latestDecision         AssessmentDecision @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
 
   @@unique([userId, moduleId])
 }
@@ -453,19 +458,19 @@ model AuditEvent {
 }
 
 model AssessmentJob {
-  id            String              @id @default(cuid())
-  submissionId  String
-  status        AssessmentJobStatus @default(PENDING)
-  attempts      Int                 @default(0)
-  maxAttempts   Int                 @default(3)
-  availableAt   DateTime            @default(now())
-  lockedAt      DateTime?
-  lockedBy      String?
+  id             String              @id @default(cuid())
+  submissionId   String
+  status         AssessmentJobStatus @default(PENDING)
+  attempts       Int                 @default(0)
+  maxAttempts    Int                 @default(3)
+  availableAt    DateTime            @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
   leaseExpiresAt DateTime?
-  errorMessage  String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  submission    Submission          @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  submission     Submission          @relation(fields: [submissionId], references: [id], onDelete: Restrict)
 
   @@index([status, availableAt])
   @@index([status, leaseExpiresAt])
@@ -473,31 +478,36 @@ model AssessmentJob {
 }
 
 model Course {
-  id                 String             @id @default(cuid())
-  title              String             // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
-  description        String?            // lokalisert JSON
+  id                 String                  @id @default(cuid())
+  title              String // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
+  description        String? // lokalisert JSON
   certificationLevel String?
   // #496/EN-1: OPEN = visible to everyone (current behavior, default for existing courses);
   // RESTRICTED = visible/available only to enrolled users.
-  enrollmentPolicy   CourseEnrollmentPolicy @default(OPEN)
+  enrollmentPolicy   CourseEnrollmentPolicy  @default(OPEN)
+  // #495/T-QA-1: kurs-master av/på for diskusjon. Default true => eksisterende publiserte
+  // kurs får diskusjon på når feature lander (besluttet 2026-06-27). Effektiv regel for et
+  // item: Course.discussionsEnabled && CourseItem.discussionsEnabled.
+  discussionsEnabled Boolean                 @default(true)
   publishedAt        DateTime?
   archivedAt         DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  modules            CourseModule[]     // deprecated av CourseItem (#480) — beholdt under expand-contract til lese-cutover + drop
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  modules            CourseModule[] // deprecated av CourseItem (#480) — beholdt under expand-contract til lese-cutover + drop
   items              CourseItem[]
   completions        CourseCompletion[]
   sectionReads       CourseSectionRead[]
   enrollments        CourseEnrollment[]
   groupAssignments   CourseGroupAssignment[]
+  discussionThreads  DiscussionThread[]
 }
 
 model CourseModule {
-  courseId   String
-  moduleId   String
-  sortOrder  Int
-  course     Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  module     Module  @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  courseId  String
+  moduleId  String
+  sortOrder Int
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module    Module @relation(fields: [moduleId], references: [id], onDelete: Restrict)
 
   @@id([courseId, moduleId])
   @@index([moduleId])
@@ -509,7 +519,7 @@ model CourseCompletion {
   courseId           String
   completedAt        DateTime @default(now())
   certificateId      String   @unique @default(cuid())
-  moduleSnapshotJson String   // JSON-array av moduleIds som inngikk ved fullføring
+  moduleSnapshotJson String // JSON-array av moduleIds som inngikk ved fullføring
   user               User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
@@ -610,7 +620,7 @@ model CourseGroupAssignment {
 // kan fryses mot en bestemt versjon. Kobles til kurs via CourseItem (#480/F1).
 model CourseSection {
   id              String                 @id @default(cuid())
-  title           String                 // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
+  title           String // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
   activeVersionId String?
   archivedAt      DateTime?
   createdAt       DateTime               @default(now())
@@ -627,13 +637,13 @@ model CourseSection {
 // `asset:<id>`-URL i et vanlig bilde (`![alt](asset:<id>)`), som resolves til serve-
 // endepunktet ved render.
 model SectionAsset {
-  id        String        @id @default(cuid())
-  sectionId String
-  filename  String
-  mimeType  String
-  blobPath  String
-  sizeBytes Int
-  createdAt DateTime      @default(now())
+  id                 String        @id @default(cuid())
+  sectionId          String
+  filename           String
+  mimeType           String
+  blobPath           String
+  sizeBytes          Int
+  createdAt          DateTime      @default(now())
   // #657: localized SVG variants. sourceLocale is the language of the text baked into the
   // original (blobPath); localizedBlobPaths maps each OTHER supported locale → the blob path of
   // a variant whose <text> has been translated. Both null for raster images and untranslated SVGs.
@@ -672,15 +682,20 @@ enum CourseItemType {
 // lese-pathene er kuttet over og CourseModule droppes. Nøyaktig én av moduleId/
 // sectionId er satt, styrt av itemType (DB-CHECK i migreringen).
 model CourseItem {
-  id        String         @id @default(cuid())
-  courseId  String
-  itemType  CourseItemType
-  sortOrder Int
-  moduleId  String?
-  sectionId String?
-  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  module    Module?        @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  section   CourseSection? @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  id                 String             @id @default(cuid())
+  courseId           String
+  itemType           CourseItemType
+  sortOrder          Int
+  moduleId           String?
+  sectionId          String?
+  // #495/T-QA-1: per-item av/på. Toggle ligger her (kursets plassering av modulen/seksjonen),
+  // ikke på den delte Module/CourseSection — så å skru av i ett kurs påvirker ikke samme
+  // modul i et annet kurs. Default true (additivt, ikke-brytende).
+  discussionsEnabled Boolean            @default(true)
+  course             Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module             Module?            @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  section            CourseSection?     @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  discussionThreads  DiscussionThread[]
 
   @@index([courseId, sortOrder])
   @@index([moduleId])
@@ -691,7 +706,7 @@ model CourseSectionVersion {
   id                String          @id @default(cuid())
   sectionId         String
   versionNo         Int
-  bodyMarkdown      String          // lokalisert JSON av markdown-tekst, per locale
+  bodyMarkdown      String // lokalisert JSON av markdown-tekst, per locale
   publishedBy       String?
   publishedAt       DateTime?
   createdAt         DateTime        @default(now())
@@ -701,4 +716,79 @@ model CourseSectionVersion {
 
   @@unique([sectionId, versionNo])
   @@index([sectionId, publishedAt])
+}
+
+// ── Diskusjon / Q&A (#495, T-QA-1) ────────────────────────────────────────────
+// Tråder henger på kurs-nivå (courseItemId = null) eller på en konkret seksjon/modul
+// (courseItemId satt). UGC er ÉNSPRÅKLIG ren tekst på forfatterens språk — IKKE den
+// lokaliserte {en-GB,nb,nn}-JSON-formen authored content bruker. Soft-delete, aldri
+// hard-delete: slettede innlegg beholder raden (deletedAt/deletedById) for trådintegritet.
+// Design: doc/DISCUSSIONS_DESIGN.md.
+
+enum DiscussionThreadKind {
+  QUESTION
+  DISCUSSION
+}
+
+enum DiscussionThreadStatus {
+  OPEN
+  RESOLVED
+  LOCKED
+}
+
+model DiscussionThread {
+  id              String                   @id @default(cuid())
+  courseId        String
+  courseItemId    String? // null = kurs-nivå board; satt = per seksjon/modul
+  authorId        String
+  kind            DiscussionThreadKind     @default(DISCUSSION)
+  title           String // énspråklig UGC
+  bodyMarkdown    String // énspråklig UGC (restriktiv render, ikke renderSectionMarkdown)
+  status          DiscussionThreadStatus   @default(OPEN)
+  acceptedReplyId String?                  @unique // satt når et svar er «løsning» (kun QUESTION)
+  pinnedAt        DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  deletedAt       DateTime?
+  deletedById     String?
+  course          Course                   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseItem      CourseItem?              @relation(fields: [courseItemId], references: [id], onDelete: SetNull)
+  author          User                     @relation("DiscussionThreadAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  deletedBy       User?                    @relation("DiscussionThreadDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  acceptedReply   DiscussionReply?         @relation("AcceptedReply", fields: [acceptedReplyId], references: [id], onDelete: SetNull)
+  replies         DiscussionReply[]        @relation("ThreadReplies")
+  subscriptions   DiscussionSubscription[]
+
+  @@index([courseId, courseItemId])
+  @@index([authorId])
+}
+
+model DiscussionReply {
+  id                String            @id @default(cuid())
+  threadId          String
+  authorId          String
+  bodyMarkdown      String // énspråklig UGC
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+  deletedById       String?
+  thread            DiscussionThread  @relation("ThreadReplies", fields: [threadId], references: [id], onDelete: Cascade)
+  author            User              @relation("DiscussionReplyAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  deletedBy         User?             @relation("DiscussionReplyDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  acceptedForThread DiscussionThread? @relation("AcceptedReply")
+
+  @@index([threadId])
+  @@index([authorId])
+}
+
+model DiscussionSubscription {
+  id        String           @id @default(cuid())
+  threadId  String
+  userId    String
+  createdAt DateTime         @default(now())
+  thread    DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId])
 }

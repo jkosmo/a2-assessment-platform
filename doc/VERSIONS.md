@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.89 - 2026-06-27
+
+feat(discussions): datamodell + migrasjon for diskusjon/Q&A (#495/T-QA-1)
+
+Første skive av diskusjonsfunksjonaliteten (epic #478, design i `doc/DISCUSSIONS_DESIGN.md`).
+Kun datamodell — ingen API/UI ennå (det er T-QA-2..4). Ship-safe alene.
+
+- Nye modeller: `DiscussionThread`, `DiscussionReply`, `DiscussionSubscription` + enums
+  `DiscussionThreadKind` (QUESTION/DISCUSSION) og `DiscussionThreadStatus` (OPEN/RESOLVED/LOCKED).
+- Av/på-toggle `discussionsEnabled Boolean @default(true)` på `Course` og `CourseItem`. Default
+  `true` (besluttet 2026-06-27): eksisterende publiserte kurs får diskusjon på når feature lander;
+  produsent kan opt-out per kurs/modul/seksjon. Effektiv regel:
+  `Course.discussionsEnabled && CourseItem.discussionsEnabled`.
+- UGC er énspråklig ren tekst (ikke lokalisert JSON). Soft-delete (`deletedAt`/`deletedById`),
+  aldri hard-delete, for trådintegritet. `acceptedReplyId` er unikt (ett løsningssvar per tråd).
+- Migrasjon er additiv og ikke-brytende (alle kolonner har DEFAULT, alle tabeller tomme).
+- Integrasjonstest `test/m2-discussions-datamodel.test.ts` pinner defaults, unike constraints,
+  soft-delete og cascade.
+
 ## 1.3.88 - 2026-06-26
 
 fix(admin-content): prod-bugs på Klasser/Seksjoner — admin-knapper skjult + topp-nav borte (#690)
