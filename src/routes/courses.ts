@@ -15,8 +15,14 @@ import {
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
+import { discussionsRouter } from "./discussions.js";
 
 const coursesRouter = Router();
+
+// #495/T-QA-2: diskusjon/Q&A under kurs-stien så authz arver «har tilgang til publisert kurs».
+// mergeParams lar sub-routeren lese :courseId. Registreres tidlig; de spesifikke metodene/stiene
+// kolliderer ikke med "/:courseId"-GET fordi de ligger under "/:courseId/discussions".
+coursesRouter.use("/:courseId/discussions", discussionsRouter);
 
 coursesRouter.get("/", async (request, response, next) => {
   const userId = request.context?.userId;

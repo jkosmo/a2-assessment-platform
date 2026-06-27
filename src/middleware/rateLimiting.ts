@@ -10,6 +10,7 @@ const mcqSubmitStore = new MemoryStore();
 const generateStore = new MemoryStore();
 const extractStore = new MemoryStore();
 const intentLogStore = new MemoryStore();
+const discussionWriteStore = new MemoryStore();
 
 function resolveRateLimitKey(request: Request) {
   return request.context?.userId ?? request.ip ?? "unknown";
@@ -112,6 +113,17 @@ export const intentLogLimiter = createLimiter({
   },
 });
 
+// #495/T-QA-2: skrive-limiter for diskusjon (opprett tråd/svar, redigering, moderering).
+// UGC-skriving er spam-utsatt; 30/min per bruker er romslig for normal bruk men stopper abuse.
+export const discussionWriteLimiter = createLimiter({
+  store: discussionWriteStore,
+  limit: 30,
+  message: {
+    error: "rate_limited",
+    message: "Too many discussion requests. Retry in 60 seconds.",
+  },
+});
+
 export async function resetRateLimitState() {
   await Promise.all([
     generalApiStore.resetAll?.(),
@@ -121,5 +133,6 @@ export async function resetRateLimitState() {
     extractStore.resetAll?.(),
     generateStore.resetAll?.(),
     intentLogStore.resetAll?.(),
+    discussionWriteStore.resetAll?.(),
   ]);
 }

@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.90 - 2026-06-27
+
+feat(discussions): backend API + authz + UGC-sanitering (#495/T-QA-2)
+
+REST-API for diskusjon/Q&A under `/api/courses/:courseId/discussions`, montert på coursesRouter
+så autorisasjon arver «har tilgang til publisert kurs». Fortsatt ingen UI (det er T-QA-3/4).
+
+- Ruter: list/opprett tråd, tråd+svar, svar, rediger egen, moderering (pin/lås), aksepter svar,
+  soft-delete (tråd/svar), abonner/avslutt. zod-validering på all input.
+- Authz: les/skriv krever publisert-kurs-tilgang (OPEN for alle, RESTRICTED for enrolled/klasse;
+  SMO/ADMIN alltid). Moderering + slett-andres krever SMO/ADMIN; aksepter svar = spørrer/moderator.
+- Scope-håndheving: skriving blokkeres når `discussionsEnabled` er av på kurs/CourseItem, eller
+  tråden er `LOCKED`. Soft-delete, aldri hard-delete.
+- **Restriktiv UGC-render** (`renderDiscussionMarkdown`) — egen, strengere DOMPurify-allowlist
+  uten iframe/rå-HTML/bilder, separat fra `renderSectionMarkdown`. Lenker tvinges til
+  `rel=noopener noreferrer` + `target=_blank`.
+- Dedikert `discussionWriteLimiter` (30/min), nye audit-typer/-handlinger, anonymiserte brukere
+  vises uten navn.
+- Tester: `test/unit/ugc-sanitizer.test.ts` (sanitering) + `test/m2-discussions-api.test.ts`
+  (flyt, authz, scope/lock, soft-delete, sanitering, validering, tilgang).
+
 ## 1.3.89 - 2026-06-27
 
 feat(discussions): datamodell + migrasjon for diskusjon/Q&A (#495/T-QA-1)
