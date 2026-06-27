@@ -10,6 +10,8 @@ export const auditEntityTypes = {
   certificationStatus: "certification_status",
   course: "course",
   class: "class",
+  discussionThread: "discussion_thread",
+  discussionReply: "discussion_reply",
   llmEvaluation: "llm_evaluation",
   manualReview: "manual_review",
   mcqAttempt: "mcq_attempt",
@@ -89,6 +91,16 @@ export const auditActions = {
     recertificationReminderFailed: "recertification_reminder_failed",
     participantNotificationSent: "participant_notification_sent",
     participantNotificationFailed: "participant_notification_failed",
+  },
+  discussion: {
+    threadCreated: "discussion_thread_created",
+    threadEdited: "discussion_thread_edited",
+    threadDeleted: "discussion_thread_deleted",
+    threadModerated: "discussion_thread_moderated",
+    answerAccepted: "discussion_answer_accepted",
+    replyCreated: "discussion_reply_created",
+    replyEdited: "discussion_reply_edited",
+    replyDeleted: "discussion_reply_deleted",
   },
   manualReview: {
     opened: "manual_review_opened",
@@ -283,6 +295,26 @@ export type AuditMetadataByAction = {
   [auditActions.class.memberRemoved]: EventMetadata<{ classId: string; userId: string }>;
   [auditActions.class.courseAssigned]: EventMetadata<{ classId: string; courseId: string }>;
   [auditActions.class.courseUnassigned]: EventMetadata<{ classId: string; courseId: string }>;
+  [auditActions.discussion.threadCreated]: EventMetadata<{
+    courseId: string;
+    courseItemId: string | null;
+    kind: string;
+  }>;
+  [auditActions.discussion.threadEdited]: EventMetadata<{ courseId: string; threadId: string }>;
+  [auditActions.discussion.threadDeleted]: EventMetadata<{ courseId: string; threadId: string }>;
+  [auditActions.discussion.threadModerated]: EventMetadata<{
+    courseId: string;
+    threadId: string;
+    change: string;
+  }>;
+  [auditActions.discussion.answerAccepted]: EventMetadata<{
+    courseId: string;
+    threadId: string;
+    replyId: string;
+  }>;
+  [auditActions.discussion.replyCreated]: EventMetadata<{ courseId: string; threadId: string }>;
+  [auditActions.discussion.replyEdited]: EventMetadata<{ courseId: string; threadId: string }>;
+  [auditActions.discussion.replyDeleted]: EventMetadata<{ courseId: string; threadId: string }>;
   [auditActions.manualReview.opened]: EventMetadata<{
     submissionId: string;
     decisionId: string;

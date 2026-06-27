@@ -21,13 +21,16 @@ export interface CourseModuleEntry {
 
 // A single step in the participant course sequence — either a module or a
 // learning section (#491/P1), in sortOrder.
+// courseItemId + discussionsEnabled (#495/T-QA-3): lar deltaker-UI feste diskusjonstråder på
+// det konkrete CourseItem og skjule panelet når diskusjon er avskrudd for elementet.
 export type CourseSequenceItem =
-  | { type: "MODULE"; sortOrder: number; moduleId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" }
-  | { type: "SECTION"; sortOrder: number; sectionId: string; title: string; read: boolean };
+  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean }
+  | { type: "SECTION"; sortOrder: number; sectionId: string; courseItemId: string; title: string; read: boolean; discussionsEnabled: boolean };
 
 export interface CourseDetail extends CourseListItem {
   certificationLevel: string | null;
   publishedAt: string | null;
+  discussionsEnabled: boolean;
   modules: CourseModuleEntry[];
   items: CourseSequenceItem[];
 }
@@ -49,6 +52,7 @@ export interface AdminCourseDetail {
   description: string | null;
   certificationLevel: string | null;
   enrollmentPolicy: string;
+  discussionsEnabled: boolean;
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;

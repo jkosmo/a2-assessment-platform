@@ -402,3 +402,43 @@ export async function sendCourseAssignmentNotification(
   logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
   return { delivered: true, channel, subject, nextStepGuidance: body };
 }
+
+// #495/T-QA-5: generisk sender for diskusjons-varsler (nytt spørsmål → kursets SMO; nytt svar →
+// trådabonnenter). Subject/body bygges av kalleren (locale-templates i notificationMessages.ts);
+// her gjenbrukes samme kanal-dispatch (disabled/log/acs_email; webhook → log) som øvrige varsler.
+// Ingen lenker i e-post (#688-policy) — mottakeren bes logge inn selv.
+export interface DiscussionNotificationInput {
+  recipientEmail: string;
+  recipientName?: string | null;
+  subject: string;
+  body: string;
+  notificationType: "discussion_question_created" | "discussion_reply_created";
+}
+
+export async function sendDiscussionNotification(
+  input: DiscussionNotificationInput,
+): Promise<NotificationResult> {
+  const { subject, body } = input;
+  const payload = {
+    notificationType: input.notificationType,
+    recipient: { email: input.recipientEmail, name: input.recipientName ?? null },
+    subject,
+    emittedAt: new Date().toISOString(),
+  };
+
+  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+  if (channel === "disabled") {
+    return { delivered: false, channel, subject, nextStepGuidance: body, failureReason: "channel_disabled" };
+  }
+  if (channel === "acs_email") {
+    return sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject,
+      body,
+      logPayload: payload,
+    });
+  }
+  logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
+  return { delivered: true, channel, subject, nextStepGuidance: body };
+}

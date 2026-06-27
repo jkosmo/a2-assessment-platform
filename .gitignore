@@ -3,6 +3,7 @@ dist/
 .env
 .env.postgres.local
 .env.postgres.test
+.env.test.local
 .env.entra.dev.generated
 .generated/
 prisma/schema.postgres.prisma

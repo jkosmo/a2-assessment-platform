@@ -48,7 +48,7 @@ The conversational and advanced editors are two modes of the same module workspa
 | `/api/submissions` | Participant | Submit work, view results, file appeals |
 | `/api/assessments` | Participant | Trigger assessment, poll job status |
 | `/api/modules` | Participant | Browse available modules, run MCQ |
-| `/api/courses` | Participant | Browse courses; read learning sections + mark read (#476) |
+| `/api/courses` | Participant | Browse courses; read learning sections + mark read (#476); discussion/Q&A threads + replies (#495) |
 | `/api/me` | All | Current user identity and roles |
 | `/api/reviews` | Reviewer / Admin | Manual review queue and override |
 | `/api/appeals` | Appeal Handler / Admin | Appeal queue and resolution |

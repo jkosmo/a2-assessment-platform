@@ -1014,7 +1014,7 @@ async function renderDetailView(courseId) {
       const itemsData = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/items`, getHeaders);
       courseModules = (itemsData.items ?? [])
         .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map(it => ({ type: it.type, refId: it.type === "MODULE" ? it.moduleId : it.sectionId, title: localizedText(it.title) || it.moduleId || it.sectionId }));
+        .map(it => ({ type: it.type, refId: it.type === "MODULE" ? it.moduleId : it.sectionId, title: localizedText(it.title) || it.moduleId || it.sectionId, discussionsEnabled: it.discussionsEnabled !== false }));
     } catch {
       courseModules = (course.modules ?? [])
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -1041,6 +1041,8 @@ async function renderDetailView(courseId) {
 
   const certLevel = course?.certificationLevel ?? "";
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
+  // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
+  const discussionsEnabled = course?.discussionsEnabled !== false;
   const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
   const showPublishButton = canPublishCourse({
     ...course,
@@ -1104,6 +1106,13 @@ async function renderDetailView(courseId) {
             <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>Begrenset – kun tildelte (individuelt eller via klasse)</option>
           </select>
         </div>
+
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="discussionsEnabled"${discussionsEnabled ? " checked" : ""} />
+            Diskusjon på dette kurset (deltakere kan stille spørsmål og diskutere)
+          </label>
+        </div>
       </div>
 
       <div class="detail-section">
@@ -1166,6 +1175,9 @@ function renderModuleList() {
         <span class="item-type-badge">${m.type === "SECTION" ? "SEKSJON" : "MODUL"}</span>
         <span class="module-list-item-title">${escapeHtml(m.title)}</span>
         <div class="module-list-item-actions">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--color-meta);" title="Tillat diskusjon på dette elementet">
+            <input type="checkbox" data-disc-toggle="${i}"${m.discussionsEnabled !== false ? " checked" : ""} /> Diskusjon
+          </label>
           <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
           <button class="module-move-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
           <button class="module-remove-btn" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
@@ -1174,6 +1186,13 @@ function renderModuleList() {
   </div>`;
 
   document.getElementById("moduleList")?.addEventListener("click", handleModuleListClick);
+  // #495/T-QA-4: per-element diskusjons-toggle oppdaterer state (lagres med sekvensen via PUT /items).
+  document.getElementById("moduleList")?.addEventListener("change", (e) => {
+    const cb = e.target.closest("[data-disc-toggle]");
+    if (!cb) return;
+    const idx = parseInt(cb.dataset.discToggle, 10);
+    if (courseModules[idx]) courseModules[idx].discussionsEnabled = cb.checked;
+  });
 }
 
 function handleModuleListClick(e) {
@@ -1407,6 +1426,7 @@ async function saveCourse(courseId) {
   const collectedValues = collectLocaleValues();
   const certLevel = document.getElementById("certLevel")?.value ?? "";
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
+  const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
     ? await localizeCourseCopyAcrossLocales({
@@ -1453,6 +1473,7 @@ async function saveCourse(courseId) {
           description: normalizedDescription,
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
+          discussionsEnabled,
         }),
       });
       savedCourseId = body.course?.id;
@@ -1466,6 +1487,7 @@ async function saveCourse(courseId) {
           description: normalizedDescription,
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
+          discussionsEnabled,
         }),
       });
     }
@@ -1473,7 +1495,9 @@ async function saveCourse(courseId) {
     // Save the mixed module/section sequence (#490). PUT /items also re-syncs
     // CourseModule server-side (B2) so legacy read paths stay correct.
     const items = courseModules.map(m =>
-      m.type === "SECTION" ? { type: "SECTION", sectionId: m.refId } : { type: "MODULE", moduleId: m.refId },
+      m.type === "SECTION"
+        ? { type: "SECTION", sectionId: m.refId, discussionsEnabled: m.discussionsEnabled !== false }
+        : { type: "MODULE", moduleId: m.refId, discussionsEnabled: m.discussionsEnabled !== false },
     );
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(savedCourseId)}/items`, getHeaders, {
       method: "PUT",

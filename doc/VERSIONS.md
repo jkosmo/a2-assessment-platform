@@ -2,6 +2,96 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.93 - 2026-06-27
+
+feat(discussions): varsler + per-element toggle + brukerguide — #495 komplett (T-QA-5, T-QA-4, T-QA-6)
+
+- **Varsler (T-QA-5):** nytt spørsmål → kursets SMO-er (aktive SUBJECT_MATTER_OWNER); nytt svar →
+  trådens abonnenter. Locale-keyed templates (en-GB/nb/nn) i `notificationMessages.ts`, sendt via
+  ACS-kanalen (`sendDiscussionNotification`). Best-effort (svelger feil), audit per varsel.
+  Ingen lenker i e-post (#688). Preferanse-styring overlatt til #497.
+- **Per-element toggle (resten av T-QA-4):** `CourseItem.discussionsEnabled` bæres i `PUT /items`
+  + avkrysning per modul/seksjon i kurs-editoren. Default på.
+- **Docs (T-QA-6):** `doc/DISCUSSIONS_GUIDE.md` (deltaker + forfatter); design-status satt til
+  implementert.
+- Tester: discussion-notifications (unit) + varsel-/per-element-audit (integrasjon).
+
+Med dette er hele #495 (T-QA-1..6) implementert og lokalt verifisert.
+
+## 1.3.92 - 2026-06-27
+
+feat(discussions): forfatter av/på-toggle på kurset + API-dokumentasjon (#495/T-QA-4, T-QA-6)
+
+- Kurs-master-toggle `discussionsEnabled` eksponert i admin-kurs-API-et (`POST`/`PUT
+  /api/admin/content/courses`) + admin-kurs-detalj, og en avkrysningsboks i kurs-editoren
+  (`admin-content-courses.js`). Default på.
+- Integrasjonstest for admin round-trip (av → på).
+- Docs: `doc/API_REFERENCE.md` (Discussions/Q&A-seksjon) + `doc/route-map.md`.
+
+Merknad: per-element (per modul/seksjon) av/på-toggle i editoren gjenstår som en avgrenset
+videreføring — datamodell/API støtter `CourseItem.discussionsEnabled` allerede (default på), og
+deltaker-panelet respekterer det; kun forfatter-UI for per-element-bryteren mangler.
+
+## 1.3.91 - 2026-06-27
+
+feat(discussions): deltaker-UI i course player + inline moderering (#495/T-QA-3, delvis T-QA-4)
+
+Gjenbrukbart diskusjonspanel (`public/static/discussion-panel.js`) montert på kurs-nivå (under
+kurssekvensen) og per seksjon (i lese-overlayet), drevet av T-QA-2-API-et.
+
+- Trådliste (festet/badge for type + status), trådvisning med flat svarliste, compose-boks,
+  «marker som svar» for spørsmål, abonner/avslutt. UGC injiseres som server-sanitert `bodyHtml`.
+- Inline moderering (pin/lås/slett andres) vises ut fra server-flaggene `canModerate`/`canDelete`
+  /`canAccept` — samme panel for deltaker og SMO (dekker moderering-delen av T-QA-4).
+- Course-detalj-DTO eksponerer nå `courseItemId` + `discussionsEnabled` per element og
+  `discussionsEnabled` på kurset, så panelet kan festes per element og skjules når avskrudd.
+- i18n: nye `discussion.*`-nøkler i alle tre locales (en-GB, nb, nn).
+- e2e: `test/e2e/participant-discussions.spec.ts` (opprett tråd → list → åpne → svar) mot ekte
+  participant.js + discussion-panel.js.
+
+Gjenstår av T-QA-4: forfatter-av/på-toggles i kurs-editoren (datamodell/API støtter det allerede
+via `discussionsEnabled`, default på).
+
+## 1.3.90 - 2026-06-27
+
+feat(discussions): backend API + authz + UGC-sanitering (#495/T-QA-2)
+
+REST-API for diskusjon/Q&A under `/api/courses/:courseId/discussions`, montert på coursesRouter
+så autorisasjon arver «har tilgang til publisert kurs». Fortsatt ingen UI (det er T-QA-3/4).
+
+- Ruter: list/opprett tråd, tråd+svar, svar, rediger egen, moderering (pin/lås), aksepter svar,
+  soft-delete (tråd/svar), abonner/avslutt. zod-validering på all input.
+- Authz: les/skriv krever publisert-kurs-tilgang (OPEN for alle, RESTRICTED for enrolled/klasse;
+  SMO/ADMIN alltid). Moderering + slett-andres krever SMO/ADMIN; aksepter svar = spørrer/moderator.
+- Scope-håndheving: skriving blokkeres når `discussionsEnabled` er av på kurs/CourseItem, eller
+  tråden er `LOCKED`. Soft-delete, aldri hard-delete.
+- **Restriktiv UGC-render** (`renderDiscussionMarkdown`) — egen, strengere DOMPurify-allowlist
+  uten iframe/rå-HTML/bilder, separat fra `renderSectionMarkdown`. Lenker tvinges til
+  `rel=noopener noreferrer` + `target=_blank`.
+- Dedikert `discussionWriteLimiter` (30/min), nye audit-typer/-handlinger, anonymiserte brukere
+  vises uten navn.
+- Tester: `test/unit/ugc-sanitizer.test.ts` (sanitering) + `test/m2-discussions-api.test.ts`
+  (flyt, authz, scope/lock, soft-delete, sanitering, validering, tilgang).
+
+## 1.3.89 - 2026-06-27
+
+feat(discussions): datamodell + migrasjon for diskusjon/Q&A (#495/T-QA-1)
+
+Første skive av diskusjonsfunksjonaliteten (epic #478, design i `doc/DISCUSSIONS_DESIGN.md`).
+Kun datamodell — ingen API/UI ennå (det er T-QA-2..4). Ship-safe alene.
+
+- Nye modeller: `DiscussionThread`, `DiscussionReply`, `DiscussionSubscription` + enums
+  `DiscussionThreadKind` (QUESTION/DISCUSSION) og `DiscussionThreadStatus` (OPEN/RESOLVED/LOCKED).
+- Av/på-toggle `discussionsEnabled Boolean @default(true)` på `Course` og `CourseItem`. Default
+  `true` (besluttet 2026-06-27): eksisterende publiserte kurs får diskusjon på når feature lander;
+  produsent kan opt-out per kurs/modul/seksjon. Effektiv regel:
+  `Course.discussionsEnabled && CourseItem.discussionsEnabled`.
+- UGC er énspråklig ren tekst (ikke lokalisert JSON). Soft-delete (`deletedAt`/`deletedById`),
+  aldri hard-delete, for trådintegritet. `acceptedReplyId` er unikt (ett løsningssvar per tråd).
+- Migrasjon er additiv og ikke-brytende (alle kolonner har DEFAULT, alle tabeller tomme).
+- Integrasjonstest `test/m2-discussions-datamodel.test.ts` pinner defaults, unike constraints,
+  soft-delete og cascade.
+
 ## 1.3.88 - 2026-06-26
 
 fix(admin-content): prod-bugs på Klasser/Seksjoner — admin-knapper skjult + topp-nav borte (#690)
