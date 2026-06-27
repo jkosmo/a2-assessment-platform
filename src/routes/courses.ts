@@ -247,8 +247,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
           type: "SECTION",
           sortOrder: item.sortOrder,
           sectionId: item.section.id,
+          courseItemId: item.id,
           title: localizeContentText(locale, item.section.title) ?? item.section.title,
           read,
+          discussionsEnabled: item.discussionsEnabled,
         };
       }
       const moduleId = item.moduleId ?? item.module?.id ?? "";
@@ -259,8 +261,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         type: "MODULE",
         sortOrder: item.sortOrder,
         moduleId,
+        courseItemId: item.id,
         title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
         moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+        discussionsEnabled: item.discussionsEnabled,
       };
     });
 
@@ -276,6 +280,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       description: localizeContentText(locale, course.description) ?? course.description,
       certificationLevel: course.certificationLevel,
       publishedAt: course.publishedAt.toISOString(),
+      discussionsEnabled: course.discussionsEnabled,
       moduleCount: moduleIds.length,
       progress: {
         completed: completedElements,

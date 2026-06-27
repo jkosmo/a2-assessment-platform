@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.91 - 2026-06-27
+
+feat(discussions): deltaker-UI i course player + inline moderering (#495/T-QA-3, delvis T-QA-4)
+
+Gjenbrukbart diskusjonspanel (`public/static/discussion-panel.js`) montert på kurs-nivå (under
+kurssekvensen) og per seksjon (i lese-overlayet), drevet av T-QA-2-API-et.
+
+- Trådliste (festet/badge for type + status), trådvisning med flat svarliste, compose-boks,
+  «marker som svar» for spørsmål, abonner/avslutt. UGC injiseres som server-sanitert `bodyHtml`.
+- Inline moderering (pin/lås/slett andres) vises ut fra server-flaggene `canModerate`/`canDelete`
+  /`canAccept` — samme panel for deltaker og SMO (dekker moderering-delen av T-QA-4).
+- Course-detalj-DTO eksponerer nå `courseItemId` + `discussionsEnabled` per element og
+  `discussionsEnabled` på kurset, så panelet kan festes per element og skjules når avskrudd.
+- i18n: nye `discussion.*`-nøkler i alle tre locales (en-GB, nb, nn).
+- e2e: `test/e2e/participant-discussions.spec.ts` (opprett tråd → list → åpne → svar) mot ekte
+  participant.js + discussion-panel.js.
+
+Gjenstår av T-QA-4: forfatter-av/på-toggles i kurs-editoren (datamodell/API støtter det allerede
+via `discussionsEnabled`, default på).
+
 ## 1.3.90 - 2026-06-27
 
 feat(discussions): backend API + authz + UGC-sanitering (#495/T-QA-2)

@@ -4,6 +4,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
+import { mountDiscussionPanel } from "/static/discussion-panel.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -2906,15 +2907,16 @@ function renderCourseDetailModules(courseId, course) {
   if (!sequence) return;
   container.innerHTML = "";
   if (sequence.length === 0) {
+    // Tomt kurs (ingen moduler/seksjoner) — vis melding, men fall gjennom så kurs-nivå
+    // diskusjonsboardet fortsatt monteres (#495/T-QA-3).
     container.innerHTML = `<p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.noModules"))}</p>`;
-    return;
   }
   for (const entry of sequence) {
     if (entry.type === "SECTION") {
       const sectionRow = document.createElement("button");
       sectionRow.type = "button";
       sectionRow.className = "btn-secondary course-module-row course-module-button";
-      sectionRow.addEventListener("click", () => openSectionReader(courseId, entry.sectionId));
+      sectionRow.addEventListener("click", () => openSectionReader(courseId, entry.sectionId, entry.courseItemId, entry.discussionsEnabled));
       const readBadge = entry.read ? t("courses.section.doneBadge") : t("courses.section.todoBadge");
       sectionRow.innerHTML = `
         <span class="course-module-row-copy">
@@ -2956,11 +2958,30 @@ function renderCourseDetailModules(courseId, course) {
     `;
     container.appendChild(row);
   }
+
+  // #495/T-QA-3: kurs-nivå diskusjonsboard under sekvensen (kun når påskrudd for kurset).
+  if (course?.discussionsEnabled) {
+    const discWrap = document.createElement("div");
+    discWrap.className = "card";
+    discWrap.style.cssText = "margin-top:12px;padding:12px;";
+    discWrap.setAttribute("data-course-discussion", courseId);
+    container.appendChild(discWrap);
+    mountDiscussionPanel({
+      container: discWrap,
+      courseId,
+      courseItemId: null,
+      apiFetch,
+      headers,
+      t,
+      escapeHtml: escapeHtmlP,
+      showToast,
+    });
+  }
 }
 
 // #491/P1 — open a learning section in a mobile-friendly reader overlay with
 // server-rendered, sanitised HTML in the participant's locale.
-async function openSectionReader(courseId, sectionId) {
+async function openSectionReader(courseId, sectionId, courseItemId, discussionsEnabled) {
   const existing = document.getElementById("sectionReaderOverlay");
   if (existing) existing.remove();
 
@@ -2981,6 +3002,7 @@ async function openSectionReader(courseId, sectionId) {
         <button type="button" id="sectionReaderMarkRead" class="btn-primary">${escapeHtmlP(t("courses.section.markRead"))}</button>
         <button type="button" id="sectionReaderClose" class="btn-secondary">${escapeHtmlP(t("courses.section.close"))}</button>
       </div>
+      <div id="sectionReaderDiscussion" style="margin-top:16px;"></div>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -3029,5 +3051,22 @@ async function openSectionReader(courseId, sectionId) {
   } catch (error) {
     const bodyEl = overlay.querySelector("#sectionReaderBody");
     if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
+  }
+
+  // #495/T-QA-3: per-seksjon diskusjonsboard i leseren (kun når påskrudd for elementet).
+  if (discussionsEnabled && courseItemId) {
+    const discEl = overlay.querySelector("#sectionReaderDiscussion");
+    if (discEl) {
+      mountDiscussionPanel({
+        container: discEl,
+        courseId,
+        courseItemId,
+        apiFetch,
+        headers,
+        t,
+        escapeHtml: escapeHtmlP,
+        showToast,
+      });
+    }
   }
 }
