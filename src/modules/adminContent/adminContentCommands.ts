@@ -201,14 +201,14 @@ export async function listUnpublishedPurgeCandidates(): Promise<PurgeCandidate[]
   return candidates.map((m) => {
     const reasons: string[] = [];
     if (m._count.submissions > 0) reasons.push(`${m._count.submissions} submissions`);
-    if (m._count.courseModules > 0) reasons.push(`in ${m._count.courseModules} course(s)`);
+    if (m._count.courseItems > 0) reasons.push(`in ${m._count.courseItems} course(s)`);
     if (m._count.certificationStatuses > 0) reasons.push(`${m._count.certificationStatuses} certification statuses`);
     return {
       id: m.id,
       title: m.title,
       updatedAt: m.updatedAt,
       submissions: m._count.submissions,
-      courseModules: m._count.courseModules,
+      courseModules: m._count.courseItems,
       versions: m._count.versions,
       reasonSkipped: reasons.length > 0 ? reasons.join("; ") : null,
     };

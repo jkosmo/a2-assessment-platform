@@ -49,10 +49,10 @@ export async function updateCourse(
 export async function publishCourse(courseId: string, actorId?: string) {
   const course = await prisma.course.findUnique({
     where: { id: courseId },
-    include: { _count: { select: { modules: true } } },
+    include: { _count: { select: { items: { where: { itemType: "MODULE" } } } } },
   });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-  if (course._count.modules === 0) {
+  if (course._count.items === 0) {
     throw new ValidationError("Cannot publish a course with no modules.");
   }
 
@@ -164,9 +164,9 @@ export async function setCourseItems(courseId: string, items: CourseItemInput[])
     if (found !== sectionIds.length) throw new ValidationError("One or more sections do not exist.");
   }
 
+  // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.
   return runInTransaction(async (tx) => {
     await tx.courseItem.deleteMany({ where: { courseId } });
-    await tx.courseModule.deleteMany({ where: { courseId } });
     if (items.length > 0) {
       await tx.courseItem.createMany({
         data: items.map((item, index) => ({
@@ -180,39 +180,43 @@ export async function setCourseItems(courseId: string, items: CourseItemInput[])
           discussionsEnabled: item.discussionsEnabled ?? true,
         })),
       });
-      const moduleRows = items
-        .map((item, index) => ({ item, index }))
-        .filter((entry): entry is { item: { type: "MODULE"; moduleId: string }; index: number } => entry.item.type === "MODULE")
-        .map(({ item, index }) => ({ courseId, moduleId: item.moduleId, sortOrder: index }));
-      if (moduleRows.length > 0) {
-        await tx.courseModule.createMany({ data: moduleRows });
-      }
     }
     await tx.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
   });
 }
 
+// Legacy modules-only setter (import + admin PUT /modules). #502: skriver nå CourseItem MODULE-
+// elementer i stedet for CourseModule. Erstatter modul-elementene; eventuelle SECTION-elementer
+// bevares (re-indekseres etter modulene for stabil sortOrder).
 export async function setCourseModules(
   courseId: string,
   modules: Array<{ moduleId: string; sortOrder: number }>,
 ) {
   return runInTransaction(async (tx) => {
-    await tx.courseModule.deleteMany({ where: { courseId } });
-    // Dual-write to CourseItem (#480 expand-contract). Only MODULE items are
-    // managed here so any future SECTION items survive a module re-order.
-    await tx.courseItem.deleteMany({ where: { courseId, itemType: "MODULE" } });
-    if (modules.length > 0) {
-      await tx.courseModule.createMany({
-        data: modules.map((m) => ({ courseId, moduleId: m.moduleId, sortOrder: m.sortOrder })),
-      });
-      await tx.courseItem.createMany({
-        data: modules.map((m) => ({
-          courseId,
-          itemType: "MODULE" as const,
-          moduleId: m.moduleId,
-          sortOrder: m.sortOrder,
-        })),
-      });
+    const sections = await tx.courseItem.findMany({
+      where: { courseId, itemType: "SECTION" },
+      orderBy: { sortOrder: "asc" },
+      select: { sectionId: true, discussionsEnabled: true },
+    });
+    await tx.courseItem.deleteMany({ where: { courseId } });
+    // Bevar den passerte sortOrder for moduler (uendret kontrakt fra før #502); seksjoner legges
+    // etter høyeste modul-sortOrder så de overlever en modul-re-set.
+    const moduleRows = modules.map((m) => ({
+      courseId,
+      itemType: "MODULE" as const,
+      moduleId: m.moduleId,
+      sortOrder: m.sortOrder,
+    }));
+    const maxModuleOrder = moduleRows.reduce((max, r) => Math.max(max, r.sortOrder), -1);
+    const sectionRows = sections.map((s, i) => ({
+      courseId,
+      itemType: "SECTION" as const,
+      sectionId: s.sectionId,
+      sortOrder: maxModuleOrder + 1 + i,
+      discussionsEnabled: s.discussionsEnabled,
+    }));
+    if (moduleRows.length + sectionRows.length > 0) {
+      await tx.courseItem.createMany({ data: [...moduleRows, ...sectionRows] });
     }
     await tx.course.update({
       where: { id: courseId },

@@ -150,10 +150,11 @@ describe("MVP reporting endpoints", () => {
       select: { id: true },
     });
 
-    await prisma.courseModule.create({
+    await prisma.courseItem.create({
       data: {
         courseId: reportingCourse.id,
         moduleId,
+        itemType: "MODULE",
         sortOrder: 1,
       },
     });

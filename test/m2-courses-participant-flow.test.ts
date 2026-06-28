@@ -137,10 +137,11 @@ describe("Participant courses API", () => {
       select: { id: true },
     });
 
-    await prisma.courseModule.create({
+    await prisma.courseItem.create({
       data: {
         courseId: startedOnlyCourse.id,
         moduleId: startedModule.module.id,
+        itemType: "MODULE",
         sortOrder: 1,
       },
     });
@@ -154,10 +155,10 @@ describe("Participant courses API", () => {
       select: { id: true },
     });
 
-    await prisma.courseModule.createMany({
+    await prisma.courseItem.createMany({
       data: [
-        { courseId: mixedCourse.id, moduleId: startedModule.module.id, sortOrder: 1 },
-        { courseId: mixedCourse.id, moduleId: passedModule.module.id, sortOrder: 2 },
+        { courseId: mixedCourse.id, moduleId: startedModule.module.id, itemType: "MODULE", sortOrder: 1 },
+        { courseId: mixedCourse.id, moduleId: passedModule.module.id, itemType: "MODULE", sortOrder: 2 },
       ],
     });
 

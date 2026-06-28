@@ -15,7 +15,7 @@ describe("Admin course item ordering", () => {
     await prisma.$disconnect();
   });
 
-  it("sets and reads an interleaved module/section sequence and re-syncs CourseModule", async () => {
+  it("sets and reads an interleaved module/section sequence (CourseItem is the source)", async () => {
     const moduleA = await prisma.module.create({ data: { title: `Item Mod A ${Date.now()}` }, select: { id: true } });
     const moduleB = await prisma.module.create({ data: { title: `Item Mod B ${Date.now()}` }, select: { id: true } });
     const section = await prisma.courseSection.create({ data: { title: `Item Sec ${Date.now()}` }, select: { id: true } });
@@ -43,14 +43,6 @@ describe("Admin course item ordering", () => {
     expect(items[0].moduleId).toBe(moduleA.id);
     expect(items[1].sectionId).toBe(section.id);
     expect(items[2].moduleId).toBe(moduleB.id);
-
-    // CourseModule is re-synced from the MODULE items (read-path compatibility).
-    const courseModules = await prisma.courseModule.findMany({
-      where: { courseId: course.id },
-      orderBy: { sortOrder: "asc" },
-    });
-    expect(courseModules.map((c) => c.moduleId)).toEqual([moduleA.id, moduleB.id]);
-    expect(courseModules.map((c) => c.sortOrder)).toEqual([0, 2]);
 
     await prisma.course.delete({ where: { id: course.id } });
     await prisma.courseSection.delete({ where: { id: section.id } });

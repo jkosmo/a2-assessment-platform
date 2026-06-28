@@ -41,10 +41,10 @@ export async function listLibraryModules(locale: SupportedLocale = "en-GB") {
     activeVersionId: module.activeVersionId,
     activeVersionNo: module.activeVersion?.versionNo ?? null,
     latestVersionNo: module.versions[0]?.versionNo ?? null,
-    courseCount: module._count.courseModules,
-    courses: module.courseModules.map((cm) => ({
-      id: cm.course.id,
-      title: localizeContentText(locale, cm.course.title) ?? cm.course.title,
+    courseCount: module._count.courseItems,
+    courses: module.courseItems.map((ci) => ({
+      id: ci.course.id,
+      title: localizeContentText(locale, ci.course.title) ?? ci.course.title,
     })),
   }));
 }

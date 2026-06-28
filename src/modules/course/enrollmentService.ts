@@ -139,7 +139,7 @@ async function hasUserStartedCourse(userId: string, courseId: string): Promise<b
   const reads = await prisma.courseSectionRead.count({ where: { userId, courseId } });
   if (reads > 0) return true;
   const submissions = await prisma.submission.count({
-    where: { userId, module: { courseModules: { some: { courseId } } } },
+    where: { userId, module: { courseItems: { some: { courseId } } } },
   });
   return submissions > 0;
 }
@@ -239,7 +239,7 @@ export async function isModuleInAccessibleCourse(input: {
   roles: AppRoleType[];
   groupIds?: string[];
 }): Promise<boolean> {
-  const links = await prisma.courseModule.findMany({
+  const links = await prisma.courseItem.findMany({
     where: { moduleId: input.moduleId },
     select: { courseId: true },
   });

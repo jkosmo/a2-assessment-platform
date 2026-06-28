@@ -2,14 +2,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import { setCourseModules } from "../src/modules/course/courseCommands.js";
 import { prisma } from "../src/db/prisma.js";
 
-// #480 expand-contract: setCourseModules dual-writes MODULE CourseItem rows in
-// parallel with CourseModule, while leaving any SECTION CourseItems intact.
-describe("CourseItem dual-write (#480)", () => {
+// #502 contract: setCourseModules skriver MODULE-elementer til CourseItem (eneste sannhetskilde —
+// ingen CourseModule-mirror lenger), og lar SECTION-elementer være i fred.
+describe("setCourseModules → CourseItem (#502 contract)", () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
-  it("mirrors modules into CourseItem with order preserved, and re-syncs on re-set", async () => {
+  it("writes modules to CourseItem with order preserved, and re-syncs on re-set", async () => {
     const course = await prisma.course.create({
       data: { title: `DualWrite ${Date.now()}` },
       select: { id: true },
@@ -28,16 +28,11 @@ describe("CourseItem dual-write (#480)", () => {
       { moduleId: moduleB.id, sortOrder: 1 },
     ]);
 
-    const courseModules = await prisma.courseModule.findMany({
-      where: { courseId: course.id },
-      orderBy: { sortOrder: "asc" },
-    });
     const courseItems = await prisma.courseItem.findMany({
       where: { courseId: course.id },
       orderBy: { sortOrder: "asc" },
     });
 
-    expect(courseModules.map((c) => c.moduleId)).toEqual([moduleB.id, moduleA.id]);
     expect(courseItems).toHaveLength(2);
     expect(courseItems.map((i) => i.moduleId)).toEqual([moduleB.id, moduleA.id]);
     expect(courseItems.every((i) => i.itemType === "MODULE")).toBe(true);

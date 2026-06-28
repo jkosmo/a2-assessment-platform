@@ -1,7 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
 
-type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseModule">;
+type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem">;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
@@ -42,9 +42,9 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
             select: { id: true, versionNo: true, publishedAt: true },
           },
           _count: {
-            select: { courseModules: true },
+            select: { courseItems: true },
           },
-          courseModules: {
+          courseItems: {
             select: {
               course: {
                 select: { id: true, title: true },
@@ -153,7 +153,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     },
 
     async countModuleCourses(moduleId: string) {
-      return client.courseModule.count({ where: { moduleId } });
+      return client.courseItem.count({ where: { moduleId } });
     },
 
     updateModuleTitle(moduleId: string, title: string) {
@@ -191,7 +191,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           _count: {
             select: {
               submissions: true,
-              courseModules: true,
+              courseItems: true,
               versions: true,
               rubricVersions: true,
               promptTemplateVersions: true,
