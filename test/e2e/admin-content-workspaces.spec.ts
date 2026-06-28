@@ -945,7 +945,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("courses conversational flow goes straight to module selection and opens the editor after save (#673-followup)", async ({ page }) => {
+  test("courses conversational flow creates the course on certification choice and opens the editor (#506)", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [
         { id: "module-1", title: "Trade unions" },
@@ -958,17 +958,14 @@ test.describe("admin content browser coverage", () => {
     const titleInput = page.locator("#convTitleInput");
     await titleInput.fill("Labour rights");
     await titleInput.press("Enter");
+    // #506: etter nivå-valg opprettes kurset direkte (tittel + nivå, ingen moduler) og editoren åpnes —
+    // moduler OG seksjoner legges til der. Det gamle modul-søk-steget i samtalen er fjernet.
     await clickEnabledButton(page, "Basic");
 
-    await page.locator("#convComboboxInput").fill("Trade");
-    await page.locator(".combobox-option").first().click();
-    await page.locator("#convAddModuleItemBtn").click();
-    await expect(page.locator("#convModuleListContainer")).toContainText("Trade unions");
-
-    await page.locator("#convCreateBtn").click();
-    // #673-followup: opprettelse lander i kurs-editoren (der seksjoner legges til), ikke lista.
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
-    await expect.poll(() => state.mutableCourses[0]?.modules?.length ?? 0).toBe(1);
+    await expect.poll(() => state.mutableCourses.length).toBe(1);
+    await expect.poll(() => state.mutableCourses[0]?.certificationLevel).toBe("basic");
+    await expect.poll(() => state.mutableCourses[0]?.modules?.length ?? 0).toBe(0);
   });
 
   test("course detail view renders when backend returns null description for an existing course", async ({ page }) => {
@@ -1166,8 +1163,8 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#localeSelect").selectOption("nn");
     await page.locator("#convTitleInput").fill("Arbeidsmiljøkurs");
     await page.locator("#convTitleInput").press("Enter");
+    // #506: nivå-valget oppretter kurset direkte og åpner editoren.
     await page.locator('[data-cert="basic"]').click();
-    await page.locator("#convCreateBtn").click();
 
     // #673-followup: opprettelse går nå rett til kurs-editoren (der seksjoner legges til), ikke lista.
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
@@ -1211,8 +1208,8 @@ test.describe("admin content browser coverage", () => {
     await expect.poll(() => state.lastCourseLocalizationBodies.map((body) => body.targetLocale).slice(-2).sort()).toEqual(["en-GB", "nb"]);
   });
 
-  test("courses conversational flow goes directly from certification choice to module search", async ({ page }) => {
-    await mockCommonApis(page, {
+  test("courses conversational flow has no module-search step after certification choice (#506)", async ({ page }) => {
+    const state = await mockCommonApis(page, {
       libraryModules: [{ id: "module-1", title: "Trade unions" }],
     });
 
@@ -1220,11 +1217,11 @@ test.describe("admin content browser coverage", () => {
 
     await page.locator("#convTitleInput").fill("Labour rights");
     await page.locator("#convTitleInput").press("Enter");
+    // #506: ingen modul-søk-steg lenger — nivå-valget oppretter kurset og åpner editoren.
     await clickEnabledButton(page, "Basic");
 
-    await expect(page.locator("#convComboboxInput")).toBeVisible();
-    await expect(page.locator("#convCreateBtn")).toBeVisible();
-    await expect(page.getByText("Du kan opprette kurset direkte")).toBeVisible();
+    await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
+    await expect.poll(() => state.mutableCourses.length).toBe(1);
   });
 
   test("courses list refreshes 'Sist endret' after saving course changes", async ({ page }) => {

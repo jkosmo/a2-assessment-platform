@@ -662,7 +662,10 @@ function showConvCertStep() {
     convCertLevel = btn.dataset.cert;
     document.querySelectorAll(".conv-choice-btn").forEach(b => b.disabled = true);
     appendConvCertBubble(btn.textContent.trim());
-    showConvModuleSearch();
+    // Forenklet flyt: etter nivå-valg opprettes kurset direkte og editoren åpnes, der moduler OG
+    // seksjoner legges til. (Det gamle modul-søk-steget i samtalen er fjernet.)
+    convModules = [];
+    convCreateCourse();
   });
 
   // Focus first cert-choice button so keyboard users land in the new step.
