@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.2 - 2026-06-28
+
+fix(sections): sticky bilde-toolbar festes under tab-baren (#679 oppfølging)
+
+Den sticky pane-toolbaren (`.editor-pane-label`) lå bak den sticky workspace-tab-baren
+(`.content-area-nav`, `top:0`), så «Last opp bilde» bare så vidt stakk fram. Forskjøvet til
+`top: 46px` (under tab-baren) + høyere z-index, så hele toolbaren er synlig i høy editor.
+
 ## 1.4.1 - 2026-06-28
 
 fix(ux): bunt med små deltaker-/forfatter-forbedringer (lav risiko)
