@@ -1542,6 +1542,7 @@ async function loadParticipantConsoleConfig() {
   document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
   applyOutputVisibility();
   applyIdentityDefaults();
+  applyCourseOnlyMode();
   renderRolePresetControl();
 
   if (roleSwitchState.authMode === "entra") {
@@ -1561,6 +1562,15 @@ async function loadParticipantConsoleConfig() {
 
   // Identity form is now populated — safe to allow course loading (#541).
   if (loadCoursesBtn) loadCoursesBtn.disabled = false;
+}
+
+// #495-follow-up: når PARTICIPANT_COURSE_ONLY er på, når deltakere moduler kun via kurs — skjul den
+// frittstående modul-seksjonen. Modul åpnet via course player bruker submission-/MCQ-seksjonene
+// (ikke denne lista), så den flyten er upåvirket.
+function applyCourseOnlyMode() {
+  if (participantRuntimeConfig?.courseOnly) {
+    setHidden(document.getElementById("moduleListSection"), true);
+  }
 }
 
 function applyIdentityDefaults() {

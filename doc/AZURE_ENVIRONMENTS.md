@@ -138,6 +138,7 @@ For each environment, define variables/secrets used by workflow:
 - `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A2 Assessment Platform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
 - `PARTICIPANT_CONSOLE_CONFIG_FILE` (optional, default `config/participant-console.json`)
 - `PARTICIPANT_CONSOLE_DEBUG_MODE` (optional, `auto` | `true` | `false`, default `auto`)
+- `PARTICIPANT_COURSE_ONLY` (optional, `true` | `false`, default `true`) — når `true` når deltakere moduler KUN gjennom kurs; den frittstående modul-lista og -innleveringen er gated av (SMO/ADMIN unntatt). Sett `false` for å gjenåpne frittstående modul-tilgang for deltakere.
 - `BUDGET_CONTACT_EMAIL`
 - `MONTHLY_BUDGET_AMOUNT`
 

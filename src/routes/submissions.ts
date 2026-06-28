@@ -7,7 +7,9 @@ import {
   getOwnedSubmissionResultView,
 } from "../modules/submission/index.js";
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
+import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
+import { AppRole } from "../db/prismaRuntime.js";
 import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
 
 const createSubmissionSchema = z.object({
@@ -40,6 +42,27 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
   if (!userId) {
     response.status(401).json({ error: "unauthorized" });
     return;
+  }
+
+  // #495-follow-up (PARTICIPANT_COURSE_ONLY): deltakere kan kun levere på moduler som ligger i et
+  // publisert kurs de har tilgang til. Modul tatt via course player passerer (modulen er i kurset).
+  // SMO/ADMIN er unntatt (authoring/testing). Hard grense — gjelder alle nye innleveringer når på.
+  const roles = request.context?.roles ?? [];
+  const isContentRole = roles.includes(AppRole.SUBJECT_MATTER_OWNER) || roles.includes(AppRole.ADMINISTRATOR);
+  if (env.PARTICIPANT_COURSE_ONLY && !isContentRole) {
+    const allowed = await isModuleInAccessibleCourse({
+      moduleId: parsed.data.moduleId,
+      userId,
+      roles,
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!allowed) {
+      response.status(403).json({
+        error: "course_required",
+        message: "This module is only available through a course.",
+      });
+      return;
+    }
   }
 
   try {

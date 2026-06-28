@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.0 - 2026-06-28
+
+feat(participant): deltakere når moduler kun via kurs (PARTICIPANT_COURSE_ONLY)
+
+Forenkling av deltaker-overflaten: én inngang (kurs) i stedet for både frittstående moduler og
+kurs. Modul forblir authoring-/vurderings-primitivet; kun deltaker-tilgangen begrenses.
+
+- Nytt flagg `PARTICIPANT_COURSE_ONLY` (env, **default `true`** — på i alle miljø). Eksponert i
+  `/participant/config` som `courseOnly`.
+- **Backend-gate:** `POST /api/submissions` krever at modulen ligger i et publisert kurs deltakeren
+  har tilgang til (`isModuleInAccessibleCourse`), ellers `403 course_required`. Modul åpnet via
+  course player passerer. SMO/ADMIN er unntatt. Hard grense — gjelder alle nye innleveringer; ingen
+  datamigrasjon, historikk bevares.
+- **Frontend:** den frittstående modul-seksjonen (`#moduleListSection`) skjules når `courseOnly`.
+- Tester: `test/m2-participant-course-only.test.ts` (gate) + `test/e2e/participant-course-only.spec.ts`
+  (UI skjuler/viser modul-lista). Escape-hatch: sett `PARTICIPANT_COURSE_ONLY=false`.
+
+Markerer overgangen til Tier-2-leveransen (diskusjon #495 + kurs-only) — minor-bump til 1.4.0.
+
 ## 1.3.95 - 2026-06-28
 
 fix(discussions): helhetlig fargekoding av status-badges (#495)
