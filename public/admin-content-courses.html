@@ -88,16 +88,18 @@
       .col-actions { white-space: nowrap; }
 
       /* ── Cert badge ──────────────────────────────────────────────────────── */
+      /* Status-merke (sertifiseringsnivå) — flatt «tag», ikke pille m/kant, så det ikke forveksles
+         med handlingsknappene (Rediger/Eksporter/…). */
       .cert-badge {
         display: inline-block;
         padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 12px;
+        border-radius: 4px;
+        font-size: 11px;
         font-weight: 600;
-        background: var(--color-module-summary-bg);
-        border: 1px solid var(--color-module-summary-border);
-        color: var(--color-meta);
+        background: var(--color-blue-light);
+        color: var(--color-link-active);
         text-transform: capitalize;
+        letter-spacing: 0.02em;
       }
 
       /* ── Row actions ─────────────────────────────────────────────────────── */
