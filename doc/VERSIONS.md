@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.1 - 2026-06-28
+
+fix(ux): bunt med små deltaker-/forfatter-forbedringer (lav risiko)
+
+- **Terminologi (deltaker):** fjernet «Modul»/«Seksjon»-begrepene i kursvisningen — handlingen bærer
+  meningen: «Les» på seksjoner, «Gjennomfør» på moduler. Kun deltaker-overflaten; forfatter/admin
+  beholder begrepene.
+- **#656:** fullskjerm-veksling (⛶) i seksjonsleseren for deltaker.
+- **#679:** «Last opp bilde»-toolbaren i seksjonseditoren er nå sticky i høy editor (CSS).
+- **#673:** arkiverte kurs skjules fra standard kursliste; «Vis arkiverte (N)»-toggle + «Gjenopprett»
+  (nytt `POST /api/admin/content/courses/:id/restore`).
+- Tester: restore-integrasjon + oppdatert arkiv-e2e; e2e-suite 75 grønn.
+
 ## 1.4.0 - 2026-06-28
 
 feat(participant): deltakere når moduler kun via kurs (PARTICIPANT_COURSE_ONLY)

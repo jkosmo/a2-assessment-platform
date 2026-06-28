@@ -5,6 +5,7 @@ import {
   updateCourse,
   publishCourse,
   archiveCourse,
+  restoreCourse,
   setCourseModules,
   setCourseItems,
   deleteCourse,
@@ -314,6 +315,16 @@ adminCoursesRouter.post("/:courseId/publish", async (request, response, next) =>
 adminCoursesRouter.post("/:courseId/archive", async (request, response, next) => {
   try {
     const course = await archiveCourse(request.params.courseId, request.context?.userId);
+    response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #673: gjenopprett et arkivert kurs.
+adminCoursesRouter.post("/:courseId/restore", async (request, response, next) => {
+  try {
+    const course = await restoreCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
   } catch (error) {
     next(error);

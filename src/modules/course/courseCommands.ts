@@ -89,6 +89,22 @@ export async function archiveCourse(courseId: string, actorId?: string) {
   return updated;
 }
 
+// #673: gjenopprett et arkivert kurs (nullstill archivedAt). Motstykke til archiveCourse.
+export async function restoreCourse(courseId: string, actorId?: string) {
+  const updated = await prisma.course.update({
+    where: { id: courseId },
+    data: { archivedAt: null },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.course,
+    entityId: courseId,
+    action: auditActions.course.restored,
+    actorId,
+    metadata: { courseId },
+  });
+  return updated;
+}
+
 export async function deleteCourse(courseId: string, actorId?: string) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");

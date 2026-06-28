@@ -2930,7 +2930,7 @@ function renderCourseDetailModules(courseId, course) {
       const readBadge = entry.read ? t("courses.section.doneBadge") : t("courses.section.todoBadge");
       sectionRow.innerHTML = `
         <span class="course-module-row-copy">
-          <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(entry.title))} <span style="font-weight:600;color:var(--color-meta);font-size:12px">· ${escapeHtmlP(t("courses.section.label"))}</span></span>
+          <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(entry.title))}</span>
           <span class="course-module-row-action">${escapeHtmlP(t("courses.section.read"))}</span>
         </span>
         <span class="module-status-badge ${entry.read ? "completed" : ""}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(readBadge)}</span>
@@ -2944,7 +2944,8 @@ function renderCourseDetailModules(courseId, course) {
     const badgeText = passed ? t("courses.module.passed") : inProgress ? t("courses.module.inProgress") : t("courses.module.notStarted");
     const badgeClass = passed ? "completed" : inProgress ? "retake" : "";
     const selected = selectedModuleId === m.moduleId;
-    const actionText = selected ? t("submission.selectedModule") : t("progress.selectModule");
+    // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
+    const actionText = selected ? t("courses.module.selectedShort") : t("courses.module.go");
     const row = document.createElement("button");
     row.type = "button";
     row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
@@ -3004,9 +3005,13 @@ async function openSectionReader(courseId, sectionId, courseItemId, discussionsE
     <style>
       #sectionReaderBody img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
       #sectionReaderBody iframe { max-width: 100%; }
+      #sectionReaderPanel.section-reader-fullscreen { max-width: 100% !important; }
     </style>
-    <div style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;display:flex;flex-direction:column;">
-      <h2 id="sectionReaderTitle" style="margin:0 0 var(--space-2,12px) 0;font-size:20px">…</h2>
+    <div id="sectionReaderPanel" style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 var(--space-2,12px) 0;">
+        <h2 id="sectionReaderTitle" style="margin:0;font-size:20px">…</h2>
+        <button type="button" id="sectionReaderFullscreen" class="btn-secondary" style="width:auto;min-height:0;padding:4px 10px;font-size:14px;flex-shrink:0;" aria-pressed="false" title="${escapeHtmlP(t("courses.section.fullscreen"))}">⛶</button>
+      </div>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
       <div style="margin-top:var(--space-3,16px);padding-top:var(--space-2,12px);border-top:1px solid var(--color-border-soft,#e5e7eb);display:flex;justify-content:center;gap:var(--space-2,12px);flex-wrap:wrap;">
         <button type="button" id="sectionReaderMarkRead" class="btn-primary">${escapeHtmlP(t("courses.section.markRead"))}</button>
@@ -3027,6 +3032,13 @@ async function openSectionReader(courseId, sectionId, courseItemId, discussionsE
     }
   };
   overlay.querySelector("#sectionReaderClose")?.addEventListener("click", close);
+  // #656: fullskjerm-veksling i seksjonsleseren.
+  overlay.querySelector("#sectionReaderFullscreen")?.addEventListener("click", (e) => {
+    const panel = overlay.querySelector("#sectionReaderPanel");
+    const on = panel?.classList.toggle("section-reader-fullscreen");
+    e.currentTarget.setAttribute("aria-pressed", on ? "true" : "false");
+    e.currentTarget.textContent = on ? "🗗" : "⛶";
+  });
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   document.addEventListener("keydown", function onKey(e) {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
