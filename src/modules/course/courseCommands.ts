@@ -3,6 +3,7 @@ import { runInTransaction } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 
 export async function createCourse(input: {
   title: string;
@@ -72,10 +73,42 @@ export async function publishCourse(courseId: string, actorId?: string) {
   return updated;
 }
 
-export async function archiveCourse(courseId: string, actorId?: string) {
+// #705: avpubliser et kurs (motstykke til publishCourse). Symmetri med modul/seksjon.
+export async function unpublishCourse(courseId: string, actorId?: string) {
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+
+  // G3 (aktivitets-lås): et kurs med påbegynt-ufullført deltaker kan ikke trekkes vekk.
+  await assertCourseHasNoInProgressParticipants(courseId, "avpubliseres");
+
   const updated = await prisma.course.update({
     where: { id: courseId },
-    data: { archivedAt: new Date() },
+    data: { publishedAt: null },
+  });
+
+  await recordAuditEvent({
+    entityType: auditEntityTypes.course,
+    entityId: courseId,
+    action: auditActions.course.unpublished,
+    actorId,
+    metadata: { courseId },
+  });
+
+  return updated;
+}
+
+export async function archiveCourse(courseId: string, actorId?: string) {
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
+
+  // G3 (aktivitets-lås): blokker arkivering så lenge noen har en påbegynt, ufullført gjennomføring.
+  await assertCourseHasNoInProgressParticipants(courseId, "arkiveres");
+
+  // I3: arkivering auto-avpubliserer (publishedAt nullstilles) så «arkivert men publisert» aldri
+  // oppstår. Gjenopprett (restoreCourse) lander dermed i Utkast.
+  const updated = await prisma.course.update({
+    where: { id: courseId },
+    data: { archivedAt: new Date(), publishedAt: null },
   });
 
   await recordAuditEvent({

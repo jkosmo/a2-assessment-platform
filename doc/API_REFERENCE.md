@@ -210,7 +210,9 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 | `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course |
-| `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course |
+| `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course. Blocked `400` if a participant has started-but-not-completed it (G3, #705) |
+| `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course. Blocked `400` if a participant has started-but-not-completed it (G3); auto-unpublishes (I3, #705) |
+| `POST` | `/api/admin/content/courses/:courseId/restore` | Restore an archived course (lands in Utkast, #705) |
 | `GET` | `/api/admin/content/courses/:courseId/enrollments` | List active enrollments for a course, each with the participant + derived status (#496/EN-2) |
 | `POST` | `/api/admin/content/courses/:courseId/enrollments` | Assign — body `{ userIds?: string[], department?: string, dueAt?: string\|null }`. Individual list and/or department materialisation. Idempotent per user; audited (#496/EN-2) |
 | `DELETE` | `/api/admin/content/courses/:courseId/enrollments/:userId` | Revoke (soft) a participant's enrollment; audited (#496/EN-2) |
@@ -240,7 +242,11 @@ Classes (cohorts) assign a course to a group of participants dynamically: a part
 | `GET` | `/api/admin/content/sections/:sectionId` | Section detail (active version's `bodyMarkdown`) |
 | `PATCH` | `/api/admin/content/sections/:sectionId/title` | Update title |
 | `PUT` | `/api/admin/content/sections/:sectionId/content` | Publish a new immutable content version (latest-wins) |
-| `DELETE` | `/api/admin/content/sections/:sectionId` | Delete (blocked `400` if the section is used in a course) |
+| `POST` | `/api/admin/content/sections/:sectionId/publish` | Re-point active version to latest (G1 needs content, #705) |
+| `POST` | `/api/admin/content/sections/:sectionId/unpublish` | Unpublish. Blocked `400` if the section is used in any course (G2, #705) |
+| `POST` | `/api/admin/content/sections/:sectionId/archive` | Archive. Blocked `400` if used in any course (G2); auto-unpublishes (I3, #705) |
+| `POST` | `/api/admin/content/sections/:sectionId/restore` | Restore an archived section (lands in Utkast, #705) |
+| `DELETE` | `/api/admin/content/sections/:sectionId` | Delete (blocked `400` if the section is used in a course; names the courses, #705) |
 | `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view) |
 | `POST` | `/api/admin/content/sections/localize` | LLM-translate title + bodyMarkdown to another locale (markdown-preserving). Rate-limited. |
 | `POST` | `/api/admin/content/sections/:sectionId/assets` | Upload a section image (multipart `file`). PNG/JPEG/GIF/WebP/SVG, max 5 MB. SVG is sanitised server-side before storage (scripts/handlers/`foreignObject`/`<a>` stripped, #657). Returns `asset` + `ref` (`asset:<id>`). |

@@ -9,6 +9,7 @@ export const auditEntityTypes = {
   calibrationWorkspace: "calibration_workspace",
   certificationStatus: "certification_status",
   course: "course",
+  courseSection: "course_section",
   class: "class",
   discussionThread: "discussion_thread",
   discussionReply: "discussion_reply",
@@ -69,9 +70,16 @@ export const auditActions = {
   course: {
     created: "course_created",
     published: "course_published",
+    unpublished: "course_unpublished",
     archived: "course_archived",
     restored: "course_restored",
     completionIssued: "course_completion_issued",
+  },
+  section: {
+    published: "section_published",
+    unpublished: "section_unpublished",
+    archived: "section_archived",
+    restored: "section_restored",
   },
   enrollment: {
     assigned: "course_enrollment_assigned",
@@ -277,8 +285,13 @@ export type AuditMetadataByAction = {
   }>;
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
   [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
+  [auditActions.section.published]: EventMetadata<{ sectionId: string }>;
+  [auditActions.section.unpublished]: EventMetadata<{ sectionId: string }>;
+  [auditActions.section.archived]: EventMetadata<{ sectionId: string }>;
+  [auditActions.section.restored]: EventMetadata<{ sectionId: string }>;
   [auditActions.course.completionIssued]: EventMetadata<{
     userId: string;
     courseId: string;

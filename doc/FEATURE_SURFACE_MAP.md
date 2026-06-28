@@ -197,3 +197,26 @@ one page leaves siblings broken — this bit Klasser + Seksjoner together (v1.3.
 `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config";
 `test/e2e/section-editor.spec.ts` "top workspace nav renders in prod-shaped config". A mock that sets
 **both** identityDefaults and `/api/me` hides this class of bug — always include a prod-shape case.
+
+## 13. Content lifecycle — publiser/avpubliser/arkiver/gjenopprett/slett on 3 entities (#705)
+
+Kurs, modul **and** seksjon share one lifecycle: states **Utkast/Publisert/Arkivert**, actions
+**Publiser⇄Avpubliser · Arkiver⇄Gjenopprett · Slett**, in that order, with the same four guards.
+A change to any rule (a new guard, a label, the auto-unpublish behaviour) must touch all three list
+UIs and the three command modules together. The integrity invariant (a published course never holds
+an unavailable module/section) is enforced by G2, **not** by the participant-side "Ikke tilgjengelig"
+fallback (that is only a safety net, #502-followup). Canonical model: `doc/design/CONTENT_LIFECYCLE.md`.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Shared guards (source of truth) | `src/modules/course/contentLifecycle.ts` | G2 `assertModuleNotInAnyCourse`/`assertSectionNotInAnyCourse`; G3 `assertCourseHasNoInProgressParticipants` |
+| Module commands | `src/modules/adminContent/adminContentCommands.ts` (`unpublishModule`, `archiveModule`) + repo `archiveModule` (auto-unpublish) | G2 on unpublish+archive; delete-in-course guard in `adminContent.ts` route |
+| Course commands | `src/modules/course/courseCommands.ts` (`unpublishCourse`, `archiveCourse`) | G3 on both; archive auto-unpublishes (I3); delete blocked by completions (G4) |
+| Section commands | `src/modules/course/sectionCommands.ts` (`publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`/`deleteSection`) | G2 on unpublish/archive/delete; archive auto-unpublishes |
+| Routes | `adminContent.ts` (modules), `adminCourses.ts` (`/unpublish`), `adminSections.ts` (`/publish,/unpublish,/archive,/restore`) | `ValidationError` → 400 with named courses |
+| Module list UI | `public/static/admin-content-library.js` (`statusBadge`, row actions) | already had publish/unpublish/archive/restore + status column |
+| Course list UI | `public/static/admin-content-courses.js` (`courseStatus`/`courseStatusBadge`, `unpublishCourseInAdmin`, Status column) | added Avpubliser + status column |
+| Section list UI | `public/static/admin-content-sections.js` (`sectionStatus`/`statusBadge`/`sectionLifecycle`, archived toggle) | added status column + all lifecycle actions |
+| Shared badge style | `public/static/shared.css` → `.status-badge--{draft,published,archived}` | library has its own scoped `.status-badge` modifiers (richer module statuses) |
+
+**Guards:** `test/m2-content-lifecycle.test.ts` (G2/G3/I3 across all three); `test/m2-module-archive.test.ts` (archive auto-unpublishes); `test/e2e/admin-content-workspaces.spec.ts` "courses list can unpublish a published course (#705)" + "sections list shows status and runs the lifecycle actions (#705)".

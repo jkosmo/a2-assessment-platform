@@ -303,6 +303,18 @@ function canPublishCourse(course) {
   return !course?.publishedAt && !course?.archivedAt && moduleCount > 0;
 }
 
+// #705: samme to akser og status-vokabular som modul/seksjon — arkivert overstyrer.
+function courseStatus(course) {
+  if (course?.archivedAt) return "archived";
+  if (course?.publishedAt) return "published";
+  return "draft";
+}
+
+function courseStatusBadge(status) {
+  const label = status === "published" ? "Publisert" : status === "archived" ? "Arkivert" : "Utkast";
+  return `<span class="status-badge status-badge--${status}">${label}</span>`;
+}
+
 async function publishCourseInAdmin(courseId, triggerButton = null) {
   if (!courseId) return;
   if (triggerButton) triggerButton.disabled = true;
@@ -377,25 +389,36 @@ async function renderListView() {
   const rows = deriveCourseListRows(courses, {
     localizeTitle: localizedText,
     formatDate,
-  }).map((course) => `<tr>
-      <td class="col-title">${escapeHtml(course.title)}${course.archivedAt ? ` <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#f0f0f0;color:#666;font-size:11px;font-weight:600;vertical-align:middle;">Arkivert</span>` : ""}</td>
+  }).map((course) => {
+    const status = courseStatus(course);
+    const cid = escapeHtml(course.courseId);
+    const ctitle = escapeHtml(course.title);
+    // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
+    const publishToggle = canPublishCourse(course)
+      ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>`
+      : status === "published"
+        ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
+        : "";
+    const archiveToggleBtn = course.archivedAt
+      ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
+      : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
+    return `<tr>
+      <td class="col-title">${ctitle}</td>
+      <td class="col-status">${courseStatusBadge(status)}</td>
       <td class="col-level">${certBadge(course.certificationLevel)}</td>
       <td class="col-module-count">${course.moduleCount}</td>
       <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
       <td class="col-actions">
         <div class="row-actions">
           <a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>
-          ${canPublishCourse(course)
-            ? `<button class="row-action-btn" data-action="publish" data-course-id="${escapeHtml(course.courseId)}">Publiser</button>`
-            : ""}
-          <button class="row-action-btn" data-action="export" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Eksporter</button>
-          ${course.archivedAt
-            ? `<button class="row-action-btn" data-action="restore" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Gjenopprett</button>`
-            : `<button class="row-action-btn" data-action="archive" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Arkiver</button>`}
-          <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Slett</button>
+          ${publishToggle}
+          ${archiveToggleBtn}
+          <button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>
+          <button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>
         </div>
       </td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
   pageContent.innerHTML = `
     <div class="page-header">
@@ -412,6 +435,7 @@ async function renderListView() {
         <thead>
           <tr>
             <th scope="col">Tittel</th>
+            <th scope="col">Status</th>
             <th scope="col">Sertifiseringsnivå</th>
             <th scope="col">Antall moduler</th>
             <th scope="col">Sist endret</th>
@@ -496,6 +520,10 @@ function handleListTableClick(event) {
     exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle);
     return;
   }
+  if (btn.dataset.action === "unpublish") {
+    unpublishCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
+    return;
+  }
   if (btn.dataset.action === "archive") {
     archiveCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
@@ -522,6 +550,23 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
     await renderListView();
   } catch (err) {
     showToast(err?.message ?? "Kunne ikke arkivere kurs.", "error");
+    if (triggerButton) triggerButton.disabled = false;
+  }
+}
+
+// #705: avpubliser et kurs (motstykke til Publiser). G3-vakta (påbegynt deltaker) i backend gir
+// en forklarende feilmelding hvis det ikke er lov.
+async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = null) {
+  if (!window.confirm(`Avpublisere kurset «${courseTitle}»? Det blir skjult for deltakere til du publiserer igjen.`)) {
+    return;
+  }
+  if (triggerButton) triggerButton.disabled = true;
+  try {
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/unpublish`, getHeaders, { method: "POST" });
+    showToast("Kurset ble avpublisert.", "success");
+    await renderListView();
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke avpublisere kurs.", "error");
     if (triggerButton) triggerButton.disabled = false;
   }
 }

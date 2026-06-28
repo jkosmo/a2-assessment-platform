@@ -4,6 +4,7 @@ import {
   createCourse,
   updateCourse,
   publishCourse,
+  unpublishCourse,
   archiveCourse,
   restoreCourse,
   setCourseModules,
@@ -306,6 +307,16 @@ adminCoursesRouter.put("/:courseId/items", async (request, response, next) => {
 adminCoursesRouter.post("/:courseId/publish", async (request, response, next) => {
   try {
     const course = await publishCourse(request.params.courseId, request.context?.userId);
+    response.json({ course });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #705: avpubliser et kurs (motstykke til publish). G3-vakt (påbegynt deltaker) i kommandolaget.
+adminCoursesRouter.post("/:courseId/unpublish", async (request, response, next) => {
+  try {
+    const course = await unpublishCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
   } catch (error) {
     next(error);

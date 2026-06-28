@@ -77,7 +77,10 @@ describe("Module archive and restore (#258)", () => {
     expect((archiveList.body.modules as Array<{ id: string }>).some((m) => m.id === moduleId)).toBe(false);
   });
 
-  it("blocks archiving a published (active) module", async () => {
+  // #705/I3: archiving a published module (not used in any course) now auto-unpublishes it
+  // atomically instead of erroring "must unpublish first". The course-use lock (G2) is covered
+  // separately in m2-content-lifecycle.test.ts.
+  it("auto-unpublishes a published module when archiving it (not in any course)", async () => {
     const moduleId = await createBareModule(`published-${Date.now()}`);
 
     // Create minimal content and publish
@@ -130,12 +133,19 @@ describe("Module archive and restore (#258)", () => {
       .set(adminHeaders);
     expect(pubRes.status).toBe(200);
 
-    // Archive should fail
+    // Archive now succeeds and auto-unpublishes (I3): the module ends up archived + unpublished.
     const archiveRes = await request(app)
       .post(`/api/admin/content/modules/${moduleId}/archive`)
       .set(adminHeaders);
-    expect(archiveRes.status).toBe(400);
-    expect(archiveRes.body.message).toMatch(/unpublished/);
+    expect(archiveRes.status).toBe(200);
+    expect(archiveRes.body.archivedAt).toBeTruthy();
+
+    const module = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { activeVersionId: true, archivedAt: true },
+    });
+    expect(module?.activeVersionId).toBeNull();
+    expect(module?.archivedAt).toBeTruthy();
   });
 
   it("blocks archiving an already-archived module", async () => {

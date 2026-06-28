@@ -1,6 +1,9 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
 
 // Section CRUD + versioning (#485/B1) for course learning sections (#476).
 // Mirrors Module/ModuleVersion: editing content publishes an immutable new
@@ -76,12 +79,122 @@ export function listSections() {
   });
 }
 
+// #705: enhetlig livssyklus for seksjoner (symmetri med modul/kurs). Seksjoner auto-publiseres
+// ved lagring; disse handlingene gir samme Publiser/Avpubliser/Arkiver/Gjenopprett-vokabular.
+
+// Publiser: re-pek activeVersionId til siste versjon (krever at det finnes en versjon med innhold).
+export async function publishSection(sectionId: string, actorId?: string) {
+  const section = await prisma.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, archivedAt: true },
+  });
+  if (!section) {
+    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+  }
+  if (section.archivedAt) {
+    throw new ValidationError("Gjenopprett seksjonen før du publiserer den.");
+  }
+  const latest = await prisma.courseSectionVersion.findFirst({
+    where: { sectionId },
+    orderBy: { versionNo: "desc" },
+    select: { id: true },
+  });
+  if (!latest) {
+    throw new ValidationError("Seksjonen har ikke noe innhold å publisere.");
+  }
+  const updated = await prisma.courseSection.update({
+    where: { id: sectionId },
+    data: { activeVersionId: latest.id },
+    include: { activeVersion: true },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.courseSection,
+    entityId: sectionId,
+    action: auditActions.section.published,
+    actorId,
+    metadata: { sectionId },
+  });
+  return updated;
+}
+
+// Avpubliser: nullstill activeVersionId. G2 — kan ikke avpublisere en seksjon som ligger i et kurs.
+export async function unpublishSection(sectionId: string, actorId?: string) {
+  await assertSectionExists(sectionId);
+  await assertSectionNotInAnyCourse(sectionId, "avpubliseres");
+  const updated = await prisma.courseSection.update({
+    where: { id: sectionId },
+    data: { activeVersionId: null },
+    include: { activeVersion: true },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.courseSection,
+    entityId: sectionId,
+    action: auditActions.section.unpublished,
+    actorId,
+    metadata: { sectionId },
+  });
+  return updated;
+}
+
+// Arkiver: G2-vakt + auto-avpubliser (I3). Gjenopprett lander i Utkast.
+export async function archiveSection(sectionId: string, actorId?: string) {
+  const section = await prisma.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, archivedAt: true },
+  });
+  if (!section) {
+    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+  }
+  if (section.archivedAt) {
+    throw new ValidationError("Seksjonen er allerede arkivert.");
+  }
+  await assertSectionNotInAnyCourse(sectionId, "arkiveres");
+  const updated = await prisma.courseSection.update({
+    where: { id: sectionId },
+    data: { archivedAt: new Date(), activeVersionId: null },
+    include: { activeVersion: true },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.courseSection,
+    entityId: sectionId,
+    action: auditActions.section.archived,
+    actorId,
+    metadata: { sectionId },
+  });
+  return updated;
+}
+
+// Gjenopprett: nullstill archivedAt (lander i Utkast — forfatteren re-publiserer bevisst).
+export async function restoreSection(sectionId: string, actorId?: string) {
+  const section = await prisma.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, archivedAt: true },
+  });
+  if (!section) {
+    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+  }
+  if (!section.archivedAt) {
+    throw new ValidationError("Seksjonen er ikke arkivert.");
+  }
+  const updated = await prisma.courseSection.update({
+    where: { id: sectionId },
+    data: { archivedAt: null },
+    include: { activeVersion: true },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.courseSection,
+    entityId: sectionId,
+    action: auditActions.section.restored,
+    actorId,
+    metadata: { sectionId },
+  });
+  return updated;
+}
+
 export async function deleteSection(sectionId: string) {
   await assertSectionExists(sectionId);
-  const references = await prisma.courseItem.count({ where: { sectionId } });
-  if (references > 0) {
-    throw new ValidationError("Cannot delete a section that is used in one or more courses.");
-  }
+  // G2: navngir kursene (konsistent med modul-sletting).
+  await assertSectionNotInAnyCourse(sectionId, "slettes");
   await runInTransaction(async (tx) => {
     // Detach activeVersion FK before deleting versions to avoid the self-reference.
     await tx.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });

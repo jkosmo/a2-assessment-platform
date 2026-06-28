@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.5.0 - 2026-06-28
+
+feat: enhetlig innholds-livssyklus for kurs/modul/seksjon + tett integritets-hull (#705)
+
+Bakgrunn: en publisert modul kunne arkiveres ved å først avpublisere den (arkiv-vakta sjekket
+kun publiser-status, ikke kurs-referanser; avpubliser hadde ingen vakt) — slik kunne et publisert
+kurs ende med en arkivert/avpublisert modul. Livssyklusen var dessuten ujevnt implementert
+(seksjoner manglet arkiver/avpubliser helt, med et ubrukt `archivedAt`-felt).
+
+Én gjenkjennbar modell for alle tre innholdstyper (se `doc/design/CONTENT_LIFECYCLE.md`):
+
+- **Samme status overalt:** Utkast / Publisert / Arkivert, vist med felles `.status-badge`.
+- **Samme handlinger, samme rekkefølge:** Publiser⇄Avpubliser · Arkiver⇄Gjenopprett · Slett.
+- **G2 bruk-lås (alle kurs):** en modul/seksjon i ETHVERT kurs (publisert eller utkast) kan ikke
+  avpubliseres/arkiveres/slettes. Feilmeldingen navngir kursene. Tetter integritets-hullet.
+- **G3 aktivitets-lås:** et kurs med en påbegynt-men-ufullført deltaker kan ikke
+  avpubliseres/arkiveres.
+- **I3 arkiver auto-avpubliserer:** «arkivert men publisert» kan ikke oppstå; gjenopprett lander
+  i Utkast.
+- **Seksjoner:** ny publiser/avpubliser/arkiver/gjenopprett-symmetri (ruter + status-merkelapp +
+  Vis arkiverte-veksling i seksjonslista).
+- **Kurs:** ny Avpubliser (manglet) + status-kolonne i kurslista.
+- Nye endepunkt: `POST /api/admin/content/courses/:id/unpublish`,
+  `POST /api/admin/content/sections/:id/{publish,unpublish,archive,restore}`.
+- Tester: `m2-content-lifecycle` (G2/G3/I3) + oppdatert `m2-module-archive` (arkiver auto-avpub.)
+  + 2 nye e2e (kurs-avpubliser, seksjon-livssyklus).
+
 ## 1.4.6 - 2026-06-28
 
 fix(ux): forenklet kurs-opprettelse — nivå-valg går rett til editoren (#506)

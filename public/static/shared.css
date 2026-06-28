@@ -1057,3 +1057,19 @@ dialog::backdrop {
 .disc-compose-actions { display: flex; justify-content: flex-end; }
 .discussion-body { overflow-wrap: anywhere; }
 .discussion-body p { margin: 0 0 8px; }
+
+/* #705 Enhetlig innholds-livssyklus — felles status-merkelapp for kurs/modul/seksjon, slik at
+   de tre admin-listene gjenkjennes likt. Samme tre ord overalt: Utkast / Publisert / Arkivert. */
+.status-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.status-badge--draft     { background: #edf1f7; color: #42526b; }  /* grå  — utkast (ikke synlig) */
+.status-badge--published { background: #e6f4ea; color: #12613a; }  /* grønn — live */
+.status-badge--archived  { background: #f0f0f0; color: #666; }     /* dempet — pensjonert */
