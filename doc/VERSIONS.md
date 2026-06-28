@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.5 - 2026-06-28
+
+fix(ux): kompakte modul-filtre + sertifiseringsmerke ser ikke ut som knapp
+
+- **Modulbibliotek:** filter-fanene (Alle/Aktive/…) er nå kompakte piller på rad (`width:auto`
+  overstyrer global `button{width:100%}`), ikke fullbredde stablet.
+- **Kursliste:** sertifiseringsnivå-merket («Grunnleggende» o.l.) restylet til et flatt «tag»
+  (liten radius, ingen kant, svak blåtone) så det ikke forveksles med handlingsknappene.
+
 ## 1.4.4 - 2026-06-28
 
 fix(ux): bunt 2 — rapport-knapper, seksjoner ved opprettelse, avpublisert modul i kurs
