@@ -257,6 +257,11 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       const certStatus = certStatusByModuleId.get(moduleId);
       const passed = certStatus !== undefined && certStatus !== "NOT_CERTIFIED";
       const hasStarted = latestSubmissionByModuleId.has(moduleId);
+      // #502-followup: en modul er «tilgjengelig» for deltaker når den har en publisert aktiv
+      // versjon og ikke er arkivert. Avpubliserte moduler markeres i UI (ikke en blindvei).
+      const available = Boolean(
+        item.module?.activeVersionId && item.module?.activeVersion?.publishedAt && !item.module?.archivedAt,
+      );
       return {
         type: "MODULE",
         sortOrder: item.sortOrder,
@@ -265,6 +270,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
         moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
         discussionsEnabled: item.discussionsEnabled,
+        available,
       };
     });
 

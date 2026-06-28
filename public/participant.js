@@ -2944,22 +2944,30 @@ function renderCourseDetailModules(courseId, course) {
     const badgeText = passed ? t("courses.module.passed") : inProgress ? t("courses.module.inProgress") : t("courses.module.notStarted");
     const badgeClass = passed ? "completed" : inProgress ? "retake" : "";
     const selected = selectedModuleId === m.moduleId;
+    // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
+    const available = m.available !== false;
     // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
-    const actionText = selected ? t("courses.module.selectedShort") : t("courses.module.go");
+    const actionText = !available
+      ? t("courses.module.unavailableShort")
+      : selected ? t("courses.module.selectedShort") : t("courses.module.go");
     const row = document.createElement("button");
     row.type = "button";
     row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
     row.setAttribute("aria-pressed", selected ? "true" : "false");
-    row.addEventListener("click", async () => {
+    if (!available) {
       row.disabled = true;
-      try {
-        await openCourseModule(courseId, m.moduleId);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
-      } finally {
-        row.disabled = false;
-      }
-    });
+    } else {
+      row.addEventListener("click", async () => {
+        row.disabled = true;
+        try {
+          await openCourseModule(courseId, m.moduleId);
+        } catch (error) {
+          showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+        } finally {
+          row.disabled = false;
+        }
+      });
+    }
     row.innerHTML = `
       <span class="course-module-row-copy">
         <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>

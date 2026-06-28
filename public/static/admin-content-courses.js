@@ -689,7 +689,7 @@ function showConvModuleSearch() {
 
   after.innerHTML = `
     <div class="conv-bot-msg" role="status" aria-live="polite">
-      <p>Søk etter moduler og legg dem til i kurset. Du kan også opprette kurset direkte hvis du vil legge til moduler senere.</p>
+      <p>Søk etter moduler og legg dem til i kurset. Du kan opprette kurset direkte — etterpå åpnes editoren der du kan legge til <strong>seksjoner</strong> og justere rekkefølgen.</p>
     </div>
     <div id="convModuleListContainer"></div>
     <div class="combobox-row" style="margin-bottom:var(--space-2)">
@@ -955,8 +955,9 @@ async function convCreateCourse() {
       });
     }
 
-    showToast("Kurs opprettet.", "success");
-    window.location.href = "/admin-content/courses";
+    showToast("Kurs opprettet. Legg til seksjoner og juster rekkefølgen her.", "success");
+    // #673-followup: gå rett til editoren der seksjoner + sekvens kan redigeres (ikke bare moduler).
+    window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
   } catch (err) {
     if (after) {
       after.innerHTML = `<div class="error-banner">${escapeHtml(err?.message ?? "Kunne ikke opprette kurs.")}</div>`;

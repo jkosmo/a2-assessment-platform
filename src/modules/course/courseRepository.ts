@@ -131,7 +131,17 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         where: { courseId },
         orderBy: { sortOrder: "asc" },
         include: {
-          module: { select: { id: true, title: true, archivedAt: true } },
+          // activeVersion.publishedAt (#502-followup): lar deltaker-UI markere avpubliserte moduler
+          // som «ikke tilgjengelig» i stedet for en blindvei-klikk.
+          module: {
+            select: {
+              id: true,
+              title: true,
+              archivedAt: true,
+              activeVersionId: true,
+              activeVersion: { select: { publishedAt: true } },
+            },
+          },
           section: { select: { id: true, title: true, archivedAt: true } },
         },
       });

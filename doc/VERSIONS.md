@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.4 - 2026-06-28
+
+fix(ux): bunt 2 — rapport-knapper, seksjoner ved opprettelse, avpublisert modul i kurs
+
+Tre småforbedringer fra staging-verifisering av v1.4.3:
+
+- **Rapport (#results):** eksport-knappene er nå kompakte og ligger på rad (overstyrer global
+  `button{width:100%}` i `.export-row`).
+- **Kurs-opprettelse:** etter «Opprett kurs» lander forfatteren nå i **kurs-editoren** (der
+  seksjoner + sekvens redigeres), ikke i kurslista — så seksjoner kan legges til som neste steg.
+- **Avpublisert modul i kurs:** course-detail eksponerer `available` per MODULE-element (publisert
+  aktiv versjon, ikke arkivert); deltaker-UI viser «Ikke tilgjengelig» (ikke-klikkbar) i stedet for
+  en blindvei-klikk som ga feilmelding.
+- Tester: `m2-course-module-availability` + oppdaterte conv-create-e2e. tsc + 309 integrasjon + 75
+  e2e grønt.
+
 ## 1.4.3 - 2026-06-28
 
 refactor(course): CourseItem som eneste sannhetskilde — lese-cutover (#502, del 1)
