@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.3 - 2026-06-28
+
+refactor(course): CourseItem som eneste sannhetskilde — lese-cutover (#502, del 1)
+
+Contract-fasen av #480: alle lesninger av kursets moduler går nå mot `CourseItem` (MODULE-elementer)
+i stedet for `CourseModule`-join-en, og dual-write til `CourseModule` er fjernet.
+
+- Repository: `findCourseById`, `findPublishedCourses`, `findPublishedCoursesWithModuleDetails`,
+  `findPublishedCoursesContainingModule`, `listCourses` deriverer nå `modules`/`_count.modules` fra
+  CourseItem (retur-shape uendret → konsumenter urørt). publishCourse-gate teller MODULE-elementer.
+- `setCourseItems`/`setCourseModules` skriver kun CourseItem (ingen dual-write). adminContent
+  (modul-i-N-kurs-guard, purge-kandidater) + enrollment (`isModuleInAccessibleCourse`,
+  in-progress-probe) lest om til CourseItem.
+- **CourseModule-tabellen beholdes** (ingen migrasjon) — selve `DROP` er et eget steg etter
+  prod-soak (reverserbart; ingen data tapt siden CourseItem har alt).
+- **Fix:** `.env.test` setter nå `PARTICIPANT_COURSE_ONLY=false` — gaten (v1.4.0) defaultet true i
+  test og blokkerte frittstående-submission-tester, som gjorde **main-CI rød siden v1.4.0**. Gaten
+  dekkes fortsatt av `m2-participant-course-only`. Oppdaterte tester som lagde CourseModule direkte.
+- Verifisert: tsc + unit 689 + dom 5 + integrasjon 308 grønt.
+
 ## 1.4.2 - 2026-06-28
 
 fix(sections): sticky bilde-toolbar festes under tab-baren (#679 oppfølging)

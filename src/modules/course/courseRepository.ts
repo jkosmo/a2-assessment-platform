@@ -50,20 +50,25 @@ type CourseRepositoryClient = Pick<
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {
   return {
-    findPublishedCoursesContainingModule(moduleId: string) {
-      return client.course.findMany({
+    async findPublishedCoursesContainingModule(moduleId: string) {
+      const courses = await client.course.findMany({
         where: {
           publishedAt: { not: null },
           archivedAt: null,
-          modules: { some: { moduleId } },
+          items: { some: { moduleId } },
         },
         include: {
-          modules: {
+          items: {
+            where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
             select: { moduleId: true },
           },
         },
       });
+      return courses.map(({ items, ...rest }) => ({
+        ...rest,
+        modules: items.filter((i) => i.moduleId).map((i) => ({ moduleId: i.moduleId as string })),
+      }));
     },
 
     countPassedModulesForUser(userId: string, moduleIds: string[]) {
@@ -98,11 +103,13 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    listCourses() {
-      return client.course.findMany({
+    async listCourses() {
+      // #502: tell MODULE-elementer fra CourseItem i stedet for CourseModule; behold _count.modules-shapen.
+      const courses = await client.course.findMany({
         orderBy: { createdAt: "desc" },
-        include: { _count: { select: { modules: true } } },
+        include: { _count: { select: { items: { where: { itemType: "MODULE" } } } } },
       });
+      return courses.map(({ _count, ...rest }) => ({ ...rest, _count: { modules: _count.items } }));
     },
 
     markSectionRead(userId: string, courseId: string, sectionId: string) {
@@ -130,11 +137,15 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    findCourseById(courseId: string) {
-      return client.course.findUnique({
+    // #502 contract-fase: `modules` deriveres nå fra CourseItem (MODULE-elementer) i stedet for den
+    // gamle CourseModule-join-en, så CourseItem er eneste sannhetskilde. Retur-shapen beholdes
+    // ({ moduleId, sortOrder, module }) så konsumentene er uendret.
+    async findCourseById(courseId: string) {
+      const course = await client.course.findUnique({
         where: { id: courseId },
         include: {
-          modules: {
+          items: {
+            where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
             include: {
               module: {
@@ -144,23 +155,36 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           },
         },
       });
+      if (!course) return null;
+      const { items, ...rest } = course;
+      const modules = items
+        .filter((item) => item.moduleId && item.module)
+        .map((item) => ({ moduleId: item.moduleId as string, sortOrder: item.sortOrder, module: item.module! }));
+      return { ...rest, modules };
     },
 
-    findPublishedCourses() {
-      return client.course.findMany({
+    async findPublishedCourses() {
+      const courses = await client.course.findMany({
         where: { publishedAt: { not: null }, archivedAt: null },
         orderBy: { publishedAt: "asc" },
         include: {
-          modules: {
+          items: {
+            where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
             select: { moduleId: true },
           },
         },
       });
+      return courses.map(({ items, ...rest }) => ({
+        ...rest,
+        modules: items
+          .filter((item) => item.moduleId)
+          .map((item) => ({ moduleId: item.moduleId as string })),
+      }));
     },
 
-    findPublishedCoursesWithModuleDetails(filters: Pick<ReportFilters, "courseId"> = {}) {
-      return client.course.findMany({
+    async findPublishedCoursesWithModuleDetails(filters: Pick<ReportFilters, "courseId"> = {}) {
+      const courses = await client.course.findMany({
         where: {
           publishedAt: { not: null },
           archivedAt: null,
@@ -168,14 +192,19 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         },
         orderBy: { publishedAt: "asc" },
         include: {
-          modules: {
+          items: {
+            where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
-            include: {
-              module: { select: { id: true, title: true } },
-            },
+            include: { module: { select: { id: true, title: true } } },
           },
         },
       });
+      return courses.map(({ items, ...rest }) => ({
+        ...rest,
+        modules: items
+          .filter((item) => item.moduleId && item.module)
+          .map((item) => ({ moduleId: item.moduleId as string, sortOrder: item.sortOrder, module: item.module! })),
+      }));
     },
 
     findUserCourseCompletions(userId: string) {

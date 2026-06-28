@@ -32,7 +32,7 @@ describe("Participant course-only gate (#495-follow-up)", () => {
     env.PARTICIPANT_COURSE_ONLY = originalFlag;
   });
   afterAll(async () => {
-    await prisma.courseModule.deleteMany({ where: { courseId: { in: createdCourseIds } } });
+    await prisma.courseItem.deleteMany({ where: { courseId: { in: createdCourseIds } } });
     await prisma.course.deleteMany({ where: { id: { in: createdCourseIds } } });
     await prisma.module.deleteMany({ where: { id: { in: createdModuleIds } } });
     await prisma.user.deleteMany({ where: { externalId: { startsWith: idPrefix } } });
@@ -58,7 +58,7 @@ describe("Participant course-only gate (#495-follow-up)", () => {
       select: { id: true },
     });
     createdCourseIds.push(course.id);
-    await prisma.courseModule.create({ data: { courseId: course.id, moduleId: module.id, sortOrder: 0 } });
+    await prisma.courseItem.create({ data: { courseId: course.id, moduleId: module.id, itemType: "MODULE", sortOrder: 0 } });
 
     const res = await request(app)
       .post("/api/submissions")

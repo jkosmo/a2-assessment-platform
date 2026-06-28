@@ -46,10 +46,10 @@ describe("Course completion issuance", () => {
           nn: "Test av kursbevis-utferding.",
         }),
         publishedAt: new Date(),
-        modules: {
+        items: {
           create: [
-            { moduleId: moduleA.module.id, sortOrder: 1 },
-            { moduleId: moduleB.module.id, sortOrder: 2 },
+            { itemType: "MODULE", moduleId: moduleA.module.id, sortOrder: 1 },
+            { itemType: "MODULE", moduleId: moduleB.module.id, sortOrder: 2 },
           ],
         },
       },
@@ -131,10 +131,10 @@ describe("Course completion issuance", () => {
         title: JSON.stringify({ "en-GB": `Reconcile Course ${suffix}`, nb: `Avstemmingskurs ${suffix}`, nn: `Avstemmingskurs ${suffix}` }),
         description: JSON.stringify({ "en-GB": "x", nb: "x", nn: "x" }),
         publishedAt: new Date(),
-        modules: {
+        items: {
           create: [
-            { moduleId: moduleA.module.id, sortOrder: 1 },
-            { moduleId: moduleB.module.id, sortOrder: 2 },
+            { itemType: "MODULE", moduleId: moduleA.module.id, sortOrder: 1 },
+            { itemType: "MODULE", moduleId: moduleB.module.id, sortOrder: 2 },
           ],
         },
       },
@@ -252,10 +252,10 @@ describe("Course completion issuance", () => {
         title: JSON.stringify({ "en-GB": `Cert Course ${suffix}`, nb: `Beviskurs ${suffix}`, nn: `Beviskurs ${suffix}` }),
         certificationLevel: "intermediate",
         publishedAt: new Date(),
-        modules: {
+        items: {
           create: [
-            { moduleId: moduleA.module.id, sortOrder: 1 },
-            { moduleId: moduleB.module.id, sortOrder: 2 },
+            { itemType: "MODULE", moduleId: moduleA.module.id, sortOrder: 1 },
+            { itemType: "MODULE", moduleId: moduleB.module.id, sortOrder: 2 },
           ],
         },
       },
