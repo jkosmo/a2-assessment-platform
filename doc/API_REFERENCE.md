@@ -210,8 +210,8 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 | `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course |
-| `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course. Blocked `400` if a participant has started-but-not-completed it (G3, #705) |
-| `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course. Blocked `400` if a participant has started-but-not-completed it (G3); auto-unpublishes (I3, #705) |
+| `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course (reversible soft take-down; no G3 lock, #705) |
+| `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course. Blocked `400` if a participant is mid-course (G3 — suggests unpublish instead); auto-unpublishes (I3, #705) |
 | `POST` | `/api/admin/content/courses/:courseId/restore` | Restore an archived course (lands in Utkast, #705) |
 | `GET` | `/api/admin/content/courses/:courseId/enrollments` | List active enrollments for a course, each with the participant + derived status (#496/EN-2) |
 | `POST` | `/api/admin/content/courses/:courseId/enrollments` | Assign — body `{ userIds?: string[], department?: string, dueAt?: string\|null }`. Individual list and/or department materialisation. Idempotent per user; audited (#496/EN-2) |

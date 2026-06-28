@@ -1,4 +1,6 @@
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { archiveModule, unpublishModule } from "../src/modules/adminContent/adminContentCommands.js";
 import { archiveCourse, unpublishCourse } from "../src/modules/course/courseCommands.js";
@@ -150,25 +152,42 @@ describe("Unified content lifecycle (#705)", () => {
     expect(republished?.activeVersionId).not.toBeNull();
   });
 
-  // G3 — kurs med påbegynt-ufullført deltaker.
-  it("blokkerer avpubliser OG arkiver av et kurs med påbegynt deltaker; fullføring frigjør (G3, I3)", async () => {
+  // G3 — kurs med påbegynt-ufullført deltaker. Arkiver blokkeres; avpubliser er bevisst tillatt
+  // (reversibel «myk» nedtaking).
+  it("blokkerer ARKIVER (ikke avpubliser) av et kurs med påbegynt deltaker; fullføring frigjør (G3, I3)", async () => {
     const sectionId = await makeSection();
-    const courseId = await makeCourse({ sectionId, published: true });
     const userId = await makeUser();
 
-    // Påbegynt: deltakeren har lest en seksjon, men ingen completion.
-    await prisma.courseSectionRead.create({ data: { userId, courseId, sectionId } });
+    // Eget kurs for avpubliser-delen (slik at vi kan republisere uten å påvirke arkiver-delen).
+    const unpubCourseId = await makeCourse({ sectionId, published: true });
+    await prisma.courseSectionRead.create({ data: { userId, courseId: unpubCourseId, sectionId } });
+    // Avpubliser er IKKE G3-låst — skal lykkes selv med påbegynt deltaker.
+    const unpubResult = await unpublishCourse(unpubCourseId, ACTOR);
+    expect(unpubResult.publishedAt).toBeNull();
 
-    await expect(unpublishCourse(courseId, ACTOR)).rejects.toThrow(/påbegynt/);
-    await expect(archiveCourse(courseId, ACTOR)).rejects.toThrow(/påbegynt/);
+    // Arkiver ER G3-låst.
+    const archCourseId = await makeCourse({ sectionId, published: true });
+    await prisma.courseSectionRead.create({ data: { userId, courseId: archCourseId, sectionId } });
+    await expect(archiveCourse(archCourseId, ACTOR)).rejects.toThrow(/midt i en gjennomføring/);
 
-    // Fullført: deltakeren har en completion → ikke lenger «påbegynt-ufullført».
-    await prisma.courseCompletion.create({
-      data: { userId, courseId, moduleSnapshotJson: "[]" },
-    });
+    // Fullført: deltakeren har en completion → ikke lenger «midt i».
+    await prisma.courseCompletion.create({ data: { userId, courseId: archCourseId, moduleSnapshotJson: "[]" } });
 
-    const result = await archiveCourse(courseId, ACTOR);
+    const result = await archiveCourse(archCourseId, ACTOR);
     expect(result.archivedAt).not.toBeNull();
     expect(result.publishedAt).toBeNull(); // I3: arkivering auto-avpubliserer kurset
+  });
+
+  // Regresjonsvakt: seksjonslistas status-merkelapp trenger activeVersionId i list-responsen.
+  // (Tidligere utelatt → alle seksjoner viste «Utkast» og Publiser-knappen så ingen effekt.)
+  it("GET /sections returnerer activeVersionId så status kan utledes", async () => {
+    const sectionId = await makeSection(); // createSection auto-publiserer
+    const res = await request(app)
+      .get("/api/admin/content/sections")
+      .set({ "x-user-id": "admin-1", "x-user-email": "admin@company.com", "x-user-name": "Admin" });
+    expect(res.status).toBe(200);
+    const row = (res.body.sections as Array<{ id: string; activeVersionId: string | null }>).find((s) => s.id === sectionId);
+    expect(row).toBeTruthy();
+    expect(row?.activeVersionId).toBeTruthy(); // publisert → status «Publisert», ikke «Utkast»
   });
 });

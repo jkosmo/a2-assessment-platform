@@ -91,14 +91,15 @@ export async function countCourseInProgressParticipants(courseId: string): Promi
   return inProgress;
 }
 
-// G3: et kurs med minst én påbegynt-ufullført deltaker kan ikke avpubliseres/arkiveres.
+// G3: et kurs med minst én påbegynt-ufullført deltaker kan ikke arkiveres (pensjoneres). Avpublisering
+// er bevisst unntatt (reversibel «myk» nedtaking) — derfor peker meldingen på Avpubliser som alternativ.
 export async function assertCourseHasNoInProgressParticipants(courseId: string, verb: string): Promise<void> {
   const count = await countCourseInProgressParticipants(courseId);
   if (count > 0) {
-    const deltaker = count === 1 ? "1 deltaker har" : `${count} deltakere har`;
+    const deltaker = count === 1 ? "1 deltaker er" : `${count} deltakere er`;
     throw new ValidationError(
-      `Kurset kan ikke ${verb} fordi ${deltaker} en påbegynt, ufullført gjennomføring. ` +
-        `Vent til de er ferdige, eller fjern påmeldingene først.`,
+      `Kurset kan ikke ${verb} fordi ${deltaker} midt i en gjennomføring. ` +
+        `Avpubliser kurset i stedet (skjuler det uten å pensjonere det), eller vent til de er ferdige.`,
     );
   }
 }

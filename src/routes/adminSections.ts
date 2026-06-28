@@ -136,6 +136,8 @@ adminSectionsRouter.get("/", async (_request, response, next) => {
       sections: sections.map((s) => ({
         id: s.id,
         title: s.title,
+        // #705: status-merkelappen i lista trenger activeVersionId (Publisert vs Utkast).
+        activeVersionId: s.activeVersionId,
         versionNo: s.activeVersion?.versionNo ?? null,
         updatedAt: s.updatedAt.toISOString(),
         archivedAt: s.archivedAt?.toISOString() ?? null,
