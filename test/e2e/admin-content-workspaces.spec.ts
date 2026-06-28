@@ -1304,6 +1304,75 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#deleteDialogText")).toContainText("Trade unions");
   });
 
+  // #705: enhetlig livssyklus — kurslista har nå Avpubliser (motstykke til Publiser) + status-merkelapp.
+  test("courses list can unpublish a published course (#705)", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      courses: [
+        {
+          id: "course-1",
+          title: { "en-GB": "Trade unions" },
+          certificationLevel: "basic",
+          moduleCount: 1,
+          updatedAt: "2026-04-18T10:30:00.000Z",
+          publishedAt: "2026-04-18T12:00:00.000Z",
+          modules: [{ moduleId: "module-1", sortOrder: 1, moduleTitle: { "en-GB": "Trade unions" } }],
+        },
+      ],
+    });
+    // The shared catch-all only matches single-segment courses/*; register the two-segment unpublish path.
+    await page.route("**/api/admin/content/courses/*/unpublish", async (route: Route) => {
+      const segments = new URL(route.request().url()).pathname.split("/");
+      const courseId = decodeURIComponent(segments[segments.length - 2] ?? "");
+      const course = state.mutableCourses.find((c) => c.id === courseId);
+      if (course) course.publishedAt = null;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+    });
+
+    await page.goto("/admin-content/courses");
+    const row = page.locator("#coursesTableBody tr").filter({ hasText: "Trade unions" });
+    await expect(row.locator(".status-badge")).toHaveText("Publisert");
+    await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await row.locator('[data-action="unpublish"]').click();
+
+    await expect.poll(() => state.mutableCourses[0]?.publishedAt ?? null).toBeNull();
+    // Etter avpublisering: status → Utkast, og Publiser-knappen kommer tilbake.
+    await expect(page.locator("#coursesTableBody tr").filter({ hasText: "Trade unions" }).locator(".status-badge")).toHaveText("Utkast");
+    await expect(page.locator('[data-action="publish"][data-course-id="course-1"]')).toBeVisible();
+  });
+
+  // #705: seksjonslista fikk samme status-merkelapp + Publiser/Avpubliser/Arkiver/Gjenopprett.
+  test("sections list shows status and runs the lifecycle actions (#705)", async ({ page }) => {
+    await mockCommonApis(page);
+    const sections: Array<{ id: string; title: string; versionNo: number; activeVersionId: string | null; archivedAt: string | null; updatedAt: string }> = [
+      { id: "section-1", title: "Intro", versionNo: 2, activeVersionId: "v2", archivedAt: null, updatedAt: "2026-04-18T10:30:00.000Z" },
+    ];
+    await page.route("**/api/admin/content/sections", async (route: Route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections }) });
+    });
+    await page.route("**/api/admin/content/sections/*/unpublish", async (route: Route) => {
+      sections[0].activeVersionId = null;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sections[0] }) });
+    });
+    await page.route("**/api/admin/content/sections/*/publish", async (route: Route) => {
+      sections[0].activeVersionId = "v2";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sections[0] }) });
+    });
+
+    // Seksjonssida er lokalisert; e2e booter på en-GB, så vi sjekker engelske etiketter her.
+    await page.goto("/admin-content/sections");
+    const row = page.locator("#sectionsTableBody tr").filter({ hasText: "Intro" });
+    await expect(row.locator(".status-badge")).toHaveText("Published");
+    await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
+
+    await row.locator('[data-action="unpublish"]').click();
+    // Etter avpublisering: status → Draft, og Publish-knappen vises.
+    const row2 = page.locator("#sectionsTableBody tr").filter({ hasText: "Intro" });
+    await expect(row2.locator(".status-badge")).toHaveText("Draft");
+    await expect(row2.locator('[data-action="publish"]')).toBeVisible();
+  });
+
   test("shell and courses routes pass an accessibility smoke check", async ({ page }) => {
     await mockCommonApis(page, {
       courses: [],

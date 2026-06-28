@@ -7,6 +7,7 @@ import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../../errors/AppError.js";
+import { assertModuleNotInAnyCourse } from "../course/contentLifecycle.js";
 import {
   generateModuleRubric,
   type AssessmentBlueprint,
@@ -699,14 +700,17 @@ export async function archiveModule(moduleId: string, actorId: string) {
     throw new Error("Module not found.");
   }
 
-  if (module.activeVersionId) {
-    throw new Error("Module must be unpublished before it can be archived.");
-  }
-
   if (module.archivedAt) {
     throw new Error("Module is already archived.");
   }
 
+  // G2 (bruk-lås): en modul som ligger i ETHVERT kurs (publisert eller utkast) kan ikke
+  // arkiveres — den ville trekkes vekk under kurset. Dette tetter hullet der en publisert
+  // modul kunne avpubliseres og deretter arkiveres mens den fortsatt lå i et publisert kurs.
+  await assertModuleNotInAnyCourse(moduleId, "arkiveres");
+
+  // I3: arkivering auto-avpubliserer (rydder activeVersionId samtidig som archivedAt settes),
+  // så tilstanden «arkivert men fortsatt publisert» aldri oppstår. Gjenopprett lander i Utkast.
   const result = await adminContentRepository.archiveModule(moduleId, new Date());
 
   await recordAuditEvent({
@@ -746,6 +750,9 @@ export async function restoreModule(moduleId: string, actorId: string) {
 
 export async function unpublishModule(moduleId: string, actorId: string) {
   await ensureModuleExists(moduleId);
+  // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et kurs — det ville gi en
+  // blindvei i kurset. Fjern den fra kursene først.
+  await assertModuleNotInAnyCourse(moduleId, "avpubliseres");
   const result = await adminContentRepository.unpublishModule(moduleId);
 
   await recordAuditEvent({

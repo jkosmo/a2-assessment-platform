@@ -7,6 +7,10 @@ import {
   updateSectionContent,
   getSection,
   listSections,
+  publishSection,
+  unpublishSection,
+  archiveSection,
+  restoreSection,
   deleteSection,
   createSectionAsset,
   listSectionAssets,
@@ -230,6 +234,44 @@ adminSectionsRouter.post("/:sectionId/assets/localize", generateLimiter, async (
   try {
     const result = await localizeSectionAssets(request.params.sectionId, parsed.data.sourceLocale);
     response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #705: enhetlig livssyklus — seksjoner får samme Publiser/Avpubliser/Arkiver/Gjenopprett som
+// moduler/kurs. Bruk-lås (G2) håndheves i kommandolaget og gir 400 med navngitte kurs.
+adminSectionsRouter.post("/:sectionId/publish", async (request, response, next) => {
+  try {
+    const section = await publishSection(request.params.sectionId, request.context?.userId);
+    response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.post("/:sectionId/unpublish", async (request, response, next) => {
+  try {
+    const section = await unpublishSection(request.params.sectionId, request.context?.userId);
+    response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.post("/:sectionId/archive", async (request, response, next) => {
+  try {
+    const section = await archiveSection(request.params.sectionId, request.context?.userId);
+    response.json({ section: toDetail(section) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminSectionsRouter.post("/:sectionId/restore", async (request, response, next) => {
+  try {
+    const section = await restoreSection(request.params.sectionId, request.context?.userId);
+    response.json({ section: toDetail(section) });
   } catch (error) {
     next(error);
   }

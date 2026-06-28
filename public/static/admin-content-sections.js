@@ -20,6 +20,11 @@ const EDITOR_LOCALES = ["nb", "nn", "en-GB"];
 const LABELS = {
   "en-GB": {
     heading: "Sections", newSection: "+ New section", colTitle: "Title", colVersion: "Version",
+    colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
+    publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
+    showArchived: "Show archived", hideArchived: "Hide archived",
+    published: "Section published.", unpublished: "Section unpublished.",
+    archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Edit", del: "Delete", empty: "No sections yet.",
     back: "← Back", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
@@ -31,6 +36,11 @@ const LABELS = {
   },
   nb: {
     heading: "Seksjoner", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
+    colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
+    publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
+    showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
+    published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
+    archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Rediger", del: "Slett", empty: "Ingen seksjoner ennå.",
     back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
@@ -42,6 +52,11 @@ const LABELS = {
   },
   nn: {
     heading: "Seksjonar", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
+    colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
+    publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
+    showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
+    published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
+    archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Rediger", del: "Slett", empty: "Ingen seksjonar enno.",
     back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
@@ -140,6 +155,22 @@ function goTo(view, sectionId) {
 // List view
 // ---------------------------------------------------------------------------
 
+// #705: status fra de samme to aksene som modul/kurs — arkivert overstyrer; ellers publisert hvis
+// en aktiv versjon er valgt, ellers utkast.
+function sectionStatus(s) {
+  if (s.archivedAt) return "archived";
+  if (s.activeVersionId) return "published";
+  return "draft";
+}
+
+function statusBadge(status) {
+  const label = status === "published" ? L("statusPublished") : status === "archived" ? L("statusArchived") : L("statusDraft");
+  return `<span class="status-badge status-badge--${status}">${escapeHtml(label)}</span>`;
+}
+
+// #705: vis/skjul arkiverte seksjoner (default skjult), likt kurslista.
+let showArchivedSections = false;
+
 async function renderListView() {
   let sections;
   try {
@@ -150,34 +181,73 @@ async function renderListView() {
     return;
   }
 
-  const rows = sections.map((s) => `<tr>
+  const hasArchived = sections.some((s) => s.archivedAt);
+  const visible = showArchivedSections ? sections : sections.filter((s) => !s.archivedAt);
+
+  // #705: samme handlings-rekkefølge og status-vokabular som modul/kurs.
+  const rows = visible.map((s) => {
+    const status = sectionStatus(s);
+    const id = escapeHtml(s.id);
+    const lifecycle = status === "archived"
+      ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
+      : status === "published"
+        ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>
+           <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`
+        : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>
+           <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
+    return `<tr>
       <td class="col-title">${escapeHtml(displayTitle(s.title))}</td>
+      <td>${statusBadge(status)}</td>
       <td>v${escapeHtml(s.versionNo ?? "1")}</td>
       <td style="white-space:nowrap">${escapeHtml(new Date(s.updatedAt).toLocaleDateString(currentLocale))}</td>
       <td class="col-actions">
-        <button class="row-action-btn" data-action="edit" data-id="${escapeHtml(s.id)}">${escapeHtml(L("edit"))}</button>
-        <button class="row-action-btn destructive" data-action="delete" data-id="${escapeHtml(s.id)}">${escapeHtml(L("del"))}</button>
+        <button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
+        ${lifecycle}
+        <button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>
       </td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
   pageContent.innerHTML = `
     <div class="page-header">
       <h1>${escapeHtml(L("heading"))}</h1>
       <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
     </div>
-    ${sections.length === 0
+    ${hasArchived ? `<div style="margin-bottom:8px"><button type="button" id="toggleArchivedSectionsBtn" class="row-action-btn">${escapeHtml(showArchivedSections ? L("hideArchived") : L("showArchived"))}</button></div>` : ""}
+    ${visible.length === 0
       ? `<div class="empty-state"><p class="empty-state-text">${escapeHtml(L("empty"))}</p></div>`
       : `<div class="sections-table-wrap"><table class="sections-table">
-          <thead><tr><th>${escapeHtml(L("colTitle"))}</th><th>${escapeHtml(L("colVersion"))}</th><th>${escapeHtml(L("colUpdated"))}</th><th class="col-actions"></th></tr></thead>
+          <thead><tr><th>${escapeHtml(L("colTitle"))}</th><th>${escapeHtml(L("colStatus"))}</th><th>${escapeHtml(L("colVersion"))}</th><th>${escapeHtml(L("colUpdated"))}</th><th class="col-actions"></th></tr></thead>
           <tbody id="sectionsTableBody">${rows}</tbody></table></div>`}`;
 
   document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
+  document.getElementById("toggleArchivedSectionsBtn")?.addEventListener("click", () => {
+    showArchivedSections = !showArchivedSections;
+    renderListView();
+  });
   document.getElementById("sectionsTableBody")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-action]");
     if (!btn) return;
-    if (btn.dataset.action === "edit") goTo("editor", btn.dataset.id);
-    else if (btn.dataset.action === "delete") deleteSection(btn.dataset.id);
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+    if (action === "edit") goTo("editor", id);
+    else if (action === "delete") deleteSection(id);
+    else if (action === "publish") sectionLifecycle(id, "publish", "published");
+    else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
+    else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
+    else if (action === "restore") sectionLifecycle(id, "restore", "restored");
   });
+}
+
+// #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}).
+async function sectionLifecycle(sectionId, action, toastKey) {
+  try {
+    await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/${action}`, getHeaders, { method: "POST" });
+    showToast(L(toastKey));
+    renderListView();
+  } catch (err) {
+    showToast(err?.message ?? "Error", "error");
+  }
 }
 
 async function deleteSection(sectionId) {

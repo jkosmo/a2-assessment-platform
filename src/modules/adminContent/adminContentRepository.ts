@@ -80,9 +80,11 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     },
 
     archiveModule(moduleId: string, now: Date) {
+      // I3: arkivering auto-avpubliserer (activeVersionId nullstilles) så «arkivert men
+      // publisert» aldri oppstår. Gjenopprett (restoreModule) lander dermed i Utkast.
       return client.module.update({
         where: { id: moduleId },
-        data: { archivedAt: now },
+        data: { archivedAt: now, activeVersionId: null },
         select: { id: true, title: true, archivedAt: true },
       });
     },
