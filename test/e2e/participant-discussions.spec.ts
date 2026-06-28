@@ -160,6 +160,6 @@ test("participant: oppretter en kurs-nivå tråd, ser den i lista, åpner og sva
   await panel.locator("[data-disc-thread]").first().click();
   await panel.locator("[data-disc-reply-text]").fill("Mitt svar");
   await panel.locator("[data-disc-reply-form] button[type=submit]").click();
-  await expect(panel.locator(".discussion-reply")).toHaveCount(1);
-  await expect(panel.locator(".discussion-reply")).toContainText("Mitt svar");
+  await expect(panel.locator(".disc-reply")).toHaveCount(1);
+  await expect(panel.locator(".disc-reply")).toContainText("Mitt svar");
 });
