@@ -332,10 +332,10 @@ async function publishCourseInAdmin(courseId, triggerButton = null) {
 async function renderListView() {
   pageContent.innerHTML = `<div class="page-loading">Laster kurs…</div>`;
 
-  let courses;
+  let allCourses;
   try {
     const data = await apiFetch("/api/admin/content/courses", getHeaders);
-    courses = data.courses ?? [];
+    allCourses = data.courses ?? [];
   } catch (err) {
     pageContent.innerHTML = `
       <div class="empty-state">
@@ -345,7 +345,14 @@ async function renderListView() {
     return;
   }
 
-  if (courses.length === 0) {
+  // #673: skjul arkiverte kurs fra standardlista; en toggle viser dem (med gjenopprett).
+  const archivedCount = allCourses.filter((c) => c.archivedAt).length;
+  const courses = showArchivedCourses ? allCourses : allCourses.filter((c) => !c.archivedAt);
+  const archiveToggle = archivedCount > 0
+    ? `<button type="button" id="toggleArchivedBtn" class="btn btn-secondary">${showArchivedCourses ? "Skjul arkiverte" : `Vis arkiverte (${archivedCount})`}</button>`
+    : "";
+
+  if (allCourses.length === 0) {
     pageContent.innerHTML = `
       <div class="page-header">
         <h1>Kurs</h1>
@@ -383,7 +390,7 @@ async function renderListView() {
             : ""}
           <button class="row-action-btn" data-action="export" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Eksporter</button>
           ${course.archivedAt
-            ? ""
+            ? `<button class="row-action-btn" data-action="restore" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Gjenopprett</button>`
             : `<button class="row-action-btn" data-action="archive" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Arkiver</button>`}
           <button class="row-action-btn destructive" data-action="delete" data-course-id="${escapeHtml(course.courseId)}" data-course-title="${escapeHtml(course.title)}">Slett</button>
         </div>
@@ -397,6 +404,7 @@ async function renderListView() {
         <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
         <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs-pakke (.json)</button>
         <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
+        ${archiveToggle}
       </div>
     </div>
     <div class="courses-table-wrap">
@@ -418,6 +426,10 @@ async function renderListView() {
   document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
   document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
     document.getElementById("importCoursePackageFile")?.click();
+  });
+  document.getElementById("toggleArchivedBtn")?.addEventListener("click", () => {
+    showArchivedCourses = !showArchivedCourses;
+    renderListView();
   });
 }
 
@@ -488,6 +500,10 @@ function handleListTableClick(event) {
     archiveCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
   }
+  if (btn.dataset.action === "restore") {
+    restoreCourseInAdmin(btn.dataset.courseId, btn.dataset.courseTitle, btn);
+    return;
+  }
   if (btn.dataset.action === "delete") {
     openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
   }
@@ -506,6 +522,19 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
     await renderListView();
   } catch (err) {
     showToast(err?.message ?? "Kunne ikke arkivere kurs.", "error");
+    if (triggerButton) triggerButton.disabled = false;
+  }
+}
+
+// #673: gjenopprett et arkivert kurs (nullstill arkivering).
+async function restoreCourseInAdmin(courseId, courseTitle, triggerButton = null) {
+  if (triggerButton) triggerButton.disabled = true;
+  try {
+    await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/restore`, getHeaders, { method: "POST" });
+    showToast(`Kurset «${courseTitle}» ble gjenopprettet.`, "success");
+    await renderListView();
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke gjenopprette kurs.", "error");
     if (triggerButton) triggerButton.disabled = false;
   }
 }
@@ -945,6 +974,8 @@ let initialDetailLocaleValues = cloneCourseLocaleValues();
 // Course items being edited — modules and learning sections interleaved (#490/U3).
 // Each entry: { type: "MODULE" | "SECTION", refId, title }
 let courseModules = [];
+// #673: vis/skjul arkiverte kurs i lista (default skjult).
+let showArchivedCourses = false;
 
 // All available library modules (for the combobox)
 let allLibraryModules = [];

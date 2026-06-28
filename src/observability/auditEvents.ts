@@ -70,6 +70,7 @@ export const auditActions = {
     created: "course_created",
     published: "course_published",
     archived: "course_archived",
+    restored: "course_restored",
     completionIssued: "course_completion_issued",
   },
   enrollment: {
@@ -277,6 +278,7 @@ export type AuditMetadataByAction = {
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
   [auditActions.course.completionIssued]: EventMetadata<{
     userId: string;
     courseId: string;

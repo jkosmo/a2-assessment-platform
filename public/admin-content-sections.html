@@ -71,7 +71,8 @@
          the preview's height instead of staying pinned at its 320px minimum. */
       .editor-cols > div { display: flex; flex-direction: column; min-width: 0; }
       .editor-cols textarea { width: 100%; min-height: 320px; flex: 1 1 auto; padding: var(--space-2); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-family: var(--font-mono, monospace); font-size: 13px; resize: vertical; }
-      .editor-pane-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); margin-bottom: 4px; }
+      /* #679: hold pane-toolbaren (inkl. «Last opp bilde») synlig i høy editor. */
+      .editor-pane-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); margin-bottom: 4px; position: sticky; top: 0; z-index: 2; background: var(--color-surface); padding: 6px 0; }
       .preview-pane { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); min-height: 320px; flex: 1 1 auto; overflow-y: auto; }
       .preview-pane img { max-width: 100%; height: auto; }
       .preview-pane iframe { max-width: 100%; }

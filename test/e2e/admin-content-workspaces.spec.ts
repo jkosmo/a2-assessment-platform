@@ -998,7 +998,7 @@ test.describe("admin content browser coverage", () => {
 
   // #660 follow-up: the course list exposes an "Arkiver" action (the delete-blocked error tells
   // authors to archive instead). Archiving marks the course and removes the archive button.
-  test("course list can archive a course, which shows the Arkivert badge and hides the archive button", async ({ page }) => {
+  test("course list can archive a course, which hides it from the default list; toggle reveals it with restore (#673)", async ({ page }) => {
     const state = await mockCommonApis(page, {
       courses: [
         {
@@ -1033,10 +1033,17 @@ test.describe("admin content browser coverage", () => {
     page.once("dialog", (dialog) => dialog.accept());
     await row.locator('[data-action="archive"]').click();
 
-    // After archiving: the row carries the Arkivert badge and the archive action is gone.
+    // #673: after archiving the course is hidden from the default list; a "Vis arkiverte" toggle appears.
+    await expect(page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" })).toHaveCount(0);
+    const toggle = page.locator("#toggleArchivedBtn");
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+
+    // Now visible under the toggle: carries the Arkivert badge, archive action gone, restore present.
     const archivedRow = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await expect(archivedRow).toContainText("Arkivert");
     await expect(archivedRow.locator('[data-action="archive"]')).toHaveCount(0);
+    await expect(archivedRow.locator('[data-action="restore"]')).toBeVisible();
   });
 
   // #645/#496: the course detail form exposes a visibility (enrollmentPolicy) control so an author
