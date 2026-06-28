@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.94 - 2026-06-28
+
+fix(discussions): UX-polish av diskusjonspanelet (#495)
+
+- Fikset stablede fullbreddeknapper (arv fra global `button{width:100%}`) — egen scopet CSS gir
+  kompakte verktøylinjer med auto-bredde-knapper.
+- Panelet er nå en lett distinkt «sone» (ikon + tittel + venstre-aksent) som beholder app-ens
+  designspråk, så det er gjenkjennelig men tydelig en egen modul.
+- Moderering (Fest/Lås/Slett) samlet i en egen, dempet verktøylinje med fare-farge på Lås/Slett,
+  klart adskilt fra deltaker-handlinger (abonnement, svar). «← Tilbake» som lenke; «Svar»
+  høyrejustert primærknapp.
+- Ren stil-/markup-endring i `discussion-panel.js` + `shared.css`; ingen API-endring. e2e oppdatert.
+
 ## 1.3.93 - 2026-06-27
 
 feat(discussions): varsler + per-element toggle + brukerguide — #495 komplett (T-QA-5, T-QA-4, T-QA-6)

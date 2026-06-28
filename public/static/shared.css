@@ -973,3 +973,71 @@ dialog::backdrop {
     min-width: 40%;
   }
 }
+
+/* #495 Diskusjon / Q&A — lett distinkt «sone». Overstyrer den globale button{width:100%}
+   scopet til panelet så vi får kompakte verktøylinjer i stedet for stablede fullbreddeknapper. */
+.discussion-panel {
+  border: 1px solid var(--color-border-soft);
+  border-left: 3px solid var(--color-blue);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: var(--space-2);
+}
+.discussion-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+.discussion-head-title { font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.discussion-panel .disc-btn {
+  width: auto;
+  min-height: 0;
+  padding: 4px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+  border-radius: var(--radius-button);
+  border: 1.5px solid var(--color-blue);
+  background: transparent;
+  color: var(--color-blue);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.discussion-panel .disc-btn:hover { background: var(--color-blue-light); }
+.discussion-panel .disc-btn-primary { background: var(--color-blue); color: var(--color-surface); }
+.discussion-panel .disc-btn-ghost { border-color: transparent; color: var(--color-meta); padding: 4px 6px; }
+.discussion-panel .disc-btn-ghost:hover { background: var(--color-blue-light); color: var(--color-blue); }
+.discussion-panel .disc-btn-danger { border-color: var(--color-error); color: var(--color-error); }
+.discussion-panel .disc-btn-danger:hover { background: var(--color-error); color: var(--color-surface); }
+.disc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: var(--space-1); }
+.discussion-panel .disc-back {
+  background: none; border: none; width: auto; min-height: 0; padding: 2px 0;
+  color: var(--color-blue); cursor: pointer; font-size: 13px;
+}
+.disc-mod-toolbar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: var(--space-1); padding: 6px 8px; border-radius: 8px;
+  background: rgba(19, 78, 201, 0.05); border: 1px dashed var(--color-border-soft);
+}
+.disc-mod-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--color-meta); margin-right: 2px;
+}
+.disc-thread-list { display: flex; flex-direction: column; gap: 6px; }
+.discussion-panel .disc-thread-row {
+  width: 100%; text-align: left; display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: 8px;
+  background: var(--color-surface); cursor: pointer; min-height: 0;
+}
+.discussion-panel .disc-thread-row:hover { background: var(--color-blue-light); }
+.disc-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.disc-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+.disc-meta { color: var(--color-meta); font-size: 13px; }
+.disc-reply { border-top: 1px solid var(--color-border-soft); padding: 8px 0; }
+.disc-reply-actions { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.disc-compose { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 6px; }
+.disc-compose textarea, .discussion-panel input[type="text"] { width: 100%; box-sizing: border-box; padding: 8px; }
+.disc-compose-actions { display: flex; justify-content: flex-end; }
+.discussion-body { overflow-wrap: anywhere; }
+.discussion-body p { margin: 0 0 8px; }
