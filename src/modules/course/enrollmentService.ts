@@ -1,10 +1,11 @@
-import type { CourseEnrollmentSource } from "@prisma/client";
+import type { CourseEnrollmentSource, AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { deriveEnrollmentStatus, type EnrollmentStatus } from "./enrollmentStatus.js";
+import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.js";
 
 // #496/EN-2: enrollment service — assign/revoke/list + self-enroll + course visibility. Status is
 // always DERIVED here (never stored) from CourseCompletion + progress + dueAt, so it cannot drift.
@@ -227,4 +228,36 @@ export async function filterVisibleCourseIds(
     for (const row of enrolled) visible.add(row.courseId);
   }
   return visible;
+}
+
+// #495-follow-up (PARTICIPANT_COURSE_ONLY): er modulen del av et publisert kurs som brukeren har
+// tilgang til? Brukes til å gate frittstående modul-innlevering for deltakere — modul tatt via
+// course player passerer (modulen ligger jo i et tilgjengelig kurs).
+export async function isModuleInAccessibleCourse(input: {
+  moduleId: string;
+  userId: string;
+  roles: AppRoleType[];
+  groupIds?: string[];
+}): Promise<boolean> {
+  const links = await prisma.courseModule.findMany({
+    where: { moduleId: input.moduleId },
+    select: { courseId: true },
+  });
+  const courseIds = [...new Set(links.map((l) => l.courseId))];
+  if (courseIds.length === 0) return false;
+
+  const courses = await prisma.course.findMany({
+    where: { id: { in: courseIds }, publishedAt: { not: null }, archivedAt: null },
+    select: { id: true, enrollmentPolicy: true },
+  });
+  if (courses.length === 0) return false;
+
+  const classIds = await getUserClassIds({
+    userId: input.userId,
+    roles: input.roles,
+    groupIds: input.groupIds,
+  });
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+  const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
+  return courses.some((c) => visible.has(c.id));
 }

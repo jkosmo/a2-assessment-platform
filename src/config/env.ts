@@ -45,6 +45,13 @@ const envSchema = z.object({
     .string()
     .transform((value) => value.toLowerCase() === "true")
     .default("false"),
+  // #495-follow-up: når true (default) når deltakere moduler KUN gjennom kurs — den frittstående
+  // modul-lista og -innleveringen er gated av. Modul forblir authoring/vurderings-primitivet; dette
+  // begrenser kun deltaker-overflaten. SMO/ADMIN er unntatt. Sett "false" for å gjenåpne frittstående.
+  PARTICIPANT_COURSE_ONLY: z
+    .string()
+    .transform((value) => value.toLowerCase() === "true")
+    .default("true"),
   // #690: Entra security/M365 group whose members are imported into the platform as users
   // (e.g. "Alle i A-2 Norge"). When set, an admin can run a Graph-backed sync that upserts these
   // users so they are searchable/assignable before their first login. Requires the app's managed

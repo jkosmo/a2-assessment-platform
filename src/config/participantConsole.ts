@@ -84,6 +84,8 @@ type ParticipantConsoleConfig = z.infer<typeof participantConsoleConfigSchema>;
 export type ParticipantConsoleRuntimeConfig = {
   authMode: "mock" | "entra";
   debugMode: boolean;
+  // #495-follow-up: når true skjuler deltaker-UI den frittstående modul-lista (kun kurs).
+  courseOnly: boolean;
   mockRoleSwitchEnabled: boolean;
   mockRolePresets: ParticipantConsoleConfig["mockRolePresets"];
   navigation: { items: WorkspaceNavigationItem[] };
@@ -129,6 +131,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
   return {
     authMode: env.AUTH_MODE,
     debugMode: resolveParticipantConsoleDebugMode(),
+    courseOnly: env.PARTICIPANT_COURSE_ONLY,
     mockRoleSwitchEnabled,
     mockRolePresets: mockRoleSwitchEnabled ? config.mockRolePresets : [],
     navigation: {
