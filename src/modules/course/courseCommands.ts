@@ -74,12 +74,12 @@ export async function publishCourse(courseId: string, actorId?: string) {
 }
 
 // #705: avpubliser et kurs (motstykke til publishCourse). Symmetri med modul/seksjon.
+// Bevisst UTEN G3-lås: avpublisering er reversibel (republiser når som helst) og er den «myke»
+// måten å ta et kurs ned på mens noen er midt i det. Den harde G3-låsen gjelder kun arkivering
+// (som er pensjonering). Frontend bekrefter avpublisering med en advarsel.
 export async function unpublishCourse(courseId: string, actorId?: string) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
-
-  // G3 (aktivitets-lås): et kurs med påbegynt-ufullført deltaker kan ikke trekkes vekk.
-  await assertCourseHasNoInProgressParticipants(courseId, "avpubliseres");
 
   const updated = await prisma.course.update({
     where: { id: courseId },

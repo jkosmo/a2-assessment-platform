@@ -63,9 +63,15 @@ Dette gjør den eksisterende slett-vakta konsistent: alle tre tilbaketrekkende h
 (avpubliser/arkiver/slett) er beskyttet likt, ikke bare slett.
 
 ### G3 — Aktivitets-lås (kurs med påbegynt deltaker)  ⟵ *vedtatt: blokker hvis påbegynt*
-Et kurs som har minst én deltaker som har **påbegynt men ikke fullført** kan ikke
-**avpubliseres eller arkiveres**. «Påbegynt» = har lest minst én seksjon (`CourseSectionRead`)
-eller levert minst ett forsøk (`Submission`) på en modul i kurset, uten en `CourseCompletion`.
+Et kurs som har minst én deltaker som har **påbegynt men ikke fullført** kan ikke **arkiveres**
+(pensjoneres). «Påbegynt» = har lest minst én seksjon (`CourseSectionRead`) eller levert minst
+ett forsøk (`Submission`) på en modul i kurset, uten en `CourseCompletion`.
+
+**Avpublisering er bevisst unntatt fra G3** (justert etter staging-gjennomgang v1.5.1):
+avpublisering er reversibel (republiser når som helst) og er den «myke» måten å ta et kurs ned på
+mens noen er midt i det. Arkivering er pensjonering og forblir låst. Feilmeldingen ved blokkert
+arkivering peker derfor på Avpubliser som alternativet. (Aktivitets-signalet er varig — det fjernes
+ikke ved å trekke en påmelding — så en hard lås på avpublisering ville vært en blindvei.)
 
 ### G4 — Slett-vern (historikk)
 Kan ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.

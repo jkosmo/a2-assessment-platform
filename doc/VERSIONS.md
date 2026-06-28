@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.5.1 - 2026-06-28
+
+fix: livssyklus-justeringer fra staging-gjennomgang av v1.5.0 (#705)
+
+- **Seksjon-status viste alltid «Utkast» + Publiser-knapp uten effekt:** list-endepunktet
+  `GET /api/admin/content/sections` utelot `activeVersionId`, så klienten kunne ikke utlede status.
+  Nå inkludert. Regresjonsvakt i `m2-content-lifecycle`.
+- **Seksjonseditoren manglet Publiser-knapp (slik moduler har):** lagt til status-merkelapp +
+  Publiser/Avpubliser i editor-verktøylinja; status holdes i synk etter lagring.
+- **Kurs-avpublisering er ikke lenger G3-låst:** avpublisering er reversibel «myk» nedtaking og
+  tillates alltid; den harde G3-låsen gjelder kun **arkivering** (pensjonering). Feilmeldingen ved
+  blokkert arkivering peker nå på Avpubliser som alternativ. (Aktivitets-signalet er varig, så en
+  hard lås på avpublisering ville vært en blindvei.)
+
 ## 1.5.0 - 2026-06-28
 
 feat: enhetlig innholds-livssyklus for kurs/modul/seksjon + tett integritets-hull (#705)

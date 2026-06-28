@@ -269,13 +269,15 @@ let editing = null; // { id, title:{}, body:{}, editLocale }
 let previewTimer = null;
 
 async function renderEditorView(sectionId) {
-  editing = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale };
+  editing = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null };
 
   if (sectionId) {
     try {
       const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders);
       editing.title = parseLocalized(data.section.title);
       editing.body = parseLocalized(data.section.bodyMarkdown);
+      editing.activeVersionId = data.section.activeVersionId ?? null;
+      editing.archivedAt = data.section.archivedAt ?? null;
     } catch (err) {
       pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(err?.message ?? "Error")}</p></div>`;
       return;
@@ -283,7 +285,10 @@ async function renderEditorView(sectionId) {
   }
 
   pageContent.innerHTML = `
-    <div class="page-header-back"><a href="#" class="back-link" id="backLink">${escapeHtml(L("back"))}</a></div>
+    <div class="page-header-back" style="display:flex;align-items:center;gap:10px">
+      <a href="#" class="back-link" id="backLink">${escapeHtml(L("back"))}</a>
+      <span id="sectionStatusBadge"></span>
+    </div>
     <div class="section-editor">
       <div class="lang-tabs" id="langTabs">
         ${EDITOR_LOCALES.map((loc) => `<button type="button" class="lang-tab${loc === editing.editLocale ? " active" : ""}" data-locale="${loc}">${escapeHtml(localeLabels[loc] ?? loc)}</button>`).join("")}
@@ -309,6 +314,7 @@ async function renderEditorView(sectionId) {
       <div class="editor-actions">
         <button type="button" id="saveBtn" class="btn btn-primary">${escapeHtml(L("save"))}</button>
         <button type="button" id="translateBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("translate"))}</button>
+        <button type="button" id="sectionLifecycleBtn" class="btn btn-secondary" style="width:auto;display:none"></button>
         <span class="editor-status" id="editorStatus"></span>
       </div>
     </div>`;
@@ -333,7 +339,57 @@ async function renderEditorView(sectionId) {
     event.target.value = "";
     if (file) uploadImage(file);
   });
+  document.getElementById("sectionLifecycleBtn")?.addEventListener("click", toggleSectionLifecycle);
+  refreshSectionLifecycleUI();
   refreshPreview();
+}
+
+// #705: status i editoren (samme vokabular som modul) + Publiser/Avpubliser-knapp. Seksjoner
+// auto-publiseres ved lagring, så knappen er først og fremst for å avpublisere en live seksjon,
+// eller publisere en som er tatt ned igjen — uten å redigere innholdet.
+function editorSectionStatus() {
+  if (!editing?.id) return null;
+  if (editing.archivedAt) return "archived";
+  if (editing.activeVersionId) return "published";
+  return "draft";
+}
+
+function refreshSectionLifecycleUI() {
+  const badge = document.getElementById("sectionStatusBadge");
+  const btn = document.getElementById("sectionLifecycleBtn");
+  const status = editorSectionStatus();
+  if (badge) badge.innerHTML = status ? statusBadge(status) : "";
+  if (!btn) return;
+  if (!status || status === "archived") {
+    btn.style.display = "none";
+    return;
+  }
+  btn.style.display = "";
+  if (status === "published") {
+    btn.textContent = L("unpublish");
+    btn.dataset.action = "unpublish";
+  } else {
+    btn.textContent = L("publish");
+    btn.dataset.action = "publish";
+  }
+}
+
+async function toggleSectionLifecycle() {
+  const btn = document.getElementById("sectionLifecycleBtn");
+  if (!editing?.id || !btn) return;
+  const action = btn.dataset.action;
+  btn.disabled = true;
+  try {
+    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
+    editing.activeVersionId = data.section?.activeVersionId ?? null;
+    editing.archivedAt = data.section?.archivedAt ?? null;
+    showToast(L(action === "publish" ? "published" : "unpublished"));
+    refreshSectionLifecycleUI();
+  } catch (err) {
+    showToast(err?.message ?? "Error", "error");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function captureInputs() {
@@ -402,17 +458,23 @@ async function persistSection({ silent } = {}) {
         body: JSON.stringify({ title, bodyMarkdown }),
       });
       editing.id = data.section.id;
+      editing.activeVersionId = data.section.activeVersionId ?? editing.activeVersionId;
+      editing.archivedAt = data.section.archivedAt ?? null;
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
     } else {
       await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/title`, getHeaders, {
         method: "PATCH",
         body: JSON.stringify({ title }),
       });
-      await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/content`, getHeaders, {
+      const contentRes = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/content`, getHeaders, {
         method: "PUT",
         body: JSON.stringify({ bodyMarkdown }),
       });
+      // Lagring publiserer (latest-wins) — oppdater status så merkelappen blir riktig.
+      editing.activeVersionId = contentRes.section?.activeVersionId ?? editing.activeVersionId;
     }
+    // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
+    refreshSectionLifecycleUI();
     if (!silent) {
       showToast(L("saved"));
       if (status) status.textContent = L("saved");
