@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.4.6 - 2026-06-28
+
+fix(ux): forenklet kurs-opprettelse — nivå-valg går rett til editoren (#506)
+
+- **Kurs-opprettelse (samtale):** det mellomliggende modul-søk-steget er fjernet. Etter at
+  forfatteren har skrevet tittel og valgt sertifiseringsnivå, opprettes kurset direkte (tittel +
+  nivå, ingen moduler) og **kurs-editoren** åpnes — der både moduler OG seksjoner legges til og
+  sekvensen redigeres. Færre steg, og moduler/seksjoner håndteres samme sted.
+- Tester: oppdaterte conv-create-e2e (nivå-valg → editor, intet modul-søk-steg).
+
 ## 1.4.5 - 2026-06-28
 
 fix(ux): kompakte modul-filtre + sertifiseringsmerke ser ikke ut som knapp
