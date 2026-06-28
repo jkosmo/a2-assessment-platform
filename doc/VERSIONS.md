@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.3.95 - 2026-06-28
+
+fix(discussions): helhetlig fargekoding av status-badges (#495)
+
+Rettet semantikken i diskusjons-badgene og samlet paletten i CSS-klasser (.disc-badge--*)
+som gjenbruker app-ens etablerte badge-farger (jf. .sr-badge--*):
+
+- **Åpen → gul** (trenger svar), **Løst → grønn** (fullført), **Låst → rød** (lukket).
+  (Var tidligere semantisk bakvendt: Åpen=grønn, Løst=blå.)
+- **Spørsmål → blå** (informasjon), **Diskusjon → grå** (nøytral kategori).
+- **✓ Akseptert svar → grønn** (matcher Løst). **📌 Festet** = hvit m/gull kant (meta-markør).
+- Fargene flyttet fra inline-hex i `discussion-panel.js` til `shared.css` for et temabart,
+  helhetlig design.
+
 ## 1.3.94 - 2026-06-28
 
 fix(discussions): UX-polish av diskusjonspanelet (#495)
