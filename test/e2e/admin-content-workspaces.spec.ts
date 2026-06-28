@@ -945,7 +945,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("courses conversational flow goes straight to module selection and returns to the course list after save", async ({ page }) => {
+  test("courses conversational flow goes straight to module selection and opens the editor after save (#673-followup)", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [
         { id: "module-1", title: "Trade unions" },
@@ -966,9 +966,8 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#convModuleListContainer")).toContainText("Trade unions");
 
     await page.locator("#convCreateBtn").click();
-    await expect(page).toHaveURL(/\/admin-content\/courses$/);
-    await expect(page.getByRole("table", { name: "Kursliste" })).toBeVisible();
-    await expect(page.locator("#coursesTableBody")).toContainText("Labour rights");
+    // #673-followup: opprettelse lander i kurs-editoren (der seksjoner legges til), ikke lista.
+    await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
     await expect.poll(() => state.mutableCourses[0]?.modules?.length ?? 0).toBe(1);
   });
 
@@ -1170,7 +1169,8 @@ test.describe("admin content browser coverage", () => {
     await page.locator('[data-cert="basic"]').click();
     await page.locator("#convCreateBtn").click();
 
-    await expect(page).toHaveURL(/\/admin-content\/courses$/);
+    // #673-followup: opprettelse går nå rett til kurs-editoren (der seksjoner legges til), ikke lista.
+    await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
     await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "nn")).toBe("Arbeidsmiljøkurs");
     await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "en-GB")).toBe("Arbeidsmiljøkurs [en-GB]");
     await expect.poll(() => courseTextForLocale(state.mutableCourses[0]?.title, "nb")).toBe("Arbeidsmiljøkurs [nb]");
@@ -1224,7 +1224,7 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.locator("#convComboboxInput")).toBeVisible();
     await expect(page.locator("#convCreateBtn")).toBeVisible();
-    await expect(page.getByText("Du kan også opprette kurset direkte")).toBeVisible();
+    await expect(page.getByText("Du kan opprette kurset direkte")).toBeVisible();
   });
 
   test("courses list refreshes 'Sist endret' after saving course changes", async ({ page }) => {

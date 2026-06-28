@@ -17,6 +17,8 @@
       th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
       tr:hover { background: var(--color-row-hover); }
       .export-row { display: flex; gap: var(--space-1); flex-wrap: wrap; margin-top: var(--space-1); }
+      /* Overstyr global button{width:100%} så eksport-knappene blir kompakte og ligger på rad. */
+      .export-row button { width: auto; min-height: 0; padding: 6px 12px; font-size: 13px; }
       .report-row-button { width: auto; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-blue); cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
       .report-row-button:hover { color: var(--color-blue-strong); }
       tr.is-selected { background: color-mix(in srgb, var(--color-blue) 8%, white); }

@@ -24,7 +24,7 @@ export interface CourseModuleEntry {
 // courseItemId + discussionsEnabled (#495/T-QA-3): lar deltaker-UI feste diskusjonstråder på
 // det konkrete CourseItem og skjule panelet når diskusjon er avskrudd for elementet.
 export type CourseSequenceItem =
-  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean }
+  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean; available: boolean }
   | { type: "SECTION"; sortOrder: number; sectionId: string; courseItemId: string; title: string; read: boolean; discussionsEnabled: boolean };
 
 export interface CourseDetail extends CourseListItem {
