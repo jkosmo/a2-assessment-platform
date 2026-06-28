@@ -1032,7 +1032,23 @@ dialog::backdrop {
 }
 .discussion-panel .disc-thread-row:hover { background: var(--color-blue-light); }
 .disc-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.disc-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+.disc-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+/* Helhetlig palett — gjenbruker app-ens badge-farger (jf. .sr-badge--*). Semantikk:
+   grønn = fullført (Løst/Akseptert), gul = trenger handling (Åpen), rød = lukket (Låst),
+   blå = informasjon (Spørsmål), grå = nøytral kategori (Diskusjon). */
+.disc-badge--open      { background: #fff3db; color: #7a4b00; }   /* gul  — trenger svar */
+.disc-badge--resolved  { background: #e6f4ea; color: #12613a; }   /* grønn — løst */
+.disc-badge--locked    { background: #fbe9e7; color: #b3261e; }   /* rød  — låst */
+.disc-badge--question  { background: #e8f0fe; color: #1a5276; }   /* blå  — spørsmål */
+.disc-badge--discussion{ background: #edf1f7; color: #42526b; }   /* grå  — diskusjon */
+.disc-badge--accepted  { background: #e6f4ea; color: #12613a; }   /* grønn — akseptert svar */
+.disc-badge--pinned    { background: var(--color-surface); color: #7a4b00; border-color: #e0c068; } /* festet */
 .disc-meta { color: var(--color-meta); font-size: 13px; }
 .disc-reply { border-top: 1px solid var(--color-border-soft); padding: 8px 0; }
 .disc-reply-actions { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }

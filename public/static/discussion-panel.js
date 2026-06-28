@@ -46,17 +46,10 @@ export function mountDiscussionPanel(opts) {
     return `<button type="button" class="disc-btn ${extraClass}" data-disc-act="${action}">${escapeHtml(label)}</button>`;
   }
 
-  function badge(text, kind) {
-    const colors = {
-      open: "background:#e6f4ea;color:#137333;",
-      resolved: "background:#e8f0fe;color:#1a73e8;",
-      locked: "background:#fce8e6;color:#c5221f;",
-      question: "background:#fef7e0;color:#b06000;",
-      discussion: "background:#f1f3f4;color:#5f6368;",
-      pinned: "background:#fff;color:#b06000;border:1px solid #f0c36d;",
-      accepted: "background:#e6f4ea;color:#137333;",
-    };
-    return `<span class="disc-badge" style="${colors[kind] ?? colors.discussion}">${escapeHtml(text)}</span>`;
+  // Helhetlig badge-palett ligger i shared.css (.disc-badge--*). Semantikk: grønn=Løst/Akseptert,
+  // gul=Åpen (trenger svar), rød=Låst, blå=Spørsmål, grå=Diskusjon.
+  function badge(text, variant) {
+    return `<span class="disc-badge disc-badge--${variant}">${escapeHtml(text)}</span>`;
   }
 
   function authorName(author) {
