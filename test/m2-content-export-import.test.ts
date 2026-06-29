@@ -182,6 +182,35 @@ describe("#433 module export-import round-trip", () => {
     expect(importResponse.status).toBe(400);
     expect(importResponse.body.error).toBe("validation_error");
   });
+
+  // #528 (security): replaceExisting import into a module the actor does not own (and is not admin)
+  // must be blocked before any version is appended — closes an authz gap (combinable with auto-publish).
+  it("blocks replaceExisting import into a module the importer does not own (#528)", async () => {
+    const { moduleId } = await setupModule(`own-${Date.now()}`); // owned by admin-1
+    const envelope = (
+      await request(app).get(`/api/admin/content/modules/${moduleId}/export-package`).set(adminHeaders)
+    ).body.envelope;
+
+    const otherSmo = {
+      "x-user-id": `sec-import-${Date.now()}`,
+      "x-user-email": `imp-${Date.now()}@company.com`,
+      "x-user-name": "Other SMO",
+      "x-user-roles": "SUBJECT_MATTER_OWNER",
+    };
+    const res = await request(app)
+      .post("/api/admin/content/modules/import")
+      .set(otherSmo)
+      .send({ payload: envelope, mode: "replaceExisting", targetId: moduleId });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("module_ownership");
+
+    // Sanity: the owner (admin) can still replaceExisting into their own module.
+    const ownerRes = await request(app)
+      .post("/api/admin/content/modules/import")
+      .set(adminHeaders)
+      .send({ payload: envelope, mode: "replaceExisting", targetId: moduleId });
+    expect(ownerRes.status).toBe(201);
+  });
 });
 
 describe("#512 course export-import with learning sections", () => {

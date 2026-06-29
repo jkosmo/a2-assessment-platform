@@ -291,12 +291,14 @@ const moduleRubricResponseCodec = z.object({
         id: z.string().min(1),
         label: z.string().min(1),
         description: z.string().min(1),
-        maxScore: z.number().int().min(1).max(10),
+        // #527 (security/integritet): lås generert maxScore til 4 så den matcher assessor-kontrakten
+        // (rubric_scores 0..4 per kriterium). Tidligere 1..10 lot LLM-en styre nevneren i scoringen.
+        maxScore: z.literal(4),
         candidateVisible: z.boolean().default(true),
       }),
     )
-    .min(2)
-    .max(8),
+    .min(3)
+    .max(6),
   generatedFromTask: z.boolean().default(true),
   assessorNotes: z.string().default(""),
 });
@@ -1229,7 +1231,7 @@ ${blueprintSection}## Authoring rules
 
 - Produce 3-6 criteria. Each must name a specific dimension the task actually tests (e.g. "Trade-off between privacy and audit obligation", not "Quality of reasoning").
 - Each \`description\` must reference concrete content from the task or assessor expectations so a human assessor can apply it without guessing.
-- \`maxScore\` per criterion is an integer 1-10. Sum across all criteria should land in the range 10-30.
+- \`maxScore\` per criterion must be exactly 4, matching the assessor scale (0-4 per criterion). Produce 3-6 criteria.
 - \`id\` is short snake_case (e.g. "scenario_application", "priority_reasoning"). Stable across runs.
 - \`candidateVisible: true\` means the criterion text is appropriate to show the candidate before they submit. Set false only for criteria that would leak the expected answer.
 - \`assessorNotes\` is a short paragraph with one or two judgement calls the assessor should make consistently across submissions (e.g. don't penalise for missing X unless the task asked for it). Keep it under 60 words.
@@ -1244,7 +1246,7 @@ Return a single JSON object:
       "id": "snake_case_id",
       "label": "Short label in ${LOCALE_DISPLAY[input.locale]}",
       "description": "1-2 sentences that name what the assessor checks for, grounded in the task.",
-      "maxScore": integer 1-10,
+      "maxScore": 4,
       "candidateVisible": boolean
     }
   ],

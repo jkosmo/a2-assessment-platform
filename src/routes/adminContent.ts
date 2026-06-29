@@ -321,6 +321,12 @@ adminContentRouter.post("/modules/import", async (request, response) => {
     return;
   }
   try {
+    // #528 (security): replaceExisting legger en ny aktiv versjon på targetId. Uten eierskaps-sjekk
+    // kunne en SMO importere (og auto-publisere) en versjon inn i en modul de ikke eier. Krev eierskap
+    // (eller ADMIN) på targetId før import — speiler vakta på publish/unpublish/archive-rutene.
+    if ((data.mode ?? "createNew") === "replaceExisting" && data.targetId) {
+      await assertModuleOwnership(data.targetId, actorId, request.context?.roles ?? []);
+    }
     // Cast through unknown: zod-inferred OUTPUT types from the import side and the
     // schema-builder side are structurally identical but nominally unrelated when
     // they cross module boundaries via different re-export chains. Runtime payload
