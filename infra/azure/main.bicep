@@ -250,7 +250,10 @@ var openAiModelDeploymentName = 'a2-assessment-${openAiEnvToken}-${azureOpenAiMo
 // 3-24 chars, lowercase alphanumeric only (no hyphens), globally unique.
 var courseAssetsStorageName = toLower('a2${envCode}assets${suffix}')
 var courseAssetsContainerName = 'course-assets'
-var postgresConnectionString = 'postgresql://${uriComponent(postgresAdministratorLogin)}:${uriComponent(postgresAdministratorPassword)}@${postgresHost}:5432/${postgresDatabaseName}?schema=public&sslmode=require'
+// connection_limit/pool_timeout: Prisma defaults the pool to (cores*2+1) = 3 on the 1-core B1 app,
+// which starved under real concurrent participant load (P2024 "Timed out fetching a connection").
+// Set explicitly so web+worker+parser stay well under Postgres max_connections (50): 3 apps × 10 = 30.
+var postgresConnectionString = 'postgresql://${uriComponent(postgresAdministratorLogin)}:${uriComponent(postgresAdministratorPassword)}@${postgresHost}:5432/${postgresDatabaseName}?schema=public&sslmode=require&connection_limit=10&pool_timeout=20'
 var llmFailureAlertQuery = '''
 union isfuzzy=true AppServiceConsoleLogs, AzureDiagnostics
 | where TimeGenerated > ago(5m)
