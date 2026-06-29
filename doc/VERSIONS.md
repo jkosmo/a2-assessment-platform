@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.5 - 2026-06-29
+
+fix(security): re-implementer security-scan-funn på dagens main (#527/#528); #526 var alt fikset
+
+Tre eldre codex-genererte security-PR-er (2026-06-17) ble vurdert. #526 (SSRF via redirect-kjeder)
+var allerede fikset i main (`urlFetchService` bruker `redirect:manual` + per-hop-validering) → lukket.
+De to andre stod fortsatt åpne og er re-implementert ferskt:
+
+- **#528 (autz):** `POST /api/admin/content/modules/import` med `mode=replaceExisting` sjekker nå
+  eierskap på `targetId` (`assertModuleOwnership`) før import. Tettet hull der en SMO kunne importere
+  (og auto-publisere) en ny versjon inn i en modul de ikke eier. Verken rute eller service sjekket
+  dette før. Regresjonsvakt i `m2-content-export-import`.
+- **#527 (vurderings-integritet):** generert rubrikk-skala låst — `maxScore` må være eksakt 4 (matcher
+  assessor-skalaen 0–4) og 3–6 kriterier, i både zod-skjema og generation-prompt. Hindrer LLM-styrt
+  nevner-drift i scoringen. (Manuelle slidere er fortsatt forfatter-kontroll, utenfor dette scope.)
+
+NB: ment for **staging**-verifisering foreløpig.
+
 ## 1.6.4 - 2026-06-29
 
 feat/ux: deltaker-kursspiller — «fortsett der du slapp», riktig telling, + småfiks (#492/#714/#710)
