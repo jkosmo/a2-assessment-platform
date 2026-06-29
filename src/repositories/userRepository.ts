@@ -217,9 +217,28 @@ function parseRoleMap(): Record<string, AppRoleType> {
   return parseEntraGroupRoleMapJson(env.ENTRA_GROUP_ROLE_MAP_JSON);
 }
 
+// #705-perf(A): gruppe-synk kjørte på HVERT autentisert request (findMany + reconcile mot DB),
+// som la målbar latens på alle API-kall i Entra-modus på den Burstable-DB-en. Roller endres
+// sjelden, så vi struper synken per bruker med en in-memory TTL. Web-appen kjører som én
+// prosess (numberOfWorkers=1), så et modul-nivå cache er konsistent. getActiveRoles leser
+// fortsatt DB hvert kall, så allerede tildelte roller er alltid ferske — vi hopper kun over
+// den (idempotente) re-synkroniseringen innenfor vinduet.
+const groupSyncThrottleMs = 5 * 60 * 1000;
+const lastGroupSyncAtByUser = new Map<string, number>();
+
+// Eksponert for tester så throttle-tilstanden kan nullstilles mellom caser.
+export function resetGroupSyncThrottle() {
+  lastGroupSyncAtByUser.clear();
+}
+
 export async function syncEntraGroupRoles(userId: string, principal: AuthPrincipal, at = new Date()) {
   if (!env.ENTRA_SYNC_GROUP_ROLES) {
     return;
+  }
+
+  const lastSync = lastGroupSyncAtByUser.get(userId);
+  if (lastSync !== undefined && at.getTime() - lastSync < groupSyncThrottleMs) {
+    return; // synket nylig — hopp over DB-arbeidet for dette requestet
   }
 
   const map = parseRoleMap();
@@ -264,4 +283,7 @@ export async function syncEntraGroupRoles(userId: string, principal: AuthPrincip
       });
     }
   }
+
+  // Marker som synket først etter vellykket reconcile (så et kast → retry neste request).
+  lastGroupSyncAtByUser.set(userId, at.getTime());
 }
