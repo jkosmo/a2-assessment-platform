@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.4 - 2026-06-29
+
+feat/ux: deltaker-kursspiller — «fortsett der du slapp», riktig telling, + småfiks (#492/#714/#710)
+
+- **#492 (resume):** kurs-spilleren viser nå «Fortsett der du slapp» / «Start kurset» som hopper rett
+  til neste uferdige element (ulest seksjon / ikke-bestått tilgjengelig modul), og uthever det neste
+  elementet i lista. Per-element-status fantes fra før (Lest/Bestått/Påbegynt).
+- **#714 (telling):** «X/18 moduler» var misvisende (18 = moduler + seksjoner). Backend
+  (`/api/courses` + `/api/courses/:id`) returnerer nå per-type tall, og deltaker-UI viser
+  «Moduler x/y · Seksjoner x/y». Regresjonsvakt i `m2-course-section-read`.
+- **#710:** «0» og tall i «Brukt i kurs»-kolonnen (seksjon-/modul-lister) ligger nå på samme linje
+  (felles boks-geometri på `.course-count-btn`/`.course-count-zero`).
+
+NB: foreløpig kun ment for **staging**-verifisering.
+
 ## 1.6.3 - 2026-06-29
 
 fix(ux): skjul dev-only «mock-identity»-kort til auth-modus er kjent (ingen flash i prod)
