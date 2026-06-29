@@ -369,6 +369,50 @@ Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. 
 - `llmEvaluation.modelName` references expected deployment
 - no sustained `llm_evaluation_failed` alerts
 
+## Production user access (Entra) — consent, group claim, roles
+
+How a real user gets into prod (`AUTH_MODE=entra`). Established 2026-06-29 when onboarding the first
+external user. There is **no in-app "assign role" UI** — roles come only from the two mechanisms below
+(`src/auth/authenticate.ts`: token `roles` claim is merged with DB roles from group-sync).
+
+**Prod app IDs (tenant `a018856e-8cf2-4ec4-bbc8-ab18058027dc`, domain `a-2.no`):**
+- Client SPA `a2-assessment-client-prod`: `c614110a-03b2-4799-bfed-7fbee03e7ce0`
+- API `a2-assessment-api-prod`: appId `3a5644c4-e5cd-4439-b5b7-9048b615eef9`, SP `536d1154-dcd5-4e72-8cd0-64da68fe6b59`
+- App role IDs (on the API app): `ADMINISTRATOR=0b490fe8-de0c-4de7-8854-feb5b8038152`, `SUBJECT_MATTER_OWNER=c032b455-384b-48fa-81d7-dc97afa847b3`
+
+**One-time setup (done):**
+1. **Admin consent** for the client app (`User.Read` + the `access_as_user` API scope). Application
+   Administrator is sufficient (these are not privileged permissions). Portal: Enterprise applications
+   → `a2-assessment-client-prod` → Permissions → *Grant admin consent*; or `az ad app permission
+   admin-consent --id c614110a-...`.
+2. **Groups claim** must be emitted or group-sync sees nothing: `groupMembershipClaims=SecurityGroup`
+   on BOTH apps (`az ad app update --id <appId> --set groupMembershipClaims=SecurityGroup`).
+
+**Role model:**
+- **PARTICIPANT (everyone):** Entra group-sync. Prod vars `ENTRA_SYNC_GROUP_ROLES=true` +
+  `ENTRA_GROUP_ROLE_MAP_JSON={"8bab5ab4-c7db-4c9c-baad-316e1ff63504":"PARTICIPANT"}` (the existing
+  "Alle i A-2 Norge" group → PARTICIPANT). These are **app settings applied by Bicep**, so changing
+  them requires a **full `deploy-azure.yml` deploy** (not code-only `deploy-app.yml`) before they take
+  effect. `syncEntraGroupRoles` runs on each login and writes `roleAssignment` rows.
+- **ADMINISTRATOR / SUBJECT_MATTER_OWNER (few individuals):** per-user **app-role assignment** on the
+  API enterprise app — no group, no deploy needed (read live from the token `roles` claim). Portal:
+  Enterprise applications → `a2-assessment-api-prod` → Users and groups → Add user/group. Or CLI:
+  ```bash
+  OID=$(az ad user show --id person@a-2.no --query id -o tsv)
+  az rest --method POST --url "https://graph.microsoft.com/v1.0/users/$OID/appRoleAssignments" \
+    --headers "Content-Type=application/json" \
+    --body "{\"principalId\":\"$OID\",\"resourceId\":\"536d1154-dcd5-4e72-8cd0-64da68fe6b59\",\"appRoleId\":\"<ROLE_ID>\"}"
+  ```
+- `appRoleAssignmentRequired=false` on the API SP — keep it false, otherwise group-sync participants
+  (who are NOT app-role-assigned) would be blocked from getting a token.
+- **Permissions caveat:** the tenant disallows non-admins creating security groups, and Application
+  Administrator cannot create groups or manage group membership. So dedicated role-groups need a
+  **Groups Administrator**. Until then: PARTICIPANT via the existing all-staff group, elevated roles
+  per-user via app-role assignment. Switch to dedicated groups once volume grows.
+
+**After any change, the user must sign in again** (fresh token: new groups/roles claim). Verify a
+PARTICIPANT login lands on the participant console and an elevated login sees admin-content.
+
 ## Cost guardrails
 - Resource tags: `environment`, `costCenter`, `owner`.
 - Optional monthly budget + alert via `configure-cost-guardrails.ps1`.
