@@ -1074,9 +1074,33 @@ dialog::backdrop {
 .status-badge--published { background: #e6f4ea; color: #12613a; }  /* grønn — live */
 .status-badge--archived  { background: #f0f0f0; color: #666; }     /* dempet — pensjonert */
 
-/* #705-UX(B): felles handlings-knapperad i admin-listene (seksjoner/klasser arvet ikke kurs/modul-
-   sidenes side-scopede .row-actions). Knapper grupperes og brytes pent på smale skjermer. */
-.row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* #705-UX(B): felles handlings-knapperad + knapp i admin-listene, så alle fire listene (kurs/
+   moduler/seksjoner/klasser) ser like ut. Tidligere definerte hver side sin egen .row-action-btn
+   med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig. */
+.row-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.row-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-family: inherit;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
+.row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
+.row-action-btn.destructive:hover { background: #fdf0ef; }
 
 /* #705-UX(A): felles filter-piller (Alle/Aktive/Publiserte/Arkiverte) på tvers av admin-listene,
    samme uttrykk som modul-bibliotekets .library-filter-btn. */

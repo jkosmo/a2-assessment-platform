@@ -1292,6 +1292,8 @@ test.describe("admin content browser coverage", () => {
           certificationLevel: "advanced",
           moduleCount: 3,
           updatedAt: "2026-04-18T10:30:00.000Z",
+          // #705-UX: Slett vises kun for arkiverte kurs, så denne må være arkivert.
+          archivedAt: "2026-04-18T12:00:00.000Z",
         },
       ],
     });
@@ -1299,6 +1301,8 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/courses");
 
     await expect(page.getByRole("table", { name: "Kursliste" })).toBeVisible();
+    // Arkiverte er skjult under default «Aktive»-filter — bytt til «Arkiverte».
+    await page.locator('.list-filter-btn[data-filter="archived"]').click();
     await page.locator('[data-action="delete"]').first().click();
 
     await expect(page.locator("#deleteDialog")).toHaveAttribute("open", "");

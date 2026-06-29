@@ -74,7 +74,9 @@ arkivering peker derfor på Avpubliser som alternativet. (Aktivitets-signalet er
 ikke ved å trekke en påmelding — så en hard lås på avpublisering ville vært en blindvei.)
 
 ### G4 — Slett-vern (historikk)
-Kan ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
+**Slett vises kun for arkiverte elementer** (vedtatt v1.6.1): sletting er det terminale steget
+*etter* arkivering, likt for kurs/modul/seksjon. Aktive rader viser Arkiver i stedet. I tillegg
+kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
 - **Kurs:** har `CourseCompletion` (utstedte sertifikat) → «Arkiver kurset i stedet».
 - **Modul:** har versjoner/forsøk/sertifiseringsstatus, eller er i et kurs (G2).
 - **Seksjon:** er i et kurs (G2) — dekker også leshistorikk (kun kurs-koblede seksjoner har lesinger).

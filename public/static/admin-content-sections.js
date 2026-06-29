@@ -240,8 +240,10 @@ async function renderListView() {
   const rows = visible.map((s) => {
     const status = sectionStatus(s);
     const id = escapeHtml(s.id);
+    // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
     const lifecycle = status === "archived"
-      ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
+      ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>
+         <button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>`
       : status === "published"
         ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>
            <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`
@@ -261,7 +263,6 @@ async function renderListView() {
         <div class="row-actions">
           <button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
           ${lifecycle}
-          <button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>
         </div>
       </td>
     </tr>`;
