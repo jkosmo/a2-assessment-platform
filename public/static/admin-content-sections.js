@@ -23,6 +23,8 @@ const LABELS = {
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
+    filterAll: "All", filterActive: "Active", filterPublished: "Published", filterArchived: "Archived",
+    colCourses: "Used in courses", coursesPopoverTitle: "Used in courses", noCourses: "Not used in any course.",
     published: "Section published.", unpublished: "Section unpublished.",
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Edit", del: "Delete", empty: "No sections yet.",
@@ -39,6 +41,8 @@ const LABELS = {
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
+    filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
+    colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikke brukt i noe kurs.",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Rediger", del: "Slett", empty: "Ingen seksjoner ennå.",
@@ -55,6 +59,8 @@ const LABELS = {
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
+    filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
+    colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikke brukt i noe kurs.",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Rediger", del: "Slett", empty: "Ingen seksjonar enno.",
@@ -102,6 +108,7 @@ const pageContent = document.getElementById("pageContent");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const localeSelect = document.getElementById("localeSelect");
+const navKalibrering = document.getElementById("navKalibrering");
 const appVersionLabel = document.getElementById("appVersion");
 
 function escapeHtml(value) {
@@ -168,21 +175,66 @@ function statusBadge(status) {
   return `<span class="status-badge status-badge--${status}">${escapeHtml(label)}</span>`;
 }
 
-// #705: vis/skjul arkiverte seksjoner (default skjult), likt kurslista.
-let showArchivedSections = false;
+// #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
+let sectionsFilter = "active";
+let allSections = []; // siste hentede liste — slås opp av «Brukt i kurs»-popoveren.
+
+// #705-UX(G): popover som viser hvilke kurs en seksjon brukes i (likt modul-biblioteket).
+function showSectionCoursesPopover(anchor, sectionId) {
+  const section = allSections.find((s) => s.id === sectionId);
+  if (!section) return;
+  document.getElementById("sectionCoursesPopover")?.remove();
+  const pop = document.createElement("div");
+  pop.id = "sectionCoursesPopover";
+  pop.className = "courses-popover";
+  pop.setAttribute("role", "dialog");
+  const items = (section.courses ?? []).map((c) => `<li>${escapeHtml(c.title ?? c.id)}</li>`).join("")
+    || `<li><em>${escapeHtml(L("noCourses"))}</em></li>`;
+  pop.innerHTML = `<p class="courses-popover-title">${escapeHtml(L("coursesPopoverTitle"))}</p><ul class="courses-popover-list">${items}</ul>`;
+  document.body.appendChild(pop);
+  const rect = anchor.getBoundingClientRect();
+  pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+  pop.style.left = `${rect.left + window.scrollX}px`;
+  const close = (e) => {
+    if (!pop.contains(e.target) && e.target !== anchor) {
+      pop.remove();
+      document.removeEventListener("click", close, true);
+    }
+  };
+  setTimeout(() => document.addEventListener("click", close, true), 0);
+}
+
+function filterSections(sections) {
+  if (sectionsFilter === "all") return sections;
+  if (sectionsFilter === "archived") return sections.filter((s) => s.archivedAt);
+  if (sectionsFilter === "published") return sections.filter((s) => !s.archivedAt && s.activeVersionId);
+  return sections.filter((s) => !s.archivedAt); // active
+}
+
+function sectionFilterBar() {
+  const pills = [
+    ["all", L("filterAll")],
+    ["active", L("filterActive")],
+    ["published", L("filterPublished")],
+    ["archived", L("filterArchived")],
+  ];
+  return `<div class="list-filters" role="group" aria-label="Filtrer seksjoner">${pills
+    .map(([key, label]) => `<button type="button" class="list-filter-btn${sectionsFilter === key ? " active" : ""}" data-filter="${key}">${escapeHtml(label)}</button>`)
+    .join("")}</div>`;
+}
 
 async function renderListView() {
   let sections;
   try {
     const data = await apiFetch("/api/admin/content/sections", getHeaders);
     sections = data.sections ?? [];
+    allSections = sections;
   } catch (err) {
     pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(L("loadError"))}</p><p class="empty-state-text">${escapeHtml(err?.message ?? "")}</p></div>`;
     return;
   }
 
-  const hasArchived = sections.some((s) => s.archivedAt);
-  const visible = showArchivedSections ? sections : sections.filter((s) => !s.archivedAt);
+  const visible = filterSections(sections);
 
   // #705: samme handlings-rekkefølge og status-vokabular som modul/kurs.
   const rows = visible.map((s) => {
@@ -195,15 +247,22 @@ async function renderListView() {
            <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`
         : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>
            <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
+    const courseCount = Number(s.courseCount ?? 0);
+    const courseCell = courseCount > 0
+      ? `<button class="course-count-btn" data-id="${id}" aria-label="${courseCount}">${courseCount}</button>`
+      : `<span class="course-count-zero">0</span>`;
     return `<tr>
       <td class="col-title">${escapeHtml(displayTitle(s.title))}</td>
       <td>${statusBadge(status)}</td>
       <td>v${escapeHtml(s.versionNo ?? "1")}</td>
+      <td>${courseCell}</td>
       <td style="white-space:nowrap">${escapeHtml(new Date(s.updatedAt).toLocaleDateString(currentLocale))}</td>
       <td class="col-actions">
-        <button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
-        ${lifecycle}
-        <button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>
+        <div class="row-actions">
+          <button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
+          ${lifecycle}
+          <button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>
+        </div>
       </td>
     </tr>`;
   }).join("");
@@ -213,19 +272,23 @@ async function renderListView() {
       <h1>${escapeHtml(L("heading"))}</h1>
       <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
     </div>
-    ${hasArchived ? `<div style="margin-bottom:8px"><button type="button" id="toggleArchivedSectionsBtn" class="row-action-btn">${escapeHtml(showArchivedSections ? L("hideArchived") : L("showArchived"))}</button></div>` : ""}
+    ${sectionFilterBar()}
     ${visible.length === 0
       ? `<div class="empty-state"><p class="empty-state-text">${escapeHtml(L("empty"))}</p></div>`
       : `<div class="sections-table-wrap"><table class="sections-table">
-          <thead><tr><th>${escapeHtml(L("colTitle"))}</th><th>${escapeHtml(L("colStatus"))}</th><th>${escapeHtml(L("colVersion"))}</th><th>${escapeHtml(L("colUpdated"))}</th><th class="col-actions"></th></tr></thead>
+          <thead><tr><th>${escapeHtml(L("colTitle"))}</th><th>${escapeHtml(L("colStatus"))}</th><th>${escapeHtml(L("colVersion"))}</th><th>${escapeHtml(L("colCourses"))}</th><th>${escapeHtml(L("colUpdated"))}</th><th class="col-actions"></th></tr></thead>
           <tbody id="sectionsTableBody">${rows}</tbody></table></div>`}`;
 
   document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
-  document.getElementById("toggleArchivedSectionsBtn")?.addEventListener("click", () => {
-    showArchivedSections = !showArchivedSections;
+  pageContent.querySelector(".list-filters")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-filter]");
+    if (!btn) return;
+    sectionsFilter = btn.dataset.filter;
     renderListView();
   });
   document.getElementById("sectionsTableBody")?.addEventListener("click", (event) => {
+    const courseBtn = event.target.closest(".course-count-btn");
+    if (courseBtn) { showSectionCoursesPopover(courseBtn, courseBtn.dataset.id); return; }
     const btn = event.target.closest("[data-action]");
     if (!btn) return;
     const id = btn.dataset.id;
@@ -622,6 +685,14 @@ function renderWorkspaceNavigation() {
   renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker, items, buildLabel: (item) => tNav(item.labelKey) || item.id });
 }
 
+// #705-UX(H): vis Kalibrering-fanen for brukere med kalibreringstilgang (likt kurs/modul-sidene).
+function renderContentAreaNav() {
+  const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
+  const userRoles = new Set(resolveActiveWorkspaceRoles());
+  const hasCalibrationRole = [...calibrationRoles].some((r) => userRoles.has(r));
+  if (navKalibrering) navKalibrering.hidden = !hasCalibrationRole;
+}
+
 async function init() {
   try {
     const cfg = await getConsoleConfig();
@@ -648,6 +719,7 @@ async function init() {
 
   buildLocaleSelector();
   renderWorkspaceNavigation();
+  renderContentAreaNav();
 
   await initConsentGuard(getHeaders, currentLocale);
 

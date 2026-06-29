@@ -3,12 +3,29 @@ import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
+import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
 const pageContent = document.getElementById("pageContent");
 const workspaceNav = document.getElementById("workspaceNav");
+const localePicker = document.querySelector(".locale-picker");
+const localeSelect = document.getElementById("localeSelect");
+const navKalibrering = document.getElementById("navKalibrering");
 const appVersionLabel = document.getElementById("appVersion");
+
+// #705-UX(D): klasser-siden manglet i18n-oppslag, så topp-navet viste råe nøkler (nav.participant …).
+let currentLocale = (() => {
+  const stored = localStorage.getItem("participant.locale");
+  if (stored && supportedLocales.includes(stored)) return stored;
+  const b = navigator.language?.toLowerCase() ?? "";
+  if (b.startsWith("nb")) return "nb";
+  if (b.startsWith("nn")) return "nn";
+  return "en-GB";
+})();
+function tNav(key) {
+  return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
+}
 
 let _headerValues = {};
 let participantRuntimeConfig = {};
@@ -55,8 +72,10 @@ async function renderListView() {
       <td>${c._count?.members ?? 0}</td>
       <td>${c._count?.courseAssignments ?? 0}</td>
       <td class="col-actions">
-        <button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>
-        ${c.isSystem ? "" : `<button class="row-action-btn destructive" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`}
+        <div class="row-actions">
+          <button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>
+          ${c.isSystem ? "" : `<button class="row-action-btn destructive" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`}
+        </div>
       </td>
     </tr>`).join("");
   pageContent.innerHTML = `
@@ -260,7 +279,27 @@ function renderWorkspaceNavigation() {
     resolveActiveWorkspaceRoles().join(","),
     window.location.pathname,
   );
-  renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker: null, items, buildLabel: (item) => item.labelKey || item.id });
+  // #705-UX(D): resolver via tNav slik at etikettene oversettes i stedet for å vise råe nøkler.
+  renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker, items, buildLabel: (item) => tNav(item.labelKey) || item.id });
+}
+
+// #705-UX(H): vis Kalibrering-fanen for brukere med kalibreringstilgang (likt kurs/modul-sidene).
+function renderContentAreaNav() {
+  const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
+  const userRoles = new Set(resolveActiveWorkspaceRoles());
+  const hasCalibrationRole = [...calibrationRoles].some((r) => userRoles.has(r));
+  if (navKalibrering) navKalibrering.hidden = !hasCalibrationRole;
+}
+
+function buildLocaleSelector() {
+  if (!localeSelect) return;
+  localeSelect.innerHTML = supportedLocales.map((l) => `<option value="${l}"${l === currentLocale ? " selected" : ""}>${localeLabels[l] ?? l}</option>`).join("");
+  localeSelect.addEventListener("change", () => {
+    currentLocale = localeSelect.value;
+    localStorage.setItem("participant.locale", currentLocale);
+    renderWorkspaceNavigation();
+    renderListView();
+  });
 }
 
 async function init() {
@@ -288,8 +327,10 @@ async function init() {
   } catch {
     _headerValues = {};
   }
+  buildLocaleSelector();
   renderWorkspaceNavigation();
-  await initConsentGuard(getHeaders, "nb");
+  renderContentAreaNav();
+  await initConsentGuard(getHeaders, currentLocale);
   try {
     const body = await apiFetch("/version", { headers: {} });
     if (appVersionLabel) appVersionLabel.textContent = `v${body.version ?? "unknown"}`;

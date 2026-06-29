@@ -55,6 +55,7 @@ describe("admin content courses state helpers", () => {
         updatedLabel: "formatted:2026-04-18T10:30:00.000Z",
         publishedAt: null,
         archivedAt: null,
+        inProgressCount: 0,
       },
       {
         courseId: "course-2",
@@ -64,6 +65,7 @@ describe("admin content courses state helpers", () => {
         updatedLabel: "formatted:2026-03-02T08:15:00.000Z",
         publishedAt: "2026-03-02T08:15:00.000Z",
         archivedAt: null,
+        inProgressCount: 0,
       },
     ]);
   });

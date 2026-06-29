@@ -22,6 +22,7 @@ import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
 import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
+import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 
 const adminCoursesRouter = Router();
@@ -111,7 +112,11 @@ adminCoursesRouter.post("/localize-copy", generateLimiter, async (request, respo
 adminCoursesRouter.get("/", async (_request, response, next) => {
   try {
     const courses = await courseRepository.listCourses();
-    const items: AdminCourseListItem[] = courses.map((c) => ({
+    // #705-UX(F): vis antall påbegynte-ufullførte deltakere per kurs (samme signal som G3-vakta).
+    const inProgressCounts = await Promise.all(
+      courses.map((c) => countCourseInProgressParticipants(c.id)),
+    );
+    const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
       description: c.description,
@@ -120,6 +125,7 @@ adminCoursesRouter.get("/", async (_request, response, next) => {
       updatedAt: c.updatedAt.toISOString(),
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
+      inProgressCount: inProgressCounts[i],
     }));
     response.json({ courses: items });
   } catch (error) {

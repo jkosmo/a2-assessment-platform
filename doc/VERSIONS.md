@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.0 - 2026-06-29
+
+feat(ux): samkjørt innholdsforvaltning — Kurs/Moduler/Seksjoner/Klasser likere (#705-UX)
+
+UI-konsistens-runde etter staging-gjennomgang av de fire admin-listene:
+
+- **(D) Klasser-toppnav viste råe i18n-nøkler** («nav.participant» …) — klasser-siden manglet
+  i18n-oppslag. Lagt til oversettelse (tNav) + språkvelger. E2e-guard bruker nå en ekte nøkkel.
+- **(H) Kalibrering-fanen manglet** på Seksjoner og Klasser — lagt til (vises rollestyrt, likt
+  Kurs/Moduler).
+- **(E) «Innholdsforvaltning» åpner nå på Kurs** (ikke modul-biblioteket). Modul-biblioteket er
+  fortsatt på /admin-content via «Moduler»-fanen.
+- **(A) Filter-piller** (Alle/Aktive/Publiserte/Arkiverte) på Kurs og Seksjoner, samme uttrykk som
+  modul-biblioteket (erstatter «Vis arkiverte»-toggelen). Delt `.list-filter-btn` i shared.css.
+- **(B) Felles knapperad** (`.row-actions`) i alle listene.
+- **(F) Kurslista viser «Påbegynt»** — antall deltakere midt i kurset (samme signal som G3-vakta).
+- **(G) Seksjonslista viser «Brukt i kurs»** med popover (samme som modul-biblioteket).
+- **(C)** Kurslista viste allerede «Antall moduler» (uendret).
+- Småavvik: Klasser fikk språkvelger; delt status-/popover-CSS flyttet til shared.css.
+- Nye API-felt: `inProgressCount` på kurslista, `courseCount`/`courses` på seksjonslista.
+
 ## 1.5.1 - 2026-06-28
 
 fix: livssyklus-justeringer fra staging-gjennomgang av v1.5.0 (#705)

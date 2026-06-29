@@ -1073,3 +1073,41 @@ dialog::backdrop {
 .status-badge--draft     { background: #edf1f7; color: #42526b; }  /* grå  — utkast (ikke synlig) */
 .status-badge--published { background: #e6f4ea; color: #12613a; }  /* grønn — live */
 .status-badge--archived  { background: #f0f0f0; color: #666; }     /* dempet — pensjonert */
+
+/* #705-UX(B): felles handlings-knapperad i admin-listene (seksjoner/klasser arvet ikke kurs/modul-
+   sidenes side-scopede .row-actions). Knapper grupperes og brytes pent på smale skjermer. */
+.row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* #705-UX(A): felles filter-piller (Alle/Aktive/Publiserte/Arkiverte) på tvers av admin-listene,
+   samme uttrykk som modul-bibliotekets .library-filter-btn. */
+.list-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--space-2); }
+.list-filter-btn {
+  width: auto;
+  min-height: 0;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-meta);
+  cursor: pointer;
+}
+.list-filter-btn:hover { border-color: var(--color-link-hover-border); color: var(--color-text); }
+.list-filter-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
+
+/* #705-UX(G): «Brukt i kurs»-teller + popover, delt så seksjonslista matcher modul-biblioteket. */
+.course-count-btn {
+  background: none; border: none; padding: 2px 6px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border-radius: 4px; color: var(--color-link-active); text-decoration: underline;
+}
+.course-count-btn:hover { background: var(--color-blue-light); }
+.course-count-zero { color: var(--color-meta); font-size: 13px; }
+.courses-popover {
+  position: fixed; z-index: 200; background: var(--color-surface);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  box-shadow: 0 4px 20px rgba(0,0,0,.12); padding: var(--space-1); min-width: 200px; max-width: 320px;
+}
+.courses-popover-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin: 0 0 6px; }
+.courses-popover-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.courses-popover-list li { font-size: 13px; color: var(--color-text); padding: 2px 0; }
