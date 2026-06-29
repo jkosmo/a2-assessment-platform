@@ -525,6 +525,14 @@ body.auth-entra .mock-identity-card {
   display: none;
 }
 
+/* Skjul dev-only mock-identity-/rollevelger-kortet til runtime auth-modus er kjent, så det aldri
+   blinker i prod/stage (entra) før config er lastet. Sidene starter med <body class="auth-resolving">
+   og JS fjerner klassen etter at /participant/config er hentet. (Ingen sikkerhetsrisiko — mock-
+   headerne ignoreres server-side i entra-modus — men dev-UI skal ikke vises for ekte brukere.) */
+body.auth-resolving .mock-identity-card {
+  display: none !important;
+}
+
 .mock-identity-dev-badge {
   display: inline-block;
   font-size: 10px;
