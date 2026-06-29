@@ -315,6 +315,26 @@ function courseStatusBadge(status) {
   return `<span class="status-badge status-badge--${status}">${label}</span>`;
 }
 
+// #705-UX(A): filtrer kurslista likt modul-biblioteket. Bruker `course` slik den kommer fra API.
+function filterCourses(courses) {
+  if (coursesFilter === "all") return courses;
+  if (coursesFilter === "archived") return courses.filter((c) => c.archivedAt);
+  if (coursesFilter === "published") return courses.filter((c) => !c.archivedAt && c.publishedAt);
+  return courses.filter((c) => !c.archivedAt); // active
+}
+
+function courseFilterBar() {
+  const pills = [
+    ["all", "Alle"],
+    ["active", "Aktive"],
+    ["published", "Publiserte"],
+    ["archived", "Arkiverte"],
+  ];
+  return `<div class="list-filters" role="group" aria-label="Filtrer kurs">${pills
+    .map(([key, label]) => `<button type="button" class="list-filter-btn${coursesFilter === key ? " active" : ""}" data-filter="${key}">${label}</button>`)
+    .join("")}</div>`;
+}
+
 async function publishCourseInAdmin(courseId, triggerButton = null) {
   if (!courseId) return;
   if (triggerButton) triggerButton.disabled = true;
@@ -357,12 +377,10 @@ async function renderListView() {
     return;
   }
 
-  // #673: skjul arkiverte kurs fra standardlista; en toggle viser dem (med gjenopprett).
-  const archivedCount = allCourses.filter((c) => c.archivedAt).length;
-  const courses = showArchivedCourses ? allCourses : allCourses.filter((c) => !c.archivedAt);
-  const archiveToggle = archivedCount > 0
-    ? `<button type="button" id="toggleArchivedBtn" class="btn btn-secondary">${showArchivedCourses ? "Skjul arkiverte" : `Vis arkiverte (${archivedCount})`}</button>`
-    : "";
+  // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket, i stedet
+  // for den gamle «Vis arkiverte»-toggelen.
+  const courses = filterCourses(allCourses);
+  const archiveToggle = courseFilterBar(allCourses);
 
   if (allCourses.length === 0) {
     pageContent.innerHTML = `
@@ -407,6 +425,7 @@ async function renderListView() {
       <td class="col-status">${courseStatusBadge(status)}</td>
       <td class="col-level">${certBadge(course.certificationLevel)}</td>
       <td class="col-module-count">${course.moduleCount}</td>
+      <td class="col-inprogress">${course.inProgressCount > 0 ? course.inProgressCount : "–"}</td>
       <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
       <td class="col-actions">
         <div class="row-actions">
@@ -427,9 +446,9 @@ async function renderListView() {
         <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
         <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs-pakke (.json)</button>
         <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
-        ${archiveToggle}
       </div>
     </div>
+    ${archiveToggle}
     <div class="courses-table-wrap">
       <table class="courses-table" aria-label="Kursliste">
         <thead>
@@ -438,6 +457,7 @@ async function renderListView() {
             <th scope="col">Status</th>
             <th scope="col">Sertifiseringsnivå</th>
             <th scope="col">Antall moduler</th>
+            <th scope="col" title="Deltakere som er midt i kurset (påbegynt, ikke fullført)">Påbegynt</th>
             <th scope="col">Sist endret</th>
             <th scope="col">Handlinger</th>
           </tr>
@@ -451,8 +471,10 @@ async function renderListView() {
   document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
     document.getElementById("importCoursePackageFile")?.click();
   });
-  document.getElementById("toggleArchivedBtn")?.addEventListener("click", () => {
-    showArchivedCourses = !showArchivedCourses;
+  pageContent.querySelector(".list-filters")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-filter]");
+    if (!btn) return;
+    coursesFilter = btn.dataset.filter;
     renderListView();
   });
 }
@@ -1023,8 +1045,9 @@ let initialDetailLocaleValues = cloneCourseLocaleValues();
 // Course items being edited — modules and learning sections interleaved (#490/U3).
 // Each entry: { type: "MODULE" | "SECTION", refId, title }
 let courseModules = [];
-// #673: vis/skjul arkiverte kurs i lista (default skjult).
-let showArchivedCourses = false;
+// #705-UX(A): aktivt filter i kurslista (Alle/Aktive/Publiserte/Arkiverte). Default «Aktive»
+// (skjuler arkiverte), som den gamle default-visningen.
+let coursesFilter = "active";
 
 // All available library modules (for the combobox)
 let allLibraryModules = [];

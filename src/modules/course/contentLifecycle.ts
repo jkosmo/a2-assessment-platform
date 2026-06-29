@@ -32,6 +32,29 @@ export function findCoursesContainingSection(sectionId: string) {
   return coursesContaining({ sectionId });
 }
 
+// #705-UX(G): batch — hvilke kurs bruker hver av disse seksjonene (for «Brukt i kurs»-kolonnen i
+// seksjonslista, med samme popover som modul-biblioteket). Ett spørsmål for alle seksjonene.
+export async function findCoursesForSections(
+  sectionIds: string[],
+): Promise<Map<string, Array<{ id: string; title: string }>>> {
+  const result = new Map<string, Array<{ id: string; title: string }>>();
+  if (sectionIds.length === 0) return result;
+  const items = await prisma.courseItem.findMany({
+    where: { sectionId: { in: sectionIds }, itemType: "SECTION" },
+    select: { sectionId: true, course: { select: { id: true, title: true } } },
+  });
+  for (const item of items) {
+    if (!item.sectionId || !item.course) continue;
+    const list = result.get(item.sectionId) ?? [];
+    // Unngå duplikater hvis en seksjon skulle forekomme flere ganger.
+    if (!list.some((c) => c.id === item.course.id)) {
+      list.push({ id: item.course.id, title: courseDisplayTitle(item.course.title) });
+    }
+    result.set(item.sectionId, list);
+  }
+  return result;
+}
+
 function inUseMessage(
   subject: "Modulen" | "Seksjonen",
   verb: string,

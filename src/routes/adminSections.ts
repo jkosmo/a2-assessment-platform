@@ -17,6 +17,7 @@ import {
   localizeSectionAssets,
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
+import { findCoursesForSections } from "../modules/course/contentLifecycle.js";
 import { localizedTextPatchSchema, generationLocaleSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
@@ -132,16 +133,23 @@ adminSectionsRouter.post("/localize", generateLimiter, async (request, response,
 adminSectionsRouter.get("/", async (_request, response, next) => {
   try {
     const sections = await listSections();
+    // #705-UX(G): «Brukt i kurs»-kolonne med popover (likt modul-biblioteket).
+    const coursesBySection = await findCoursesForSections(sections.map((s) => s.id));
     response.json({
-      sections: sections.map((s) => ({
-        id: s.id,
-        title: s.title,
-        // #705: status-merkelappen i lista trenger activeVersionId (Publisert vs Utkast).
-        activeVersionId: s.activeVersionId,
-        versionNo: s.activeVersion?.versionNo ?? null,
-        updatedAt: s.updatedAt.toISOString(),
-        archivedAt: s.archivedAt?.toISOString() ?? null,
-      })),
+      sections: sections.map((s) => {
+        const courses = coursesBySection.get(s.id) ?? [];
+        return {
+          id: s.id,
+          title: s.title,
+          // #705: status-merkelappen i lista trenger activeVersionId (Publisert vs Utkast).
+          activeVersionId: s.activeVersionId,
+          versionNo: s.activeVersion?.versionNo ?? null,
+          updatedAt: s.updatedAt.toISOString(),
+          archivedAt: s.archivedAt?.toISOString() ?? null,
+          courseCount: courses.length,
+          courses,
+        };
+      }),
     });
   } catch (error) {
     next(error);

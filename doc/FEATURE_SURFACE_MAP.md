@@ -220,3 +220,22 @@ fallback (that is only a safety net, #502-followup). Canonical model: `doc/desig
 | Shared badge style | `public/static/shared.css` → `.status-badge--{draft,published,archived}` | library has its own scoped `.status-badge` modifiers (richer module statuses) |
 
 **Guards:** `test/m2-content-lifecycle.test.ts` (G2/G3/I3 across all three); `test/m2-module-archive.test.ts` (archive auto-unpublishes); `test/e2e/admin-content-workspaces.spec.ts` "courses list can unpublish a published course (#705)" + "sections list shows status and runs the lifecycle actions (#705)".
+
+## 14. Admin-content list pages — shared shape across Kurs/Moduler/Seksjoner/Klasser (#705-UX)
+
+The four admin-content list pages are intentionally aligned so an author recognises the same shape
+everywhere. A change to any shared element (filter pills, status badge, action-button row, the
+"used in courses" popover, the top-nav i18n, the Kalibrering tab) should be applied to all relevant
+pages — they are separate static JS/HTML files, so consistency is by convention, not a component.
+
+| Shared element | Where | Notes |
+|----------------|-------|-------|
+| Filter pills | `.list-filters`/`.list-filter-btn` in `shared.css`; built per page (`courseFilterBar`/`sectionFilterBar`; modules uses its own `.library-filter-btn`) | Alle/Aktive/Publiserte/Arkiverte |
+| Status badge | `.status-badge--{draft,published,archived}` in `shared.css` (entry #13) | Utkast/Publisert/Arkivert |
+| Action row | `.row-actions` in `shared.css` | wraps `.row-action-btn` group |
+| "Used in courses" popover | `.course-count-btn`/`.courses-popover` in `shared.css`; `showCoursesPopover` (library), `showSectionCoursesPopover` (sections) | count + click popover |
+| Top workspace nav i18n | each page's `renderWorkspaceNavigation` `buildLabel: (item) => tNav/t(item.labelKey)` | **never** render `item.labelKey` raw (was the classes bug, D) |
+| Kalibrering tab + reveal | `#navKalibrering` in each `.html` + `renderContentAreaNav()` role-gate in each page JS | role-gated visibility |
+| Landing entry | capability `admin-content` path = `/admin-content/courses` (`src/config/capabilities.ts`) | «Innholdsforvaltning» opens on Kurs |
+
+**Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle. When adding a column/filter to one list, mirror it where it applies and update this entry.

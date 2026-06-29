@@ -1029,13 +1029,14 @@ test.describe("admin content browser coverage", () => {
     page.once("dialog", (dialog) => dialog.accept());
     await row.locator('[data-action="archive"]').click();
 
-    // #673: after archiving the course is hidden from the default list; a "Vis arkiverte" toggle appears.
+    // #673/#705-UX(A): after archiving the course is hidden from the default "Aktive" filter; the
+    // "Arkiverte" filter pill reveals it.
     await expect(page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" })).toHaveCount(0);
-    const toggle = page.locator("#toggleArchivedBtn");
-    await expect(toggle).toBeVisible();
-    await toggle.click();
+    const archivedFilter = page.locator('.list-filter-btn[data-filter="archived"]');
+    await expect(archivedFilter).toBeVisible();
+    await archivedFilter.click();
 
-    // Now visible under the toggle: carries the Arkivert badge, archive action gone, restore present.
+    // Now visible under the filter: carries the Arkivert badge, archive action gone, restore present.
     const archivedRow = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
     await expect(archivedRow).toContainText("Arkivert");
     await expect(archivedRow.locator('[data-action="archive"]')).toHaveCount(0);

@@ -44,6 +44,8 @@ export interface AdminCourseListItem {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  // #705-UX(F): antall deltakere som er midt i kurset (påbegynt, ikke fullført).
+  inProgressCount: number;
 }
 
 export interface AdminCourseDetail {

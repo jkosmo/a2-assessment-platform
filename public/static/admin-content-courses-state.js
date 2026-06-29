@@ -24,5 +24,6 @@ export function deriveCourseListRows(courses, { localizeTitle, formatDate }) {
     updatedLabel: formatDate(course.updatedAt ?? course.publishedAt ?? null),
     publishedAt: course.publishedAt ?? null,
     archivedAt: course.archivedAt ?? null,
+    inProgressCount: course.inProgressCount ?? 0,
   }));
 }

@@ -166,7 +166,9 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
     },
     {
       id: "admin-content",
-      path: "/admin-content",
+      // #705-UX(E): Innholdsforvaltning lander nå på Kurs (ikke modul-biblioteket). Modul-biblioteket
+      // er fortsatt på /admin-content via «Moduler»-fanen.
+      path: "/admin-content/courses",
       labelKey: "nav.adminContent",
       requiredRoles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR],
     },

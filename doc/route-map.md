@@ -6,7 +6,8 @@ This map covers all admin-content entry points and their status for pilot. Use i
 
 | Route | Workspace | HTML file | Status |
 |---|---|---|---|
-| `/admin-content` | Module library (root) | `admin-content-library.html` | **Canonical** |
+| `/admin-content` | Module library (the «Moduler» tab) | `admin-content-library.html` | **Canonical** |
+| `/admin-content/courses` (nav entry) | «Innholdsforvaltning» lander her by default (#705-UX/E) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/module/:moduleId/conversation` | Module — conversational editor | `admin-content.html` | **Canonical** |
 | `/admin-content/module/:moduleId/advanced` | Module — advanced editor | `admin-content-advanced.html` | **Canonical** |
 | `/admin-content/courses` | Course list | `admin-content-courses.html` | **Canonical** |

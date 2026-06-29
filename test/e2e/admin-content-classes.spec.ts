@@ -159,6 +159,9 @@ test("classes admin: admin buttons + top nav render in prod-shaped config (role 
           items: [
             { id: "dashboard", path: "/dashboard", labelKey: "Oversikt", requiredRoles: [] },
             { id: "review", path: "/review", labelKey: "Vurdering", requiredRoles: ["SUBJECT_MATTER_OWNER"] },
+            // #705-UX(D): a REAL i18n key — the classes page must resolve it via tNav, not render
+            // the raw key. (The earlier mock used display strings as labelKeys, hiding the bug.)
+            { id: "adminContent", path: "/admin-content/courses", labelKey: "nav.adminContent", requiredRoles: [] },
           ],
           workspaceItems: [],
         },
@@ -182,6 +185,8 @@ test("classes admin: admin buttons + top nav render in prod-shaped config (role 
   await expect(page.locator("#workspaceNav")).toBeVisible();
   await expect(page.locator('#workspaceNav a', { hasText: "Oversikt" })).toBeVisible();
   await expect(page.locator('#workspaceNav a', { hasText: "Vurdering" })).toBeVisible();
+  // #705-UX(D): the real i18n key must be resolved (translated), never rendered raw.
+  await expect(page.locator("#workspaceNav")).not.toContainText("nav.adminContent");
 });
 
 // #690 fallback: ADMINISTRATOR imports users from a JSON file → POST /api/admin/sync/org/delta.
