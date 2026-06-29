@@ -385,8 +385,13 @@ external user. There is **no in-app "assign role" UI** — roles come only from 
    Administrator is sufficient (these are not privileged permissions). Portal: Enterprise applications
    → `a2-assessment-client-prod` → Permissions → *Grant admin consent*; or `az ad app permission
    admin-consent --id c614110a-...`.
-2. **Groups claim** must be emitted or group-sync sees nothing: `groupMembershipClaims=SecurityGroup`
-   on BOTH apps (`az ad app update --id <appId> --set groupMembershipClaims=SecurityGroup`).
+2. **Groups claim** must be emitted or group-sync sees nothing: `groupMembershipClaims=All` on BOTH
+   apps (`az ad app update --id <appId> --set groupMembershipClaims=All`).
+   - **Use `All`, not `SecurityGroup`** — the participant group "Alle i A-2 Norge" is a **mail-enabled
+     distribution group** (`securityEnabled=false`), which `SecurityGroup` **excludes** from the token.
+     With `SecurityGroup` the group was missing from the access token → group-sync assigned no role →
+     every participant got 403 on `/api/courses`. `All` includes security + distribution + M365 groups.
+     Verify a group's type with `az ad group show --group <id> --query securityEnabled`. (Incident 2026-06-29.)
 
 **Role model:**
 - **PARTICIPANT (everyone):** Entra group-sync. Prod vars `ENTRA_SYNC_GROUP_ROLES=true` +
