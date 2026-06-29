@@ -81,6 +81,10 @@ coursesRouter.get("/", async (request, response, next) => {
             completed,
             total,
             courseStatus: computeCourseStatus(completed, total, hasStarted),
+            moduleCompleted: passed,
+            moduleTotal: moduleIds.length,
+            sectionCompleted: readCount,
+            sectionTotal: sectionIds.length,
           },
         };
       }),
@@ -292,6 +296,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         completed: completedElements,
         total: totalElements,
         courseStatus: computeCourseStatus(completedElements, totalElements, latestSubmissions.length > 0 || readSectionCount > 0),
+        moduleCompleted: passedCount,
+        moduleTotal: moduleIds.length,
+        sectionCompleted: readSectionCount,
+        sectionTotal: sectionCount,
       },
       modules: course.modules.map((cm) => {
         const certStatus = certStatusByModuleId.get(cm.moduleId);

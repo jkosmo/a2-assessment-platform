@@ -2850,6 +2850,35 @@ function renderParticipantCourseAccordion() {
   }
 }
 
+// #714: vis fremdrift per type («Moduler x/y · Seksjoner x/y») i stedet for den misvisende
+// «x/total moduler» (total teller med seksjoner). Faller tilbake til x/total hvis backend mangler
+// per-type-feltene (eldre respons).
+function formatCourseProgressLabel(progress) {
+  const p = progress ?? {};
+  const parts = [];
+  if ((p.moduleTotal ?? 0) > 0) parts.push(`${t("courses.progress.modules")} ${p.moduleCompleted ?? 0}/${p.moduleTotal}`);
+  if ((p.sectionTotal ?? 0) > 0) parts.push(`${t("courses.progress.sections")} ${p.sectionCompleted ?? 0}/${p.sectionTotal}`);
+  if (parts.length === 0) return `${p.completed ?? 0}/${p.total ?? 0}`;
+  return parts.join(" · ");
+}
+
+// #492: finn neste uferdige element i sekvensen (uleste seksjoner / ikke-beståtte tilgjengelige moduler).
+function findNextIncompleteEntry(sequence) {
+  if (!Array.isArray(sequence)) return null;
+  return sequence.find((e) =>
+    e.type === "SECTION" ? !e.read : e.moduleStatus !== "PASSED" && e.available !== false,
+  ) ?? null;
+}
+
+function openCourseItemEntry(courseId, entry) {
+  if (!entry) return;
+  if (entry.type === "SECTION") {
+    openSectionReader(courseId, entry.sectionId, entry.courseItemId, entry.discussionsEnabled);
+  } else {
+    openCourseModule(courseId, entry.moduleId);
+  }
+}
+
 function buildCourseAccordionItem(course) {
   const courseStatus = course.progress?.courseStatus ?? "NOT_STARTED";
   const completed = courseStatus === "COMPLETED";
@@ -2874,7 +2903,7 @@ function buildCourseAccordionItem(course) {
     <button type="button" class="course-accordion-header" aria-expanded="false">
       <span>
         <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
-        <span class="course-accordion-progress">${passedCount}/${totalCount} ${escapeHtmlP(t("courses.modulesOf"))}</span>
+        <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
       </span>
       <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
       <span class="course-accordion-chevron">&#9662;</span>
@@ -2924,11 +2953,23 @@ function renderCourseDetailModules(courseId, course) {
     // diskusjonsboardet fortsatt monteres (#495/T-QA-3).
     container.innerHTML = `<p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.noModules"))}</p>`;
   }
+  // #492: «Fortsett der du slapp» / «Start kurset» — hopp rett til neste uferdige element.
+  const nextEntry = findNextIncompleteEntry(sequence);
+  if (sequence.length > 0 && nextEntry) {
+    const anyComplete = sequence.some((e) => (e.type === "SECTION" ? e.read : e.moduleStatus === "PASSED"));
+    const resumeBtn = document.createElement("button");
+    resumeBtn.type = "button";
+    resumeBtn.className = "btn btn-primary course-resume-btn";
+    resumeBtn.textContent = anyComplete ? t("courses.resume") : t("courses.start");
+    resumeBtn.addEventListener("click", () => openCourseItemEntry(courseId, nextEntry));
+    container.appendChild(resumeBtn);
+  }
   for (const entry of sequence) {
     if (entry.type === "SECTION") {
       const sectionRow = document.createElement("button");
       sectionRow.type = "button";
       sectionRow.className = "btn-secondary course-module-row course-module-button";
+      if (entry === nextEntry) sectionRow.classList.add("course-module-row--next");
       sectionRow.addEventListener("click", () => openSectionReader(courseId, entry.sectionId, entry.courseItemId, entry.discussionsEnabled));
       const readBadge = entry.read ? t("courses.section.doneBadge") : t("courses.section.todoBadge");
       sectionRow.innerHTML = `
@@ -2956,6 +2997,7 @@ function renderCourseDetailModules(courseId, course) {
     const row = document.createElement("button");
     row.type = "button";
     row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
+    if (entry === nextEntry) row.classList.add("course-module-row--next");
     row.setAttribute("aria-pressed", selected ? "true" : "false");
     if (!available) {
       row.disabled = true;

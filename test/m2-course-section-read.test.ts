@@ -37,7 +37,8 @@ describe("Participant section read progress", () => {
     expect(before.status).toBe(200);
     const sectionBefore = (before.body.course.items as Array<{ type: string; read?: boolean }>).find((i) => i.type === "SECTION");
     expect(sectionBefore?.read).toBe(false);
-    expect(before.body.course.progress).toMatchObject({ completed: 0, total: 1 });
+    // #714: per-type oppdeling — her 0 moduler, 1 seksjon (ulest).
+    expect(before.body.course.progress).toMatchObject({ completed: 0, total: 1, moduleTotal: 0, sectionTotal: 1, sectionCompleted: 0 });
 
     // Mark read (idempotent).
     const mark1 = await request(app).post(`/api/courses/${course.id}/sections/${section.id}/read`).set(participantHeaders);
@@ -49,7 +50,7 @@ describe("Participant section read progress", () => {
     const after = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
     const sectionAfter = (after.body.course.items as Array<{ type: string; read?: boolean }>).find((i) => i.type === "SECTION");
     expect(sectionAfter?.read).toBe(true);
-    expect(after.body.course.progress).toMatchObject({ completed: 1, total: 1, courseStatus: "COMPLETED" });
+    expect(after.body.course.progress).toMatchObject({ completed: 1, total: 1, courseStatus: "COMPLETED", sectionCompleted: 1, sectionTotal: 1 });
 
     // Reading the only section of a module-less course now issues a course completion (#580):
     // remove it first since CourseCompletion → Course is onDelete: Restrict.

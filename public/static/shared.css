@@ -1129,12 +1129,18 @@ dialog::backdrop {
 .list-filter-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
 
 /* #705-UX(G): «Brukt i kurs»-teller + popover, delt så seksjonslista matcher modul-biblioteket. */
+/* #710: «0» (span) og tall-knappen må ha identisk boks-geometri så de ligger på samme linje
+   på tvers av rader. Begge: inline-block, samme padding/font/line-height, midtstilt vertikalt. */
+.course-count-btn, .course-count-zero {
+  display: inline-block; vertical-align: middle; box-sizing: border-box;
+  padding: 2px 6px; font-size: 13px; font-weight: 600; line-height: 1.5;
+}
 .course-count-btn {
-  background: none; border: none; padding: 2px 6px; font-size: 13px; font-weight: 600;
-  cursor: pointer; border-radius: 4px; color: var(--color-link-active); text-decoration: underline;
+  background: none; border: none; cursor: pointer; border-radius: 4px;
+  color: var(--color-link-active); text-decoration: underline; font-family: inherit;
 }
 .course-count-btn:hover { background: var(--color-blue-light); }
-.course-count-zero { color: var(--color-meta); font-size: 13px; }
+.course-count-zero { color: var(--color-meta); }
 .courses-popover {
   position: fixed; z-index: 200; background: var(--color-surface);
   border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);

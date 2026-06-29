@@ -9,6 +9,12 @@ export interface CourseListItem {
     completed: number;
     total: number;
     courseStatus: CourseStatus;
+    // #714: per-type oppdeling så deltaker-UI kan vise «Moduler x/y · Seksjoner x/y» i stedet for
+    // den misvisende «x/total moduler» (total = moduler + seksjoner).
+    moduleCompleted: number;
+    moduleTotal: number;
+    sectionCompleted: number;
+    sectionTotal: number;
   };
 }
 
