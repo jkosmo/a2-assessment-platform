@@ -1791,6 +1791,7 @@ async function loadParticipantConsoleConfig() {
   }
 
   document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
+  document.body.classList.remove("auth-resolving"); // auth-modus kjent → ikke vis dev-kort i prod/stage
   applyOutputVisibility();
   applyIdentityDefaults();
   if (calibrationLimitInput) {

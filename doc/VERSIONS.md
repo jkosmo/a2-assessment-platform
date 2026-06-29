@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.3 - 2026-06-29
+
+fix(ux): skjul dev-only «mock-identity»-kort til auth-modus er kjent (ingen flash i prod)
+
+Det dev-only «Testbruker / Dev only»-kortet (mock-identitet + rolle-velger) blinket i et par
+sekunder før den normale siden i prod/stage (entra), fordi sidene starter med standard `authMode:
+"mock"` og først skjuler kortet etter at `/participant/config` er lastet — synlig når DB/last er treg.
+
+- Ikke en sikkerhetssvakhet: i entra-modus ignorerer `authenticate()` mock-headerne fullstendig
+  (roller kommer fra Entra-tokenet), så rolle-velgeren kan ikke endre tilgang server-side. Men dev-UI
+  skal ikke vises for ekte brukere.
+- Fiks: sidene starter med `<body class="auth-resolving">` + `shared.css` skjuler
+  `.mock-identity-card` mens den klassen er på. JS fjerner `auth-resolving` etter at config er lastet,
+  så kortet vises kun i ekte mock-modus (lokal dev), aldri som et blink i prod/stage.
+- Berørte sider: participant, admin-content (+ advanced), admin-platform, calibration.
+
 ## 1.6.2 - 2026-06-29
 
 fix(infra): øk Prisma connection pool (connection_limit=10) — fra prod-incident

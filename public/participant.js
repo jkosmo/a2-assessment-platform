@@ -1540,6 +1540,9 @@ async function loadParticipantConsoleConfig() {
   }
 
   document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
+  // Auth-modus er nå kjent → fjern «resolving»-tilstanden (dev-kortet vises kun i ekte mock-modus,
+  // aldri som et blink i prod/stage). Se shared.css `body.auth-resolving .mock-identity-card`.
+  document.body.classList.remove("auth-resolving");
   applyOutputVisibility();
   applyIdentityDefaults();
   applyCourseOnlyMode();
