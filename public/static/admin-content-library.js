@@ -252,8 +252,11 @@ function renderLibrary() {
       ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
       : `<span class="course-count-zero">0</span>`;
 
+    // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering) — konsistent
+    // med kurs/seksjon. Sletting er vaktet i backend (blokkeres ved avhengigheter/kursbruk).
     const archiveAction = isArchived
-      ? `<button class="row-action-btn" data-action="restore" data-module-id="${escapeHtml(m.id)}">Gjenopprett</button>`
+      ? `<button class="row-action-btn" data-action="restore" data-module-id="${escapeHtml(m.id)}">Gjenopprett</button>
+         <button class="row-action-btn destructive" data-action="delete" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Slett</button>`
       : `<button class="row-action-btn" data-action="archive" data-module-id="${escapeHtml(m.id)}">Arkiver</button>`;
     // v1.2.20 (#459): Avpubliser-knapp synlig kun for moduler som er aktivt publisert
     // (published eller published_with_draft). Klikk → bekreftelses-prompt → POST /unpublish.
@@ -336,9 +339,25 @@ function handleTableClick(event) {
 
   if (action === "archive") archiveModule(moduleId, btn);
   else if (action === "restore") restoreModule(moduleId, btn);
+  else if (action === "delete") deleteModuleFromRow(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
   else if (action === "duplicate") duplicateModule(moduleId, btn);
   else if (action === "export") exportModulePackage(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
   else if (action === "unpublish") unpublishModuleFromRow(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
+}
+
+// #705-UX: slett en arkivert modul (terminal). Vaktet i backend — blokkeres med forklarende
+// melding hvis modulen har avhengigheter eller brukes i et kurs.
+async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
+  if (!window.confirm(`Slette modulen «${moduleTitle}» permanent? Dette kan ikke angres.`)) return;
+  btn.disabled = true;
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
+    showToast("Modul slettet.", "success");
+    await loadModules();
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke slette modul.", "error");
+    btn.disabled = false;
+  }
 }
 
 // #433 — per-row module export. Calls the versioned /export-package endpoint

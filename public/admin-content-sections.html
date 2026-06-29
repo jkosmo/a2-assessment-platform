@@ -47,14 +47,14 @@
 
       .sections-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
       .sections-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      .sections-table .col-title { width: 100%; }
-      .sections-table th, .sections-table td { text-align: left; padding: 10px var(--space-2); border-bottom: 1px solid var(--color-border-soft); }
+      /* #705-UX: tittel-kolonnen er den fleksible (min-width, ikke width:100% som klemte de andre
+         kolonnene + tvang handlingsknappene til å stable seg vertikalt). */
+      .sections-table .col-title { min-width: 220px; font-weight: 600; }
+      .sections-table th, .sections-table td { text-align: left; padding: 10px var(--space-2); border-bottom: 1px solid var(--color-border-soft); vertical-align: middle; }
       .sections-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); }
-      .sections-table .col-actions { text-align: right; white-space: nowrap; }
-      .row-action-btn { width: auto; background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); padding: 4px 8px; font-size: 13px; cursor: pointer; color: var(--color-text); white-space: nowrap; }
-      .sections-table .col-actions { display: flex; gap: 6px; justify-content: flex-end; }
-      .row-action-btn:hover { background: var(--color-row-hover); }
-      .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
+      /* col-actions er en vanlig celle (ikke flex) så den vokser til knapperaden og holder den
+         horisontal. .row-action-btn + .row-actions arves nå fra shared.css (felles utseende). */
+      .sections-table .col-actions { white-space: nowrap; }
 
       /* Editor */
       .section-editor { max-width: 720px; }

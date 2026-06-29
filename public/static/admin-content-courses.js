@@ -417,8 +417,11 @@ async function renderListView() {
       : status === "published"
         ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
         : "";
+    // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering). Aktive
+    // rader viser Arkiver i stedet — konsistent på tvers av kurs/modul/seksjon.
     const archiveToggleBtn = course.archivedAt
-      ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
+      ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>
+         <button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
       : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
     return `<tr>
       <td class="col-title">${ctitle}</td>
@@ -431,9 +434,8 @@ async function renderListView() {
         <div class="row-actions">
           <a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>
           ${publishToggle}
-          ${archiveToggleBtn}
           <button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>
-          <button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>
+          ${archiveToggleBtn}
         </div>
       </td>
     </tr>`;

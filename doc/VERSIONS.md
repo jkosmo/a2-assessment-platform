@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.1 - 2026-06-29
+
+fix(ux): admin-liste-polish fra staging-gjennomgang av v1.6.0 (#705-UX)
+
+- **Slett vises nå kun for arkiverte elementer** (kurs/modul/seksjon). Sletting er det terminale
+  steget *etter* arkivering — aktive rader viser Arkiver i stedet. Konsistent på tvers, og rydder
+  opp i de aktive radene. Moduler fikk dermed også en (vaktet) Slett — kun når arkivert.
+- **Felles knappestil:** `.row-action-btn` + `.row-actions` er nå kanonisk i `shared.css`. Seksjoner
+  og Klasser hadde egne, litt avvikende definisjoner (font/padding) — fjernet, arver nå felles.
+- **Seksjonslista layout:** tittel-kolonnen var `width:100%` og handlings-cellen var `display:flex`,
+  som klemte de andre kolonnene og stablet knappene vertikalt. Nå fleksibel tittel (min-width) +
+  vanlig handlings-celle → knappene ligger horisontalt og skjermbredden utnyttes som i Kurs/Moduler.
+
 ## 1.6.0 - 2026-06-29
 
 feat(ux): samkjørt innholdsforvaltning — Kurs/Moduler/Seksjoner/Klasser likere (#705-UX)
