@@ -15,6 +15,11 @@ holder når SPA-en fyrer flere parallelle `/api`-kall + auth kjører gruppe-synk
   = 3×10 = 30, godt under Postgres `max_connections=50`).
 - Prod ble hotfikset live ved å oppdatere KV-secret `DATABASE-URL` direkte + restart (ingen full
   deploy nødvendig); denne Bicep-endringen persisterer fiksen for fremtidige deploys.
+- **(A) Strupet Entra gruppe-synk:** `syncEntraGroupRoles` kjørte DB-arbeid (findMany + reconcile) på
+  HVERT autentisert request i Entra-modus, som la latens på alle API-kall (prod-vs-stage-deltaen,
+  siden stage har synk av). Nå strupet per bruker med 5-min in-memory TTL (web = én prosess).
+  `getActiveRoles` leser fortsatt DB hvert kall, så tildelte roller er alltid ferske; vi hopper kun
+  over den idempotente re-synkroniseringen innenfor vinduet. `resetGroupSyncThrottle()` for tester.
 
 ## 1.6.1 - 2026-06-29
 
