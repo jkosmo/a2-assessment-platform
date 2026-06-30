@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.6 - 2026-06-30
+
+fix(ux): kurselement-lista harmonisert med admin-oversiktene + reell #710-fiks på modul-biblioteket
+
+Oppfølging etter stage-verifisering av 1.6.4/1.6.5 (#714/#710):
+
+- **#710 (egentlig fiks):** «Brukt i kurs»-linjeringen var fortsatt skjev på **Moduler**-siden.
+  Årsak: `admin-content-library.html` hadde en lokal `<style>`-override av
+  `.course-count-btn`/`.course-count-zero` som manglet `display:inline-block`/`vertical-align`/
+  `line-height` og dermed vant over shared.css (senere i dokumentet). Override fjernet → begge
+  sider styres nå av shared.css og «0»/tall ligger på samme linje. Seksjoner-siden var alt riktig.
+- **#714 (oppfølging, kosmetisk):** deltakerens oversikt over kurselementer er gjort lik
+  admin-oversiktene: hver tilstand er nå en **pille** (ikke bare «Bestått») — grå «ikke startet /
+  ikke lest», blå «påbegynt», grønn «bestått/lest», dempet «ikke tilgjengelig». Luftigere rader,
+  fet tittel, dempet handlingsverb som type-hint, status til høyre. Inline badge-stiler flyttet
+  til CSS (`.module-status-badge`).
+
+NB: foreløpig kun ment for **staging**-verifisering.
+
 ## 1.6.5 - 2026-06-29
 
 fix(security): re-implementer security-scan-funn på dagens main (#527/#528); #526 var alt fikset

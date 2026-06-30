@@ -2977,7 +2977,7 @@ function renderCourseDetailModules(courseId, course) {
           <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(entry.title))}</span>
           <span class="course-module-row-action">${escapeHtmlP(t("courses.section.read"))}</span>
         </span>
-        <span class="module-status-badge ${entry.read ? "completed" : ""}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(readBadge)}</span>
+        <span class="module-status-badge ${entry.read ? "completed" : ""}">${escapeHtmlP(readBadge)}</span>
       `;
       container.appendChild(sectionRow);
       continue;
@@ -2985,15 +2985,18 @@ function renderCourseDetailModules(courseId, course) {
     const m = entry;
     const passed = m.moduleStatus === "PASSED";
     const inProgress = m.moduleStatus === "IN_PROGRESS";
-    const badgeText = passed ? t("courses.module.passed") : inProgress ? t("courses.module.inProgress") : t("courses.module.notStarted");
-    const badgeClass = passed ? "completed" : inProgress ? "retake" : "";
     const selected = selectedModuleId === m.moduleId;
     // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
     const available = m.available !== false;
-    // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
-    const actionText = !available
+    // #714-followup: status ligger i pillen (som admin-oversiktene) — også «ikke tilgjengelig».
+    const badgeText = !available
       ? t("courses.module.unavailableShort")
-      : selected ? t("courses.module.selectedShort") : t("courses.module.go");
+      : passed ? t("courses.module.passed")
+      : inProgress ? t("courses.module.inProgress")
+      : t("courses.module.notStarted");
+    const badgeClass = !available ? "unavailable" : passed ? "completed" : inProgress ? "retake" : "";
+    // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
+    const actionText = selected ? t("courses.module.selectedShort") : t("courses.module.go");
     const row = document.createElement("button");
     row.type = "button";
     row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
@@ -3018,7 +3021,7 @@ function renderCourseDetailModules(courseId, course) {
         <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
         <span class="course-module-row-action">${escapeHtmlP(actionText)}</span>
       </span>
-      <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(badgeText)}</span>
+      <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
     `;
     container.appendChild(row);
   }
