@@ -15,6 +15,7 @@ type MockLibraryModule = {
   id: string;
   title?: string;
   status?: string;
+  courseCount?: number;
 };
 
 type MockCourse = {
