@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.7 - 2026-06-30
+
+fix(ux): «Brukt i kurs»-tall sentreres i fast boks → robust linjering på tvers av rader (#710)
+
+Etter 1.6.6 var «0» og tall-lenken fortsatt ikke på samme vertikale linje for noen brukere.
+Deployet 1.6.6-CSS var korrekt (lik padding/inline-block), så restproblemet var enten en
+`<button>` vs `<span>`-renderingsforskjell eller et cachet stilark. Robust fiks:
+`.course-count-btn`/`.course-count-zero` får nå `min-width: 2.25em` + `text-align: center` +
+`margin: 0`, slik at sifferet sentreres i en identisk boks uansett element-type, glyf-bredde
+eller button-quirks. Endringen gir også nytt ETag → tvinger frisk stilark-henting (cache-bust).
+
+NB: foreløpig kun ment for **staging**-verifisering.
+
 ## 1.6.6 - 2026-06-30
 
 fix(ux): kurselement-lista harmonisert med admin-oversiktene + reell #710-fiks på modul-biblioteket
