@@ -151,6 +151,38 @@ test.describe("admin content module library", () => {
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation$/);
   });
 
+  // #710 regression guard: the "Brukt i kurs" cell renders a <button> when the count > 0
+  // and a <span> when 0. A global `button { width: 100% }` rule once stretched the button to
+  // the full cell width, so the centred digit landed ~70px right of the span's "0" — the two
+  // numbers were not on the same vertical line across rows. Pin that both elements occupy an
+  // identical-width box at the same left edge (shared `.course-count-btn`/`.course-count-zero`
+  // geometry with `width: auto`).
+  test("#710: 'Brukt i kurs' count aligns across rows (button vs zero-span)", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [
+        { id: "module-1", title: "Used module", status: "published", courseCount: 1 },
+        { id: "module-2", title: "Unused module", status: "published", courseCount: 0 },
+      ],
+    });
+
+    await page.goto(LIBRARY_PATH);
+
+    const countBtn = page.locator(".course-count-btn").first();
+    const countZero = page.locator(".course-count-zero").first();
+    await expect(countBtn).toBeVisible();
+    await expect(countZero).toBeVisible();
+
+    const btnBox = await countBtn.boundingBox();
+    const zeroBox = await countZero.boundingBox();
+    expect(btnBox).not.toBeNull();
+    expect(zeroBox).not.toBeNull();
+
+    // Same column → identical left edge; same box geometry → identical width. The historic
+    // bug had btn.width ≈ 169px vs zero.width ≈ 29px. Allow 1.5px for sub-pixel rounding.
+    expect(Math.abs(btnBox!.x - zeroBox!.x)).toBeLessThan(1.5);
+    expect(Math.abs(btnBox!.width - zeroBox!.width)).toBeLessThan(1.5);
+  });
+
   test("clicking 'Åpne i Avansert' navigates to the module's advanced editor", async ({ page }) => {
     await mockCommonApis(page, {
       libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
