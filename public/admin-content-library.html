@@ -149,20 +149,9 @@
         text-transform: capitalize;
       }
 
-      /* ── Course count clickable ──────────────────────────────────────────── */
-      .course-count-btn {
-        background: none;
-        border: none;
-        padding: 2px 6px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        border-radius: 4px;
-        color: var(--color-link-active);
-        text-decoration: underline;
-      }
-      .course-count-btn:hover { background: var(--color-blue-light); }
-      .course-count-zero { color: var(--color-meta); font-size: 13px; }
+      /* #710: «Brukt i kurs»-teller styres nå utelukkende av shared.css
+         (.course-count-btn / .course-count-zero) — lokal override fjernet fordi
+         den manglet inline-block/vertical-align og brøt linjeringen mellom «0» og tall. */
 
       /* ── Row actions ─────────────────────────────────────────────────────── */
       .row-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
