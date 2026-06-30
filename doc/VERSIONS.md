@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.8 - 2026-06-30
+
+fix(ux): ROT-ÅRSAK for «Brukt i kurs»-skjevhet — global `button { width: 100% }` (#710)
+
+Verifisert med headless-render (Playwright) av den faktisk deployede CSS-en: teller-**knappen**
+(`<button class="course-count-btn">`) arvet den globale skjema-regelen `button { width: 100% }`
+og ble dermed **cellebred (~169px)**, mens «0» (`<span>`) forble smal (~29px). Med
+`text-align: center` havnet «1» midt i den brede knappen → ~70px til høyre for «0».
+`min-width`/`text-align` fra 1.6.7 kunne aldri vinne mot `width: 100%`.
+
+Fiks: `width: auto` på `.course-count-btn`/`.course-count-zero` → shrink-to-fit, identisk
+29px-boks, sifrene perfekt over hverandre (målt glyf-senter-diff: 0.01px). Lærdom: CSS-fiks
+bør renderes og måles før deploy, ikke verifiseres manuelt på stage i flere runder.
+
+NB: foreløpig kun ment for **staging**-verifisering.
+
 ## 1.6.7 - 2026-06-30
 
 fix(ux): «Brukt i kurs»-tall sentreres i fast boks → robust linjering på tvers av rader (#710)
