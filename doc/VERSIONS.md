@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.9 - 2026-06-30
+
+fix(infra): #405 produksjonsvern — subscription-guard + ekstern oppetids-ping (lås verifisert)
+
+Tre vern mot May-2026-incidentklassen (staging-workflow traff prod og slettet det meste):
+
+- **Del 1 — CanNotDelete-lås (verifisert):** `rg-production-do-not-delete` er aktiv i prod (lå
+  allerede i Bicep; nå bekreftet live via `az lock list`). Blokkerer all sletting i prod-RG-en.
+- **Del 2 — subscription-guard:** `activate-`/`deactivate-staging-app-layer.yml` avbryter hardt
+  etter Azure-login hvis konteksten er prod-subscription (5b3f760b), før noen Azure-mutasjon.
+- **Del 3 — ekstern oppetids-ping:** Application Insights standard availability-test mot `/healthz`
+  fra West Europe + North Europe hvert 5. min, + `metricAlert` (begge lokasjoner nede) →
+  observability action group. Ekstern → fyrer **selv om** App Service slettes (ulikt dagens
+  HealthCheckStatus). Opprettes der det finnes en alarm-mottaker (`createObservabilityActionGroup`).
+
+NB: action group krever `OBSERVABILITY_ALERT_EMAIL` (GitHub-var) — settes for stage + prod. Det
+wirer samtidig dagens alarmer (latency/llmfail/health/runtime-errors) som i dag varsler ingen.
+Bicep validert: ren build + begge webtest-lokasjons-IDer bekreftet mot Azure. Deploy via
+`deploy-azure.yml` med prod what-if; stage først for å teste alarm-kjeden ende-til-ende.
+
 ## 1.6.8 - 2026-06-30
 
 fix(ux): ROT-ÅRSAK for «Brukt i kurs»-skjevhet — global `button { width: 100% }` (#710)
