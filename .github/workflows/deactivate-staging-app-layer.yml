@@ -35,6 +35,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # #405 safeguard (defense in depth — the deactivate SCRIPT also has an env guard): this
+      # destructive, staging-only workflow tears down the App Service layer. The May 2026 incident
+      # was exactly this kind of operation running against prod. Abort hard if the active context
+      # is the production subscription, before any deletion happens.
+      - name: Assert staging subscription
+        shell: pwsh
+        run: |
+          $current = (az account show --query id -o tsv).Trim()
+          if ($current -eq '5b3f760b-42d4-4d78-812c-c059278d1086') {
+            throw "SAFETY ABORT: this workflow is authenticated against the PRODUCTION subscription (5b3f760b-...). It must only run against staging."
+          }
+          Write-Host "Subscription guard OK — active subscription $current is not production."
+
       - name: Deactivate staging app layer
         shell: pwsh
         run: |

@@ -1,0 +1,66 @@
+name: Stage web app power (stop/start)
+
+# Manual stop/start of the STAGING web app only. Added for #405 to drive the end-to-end
+# availability-alert test (stop → webtest goes red → alert fires → start) without needing
+# local az against the staging tenant (which is conditional-access blocked). Also useful for
+# ad-hoc staging cost control. Never touches production (subscription guard below).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Power action for the staging web app"
+        required: true
+        type: choice
+        options:
+          - stop
+          - start
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  # Shared with deploy-azure / activate / deactivate so this Azure-mutating workflow cannot run
+  # in parallel with a deploy (consistent with the other staging app-layer workflows).
+  group: deploy-azure-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  power:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # #405 safeguard: staging-only — abort if authenticated against the production subscription.
+      - name: Assert staging subscription
+        shell: pwsh
+        run: |
+          $current = (az account show --query id -o tsv).Trim()
+          if ($current -eq '5b3f760b-42d4-4d78-812c-c059278d1086') {
+            throw "SAFETY ABORT: authenticated against the PRODUCTION subscription (5b3f760b-...). This workflow is staging-only."
+          }
+          Write-Host "Subscription guard OK — $current is not production."
+
+      - name: Resolve and power the staging web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          WEB=$(az webapp list -g "$RG" --query "[?contains(name, '-app-')].name" -o tsv | head -1)
+          if [ -z "$WEB" ]; then
+            echo "::error::No web app (name contains '-app-') found in $RG."
+            exit 1
+          fi
+          echo "Web app: $WEB — action: ${{ inputs.action }}"
+          az webapp ${{ inputs.action }} --resource-group "$RG" --name "$WEB"
+          state=$(az webapp show --resource-group "$RG" --name "$WEB" --query state -o tsv)
+          echo "Result: $WEB is now '$state'."
+          echo "$WEB → ${{ inputs.action }} (state: $state)" >> "$GITHUB_STEP_SUMMARY"

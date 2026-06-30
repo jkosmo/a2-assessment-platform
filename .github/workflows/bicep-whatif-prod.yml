@@ -79,6 +79,7 @@ jobs:
               parserWorkerAuthKey="whatif-only-placeholder-not-deployed" \
               deployPrincipalId="${{ vars.DEPLOY_PRINCIPAL_ID }}" \
               skipRoleAssignments="${{ vars.SKIP_ROLE_ASSIGNMENTS || 'false' }}" \
+              observabilityAlertEmail="${{ vars.OBSERVABILITY_ALERT_EMAIL }}" \
             2>&1 || true)
           # #472: large diffs (hundreds of KB) blow the E2BIG limit when passed via env to
           # github-script. Write to a file; the comment/log steps read it instead.

@@ -1662,6 +1662,82 @@ resource notificationFailureAlert 'Microsoft.Insights/scheduledQueryRules@2021-0
   }
 }
 
+// #405 part 3 — external availability ping of /healthz. Unlike the internal HealthCheckStatus
+// metric alerts (which silence when the App Service resource disappears), this Application Insights
+// availability test runs from outside Azure and keeps reporting — so it fires even if the whole
+// App Service is deleted (the May 2026 incident scenario). Gated on createObservabilityActionGroup
+// so it lands in any environment that has an alert receiver wired (stage included → testable there).
+resource healthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (createObservabilityActionGroup) {
+  name: toLower('${appNamePrefix}-${envCode}-healthz-ping')
+  location: location
+  kind: 'standard'
+  tags: {
+    // REQUIRED association with the App Insights component — without this the portal Availability
+    // blade and the metric alert cannot resolve the test.
+    'hidden-link:${appInsights.id}': 'Resource'
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    SyntheticMonitorId: toLower('${appNamePrefix}-${envCode}-healthz-ping')
+    Name: '${appNamePrefix}-${envCode} /healthz availability'
+    Description: 'External ping of /healthz from EMEA — fires even if the App Service is deleted (#405).'
+    Enabled: true
+    Frequency: 300
+    Timeout: 30
+    Kind: 'standard'
+    RetryEnabled: true
+    Locations: [
+      { Id: 'emea-nl-ams-azr' }
+      { Id: 'emea-gb-db3-azr' }
+    ]
+    Request: {
+      RequestUrl: 'https://${webApp.properties.defaultHostName}/healthz'
+      HttpVerb: 'GET'
+    }
+    ValidationRules: {
+      ExpectedHttpStatusCode: 200
+      SSLCheck: true
+      SSLCertRemainingLifetimeCheck: 7
+    }
+  }
+}
+
+// Fires when both external test locations report /healthz unreachable. failedLocationCount=2 of 2
+// avoids single-location flapping while still catching a real outage (app down/deleted → all fail).
+resource healthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (createObservabilityActionGroup) {
+  name: toLower('${appNamePrefix}-${envCode}-healthz-availability')
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    description: 'External /healthz availability test is failing — the app is unreachable from outside Azure (fires even if the App Service was deleted). See #405.'
+    severity: 1
+    enabled: true
+    scopes: [
+      healthzAvailabilityTest.id
+      appInsights.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: healthzAvailabilityTest.id
+      componentId: appInsights.id
+      failedLocationCount: 2
+    }
+    actions: [
+      {
+        actionGroupId: observabilityActionGroup.id
+      }
+    ]
+  }
+}
+
 // Production resource group CanNotDelete lock (#405). Blocks all DELETE operations on
 // resources in the prod RG. The May 2026 incident where a staging deactivate workflow
 // targeted production resources would have been blocked here with a 409 Conflict before
