@@ -1130,11 +1130,12 @@ dialog::backdrop {
 
 /* #705-UX(G): «Brukt i kurs»-teller + popover, delt så seksjonslista matcher modul-biblioteket. */
 /* #710: «0» (span) og tall-knappen må ligge på nøyaktig samme sted på tvers av rader.
-   Begge får identisk boks (inline-block, lik min-bredde, midtstilt innhold), så sifferet
-   sentreres likt uansett element-type (button vs span), glyf-bredde eller button-quirks. */
+   ROT-ÅRSAK: global `button { width: 100% }` (skjema-knapper) gjorde teller-knappen
+   cellebred, så «1» (text-align center) havnet ~70px til høyre for span-«0». Fiks:
+   `width: auto` på begge → shrink-to-fit, identisk boks, sifferet sentrert likt. */
 .course-count-btn, .course-count-zero {
   display: inline-block; vertical-align: middle; box-sizing: border-box;
-  min-width: 2.25em; text-align: center; margin: 0;
+  width: auto; min-width: 2.25em; text-align: center; margin: 0;
   padding: 2px 6px; font-size: 13px; font-weight: 600; line-height: 1.5;
 }
 .course-count-btn {
