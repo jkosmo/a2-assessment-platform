@@ -49,7 +49,11 @@ echo "  parser: $PARSER"
 echo
 
 FAIL=0
-MAX_ATTEMPTS=4    # 4 attempts at ~30s timeout each, with 45s sleep between → ~3 min total budget
+# 6 attempts × (≤30s curl + 45s sleep) → ~6 min budget. Widened from 4 (#710 prod promote,
+# run 28431321940): the prod WORKER cold-started 7s AFTER the 4th attempt (B1 worker restart
+# took ~4 min), so a healthy deploy got a red smoke gate. Web/parser come up well within budget;
+# the worker is the slow one. 6 attempts comfortably covers the observed B1 worker cold-start.
+MAX_ATTEMPTS=6
 SLEEP_BETWEEN=45
 
 # An endpoint counts as healthy when curl returns the expected HTTP code. The deploy
