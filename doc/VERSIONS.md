@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.10 - 2026-07-05
+
+feat(admin-content): #649 AA-1 — Agent Authoring validate-endepunkt med detaljert rapport
+
+Første API-steg i EPIC #647 (designnotat: `doc/design/AGENT_AUTHORING_647.md`, landet i #724):
+
+- **Ny kontrakt `a2-authoring-package/v1`** (`agentAuthoringSchemas.ts`): agentens plan for
+  drafts av seksjoner/moduler/kurs. Gjenbruker `a2-content-export/v1`-leaf-schemas uten
+  `audit`; alle objekter er strict, så publiserings-/audit-felt avvises som `unknown_field`
+  i stedet for å ignoreres stille (draft-only-invarianten håndheves strukturelt).
+- **`POST /api/admin/content/agent-authoring/validate`** (`admin_content`-beskyttet):
+  dry-run uten DB-writes. Returnerer 200 med `{ valid, summary, issues[{severity, path,
+  code, message}], plan }` også for ugyldige pakker; `plan` (topologisk rekkefølge) kun når
+  `errors == 0`. Dekker alle tre `assessmentMode` (`required_for_mode`/`forbidden_for_mode`),
+  clientRef-regler (duplikat/ukjent/type-mismatch), eksisterende-ID-sjekk mot DB, og
+  warnings for mulig duplikat-tittel og modul-løse kurs.
+- Tester: 12 unit (regelsettet, injiserbare lookups) + 5 integration (endepunktkontrakt,
+  ingen-writes-garanti, rollevern). API_REFERENCE oppdatert.
+
 ## 1.6.9 - 2026-06-30
 
 fix(infra): #405 produksjonsvern — subscription-guard + ekstern oppetids-ping (lås verifisert)
