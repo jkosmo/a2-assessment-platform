@@ -144,3 +144,17 @@ gh workflow run bicep-whatif-prod.yml -f pr_number=<PR_NUMBER>
 ```
 
 The diff is posted as a PR comment. Staging what-if runs automatically on PR; prod what-if is manual because the production GitHub environment has approval gates that would block PR-time auto-runs (#419).
+
+---
+
+## Agent skills (repo-canonical)
+
+Repo-canonical agent skills live under `skills/`. If a user request matches a skill's
+description, read its `SKILL.md` and follow it before improvising.
+
+- **`skills/a2-authoring-api/`** — build draft courses/modules/sections on the platform from
+  conversation context via the Agent Authoring API (EPIC #647). Validate-first, draft-only,
+  returns admin-UI links; NEVER calls publish endpoints. For ChatGPT/Codex this file is the
+  skill; Claude Code additionally discovers it via the `.claude/skills/a2-authoring-api/`
+  pointer. The canonical `skills/` copy is the source of truth — regenerate pointers from it,
+  never fork the content.

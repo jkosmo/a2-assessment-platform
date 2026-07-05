@@ -1,0 +1,142 @@
+{
+  "packageFormat": "a2-authoring-package/v1",
+  "locale": "nb",
+  "constraints": {
+    "source": "Eksempel-fixture for a2-authoring-api-skillen (AA-4, #652)",
+    "requirements": "1 kurs, 2 læringsseksjoner, 3 moduler (én per assessment mode), bokmål"
+  },
+  "objects": [
+    {
+      "clientRef": "intro",
+      "type": "section",
+      "payload": {
+        "title": "Introduksjon til personvern",
+        "bodyMarkdown": "## Hvorfor personvern\n\nDenne seksjonen gir oversikt over personvernprinsippene i GDPR artikkel 5 og hvorfor de gjelder alt arbeid med persondata.\n\n- Lovlighet, rettferdighet og åpenhet\n- Formålsbegrensning og dataminimering\n- Riktighet, lagringsbegrensning, integritet og konfidensialitet"
+      }
+    },
+    {
+      "clientRef": "oppsummering",
+      "type": "section",
+      "payload": {
+        "title": "Oppsummering og videre lesning",
+        "bodyMarkdown": "## Oppsummering\n\nDu har nå vært gjennom behandlingsgrunnlag, avviksmelding og personvernprinsippene.\n\nVidere lesning: Datatilsynets veiledere om internkontroll og informasjonssikkerhet."
+      }
+    },
+    {
+      "clientRef": "modul-behandlingsgrunnlag",
+      "type": "module",
+      "payload": {
+        "module": {
+          "title": "Behandlingsgrunnlag i praksis",
+          "description": "Fritekstvurdering: identifisere og begrunne riktig behandlingsgrunnlag.",
+          "certificationLevel": "basic"
+        },
+        "activeVersion": {
+          "assessmentMode": "FREETEXT_ONLY",
+          "taskText": "En kunde ber om å få slettet sine data, men avtalen løper fortsatt i 6 måneder. Beskriv hvilket behandlingsgrunnlag som gjelder for videre lagring, og hvordan du ville svart kunden.",
+          "assessorExpectedContent": "Identifiserer GDPR artikkel 6(1)(b) (avtale) som grunnlag for videre behandling i avtaleperioden, skiller mellom sletteplikt og lagringsplikt, og formulerer et korrekt og forståelig svar til kunden.",
+          "rubric": {
+            "criteria": {
+              "identifisering": "0-4: Identifiserer korrekt behandlingsgrunnlag (art. 6(1)(b)) og avgrenser mot samtykke.",
+              "begrunnelse": "0-4: Begrunner hvorfor sletting ikke kan skje før avtaleforholdet er avsluttet.",
+              "kommunikasjon": "0-4: Svaret til kunden er korrekt, klart og imøtekommende."
+            },
+            "scalingRule": { "practical_weight": 100, "max_total": 12 }
+          },
+          "promptTemplate": {
+            "systemPrompt": "Du er sensor for en personvernmodul. Vurder besvarelsen strengt mot rubrikken, på norsk.",
+            "userPromptTemplate": "Vurder følgende besvarelse mot rubrikken. Gi poeng per kriterium med kort begrunnelse."
+          }
+        }
+      }
+    },
+    {
+      "clientRef": "modul-prinsipper",
+      "type": "module",
+      "payload": {
+        "module": {
+          "title": "Personvernprinsippene",
+          "description": "Flervalgsprøve om GDPR artikkel 5.",
+          "certificationLevel": "basic"
+        },
+        "activeVersion": {
+          "assessmentMode": "MCQ_ONLY",
+          "mcqSet": {
+            "title": "Personvernprinsippene — kontrollspørsmål",
+            "questions": [
+              {
+                "stem": "Hvilket prinsipp krever at du ikke samler inn mer persondata enn nødvendig for formålet?",
+                "options": ["Dataminimering", "Formålsbegrensning", "Lagringsbegrensning", "Riktighet"],
+                "correctAnswer": "Dataminimering",
+                "rationale": "Dataminimering (art. 5(1)(c)) krever at opplysningene er adekvate, relevante og begrenset til det nødvendige."
+              },
+              {
+                "stem": "Data samlet inn for kundeservice brukes til markedsføring uten nytt grunnlag. Hvilket prinsipp brytes?",
+                "options": ["Formålsbegrensning", "Integritet og konfidensialitet", "Dataminimering", "Åpenhet"],
+                "correctAnswer": "Formålsbegrensning",
+                "rationale": "Formålsbegrensning (art. 5(1)(b)) forbyr viderebehandling som er uforenlig med innsamlingsformålet."
+              }
+            ]
+          },
+          "assessmentPolicy": { "passRules": { "mcqMinPercent": 70 } }
+        }
+      }
+    },
+    {
+      "clientRef": "modul-avvik",
+      "type": "module",
+      "payload": {
+        "module": {
+          "title": "Avvikshåndtering",
+          "description": "Kombinert fritekst + flervalg om brudd på personopplysningssikkerheten.",
+          "certificationLevel": "basic"
+        },
+        "activeVersion": {
+          "assessmentMode": "FREETEXT_PLUS_MCQ",
+          "taskText": "Du oppdager at en e-post med persondata er sendt til feil mottaker. Beskriv hva du gjør de første 24 timene.",
+          "assessorExpectedContent": "Varsler personvernombud/leder umiddelbart, dokumenterer hendelsen, vurderer risiko for de registrerte, og kjenner 72-timersfristen for melding til Datatilsynet.",
+          "rubric": {
+            "criteria": {
+              "varsling": "0-4: Varsler riktig rolle umiddelbart og kjenner 72-timersfristen.",
+              "risikovurdering": "0-4: Vurderer konsekvens for de registrerte og behovet for å varsle dem."
+            },
+            "scalingRule": { "practical_weight": 70, "max_total": 8 }
+          },
+          "promptTemplate": {
+            "systemPrompt": "Du er sensor for en avvikshåndteringsmodul. Vurder mot rubrikken, på norsk.",
+            "userPromptTemplate": "Vurder følgende besvarelse mot rubrikken. Gi poeng per kriterium med kort begrunnelse."
+          },
+          "mcqSet": {
+            "title": "Avvikshåndtering — kontrollspørsmål",
+            "questions": [
+              {
+                "stem": "Hva er fristen for å melde et meldepliktig brudd til Datatilsynet?",
+                "options": ["72 timer", "24 timer", "7 dager", "30 dager"],
+                "correctAnswer": "72 timer",
+                "rationale": "GDPR artikkel 33: uten ugrunnet opphold og senest innen 72 timer."
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "clientRef": "kurs-personvern",
+      "type": "course",
+      "payload": {
+        "course": {
+          "title": "Personvern for saksbehandlere",
+          "description": "Grunnkurs i personvern: prinsipper, behandlingsgrunnlag og avvikshåndtering.",
+          "certificationLevel": "basic"
+        },
+        "items": [
+          { "type": "SECTION", "ref": "intro" },
+          { "type": "MODULE", "ref": "modul-prinsipper" },
+          { "type": "MODULE", "ref": "modul-behandlingsgrunnlag" },
+          { "type": "MODULE", "ref": "modul-avvik" },
+          { "type": "SECTION", "ref": "oppsummering" }
+        ]
+      }
+    }
+  ]
+}

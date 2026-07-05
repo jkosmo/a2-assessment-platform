@@ -198,6 +198,15 @@ gh workflow run bicep-whatif-prod.yml -f pr_number=<PR_NUMBER>
 
 The diff is posted as a PR comment. Staging what-if runs automatically on PR; prod what-if is manual because the production GitHub environment has approval gates that would block PR-time auto-runs (#419).
 
+## Agent skills (repo-canonical)
+
+Repo-canonical agent skills live under `skills/`; Claude Code discovers them via thin
+pointers in `.claude/skills/`. The `skills/` copy is the source of truth — edit there only.
+
+- **`skills/a2-authoring-api/`** — build draft courses/modules/sections from conversation
+  context via the Agent Authoring API (EPIC #647). Validate-first, draft-only, returns
+  admin-UI links; NEVER calls publish endpoints.
+
 ## AI delegation workflow (Claude orchestrates, Codex/Gemini drafts)
 
 Use `scripts/ai-draft.ps1` to delegate implementation to Codex or Gemini, then Claude QAs.
