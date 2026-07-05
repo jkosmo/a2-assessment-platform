@@ -47,6 +47,8 @@ import {
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
 import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
+import { validateAuthoringPackage } from "../modules/adminContent/agentAuthoringValidationService.js";
+import { AUTHORING_PACKAGE_FORMAT } from "../modules/adminContent/agentAuthoringSchemas.js";
 import {
   condenseSourceMaterial,
   generateAssessmentBlueprint,
@@ -96,6 +98,34 @@ adminContentRouter.use("/courses", adminCoursesRouter);
 adminContentRouter.use("/classes", adminClassesRouter);
 adminContentRouter.use("/users", adminUsersRouter);
 adminContentRouter.use("/sections", adminSectionsRouter);
+
+// AA-1 (#649): dry-run validation of an agent-generated authoring package.
+// Read-only — never writes to the DB. Returns 200 with a report even when the
+// package is invalid (the report IS the result); 400 only when the request
+// isn't a recognizable validate call at all.
+adminContentRouter.post("/agent-authoring/validate", async (request, response) => {
+  const body = request.body as { package?: unknown } | undefined;
+  const pkg = body?.package;
+  const packageFormat =
+    pkg && typeof pkg === "object" ? (pkg as { packageFormat?: unknown }).packageFormat : undefined;
+  if (packageFormat !== AUTHORING_PACKAGE_FORMAT) {
+    response.status(400).json({
+      error: "validation_error",
+      message: `Request body must be { package } with packageFormat "${AUTHORING_PACKAGE_FORMAT}".`,
+    });
+    return;
+  }
+
+  try {
+    const report = await validateAuthoringPackage(pkg);
+    response.status(200).json(report);
+  } catch {
+    response.status(500).json({
+      error: "agent_authoring_validate_failed",
+      message: "Could not validate authoring package.",
+    });
+  }
+});
 
 adminContentRouter.post("/modules", async (request, response) => {
   const { data, error } = parseRequest(moduleCreateBodySchema, request.body);

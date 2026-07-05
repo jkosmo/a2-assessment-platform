@@ -191,6 +191,16 @@ material for draft generation. All routes use the `admin_content` capability.
 | `POST` | `/api/admin/content/source-material/crawl-url` | **#479 Slice B.** Crawl a start URL: same-hostname only, ≤20 pages, ≤2 hops, honouring `robots.txt`, 300 ms politeness delay. Each page is independently SSRF-revalidated and byte-capped. **3/min per user.** Body `{ url }` → `{ startHostname, pages: [{ url, title, extractedText, fetchedBytes }], pagesCrawled, pagesSkipped, totalBytes, truncated }`. `422 crawl_empty` if nothing could be crawled. |
 | `POST` | `/api/admin/content/source-material/condense` | LLM-condense combined source material when it exceeds ~50K chars. |
 
+#### Agent Authoring (#647)
+
+Design: `doc/design/AGENT_AUTHORING_647.md`. Lets an agent dry-run an
+`a2-authoring-package/v1` (draft course/module/section plan) before orchestrating the
+ordinary create/import endpoints. Publishing is manual and is **not** part of the agent API.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `POST` | `/api/admin/content/agent-authoring/validate` | **AA-1 (#649).** Dry-run validation — **no DB writes**. Body `{ package: <a2-authoring-package/v1> }`. Returns `200 { valid, summary: { errors, warnings, objects }, issues: [{ severity: "error"\|"warning", path, code, message }], plan }` — 200 also for invalid packages (the report is the result). `plan` (topological execution order, ops `create_section`/`create_module`/`create_course`/`set_course_items`) is only populated when `errors == 0`. Covers all three `assessmentMode`s (`required_for_mode`/`forbidden_for_mode`), package rules (`duplicate_client_ref`, `unknown_client_ref`, `client_ref_type_mismatch`, `ref_or_id_required`, `ref_and_id_conflict`, `unknown_module_id`/`unknown_section_id`, `unknown_field` — publish/audit fields are rejected) and non-blocking warnings (`possible_duplicate_title`, `course_without_modules`). `400` only when the body isn't `{ package }` with the right `packageFormat`. |
+
 ---
 
 ## Admin - Courses & Learning Sections
