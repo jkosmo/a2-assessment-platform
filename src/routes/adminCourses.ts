@@ -15,7 +15,8 @@ import {
   revokeEnrollment,
   listCourseEnrollments,
 } from "../modules/course/index.js";
-import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest, clientRefSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
@@ -64,8 +65,12 @@ const courseLocalizationBodySchema = z.object({
   message: "At least one field is required.",
 });
 
+// AA-2 (#650): create accepts an optional clientRef (echoed back, never persisted)
+// and returns admin links so agent orchestration can hand humans review URLs.
+const courseCreateBodySchema = courseBodySchema.extend({ clientRef: clientRefSchema.optional() });
+
 adminCoursesRouter.post("/", async (request, response, next) => {
-  const parsed = courseBodySchema.safeParse(request.body);
+  const parsed = courseCreateBodySchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
@@ -80,7 +85,11 @@ adminCoursesRouter.post("/", async (request, response, next) => {
       discussionsEnabled: parsed.data.discussionsEnabled,
       actorId: request.context?.userId,
     });
-    response.status(201).json({ course });
+    response.status(201).json({
+      course,
+      links: courseAdminLinks(course.id),
+      ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
+    });
   } catch (error) {
     next(error);
   }
@@ -159,7 +168,13 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       mode: data.mode ?? "createNew",
       targetCourseId: data.targetId,
     });
-    response.status(201).json({ courseId: result.courseId, moduleIds: result.moduleIds });
+    // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
+    response.status(201).json({
+      courseId: result.courseId,
+      moduleIds: result.moduleIds,
+      links: courseAdminLinks(result.courseId),
+      ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
+    });
   } catch (err) {
     if (err instanceof AppError) {
       response.status(err.httpStatus).json({ error: err.code, message: err.message });

@@ -201,6 +201,21 @@ ordinary create/import endpoints. Publishing is manual and is **not** part of th
 |--------|------|-------|
 | `POST` | `/api/admin/content/agent-authoring/validate` | **AA-1 (#649).** Dry-run validation — **no DB writes**. Body `{ package: <a2-authoring-package/v1> }`. Returns `200 { valid, summary: { errors, warnings, objects }, issues: [{ severity: "error"\|"warning", path, code, message }], plan }` — 200 also for invalid packages (the report is the result). `plan` (topological execution order, ops `create_section`/`create_module`/`create_course`/`set_course_items`) is only populated when `errors == 0`. Covers all three `assessmentMode`s (`required_for_mode`/`forbidden_for_mode`), package rules (`duplicate_client_ref`, `unknown_client_ref`, `client_ref_type_mismatch`, `ref_or_id_required`, `ref_and_id_conflict`, `unknown_module_id`/`unknown_section_id`, `unknown_field` — publish/audit fields are rejected) and non-blocking warnings (`possible_duplicate_title`, `course_without_modules`). `400` only when the body isn't `{ package }` with the right `packageFormat`. |
 
+**Agent-friendly create/import responses (AA-2, #650):** the create/import calls the skill
+orchestrates accept an optional `clientRef` (pattern `[a-z0-9-]{1,64}`, echoed back in the
+201-response, never persisted) and return admin-UI deep links in `links`:
+
+- `POST /modules` and `POST /modules/import` → `links: { conversation: "/admin-content/module/:id/conversation", advanced: "/admin-content/module/:id/advanced" }`
+- `POST /courses` and `POST /courses/import` → `links: { course: "/admin-content/courses/:id" }`
+- `POST /sections` → `links: { editor: "/admin-content/sections?id=:id" }`. Also accepts
+  `draft: true` — the section is created in Utkast (`activeVersionId` stays `null`; content is
+  preserved as version 1, published later via `POST /sections/:id/publish`). Default (omitted)
+  keeps auto-publish-on-save.
+
+Agent imports must pass `autoPublish: false` (and the authoring contract has no `audit`, so
+source-publish auto-publication can never trigger). Retry-safe `Idempotency-Key` support is
+tracked separately in #726.
+
 ---
 
 ## Admin - Courses & Learning Sections

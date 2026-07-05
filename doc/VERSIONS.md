@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.11 - 2026-07-05
+
+feat(admin-content): #650 AA-2 — agentvennlige create/import-responser + draft-seksjoner
+
+Andre API-steg i EPIC #647 (design: `doc/design/AGENT_AUTHORING_647.md` §3–§4):
+
+- **`links` i 201-responser**: `POST /modules`, `POST /modules/import` (conversation/advanced),
+  `POST /courses`, `POST /courses/import` (kursbygger) og `POST /sections` (editor) returnerer
+  admin-UI-deep-links (`adminUiLinks.ts`, kanoniske ruter fra `doc/route-map.md`) slik at
+  skillen kan gi brukeren gjennomgangs-URL-er.
+- **`clientRef`-ekko**: samme kall aksepterer valgfri `clientRef` (`[a-z0-9-]{1,64}`) som
+  ekkoes i responsen (aldri persistert) — skillen mapper plan → server-ID-er uten egen bokføring.
+- **`draft: true` på `POST /sections`**: tetter seksjonshullet i draft-only-invarianten —
+  seksjonen opprettes i Utkast (`activeVersionId` forblir null; innholdet ligger som versjon 1
+  og publiseres via eksisterende `publish`). Default-adferd (auto-publiser ved lagring) uendret.
+- Idempotency-Key (krever ny tabell) utskilt til #726 slik #650 åpner for.
+- Tester: ny integrasjonssuite kjører hele skill-sekvensen (import i alle tre assessmentMode →
+  draft-seksjon → kurs → mixed items) som både ADMINISTRATOR og SUBJECT_MATTER_OWNER og
+  verifiserer at ingenting blir live underveis. API_REFERENCE oppdatert.
+
 ## 1.6.10 - 2026-07-05
 
 feat(admin-content): #649 AA-1 — Agent Authoring validate-endepunkt med detaljert rapport

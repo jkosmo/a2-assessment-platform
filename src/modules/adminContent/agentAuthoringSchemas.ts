@@ -20,13 +20,12 @@ import {
   rubricBodySchema,
   promptTemplateBodySchema,
   mcqSetBodySchema,
+  clientRefSchema,
 } from "./adminContentSchemas.js";
 
 export const AUTHORING_PACKAGE_FORMAT = "a2-authoring-package/v1" as const;
 
-export const clientRefSchema = z
-  .string()
-  .regex(/^[a-z0-9-]{1,64}$/, "clientRef must match [a-z0-9-]{1,64}.");
+export { clientRefSchema };
 
 // Module payload = moduleExportPayloadSchema without `audit` (strict).
 export const authoringModulePayloadSchema = z

@@ -31,12 +31,20 @@ export const certificationLevelInputSchema = z.union([
   z.record(z.string(), safeShortString),
 ]).optional();
 
+// AA-2 (#650): agent-orchestrated create/import calls may carry a clientRef
+// (the object's identity within an a2-authoring-package/v1 plan). The server
+// never persists it — it is echoed back so the skill can map plan → server IDs.
+export const clientRefSchema = z
+  .string()
+  .regex(/^[a-z0-9-]{1,64}$/, "clientRef must match [a-z0-9-]{1,64}.");
+
 export const moduleCreateBodySchema = z.object({
   title: localizedTextSchema,
   description: localizedTextSchema.optional(),
   certificationLevel: certificationLevelInputSchema,
   validFrom: z.string().trim().optional(),
   validTo: z.string().trim().optional(),
+  clientRef: clientRefSchema.optional(),
 });
 
 export const moduleTitleUpdateBodySchema = z.object({
@@ -397,6 +405,8 @@ export const importBodySchema = z.object({
   // v1.2.14 (#456): når false, auto-publiser ikke selv om kildens audit.publishedAt er
   // satt. In-app duplisering sender false; fil-import lar default (true) stå.
   autoPublish: z.boolean().optional(),
+  // AA-2 (#650): echoed back in the response for agent plan→ID mapping; never persisted.
+  clientRef: clientRefSchema.optional(),
 }).refine(
   (body) => body.mode !== "replaceExisting" || !!body.targetId,
   { message: "targetId is required when mode is replaceExisting", path: ["targetId"] },

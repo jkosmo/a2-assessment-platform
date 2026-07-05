@@ -49,6 +49,7 @@ import {
 import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { validateAuthoringPackage } from "../modules/adminContent/agentAuthoringValidationService.js";
 import { AUTHORING_PACKAGE_FORMAT } from "../modules/adminContent/agentAuthoringSchemas.js";
+import { moduleAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import {
   condenseSourceMaterial,
   generateAssessmentBlueprint,
@@ -148,7 +149,12 @@ adminContentRouter.post("/modules", async (request, response) => {
     const module = await createModule(
       toCreateModuleInput(data, validFrom ?? undefined, validTo ?? undefined, request.context?.userId),
     );
-    response.status(201).json({ module });
+    // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
+    response.status(201).json({
+      module,
+      links: moduleAdminLinks(module.id),
+      ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
+    });
   } catch (error) {
     response.status(400).json({ error: "create_module_failed", message: "Could not create module." });
   }
@@ -368,7 +374,13 @@ adminContentRouter.post("/modules/import", async (request, response) => {
       targetModuleId: data.targetId,
       autoPublish: data.autoPublish,
     });
-    response.status(201).json({ moduleId: result.moduleId, moduleVersionId: result.moduleVersionId });
+    // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
+    response.status(201).json({
+      moduleId: result.moduleId,
+      moduleVersionId: result.moduleVersionId,
+      links: moduleAdminLinks(result.moduleId),
+      ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
+    });
   } catch (err) {
     if (err instanceof AppError) {
       response.status(err.httpStatus).json({ error: err.code, message: err.message });
