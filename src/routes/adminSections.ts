@@ -18,7 +18,8 @@ import {
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { findCoursesForSections } from "../modules/course/contentLifecycle.js";
-import { localizedTextPatchSchema, generationLocaleSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { localizedTextPatchSchema, generationLocaleSchema, clientRefSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { sectionAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
@@ -45,6 +46,10 @@ const uploadAsset: RequestHandler = (request, response, next) => {
 const createSectionSchema = z.object({
   title: localizedTextPatchSchema,
   bodyMarkdown: localizedTextPatchSchema,
+  // AA-2 (#650): agents create sections as drafts (activeVersionId stays null)
+  // and get their plan-ref echoed back. Default keeps auto-publish-on-save.
+  draft: z.boolean().optional(),
+  clientRef: clientRefSchema.optional(),
 });
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
@@ -88,8 +93,13 @@ adminSectionsRouter.post("/", async (request, response, next) => {
       title: localizedTextCodec.serialize(parsed.data.title),
       bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
       actorId: request.context?.userId,
+      draft: parsed.data.draft,
     });
-    response.status(201).json({ section: toDetail(section) });
+    response.status(201).json({
+      section: toDetail(section),
+      links: sectionAdminLinks(section.id),
+      ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
+    });
   } catch (error) {
     next(error);
   }

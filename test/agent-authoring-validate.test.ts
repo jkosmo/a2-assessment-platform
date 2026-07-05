@@ -55,13 +55,16 @@ function validPackage(suffix: string) {
   };
 }
 
-async function contentCounts() {
+// Parallel-safe no-writes check: other integration files create content
+// concurrently, so global counts are racy. Instead we assert that nothing
+// with THIS test's unique title suffix was persisted.
+async function rowsWithSuffix(suffix: string) {
   const [modules, courses, sections] = await Promise.all([
-    prisma.module.count(),
-    prisma.course.count(),
-    prisma.courseSection.count(),
+    prisma.module.count({ where: { title: { contains: suffix } } }),
+    prisma.course.count({ where: { title: { contains: suffix } } }),
+    prisma.courseSection.count({ where: { title: { contains: suffix } } }),
   ]);
-  return { modules, courses, sections };
+  return modules + courses + sections;
 }
 
 describe("#649 POST /api/admin/content/agent-authoring/validate", () => {
@@ -70,12 +73,12 @@ describe("#649 POST /api/admin/content/agent-authoring/validate", () => {
   });
 
   it("validates a well-formed package without writing to the database", async () => {
-    const before = await contentCounts();
+    const suffix = `ok-${Date.now()}`;
 
     const response = await request(app)
       .post("/api/admin/content/agent-authoring/validate")
       .set(adminHeaders)
-      .send({ package: validPackage(`ok-${Date.now()}`) });
+      .send({ package: validPackage(suffix) });
 
     expect(response.status).toBe(200);
     expect(response.body.valid).toBe(true);
@@ -87,12 +90,12 @@ describe("#649 POST /api/admin/content/agent-authoring/validate", () => {
       { op: "set_course_items", clientRef: "course-main" },
     ]);
 
-    expect(await contentCounts()).toEqual(before);
+    expect(await rowsWithSuffix(suffix)).toBe(0);
   });
 
   it("returns a 200 report (not an error status) for an invalid package, still without writes", async () => {
-    const before = await contentCounts();
-    const pkg = validPackage(`bad-${Date.now()}`);
+    const suffix = `bad-${Date.now()}`;
+    const pkg = validPackage(suffix);
     // Break it three ways: dangling ref, duplicate clientRef, mode violation.
     (pkg.objects[2].payload as { items: unknown[] }).items = [{ type: "MODULE", ref: "does-not-exist" }];
     pkg.objects[0].clientRef = "module-1";
@@ -114,7 +117,7 @@ describe("#649 POST /api/admin/content/agent-authoring/validate", () => {
     expect(codes).toContain("duplicate_client_ref");
     expect(codes).toContain("forbidden_for_mode");
 
-    expect(await contentCounts()).toEqual(before);
+    expect(await rowsWithSuffix(suffix)).toBe(0);
   });
 
   it("warns about duplicate titles of existing modules", async () => {

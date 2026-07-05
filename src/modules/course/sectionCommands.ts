@@ -11,7 +11,10 @@ import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
 // fields (title, bodyMarkdown) arrive already serialized to JSON strings by the
 // route layer, exactly like createCourse.
 
-export async function createSection(input: { title: string; bodyMarkdown: string; actorId?: string }) {
+// AA-2 (#650): `draft: true` keeps the section in Utkast (activeVersionId stays
+// null) — same state a restored section lands in (I3). Content lives in version 1;
+// publishSection re-points to it. Default (false) preserves auto-publish-on-save.
+export async function createSection(input: { title: string; bodyMarkdown: string; actorId?: string; draft?: boolean }) {
   return runInTransaction(async (tx) => {
     const section = await tx.courseSection.create({ data: { title: input.title } });
     const version = await tx.courseSectionVersion.create({
@@ -19,10 +22,16 @@ export async function createSection(input: { title: string; bodyMarkdown: string
         sectionId: section.id,
         versionNo: 1,
         bodyMarkdown: input.bodyMarkdown,
-        publishedBy: input.actorId ?? null,
-        publishedAt: new Date(),
+        publishedBy: input.draft ? null : input.actorId ?? null,
+        publishedAt: input.draft ? null : new Date(),
       },
     });
+    if (input.draft) {
+      return tx.courseSection.findUniqueOrThrow({
+        where: { id: section.id },
+        include: { activeVersion: true },
+      });
+    }
     return tx.courseSection.update({
       where: { id: section.id },
       data: { activeVersionId: version.id },
