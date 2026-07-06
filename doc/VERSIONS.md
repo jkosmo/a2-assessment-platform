@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.14 - 2026-07-06
+
+feat(ux): #731 «Agent-tilgang» på profilsiden — utsted/vis én gang/liste/revokér agent-tokens
+
+Gjør AA-3-tokens (#651) tilgjengelige for ikke-tekniske brukere — ingen API-kall eller
+env-variabler nødvendig:
+
+- Ny rollegatet seksjon på **/profile** (kun SUBJECT_MATTER_OWNER/ADMINISTRATOR; gating på
+  `/api/me`-roller, skjult via `setHidden`): merkelapp + TTL (15/30/60 min) → «Lag token» →
+  hemmeligheten vises **én gang** med kopiér-knapp (clipboard-API med select-fallback) og
+  tydelig advarsel, tabell over egne tokens (opprettet/utløper/sist brukt/status) med
+  «Trekk tilbake»-knapp for aktive.
+- Profilsiden var tidligere uten rollegatede seksjoner — dette er den første; valgt fremfor
+  admin-platform fordi tokens er personlige og SMO-er (ikke bare administratorer) skal ha dem.
+- i18n: `agentTokens.*` på en-GB/nb/nn.
+- Ny brukerguide `doc/AGENT_ACCESS_GUIDE.md` (flyt, sikkerhet, FAQ).
+- E2e (Playwright, samme PR per standing order): skjult for PARTICIPANT; SMO utsteder
+  (POST-body verifisert), ser `aat_`-hemmeligheten, lista re-rendres, revokerer (POST +
+  status «Revoked», handlingsknapp borte). 80/80 e2e grønne totalt.
+
 ## 1.6.13 - 2026-07-06
 
 feat(auth): #651 AA-3 — kortlivede, scopede agent-authoring-tokens (multitenant)
