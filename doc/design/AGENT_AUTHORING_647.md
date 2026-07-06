@@ -251,7 +251,7 @@ Vurderte alternativer:
 | # | Modell | Vurdering |
 |---|---|---|
 | 1 | Eksisterende app-auth (mock lokalt, Entra-JWT ellers) | Null ny angrepsflate; dekker repo-lokale agenter fullt ut i dag. **Valgt for MVP.** |
-| 2 | Kortlivet agent-authoring-token utstedt av innlogget bruker | Riktig modell for ekstern ChatGPT/Claude → staging/prod: scopet (kun authoring-endepunktene), kort TTL (≤ 60 min), bundet til utstedende bruker (arver eierskap + audit), revokerbar. **Designes/landes i AA-3 (#651) — obligatorisk før noen ekstern agent får kalle delte miljøer.** |
+| 2 | Kortlivet agent-authoring-token utstedt av innlogget bruker | Riktig modell for ekstern ChatGPT/Claude → staging/prod: scopet (kun authoring-endepunktene), kort TTL (≤ 60 min), bundet til utstedende bruker (arver eierskap + audit), revokerbar. **Implementert i AA-3 (#651)** — se «AA-3-beslutning» under. |
 | 3 | Statisk API-token/PAT | Ingen brukerbinding, lekkasje gir stående admin-innholdstilgang, ikke-revokerbar i praksis. **Avvist.** |
 | 4 | OAuth/device-flow | Best UX for tredjeparts-agenter på sikt, men uforholdsmessig tungt nå. **Senere**, bygger evt. oppå 2. |
 
@@ -259,6 +259,25 @@ MVP-konsekvens: en lokal agent kjører mot `npm run dev` med `AUTH_MODE=mock` og
 `x-user-roles: SUBJECT_MATTER_OWNER` (mock er allerede hard-blokkert i produksjon). Mot
 staging/prod i MVP går agentarbeid via en bruker som selv skaffer Entra-token — ingen ny
 mekanisme. Ekstern direktebruk er eksplisitt **utenfor MVP** til AA-3 er landet.
+
+### AA-3-beslutning (implementert, #651 / v1.6.13)
+
+Alternativ 2 er implementert som **Agent Authoring Session**, med multitenant som premiss
+(tokens utstedes og verifiseres kun mot installasjonens egen database — aldri på tvers):
+
+- **Utstedelse**: `POST /api/admin/content/agent-authoring/tokens` (`admin_content`-rolle,
+  vanlig bruker-auth) → `aat_<48 hex>`-hemmelighet vist **én gang**; kun sha256-hash lagres
+  (`AgentAuthoringToken`-tabellen). TTL 5–60 min (default 60). Liste/revokér via
+  `GET .../tokens` og `POST .../tokens/:id/revoke` (eier eller ADMINISTRATOR).
+- **Bruk**: `Authorization: Bearer aat_...` virker i begge auth-moduser; identitet/roller
+  hentes fra utstederens brukerkonto (writes attribueres som brukeren, eierskap #528 arves).
+- **Scope**: `enforceAgentTokenScope` (montert rett etter `authenticate`) tillater kun de
+  fem draft-operasjonene skillen orkestrerer; alt annet → 403 `agent_token_scope`. Tokens
+  kan ikke utstede/revokere tokens. Rutene herder i tillegg: import krever `createNew` +
+  `autoPublish: false`, seksjoner krever `draft: true`, items kun på upubliserte kurs —
+  ingen publish-kodevei er nåbar med token.
+- **Audit**: utstedelse/revokering audit-logges (`agent_authoring_token_issued`/`_revoked`);
+  selve writene bærer allerede `source: agent_authoring` + `agentRunId` (AA-5).
 
 ## 8. Rollback / partial failure (multi-call-orkestrering)
 

@@ -16,4 +16,8 @@ export type RequestContext = {
   userId?: string;
   roles?: AppRole[];
   locale?: SupportedLocale;
+  // AA-3 (#651): set when the request authenticated with a short-lived agent
+  // authoring token — enforceAgentTokenScope then restricts it to draft
+  // authoring endpoints, and routes apply extra hardening (no publish paths).
+  agentToken?: { tokenId: string };
 };

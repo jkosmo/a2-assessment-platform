@@ -325,6 +325,18 @@ adminCoursesRouter.put("/:courseId/items", async (request, response, next) => {
     return;
   }
   try {
+    // AA-3 (#651): agent-token-requests kan kun endre item-sekvensen på UPUBLISERTE
+    // kurs — å endre et publisert kurs er en live-endring utenfor draft-scopet.
+    if (request.context?.agentToken) {
+      const course = await courseRepository.findCourseById(request.params.courseId);
+      if (course?.publishedAt) {
+        response.status(403).json({
+          error: "agent_token_scope",
+          message: "Agent tokens may only set items on unpublished (draft) courses.",
+        });
+        return;
+      }
+    }
     await setCourseItems(request.params.courseId, parsed.data.items, {
       actorId: request.context?.userId,
       agent: { agentRunId: parsed.data.agentRunId },

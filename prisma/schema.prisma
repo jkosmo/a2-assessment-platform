@@ -102,6 +102,25 @@ model User {
   discussionRepliesAuthored     DiscussionReply[]        @relation("DiscussionReplyAuthor")
   discussionRepliesDeleted      DiscussionReply[]        @relation("DiscussionReplyDeletedBy")
   discussionSubscriptions       DiscussionSubscription[]
+  agentAuthoringTokens          AgentAuthoringToken[]    @relation("AgentAuthoringTokens")
+}
+
+// AA-3 (#651): kortlivet, scopet token for agent-orkestrerte draft-operasjoner.
+// Kun sha256-hashen lagres — hemmeligheten (aat_...) vises én gang ved utstedelse.
+// Per installasjon (multitenant): tokens utstedes og verifiseres kun mot denne
+// installasjonens database og kan aldri brukes på tvers.
+model AgentAuthoringToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  label      String?
+  userId     String
+  user       User      @relation("AgentAuthoringTokens", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([userId])
 }
 
 model UserConsent {
