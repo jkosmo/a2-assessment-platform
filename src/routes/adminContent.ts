@@ -373,6 +373,7 @@ adminContentRouter.post("/modules/import", async (request, response) => {
       mode: data.mode ?? "createNew",
       targetModuleId: data.targetId,
       autoPublish: data.autoPublish,
+      agent: { clientRef: data.clientRef, agentRunId: data.agentRunId },
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
     response.status(201).json({

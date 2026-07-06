@@ -18,7 +18,7 @@ import {
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { findCoursesForSections } from "../modules/course/contentLifecycle.js";
-import { localizedTextPatchSchema, generationLocaleSchema, clientRefSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { localizedTextPatchSchema, generationLocaleSchema, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { sectionAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
@@ -50,6 +50,8 @@ const createSectionSchema = z.object({
   // and get their plan-ref echoed back. Default keeps auto-publish-on-save.
   draft: z.boolean().optional(),
   clientRef: clientRefSchema.optional(),
+  // AA-5 (#653): stamped into the create's audit event (source: agent_authoring).
+  agentRunId: agentRunIdSchema.optional(),
 });
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
@@ -94,6 +96,7 @@ adminSectionsRouter.post("/", async (request, response, next) => {
       bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
       actorId: request.context?.userId,
       draft: parsed.data.draft,
+      agent: { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId },
     });
     response.status(201).json({
       section: toDetail(section),

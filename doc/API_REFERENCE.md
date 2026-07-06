@@ -216,6 +216,15 @@ Agent imports must pass `autoPublish: false` (and the authoring contract has no 
 source-publish auto-publication can never trigger). Retry-safe `Idempotency-Key` support is
 tracked separately in #726.
 
+**Audit trace (AA-5, #653):** the same calls (plus `PUT .../courses/:courseId/items`) accept
+an optional `agentRunId` (`[a-zA-Z0-9._-]{1,64}`, one ID per orchestration run). When
+`clientRef`/`agentRunId` is present, the write's audit event gets
+`source: "agent_authoring"` + `clientRef` + `agentRunId` in its metadata — query audit
+events by `agentRunId` to reconstruct exactly what a run created (partial or complete).
+Section/course creation and course-items updates are now always audited
+(`section_created` with a `draft` flag, `course_created`, `course_items_updated`) for both
+human and agent writes; the agent marker is only added for agent-orchestrated calls.
+
 ---
 
 ## Admin - Courses & Learning Sections

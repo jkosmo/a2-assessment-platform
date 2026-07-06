@@ -66,16 +66,29 @@ Resolve each item: `ref` → mapped server ID; explicit `moduleId`/`sectionId` p
 
 → `204` (no body).
 
+## Audit trace (agentRunId)
+
+Generate ONE `agentRunId` per orchestration run (pattern `[a-zA-Z0-9._-]{1,64}`, e.g.
+`aar-<timestamp>-<random>`; the reference script does this automatically) and send it in
+the body of every write (`POST /sections`, `POST /modules/import`, `POST /courses`,
+`PUT .../items`). Every write is then audit-logged with
+`source: "agent_authoring" + clientRef + agentRunId` — so a human can reconstruct exactly
+what a run created, even after a partial failure. Always include the `agentRunId` in your
+final summary to the user.
+
 ## Error handling
 
 - Validation failures on create calls: `400 { error: "validation_error", issues: [...] }` —
   same Zod-issue shape as the validate report; show field paths.
 - Other errors: `{ error: "<code>", message }` (e.g. `module_import_failed`, 403
   `forbidden`, 404 `import_target_not_found`).
-- **Partial failure**: stop at the failed step; report created IDs + links, the error body,
-  and the remaining steps. Never auto-delete. Retries currently create duplicates
-  (Idempotency-Key is tracked in #726) — on a timeout, check with the user / the library
-  list before re-running a create step.
+- **Partial failure**: stop at the failed step; report per step what happened
+  (done / failed / skipped — the reference script returns this as `steps[]`), the created
+  IDs + links, the error body, and the `agentRunId`. Never auto-delete — cleanup (archive +
+  delete in the admin UI) or completion is the human's decision; a retry of the remaining
+  steps can reuse the `clientRef → id` map you already have. Retries of CREATE steps
+  currently create duplicates (Idempotency-Key is tracked in #726) — on a timeout, check
+  with the user / the library list before re-running a create step.
 
 ## Admin links (for the final summary)
 

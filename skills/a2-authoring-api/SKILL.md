@@ -52,11 +52,14 @@ point them to the admin UI links instead.
    environment, prefer the reference script (it implements the whole flow):
    `node skills/a2-authoring-api/scripts/import-package.mjs --file pkg.json --base-url <url>`.
 7. **Report the result**: one line per created object with its admin link
-   (`links.conversation`/`links.course`/`links.editor`), plus an explicit closing note:
+   (`links.conversation`/`links.course`/`links.editor`), the run's `agentRunId` (audit
+   trace), plus an explicit closing note:
    *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*
-8. **On partial failure**: stop at the failed step. Report what WAS created (IDs + links),
-   what failed (the API error body), and what remains. Do NOT delete anything — drafts are
-   harmless and may contain work worth keeping; cleanup is the human's decision.
+8. **On partial failure**: stop at the failed step. Report per plan step what happened
+   (done / failed / skipped), what WAS created (IDs + links), the API error body, and the
+   `agentRunId` (every completed write is audit-logged with it, so the run is
+   reconstructable). Do NOT delete anything — drafts are harmless and may contain work
+   worth keeping; cleanup is the human's decision.
 
 ## Security rules (hard)
 

@@ -1,7 +1,8 @@
-#!/usr/bin/env node
 // AA-4 (#652): reference implementation of the Agent Authoring orchestration.
+// (No shebang: vite-node evaluates this file when tests import it, and a shebang
+// line breaks its transform. Run it via `node <path>` instead of `./<path>`.)
 // Validates an a2-authoring-package/v1 against the dry-run endpoint, then executes
-// the returned plan (draft sections → draft module imports → draft course → items).
+// the returned plan (draft sections -> draft module imports -> draft course -> items).
 // Never calls a publish endpoint; on failure it stops and reports partial progress.
 //
 // Library usage (also consumed by test/agent-authoring-skill-import.test.ts):
@@ -62,19 +63,26 @@ export async function validatePackage({ baseUrl, headers, pkg, fetchImpl = fetch
 }
 
 // Executes the validate plan. Returns:
-//   { ok, report, created: [{ clientRef, type, id, links }], failedStep, error }
-// Partial failure: `created` holds everything that succeeded before `failedStep`.
-export async function importPackage({ baseUrl, headers, pkg, fetchImpl = fetch, log = () => {} }) {
+//   { ok, runId, report, created: [{ clientRef, type, id, links }],
+//     steps: [{ op, clientRef, status: "done"|"failed"|"skipped", id?, links? }],
+//     failedStep, error }
+// Partial failure: `created` holds everything that succeeded before `failedStep`;
+// `steps` is the standard per-operation status the skill shows the user (AA-5 #653).
+// Every write carries `agentRunId` (audit trace: source agent_authoring + runId).
+export async function importPackage({ baseUrl, headers, pkg, runId, fetchImpl = fetch, log = () => {} }) {
+  const agentRunId = runId ?? `aar-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const report = await validatePackage({ baseUrl, headers, pkg, fetchImpl });
   if (!report.valid) {
-    return { ok: false, report, created: [], failedStep: null, error: "validation_failed" };
+    return { ok: false, runId: agentRunId, report, created: [], steps: [], failedStep: null, error: "validation_failed" };
   }
 
   const objectsByRef = new Map(pkg.objects.map((object) => [object.clientRef, object]));
   const idsByRef = new Map();
   const created = [];
+  const steps = report.plan.map((step) => ({ ...step, status: "skipped" }));
 
-  for (const step of report.plan) {
+  for (const stepStatus of steps) {
+    const step = { op: stepStatus.op, clientRef: stepStatus.clientRef };
     const object = objectsByRef.get(step.clientRef);
     let result;
 
@@ -84,6 +92,7 @@ export async function importPackage({ baseUrl, headers, pkg, fetchImpl = fetch, 
         bodyMarkdown: object.payload.bodyMarkdown,
         draft: true,
         clientRef: step.clientRef,
+        agentRunId,
       });
       if (result.ok) {
         idsByRef.set(step.clientRef, result.json.section.id);
@@ -95,6 +104,7 @@ export async function importPackage({ baseUrl, headers, pkg, fetchImpl = fetch, 
         mode: "createNew",
         autoPublish: false,
         clientRef: step.clientRef,
+        agentRunId,
       });
       if (result.ok) {
         idsByRef.set(step.clientRef, result.json.moduleId);
@@ -107,6 +117,7 @@ export async function importPackage({ baseUrl, headers, pkg, fetchImpl = fetch, 
         ...(course.description ? { description: course.description } : {}),
         ...(course.certificationLevel ? { certificationLevel: course.certificationLevel } : {}),
         clientRef: step.clientRef,
+        agentRunId,
       });
       if (result.ok) {
         idsByRef.set(step.clientRef, result.json.course.id);
@@ -123,19 +134,27 @@ export async function importPackage({ baseUrl, headers, pkg, fetchImpl = fetch, 
         "PUT",
         `${baseUrl}/api/admin/content/courses/${idsByRef.get(step.clientRef)}/items`,
         headers,
-        { items },
+        { items, agentRunId },
       );
     } else {
-      return { ok: false, report, created, failedStep: step, error: `Unknown plan op: ${step.op}` };
+      stepStatus.status = "failed";
+      return { ok: false, runId: agentRunId, report, created, steps, failedStep: step, error: `Unknown plan op: ${step.op}` };
     }
 
     if (!result.ok) {
-      return { ok: false, report, created, failedStep: step, error: `HTTP ${result.status}: ${result.text}` };
+      stepStatus.status = "failed";
+      return { ok: false, runId: agentRunId, report, created, steps, failedStep: step, error: `HTTP ${result.status}: ${result.text}` };
     }
-    log(`${step.op} ${step.clientRef} ✓`);
+    stepStatus.status = "done";
+    const createdEntry = created.find((entry) => entry.clientRef === step.clientRef && step.op !== "set_course_items");
+    if (createdEntry) {
+      stepStatus.id = createdEntry.id;
+      stepStatus.links = createdEntry.links;
+    }
+    log(`${step.op} ${step.clientRef} ok`);
   }
 
-  return { ok: true, report, created, failedStep: null, error: null };
+  return { ok: true, runId: agentRunId, report, created, steps, failedStep: null, error: null };
 }
 
 function headersFromEnv(env) {
@@ -195,6 +214,7 @@ async function main() {
     return;
   }
 
+  console.log(`agentRunId: ${result.runId} (audit trace — all writes of this run carry it)`);
   if (result.created.length > 0) {
     console.log("\nCreated drafts (review and publish manually in the admin UI):");
     for (const entry of result.created) {

@@ -38,6 +38,12 @@ export const clientRefSchema = z
   .string()
   .regex(/^[a-z0-9-]{1,64}$/, "clientRef must match [a-z0-9-]{1,64}.");
 
+// AA-5 (#653): one orchestration run's trace ID — stamped into the audit metadata
+// of every write the run performs, so partial success is reconstructable.
+export const agentRunIdSchema = z
+  .string()
+  .regex(/^[a-zA-Z0-9._-]{1,64}$/, "agentRunId must match [a-zA-Z0-9._-]{1,64}.");
+
 export const moduleCreateBodySchema = z.object({
   title: localizedTextSchema,
   description: localizedTextSchema.optional(),
@@ -407,6 +413,8 @@ export const importBodySchema = z.object({
   autoPublish: z.boolean().optional(),
   // AA-2 (#650): echoed back in the response for agent plan→ID mapping; never persisted.
   clientRef: clientRefSchema.optional(),
+  // AA-5 (#653): stamped into the import's audit event (source: agent_authoring).
+  agentRunId: agentRunIdSchema.optional(),
 }).refine(
   (body) => body.mode !== "replaceExisting" || !!body.targetId,
   { message: "targetId is required when mode is replaceExisting", path: ["targetId"] },

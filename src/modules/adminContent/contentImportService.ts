@@ -27,7 +27,12 @@ import { createCourse, setCourseModules, setCourseItems, publishCourse, type Cou
 import { createSection } from "../course/sectionCommands.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import {
+  auditActions,
+  auditEntityTypes,
+  agentAuthoringAuditMetadata,
+  type AgentAuthoringContext,
+} from "../../observability/auditEvents.js";
 import type {
   ExportEnvelope,
   ModuleExportPayload,
@@ -160,6 +165,8 @@ export async function importModuleFromEnvelope(
     mode: ImportMode;
     targetModuleId?: string;
     autoPublish?: boolean;
+    // AA-5 (#653): agent-orchestrated imports carry a trace in the audit metadata.
+    agent?: AgentAuthoringContext;
   },
 ): Promise<{ moduleId: string; moduleVersionId: string }> {
   if (envelope.scope !== "module" || !envelope.module) {
@@ -179,6 +186,7 @@ export async function importModuleFromEnvelope(
       sourcePublishedAt: envelope.module.activeVersion.audit.publishedAt ?? null,
       sourcePublishedBy: envelope.module.activeVersion.audit.publishedBy ?? null,
       sourceVersionNo: envelope.module.activeVersion.audit.sourceVersionNo ?? null,
+      ...agentAuthoringAuditMetadata(options.agent),
     },
   });
 
