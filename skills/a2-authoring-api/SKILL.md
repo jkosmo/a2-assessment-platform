@@ -93,11 +93,11 @@ package are only valid within the target installation.
 | Installation type | Auth |
 |---|---|
 | Local dev (`npm run dev`, `AUTH_MODE=mock`) | Mock headers: `x-user-id`, `x-user-email`, `x-user-name`, `x-user-roles: SUBJECT_MATTER_OWNER` (or `ADMINISTRATOR`). Script env vars: `A2_USER_ID`, `A2_USER_EMAIL`, `A2_USER_NAME`, `A2_USER_ROLES`. |
-| Any shared installation (a tenant's staging/prod) | `Authorization: Bearer <JWT>` issued by **that installation's** identity provider (Entra tenant), from a user logged into that installation. Script env var: `A2_AUTH_BEARER`. A token from one tenant is useless in another — never reuse tokens across installations. |
+| Any shared installation (a tenant's staging/prod) — **preferred: agent authoring token** | A logged-in SMO/admin issues a short-lived token from **that installation**: `POST /api/admin/content/agent-authoring/tokens` (body `{ "label": "...", "ttlMinutes": 60 }`) → an `aat_...` secret shown once. The agent uses it as `Authorization: Bearer aat_...` (script env var: `A2_AUTH_BEARER`). It expires within the hour, can be revoked, and is scoped to draft authoring only — the API rejects any publish path, non-draft section create, `replaceExisting`/auto-publish import, and item changes on published courses. |
+| Any shared installation — fallback | A full `Authorization: Bearer <Entra JWT>` from a user logged into that installation (same env var). Unscoped — prefer the agent token. |
 
-Direct external-agent access (e.g. a ChatGPT Action calling an installation without a
-user-supplied token) is NOT available until AA-3 (#651) lands a short-lived, per-tenant
-agent authoring token.
+Tokens are per installation and useless anywhere else — never reuse them across
+installations, and never paste them into packages, chat output or files.
 
 ## Distribution
 

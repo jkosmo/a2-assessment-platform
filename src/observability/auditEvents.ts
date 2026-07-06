@@ -3,6 +3,7 @@ type EventMetadata<T extends AdditionalMetadata> = T & AdditionalMetadata;
 type NestedValue<T> = T extends string ? T : { [K in keyof T]: NestedValue<T[K]> }[keyof T];
 
 export const auditEntityTypes = {
+  agentAuthoringToken: "agent_authoring_token",
   appeal: "appeal",
   assessmentDecision: "assessment_decision",
   assessmentJob: "assessment_job",
@@ -66,6 +67,11 @@ export const auditActions = {
   },
   calibration: {
     workspaceSessionStarted: "calibration_workspace_session_started",
+  },
+  // AA-3 (#651): utstedelse/revokering av kortlivede agent-authoring-tokens.
+  agentAuthoring: {
+    tokenIssued: "agent_authoring_token_issued",
+    tokenRevoked: "agent_authoring_token_revoked",
   },
   course: {
     created: "course_created",
@@ -286,6 +292,8 @@ export type AuditMetadataByAction = {
   [auditActions.certification.participantNotificationFailed]: EventMetadata<{
     channel: string;
   }>;
+  [auditActions.agentAuthoring.tokenIssued]: EventMetadata<{ tokenId: string; expiresAt: string }>;
+  [auditActions.agentAuthoring.tokenRevoked]: EventMetadata<{ tokenId: string }>;
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
   [auditActions.course.itemsUpdated]: EventMetadata<{ courseId: string; itemCount: number }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;

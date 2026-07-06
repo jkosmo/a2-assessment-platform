@@ -216,6 +216,23 @@ Agent imports must pass `autoPublish: false` (and the authoring contract has no 
 source-publish auto-publication can never trigger). Retry-safe `Idempotency-Key` support is
 tracked separately in #726.
 
+**Agent authoring tokens (AA-3, #651):** short-lived, scoped tokens for direct agent calls.
+Issued by a logged-in ADMINISTRATOR/SMO with normal user auth (tokens can NOT mint tokens):
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `POST` | `/api/admin/content/agent-authoring/tokens` | Body `{ label?, ttlMinutes? (5–60, default 60) }` → `201 { token: "aat_…", id, expiresAt }`. The secret is shown **once**; only its sha256 hash is stored. Issuance is audited. |
+| `GET` | `/api/admin/content/agent-authoring/tokens` | Own tokens (id, label, createdAt, expiresAt, revokedAt, lastUsedAt) — never the secret. |
+| `POST` | `/api/admin/content/agent-authoring/tokens/:tokenId/revoke` | Owner or ADMINISTRATOR. Immediate; audited. |
+
+Using `Authorization: Bearer aat_…` authenticates as the issuing user (works in both auth
+modes; identity/roles from the DB) but the request is **scope-limited** to the five draft
+authoring operations (validate, modules/import, sections, courses, courses/:id/items) —
+anything else returns `403 agent_token_scope`. Extra hardening on the allowlisted calls:
+import requires `mode: "createNew"` + `autoPublish: false`, section create requires
+`draft: true`, and items may only be set on unpublished courses. No publish code path is
+reachable with a token. Tokens are per installation (multitenant) and expire within the hour.
+
 **Audit trace (AA-5, #653):** the same calls (plus `PUT .../courses/:courseId/items`) accept
 an optional `agentRunId` (`[a-zA-Z0-9._-]{1,64}`, one ID per orchestration run). When
 `clientRef`/`agentRunId` is present, the write's audit event gets

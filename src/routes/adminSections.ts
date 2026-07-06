@@ -90,6 +90,15 @@ adminSectionsRouter.post("/", async (request, response, next) => {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
+  // AA-3 (#651): agent-token-requests er create-draft-only — default-adferden
+  // (auto-publiser ved lagring) er ikke tillatt for tokens.
+  if (request.context?.agentToken && parsed.data.draft !== true) {
+    response.status(403).json({
+      error: "agent_token_scope",
+      message: "Agent tokens must create sections with draft: true.",
+    });
+    return;
+  }
   try {
     const section = await createSection({
       title: localizedTextCodec.serialize(parsed.data.title),

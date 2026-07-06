@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.13 - 2026-07-06
+
+feat(auth): #651 AA-3 — kortlivede, scopede agent-authoring-tokens (multitenant)
+
+Alternativ 2 fra designnotatet («Agent Authoring Session») implementert; åpner for trygg
+direkte agentbruk (ChatGPT/Claude) mot delte installasjoner:
+
+- **Ny tabell `AgentAuthoringToken`** (migrasjon 20260706100000): kun sha256-hash lagres,
+  hemmeligheten (`aat_<48 hex>`) vises én gang. TTL 5–60 min (default 60), revokerbar,
+  `lastUsedAt` spores. Per installasjon — tokens kan aldri brukes på tvers (multitenant).
+- **Endepunkter** under `/api/admin/content/agent-authoring/tokens`: utsted (POST), liste
+  (GET, aldri hemmeligheten), revokér (POST :id/revoke — eier eller ADMINISTRATOR).
+  Utstedelse/revokering audit-logges.
+- **Auth**: `Authorization: Bearer aat_...` virker i begge auth-moduser; identitet/roller
+  hentes fra utstederens brukerkonto — writes attribueres som brukeren og arver
+  eierskapsmodellen (#528). Mock-headere kan aldri overstyre token-identiteten.
+- **Scope-vakt** (`enforceAgentTokenScope`, montert rett etter authenticate): token-requests
+  kan kun kalle de fem draft-operasjonene (validate, modules/import, sections, courses,
+  courses/:id/items); alt annet → 403 `agent_token_scope`. Tokens kan ikke utstede/revokere
+  tokens. Rute-herding: import krever `createNew` + `autoPublish: false`, seksjoner krever
+  `draft: true`, items kun på upubliserte kurs — ingen publish-kodevei er nåbar med token.
+- Skillen er uendret i praksis (`A2_AUTH_BEARER` tar nå helst et `aat_`-token); SKILL.md,
+  api-flow og API_REFERENCE oppdatert; designnotatet §7 har beslutningen.
+- Tester: 6 nye integrasjonstester (utstedelse/liste uten hemmelighet, full orkestrering
+  med token + bruker-attribusjon, allowlist-avslag inkl. publish og self-mint, rute-herding,
+  expiry/revoke/ukjent token → 401, rollekrav for utstedelse).
+
 ## 1.6.12 - 2026-07-06
 
 feat(admin-content): #653 AA-5 — audit-spor og partial-failure-rapportering for agent authoring

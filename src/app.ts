@@ -5,6 +5,7 @@ import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.
 import { SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES } from "./modules/adminContent/sourceMaterialExtractionService.js";
 import { rolesFor } from "./config/capabilities.js";
 import { authenticate } from "./auth/authenticate.js";
+import { enforceAgentTokenScope } from "./auth/agentTokenScope.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
 import { securityHeadersMiddleware } from "./middleware/securityHeaders.js";
@@ -179,7 +180,9 @@ app.get("/admin-platform", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-platform.html"));
 });
 
-app.use("/api", authenticate, generalApiLimiter, requireConsent);
+// AA-3 (#651): agent-token-autentiserte requests scopes til draft-authoring-
+// endepunktene rett etter autentisering — før noe annet får kjøre.
+app.use("/api", authenticate, enforceAgentTokenScope, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
 app.use("/api/courses", requireAnyRole(rolesFor("courses")), coursesRouter);

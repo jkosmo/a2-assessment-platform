@@ -5,6 +5,7 @@ import { env } from "../config/env.js";
 import { AppError } from "../errors/AppError.js";
 import type { AuthPrincipal } from "./principal.js";
 import { getActiveRoles, syncEntraGroupRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
+import { AGENT_TOKEN_PREFIX, authenticateAgentToken } from "./agentAuthoringTokenService.js";
 import { resolveRequestLocale } from "../i18n/locale.js";
 import { t } from "../i18n/messages.js";
 
@@ -125,6 +126,35 @@ export async function authenticate(request: Request, response: Response, next: N
   if (env.AUTH_MODE === "mock" && process.env.NODE_ENV === "production") {
     console.error("CRITICAL SECURITY ERROR: Mock authentication is NOT allowed in production.");
     response.status(500).json({ error: "internal_error", message: "Security configuration error." });
+    return;
+  }
+
+  // AA-3 (#651): short-lived agent authoring tokens (Bearer aat_...) work in BOTH
+  // auth modes — they are resolved against this installation's database, not the
+  // IdP. Identity/roles come from the issuing user's DB record; the request is
+  // marked agentToken so enforceAgentTokenScope can restrict it to draft
+  // authoring endpoints. Handled before mode dispatch so mock headers can never
+  // override a token-authenticated identity.
+  const authorizationHeader = request.header("authorization");
+  if (authorizationHeader?.startsWith(`Bearer ${AGENT_TOKEN_PREFIX}`)) {
+    try {
+      const token = await authenticateAgentToken(authorizationHeader.slice("Bearer ".length));
+      if (!token || token.user.activeStatus === false) {
+        response.status(401).json({ error: "unauthorized", message: t(locale, "unauthorized") });
+        return;
+      }
+      request.context = {
+        correlationId: request.context?.correlationId,
+        userId: token.user.id,
+        roles: await getActiveRoles(token.user.id),
+        locale,
+        agentToken: { tokenId: token.id },
+      };
+      next();
+    } catch (error) {
+      console.error("Agent token authentication failed.", error);
+      next(new AppError("internal_error", 500, "Internal server error."));
+    }
     return;
   }
 

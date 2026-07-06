@@ -43,9 +43,15 @@ import {
   mcqRevisionBodySchema,
   sourceMaterialUploadBodySchema,
   importBodySchema,
+  agentTokenCreateBodySchema,
   parseRequest,
   parseOptionalDate,
 } from "../modules/adminContent/adminContentSchemas.js";
+import {
+  issueAgentAuthoringToken,
+  listAgentAuthoringTokens,
+  revokeAgentAuthoringToken,
+} from "../auth/agentAuthoringTokenService.js";
 import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { validateAuthoringPackage } from "../modules/adminContent/agentAuthoringValidationService.js";
 import { AUTHORING_PACKAGE_FORMAT } from "../modules/adminContent/agentAuthoringSchemas.js";
@@ -125,6 +131,74 @@ adminContentRouter.post("/agent-authoring/validate", async (request, response) =
       error: "agent_authoring_validate_failed",
       message: "Could not validate authoring package.",
     });
+  }
+});
+
+// AA-3 (#651): utstede/liste/revokere kortlivede agent-authoring-tokens.
+// Rutene er IKKE i agent-token-allowlisten (agentTokenScope.ts) — et token kan
+// aldri utstede eller revokere tokens. Hemmeligheten returneres én gang og kan
+// aldri hentes igjen (kun sha256-hash lagres).
+adminContentRouter.post("/agent-authoring/tokens", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { data, error } = parseRequest(agentTokenCreateBodySchema, request.body ?? {});
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  try {
+    const { secret, record } = await issueAgentAuthoringToken({
+      userId,
+      label: data.label,
+      ttlMinutes: data.ttlMinutes,
+    });
+    response.status(201).json({
+      token: secret,
+      id: record.id,
+      label: record.label,
+      expiresAt: record.expiresAt.toISOString(),
+      note: "Store this token now — it is never shown again. It expires automatically and can be revoked.",
+    });
+  } catch {
+    response.status(500).json({ error: "agent_token_issue_failed", message: "Could not issue agent token." });
+  }
+});
+
+adminContentRouter.get("/agent-authoring/tokens", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    response.json({ tokens: await listAgentAuthoringTokens(userId) });
+  } catch {
+    response.status(500).json({ error: "agent_token_list_failed", message: "Could not list agent tokens." });
+  }
+});
+
+adminContentRouter.post("/agent-authoring/tokens/:tokenId/revoke", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const token = await revokeAgentAuthoringToken({
+      tokenId: request.params.tokenId,
+      actorUserId: userId,
+      roles: request.context?.roles ?? [],
+    });
+    if (!token) {
+      response.status(404).json({ error: "agent_token_not_found", message: "Token not found." });
+      return;
+    }
+    response.json({ token: { id: token.id, revokedAt: token.revokedAt?.toISOString() ?? null } });
+  } catch {
+    response.status(500).json({ error: "agent_token_revoke_failed", message: "Could not revoke agent token." });
   }
 });
 
@@ -354,6 +428,16 @@ adminContentRouter.post("/modules/import", async (request, response) => {
   }
   if (data.payload.scope !== "module") {
     response.status(400).json({ error: "scope_mismatch", message: "Envelope scope must be 'module' for this endpoint." });
+    return;
+  }
+  // AA-3 (#651): agent-token-requests er create-draft-only. autoPublish default
+  // (true) ville publisert hvis kilde-audit har publishedAt — krev eksplisitt
+  // false, og forby replaceExisting (endrer eksisterende innhold).
+  if (request.context?.agentToken && (data.mode === "replaceExisting" || data.autoPublish !== false)) {
+    response.status(403).json({
+      error: "agent_token_scope",
+      message: "Agent tokens must import with mode 'createNew' and autoPublish: false.",
+    });
     return;
   }
   try {

@@ -44,6 +44,13 @@ export const agentRunIdSchema = z
   .string()
   .regex(/^[a-zA-Z0-9._-]{1,64}$/, "agentRunId must match [a-zA-Z0-9._-]{1,64}.");
 
+// AA-3 (#651): utstedelse av kortlivet agent-authoring-token. TTL-grensene speiler
+// konstantene i agentAuthoringTokenService (5–60 min); tjenesten klamper uansett.
+export const agentTokenCreateBodySchema = z.object({
+  label: z.string().trim().min(1).max(100).optional(),
+  ttlMinutes: z.number().int().min(5).max(60).optional(),
+});
+
 export const moduleCreateBodySchema = z.object({
   title: localizedTextSchema,
   description: localizedTextSchema.optional(),

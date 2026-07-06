@@ -5,8 +5,15 @@ Reference implementation: [scripts/import-package.mjs](../scripts/import-package
 through another mechanism). Endpoint catalog: `doc/API_REFERENCE.md` (Admin Content).
 
 All calls: `Content-Type: application/json`, auth per SKILL.md (mock headers locally,
-`Authorization: Bearer …` in shared environments). All routes require the `admin_content`
+`Authorization: Bearer …` in shared environments — preferably a short-lived `aat_...`
+agent authoring token issued by the user via
+`POST /api/admin/content/agent-authoring/tokens`). All routes require the `admin_content`
 capability (ADMINISTRATOR or SUBJECT_MATTER_OWNER).
+
+Note when running on an agent token: the API enforces the draft-only rules below
+(`draft: true`, `autoPublish: false`, `mode: "createNew"`, items only on draft courses) —
+deviating returns `403 agent_token_scope`. The token cannot call anything outside this
+flow, and cannot issue or revoke tokens.
 
 ## Sequence
 
