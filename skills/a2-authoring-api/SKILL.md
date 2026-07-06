@@ -65,8 +65,11 @@ point them to the admin UI links instead.
 
 - **Never call publish endpoints** (`.../publish` on modules, module-versions, sections,
   courses). The draft-only invariant is the whole point of this API.
-- **Tokens are secrets**: never write auth tokens/headers into package files, logs, chat
-  output, or `constraints`. Pass them via environment variables only.
+- **Tokens are secrets — but a pasted `aat_` token is an accepted workflow**: the user may
+  paste a short-lived agent authoring token (and the installation URL) directly into the
+  conversation; use it for this run's API calls. You must NEVER echo the token back, quote
+  it in summaries/plans, or write it into package files, logs, or `constraints`. Full
+  bearer JWTs and any other credentials still belong in environment variables only.
 - **Stop on validation errors** — never "push through" by dropping fields blindly; show the
   field paths to the user when you cannot fix them unambiguously.
 - Do not use `mode: "replaceExisting"` unless the user explicitly asked to overwrite a
@@ -93,7 +96,7 @@ package are only valid within the target installation.
 | Installation type | Auth |
 |---|---|
 | Local dev (`npm run dev`, `AUTH_MODE=mock`) | Mock headers: `x-user-id`, `x-user-email`, `x-user-name`, `x-user-roles: SUBJECT_MATTER_OWNER` (or `ADMINISTRATOR`). Script env vars: `A2_USER_ID`, `A2_USER_EMAIL`, `A2_USER_NAME`, `A2_USER_ROLES`. |
-| Any shared installation (a tenant's staging/prod) — **preferred: agent authoring token** | A logged-in SMO/admin issues a short-lived token from **that installation**: `POST /api/admin/content/agent-authoring/tokens` (body `{ "label": "...", "ttlMinutes": 60 }`) → an `aat_...` secret shown once. The agent uses it as `Authorization: Bearer aat_...` (script env var: `A2_AUTH_BEARER`). It expires within the hour, can be revoked, and is scoped to draft authoring only — the API rejects any publish path, non-draft section create, `replaceExisting`/auto-publish import, and item changes on published courses. |
+| Any shared installation (a tenant's staging/prod) — **preferred: agent authoring token** | The logged-in SMO/admin issues a short-lived token from **that installation**: `POST /api/admin/content/agent-authoring/tokens` (body `{ "label": "...", "ttlMinutes": 60 }`) → an `aat_...` secret shown once. **End-user flow: the user simply pastes the token (and the installation URL) into the conversation** — use it as `Authorization: Bearer aat_...` for this run and never repeat it in output. CLI flow: env var `A2_AUTH_BEARER`. The token expires within the hour, can be revoked, and is scoped to draft authoring only — the API rejects any publish path, non-draft section create, `replaceExisting`/auto-publish import, and item changes on published courses. If it expires mid-run (401), report partial progress and ask the user for a fresh token; resume from the failed step. |
 | Any shared installation — fallback | A full `Authorization: Bearer <Entra JWT>` from a user logged into that installation (same env var). Unscoped — prefer the agent token. |
 
 Tokens are per installation and useless anywhere else — never reuse them across
