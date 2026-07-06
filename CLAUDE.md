@@ -205,7 +205,8 @@ pointers in `.claude/skills/`. The `skills/` copy is the source of truth — edi
 
 - **`skills/a2-authoring-api/`** — build draft courses/modules/sections from conversation
   context via the Agent Authoring API (EPIC #647). Validate-first, draft-only, returns
-  admin-UI links; NEVER calls publish endpoints.
+  admin-UI links; NEVER calls publish endpoints. Distributable zip:
+  `npm run skill:package` → `dist/skills/a2-authoring-api-v<version>.zip`.
 
 ## AI delegation workflow (Claude orchestrates, Codex/Gemini drafts)
 

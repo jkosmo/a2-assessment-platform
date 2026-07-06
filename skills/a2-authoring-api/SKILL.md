@@ -72,9 +72,37 @@ point them to the admin UI links instead.
 - Do not use `mode: "replaceExisting"` unless the user explicitly asked to overwrite a
   specific existing module and gave you its ID.
 
-## Environment / auth
+## Environment resolution (multitenant)
 
-| Environment | Auth |
+The platform is installed **per tenant** — each customer/organization runs its own
+installation with its own URL and its own identity provider. There is **no default or
+hardcoded environment**. Resolve the target installation for every run, in this order:
+
+1. A base URL the user gave you for this run ("kjør mot https://…").
+2. The `A2_BASE_URL` env var (set per machine/workspace to that tenant's installation).
+3. Otherwise: **ask the user** which installation to target. Never guess, never fall back
+   to localhost or to any vendor environment.
+
+Echo the resolved base URL back in the confirmation step (workflow step 5) so the user
+sees WHERE the drafts will be created before any write happens. Content created in one
+installation never references IDs from another — `moduleId`/`sectionId` references in a
+package are only valid within the target installation.
+
+### Auth (per installation)
+
+| Installation type | Auth |
 |---|---|
 | Local dev (`npm run dev`, `AUTH_MODE=mock`) | Mock headers: `x-user-id`, `x-user-email`, `x-user-name`, `x-user-roles: SUBJECT_MATTER_OWNER` (or `ADMINISTRATOR`). Script env vars: `A2_USER_ID`, `A2_USER_EMAIL`, `A2_USER_NAME`, `A2_USER_ROLES`. |
-| Staging/prod | `Authorization: Bearer <Entra JWT>` from a logged-in user (script env var: `A2_AUTH_BEARER`). Direct external-agent access is NOT available until AA-3 (#651) lands a short-lived agent token. |
+| Any shared installation (a tenant's staging/prod) | `Authorization: Bearer <JWT>` issued by **that installation's** identity provider (Entra tenant), from a user logged into that installation. Script env var: `A2_AUTH_BEARER`. A token from one tenant is useless in another — never reuse tokens across installations. |
+
+Direct external-agent access (e.g. a ChatGPT Action calling an installation without a
+user-supplied token) is NOT available until AA-3 (#651) lands a short-lived, per-tenant
+agent authoring token.
+
+## Distribution
+
+This folder is the deployable unit. `npm run skill:package` (in the platform repo) builds
+`dist/skills/a2-authoring-api-v<version>.zip` — a zip with the `a2-authoring-api/` folder
+at its root, which is the layout ChatGPT (institution-level skill deploy, per-user
+install) and claude.ai (capabilities upload) expect. The repo copy remains the source of
+truth; re-run the packaging after any skill change and redeploy the zip.

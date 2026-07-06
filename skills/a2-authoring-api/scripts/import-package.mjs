@@ -172,8 +172,10 @@ function headersFromEnv(env) {
   };
 }
 
-function parseArgs(argv) {
-  const args = { file: undefined, baseUrl: undefined, validateOnly: false };
+function parseArgs(argv, env) {
+  // Multitenant: the platform is installed per tenant — there is NO default
+  // base URL. It must come from --base-url or the A2_BASE_URL env var.
+  const args = { file: undefined, baseUrl: env.A2_BASE_URL, validateOnly: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--file") args.file = argv[++i];
     else if (argv[i] === "--base-url") args.baseUrl = argv[++i];
@@ -181,15 +183,19 @@ function parseArgs(argv) {
     else throw new Error(`Unknown argument: ${argv[i]}`);
   }
   if (!args.file || !args.baseUrl) {
-    throw new Error("Usage: import-package.mjs --file <package.json> --base-url <url> [--validate-only]");
+    throw new Error(
+      "Usage: import-package.mjs --file <package.json> --base-url <url> [--validate-only]\n" +
+        "(--base-url can be omitted when the A2_BASE_URL env var points at the target installation)",
+    );
   }
   return args;
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2), process.env);
   const pkg = JSON.parse(await readFile(args.file, "utf8"));
   const headers = headersFromEnv(process.env);
+  console.log(`Target installation: ${args.baseUrl}`);
 
   if (args.validateOnly) {
     const report = await validatePackage({ baseUrl: args.baseUrl, headers, pkg });
