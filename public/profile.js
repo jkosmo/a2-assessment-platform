@@ -10,6 +10,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { initConsentGuard } from "/static/consent-guard.js";
+import { setHidden } from "/static/dom-visibility.js";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,15 @@ const deletionGraceBtn = document.getElementById("deletionGraceBtn");
 const deletionImmediateBtn = document.getElementById("deletionImmediateBtn");
 const deletionCancelBtn = document.getElementById("deletionCancelBtn");
 const deletionFeedback = document.getElementById("deletionFeedback");
+const agentTokensSection = document.getElementById("agentTokensSection");
+const agentTokenLabelInput = document.getElementById("agentTokenLabel");
+const agentTokenTtlSelect = document.getElementById("agentTokenTtl");
+const issueAgentTokenBtn = document.getElementById("issueAgentTokenBtn");
+const agentTokenReveal = document.getElementById("agentTokenReveal");
+const agentTokenSecret = document.getElementById("agentTokenSecret");
+const copyAgentTokenBtn = document.getElementById("copyAgentTokenBtn");
+const agentTokenCopied = document.getElementById("agentTokenCopied");
+const agentTokensBody = document.getElementById("agentTokensBody");
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -387,6 +397,117 @@ function renderDataView(exportData) {
   dataViewBody.appendChild(renderSection("dataview.section.deletionHistory", exportData?.deletionHistory));
 }
 
+// ── Agent access (AA-3, #731) ─────────────────────────────────────────────────
+// Short-lived agent authoring tokens: issue (secret shown ONCE), list, revoke.
+// The section is only shown for SUBJECT_MATTER_OWNER / ADMINISTRATOR — roles
+// come from /api/me (via initConsentGuard), never from the mock inputs alone.
+
+const AGENT_TOKEN_ROLES = ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"];
+
+function canUseAgentTokens(meData) {
+  const roles = Array.isArray(meData?.user?.roles) ? meData.user.roles : [];
+  return roles.some((role) => AGENT_TOKEN_ROLES.includes(role));
+}
+
+function renderAgentTokens(tokens) {
+  agentTokensBody.innerHTML = "";
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    cell.textContent = t("agentTokens.empty");
+    row.appendChild(cell);
+    agentTokensBody.appendChild(row);
+    return;
+  }
+  const now = Date.now();
+  for (const token of tokens) {
+    const row = document.createElement("tr");
+    const status = token.revokedAt
+      ? "revoked"
+      : new Date(token.expiresAt).getTime() <= now
+        ? "expired"
+        : "active";
+
+    for (const text of [
+      token.label || "—",
+      formatDateTime(token.createdAt),
+      formatDateTime(token.expiresAt),
+      token.lastUsedAt ? formatDateTime(token.lastUsedAt) : "—",
+      t(`agentTokens.status.${status}`),
+    ]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      row.appendChild(td);
+    }
+
+    const actionTd = document.createElement("td");
+    if (status === "active") {
+      const revokeBtn = document.createElement("button");
+      revokeBtn.className = "btn btn-danger";
+      revokeBtn.dataset.tokenId = token.id;
+      revokeBtn.textContent = t("agentTokens.revoke");
+      revokeBtn.addEventListener("click", async () => {
+        await runWithBusyButton(revokeBtn, async () => {
+          try {
+            await apiFetch(`/api/admin/content/agent-authoring/tokens/${encodeURIComponent(token.id)}/revoke`, headers, {
+              method: "POST",
+            });
+            window.showToast?.(t("agentTokens.revoked.toast"), "success");
+            await loadAgentTokens();
+          } catch (error) {
+            window.showToast?.(error.message ?? "Error", "error");
+          }
+        });
+      });
+      actionTd.appendChild(revokeBtn);
+    } else {
+      actionTd.textContent = "—";
+    }
+    row.appendChild(actionTd);
+    agentTokensBody.appendChild(row);
+  }
+}
+
+async function loadAgentTokens() {
+  try {
+    const body = await apiFetch("/api/admin/content/agent-authoring/tokens", headers);
+    renderAgentTokens(body?.tokens ?? []);
+  } catch {
+    agentTokensBody.innerHTML = "";
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    cell.textContent = t("agentTokens.error");
+    row.appendChild(cell);
+    agentTokensBody.appendChild(row);
+  }
+}
+
+async function refreshAgentTokensSection(meData) {
+  const visible = canUseAgentTokens(meData);
+  setHidden(agentTokensSection, !visible);
+  if (visible) {
+    await loadAgentTokens();
+  }
+}
+
+async function copyAgentTokenToClipboard(secret) {
+  try {
+    await navigator.clipboard.writeText(secret);
+    return true;
+  } catch {
+    // Fallback for contexts without clipboard permission: select the text so
+    // the user can copy manually.
+    const range = document.createRange();
+    range.selectNodeContents(agentTokenSecret);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return false;
+  }
+}
+
 // ── Deletion dialog ───────────────────────────────────────────────────────────
 
 function openDeletionDialog() {
@@ -510,6 +631,9 @@ async function loadProfileData() {
   } else {
     renderCourses(null);
   }
+
+  // Agent access (AA-3, #731) — gated on the /api/me roles.
+  await refreshAgentTokensSection(cachedMeData);
 }
 
 // ── Event wiring ──────────────────────────────────────────────────────────────
@@ -570,6 +694,38 @@ downloadDataBtn.addEventListener("click", async () => {
 
 requestDeletionBtn.addEventListener("click", () => {
   openDeletionDialog();
+});
+
+issueAgentTokenBtn.addEventListener("click", async () => {
+  await runWithBusyButton(issueAgentTokenBtn, async () => {
+    try {
+      const label = agentTokenLabelInput.value.trim();
+      const body = await apiFetch("/api/admin/content/agent-authoring/tokens", headers, {
+        method: "POST",
+        body: JSON.stringify({
+          ...(label ? { label } : {}),
+          ttlMinutes: Number(agentTokenTtlSelect.value),
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      agentTokenSecret.textContent = body.token;
+      setHidden(agentTokenCopied, true);
+      setHidden(agentTokenReveal, false);
+      agentTokenLabelInput.value = "";
+      await loadAgentTokens();
+    } catch (error) {
+      window.showToast?.(error.message ?? "Error", "error");
+    }
+  });
+});
+
+copyAgentTokenBtn.addEventListener("click", async () => {
+  const secret = agentTokenSecret.textContent ?? "";
+  if (!secret) return;
+  const copied = await copyAgentTokenToClipboard(secret);
+  if (copied) {
+    setHidden(agentTokenCopied, false);
+  }
 });
 
 deletionCancelBtn.addEventListener("click", () => {

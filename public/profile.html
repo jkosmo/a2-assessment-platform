@@ -144,6 +144,49 @@
           </div>
         </section>
 
+        <!-- Agent access (AA-3, #731) — only shown for SUBJECT_MATTER_OWNER / ADMINISTRATOR -->
+        <section id="agentTokensSection" class="card profile-section" style="display:none">
+          <h2 class="profile-section-title" data-i18n="agentTokens.title">Agent access</h2>
+          <p class="small" style="color:var(--color-meta);margin-top:0" data-i18n="agentTokens.description">Create a short-lived access token for an AI agent.</p>
+          <div class="row">
+            <div>
+              <label for="agentTokenLabel" data-i18n="agentTokens.form.label">Label</label>
+              <input id="agentTokenLabel" maxlength="100" autocomplete="off" />
+            </div>
+            <div>
+              <label for="agentTokenTtl" data-i18n="agentTokens.form.ttl">Valid for</label>
+              <select id="agentTokenTtl">
+                <option value="15" data-i18n="agentTokens.ttl.15">15 minutes</option>
+                <option value="30" data-i18n="agentTokens.ttl.30">30 minutes</option>
+                <option value="60" selected data-i18n="agentTokens.ttl.60">60 minutes</option>
+              </select>
+            </div>
+          </div>
+          <button id="issueAgentTokenBtn" class="btn btn-primary" style="margin-top:10px" data-i18n="agentTokens.issue">Create token</button>
+          <div id="agentTokenReveal" class="rights-card" style="display:none;margin-top:var(--space-1)">
+            <div class="rights-card-title" data-i18n="agentTokens.reveal.title">Your new token</div>
+            <div class="rights-card-desc" data-i18n="agentTokens.reveal.warning">Copy it now — it is never shown again.</div>
+            <code id="agentTokenSecret" style="display:block;margin-top:8px;padding:8px;font-size:12px;word-break:break-all;background:var(--color-surface);border:1px solid var(--color-border-soft);border-radius:var(--radius-card)"></code>
+            <button id="copyAgentTokenBtn" class="btn btn-secondary" data-i18n="agentTokens.copy">Copy</button>
+            <span id="agentTokenCopied" class="small" style="display:none;color:var(--color-success);margin-left:8px" data-i18n="agentTokens.copied">Copied!</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="agentTokens.table.label">Label</th>
+                  <th data-i18n="agentTokens.table.created">Created</th>
+                  <th data-i18n="agentTokens.table.expires">Expires</th>
+                  <th data-i18n="agentTokens.table.lastUsed">Last used</th>
+                  <th data-i18n="agentTokens.table.status">Status</th>
+                  <th data-i18n="agentTokens.table.actions">Action</th>
+                </tr>
+              </thead>
+              <tbody id="agentTokensBody"></tbody>
+            </table>
+          </div>
+        </section>
+
       </div><!-- /profileContent -->
 
       <!-- Data view (innsyn) -->
