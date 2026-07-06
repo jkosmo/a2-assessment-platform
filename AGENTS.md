@@ -157,4 +157,5 @@ description, read its `SKILL.md` and follow it before improvising.
   returns admin-UI links; NEVER calls publish endpoints. For ChatGPT/Codex this file is the
   skill; Claude Code additionally discovers it via the `.claude/skills/a2-authoring-api/`
   pointer. The canonical `skills/` copy is the source of truth — regenerate pointers from it,
-  never fork the content.
+  never fork the content. Distributable zip (ChatGPT institution deploy / claude.ai upload):
+  `npm run skill:package` → `dist/skills/a2-authoring-api-v<version>.zip`.
