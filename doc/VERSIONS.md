@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.12 - 2026-07-06
+
+feat(admin-content): #653 AA-5 — audit-spor og partial-failure-rapportering for agent authoring
+
+- **`agentRunId`** (valgfri, `[a-zA-Z0-9._-]{1,64}`) på `POST /sections`, `POST /modules/import`,
+  `POST /courses` og `PUT /courses/:id/items`: én ID per orkestreringskjøring, stemples i
+  audit-metadata sammen med `source: "agent_authoring"` + `clientRef` — spør audit på
+  `agentRunId` for å rekonstruere nøyaktig hva en kjøring opprettet (også ved delvis feil).
+  Ingen server-side run-ledger (designbeslutning: audit-events + skillens klientlogg holder).
+- **Nye audit-hendelser**: `section_created` (med `draft`-flagg) og `course_items_updated` —
+  seksjonsoppretting og item-sekvens var uauditerte writes; nå logges de for både mennesker
+  og agenter (agent-markøren settes kun ved clientRef/agentRunId).
+- **Skill-scriptet** genererer runId automatisk, sender den på alle writes, og returnerer
+  standard partial-failure-rapport: `steps[]` med done/failed/skipped per plan-steg + `runId`.
+- Fix: fjernet shebang fra `import-package.mjs` — `#!` + CRLF (git-checkout på Windows) brakk
+  vite-nodes transform når tester importerer scriptet (CI på Linux/LF var upåvirket).
+- Tester: 3 nye integrasjonstester (audit-spor for vellykket kjøring, mid-flow-feil med
+  bevarte ID-er/links/steps, og at manuelle creates auditeres uten agent-markør).
+
 ## 1.6.11 - 2026-07-05
 
 feat(admin-content): #650 AA-2 — agentvennlige create/import-responser + draft-seksjoner

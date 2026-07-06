@@ -69,6 +69,8 @@ export const auditActions = {
   },
   course: {
     created: "course_created",
+    // AA-5 (#653): item-sekvensen er en write i agent-orkestreringen og må være sporbar.
+    itemsUpdated: "course_items_updated",
     published: "course_published",
     unpublished: "course_unpublished",
     archived: "course_archived",
@@ -76,6 +78,7 @@ export const auditActions = {
     completionIssued: "course_completion_issued",
   },
   section: {
+    created: "section_created",
     published: "section_published",
     unpublished: "section_unpublished",
     archived: "section_archived",
@@ -284,10 +287,12 @@ export type AuditMetadataByAction = {
     channel: string;
   }>;
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.itemsUpdated]: EventMetadata<{ courseId: string; itemCount: number }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;
   [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
   [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
+  [auditActions.section.created]: EventMetadata<{ sectionId: string; draft: boolean }>;
   [auditActions.section.published]: EventMetadata<{ sectionId: string }>;
   [auditActions.section.unpublished]: EventMetadata<{ sectionId: string }>;
   [auditActions.section.archived]: EventMetadata<{ sectionId: string }>;
@@ -391,3 +396,17 @@ export type AuditEventInput<TAction extends AuditAction = AuditAction> = {
   actorId?: string;
   metadata?: AuditMetadataByAction[TAction];
 };
+
+// AA-5 (#653): agent-orchestrated writes carry a trace (source + clientRef +
+// agentRunId) in the audit metadata so partial success is reconstructable —
+// query audit events by agentRunId to see exactly what a run created.
+export type AgentAuthoringContext = { clientRef?: string; agentRunId?: string };
+
+export function agentAuthoringAuditMetadata(agent?: AgentAuthoringContext) {
+  if (!agent || (!agent.clientRef && !agent.agentRunId)) return {};
+  return {
+    source: "agent_authoring" as const,
+    ...(agent.clientRef ? { clientRef: agent.clientRef } : {}),
+    ...(agent.agentRunId ? { agentRunId: agent.agentRunId } : {}),
+  };
+}

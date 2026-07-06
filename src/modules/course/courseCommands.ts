@@ -2,7 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 
 export async function createCourse(input: {
@@ -12,6 +12,8 @@ export async function createCourse(input: {
   enrollmentPolicy?: "OPEN" | "RESTRICTED";
   discussionsEnabled?: boolean;
   actorId?: string;
+  // AA-5 (#653): agent-orchestrated creates carry a trace in the audit metadata.
+  agent?: AgentAuthoringContext;
 }) {
   const course = await prisma.course.create({
     data: {
@@ -28,7 +30,7 @@ export async function createCourse(input: {
     entityId: course.id,
     action: auditActions.course.created,
     actorId: input.actorId,
-    metadata: { courseId: course.id },
+    metadata: { courseId: course.id, ...agentAuthoringAuditMetadata(input.agent) },
   });
 
   return course;
@@ -176,7 +178,12 @@ export type CourseItemInput =
 // sections interleaved (#486/B2). sortOrder follows array position. During the
 // expand-contract transition this also re-syncs CourseModule from the MODULE
 // items so the not-yet-cut-over read paths stay correct.
-export async function setCourseItems(courseId: string, items: CourseItemInput[]) {
+export async function setCourseItems(
+  courseId: string,
+  items: CourseItemInput[],
+  // AA-5 (#653): audited write; agent runs stamp source/agentRunId into the metadata.
+  options?: { actorId?: string; agent?: AgentAuthoringContext },
+) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
@@ -198,7 +205,7 @@ export async function setCourseItems(courseId: string, items: CourseItemInput[])
   }
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.
-  return runInTransaction(async (tx) => {
+  const result = await runInTransaction(async (tx) => {
     await tx.courseItem.deleteMany({ where: { courseId } });
     if (items.length > 0) {
       await tx.courseItem.createMany({
@@ -216,6 +223,14 @@ export async function setCourseItems(courseId: string, items: CourseItemInput[])
     }
     await tx.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
   });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.course,
+    entityId: courseId,
+    action: auditActions.course.itemsUpdated,
+    actorId: options?.actorId,
+    metadata: { courseId, itemCount: items.length, ...agentAuthoringAuditMetadata(options?.agent) },
+  });
+  return result;
 }
 
 // Legacy modules-only setter (import + admin PUT /modules). #502: skriver nå CourseItem MODULE-

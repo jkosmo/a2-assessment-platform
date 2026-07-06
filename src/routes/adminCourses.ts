@@ -15,7 +15,7 @@ import {
   revokeEnrollment,
   listCourseEnrollments,
 } from "../modules/course/index.js";
-import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest, clientRefSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
@@ -54,6 +54,8 @@ const setCourseItemsBodySchema = z.object({
       z.object({ type: z.literal("SECTION"), sectionId: z.string().min(1), discussionsEnabled: z.boolean().optional() }),
     ]),
   ),
+  // AA-5 (#653): stamped into the items-update's audit event (source: agent_authoring).
+  agentRunId: agentRunIdSchema.optional(),
 });
 
 const courseLocalizationBodySchema = z.object({
@@ -67,7 +69,11 @@ const courseLocalizationBodySchema = z.object({
 
 // AA-2 (#650): create accepts an optional clientRef (echoed back, never persisted)
 // and returns admin links so agent orchestration can hand humans review URLs.
-const courseCreateBodySchema = courseBodySchema.extend({ clientRef: clientRefSchema.optional() });
+// AA-5 (#653): agentRunId is stamped into the create's audit event.
+const courseCreateBodySchema = courseBodySchema.extend({
+  clientRef: clientRefSchema.optional(),
+  agentRunId: agentRunIdSchema.optional(),
+});
 
 adminCoursesRouter.post("/", async (request, response, next) => {
   const parsed = courseCreateBodySchema.safeParse(request.body);
@@ -84,6 +90,7 @@ adminCoursesRouter.post("/", async (request, response, next) => {
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
       actorId: request.context?.userId,
+      agent: { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId },
     });
     response.status(201).json({
       course,
@@ -318,7 +325,10 @@ adminCoursesRouter.put("/:courseId/items", async (request, response, next) => {
     return;
   }
   try {
-    await setCourseItems(request.params.courseId, parsed.data.items);
+    await setCourseItems(request.params.courseId, parsed.data.items, {
+      actorId: request.context?.userId,
+      agent: { agentRunId: parsed.data.agentRunId },
+    });
     response.status(204).send();
   } catch (error) {
     next(error);

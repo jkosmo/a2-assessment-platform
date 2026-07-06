@@ -14,10 +14,20 @@ export interface AuthoringValidationReport {
   plan: Array<{ op: string; clientRef: string }>;
 }
 
+export interface AuthoringStepStatus {
+  op: string;
+  clientRef: string;
+  status: "done" | "failed" | "skipped";
+  id?: string;
+  links?: Record<string, string>;
+}
+
 export interface AuthoringImportResult {
   ok: boolean;
+  runId: string;
   report: AuthoringValidationReport;
   created: AuthoringCreatedObject[];
+  steps: AuthoringStepStatus[];
   failedStep: { op: string; clientRef: string } | null;
   error: string | null;
 }
@@ -26,6 +36,7 @@ export interface AuthoringCallOptions {
   baseUrl: string;
   headers: Record<string, string>;
   pkg: unknown;
+  runId?: string;
   fetchImpl?: typeof fetch;
   log?: (line: string) => void;
 }

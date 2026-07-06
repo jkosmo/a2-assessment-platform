@@ -2,7 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
 
 // Section CRUD + versioning (#485/B1) for course learning sections (#476).
@@ -14,8 +14,16 @@ import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
 // AA-2 (#650): `draft: true` keeps the section in Utkast (activeVersionId stays
 // null) — same state a restored section lands in (I3). Content lives in version 1;
 // publishSection re-points to it. Default (false) preserves auto-publish-on-save.
-export async function createSection(input: { title: string; bodyMarkdown: string; actorId?: string; draft?: boolean }) {
-  return runInTransaction(async (tx) => {
+// AA-5 (#653): creation is audited; agent-orchestrated creates carry
+// source/clientRef/agentRunId in the metadata.
+export async function createSection(input: {
+  title: string;
+  bodyMarkdown: string;
+  actorId?: string;
+  draft?: boolean;
+  agent?: AgentAuthoringContext;
+}) {
+  const created = await runInTransaction(async (tx) => {
     const section = await tx.courseSection.create({ data: { title: input.title } });
     const version = await tx.courseSectionVersion.create({
       data: {
@@ -38,6 +46,18 @@ export async function createSection(input: { title: string; bodyMarkdown: string
       include: { activeVersion: true },
     });
   });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.courseSection,
+    entityId: created.id,
+    action: auditActions.section.created,
+    actorId: input.actorId,
+    metadata: {
+      sectionId: created.id,
+      draft: Boolean(input.draft),
+      ...agentAuthoringAuditMetadata(input.agent),
+    },
+  });
+  return created;
 }
 
 export async function updateSectionTitle(sectionId: string, title: string) {
