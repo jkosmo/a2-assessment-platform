@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.18 - 2026-07-07
+
+feat(courses): #734 kaskade-publisering — publiser aldri et kurs med upublisert innhold
+
+Publisering av et KURS sørget ikke for at kursets moduler/seksjoner var publisert. `publishCourse`
+avviste bare kurs uten moduler; et kurs kunne dermed gå live med utkast-moduler/-seksjoner, og
+deltakere møtte «modul ikke tilgjengelig» (brudd på innholds-livssyklus-invariant I1,
+`doc/design/CONTENT_LIFECYCLE.md`).
+
+Nå: `GET /api/admin/content/courses/:id/publish-preview` rapporterer hvilke elementer som er
+upublisert og om hvert er publiserbart (modul → `validateModuleVersionForPublish`; seksjon →
+har innhold). `POST …/publish` tar `{ publishItems?: boolean }`: uten flagget når det finnes
+upubliserte elementer → `409 course_has_unpublished_items`; med `publishItems:true` kaskade-
+publiseres elementene (elementer → kurs). Kan et element ikke publiseres (modul feiler validering /
+mangler innhold, arkivert element) → `422 course_publish_blocked_by_items` og INGENTING publiseres
+(atomisk-ish; kurset blir aldri «publisert med ødelagt innhold»). Kurs-UI (`admin-content-courses.js`)
+åpner en bekreftelsesdialog som lister de upubliserte elementene og tilbyr «Publiser kurset og alt
+innhold» (kaskade) + «Avbryt»; er alt allerede publisert publiseres direkte uten dialog; er noe ikke
+publiserbart forklarer dialogen hvorfor og blokkerer (ingen «kun kurs»-utvei — det ville brutt I1).
+
+Sikkerhet: agent-tokens kan fortsatt ikke publisere — publish/publish-preview er utenfor
+`agentTokenScope`-allowlisten (uendret). Ingen skjemaendring (Prisma-fri kodesti). Tester:
+`test/m2-course-cascade-publish.test.ts` (integrasjon) + `test/e2e/admin-content-course-cascade-publish.spec.ts` (e2e).
+
 ## 1.6.17 - 2026-07-07
 
 fix(ux): #736 profilsiden — blandet locale i fullførte-tabellene + fjernet statusprikk

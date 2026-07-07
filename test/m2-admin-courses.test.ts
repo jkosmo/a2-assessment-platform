@@ -41,6 +41,21 @@ describe("Admin course management", () => {
       data: { title: `Admin Course Module B ${Date.now()}` },
       select: { id: true, title: true },
     });
+    // #734: publishing a course now requires its modules to be published first (invariant I1 —
+    // a published course must never contain unavailable content). Publish both modules up front so
+    // the course-publish below exercises the unchanged all-items-published happy path.
+    for (const module of [moduleA, moduleB]) {
+      const version = await prisma.moduleVersion.create({
+        data: {
+          moduleId: module.id,
+          versionNo: 1,
+          taskText: JSON.stringify({ "en-GB": "Task text long enough to be a meaningful assessment." }),
+          publishedAt: new Date(),
+        },
+        select: { id: true },
+      });
+      await prisma.module.update({ where: { id: module.id }, data: { activeVersionId: version.id } });
+    }
 
     const createCourseResponse = await request(app)
       .post("/api/admin/content/courses")

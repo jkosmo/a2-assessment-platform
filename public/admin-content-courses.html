@@ -337,6 +337,24 @@
       .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
       .dialog-cancel:hover { background: var(--color-row-hover); }
 
+      /* ── Cascade-publish item list (#734) ────────────────────────────────── */
+      .cascade-publish-list-wrap { margin-bottom: var(--space-1); max-height: 260px; overflow-y: auto; }
+      .cascade-publish-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+      .cascade-publish-item {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px 10px;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        background: var(--color-bg);
+        font-size: 13px;
+      }
+      .cascade-publish-item.is-blocked { border-color: #f5c0bb; background: #fdf0ef; }
+      .cascade-publish-item-title { font-weight: 600; }
+      .cascade-publish-blocker { flex-basis: 100%; font-size: 12px; color: var(--color-error); }
+
       /* ── Loading ─────────────────────────────────────────────────────────── */
       .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
 
@@ -446,6 +464,19 @@
       <div class="dialog-actions">
         <button type="button" id="deleteConfirmBtn" class="btn btn-danger">Slett kurs</button>
         <button type="button" class="dialog-cancel" id="deleteCancelBtn">Avbryt</button>
+      </div>
+    </dialog>
+
+    <!-- Cascade-publish confirmation dialog (#734): lists the course's unpublished modules/sections
+         and offers to publish them together with the course, or blocks publishing when an item
+         cannot be published yet. -->
+    <dialog id="cascadePublishDialog" aria-labelledby="cascadePublishTitle">
+      <h2 class="dialog-title" id="cascadePublishTitle">Publiser kurs og innhold</h2>
+      <p class="dialog-text" id="cascadePublishText">Kurset har upublisert innhold.</p>
+      <div id="cascadePublishList" class="cascade-publish-list-wrap"></div>
+      <div class="dialog-actions">
+        <button type="button" id="cascadePublishConfirmBtn" class="btn btn-primary">Publiser kurset og alt innhold</button>
+        <button type="button" class="dialog-cancel" id="cascadePublishCancelBtn">Avbryt</button>
       </div>
     </dialog>
 

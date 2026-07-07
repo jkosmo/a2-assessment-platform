@@ -878,6 +878,19 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // #734: the courses page GETs a publish-preview before publishing. Default to "everything already
+  // published" so the plain publish path applies; specs that exercise the cascade dialog register
+  // their own publish-preview route (which wins, being registered later).
+  await page.route("**/api/admin/content/courses/*/publish-preview", async (route: Route) => {
+    const segments = new URL(route.request().url()).pathname.split("/");
+    const courseId = decodeURIComponent(segments[segments.length - 2] ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ courseId, allPublished: true, publishable: true, unpublishedItems: [] }),
+    });
+  });
+
   await page.route("**/api/admin/content/courses/*/publish", async (route: Route) => {
     const segments = new URL(route.request().url()).pathname.split("/");
     const courseId = decodeURIComponent(segments[segments.length - 2] ?? "");
@@ -888,7 +901,7 @@ export async function mockCommonApis(page: Page, {
     }
 
     course.publishedAt = "2026-04-18T12:00:00.000Z";
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course }) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course, publishedItems: [] }) });
   });
 
   await page.route("**/api/admin/content/courses/*", async (route: Route) => {
