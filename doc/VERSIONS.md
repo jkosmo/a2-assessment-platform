@@ -2,7 +2,7 @@
 
 This document tracks release versions and what each version includes.
 
-## 1.6.17 - 2026-07-07
+## 1.6.18 - 2026-07-07
 
 feat(courses): #734 kaskade-publisering — publiser aldri et kurs med upublisert innhold
 
@@ -25,6 +25,20 @@ publiserbart forklarer dialogen hvorfor og blokkerer (ingen «kun kurs»-utvei �
 Sikkerhet: agent-tokens kan fortsatt ikke publisere — publish/publish-preview er utenfor
 `agentTokenScope`-allowlisten (uendret). Ingen skjemaendring (Prisma-fri kodesti). Tester:
 `test/m2-course-cascade-publish.test.ts` (integrasjon) + `test/e2e/admin-content-course-cascade-publish.spec.ts` (e2e).
+
+## 1.6.17 - 2026-07-07
+
+fix(ux): #736 profilsiden — blandet locale i fullførte-tabellene + fjernet statusprikk
+
+- **Blandet locale (Bestått/Vis bevis):** rotårsak var at språkbytte i nedtrekksmenyen kun
+  re-kjørte `applyTranslations()` på statiske `data-i18n`-etiketter, mens de dynamisk bygde
+  modul-/kurs-radene (rendret via `t()`) ikke ble re-rendret — så verdiene ble hengende på
+  forrige språk mens overskriftene byttet. Fiks: cache siste modul-/kursdata og re-render
+  `renderProfile`/`renderModules`/`renderCourses` ved språkbytte. E2e-guard som bytter locale
+  og asserterer at verdicellene følger med.
+- **Statusprikk «●»:** fjernet `::before`-dekoren på `.outcome--pass/--review/--fail` i
+  shared.css (typografisk et list-glyph; den fargede teksten formidler status alene). Treffer
+  alle tre flatene samtidig (profil, deltaker, fullførte moduler).
 
 ## 1.6.16 - 2026-07-07
 
