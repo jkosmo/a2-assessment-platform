@@ -22,6 +22,9 @@ export async function issueAgentAuthoringToken(input: {
   userId: string;
   label?: string;
   ttlMinutes?: number;
+  // The issuer's effective roles for THIS request (DB ∪ Entra-claim). Frozen onto
+  // the token so token-auth doesn't have to re-derive non-persisted claim roles.
+  roles: string[];
 }) {
   const ttl = Math.min(
     AGENT_TOKEN_MAX_TTL_MINUTES,
@@ -33,6 +36,7 @@ export async function issueAgentAuthoringToken(input: {
       tokenHash: sha256(secret),
       label: input.label ?? null,
       userId: input.userId,
+      rolesJson: JSON.stringify(input.roles ?? []),
       expiresAt: new Date(Date.now() + ttl * 60_000),
     },
   });

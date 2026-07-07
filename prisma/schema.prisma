@@ -115,6 +115,11 @@ model AgentAuthoringToken {
   label      String?
   userId     String
   user       User      @relation("AgentAuthoringTokens", fields: [userId], references: [id], onDelete: Cascade)
+  // Snapshot of the issuer's effective roles at issuance (JSON array of AppRole).
+  // Entra app-role-claim roles are NOT persisted as RoleAssignments, so re-deriving
+  // them at token-auth time would drop them (→ 403). Freezing them here binds the
+  // token to exactly the roles the user was authorized with when they created it.
+  rolesJson  String    @default("[]")
   createdAt  DateTime  @default(now())
   expiresAt  DateTime
   revokedAt  DateTime?

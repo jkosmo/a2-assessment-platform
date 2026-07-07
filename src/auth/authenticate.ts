@@ -41,6 +41,18 @@ function parseRoleNames(input: string[] | undefined): AppRole[] {
     .filter((role) => valid.has(role)) as AppRole[];
 }
 
+// AA-3 (#651): parse the token's frozen role snapshot (JSON array). Never throws —
+// a corrupt value yields [] so auth falls back to persisted roles.
+function parseStoredRoles(rolesJson: string | null | undefined): string[] {
+  if (!rolesJson) return [];
+  try {
+    const parsed = JSON.parse(rolesJson);
+    return Array.isArray(parsed) ? parsed.filter((role): role is string => typeof role === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 function isIdentityReconciliationError(error: unknown): error is { code: string } {
   return (
     typeof error === "object" &&
@@ -131,10 +143,12 @@ export async function authenticate(request: Request, response: Response, next: N
 
   // AA-3 (#651): short-lived agent authoring tokens (Bearer aat_...) work in BOTH
   // auth modes — they are resolved against this installation's database, not the
-  // IdP. Identity/roles come from the issuing user's DB record; the request is
-  // marked agentToken so enforceAgentTokenScope can restrict it to draft
-  // authoring endpoints. Handled before mode dispatch so mock headers can never
-  // override a token-authenticated identity.
+  // IdP. The roles were frozen onto the token at issuance (the issuer's effective
+  // roles, incl. Entra JWT-claim roles that are never persisted as RoleAssignments
+  // and so can't be re-derived here). Legacy tokens with no snapshot fall back to
+  // persisted roles. The request is marked agentToken so enforceAgentTokenScope can
+  // restrict it to draft authoring endpoints. Handled before mode dispatch so mock
+  // headers can never override a token-authenticated identity.
   const authorizationHeader = request.header("authorization");
   if (authorizationHeader?.startsWith(`Bearer ${AGENT_TOKEN_PREFIX}`)) {
     try {
@@ -143,10 +157,11 @@ export async function authenticate(request: Request, response: Response, next: N
         response.status(401).json({ error: "unauthorized", message: t(locale, "unauthorized") });
         return;
       }
+      const frozenRoles = parseRoleNames(parseStoredRoles(token.rolesJson));
       request.context = {
         correlationId: request.context?.correlationId,
         userId: token.user.id,
-        roles: await getActiveRoles(token.user.id),
+        roles: frozenRoles.length > 0 ? frozenRoles : await getActiveRoles(token.user.id),
         locale,
         agentToken: { tokenId: token.id },
       };

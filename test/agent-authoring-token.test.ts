@@ -120,6 +120,39 @@ describe("#651 agent authoring tokens", () => {
     expect(moduleRow.createdById).toBe(adminUser.id);
   });
 
+  it("works when the issuer's role is not persisted (Entra claim / mock hint) — #651 stage 403 regression", async () => {
+    // A user whose SMO role comes ONLY from the request (x-user-roles hint in mock,
+    // a JWT app-role claim on stage) and has NO persisted RoleAssignment. Before the
+    // role-snapshot fix, getActiveRoles() returned [] at token-auth time → 403.
+    const claimOnlyHeaders = {
+      "x-user-id": "smo-claim-only-651",
+      "x-user-email": "smo.claim651@company.com",
+      "x-user-name": "Claim-only SMO",
+      "x-user-roles": "SUBJECT_MATTER_OWNER",
+    };
+    const issued = await request(app)
+      .post("/api/admin/content/agent-authoring/tokens")
+      .set(claimOnlyHeaders)
+      .send({ label: "claim-only" });
+    expect(issued.status).toBe(201);
+
+    // Sanity: this user genuinely has no persisted roles.
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { externalId: "smo-claim-only-651" },
+      select: { id: true },
+    });
+    const persisted = await prisma.roleAssignment.count({ where: { userId: user.id } });
+    expect(persisted).toBe(0);
+
+    // The token still authorises the draft-authoring endpoint (200, not 403).
+    const validate = await request(app)
+      .post("/api/admin/content/agent-authoring/validate")
+      .set({ authorization: `Bearer ${issued.body.token}` })
+      .send({ package: tokenPackage(`claim-${Date.now()}`) });
+    expect(validate.status).toBe(200);
+    expect(validate.body.valid).toBe(true);
+  });
+
   it("denies everything outside the draft-authoring allowlist", async () => {
     const { token, id } = await issueToken();
     const bearer = { authorization: `Bearer ${token}` };
