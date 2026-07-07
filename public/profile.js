@@ -74,6 +74,11 @@ let participantRuntimeConfig = {
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let cachedMeData = null;
 let cachedDataExport = null;
+// #736: the completed-modules/courses tables are built dynamically via t(); a locale switch only
+// re-runs applyTranslations() on static [data-i18n] labels, so cache the last data and re-render
+// these on locale change — otherwise headers switch language while the values stay behind.
+let cachedModulesData = null;
+let cachedCoursesData = null;
 
 // ── Locale ────────────────────────────────────────────────────────────────────
 
@@ -620,17 +625,10 @@ async function loadProfileData() {
     apiFetch("/api/courses/completions", headers),
   ]);
 
-  if (modulesResult.status === "fulfilled") {
-    renderModules(modulesResult.value);
-  } else {
-    renderModules(null);
-  }
-
-  if (coursesResult.status === "fulfilled") {
-    renderCourses(coursesResult.value);
-  } else {
-    renderCourses(null);
-  }
+  cachedModulesData = modulesResult.status === "fulfilled" ? modulesResult.value : null;
+  cachedCoursesData = coursesResult.status === "fulfilled" ? coursesResult.value : null;
+  renderModules(cachedModulesData);
+  renderCourses(cachedCoursesData);
 
   // Agent access (AA-3, #731) — gated on the /api/me roles.
   await refreshAgentTokensSection(cachedMeData);
@@ -644,6 +642,11 @@ loadMeButton.addEventListener("click", async () => {
 
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
+  // #736: re-render the dynamically built content so table values follow the new locale, not just
+  // the static [data-i18n] labels that applyTranslations() handles.
+  if (cachedMeData) renderProfile(cachedMeData);
+  renderModules(cachedModulesData);
+  renderCourses(cachedCoursesData);
 });
 
 rolesInput.addEventListener("input", () => {
