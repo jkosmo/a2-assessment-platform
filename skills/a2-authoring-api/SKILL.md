@@ -25,41 +25,56 @@ point them to the admin UI links instead.
 
 ## Workflow
 
-1. **Collect requirements** from the user and the conversation/project context: number of
-   modules and sections, assessment mode(s) (`FREETEXT_PLUS_MCQ`, `MCQ_ONLY`,
-   `FREETEXT_ONLY`), primary language (`locale`), certification level, ordering, and the
-   actual subject matter the content should teach/assess.
-2. **Author the package**: an `a2-authoring-package/v1` JSON document. Full contract with
-   per-mode examples: [references/package-schema.md](references/package-schema.md). A
-   complete working example: [fixtures/example-package.json](fixtures/example-package.json).
-   Write real content — concrete task texts, rubric criteria tied to each module's topic,
-   plausible MCQ distractors — not lorem ipsum. Record the user's requirements verbatim in
-   `constraints` (audit trail).
-3. **Validate (dry-run)**: `POST /api/admin/content/agent-authoring/validate` with
-   `{ "package": <package> }` — or run
-   `node skills/a2-authoring-api/scripts/import-package.mjs --file pkg.json --base-url <url> --validate-only`.
-   The endpoint never writes; 200 with `valid: false` is a report, not an error.
-4. **Fix and re-validate**: `issues[].path` is a JSON path into your package and
-   `issues[].code` is stable — fix mechanically unambiguous errors (`required_for_mode`,
-   `unknown_client_ref`, `unknown_field`, …) and re-validate. If an issue requires a
-   judgment call (e.g. `possible_duplicate_title` — reuse the existing module instead?),
-   ask the user instead of guessing.
-5. **Confirm before writing** when the package is large (> ~5 objects), touches existing
-   content (`moduleId`/`sectionId` references), or the requirements were ambiguous. Show a
-   one-line-per-object summary of what will be created.
-6. **Execute the plan** returned by validate, in order. Call sequence, exact bodies, and
-   auth headers: [references/api-flow.md](references/api-flow.md). In a shell-capable
-   environment, prefer the reference script (it implements the whole flow):
+This skill is a **course-authoring conversation**, not just a JSON emitter. The craft —
+interviewing the user, designing a pedagogically sound course, and previewing it before
+building — is in **[references/authoring-playbook.md](references/authoring-playbook.md)**;
+read it. The four phases:
+
+### Phase 1 — Discover
+Interview the user for the few things that drive the design: goal, audience, **learning
+objectives** ("after this, a learner can ___"), source material to ground the content in,
+the assessment intent per objective, scope, language. When the user is vague, propose a
+concrete straw-man and let them correct it. (Playbook §1.)
+
+### Phase 2 — Design
+Turn objectives into structure: sections *teach*, modules *assess*. Choose the assessment
+mode per module deliberately — `MCQ_ONLY` for recall, `FREETEXT_ONLY` for applied
+judgment/reasoning, `FREETEXT_PLUS_MCQ` for both. Write **real** content grounded in the
+source material: concrete task texts, rubric criteria tied to each objective, MCQs with
+plausible distractors — never lorem ipsum. Order so teaching precedes assessment. (Playbook §2.)
+
+### Phase 3 — Preview & approve  (before building anything)
+**Render the whole course back to the user in the conversation and get explicit approval
+before you build the package, validate, or write anything.** Show the ordered outline plus,
+per item, the section content / task text / MCQs / rubric, then ask "ser dette riktig ut,
+vil du endre noe før jeg oppretter utkastene?" Iterate here — it is far cheaper than fixing
+created drafts. Use the preview template in the playbook (§3).
+
+### Phase 4 — Export
+Only after approval:
+1. **Build** the `a2-authoring-package/v1`. Contract + per-mode examples:
+   [references/package-schema.md](references/package-schema.md); working example:
+   [fixtures/example-package.json](fixtures/example-package.json). Record the user's stated
+   requirements verbatim in `constraints`.
+2. **Validate (dry-run)**: `POST /api/admin/content/agent-authoring/validate` with
+   `{ "package": <package> }`, or the script with `--validate-only`. Never writes; 200 with
+   `valid: false` is a report. Fix errors (`issues[].path`/`code` are stable); if a fix
+   changes what the learner sees, **re-preview** (Phase 3).
+3. **Create the drafts** in the plan's order. Call sequence, bodies, auth:
+   [references/api-flow.md](references/api-flow.md). In a shell environment prefer the script
+   (implements the whole flow):
    `node skills/a2-authoring-api/scripts/import-package.mjs --file pkg.json --base-url <url>`.
-7. **Report the result**: one line per created object with its admin link
-   (`links.conversation`/`links.course`/`links.editor`), the run's `agentRunId` (audit
-   trace), plus an explicit closing note:
-   *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*
-8. **On partial failure**: stop at the failed step. Report per plan step what happened
-   (done / failed / skipped), what WAS created (IDs + links), the API error body, and the
-   `agentRunId` (every completed write is audit-logged with it, so the run is
-   reconstructable). Do NOT delete anything — drafts are harmless and may contain work
-   worth keeping; cleanup is the human's decision.
+4. **Report**: one line per created object with its admin link, plus the run's `agentRunId`,
+   and the closing note *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*
+
+**On partial failure:** stop at the failed step; report per step what happened
+(done/failed/skipped), what WAS created (IDs + links), the API error body, and the
+`agentRunId`. Never delete anything — cleanup is the human's decision.
+
+**If you can't reach the API at all** (sandboxed conversation with no outbound calls): don't
+lose the work — emit an `a2-content-export/v1` **course envelope** to a file and tell the
+user to import it via the admin-UI course import. This needs no token and no network from the
+agent. See the playbook (§4, Fallback).
 
 ## Security rules (hard)
 
