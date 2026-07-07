@@ -130,3 +130,41 @@ FREETEXT_PLUS_MCQ: include both the free-text triple and `mcqSet`.
 
 `plan` (only when `errors == 0`) is the execution order:
 `create_section`* → `create_module`* → `create_course` → `set_course_items`.
+
+## Fallback format: `a2-content-export/v1` course envelope (for manual import)
+
+When the agent can't call the API (see playbook §4), emit the course as a **self-contained
+`a2-content-export/v1` course envelope** written to disk; the user imports it via the
+existing admin-UI course import. The **leaf payloads are identical** to the authoring
+package (same `module`/`activeVersion`/`section` shapes) — the conversion is a mechanical
+re-wrap:
+
+```json
+{
+  "exportFormat": "a2-content-export/v1",
+  "exportedAt": "<now ISO>",
+  "scope": "course",
+  "course": {
+    "course": {
+      "title": "…", "description": "…", "certificationLevel": "…",
+      "audit": {},
+      "items": [
+        { "type": "SECTION", "sortOrder": 0, "section": { …section payload…, "audit": {} } },
+        { "type": "MODULE",  "sortOrder": 1, "module":  { …module payload…  } }
+      ]
+    }
+  }
+}
+```
+
+Mapping from an `a2-authoring-package/v1`:
+- Each package `course.items[]` entry → a `course.items[]` entry here, in array order, with
+  `sortOrder` = index; resolve `ref` → the referenced object's inlined payload.
+- Inline each referenced module/section payload directly (this format is self-contained —
+  no `clientRef`).
+- Add `audit: {}` to each module `activeVersion`, each section, and the course. Empty audit
+  = no publish history ⇒ import never auto-publishes (drafts only).
+- `exportFormat` / `exportedAt` / `scope: "course"` on the envelope.
+
+Only whole courses use this fallback path; a lone module can use the module-scoped envelope
+(`scope: "module"`) the same way.
