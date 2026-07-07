@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.16 - 2026-07-07
+
+fix(i18n): manglende `nav.review`-nøkkel i profil-toppmenyen
+
+Review-nav-elementet (capabilities.ts `labelKey: "nav.review"`) rendret rå nøkkel
+«nav.review» i toppmenyen på profilsiden fordi `profile-translations.js` bare hadde
+`nav.manualReview`, ikke `nav.review`. Lagt til `nav.review` på en-GB/nb/nn med samme
+kanoniske verdi som `participant-translations.js` («Manual review» / «Manuell behandling» /
+«Manuell handsaming»). Kosmetisk; ikke tidskritisk å deploye. (Jf. FEATURE_SURFACE_MAP #14 —
+«render aldri item.labelKey rått».)
+
 ## 1.6.15 - 2026-07-07
 
 fix(auth): #651 agent-token 403 på stage — frys utstederens roller på tokenet
