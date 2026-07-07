@@ -239,3 +239,28 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 | Landing entry | capability `admin-content` path = `/admin-content/courses` (`src/config/capabilities.ts`) | «Innholdsforvaltning» opens on Kurs |
 
 **Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle. When adding a column/filter to one list, mirror it where it applies and update this entry.
+
+## 15. Agent Authoring — draft-only invariant across 3 entities + token scope (EPIC #647)
+
+Agents create content through the **same** `admin_content` commands humans use, and the
+"agent-created content is never live" guarantee is enforced **per entity + per call**, not in
+one place. A change to any create/import path, or to the token scope, must keep all of these true.
+
+| Surface | Where | Draft-only rule |
+|---------|-------|-----------------|
+| Package contract (source of truth) | `src/modules/adminContent/agentAuthoringSchemas.ts` (`.strict()`, no publish/audit fields) | hallucinated publish fields → `unknown_field` |
+| Validation report + plan | `src/modules/adminContent/agentAuthoringValidationService.ts` | no DB writes; plan only when `errors == 0` |
+| Module create | `POST /modules/import` (`src/routes/adminContent.ts`) → `importModuleFromEnvelope` | agent tokens forced to `createNew` + `autoPublish:false`; empty `audit` ⇒ never auto-publishes |
+| Section create | `POST /sections` (`src/routes/adminSections.ts`) → `createSection({draft})` | agent tokens forced `draft:true` (else section auto-publishes on save) |
+| Course create | `POST /courses` (`src/routes/adminCourses.ts`) → `createCourse` | `publishedAt` stays null (no publish call) |
+| Course items | `PUT /courses/:id/items` | agent tokens: only on **unpublished** courses |
+| Token scope | `src/auth/agentTokenScope.ts` (`enforceAgentTokenScope`) | `aat_` tokens reach ONLY the 5 draft ops; no publish path, no token self-mint |
+| Token roles | `src/auth/agentAuthoringTokenService.ts` + `authenticate.ts` | issuer's effective roles frozen on the token (`rolesJson`) — not re-derived (#651 stage-403 fix) |
+| Audit trace | `source: agent_authoring` + `agentRunId` in every write's metadata (AA-5) | reconstruct a run from audit |
+| User surface | «Agent-tilgang» section on `/profile` (`public/profile.js`, role-gated via `/api/me` — see entry #12) | issue/copy-once/list/revoke |
+
+**Guards:** `test/agent-authoring-validate.test.ts` (validate + no-writes), `…-orchestration.test.ts`
+(drafts + links across all 3 modes, both roles), `…-audit.test.ts` (agentRunId + partial failure),
+`…-token.test.ts` (scope, expiry/revoke, role snapshot), `…-skill-import.test.ts` (fixture through
+the skill script), `test/unit/agent-authoring-validation.test.ts` (rules), `test/e2e/profile-agent-tokens.spec.ts`
+(token UI). User docs: `doc/AGENT_ACCESS_GUIDE.md`; API: `doc/API_REFERENCE.md`; design: `doc/design/AGENT_AUTHORING_647.md`.

@@ -57,3 +57,23 @@ re-applies migrations + seeds), followed by `npm run dev:seed:consent`.
   locally. The two loops above cover local development.
 - Definition of done for user-facing changes (see CLAUDE.md): a Playwright e2e of the primary
   flow, written with the feature and run locally before deploy.
+
+### Agent Authoring smoke (EPIC #647)
+
+Drive the agent-authoring API against your local app without any agent or ChatGPT:
+
+```
+# App running via `npm run dev:local` (mock auth). In another shell:
+$env:A2_USER_ID   = 'content-owner-1'      # any id; role hint below grants access
+$env:A2_USER_ROLES = 'SUBJECT_MATTER_OWNER'
+$env:A2_BASE_URL  = 'http://127.0.0.1:3000'
+node skills/a2-authoring-api/scripts/import-package.mjs --file skills/a2-authoring-api/fixtures/example-package.json --validate-only
+node skills/a2-authoring-api/scripts/import-package.mjs --file skills/a2-authoring-api/fixtures/example-package.json
+```
+
+The fixture creates a course with 2 learning sections + one module of each assessment mode
+(FREETEXT_ONLY / MCQ_ONLY / FREETEXT_PLUS_MCQ) as **drafts**, and prints admin links + an
+`agentRunId`. Package the skill as a distributable zip with `npm run skill:package`.
+
+- Agent-authoring integration tests (native Postgres, no Docker):
+  `npm run test:integration:native -- test/agent-authoring-validate.test.ts test/agent-authoring-orchestration.test.ts test/agent-authoring-audit.test.ts test/agent-authoring-token.test.ts test/agent-authoring-skill-import.test.ts`
