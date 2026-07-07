@@ -405,7 +405,7 @@ function cascadeItemTypeLabel(type) {
 function renderCascadeItemList(items, { showBlockers }) {
   return `<ul class="cascade-publish-list">${(items ?? [])
     .map((item) => {
-      const title = escapeHtml(item.title || item.id);
+      const title = escapeHtml(localizedText(item.title) || item.id);
       const badge = `<span class="item-type-badge">${escapeHtml(cascadeItemTypeLabel(item.type))}</span>`;
       const blockerNote =
         showBlockers && !item.publishable && Array.isArray(item.blockers) && item.blockers.length > 0

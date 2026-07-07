@@ -47,7 +47,9 @@ test.describe("course cascade publish (#734)", () => {
       allPublished: false,
       publishable: true,
       unpublishedItems: [
-        { type: "MODULE", id: "module-1", title: "Trade unions", publishable: true, blockers: [] },
+        // Localized (serialized LocalizedText) title — the dialog must render the readable
+        // locale value, not the raw JSON blob (guards the localizedText() rendering).
+        { type: "MODULE", id: "module-1", title: JSON.stringify({ "en-GB": "Trade unions", nb: "Fagforeninger" }), publishable: true, blockers: [] },
         { type: "SECTION", id: "section-1", title: "Introduction", publishable: true, blockers: [] },
       ],
     });
@@ -63,6 +65,8 @@ test.describe("course cascade publish (#734)", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText("Trade unions");
     await expect(dialog).toContainText("Introduction");
+    // The localized title is resolved, not dumped as raw JSON (the other locale must not leak).
+    await expect(dialog).not.toContainText("Fagforeninger");
 
     // Confirm → publish POST is sent with publishItems: true.
     await page.locator("#cascadePublishConfirmBtn").click();
