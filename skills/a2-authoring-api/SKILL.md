@@ -1,126 +1,131 @@
 ---
 name: a2-authoring-api
 description: >
-  Build draft courses, modules and learning sections on the A2 Assessment Platform from
-  conversation/project context. Structures requirements into an a2-authoring-package/v1,
-  dry-runs it against the validate endpoint, orchestrates the create/import API calls, and
-  returns admin-UI links to the unpublished drafts. Never publishes. Use when the user asks
-  an agent to "create a course/module/section" on the platform (e.g. "lag et kurs fra denne
-  samtalen med 6 fritekstmoduler og 2 læringsseksjoner").
+  Dialogue-based, source-grounded authoring of draft courses, modules and learning sections on
+  the A2 Assessment Platform. The default (normal) track is a stepwise conversation with hard
+  approval gates — locate source material (upload or web search), agree on learning objectives,
+  agree on the course structure, agree on each element's content, run an external QA against the
+  objectives, then produce the JSON and (where reachable) create the drafts via API. Never invents
+  content without a traceable source; never publishes. Use when a user asks an agent to build a
+  course/module/section on the platform (e.g. "lag et kurs for prosjektledere i agentisk KI").
 ---
 
-# A2 Agent Authoring — build draft content via API
+# A2 Agent Authoring — build draft content via a gated authoring dialogue
 
-This is the **repo-canonical** skill (EPIC #647, AA-4 #652). Installed copies
-(`.claude/skills/a2-authoring-api/`, ChatGPT/Codex project instructions) are pointers to
-this file — edit here, never in the copies. Design contract:
-`doc/design/AGENT_AUTHORING_647.md`.
+Repo-canonical skill (EPIC #647). Installed copies (`.claude/skills/…`, ChatGPT/Codex project
+files) point here — edit this file, never the copies. Design: `doc/design/AGENT_AUTHORING_647.md`.
+Craft depth for each gate: **[references/authoring-playbook.md](references/authoring-playbook.md)**.
+Package contract + examples: [references/package-schema.md](references/package-schema.md).
+API/fallback mechanics: [references/api-flow.md](references/api-flow.md).
 
 ## What you produce
 
-Everything you create is an **unpublished draft**. A human reviews and publishes in the
-admin UI. There are no publish fields in the package contract, and you must never call any
-`.../publish` endpoint. That rule has no exceptions, including when the user asks for it —
-point them to the admin UI links instead.
+Unpublished **drafts**. A human reviews and publishes in the admin UI. There are no publish
+fields in the contract, and you must never call any `.../publish` endpoint — no exceptions.
 
-## Workflow
+## Core principles (these override convenience — read first)
 
-This skill is a **course-authoring conversation**, not just a JSON emitter. The craft —
-interviewing the user, designing a pedagogically sound course, and previewing it before
-building — is in **[references/authoring-playbook.md](references/authoring-playbook.md)**;
-read it. The four phases:
+1. **Never invent content.** Do not introduce facts, claims, examples, figures, regulations,
+   module tasks, rubric criteria or MCQ answers without a **traceable source**. Valid sources
+   are: material the author uploaded/pasted, web-search results the author has seen, and the
+   author's own explicit input. The author is ultimately responsible for the content; you may
+   help them **search the web** for source material, but what you write must trace back to a
+   source, not to plausible-sounding guessing.
+2. **At a genuine gap, mark it — don't fill it.** When there is nothing to ground a claim on,
+   write conservatively and insert `[Avklaring: <what is missing and why it matters>]` rather
+   than inventing. Never dress up a guess as fact.
+3. **Separate analysis from production.** Do not write course content while objectives or
+   structure are still being decided. Content is produced only after its gate is approved.
+4. **Generating without a confirmed source is opt-in only.** If the author has no material and
+   does not want to supply or web-source any, you may draft from general knowledge **only when
+   the author explicitly allows it, after a clear warning** that the content is model-generated
+   and unverified — and every such claim is marked `[Avklaring: …]`. This is the `auto` track
+   below; it is never the default.
 
-### Phase 1 — Discover
-Interview the user for the few things that drive the design: goal, audience, **learning
-objectives** ("after this, a learner can ___"), source material to ground the content in,
-the assessment intent per objective, scope, language. When the user is vague, propose a
-concrete straw-man and let them correct it. (Playbook §1.)
+## Two tracks (choose by the user's opening)
 
-### Phase 2 — Design
-Turn objectives into structure: sections *teach*, modules *assess*. Choose the assessment
-mode per module deliberately — `MCQ_ONLY` for recall, `FREETEXT_ONLY` for applied
-judgment/reasoning, `FREETEXT_PLUS_MCQ` for both. Write **real** content grounded in the
-source material: concrete task texts, rubric criteria tied to each objective, MCQs with
-plausible distractors — never lorem ipsum. Order so teaching precedes assessment. (Playbook §2.)
+**Mode priority:** use `auto` **only** when the user explicitly asks for it (e.g. "auto",
+"generér uten dialog", "bare lag et utkast fra det du vet"). Otherwise use `normal`.
 
-### Phase 3 — Preview & approve  (before building anything)
-**Render the whole course back to the user in the conversation and get explicit approval
-before you build the package, validate, or write anything.** Show the ordered outline plus,
-per item, the section content / task text / MCQs / rubric, then ask "ser dette riktig ut,
-vil du endre noe før jeg oppretter utkastene?" Iterate here — it is far cheaper than fixing
-created drafts. Use the preview template in the playbook (§3).
+| Track | When | Behaviour |
+|---|---|---|
+| **normal** (default) | Any ordinary request ("lag et kurs …", "spiss mot denne rollen", "kom i gang") | The gated dialogue below. Source-grounded. One approval gate at a time. |
+| **auto** (opt-in) | The user explicitly asks to generate without dialogue / without source | Draft from general knowledge, **after warning the author it is unverified**; mark every unsourced claim `[Avklaring: …]`; still never publish. Present the result clearly as a review draft, not a finished course. |
 
-### Phase 4 — Export
-Only after approval:
-1. **Build** the `a2-authoring-package/v1`. Contract + per-mode examples:
-   [references/package-schema.md](references/package-schema.md); working example:
-   [fixtures/example-package.json](fixtures/example-package.json). Record the user's stated
-   requirements verbatim in `constraints`.
-2. **Validate (dry-run)**: `POST /api/admin/content/agent-authoring/validate` with
-   `{ "package": <package> }`, or the script with `--validate-only`. Never writes; 200 with
-   `valid: false` is a report. Fix errors (`issues[].path`/`code` are stable); if a fix
-   changes what the learner sees, **re-preview** (Phase 3).
-3. **Create the drafts** in the plan's order. Call sequence, bodies, auth:
-   [references/api-flow.md](references/api-flow.md). In a shell environment prefer the script
-   (implements the whole flow):
-   `node skills/a2-authoring-api/scripts/import-package.mjs --file pkg.json --base-url <url>`.
-4. **Report**: one line per created object with its admin link, plus the run's `agentRunId`,
-   and the closing note *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*
+## Normal track — the gates (HARD STOP)
 
-**On partial failure:** stop at the failed step; report per step what happened
-(done/failed/skipped), what WAS created (IDs + links), the API error body, and the
-`agentRunId`. Never delete anything — cleanup is the human's decision.
+Stop at each gate and wait for the author's approval before the next. **Never merge two gates.
+Never skip a gate because a previous answer sounded like general approval — "ja" in one context
+is not approval of the next step.** Per-gate craft is in the playbook.
 
-**If you can't reach the API at all** (sandboxed conversation with no outbound calls): don't
-lose the work — emit an `a2-content-export/v1` **course envelope** to a file and tell the
-user to import it via the admin-UI course import. This needs no token and no network from the
-agent. See the playbook (§4, Fallback).
+| # | Gate | You stop and ask (in effect) |
+|---|------|------------------------------|
+| 1 | **Source** | "What should this course be built on? Upload/paste material, or shall I help you search the web?" If nothing is provided: run a web search, **present the sources found, and get the author to confirm which to use** before anything is built on them. (Playbook §1.) |
+| 2 | **Learning objectives** | "From the source, I propose these objectives ('after this, a learner can …'). Are they right?" (Playbook §2.) |
+| 3 | **Structure** | "Here's the proposed structure — these modules, these sections, this order and assessment modes. Is it right?" Iterate until confirmed. (Playbook §3.) |
+| 4 | **Each element** | One item at a time: "Here's the content for Module/Section X (task/rubric/MCQs). Approved?" → next. Never write all elements at once. (Playbook §4.) |
+| 5 | **External QA** | An independent check that the course meets the objectives — re-derive the objectives from the source in isolation, verify each is taught **and** assessed, flag gaps/overclaims. **Prefer a separate agent** (fresh context) where the environment allows it; otherwise a deliberate fresh-context pass. (Playbook §5.) |
+| 6 | **Produce** | Only now: build the JSON, validate, and create the drafts (or emit the fallback file). (Playbook §6 + api-flow.md.) |
+
+## External QA — a real second opinion
+
+QA must independently re-read the source and objectives and judge whether the course delivers
+them; it is not a rubber stamp. **If you can spawn a separate agent** (e.g. Claude Code / an
+orchestrated environment), do so and give it only the source + objectives + finished course,
+asking it to confirm each objective is taught and assessed and to list gaps/overclaims — the
+separate context avoids the author-agent's anchoring bias. In a single-context chat, do the
+equivalent as an explicit fresh pass. Report QA findings to the author and resolve them before
+producing the JSON.
+
+## Produce & export (mechanics)
+
+After QA passes and the author approves: build the `a2-authoring-package/v1`
+([package-schema.md](references/package-schema.md)), record the author's stated requirements and
+the sources used in `constraints`, **validate** (`agent-authoring/validate`, dry-run — never
+writes), fix any errors, then **create the drafts** in plan order ([api-flow.md](references/api-flow.md)).
+Report each created object's admin link and the `agentRunId`, and close with:
+*"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*
+
+**On partial failure:** stop at the failed step; report per step (done/failed/skipped), what was
+created (IDs + links), the error, and the `agentRunId`. Never delete anything.
+
+**If you cannot reach the API** (sandboxed chat): emit an `a2-content-export/v1` **course
+envelope** to a file and tell the author to import it via the admin-UI course import (playbook §6,
+Fallback). No token or network needed.
 
 ## Security rules (hard)
 
-- **Never call publish endpoints** (`.../publish` on modules, module-versions, sections,
-  courses). The draft-only invariant is the whole point of this API.
-- **Tokens are secrets — but a pasted `aat_` token is an accepted workflow**: the user may
-  paste a short-lived agent authoring token (and the installation URL) directly into the
-  conversation; use it for this run's API calls. You must NEVER echo the token back, quote
-  it in summaries/plans, or write it into package files, logs, or `constraints`. Full
-  bearer JWTs and any other credentials still belong in environment variables only.
-- **Stop on validation errors** — never "push through" by dropping fields blindly; show the
-  field paths to the user when you cannot fix them unambiguously.
-- Do not use `mode: "replaceExisting"` unless the user explicitly asked to overwrite a
-  specific existing module and gave you its ID.
+- **Never call publish endpoints** (`.../publish` on modules, module-versions, sections, courses).
+- **Tokens are secrets — but a pasted `aat_` token is an accepted workflow.** The author may paste
+  a short-lived agent token (and the installation URL) into the conversation; use it for this run.
+  Never echo it back, quote it in summaries, or write it into files, logs or `constraints`. Full
+  bearer JWTs and other credentials go in environment variables only.
+- **Stop on validation errors** — never push through by dropping fields blindly; show field paths.
+- Do not use `mode: "replaceExisting"` unless the author explicitly named an existing module to
+  overwrite and gave its ID.
 
 ## Environment resolution (multitenant)
 
-The platform is installed **per tenant** — each customer/organization runs its own
-installation with its own URL and its own identity provider. There is **no default or
-hardcoded environment**. Resolve the target installation for every run, in this order:
-
-1. A base URL the user gave you for this run ("kjør mot https://…").
-2. The `A2_BASE_URL` env var (set per machine/workspace to that tenant's installation).
-3. Otherwise: **ask the user** which installation to target. Never guess, never fall back
-   to localhost or to any vendor environment.
-
-Echo the resolved base URL back in the confirmation step (workflow step 5) so the user
-sees WHERE the drafts will be created before any write happens. Content created in one
-installation never references IDs from another — `moduleId`/`sectionId` references in a
-package are only valid within the target installation.
+The platform is installed **per tenant** — each installation has its own URL and identity
+provider. There is **no default or hardcoded environment**. Resolve the target for every run:
+(1) a base URL the user gave you this run; (2) the `A2_BASE_URL` env var; (3) otherwise **ask**.
+Never fall back to localhost or a vendor environment. Echo the resolved base URL back before any
+write. `moduleId`/`sectionId` references are only valid within the target installation.
 
 ### Auth (per installation)
 
-| Installation type | Auth |
+| Installation | Auth |
 |---|---|
-| Local dev (`npm run dev`, `AUTH_MODE=mock`) | Mock headers: `x-user-id`, `x-user-email`, `x-user-name`, `x-user-roles: SUBJECT_MATTER_OWNER` (or `ADMINISTRATOR`). Script env vars: `A2_USER_ID`, `A2_USER_EMAIL`, `A2_USER_NAME`, `A2_USER_ROLES`. |
-| Any shared installation (a tenant's staging/prod) — **preferred: agent authoring token** | The logged-in SMO/admin issues a short-lived token from **that installation**: `POST /api/admin/content/agent-authoring/tokens` (body `{ "label": "...", "ttlMinutes": 60 }`) → an `aat_...` secret shown once. **End-user flow: the user simply pastes the token (and the installation URL) into the conversation** — use it as `Authorization: Bearer aat_...` for this run and never repeat it in output. CLI flow: env var `A2_AUTH_BEARER`. The token expires within the hour, can be revoked, and is scoped to draft authoring only — the API rejects any publish path, non-draft section create, `replaceExisting`/auto-publish import, and item changes on published courses. If it expires mid-run (401), report partial progress and ask the user for a fresh token; resume from the failed step. |
-| Any shared installation — fallback | A full `Authorization: Bearer <Entra JWT>` from a user logged into that installation (same env var). Unscoped — prefer the agent token. |
+| Local dev (`npm run dev`, `AUTH_MODE=mock`) | Mock headers `x-user-id`/`x-user-email`/`x-user-name`/`x-user-roles: SUBJECT_MATTER_OWNER`. Script env: `A2_USER_ID` etc. |
+| Shared installation — **preferred: agent token** | The author issues a short-lived token from that installation (Profil → «Agent-tilgang», or `POST …/agent-authoring/tokens`) → `aat_…`, shown once. **End-user flow: the author pastes it into the conversation.** Script env: `A2_AUTH_BEARER`. Expires within the hour, revocable, draft-scoped. On mid-run 401: report partial progress and ask for a fresh token. |
+| Shared installation — fallback | A full `Authorization: Bearer <Entra JWT>` from a logged-in user (same env var). Unscoped — prefer the token. |
 
-Tokens are per installation and useless anywhere else — never reuse them across
-installations, and never paste them into packages, chat output or files.
+Tokens are per installation and useless elsewhere — never reuse across installations, never paste
+into packages/output/files.
 
 ## Distribution
 
-This folder is the deployable unit. `npm run skill:package` (in the platform repo) builds
-`dist/skills/a2-authoring-api-v<version>.zip` — a zip with the `a2-authoring-api/` folder
-at its root, which is the layout ChatGPT (institution-level skill deploy, per-user
-install) and claude.ai (capabilities upload) expect. The repo copy remains the source of
-truth; re-run the packaging after any skill change and redeploy the zip.
+`npm run skill:package` (in the platform repo) builds `dist/skills/a2-authoring-api-v<version>.zip`
+— the `a2-authoring-api/` folder at the zip root, the layout ChatGPT (institution skill deploy /
+per-user install) and claude.ai (capabilities upload) expect. The repo copy is the source of
+truth; re-run packaging after any skill change and redeploy the zip.

@@ -1,135 +1,133 @@
-# Authoring playbook — how to run a good course-authoring session
+# Authoring playbook — running the gated authoring dialogue
 
-This is the conversational craft of the skill: how to *interview* the user, *design* a
-pedagogically sound course, and *show it back* for approval before anything is created.
-The mechanics (package format, API calls) live in `package-schema.md` and `api-flow.md`;
-this file is about doing the authoring well.
+The craft behind each gate in SKILL.md's **normal track**: how to locate source material,
+agree objectives, agree structure, write each element (grounded, never invented), QA against
+the objectives, and produce. The mechanics (package format, API calls) are in
+`package-schema.md` and `api-flow.md`.
 
-The platform's model, which shapes everything below:
-- **Learning sections teach** (markdown content, no assessment).
-- **Modules assess** — in one of three modes:
-  - `MCQ_ONLY` — multiple-choice only. For **recognition / factual recall** (definitions,
-    "which of these is correct", rules).
-  - `FREETEXT_ONLY` — a written answer graded by an LLM against a rubric. For **applied
-    judgment / reasoning / explanation** where *how* they argue matters.
-  - `FREETEXT_PLUS_MCQ` — both. For "check they know the facts **and** can apply them".
-- A **course** orders sections and modules into a learning path.
+The platform model that shapes everything:
+- **Learning sections teach** (markdown, no assessment).
+- **Modules assess**, in one mode: `MCQ_ONLY` (recognition/recall), `FREETEXT_ONLY` (applied
+  judgment / written reasoning), `FREETEXT_PLUS_MCQ` (both).
+- A **course** orders sections and modules into a path.
 - Everything you create is a **draft**; a human publishes later.
 
----
-
-## Phase 1 — Discover (gather content & intent)
-
-Don't ask twenty questions. Get the few things that determine the design, and when the user
-is vague, **propose a concrete straw-man and let them correct it** — that is faster and gives
-them something to react to.
-
-Elicit (in roughly this order):
-
-1. **Goal & topic** — what should a learner get out of this? One or two sentences.
-2. **Audience** — who are they (role, seniority, prior knowledge)? This sets level, tone,
-   examples, and language.
-3. **Learning objectives** — the backbone. Phrase each as *"After this, a learner can ___"*
-   (identify…, apply…, decide…, explain…). Everything downstream derives from these. If the
-   user hasn't articulated them, propose 3–6 from the topic and confirm.
-4. **Source material** — do they have real content to ground this in (a policy, notes, a
-   document, a slide deck)? Ask them to paste/describe/upload it. **Ground the content in
-   their material; do not invent facts, figures, regulations, or quotes.** If there is no
-   source, say so plainly and keep claims general/uncontroversial.
-5. **Assessment intent, per objective** — for each objective, is it *recall* (→ lean
-   `MCQ_ONLY`), *applied judgment / written reasoning* (→ `FREETEXT_ONLY`), or *both*
-   (→ `FREETEXT_PLUS_MCQ`)? You choose the mode; confirm your reasoning with the user.
-6. **Scope** — how many modules and sections? If unspecified, propose a lean structure
-   (a few well-formed modules beat many thin ones). Map roughly one module per objective.
-7. **Language** (`locale`) and **certification level**.
-
-Record the user's stated requirements verbatim in the package's `constraints` (audit trail).
-
-## Phase 2 — Design (turn intent into a course)
-
-**Structure.** Each objective usually becomes: a *section* that teaches it (when the learner
-needs input) + a *module* that assesses it. Simple recall objectives may need only a module;
-context/background may need only a section. Order so that **teaching precedes assessment**,
-with an intro section first and (optionally) a summary section last.
-
-**Pick the mode per module deliberately** (this is the most common design mistake):
-- Recognition/recall, unambiguous right answer → `MCQ_ONLY`.
-- "Explain / analyse / decide and justify", where the reasoning is the point → `FREETEXT_ONLY`.
-- Knowledge that must then be applied → `FREETEXT_PLUS_MCQ`.
-
-**Write real, specific content:**
-- *Task text* (free-text modules): a concrete scenario or prompt, not "Discuss X". Give the
-  learner something to *do/decide*, ideally grounded in the source material.
-- *Rubric criteria*: each criterion tied to the objective, named, with a described scale
-  (e.g. `"identifisering": "0–4: identifiserer korrekt grunnlag og avgrenser mot alternativene"`).
-  Avoid a lone vague "quality" criterion — criteria must be observable.
-- *MCQ questions*: the stem tests **one** idea; 3–4 options; **distractors reflect real
-  misconceptions** (plausible, not obviously wrong); exactly one unambiguously correct
-  option; a short `rationale` explaining why. Never "all of the above".
-- *Assessor expected content* (free-text): what a strong answer contains — this guides the
-  LLM grader.
-
-**Scope discipline.** Prefer fewer, well-formed modules. A course that assesses six things
-shallowly is worse than one that assesses three things well.
-
-## Phase 3 — Preview & approve (show it BEFORE you build)
-
-**This is mandatory and happens before you build the package, validate, or write anything.**
-Render the whole course back to the user *in the conversation*, in readable form, and get
-explicit approval. Iterate on their feedback here — it is far cheaper than fixing created
-drafts.
-
-Use this shape:
-
-```
-## Forslag: <kurstittel>
-<én linje om kurset> · Målgruppe: <…> · Språk: <…> · Nivå: <…>
-
-Struktur (rekkefølge):
-1. 📄 Seksjon: <tittel>
-2. 📝 Modul: <tittel> — <mode> — vurderer: <objektiv>
-3. 📝 Modul: <tittel> — <mode> — vurderer: <objektiv>
-4. 📄 Seksjon: Oppsummering
+**Non-negotiable (from SKILL.md):** never write content without a traceable source; at a genuine
+gap use `[Avklaring: …]`, never invention; don't produce content before its gate is approved.
 
 ---
-### 1. Seksjon: <tittel>
-<selve innholdet, eller et sammendrag hvis langt>
 
-### 2. Modul: <tittel>  (FREETEXT_ONLY)
-**Oppgave:** <task text>
-**Vurderingskriterier:** <kriterium 1 (skala)>, <kriterium 2 (skala)>
+## Gate 1 — Source
 
-### 3. Modul: <tittel>  (MCQ_ONLY)
-**Spørsmål 1:** <stem>
-- a) <option>   b) <option>   c) <option ✓>   d) <option>
-  *Riktig: c — <rationale>*
-...
-```
+The most important gate, and the one that prevents "the agent spun off and invented a course."
+Establish what the course is built on **before** proposing objectives.
 
-Then ask, explicitly: **"Ser dette riktig ut? Vil du endre rekkefølge, innhold, oppgaver
-eller vurderingsform før jeg oppretter utkastene?"** Only build the package after the user
-approves. Re-preview after any substantive change.
+1. Ask what the course should be based on. Three legitimate sources:
+   - **Uploaded/pasted material** (a policy, notes, a document, a deck) — preferred.
+   - **Web search** — the author may ask you to help find authoritative material. Search, then
+     **present the sources you found (title + what each covers) and let the author confirm which
+     to use.** The author is ultimately responsible for the content; your job is to ground it in
+     sources they have seen and accepted, not to substitute your own recall.
+   - **The author's own explicit input** (they dictate the substance).
+2. If nothing is available and the author does not want to supply or web-source material, do
+   **not** silently invent a course. Say so, and offer the opt-in path explicitly: *"Jeg har
+   ikke noe kildemateriale å bygge på. Vil du at jeg lager et ubekreftet utkast fra allmenn
+   kunnskap som du selv må verifisere? Alt vil bli merket [Avklaring]."* Proceed on general
+   knowledge only if they say yes (this is the `auto` posture; keep the draft clearly flagged).
+3. Record the confirmed sources — you will cite them into `constraints` at production, and QA
+   (gate 5) re-reads them.
 
-## Phase 4 — Export
+Do not move to objectives until the source basis is confirmed (or the author has explicitly
+opted into an unsourced draft).
 
-Once approved, build the `a2-authoring-package/v1`, validate, and create the drafts
-(`api-flow.md`). If the validate report surfaces a content problem (e.g. an MCQ missing an
-answer), fix it and, if it changed what the learner sees, re-preview.
+## Gate 2 — Learning objectives
 
-### Fallback when the agent can't reach the API directly
+Objectives are the backbone; structure and assessment derive from them.
 
-Some conversational environments can't make outbound calls to the installation. In that
-case **do not lose the work** — emit the course to disk in the platform's portable format
-and hand it to the user for manual import:
+- Derive 3–6 objectives **from the confirmed source**, each phrased *"After this, a learner can
+  ___"* (identify…, apply…, decide…, explain…). Ground each in something the source supports.
+- Present them and ask if they're right. Add/cut/reword on the author's steer.
+- If an objective can't be supported by the source, flag it (`[Avklaring: …]`) rather than
+  inventing support for it.
 
-1. Produce an **`a2-content-export/v1` course envelope** (self-contained: inlines each module
-   and section payload under `course.items[]` with `sortOrder`; `exportFormat`,
-   `exportedAt`, and `audit: {}` on each). The leaf payloads are the *same* shapes as the
-   authoring package, so this is a mechanical wrap. See `package-schema.md` for the mapping.
-2. Write it to a file, e.g. `kurs-<navn>.json`, and tell the user to import it via the
-   existing **admin-UI course import** (Innholdsforvaltning → importer). The import creates
-   the same drafts; nothing is published.
+Stop and get the objectives approved before proposing structure.
 
-This fallback needs no token and no network from the agent — only that the user can save a
-file and use the admin UI. Prefer the direct API when it's available (it returns deep links);
-use the file fallback when it isn't.
+## Gate 3 — Structure
+
+Turn approved objectives into a concrete outline, and confirm it before writing any content.
+
+- **Map each objective** to: a section that teaches it (when the learner needs input) + a module
+  that assesses it. Simple recall may need only a module; background may need only a section.
+- **Choose the assessment mode per module deliberately** (the most common design mistake):
+  - recognition / recall / unambiguous right answer → `MCQ_ONLY`
+  - "explain / analyse / decide and justify", where the reasoning is the point → `FREETEXT_ONLY`
+  - knowledge that must then be applied → `FREETEXT_PLUS_MCQ`
+- **Order** so teaching precedes assessment; intro section first, optional summary last.
+- **Scope discipline:** prefer a few well-formed modules over many thin ones. Map roughly one
+  module per objective.
+
+Present the outline as a table (sections + modules, order, mode, which objective each assesses)
+and iterate until the author confirms it. No element content is written yet.
+
+## Gate 4 — Each element (one at a time)
+
+Now write content, **one element per turn**, grounded in the source, and get each approved
+before the next. Do not dump all elements at once.
+
+Per module, write real, specific, sourced content:
+- **Task text** (free-text modules): a concrete scenario or prompt tied to the source — give the
+  learner something to *do/decide*, not "Discuss X".
+- **Rubric criteria:** each tied to the objective, named, with a described scale (e.g.
+  `"identifisering": "0–4: identifiserer korrekt grunnlag og avgrenser mot alternativene"`).
+  No lone vague "quality" criterion — criteria must be observable.
+- **Assessor expected content:** what a strong answer contains (guides the LLM grader).
+- **MCQ questions:** stem tests one idea; 3–4 options; **distractors are real misconceptions**
+  (plausible, not obviously wrong); exactly one unambiguously correct option; a short `rationale`.
+  Never "all of the above".
+
+Per section: the teaching markdown, grounded in the source. Summarise long source rather than
+copying it verbatim, and keep claims to what the source supports.
+
+Anything the source doesn't cover → `[Avklaring: …]`, not invention. Approve each element, then
+move to the next.
+
+## Gate 5 — External QA (against the objectives)
+
+An independent check that the course delivers the objectives — a real second opinion, not a
+rubber stamp.
+
+- **Prefer a separate agent where the environment allows it** (Claude Code / orchestrated). Give
+  it only the confirmed source, the objectives, and the finished course; ask it to verify each
+  objective is both **taught** (a section covers it) and **assessed** (a module tests it), and to
+  list gaps, overclaims (content not supported by the source), and un-assessed objectives. The
+  fresh context avoids the author-agent's anchoring bias.
+- **In a single-context chat**, do the equivalent as a deliberate fresh pass: re-derive the
+  objectives from the source in isolation, then audit the course against them.
+- Report findings to the author; fix gaps/overclaims before producing. Overclaims are resolved by
+  softening to what the source supports or by `[Avklaring: …]`, never by inventing support.
+
+## Gate 6 — Produce
+
+Only after QA passes and the author approves:
+
+1. Build the `a2-authoring-package/v1` (`package-schema.md`). Put the author's stated
+   requirements **and the confirmed sources** into `constraints` (audit trail).
+2. Validate (dry-run) and fix errors; if a fix changes what the learner sees, re-confirm with the
+   author.
+3. Create the drafts in plan order (`api-flow.md`), report admin links + `agentRunId`, and remind
+   the author to review and publish manually.
+
+### Fallback when the agent can't reach the API
+
+Some conversational environments can't make outbound calls. Don't lose the work — emit an
+**`a2-content-export/v1` course envelope** to a file and have the author import it via the admin-UI
+course import:
+
+1. Produce a self-contained course envelope (inline each module/section payload under
+   `course.items[]` with `sortOrder`; `exportFormat`, `exportedAt`, `audit: {}`). Leaf payloads
+   are identical to the authoring package — a mechanical re-wrap; see `package-schema.md`
+   §"Fallback format".
+2. Write it to `kurs-<navn>.json` and tell the author to import via **Innholdsforvaltning → Kurs →
+   Importer kurs-pakke**. It creates the same drafts; nothing is published.
+
+No token or network needed — only that the author can save a file and use the admin UI.
