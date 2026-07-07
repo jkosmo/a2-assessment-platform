@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.15 - 2026-07-07
+
+fix(auth): #651 agent-token 403 på stage — frys utstederens roller på tokenet
+
+Stage-test av agent-tokenet ga `403 forbidden` («Requires one of roles: ADMINISTRATOR,
+SUBJECT_MATTER_OWNER») selv om tokenet ble utstedt av en admin/SMO. Rotårsak: i Entra-modus
+er de effektive rollene DB-roller ∪ JWT-app-rollekrav, men JWT-kravrollene persisteres ikke
+som `RoleAssignment`. Token-auth utledet rollene på nytt med `getActiveRoles` (kun
+persisterte) → SMO/admin-rollen forsvant → 403. (Lokale/seedede brukere har persisterte
+roller, derfor grønt i test og lokalt.)
+
+Fiks: utstederens effektive roller (fra det autentiserte request-et som allerede passerte
+`admin_content`-vakta) fryses på tokenet ved utstedelse (`AgentAuthoringToken.rolesJson`,
+migrasjon 20260707100000) og gjenbrukes ved token-auth. Deterministisk, uavhengig av
+rollekilde, og hindrer at tokenet eskalerer roller senere. Eldre tokens uten snapshot
+faller tilbake til persisterte roller. Ny regresjonstest: bruker med rolle kun i
+request-konteksten (0 persisterte roller) utsteder token → validate gir 200, ikke 403.
+
 ## 1.6.14 - 2026-07-06
 
 feat(ux): #731 «Agent-tilgang» på profilsiden — utsted/vis én gang/liste/revokér agent-tokens

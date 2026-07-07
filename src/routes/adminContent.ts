@@ -154,6 +154,10 @@ adminContentRouter.post("/agent-authoring/tokens", async (request, response) => 
       userId,
       label: data.label,
       ttlMinutes: data.ttlMinutes,
+      // Freeze the issuer's effective roles (this request passed the admin_content
+      // guard, so they include ADMINISTRATOR/SMO even when sourced from an Entra
+      // claim that isn't persisted). #651 stage 403 fix.
+      roles: request.context?.roles ?? [],
     });
     response.status(201).json({
       token: secret,
