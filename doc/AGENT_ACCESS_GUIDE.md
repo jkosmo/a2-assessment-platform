@@ -37,5 +37,17 @@ begrenset til å lage utkast, og alt den lager må du selv gjennomgå og publise
 **Agenten sier 401/utløpt midt i jobben?** Lag et nytt token og lim det inn — agenten
 fortsetter der den slapp (det som allerede er opprettet, er trygt lagret som utkast).
 
+**Agenten sier at pakken har feil / ikke er gyldig?** Før noe opprettes, kjører agenten en
+validering. Er det feil, får den en liste med **hva** som er galt og **hvor** (f.eks. «en
+flervalgs-modul mangler spørsmål» eller «et kurs peker til en modul som ikke finnes»).
+Agenten skal rette dette selv og prøve igjen — du trenger ikke tolke feilmeldingene, men be
+den gjerne forklare hva den endret. Ingenting opprettes så lenge valideringen feiler.
+
+**Hva skjer hvis noe feiler etter at deler er opprettet (delvis suksess)?** Agenten stopper
+ved steget som feilet og forteller deg **hva som ble opprettet** (med lenker), **hva som
+feilet**, og **hva som gjenstår**. Den sletter aldri noe automatisk. De ferdige utkastene
+ligger trygt i biblioteket (usynlige for deltakere) — du kan beholde dem, be agenten fortsette,
+eller arkivere+slette dem i admin-UI.
+
 **Hvor blir det av utkastene hvis noe feiler underveis?** De ligger i biblioteket som
 vanlige utkast (usynlige for deltakere). Behold, fullfør eller arkiver+slett dem i admin-UI.

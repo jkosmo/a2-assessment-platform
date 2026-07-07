@@ -57,3 +57,23 @@ The conversational and advanced editors are two modes of the same module workspa
 | `/api/admin/platform` | Admin | Platform administration |
 | `/participant/config` | Public (rate-limited) | Participant console bootstrap config |
 | `/healthz` | Public | Health check (no version info) |
+
+### Agent Authoring (EPIC #647) — under `/api/admin/content`
+
+Draft-only content authoring by AI agents. Full details: `doc/API_REFERENCE.md`,
+`doc/AGENT_ACCESS_GUIDE.md` (SMO/user flow), `doc/design/AGENT_AUTHORING_647.md`.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /api/admin/content/agent-authoring/validate` | SMO / Admin (or agent token) | Dry-run an `a2-authoring-package/v1` — no DB writes; returns report + execution plan (AA-1) |
+| `POST /api/admin/content/agent-authoring/tokens` | SMO / Admin (user auth only) | Issue a short-lived `aat_` agent token; secret shown once (AA-3) |
+| `GET /api/admin/content/agent-authoring/tokens` | SMO / Admin | List own tokens (never the secret) |
+| `POST /api/admin/content/agent-authoring/tokens/:id/revoke` | SMO / Admin (owner or Admin) | Revoke a token immediately |
+
+Agent tokens (`Authorization: Bearer aat_…`) are scope-limited to the five draft-authoring
+operations (validate + `modules/import`, `sections`, `courses`, `courses/:id/items`) — every
+other route returns `403 agent_token_scope`.
+
+**User surface:** the **«Agent-tilgang»** section on `/profile` (issue/copy-once/list/revoke)
+is role-gated to SUBJECT_MATTER_OWNER / ADMINISTRATOR (#731). No new page/route — it is a
+section on the existing profile page.
