@@ -70,6 +70,8 @@ const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const libraryContent = document.getElementById("libraryContent");
 const librarySearch = document.getElementById("librarySearch");
+// #745: klientside-filter på kurs. Bygges fra modulenes egne `courses`-arrayer.
+const libraryCourseFilter = document.getElementById("libraryCourseFilter");
 const createModuleBtn = document.getElementById("createModuleBtn");
 const createModuleDialog = document.getElementById("createModuleDialog");
 const createModuleForm = document.getElementById("createModuleForm");
@@ -105,6 +107,9 @@ let allModules = [];
 // Default filter is "active" so authors land on a curated list of currently relevant
 // modules. Arkiverte/older versions er fortsatt tilgjengelig via filter-knappene.
 let activeFilter = "active";
+// #745: valgt kurs i kurs-filteret. "__all__" = ingen filtrering (default),
+// "__none__" = moduler som ikke er i noe kurs, ellers en course-id.
+let courseFilter = "__all__";
 let searchQuery = "";
 let sortColumn = "title"; // "title" | "updatedAt"
 let sortDirection = "asc"; // "asc" | "desc"
@@ -192,6 +197,35 @@ function resolveActiveWorkspaceRoles() {
 // Filter logic
 // ---------------------------------------------------------------------------
 
+// #745: bygg listen med distinkte kurs fra alle modulers `courses`-array (dedupe på id),
+// sortert på tittel. Brukes til å fylle kurs-filter-dropdownen.
+function collectCourseFilterOptions(modules) {
+  const byId = new Map();
+  for (const m of modules) {
+    for (const c of (m.courses ?? [])) {
+      if (c && c.id && !byId.has(c.id)) byId.set(c.id, String(c.title ?? c.id));
+    }
+  }
+  return [...byId.entries()]
+    .map(([id, title]) => ({ id, title }))
+    .sort((a, b) => a.title.localeCompare(b.title, currentLocale));
+}
+
+// #745: fyll kurs-dropdownen på nytt hver gang dataene lastes. Bevarer valgt kurs hvis det
+// fortsatt finnes; ellers faller vi tilbake til "Alle kurs".
+function rebuildCourseFilterOptions() {
+  if (!libraryCourseFilter) return;
+  const options = collectCourseFilterOptions(allModules);
+  const valid = new Set(["__all__", "__none__", ...options.map(o => o.id)]);
+  if (!valid.has(courseFilter)) courseFilter = "__all__";
+  libraryCourseFilter.innerHTML = [
+    `<option value="__all__">Alle kurs</option>`,
+    ...options.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.title)}</option>`),
+    `<option value="__none__">Ikke i noe kurs</option>`,
+  ].join("");
+  libraryCourseFilter.value = courseFilter;
+}
+
 function applyFilter(modules) {
   let result = modules;
   const q = searchQuery.trim().toLowerCase();
@@ -200,6 +234,12 @@ function applyFilter(modules) {
       (m.title ?? "").toLowerCase().includes(q) ||
       m.id.toLowerCase().includes(q)
     );
+  }
+  // #745: kurs-filter komponerer med status-filter + søk + sortering (ekstra predikat).
+  if (courseFilter === "__none__") {
+    result = result.filter(m => (m.courses ?? []).length === 0);
+  } else if (courseFilter !== "__all__") {
+    result = result.filter(m => (m.courses ?? []).some(c => c && c.id === courseFilter));
   }
   if (activeFilter === "active") result = result.filter(m => m.status !== "archived");
   else if (activeFilter === "archived") result = result.filter(m => m.status === "archived");
@@ -639,6 +679,8 @@ async function loadModules() {
   try {
     const data = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
     allModules = data.modules ?? [];
+    // #745: gjenoppbygg kurs-dropdownen når dataene lastes (nye/fjernede kurs-koblinger).
+    rebuildCourseFilterOptions();
     renderLibrary();
   } catch (err) {
     libraryContent.innerHTML = `<div class="library-empty"><p class="library-empty-title">Kunne ikke laste moduler.</p><p class="library-empty-text">${escapeHtml(err?.message ?? "")}</p></div>`;
@@ -739,6 +781,12 @@ async function init() {
   // Search
   librarySearch?.addEventListener("input", () => {
     searchQuery = librarySearch.value;
+    renderLibrary();
+  });
+
+  // #745: kurs-filter (in-memory, ingen persistering på tvers av reload — som øvrige filtre).
+  libraryCourseFilter?.addEventListener("change", () => {
+    courseFilter = libraryCourseFilter.value;
     renderLibrary();
   });
 

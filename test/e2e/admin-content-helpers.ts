@@ -16,6 +16,9 @@ type MockLibraryModule = {
   title?: string;
   status?: string;
   courseCount?: number;
+  // #745: modules carry the courses they belong to (used by the "Brukt i kurs" popover
+  // and the course filter). Kept optional so existing fixtures are unaffected.
+  courses?: Array<{ id: string; title: string }>;
 };
 
 type MockCourse = {
