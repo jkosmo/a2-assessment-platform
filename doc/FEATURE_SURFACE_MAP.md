@@ -241,6 +241,7 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 | Shared element | Where | Notes |
 |----------------|-------|-------|
 | Filter pills | `.list-filters`/`.list-filter-btn` in `shared.css`; built per page (`courseFilterBar`/`sectionFilterBar`; modules uses its own `.library-filter-btn`) | Alle/Aktive/Publiserte/Arkiverte |
+| Course filter dropdown (#745) | modules: `#libraryCourseFilter` (`.library-course-select`) built by `rebuildCourseFilterOptions`; sections: `#sectionCourseFilter` (`.list-course-select`) built by `sectionCourseFilterBar` | «Alle kurs» / per-course / «Ikke i noe kurs»; client-side, dedupes each item's `courses[]`, composes with status filter + search. NOT on the Kurs list itself. |
 | Status badge | `.status-badge--{draft,published,archived}` in `shared.css` (entry #13) | Utkast/Publisert/Arkivert |
 | Action row | `.row-actions` in `shared.css` | wraps `.row-action-btn` group |
 | "Used in courses" popover | `.course-count-btn`/`.courses-popover` in `shared.css`; `showCoursesPopover` (library), `showSectionCoursesPopover` (sections) | count + click popover |
@@ -248,7 +249,9 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 | Kalibrering tab + reveal | `#navKalibrering` in each `.html` + `renderContentAreaNav()` role-gate in each page JS | role-gated visibility |
 | Landing entry | capability `admin-content` path = `/admin-content/courses` (`src/config/capabilities.ts`) | «Innholdsforvaltning» opens on Kurs |
 
-**Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle. When adding a column/filter to one list, mirror it where it applies and update this entry.
+**Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle; `test/e2e/admin-content-course-links-library-filter.spec.ts` course filter (modules + sections). When adding a column/filter to one list, mirror it where it applies and update this entry.
+
+Related (course builder, not a list page): the course builder item list (`renderModuleList` in `admin-content-courses.js`) gives each row an **«Åpne»** link (`target="_blank"`) to that item's editor — module → `/admin-content/module/<id>/conversation`, section → `/admin-content/sections?id=<id>` (#744, same guard spec).
 
 ## 15. Agent Authoring — draft-only invariant across 3 entities + token scope (EPIC #647)
 

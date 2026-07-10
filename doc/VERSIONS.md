@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.19 - 2026-07-10
+
+feat(admin-content): #744 «Åpne»-lenker i kursbyggeren + #745 kurs-filter i modul-/seksjonsbibliotekene
+
+**#744 — åpne et element fra kursbyggeren.** Innholdslista i kursbyggeren
+(`admin-content-courses.js`, `/admin-content/courses/:courseId`, seksjonen «Innhold i kurset
+(moduler og seksjoner)») hadde ingen vei inn til det enkelte elementets editor. Hver rad får nå en
+**«Åpne»**-lenke ved siden av «Fjern» som åpner editoren i **ny fane** (`target="_blank"
+rel="noopener"`), så kursbyggeren ikke går tapt: modul → `/admin-content/module/<id>/conversation`,
+seksjon → `/admin-content/sections?id=<id>`. Hardkodet norsk «Åpne» for å matche naboene
+(«Fjern»/«Diskusjon»), gjenbruker eksisterende rad-/knapp-CSS.
+
+**#745 — filtrer bibliotekene på kurs.** Modul-biblioteket (`admin-content-library.js`) og
+seksjons-biblioteket (`admin-content-sections.js`) er flate lister som blir lange under
+agent-masseproduksjon. Begge får nå en **kurs-nedtrekksmeny** («Kurs:») ved siden av filter-linja:
+**«Alle kurs»** (default, ingen filtrering) + ett valg per distinkt kurs (dedupe på `course.id` på
+tvers av elementenes `courses`-arrayer, sortert på tittel) + **«Ikke i noe kurs»** (elementer uten
+kurs). Filteret er rent klientside — gjenbruker `courses`-dataene som «Brukt i kurs»-popoveren
+allerede har, ingen backend-endring. Det komponerer med status-filter + søk + sortering (ekstra
+predikat), og dropdownen bygges på nytt hver gang dataene lastes. In-memory-valg (ingen persistering
+på tvers av reload), som øvrige filtre. Hardkodet norske etiketter.
+
+Tester: `test/e2e/admin-content-course-links-library-filter.spec.ts` (e2e) — #744 modul-/seksjonsrad-
+lenker (href + `target=_blank`); #745 kurs-filter i modul- og seksjonsbiblioteket
+(«Kurs A» viser X/skjuler Y, «Ikke i noe kurs» viser Y/skjuler X, «Alle kurs» viser begge) + at
+filteret komponerer med søk. Ingen skjemaendring, ingen rute-endring.
+
 ## 1.6.18 - 2026-07-07
 
 feat(courses): #734 kaskade-publisering — publiser aldri et kurs med upublisert innhold

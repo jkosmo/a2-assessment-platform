@@ -177,6 +177,10 @@ function statusBadge(status) {
 
 // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
 let sectionsFilter = "active";
+// #745: valgt kurs i kurs-filteret. "__all__" = ingen filtrering (default),
+// "__none__" = seksjoner som ikke er i noe kurs, ellers en course-id. In-memory
+// (ingen persistering på tvers av reload), som øvrige filtre på siden.
+let sectionCourseFilter = "__all__";
 let allSections = []; // siste hentede liste — slås opp av «Brukt i kurs»-popoveren.
 
 // #705-UX(G): popover som viser hvilke kurs en seksjon brukes i (likt modul-biblioteket).
@@ -211,6 +215,40 @@ function filterSections(sections) {
   return sections.filter((s) => !s.archivedAt); // active
 }
 
+// #745: kurs-filter komponerer med status-filteret (ekstra predikat). "__none__" beholder
+// seksjoner uten kurs; en course-id beholder seksjoner som er i det kurset.
+function applySectionCourseFilter(sections) {
+  if (sectionCourseFilter === "__none__") return sections.filter((s) => (s.courses ?? []).length === 0);
+  if (sectionCourseFilter !== "__all__") return sections.filter((s) => (s.courses ?? []).some((c) => c && c.id === sectionCourseFilter));
+  return sections;
+}
+
+// #745: distinkte kurs på tvers av alle seksjoners `courses`-array (dedupe på id), sortert på tittel.
+function collectSectionCourseFilterOptions(sections) {
+  const byId = new Map();
+  for (const s of sections) {
+    for (const c of (s.courses ?? [])) {
+      if (c && c.id && !byId.has(c.id)) byId.set(c.id, String(c.title ?? c.id));
+    }
+  }
+  return [...byId.entries()]
+    .map(([id, title]) => ({ id, title }))
+    .sort((a, b) => a.title.localeCompare(b.title, currentLocale));
+}
+
+// #745: kurs-dropdown, bygget per render fra dataene. Bevarer valgt kurs hvis det fortsatt finnes.
+function sectionCourseFilterBar(sections) {
+  const options = collectSectionCourseFilterOptions(sections);
+  const valid = new Set(["__all__", "__none__", ...options.map((o) => o.id)]);
+  if (!valid.has(sectionCourseFilter)) sectionCourseFilter = "__all__";
+  const opts = [
+    `<option value="__all__"${sectionCourseFilter === "__all__" ? " selected" : ""}>Alle kurs</option>`,
+    ...options.map((o) => `<option value="${escapeHtml(o.id)}"${o.id === sectionCourseFilter ? " selected" : ""}>${escapeHtml(o.title)}</option>`),
+    `<option value="__none__"${sectionCourseFilter === "__none__" ? " selected" : ""}>Ikke i noe kurs</option>`,
+  ].join("");
+  return `<div class="list-course-filter"><label for="sectionCourseFilter">Kurs:</label><select id="sectionCourseFilter" class="list-course-select">${opts}</select></div>`;
+}
+
 function sectionFilterBar() {
   const pills = [
     ["all", L("filterAll")],
@@ -234,7 +272,8 @@ async function renderListView() {
     return;
   }
 
-  const visible = filterSections(sections);
+  // #745: status-filter (piller) + kurs-filter (dropdown) komponeres.
+  const visible = applySectionCourseFilter(filterSections(sections));
 
   // #705: samme handlings-rekkefølge og status-vokabular som modul/kurs.
   const rows = visible.map((s) => {
@@ -273,7 +312,7 @@ async function renderListView() {
       <h1>${escapeHtml(L("heading"))}</h1>
       <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
     </div>
-    ${sectionFilterBar()}
+    <div class="list-filters-row">${sectionFilterBar()}${sectionCourseFilterBar(sections)}</div>
     ${visible.length === 0
       ? `<div class="empty-state"><p class="empty-state-text">${escapeHtml(L("empty"))}</p></div>`
       : `<div class="sections-table-wrap"><table class="sections-table">
@@ -285,6 +324,11 @@ async function renderListView() {
     const btn = event.target.closest("[data-filter]");
     if (!btn) return;
     sectionsFilter = btn.dataset.filter;
+    renderListView();
+  });
+  // #745: kurs-filter — re-render lista med det valgte kurset.
+  document.getElementById("sectionCourseFilter")?.addEventListener("change", (event) => {
+    sectionCourseFilter = event.target.value;
     renderListView();
   });
   document.getElementById("sectionsTableBody")?.addEventListener("click", (event) => {

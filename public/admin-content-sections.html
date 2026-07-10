@@ -8,6 +8,25 @@
     <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
+      /* #745: rad som holder status-filter-pillene og kurs-dropdownen på samme linje. */
+      .list-filters-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+      .list-filters-row .list-filters { margin-bottom: 0; }
+      .list-course-filter { display: flex; align-items: center; gap: 8px; }
+      .list-course-filter label { font-size: 13px; font-weight: 600; color: var(--color-meta); }
+      .list-course-select {
+        width: auto;
+        min-height: 0;
+        padding: 5px 10px;
+        font-size: 13px;
+        font-family: inherit;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        background: var(--color-surface);
+        color: var(--color-text);
+        max-width: 260px;
+      }
+      .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+
       .content-area-nav {
         display: flex;
         gap: 0;

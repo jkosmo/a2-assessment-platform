@@ -61,6 +61,23 @@
       .library-search:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 
       .library-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+
+      /* #745: kurs-filter (dropdown) ved siden av filter-pillene. */
+      .library-course-filter { display: flex; align-items: center; gap: 8px; }
+      .library-course-filter label { font-size: 13px; font-weight: 600; color: var(--color-meta); }
+      .library-course-select {
+        width: auto;
+        min-height: 0;
+        padding: 5px 10px;
+        font-size: 13px;
+        font-family: inherit;
+        border: 1px solid var(--color-border-soft);
+        border-radius: var(--radius-card);
+        background: var(--color-surface);
+        color: var(--color-text);
+        max-width: 260px;
+      }
+      .library-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
       .library-filter-btn {
         /* width:auto + min-height:0 overstyrer global button{width:100%} så filtrene blir kompakte piller på rad. */
         width: auto;
@@ -283,6 +300,13 @@
           <button class="library-filter-btn" data-filter="unpublished_draft">Har upublisert utkast</button>
           <button class="library-filter-btn" data-filter="published">Publiserte</button>
           <button class="library-filter-btn" data-filter="archived">Arkiverte</button>
+        </div>
+        <!-- #745: klientside-filter på kurs. Options bygges i JS fra modulenes `courses`. -->
+        <div class="library-course-filter">
+          <label for="libraryCourseFilter">Kurs:</label>
+          <select id="libraryCourseFilter" class="library-course-select">
+            <option value="__all__">Alle kurs</option>
+          </select>
         </div>
       </div>
 

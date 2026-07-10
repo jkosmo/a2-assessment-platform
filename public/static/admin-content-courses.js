@@ -1401,7 +1401,13 @@ function renderModuleList() {
   }
 
   container.innerHTML = `<div class="module-list" id="moduleList">
-    ${courseModules.map((m, i) => `
+    ${courseModules.map((m, i) => {
+      // #744: åpne elementets editor i ny fane så kursbyggeren ikke går tapt.
+      // Modul → samtale-editoren; seksjon → seksjons-editoren.
+      const openHref = m.type === "SECTION"
+        ? `/admin-content/sections?id=${encodeURIComponent(m.refId)}`
+        : `/admin-content/module/${encodeURIComponent(m.refId)}/conversation`;
+      return `
       <div class="module-list-item" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="module-list-item-order">${i + 1}.</span>
         <span class="item-type-badge">${m.type === "SECTION" ? "SEKSJON" : "MODUL"}</span>
@@ -1412,9 +1418,11 @@ function renderModuleList() {
           </label>
           <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
           <button class="module-move-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
+          <a href="${openHref}" class="module-move-btn" style="text-decoration:none;display:inline-flex;align-items:center" target="_blank" rel="noopener">Åpne</a>
           <button class="module-remove-btn" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
         </div>
-      </div>`).join("")}
+      </div>`;
+    }).join("")}
   </div>`;
 
   document.getElementById("moduleList")?.addEventListener("click", handleModuleListClick);
