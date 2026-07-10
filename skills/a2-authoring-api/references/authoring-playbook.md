@@ -44,8 +44,12 @@ opted into an unsourced draft).
 
 Objectives are the backbone; structure and assessment derive from them.
 
+- **Confirm the course's primary language here** (default to the language of the source material).
+  Everything downstream — every title, task, rubric and MCQ — is written in this one language; do
+  not switch languages between elements (core principle 5).
 - Derive 3–6 objectives **from the confirmed source**, each phrased *"After this, a learner can
-  ___"* (identify…, apply…, decide…, explain…). Ground each in something the source supports.
+  ___"* (identify…, apply…, decide…, explain…), in the confirmed language. Ground each in
+  something the source supports.
 - Present them and ask if they're right. Add/cut/reword on the author's steer.
 - If an objective can't be supported by the source, flag it (`[Avklaring: …]`) rather than
   inventing support for it.
@@ -103,6 +107,9 @@ rubber stamp.
   fresh context avoids the author-agent's anchoring bias.
 - **In a single-context chat**, do the equivalent as a deliberate fresh pass: re-derive the
   objectives from the source in isolation, then audit the course against them.
+- **Check language consistency:** every title, task, rubric and MCQ must be in the one confirmed
+  language. Flag any element that drifted (e.g. an English module title in a Norwegian course) —
+  this is a real, easy-to-miss failure; fix it before producing.
 - Report findings to the author; fix gaps/overclaims before producing. Overclaims are resolved by
   softening to what the source supports or by `[Avklaring: …]`, never by inventing support.
 

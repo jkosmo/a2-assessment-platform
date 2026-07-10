@@ -41,6 +41,12 @@ fields in the contract, and you must never call any `.../publish` endpoint — n
    the author explicitly allows it, after a clear warning** that the content is model-generated
    and unverified — and every such claim is marked `[Avklaring: …]`. This is the `auto` track
    below; it is never the default.
+5. **One language — never mix.** Establish the course's primary language (`locale`) early and
+   write **every** element in it: course, section and module titles, task texts, rubric criteria,
+   MCQ questions and options. Do not name sections in one language and modules in another, and do
+   not fall back to English for module titles when the source and the rest of the course are in
+   Norwegian (a real failure seen in testing). If the source or the conversation mixes languages,
+   ask the author which language the course should be in, then produce all content in that one.
 
 ## Two tracks (choose by the user's opening)
 
