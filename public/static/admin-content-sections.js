@@ -25,6 +25,7 @@ const LABELS = {
     showArchived: "Show archived", hideArchived: "Hide archived",
     filterAll: "All", filterActive: "Active", filterPublished: "Published", filterArchived: "Archived",
     colCourses: "Used in courses", coursesPopoverTitle: "Used in courses", noCourses: "Not used in any course.",
+    courseFilterLabel: "Course:", courseFilterAll: "All courses", courseFilterNone: "Not in any course",
     published: "Section published.", unpublished: "Section unpublished.",
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Edit", del: "Delete", empty: "No sections yet.",
@@ -43,6 +44,7 @@ const LABELS = {
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
     filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
     colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikke brukt i noe kurs.",
+    courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Rediger", del: "Slett", empty: "Ingen seksjoner ennå.",
@@ -61,6 +63,7 @@ const LABELS = {
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
     filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
     colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikke brukt i noe kurs.",
+    courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikkje i noko kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Rediger", del: "Slett", empty: "Ingen seksjonar enno.",
@@ -242,11 +245,11 @@ function sectionCourseFilterBar(sections) {
   const valid = new Set(["__all__", "__none__", ...options.map((o) => o.id)]);
   if (!valid.has(sectionCourseFilter)) sectionCourseFilter = "__all__";
   const opts = [
-    `<option value="__all__"${sectionCourseFilter === "__all__" ? " selected" : ""}>Alle kurs</option>`,
+    `<option value="__all__"${sectionCourseFilter === "__all__" ? " selected" : ""}>${escapeHtml(L("courseFilterAll"))}</option>`,
     ...options.map((o) => `<option value="${escapeHtml(o.id)}"${o.id === sectionCourseFilter ? " selected" : ""}>${escapeHtml(o.title)}</option>`),
-    `<option value="__none__"${sectionCourseFilter === "__none__" ? " selected" : ""}>Ikke i noe kurs</option>`,
+    `<option value="__none__"${sectionCourseFilter === "__none__" ? " selected" : ""}>${escapeHtml(L("courseFilterNone"))}</option>`,
   ].join("");
-  return `<div class="list-course-filter"><label for="sectionCourseFilter">Kurs:</label><select id="sectionCourseFilter" class="list-course-select">${opts}</select></div>`;
+  return `<div class="list-course-filter"><label for="sectionCourseFilter">${escapeHtml(L("courseFilterLabel"))}</label><select id="sectionCourseFilter" class="list-course-select">${opts}</select></div>`;
 }
 
 function sectionFilterBar() {

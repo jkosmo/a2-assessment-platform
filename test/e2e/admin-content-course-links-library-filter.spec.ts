@@ -166,7 +166,9 @@ test.describe("#745 section library — filter by course", () => {
 
     const courseSelect = page.locator("#sectionCourseFilter");
     await expect(courseSelect).toBeVisible();
-    await expect(courseSelect.locator("option")).toContainText(["Alle kurs", "Kurs A", "Ikke i noe kurs"]);
+    // The sections library is localized (L()); in the default en-GB e2e locale the fixed options
+    // render in English — this guards against hardcoded Norwegian creeping back onto this page.
+    await expect(courseSelect.locator("option")).toContainText(["All courses", "Kurs A", "Not in any course"]);
 
     await courseSelect.selectOption("course-a");
     await expect(page.locator(".sections-table")).toContainText("Section X");
