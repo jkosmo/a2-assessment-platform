@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.20 - 2026-07-11
+
+chore(skill): a2-authoring-api #762 — preserve approved content, import-compatible fallback export, full three-language localization
+
+Hardens the repo-canonical **`skills/a2-authoring-api/`** skill (EPIC #647) against three
+observed failure modes, keeping the existing gates (Source→Objectives→Structure→Per-element→
+External QA→Produce), security rules, one-language rule and the never-publish rule intact. Depth
+moved to three NEW reference files; deterministic logic moved to three NEW repo-unit-tested
+scripts (node stdlib, imported the same way `test/agent-authoring-skill-import.test.ts` imports
+`import-package.mjs`).
+
+**Issue 1 — preserve approved course content.** The skill now maintains an authoritative
+**course state + master** (full last-approved text per element; a "remove redundancy" request may
+only drop repeated explanation, never unique examples/formulas/steps/caveats/tasks/criteria).
+`scripts/course-state.mjs` (`reviewRevision`, `auditExport`, `checkGate6Readiness`): reductions
+>20 % need approval; any loss of a mandatory example/formula/template/task/assessment-criterion
+blocks regardless of %; a pre-export loss audit classifies preserved/moved/deliberately-removed/
+**unexpectedly-missing** (last blocks); Gate 6 requires a complete master in final order; a
+schema-valid-but-incomplete export is an error. `references/content-preservation.md`.
+
+**Issue 2 — import-compatible fallback export.** A fallback file with `exportedAt`
+`…+00:00`/microseconds was rejected by A2's import but had been called "validated".
+`scripts/export-validate.mjs` normalises `exportedAt` and every `audit.publishedAt` to
+`Date.toISOString()` (Zod `.datetime()` rejects offsets + microseconds), runs the real round-trip
+(generate → write → read back → parse → validate → deliver only on pass), carries a bundled
+structural validator mirroring `exportEnvelopeSchema`, and names each check (JSON parsing /
+export-schema / import-schema / content-integrity / API dry-run / actual import) — never a
+generic "validated". Headline rule added to SKILL.md. `references/export-validation.md`.
+
+**Issue 3 — full localization to nb, nn, en-GB.** After the primary language is approved the
+skill produces **real translations** (not the primary copied into every locale) for every
+student-facing localized field. `scripts/localization-check.mjs` (`checkLocalization`) verifies
+all three languages present, equal structure, MCQ correct-answer mapping unchanged across
+locales, formulas/URLs/identifiers preserved, and flags blind copies; it documents that
+`rubric.criteria` is not a localized datatype (no API-contract change). `references/localization.md`.
+
+Tests (all green, `npx tsc --noEmit` clean): `test/unit/agent-authoring-course-state.test.ts`,
+`test/unit/agent-authoring-export-validate.test.ts`,
+`test/unit/agent-authoring-export-schema-roundtrip.test.ts` (imports the **real**
+`exportEnvelopeSchema`/`importBodySchema` and runs the generator output — incl. bad-datetime
+cases — through them), `test/unit/agent-authoring-localization.test.ts`. Repackage:
+`npm run skill:package` → `dist/skills/a2-authoring-api-v1.6.20.zip`. Known limitation: A2 has
+**no import dry-run endpoint** (course import writes), so live schema validation against the
+platform is not possible; a `courses/import?dryRun=true` endpoint is a recommended follow-up.
+No src/runtime/API-contract changes; skill + tests only.
+
 ## 1.6.19 - 2026-07-10
 
 feat(admin-content): #744 «Åpne»-lenker i kursbyggeren + #745 kurs-filter i modul-/seksjonsbibliotekene

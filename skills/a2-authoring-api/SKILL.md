@@ -17,6 +17,11 @@ files) point here — edit this file, never the copies. Design: `doc/design/AGEN
 Craft depth for each gate: **[references/authoring-playbook.md](references/authoring-playbook.md)**.
 Package contract + examples: [references/package-schema.md](references/package-schema.md).
 API/fallback mechanics: [references/api-flow.md](references/api-flow.md).
+Preserving approved content: **[references/content-preservation.md](references/content-preservation.md)**.
+Validating the fallback export: **[references/export-validation.md](references/export-validation.md)**.
+Translating to all three languages: **[references/localization.md](references/localization.md)**.
+Deterministic checks live in `scripts/` (`course-state.mjs`, `export-validate.mjs`,
+`localization-check.mjs`) — run them; they are repo-unit-tested.
 
 ## What you produce
 
@@ -48,6 +53,40 @@ fields in the contract, and you must never call any `.../publish` endpoint — n
    Norwegian (a real failure seen in testing). If the source or the conversation mixes languages,
    ask the author which language the course should be in, then produce all content in that one.
 
+## Preserve · Validate · Localize (do-not-regress guarantees)
+
+These three rules hold on **every** run and back specific gates. Depth + deterministic scripts in
+the three references above.
+
+6. **Preserve approved content.** Maintain an authoritative **course state + master** — a
+   filesystem `workdir/course-state.json` + `course-master.md` where one exists, otherwise a
+   single canonical "course master" block **rewritten in full after each approval**. Each element
+   is stored in **full text** after each approval; a later "remove redundancy" request drops only
+   repeated explanation and **keeps** every unique example, formula, operative step, caveat, task
+   and assessment criterion (relocate long detail to an optional attachment, don't delete).
+   Reductions >20 % need explicit approval; **any** loss of a mandatory
+   example/formula/template/task/assessment-criterion blocks production regardless of %. Gate 6
+   must not start without a complete master in final order; run the pre-export **loss audit**
+   (preserved / moved / deliberately-removed / **unexpectedly-missing** — the last blocks) and
+   re-compare the finished file to the master. Schema-valid-but-incomplete is an error.
+   (content-preservation.md; `course-state.mjs`.)
+7. **Validate the fallback export against the real import schema.** *A fallback export is not
+   validated until the finished file has been read back and checked against the same schema as
+   A2's import function.* Generate `exportedAt` (and normalise any date) with
+   `Date.toISOString()` — Zod `.datetime()` rejects timezone offsets and microseconds; the same
+   applies to every `audit.publishedAt`. The fallback file must be generated complete → written →
+   read back → parsed → schema-validated → delivered only on pass; the validated file **is** the
+   delivered file. Name the checks in the report (JSON parsing / export-schema / import-schema /
+   content-integrity / API dry-run / actual import) — **never say "validated" generically**.
+   (export-validation.md; `export-validate.mjs`.)
+8. **Localize to all three languages before production.** Fix one primary language for the
+   dialogue (principle 5), then after the primary is approved produce **real translations** for
+   **nb, nn and en-GB** of every student-facing field the schema localizes — not the primary text
+   copied into every locale. Preserve meaning, difficulty, the correct answer, option count+order,
+   and all formulas/identifiers/URLs; verify MCQ correct answers map to the same option in every
+   locale. Block production if a mandatory localized field is missing. (localization.md;
+   `localization-check.mjs`.)
+
 ## Two tracks (choose by the user's opening)
 
 **Mode priority:** use `auto` **only** when the user explicitly asks for it (e.g. "auto",
@@ -71,7 +110,7 @@ is not approval of the next step.** Per-gate craft is in the playbook.
 | 3 | **Structure** | "Here's the proposed structure — these modules, these sections, this order and assessment modes. Is it right?" Iterate until confirmed. (Playbook §3.) |
 | 4 | **Each element** | One item at a time: "Here's the content for Module/Section X (task/rubric/MCQs). Approved?" → next. Never write all elements at once. (Playbook §4.) |
 | 5 | **External QA** | An independent check that the course meets the objectives — re-derive the objectives from the source in isolation, verify each is taught **and** assessed, flag gaps/overclaims. **Prefer a separate agent** (fresh context) where the environment allows it; otherwise a deliberate fresh-context pass. (Playbook §5.) |
-| 6 | **Produce** | Only now: build the JSON, validate, and create the drafts (or emit the fallback file). (Playbook §6 + api-flow.md.) |
+| 6 | **Produce** | Only with a **complete course master in final order** (rule 6): run the loss audit + localization check, build the JSON, validate, and create the drafts (or emit the round-trip-validated fallback file). (Playbook §6 + api-flow.md; rules 6–8.) |
 
 ## External QA — a real second opinion
 
@@ -97,7 +136,10 @@ created (IDs + links), the error, and the `agentRunId`. Never delete anything.
 
 **If you cannot reach the API** (sandboxed chat): emit an `a2-content-export/v1` **course
 envelope** to a file and tell the author to import it via the admin-UI course import (playbook §6,
-Fallback). No token or network needed.
+Fallback). No token or network needed. **The fallback file counts as validated only after the
+finished file is read back and checked against the same schema as A2's import** (rule 7,
+export-validation.md); there is **no import dry-run endpoint**, so report the named checks and do
+not claim a live platform verdict.
 
 ## Security rules (hard)
 
