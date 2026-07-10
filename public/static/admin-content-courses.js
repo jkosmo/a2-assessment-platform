@@ -14,6 +14,7 @@ import {
   applyNavReviewBadge,
 } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
@@ -70,6 +71,7 @@ const deleteDialog = document.getElementById("deleteDialog");
 const deleteDialogText = document.getElementById("deleteDialogText");
 const deleteConfirmBtn = document.getElementById("deleteConfirmBtn");
 const deleteCancelBtn = document.getElementById("deleteCancelBtn");
+const cascadePublishDialog = document.getElementById("cascadePublishDialog");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -335,13 +337,44 @@ function courseFilterBar() {
     .join("")}</div>`;
 }
 
+// #734: publishing a course must never leave it containing unavailable (draft/archived) modules or
+// sections (invariant I1). Before publishing we ask the API which items are unpublished and whether
+// each is publishable. If everything is already live we publish directly (unchanged behaviour). If
+// there are unpublished items we open the cascade-publish dialog: it offers to publish them together
+// with the course, or — when some item cannot be published — explains what must be fixed first and
+// blocks publishing (no "course only" escape hatch, which would violate I1).
 async function publishCourseInAdmin(courseId, triggerButton = null) {
   if (!courseId) return;
   if (triggerButton) triggerButton.disabled = true;
 
+  let preview;
+  try {
+    preview = await apiFetch(
+      `/api/admin/content/courses/${encodeURIComponent(courseId)}/publish-preview`,
+      getHeaders,
+    );
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke sjekke kursinnhold.", "error");
+    if (triggerButton) triggerButton.disabled = false;
+    return;
+  }
+
+  // Everything already published — keep the direct-publish behaviour (no dialog).
+  if (preview?.allPublished) {
+    await commitCoursePublish(courseId, false, triggerButton);
+    return;
+  }
+
+  openCascadePublishDialog(courseId, preview, triggerButton);
+}
+
+// POST the publish. `publishItems` cascades the unpublished modules/sections; false is the plain
+// publish (used when everything is already live).
+async function commitCoursePublish(courseId, publishItems, triggerButton = null) {
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/publish`, getHeaders, {
       method: "POST",
+      body: JSON.stringify({ publishItems }),
     });
     showToast(t("adminContent.courses.message.published") || "Kurs publisert.", "success");
 
@@ -355,6 +388,100 @@ async function publishCourseInAdmin(courseId, triggerButton = null) {
     showToast(err?.message ?? "Kunne ikke publisere kurs.", "error");
     if (triggerButton) triggerButton.disabled = false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cascade-publish dialog (#734)
+// ---------------------------------------------------------------------------
+
+let pendingCascadePublish = null; // { courseId, triggerButton }
+
+function cascadeItemTypeLabel(type) {
+  return type === "SECTION"
+    ? (t("adminContent.courses.cascadePublish.sectionLabel") || "Seksjon")
+    : (t("adminContent.courses.cascadePublish.moduleLabel") || "Modul");
+}
+
+function renderCascadeItemList(items, { showBlockers }) {
+  return `<ul class="cascade-publish-list">${(items ?? [])
+    .map((item) => {
+      const title = escapeHtml(localizedText(item.title) || item.id);
+      const badge = `<span class="item-type-badge">${escapeHtml(cascadeItemTypeLabel(item.type))}</span>`;
+      const blockerNote =
+        showBlockers && !item.publishable && Array.isArray(item.blockers) && item.blockers.length > 0
+          ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map((b) => b.message).join(" "))}</span>`
+          : "";
+      return `<li class="cascade-publish-item${item.publishable ? "" : " is-blocked"}">${badge} <span class="cascade-publish-item-title">${title}</span>${blockerNote}</li>`;
+    })
+    .join("")}</ul>`;
+}
+
+// Data-driven so wording/options can be adjusted (or a future option added) without restructuring.
+// Two modes: `confirm` (all items publishable → offer cascade) and `blocked` (some item cannot be
+// published → explain + block, only a close action).
+function openCascadePublishDialog(courseId, preview, triggerButton) {
+  if (!cascadePublishDialog) {
+    // Defensive fallback: without the dialog, do not silently publish broken content.
+    showToast("Kurset har upublisert innhold som må publiseres først.", "error");
+    if (triggerButton) triggerButton.disabled = false;
+    return;
+  }
+
+  pendingCascadePublish = { courseId, triggerButton };
+  const blocked = !preview?.publishable;
+  const items = preview?.unpublishedItems ?? [];
+
+  const titleEl = document.getElementById("cascadePublishTitle");
+  const textEl = document.getElementById("cascadePublishText");
+  const listEl = document.getElementById("cascadePublishList");
+  const confirmBtn = document.getElementById("cascadePublishConfirmBtn");
+  const cancelBtn = document.getElementById("cascadePublishCancelBtn");
+
+  if (titleEl) {
+    titleEl.textContent = blocked
+      ? (t("adminContent.courses.cascadePublish.blockedTitle") || "Kan ikke publisere ennå")
+      : (t("adminContent.courses.cascadePublish.confirmTitle") || "Publiser kurs og innhold");
+  }
+  if (textEl) {
+    textEl.textContent = blocked
+      ? (t("adminContent.courses.cascadePublish.blockedText") ||
+          "Kurset har innhold som ikke kan publiseres ennå. Rett opp elementene under, så kan du publisere kurset.")
+      : (t("adminContent.courses.cascadePublish.confirmText") ||
+          "Kurset har upublisert innhold. Vil du publisere disse elementene sammen med kurset?");
+  }
+  if (listEl) listEl.innerHTML = renderCascadeItemList(items, { showBlockers: blocked });
+
+  if (confirmBtn) {
+    confirmBtn.textContent = t("adminContent.courses.cascadePublish.confirmBtn") || "Publiser kurset og alt innhold";
+    // No cascade primary action when something is un-publishable — only a close action (I1).
+    setHidden(confirmBtn, blocked);
+  }
+  if (cancelBtn) {
+    cancelBtn.textContent = blocked
+      ? (t("adminContent.courses.cascadePublish.closeBtn") || "Lukk")
+      : (t("adminContent.courses.cascadePublish.cancelBtn") || "Avbryt");
+  }
+
+  cascadePublishDialog.showModal();
+}
+
+function initCascadePublishDialog() {
+  const confirmBtn = document.getElementById("cascadePublishConfirmBtn");
+  const cancelBtn = document.getElementById("cascadePublishCancelBtn");
+  confirmBtn?.addEventListener("click", async () => {
+    if (!pendingCascadePublish) return;
+    const { courseId, triggerButton } = pendingCascadePublish;
+    pendingCascadePublish = null;
+    confirmBtn.disabled = true;
+    cascadePublishDialog.close();
+    await commitCoursePublish(courseId, true, triggerButton);
+    confirmBtn.disabled = false;
+  });
+  cancelBtn?.addEventListener("click", () => {
+    cascadePublishDialog?.close();
+    if (pendingCascadePublish?.triggerButton) pendingCascadePublish.triggerButton.disabled = false;
+    pendingCascadePublish = null;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1738,6 +1865,7 @@ async function init() {
   }
 
   initDeleteDialog();
+  initCascadePublishDialog();
 
   const route = detectRoute();
   if (route.view === "list") {

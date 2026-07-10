@@ -14,6 +14,8 @@ import {
   assignEnrollments,
   revokeEnrollment,
   listCourseEnrollments,
+  getCoursePublishPreview,
+  publishCourseCascade,
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
@@ -347,10 +349,59 @@ adminCoursesRouter.put("/:courseId/items", async (request, response, next) => {
   }
 });
 
-adminCoursesRouter.post("/:courseId/publish", async (request, response, next) => {
+// #734: preview the unpublished modules/sections in a course before publishing, and whether each is
+// currently publishable. The UI calls this before opening the cascade-publish confirm dialog. Read-
+// only; agent tokens cannot reach it (not in the agent-token allowlist — enforceAgentTokenScope).
+adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, next) => {
   try {
-    const course = await publishCourse(request.params.courseId, request.context?.userId);
-    response.json({ course });
+    const preview = await getCoursePublishPreview(request.params.courseId);
+    response.json(preview);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #734: publishing a course must not leave it containing unavailable content (invariant I1). If the
+// course has unpublished modules/sections the caller must opt in to cascade-publishing them via
+// `{ publishItems: true }`; otherwise we return 409 with the unpublished-item preview so the UI can
+// ask the author to confirm. If any unpublished item cannot be published we return 422 with the
+// blockers and publish nothing. Agent tokens cannot publish (publish endpoints are outside the
+// agent-token allowlist — this route is unchanged in that respect).
+const publishCourseBodySchema = z.object({ publishItems: z.boolean().optional() });
+
+adminCoursesRouter.post("/:courseId/publish", async (request, response, next) => {
+  const parsed = publishCourseBodySchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  const publishItems = parsed.data.publishItems === true;
+
+  try {
+    const preview = await getCoursePublishPreview(request.params.courseId);
+
+    // No unpublished items — plain publish (unchanged happy path; still enforces G1: ≥1 module).
+    if (preview.allPublished) {
+      const course = await publishCourse(request.params.courseId, request.context?.userId);
+      response.json({ course, publishedItems: [] });
+      return;
+    }
+
+    // Unpublished items exist but the caller has not opted into cascade — ask for confirmation.
+    if (!publishItems) {
+      response.status(409).json({
+        error: "course_has_unpublished_items",
+        message: "The course has unpublished items. Confirm cascade publish with { publishItems: true }.",
+        unpublishedItems: preview.unpublishedItems,
+        publishable: preview.publishable,
+      });
+      return;
+    }
+
+    // Cascade requested: publish items then the course. publishCourseCascade throws a 422 AppError if
+    // any item is un-publishable, and never publishes the course unless every item succeeded.
+    const result = await publishCourseCascade(request.params.courseId, request.context?.userId);
+    response.json(result);
   } catch (error) {
     next(error);
   }

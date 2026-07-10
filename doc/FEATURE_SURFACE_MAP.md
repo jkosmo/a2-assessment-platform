@@ -207,9 +207,19 @@ UIs and the three command modules together. The integrity invariant (a published
 an unavailable module/section) is enforced by G2, **not** by the participant-side "Ikke tilgjengelig"
 fallback (that is only a safety net, #502-followup). Canonical model: `doc/design/CONTENT_LIFECYCLE.md`.
 
+**Cascade publish (#734):** G2 stops content being *withdrawn* from under a course, but a course could
+still be published while its items were never published (draft modules/sections added via API/import).
+Course publish now **detects** unpublished items and either cascade-publishes them (items → course) or
+blocks with the reasons — a second enforcement point for I1. This spans the publish route, a new
+preview endpoint, a course-command service, and a course-list/detail confirm dialog; a change to the
+cascade policy (wording, an escape-hatch option, which items count as publishable) must touch all of them.
+
 | Surface | Where | Notes |
 |---------|-------|-------|
 | Shared guards (source of truth) | `src/modules/course/contentLifecycle.ts` | G2 `assertModuleNotInAnyCourse`/`assertSectionNotInAnyCourse`; G3 `assertCourseHasNoInProgressParticipants` |
+| Cascade-publish service | `src/modules/course/coursePublishService.ts` (`getCoursePublishPreview`, `publishCourseCascade`) | Inspects items + per-item publishability (module→`validateModuleVersionForPublish`, section→has content); publishes items then course; 422 if any item un-publishable (I1) |
+| Course publish route | `src/routes/adminCourses.ts` (`GET /:id/publish-preview`, `POST /:id/publish` `{publishItems}`) | 409 needs-confirm / 422 blocked / 200 `{course,publishedItems}`. Agent tokens denied (not in `agentTokenScope` allowlist) |
+| Cascade-publish dialog UI | `public/static/admin-content-courses.js` (`publishCourseInAdmin`→preview, `openCascadePublishDialog`) + `#cascadePublishDialog` in `admin-content-courses.html` | Lists unpublished items; confirm cascades; blocked mode hides confirm (`setHidden`). i18n `adminContent.courses.cascadePublish.*` |
 | Module commands | `src/modules/adminContent/adminContentCommands.ts` (`unpublishModule`, `archiveModule`) + repo `archiveModule` (auto-unpublish) | G2 on unpublish+archive; delete-in-course guard in `adminContent.ts` route |
 | Course commands | `src/modules/course/courseCommands.ts` (`unpublishCourse`, `archiveCourse`) | G3 on both; archive auto-unpublishes (I3); delete blocked by completions (G4) |
 | Section commands | `src/modules/course/sectionCommands.ts` (`publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`/`deleteSection`) | G2 on unpublish/archive/delete; archive auto-unpublishes |
@@ -219,7 +229,7 @@ fallback (that is only a safety net, #502-followup). Canonical model: `doc/desig
 | Section list UI | `public/static/admin-content-sections.js` (`sectionStatus`/`statusBadge`/`sectionLifecycle`, archived toggle) | added status column + all lifecycle actions |
 | Shared badge style | `public/static/shared.css` → `.status-badge--{draft,published,archived}` | library has its own scoped `.status-badge` modifiers (richer module statuses) |
 
-**Guards:** `test/m2-content-lifecycle.test.ts` (G2/G3/I3 across all three); `test/m2-module-archive.test.ts` (archive auto-unpublishes); `test/e2e/admin-content-workspaces.spec.ts` "courses list can unpublish a published course (#705)" + "sections list shows status and runs the lifecycle actions (#705)".
+**Guards:** `test/m2-content-lifecycle.test.ts` (G2/G3/I3 across all three); `test/m2-module-archive.test.ts` (archive auto-unpublishes); `test/m2-course-cascade-publish.test.ts` (#734 — preview, cascade, blocked-nothing-half-published); `test/e2e/admin-content-workspaces.spec.ts` "courses list can unpublish a published course (#705)" + "sections list shows status and runs the lifecycle actions (#705)"; `test/e2e/admin-content-course-cascade-publish.spec.ts` (#734 dialog: cascade confirm, direct-publish, blocked).
 
 ## 14. Admin-content list pages — shared shape across Kurs/Moduler/Seksjoner/Klasser (#705-UX)
 
