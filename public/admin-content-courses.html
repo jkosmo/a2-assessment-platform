@@ -336,6 +336,8 @@
       .dialog-actions { display: flex; gap: 8px; flex-direction: column; margin-top: var(--space-2); }
       .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
       .dialog-cancel:hover { background: var(--color-row-hover); }
+      .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
+      .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 
       /* ── Cascade-publish item list (#734) ────────────────────────────────── */
       .cascade-publish-list-wrap { margin-bottom: var(--space-1); max-height: 260px; overflow-y: auto; }
@@ -477,6 +479,19 @@
       <div class="dialog-actions">
         <button type="button" id="cascadePublishConfirmBtn" class="btn btn-primary">Publiser kurset og alt innhold</button>
         <button type="button" class="dialog-cancel" id="cascadePublishCancelBtn">Avbryt</button>
+      </div>
+    </dialog>
+
+    <!-- Cascade-delete confirmation dialog (#762, ADMINISTRATOR-only): lists what will be deleted
+         (course + exclusively-owned modules/sections), what will be spared (shared items), and any
+         blockers. The confirm button only appears when there are no blockers. -->
+    <dialog id="cascadeDeleteDialog" aria-labelledby="cascadeDeleteTitle">
+      <h2 class="dialog-title" id="cascadeDeleteTitle">Slett kurs og ubrukt innhold</h2>
+      <p class="dialog-text" id="cascadeDeleteText">Henter oversikt…</p>
+      <div id="cascadeDeleteBody" class="cascade-delete-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="cascadeDeleteConfirmBtn" class="btn btn-danger" style="display:none">Slett kurs og ubrukt innhold</button>
+        <button type="button" class="dialog-cancel" id="cascadeDeleteCancelBtn">Avbryt</button>
       </div>
     </dialog>
 

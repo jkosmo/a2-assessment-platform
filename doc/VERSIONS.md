@@ -2,7 +2,7 @@
 
 This document tracks release versions and what each version includes.
 
-## 1.6.20 - 2026-07-11
+## 1.6.21 - 2026-07-11
 
 chore(skill): a2-authoring-api #762 — preserve approved content, import-compatible fallback export, full three-language localization
 
@@ -47,6 +47,50 @@ cases — through them), `test/unit/agent-authoring-localization.test.ts`. Repac
 **no import dry-run endpoint** (course import writes), so live schema validation against the
 platform is not possible; a `courses/import?dryRun=true` endpoint is a recommended follow-up.
 No src/runtime/API-contract changes; skill + tests only.
+
+## 1.6.20 - 2026-07-11
+
+feat(courses): #762 ADMINISTRATOR-only «Slett kurs og ubrukt innhold» (cascade delete)
+
+**Hva.** Et destruktivt, **kun-ADMINISTRATOR** oppryddingsverktøy for test-innhold: slett et kurs
+sammen med de modulene og seksjonene som **kun** det kurset eier — uten noen gang å ødelegge ekte
+vurderings-/prestasjonsdata.
+
+**Sikkerhetsmodell (bærende).** En modul/seksjon er *eksklusiv* for kurs C når C er det eneste kurset
+som refererer den (via `CourseItem`). Delt innhold **spares** — kun koblet fra C, aldri slettet.
+*Bevarte poster* slettes aldri: en eksklusiv modul med `submissions > 0` ELLER
+`certificationStatuses > 0`, eller et kurs med `completions > 0`, blir **blokkeringer**. Operasjonen
+er **alt-eller-ingenting**: finnes én blokkering, kastes en `ValidationError` (400) som navngir dem
+og ingenting slettes.
+
+**FK-rekkefølge (bærende, speiler bulk-purge).** I én transaksjon: (1) slett C sine `CourseItem`- +
+`CourseModule`-rader (kobler fra så `CourseItem`-Restrict ikke blokkerer); (2) per eksklusiv modul:
+nullstill `activeVersionId`, slett `ModuleVersion` (Restrict-refererer rubric/prompt/mcq-versjoner),
+så `MCQQuestion`, så `MCQSetVersion`/`RubricVersion`/`PromptTemplateVersion`, så modulen; (3) per
+eksklusiv seksjon: nullstill `activeVersionId`, slett `CourseSectionVersion`, så seksjonen
+(reads/assets cascader); (4) slett kurset.
+
+**API.** `GET /api/admin/content/courses/:courseId/cascade-delete-preview` (forhåndsvisning:
+deletableModules/deletableSections/sparedModules/sparedSections/blockers) og
+`POST /api/admin/content/courses/:courseId/cascade-delete` (kjør; 200 med sammendrag, eller 400 med
+`details.blockers`). Begge **kun ADMINISTRATOR** (403 `forbidden` ellers) — per-rute-vakt over
+`admin_content`-mounten som slipper inn SMO+ADMIN.
+
+**UI.** Ny **ADMINISTRATOR-only** rad-handling «Slett kurs og ubrukt innhold» i kurs-arbeidsflaten
+(`/admin-content/courses`), synlig kun når `/api/me`-rollene inkluderer ADMINISTRATOR. Åpner en
+bekreftelsesdialog som lister hva som slettes, hva som beholdes (delt innhold med kursene de ligger
+i) og eventuelle blokkeringer; bekreft-knappen vises kun når det ikke finnes blokkeringer.
+
+**Revisjon.** `course_cascade_deleted`-hendelse (sammendrag av slettede/sparte id-er) + per-modul
+`module_deleted` (`source: course_cascade_delete`).
+
+**Tester.** Integrasjon (native Postgres): sletter kurs + eksklusive moduler (m/versjoner) +
+seksjoner; sparer delt modul (koblet kun fra det slettede kurset); blokkerer på modul-submission og
+på kurs-completion; preview rapporterer deletable/spared/blocked; SMO får 403 på begge endepunkter.
+e2e: handlingen skjult for SMO, synlig for ADMINISTRATOR; dialog lister preview; bekreft sender
+delete-POST; bekreft-knapp skjult ved blokkeringer.
+
+Ingen skjema-/migreringsendring (bruker eksisterende tabeller).
 
 ## 1.6.19 - 2026-07-10
 
