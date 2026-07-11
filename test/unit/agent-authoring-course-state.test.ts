@@ -8,6 +8,7 @@ import {
   auditExport,
   checkGate6Readiness,
   reductionRatio,
+  extractPackageElements,
   // @ts-expect-error — .mjs skill script consumed as a library (see import-package.mjs pattern)
 } from "../../skills/a2-authoring-api/scripts/course-state.mjs";
 
@@ -182,6 +183,83 @@ describe("#762 gate-6 readiness", () => {
       ],
     };
     expect(checkGate6Readiness(master).ready).toBe(true);
+  });
+});
+
+describe("#763 (Layer B) approved figures are mandatory content", () => {
+  // An approved section that teaches with an SVG figure: the figure's ref + labels are mandatory.
+  const figureElement = {
+    clientRef: "sec-prosess",
+    type: "section",
+    status: "approved",
+    content: "# Saksgang\n\nFiguren viser stegene.\n\n![Saksgang](asset:fig-flow)",
+    figures: [{ sourceId: "fig-flow", labels: ["Motta sak", "Vurder grunnlag", "Fatt vedtak"] }],
+    mandatory: {},
+    deliberatelyRemoved: [],
+  };
+
+  it("reviewRevision blocks when an approved figure ref is dropped", () => {
+    // Revision keeps the labels but removes the ![](asset:fig-flow) reference.
+    const revised = "# Saksgang\n\nStegene er: Motta sak, Vurder grunnlag, Fatt vedtak.";
+    const result = reviewRevision(figureElement, revised, { reductionApproved: true });
+    expect(result.blocks).toBe(true);
+    expect(result.lostMandatory.some((e: { category: string; item: string }) => e.category === "figures" && e.item === "asset:fig-flow")).toBe(true);
+  });
+
+  it("reviewRevision blocks when a figure label is emptied/renamed", () => {
+    // Ref kept, but one label ("Fatt vedtak") is gone from the revision.
+    const revised = "# Saksgang\n\n![Saksgang](asset:fig-flow)\n\nSteg: Motta sak, Vurder grunnlag.";
+    const result = reviewRevision(figureElement, revised, { reductionApproved: true });
+    expect(result.blocks).toBe(true);
+    expect(result.lostMandatory.some((e: { item: string }) => e.item === "Fatt vedtak")).toBe(true);
+  });
+
+  it("reviewRevision passes when the figure ref + all labels survive", () => {
+    const revised = "# Saksgang\n\n![Saksgang](asset:fig-flow)\n\nSteg: Motta sak, Vurder grunnlag, Fatt vedtak.";
+    const result = reviewRevision(figureElement, revised, { reductionApproved: true });
+    expect(result.lostMandatory).toEqual([]);
+    expect(result.blocks).toBe(false);
+  });
+
+  it("auditExport reads figure labels out of the produced (base64) SVG and blocks on an emptied label", () => {
+    const svg = (labels: string[]) =>
+      `<svg xmlns="http://www.w3.org/2000/svg">${labels.map((l) => `<text>${l}</text>`).join("")}</svg>`;
+    const master = {
+      order: ["sec-prosess"],
+      elements: [figureElement],
+    };
+
+    // A package where the section carries the figure with ALL labels present in the SVG blob.
+    const goodPkg = {
+      objects: [
+        {
+          clientRef: "sec-prosess",
+          type: "section",
+          payload: {
+            title: "Saksgang",
+            bodyMarkdown: "![Saksgang](asset:fig-flow)",
+            assets: [
+              {
+                sourceId: "fig-flow",
+                filename: "flow.svg",
+                mimeType: "image/svg+xml",
+                sizeBytes: 1,
+                contentBase64: Buffer.from(svg(["Motta sak", "Vurder grunnlag", "Fatt vedtak"]), "utf8").toString("base64"),
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const goodAudit = auditExport(master, extractPackageElements(goodPkg));
+    expect(goodAudit.blocks).toBe(false);
+
+    // Same package, but the SVG lost the "Fatt vedtak" label → blocking mandatory loss.
+    const badPkg = structuredClone(goodPkg);
+    badPkg.objects[0].payload.assets[0].contentBase64 = Buffer.from(svg(["Motta sak", "Vurder grunnlag"]), "utf8").toString("base64");
+    const badAudit = auditExport(master, extractPackageElements(badPkg));
+    expect(badAudit.blocks).toBe(true);
+    expect(badAudit.lostMandatory.some((e: { item: string }) => e.item === "Fatt vedtak")).toBe(true);
   });
 });
 

@@ -73,6 +73,14 @@ Turn approved objectives into a concrete outline, and confirm it before writing 
 Present the outline as a table (sections + modules, order, mode, which objective each assesses)
 and iterate until the author confirms it. No element content is written yet.
 
+**Propose figure placements here (Layer B).** As you agree the structure, flag sections that would
+otherwise be dense prose and propose **where a figure earns its place — one simple figure per
+discrete visual point** (a process → a **flow**; a set of options/branches → a **tree/decision**; a
+few related entities → **boxes-and-arrows**; the parts of one thing → a **labelled diagram**).
+Several small figures beat one crowded one; a short definition stays prose. Propose *placements*
+only (which point, which template) — you draw the SVG at Gate 4 with the text. The author confirms
+which figures to design. See `figure-design.md`.
+
 ## Gate 4 — Each element (one at a time)
 
 Now write content, **one element per turn**, grounded in the source, and get each approved
@@ -92,8 +100,18 @@ Per module, write real, specific, sourced content:
 Per section: the teaching markdown, grounded in the source. Summarise long source rather than
 copying it verbatim, and keep claims to what the source supports.
 
-Anything the source doesn't cover → `[Avklaring: …]`, not invention. Approve each element, then
-move to the next.
+**Draw the figure in the same turn as the text (Layer B).** For each figure agreed at Gate 3,
+draft the **SVG in the same turn as the element's text** so they are reviewed as one integrated
+unit. The figure **diagrams what the text/source says — it never invents** data, numbers or
+relationships the source doesn't support. Use a template skeleton from `figure-design.md`, keep
+labels short and in the one primary language as plain `<text>` (never baked into paths), reference
+it from the markdown as `![alt](asset:<sourceId>)`. **Present the figure *with* the text in the
+preview** — show the SVG inline (rendered) AND describe it in words ("flyt: Motta sak → Vurder
+grunnlag → Fatt vedtak") so the author can approve the integrated whole: *"ser tekst + figur
+riktig ut sammen?"*. One figure, one point — if it's getting crowded, split it.
+
+Anything the source doesn't cover → `[Avklaring: …]`, not invention (figures included). Approve
+each element (text + figure together), then move to the next.
 
 ## Gate 5 — External QA (against the objectives)
 
@@ -110,6 +128,11 @@ rubber stamp.
 - **Check language consistency:** every title, task, rubric and MCQ must be in the one confirmed
   language. Flag any element that drifted (e.g. an English module title in a Norwegian course) —
   this is a real, easy-to-miss failure; fix it before producing.
+- **Check the figures (Layer B):** each figure makes **one point** and no more; it **matches the
+  approved text** (diagrams it, invents nothing beyond it); its labels are short and in the **one
+  primary language**; it is SVG with real `<text>` (not raster, not text-as-paths). Flag a figure
+  that is decorative, over-packed, contradicts the text, or has drifted language — fix before
+  producing.
 - Report findings to the author; fix gaps/overclaims before producing. Overclaims are resolved by
   softening to what the source supports or by `[Avklaring: …]`, never by inventing support.
 
@@ -118,11 +141,19 @@ rubber stamp.
 Only after QA passes and the author approves:
 
 1. Build the `a2-authoring-package/v1` (`package-schema.md`). Put the author's stated
-   requirements **and the confirmed sources** into `constraints` (audit trail).
+   requirements **and the confirmed sources** into `constraints` (audit trail). **Attach the
+   figures (Layer B):** for every section with an approved figure, add the SVG (and its localized
+   variants) to that section payload's `assets[]` — `{ sourceId, filename, mimeType:
+   "image/svg+xml", sizeBytes, contentBase64, sourceLocale, localizedVariants }` — and keep the
+   markdown ref as `asset:<sourceId>` (the server remaps it on create/import; never pre-remap).
+   Every `asset:<ref>` needs a matching entry and vice versa.
 2. Validate (dry-run) and fix errors; if a fix changes what the learner sees, re-confirm with the
-   author.
-3. Create the drafts in plan order (`api-flow.md`), report admin links + `agentRunId`, and remind
-   the author to review and publish manually.
+   author. Validate now also checks figures: `missing_asset` / `unreferenced_asset`, mime,
+   per-asset size, and that each SVG survives sanitisation.
+3. Create the drafts in plan order (`api-flow.md`). Section create carries `assets[]`; the response
+   returns an `assetMap` (`sourceId → assetId`) and the persisted markdown already points at the
+   new asset ids. Report admin links + `agentRunId`, and remind the author to review and publish
+   manually.
 
 ### Fallback when the agent can't reach the API
 
@@ -133,7 +164,9 @@ course import:
 1. Produce a self-contained course envelope (inline each module/section payload under
    `course.items[]` with `sortOrder`; `exportFormat`, `exportedAt`, `audit: {}`). Leaf payloads
    are identical to the authoring package — a mechanical re-wrap; see `package-schema.md`
-   §"Fallback format".
+   §"Fallback format". **Figures travel too:** each section's `assets[]` (SVG + localized
+   variants, base64) rides along in the envelope, and the `asset:<sourceId>` refs are remapped on
+   import (Layer A). Stay within the caps (5 MB/asset, 25 MB total decoded).
 2. Write it to `kurs-<navn>.json` and tell the author to import via **Innholdsforvaltning → Kurs →
    Importer kurs-pakke**. It creates the same drafts; nothing is published.
 3. **Validate before delivering.** Generate the file with `buildFallbackEnvelope`, then run the

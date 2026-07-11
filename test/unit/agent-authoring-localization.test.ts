@@ -5,11 +5,51 @@
 import { describe, expect, it } from "vitest";
 import {
   checkLocalization,
+  checkFigureLocalization,
+  extractSvgTextRuns,
   extractPreservedTokens,
   isBlindCopy,
   presentLocales,
   // @ts-expect-error — .mjs skill script consumed as a library
 } from "../../skills/a2-authoring-api/scripts/localization-check.mjs";
+
+const b64 = (svg: string) => Buffer.from(svg, "utf8").toString("base64");
+
+// A section object carrying one SVG figure with the given base + per-locale variants.
+function figurePackage(
+  base: string,
+  variants: Array<{ locale: string; svg: string }>,
+  sourceLocale = "nb",
+): { packageFormat: string; objects: any[] } {
+  return {
+    packageFormat: "a2-authoring-package/v1",
+    objects: [
+      {
+        clientRef: "sec-figur",
+        type: "section",
+        payload: {
+          title: "Figur",
+          bodyMarkdown: "![f](asset:fig-1)",
+          assets: [
+            {
+              sourceId: "fig-1",
+              filename: "fig.svg",
+              mimeType: "image/svg+xml",
+              sizeBytes: base.length,
+              contentBase64: b64(base),
+              sourceLocale,
+              localizedVariants: variants.map((v) => ({ locale: v.locale, contentBase64: b64(v.svg) })),
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+const NB_FIG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Behandlingsgrunnlag</text><text>Formål</text></svg>';
+const NN_FIG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Handsamingsgrunnlag</text><text>Føremål</text></svg>';
+const EN_FIG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Legal basis</text><text>Purpose</text></svg>';
 
 // A three-locale localized value.
 const L = (nb: string, nn: string, en: string) => ({ nb, nn, "en-GB": en });
@@ -147,5 +187,86 @@ describe("#762 checkLocalization", () => {
     const result = checkLocalization(pkg);
     expect(result.blocks).toBe(true);
     expect(result.blindCopies.length).toBeGreaterThan(0);
+  });
+});
+
+describe("#763 (Layer B) SVG figure localization", () => {
+  it("extractSvgTextRuns reads leaf <text>/<tspan> runs in order, deduplicated", () => {
+    expect(extractSvgTextRuns(NB_FIG)).toEqual(["Behandlingsgrunnlag", "Formål"]);
+    const tspans = '<svg><text><tspan>A</tspan><tspan>B</tspan></text><text>A</text></svg>';
+    expect(extractSvgTextRuns(tspans)).toEqual(["A", "B"]); // dedup, tspans preferred over parent
+    expect(extractSvgTextRuns('<svg><rect/></svg>')).toEqual([]);
+  });
+
+  it("a fully-translated text-bearing figure → PASSES", () => {
+    const result = checkFigureLocalization(
+      figurePackage(NB_FIG, [
+        { locale: "nn", svg: NN_FIG },
+        { locale: "en-GB", svg: EN_FIG },
+      ]),
+    );
+    expect(result.blocks).toBe(false);
+    expect(result.missingVariants).toEqual([]);
+    expect(result.textCountMismatches).toEqual([]);
+    expect(result.blindCopies).toEqual([]);
+    // And the full check folds it in without blocking (no other localized fields present).
+    expect(checkLocalization(figurePackage(NB_FIG, [
+      { locale: "nn", svg: NN_FIG },
+      { locale: "en-GB", svg: EN_FIG },
+    ])).figures.blocks).toBe(false);
+  });
+
+  it("a figure missing a locale variant → FAILS", () => {
+    const result = checkFigureLocalization(figurePackage(NB_FIG, [{ locale: "nn", svg: NN_FIG }]));
+    expect(result.blocks).toBe(true);
+    expect(result.missingVariants.some((m: { locale: string }) => m.locale === "en-GB")).toBe(true);
+    // Blocking bubbles up to the top-level check.
+    expect(checkLocalization(figurePackage(NB_FIG, [{ locale: "nn", svg: NN_FIG }])).blocks).toBe(true);
+  });
+
+  it("a variant with a different label count → FAILS", () => {
+    const EN_ONE = '<svg xmlns="http://www.w3.org/2000/svg"><text>Legal basis</text></svg>';
+    const result = checkFigureLocalization(
+      figurePackage(NB_FIG, [
+        { locale: "nn", svg: NN_FIG },
+        { locale: "en-GB", svg: EN_ONE },
+      ]),
+    );
+    expect(result.blocks).toBe(true);
+    expect(result.textCountMismatches.some((m: { locale: string; expected: number; actual: number }) =>
+      m.locale === "en-GB" && m.expected === 2 && m.actual === 1)).toBe(true);
+  });
+
+  it("a variant that blindly copies the original labels → FAILS", () => {
+    const result = checkFigureLocalization(
+      figurePackage(NB_FIG, [
+        { locale: "nn", svg: NN_FIG },
+        { locale: "en-GB", svg: NB_FIG }, // English variant left as the bokmål labels
+      ]),
+    );
+    expect(result.blocks).toBe(true);
+    expect(result.blindCopies.some((b: { locale: string }) => b.locale === "en-GB")).toBe(true);
+  });
+
+  it("an identifier/URL dropped from a variant label → FAILS (token drift)", () => {
+    const NB_URL = '<svg xmlns="http://www.w3.org/2000/svg"><text>Se https://gdpr.eu/art-5</text></svg>';
+    const NN_URL = '<svg xmlns="http://www.w3.org/2000/svg"><text>Sjå https://gdpr.eu/art-5</text></svg>';
+    const EN_NO_URL = '<svg xmlns="http://www.w3.org/2000/svg"><text>See the article</text></svg>';
+    const result = checkFigureLocalization(
+      figurePackage(NB_URL, [
+        { locale: "nn", svg: NN_URL },
+        { locale: "en-GB", svg: EN_NO_URL },
+      ]),
+    );
+    expect(result.blocks).toBe(true);
+    expect(result.tokenDrift.some((d: { locale: string; token: string }) => d.locale === "en-GB" && d.token.includes("gdpr.eu"))).toBe(true);
+  });
+
+  it("a raster (non-SVG) figure is not treated as a translatable figure", () => {
+    const pkg = figurePackage(NB_FIG, []);
+    pkg.objects[0].payload.assets[0].mimeType = "image/png";
+    const result = checkFigureLocalization(pkg);
+    expect(result.blocks).toBe(false);
+    expect(result.missingVariants).toEqual([]);
   });
 });

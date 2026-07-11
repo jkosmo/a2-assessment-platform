@@ -245,6 +245,127 @@ describe("#649 agent authoring package validation", () => {
     expect(report.summary.warnings).toBe(2);
   });
 
+  describe("#763 (Layer B) section inline figures/images", () => {
+    const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Start</text></svg>';
+    const svgB64 = Buffer.from(SVG, "utf8").toString("base64");
+    const pngB64 = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
+
+    function sectionPackage(section: Record<string, unknown>) {
+      return {
+        packageFormat: "a2-authoring-package/v1",
+        objects: [{ clientRef: "sec", type: "section", payload: section }],
+      };
+    }
+
+    function svgAsset(overrides: Record<string, unknown> = {}) {
+      return {
+        sourceId: "fig-flow",
+        filename: "flow.svg",
+        mimeType: "image/svg+xml",
+        sizeBytes: SVG.length,
+        contentBase64: svgB64,
+        ...overrides,
+      };
+    }
+
+    it("accepts a section whose markdown ref matches an assets[] entry", async () => {
+      const report = await validateAuthoringPackage(
+        sectionPackage({ title: "S", bodyMarkdown: "![Flyt](asset:fig-flow)", assets: [svgAsset()] }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(true);
+      expect(report.issues).toEqual([]);
+    });
+
+    it("flags a markdown ref with no matching asset (missing_asset)", async () => {
+      const report = await validateAuthoringPackage(
+        sectionPackage({ title: "S", bodyMarkdown: "![x](asset:ghost)", assets: [svgAsset()] }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(false);
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ severity: "error", code: "missing_asset", path: "objects[0].payload.bodyMarkdown" }),
+      );
+      // The unused asset is also a (non-blocking) warning.
+      expect(report.issues).toContainEqual(expect.objectContaining({ severity: "warning", code: "unreferenced_asset" }));
+    });
+
+    it("warns (does not block) on an asset never referenced by markdown", async () => {
+      const report = await validateAuthoringPackage(
+        sectionPackage({ title: "S", bodyMarkdown: "Ingen figur her", assets: [svgAsset()] }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(true);
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ severity: "warning", code: "unreferenced_asset", path: "objects[0].payload.assets[0]" }),
+      );
+    });
+
+    it("rejects a disallowed mime type (unsupported_asset_mime)", async () => {
+      const report = await validateAuthoringPackage(
+        sectionPackage({
+          title: "S",
+          bodyMarkdown: "![x](asset:fig-flow)",
+          assets: [svgAsset({ mimeType: "image/tiff", filename: "x.tiff", contentBase64: pngB64 })],
+        }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(false);
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ code: "unsupported_asset_mime", path: "objects[0].payload.assets[0].mimeType" }),
+      );
+    });
+
+    it("rejects an oversized decoded asset (asset_too_large)", async () => {
+      // > 5 MB of decoded bytes; base64 of 6 MB of zero bytes.
+      const big = Buffer.alloc(6 * 1024 * 1024, 0).toString("base64");
+      const report = await validateAuthoringPackage(
+        sectionPackage({
+          title: "S",
+          bodyMarkdown: "![x](asset:fig-flow)",
+          assets: [svgAsset({ mimeType: "image/png", filename: "big.png", contentBase64: big })],
+        }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(false);
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ code: "asset_too_large", path: "objects[0].payload.assets[0].contentBase64" }),
+      );
+    });
+
+    it("rejects a duplicate sourceId within a section (duplicate_asset_source_id)", async () => {
+      const report = await validateAuthoringPackage(
+        sectionPackage({
+          title: "S",
+          bodyMarkdown: "![x](asset:fig-flow)",
+          assets: [svgAsset(), svgAsset({ filename: "flow2.svg" })],
+        }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(false);
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ code: "duplicate_asset_source_id", path: "objects[0].payload.assets[1].sourceId" }),
+      );
+    });
+
+    it("rejects an SVG that is empty after sanitisation (asset_svg_unsanitizable)", async () => {
+      // No <svg> root survives sanitisation → sanitizeSvg returns "".
+      const notSvg = Buffer.from("<html><body>not svg</body></html>", "utf8").toString("base64");
+      const report = await validateAuthoringPackage(
+        sectionPackage({
+          title: "S",
+          bodyMarkdown: "![x](asset:fig-flow)",
+          assets: [svgAsset({ contentBase64: notSvg })],
+        }),
+        emptyLookups(),
+      );
+      expect(report.valid).toBe(false);
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ code: "asset_svg_unsanitizable", path: "objects[0].payload.assets[0].contentBase64" }),
+      );
+    });
+  });
+
   it("returns structural schema errors with paths and no plan", async () => {
     const report = await validateAuthoringPackage(
       {

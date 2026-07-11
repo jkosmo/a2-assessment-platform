@@ -4,6 +4,7 @@ import { appName, appVersion } from "./config/appMetadata.js";
 import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.js";
 import { SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES } from "./modules/adminContent/sourceMaterialExtractionService.js";
 import { COURSE_IMPORT_BODY_LIMIT_BYTES } from "./modules/adminContent/contentImportService.js";
+import { SECTION_CREATE_BODY_LIMIT_BYTES } from "./modules/course/sectionCommands.js";
 import { rolesFor } from "./config/capabilities.js";
 import { authenticate } from "./auth/authenticate.js";
 import { enforceAgentTokenScope } from "./auth/agentTokenScope.js";
@@ -53,6 +54,13 @@ app.use(
 app.use(
   "/api/admin/content/courses/import",
   express.json({ limit: COURSE_IMPORT_BODY_LIMIT_BYTES }),
+);
+// #763 (Layer B): section create (POST /sections) may inline figures/images (base64) → bodies
+// exceed 5 MB. Registered before the global parser so ONLY the /sections routes get the larger
+// limit; the express.json parser skips non-JSON (multipart asset uploads) and already-parsed bodies.
+app.use(
+  "/api/admin/content/sections",
+  express.json({ limit: SECTION_CREATE_BODY_LIMIT_BYTES }),
 );
 app.use(express.json({ limit: "5mb" }));
 app.use("/static", express.static(publicStaticPath));

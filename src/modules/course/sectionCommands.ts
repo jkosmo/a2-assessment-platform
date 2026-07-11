@@ -4,6 +4,36 @@ import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
+import { importSectionAssets } from "./assetCommands.js";
+
+// #763 (Layer B): the agent section-create route inlines figures/images (base64), so the JSON body
+// can exceed the 5 MB global parser. Sized to cover a handful of SVG figures + localized variants
+// after base64 inflation. Applied to ONLY the /sections route prefix in app.ts (mirrors the
+// /courses/import pattern); every other endpoint stays at 5 MB.
+export const SECTION_CREATE_BODY_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
+
+// One inline figure/image an agent supplies alongside a section (see authoringSectionAssetSchema).
+export interface SectionAssetImportInput {
+  sourceId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentBase64: string;
+  sourceLocale?: string | null;
+  localizedVariants?: Array<{ locale: string; contentBase64: string }>;
+}
+
+// #763 (Layer B): rewrite every `asset:<sourceId>` markdown reference to the created SectionAsset
+// id, using the sourceId→newId map from importSectionAssets. Wider grammar ([a-zA-Z0-9_-]) than the
+// import path's remap because authoring sourceIds are client-chosen ref tokens (may carry `_`/`-`),
+// not DB cuids. Refs with no mapping are left untouched (a mistyped ref is not silently mangled).
+export function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, string>): string {
+  if (idMap.size === 0) return serializedMarkdown;
+  return serializedMarkdown.replace(/asset:([a-zA-Z0-9_-]+)/g, (whole, sourceId: string) => {
+    const mapped = idMap.get(sourceId);
+    return mapped ? `asset:${mapped}` : whole;
+  });
+}
 
 // Section CRUD + versioning (#485/B1) for course learning sections (#476).
 // Mirrors Module/ModuleVersion: editing content publishes an immutable new
@@ -58,6 +88,53 @@ export async function createSection(input: {
     },
   });
   return created;
+}
+
+// #763 (Layer B): create a section AND its inline figures/images in one call. Ordering matches the
+// import path (importSectionPayload): create the section (version 1) with the SOURCE markdown →
+// import the assets to obtain their new ids → rewrite the version's `asset:<sourceId>` refs to the
+// new ids IN PLACE. The in-place update is deliberate: it never publishes a draft (activeVersionId
+// and publishedAt are untouched) and keeps a published section published without minting a new
+// version. Returns the (refreshed) section plus the sourceId→assetId map for the API response.
+// Any invalid asset throws (ValidationError) via importSectionAssets — no silent skip.
+export async function createSectionWithAssets(input: {
+  title: string;
+  bodyMarkdown: string;
+  actorId?: string;
+  draft?: boolean;
+  agent?: AgentAuthoringContext;
+  assets: ReadonlyArray<SectionAssetImportInput>;
+}) {
+  const section = await createSection({
+    title: input.title,
+    bodyMarkdown: input.bodyMarkdown,
+    actorId: input.actorId,
+    draft: input.draft,
+    agent: input.agent,
+  });
+
+  const idMap = await importSectionAssets(section.id, input.assets);
+
+  const remapped = remapAssetRefs(input.bodyMarkdown, idMap);
+  if (remapped !== input.bodyMarkdown) {
+    const latest = await prisma.courseSectionVersion.findFirst({
+      where: { sectionId: section.id },
+      orderBy: { versionNo: "desc" },
+      select: { id: true },
+    });
+    if (latest) {
+      await prisma.courseSectionVersion.update({
+        where: { id: latest.id },
+        data: { bodyMarkdown: remapped },
+      });
+    }
+  }
+
+  const refreshed = await prisma.courseSection.findUniqueOrThrow({
+    where: { id: section.id },
+    include: { activeVersion: true },
+  });
+  return { section: refreshed, assetMap: Object.fromEntries(idMap) };
 }
 
 export async function updateSectionTitle(sectionId: string, title: string) {

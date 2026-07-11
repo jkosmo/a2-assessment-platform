@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.23 - 2026-07-11
+
+feat(figures): #749 Lag B — skill-assistert figur-design + assets i agent-flyten
+
+Bygger på Lag A (asset-transport, v1.6.22). To sider:
+
+- **Plattform:** `a2-authoring-package/v1` seksjons-payload får valgfri `assets[]` (`sourceId` =
+  klient-ref-token som markdown refererer via `asset:<sourceId>`); `POST /api/admin/content/sections`
+  tar imot `assets[]`, importerer dem (gjenbruker `importSectionAssets` — sanitér + mime/størrelse-
+  vakter), remapper `asset:<sourceId>`→ny id i markdown før lagring, og returnerer `sourceId→assetId`.
+  Egen større body-parser for /sections. Validate-endepunktet (AA-1) sjekker figur-konsistens per
+  seksjon: hver `asset:<ref>` ↔ en `assets[]`-post (`missing_asset`/`unreferenced_asset`), mime i
+  allowlist, dekodet størrelse ≤ `MAX_ASSET_BYTES`, SVG saniterer ikke til tomt, unik `sourceId`.
+- **Skill:** ny `references/figure-design.md` med kjerneprinsippet **«én figur, ett poeng»** og et
+  lite mal-sett (flyt, tre, bokser-og-piler, merket diagram — kun disse med mindre forfatter ber om
+  fri-form), SVG-only (agenten lager aldri raster), figurer grunnet i godkjent tekst/kilde,
+  oversettbar `<text>`. SKILL.md/playbook: figurer foreslås i Struktur-porten (én enkel figur per
+  visuelt poeng) og tegnes med teksten i Per-element-porten. Lokaliseringskontrollen dekker nå
+  figur-`<text>` (alle tre språk, etikett-antall bevart, token-bevaring, ingen blind-kopi); bevarings-
+  kontrollen behandler en godkjent figur som unikt innhold «fjern redundans» aldri kan droppe.
+- Tester: validate-asset-regler (unit), `/sections`+SVG-asset (integrasjon), localization/course-state
+  figur-utvidelser (unit). 762 unit + 3 integrasjon grønne. Skill ompakket til v1.6.23.
+
 ## 1.6.22 - 2026-07-11
 
 feat(content): #749 (Layer A) — carry section figures/images through export AND import
