@@ -164,6 +164,44 @@ Mapping from an `a2-authoring-package/v1`:
   no `clientRef`).
 - Add `audit: {}` to each module `activeVersion`, each section, and the course. Empty audit
   = no publish history ⇒ import never auto-publishes (drafts only).
+
+### Section figures/images — optional `assets[]` (#749, Layer A)
+
+A section payload MAY carry its figures/images inline so they survive export/import (without
+this, `asset:<id>` markdown refs would break on the destination). Each entry:
+
+```json
+{
+  "type": "SECTION", "sortOrder": 0,
+  "section": {
+    "title": "…", "bodyMarkdown": "![Diagram](asset:cmr8src…)", "audit": {},
+    "assets": [
+      {
+        "sourceId": "cmr8src…",
+        "filename": "diagram.svg",
+        "mimeType": "image/svg+xml",
+        "sizeBytes": 1234,
+        "contentBase64": "PHN2Zy…",
+        "sourceLocale": "nb",
+        "localizedVariants": [ { "locale": "en-GB", "contentBase64": "PHN2Zy…" } ]
+      }
+    ]
+  }
+}
+```
+
+- **Ref/remap contract:** `bodyMarkdown` references each figure as `![alt](asset:<sourceId>)`,
+  where `<sourceId>` equals the asset's `sourceId`. On import, A2 decodes each blob, **re-sanitises
+  SVG**, stores it to a fresh blob, creates a new `SectionAsset`, and rewrites every
+  `asset:<sourceId>` in the markdown to the new asset id — so `sourceId` is a *matching key only*,
+  never a destination id. Leave the markdown refs pointing at `sourceId`; do not pre-remap them.
+- **Allowed mime types:** `image/svg+xml`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`.
+  Per-asset limit 5 MB; the whole export is capped at 25 MB of decoded asset bytes.
+- **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale); omit
+  for raster or untranslated figures. `assets` is fully optional — omit it entirely for a
+  markdown-only section (old asset-less files import unchanged).
+- **Phase 1 (Layer A) is transport only.** The skill does not yet *design* figures (that is Layer B,
+  a later phase) — this documents how figures already present on a section travel through the file.
 - `exportFormat` / `exportedAt` / `scope: "course"` on the envelope. **`exportedAt` (and any
   `audit.publishedAt`) MUST be `Date.toISOString()` shape (`YYYY-MM-DDTHH:mm:ss.sssZ`)** — Zod
   `.datetime()` rejects timezone offsets and microseconds. Build this envelope with

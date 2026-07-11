@@ -283,9 +283,17 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 
 Classes (cohorts) assign a course to a group of participants dynamically: a participant is assigned a course if they belong to a class it is assigned to (evaluated at read time, never materialised). The built-in **"Alle deltakere"** system class covers all PARTICIPANT users. `GET /api/courses` and `GET /api/courses/enrollments` reflect class assignments (the latter with `source: "CLASS"`). Entra-linked classes (`kind=ENTRA`) are gated by the `classEntraLinkingEnabled` platform config (default off, CL-5).
 | `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
-| `GET` | `/api/admin/content/courses/:courseId/export-package` | Export envelope (inlines modules **and** sections in order, #512) |
-| `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1) |
+| `GET` | `/api/admin/content/courses/:courseId/export-package` | Export envelope (inlines modules **and** sections in order, #512). Section figures/images travel inline as base64 (#749, see below) |
+| `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1). Recreates section assets + remaps `asset:` refs (#749). Larger 35 MB body limit to carry inlined assets |
 | `DELETE` | `/api/admin/content/courses/:courseId` | Delete course |
+
+#### Section figures/images carried through export/import (#749, Layer A)
+
+Course export/import now transport a section's figures/images (`SectionAsset`), so figures survive a cross-environment round-trip and the authoring skill's fallback file — not just their markdown `asset:<id>` references. The transport is **additive** to `a2-content-export/v1` (no version-marker change); asset-less files exported before #749 import unchanged.
+
+- **Schema:** each section payload gains an OPTIONAL `assets[]`; each entry is `{ sourceId, filename, mimeType, sizeBytes, contentBase64, sourceLocale?, localizedVariants?: [{ locale, contentBase64 }] }`. `sourceId` is the source-environment `SectionAsset` id — used only to match `asset:<sourceId>` markdown refs, never persisted as an id.
+- **Export** inlines each `SectionAsset` blob (and every #657 localized SVG variant) as base64. Enforced caps: **5 MB per asset** and a **25 MB total-decoded-asset budget per envelope** — export fails `400 validation_error` if the total is exceeded (a figure is never silently dropped).
+- **Import** decodes each asset, enforces the **mime allowlist** (`image/svg+xml`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`) and the 5 MB per-asset cap, **re-sanitises SVG** (base + variants; scripts/handlers/`foreignObject`/`<a>` stripped — defence in depth), stores it to a fresh blob under the new section, creates the `SectionAsset` row (preserving `sourceLocale`/localized variants), then **rewrites the section's active `bodyMarkdown`** so every `asset:<sourceId>` points at the new asset id. A failing asset surfaces a clear `400` naming the section/asset (no silent skip). Ordering is create-section → create-assets → re-save markdown with remapped refs, so the persisted active version never references source ids. See `doc/design/COURSE_FIGURES_AND_ASSETS.md` (Layer A). Skill figure *design* (Layer B) is a later phase.
 
 ### Learning sections (#476)
 

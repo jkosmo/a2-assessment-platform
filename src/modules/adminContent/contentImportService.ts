@@ -24,7 +24,9 @@ import {
 import { adminContentRepository } from "./adminContentRepository.js";
 import { courseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
-import { createSection } from "../course/sectionCommands.js";
+import { createSection, updateSectionContent } from "../course/sectionCommands.js";
+import { importSectionAssets } from "../course/assetCommands.js";
+import { ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import {
@@ -36,9 +38,65 @@ import {
 import type {
   ExportEnvelope,
   ModuleExportPayload,
+  SectionExportPayload,
 } from "./adminContentSchemas.js";
 
 export type ImportMode = "createNew" | "replaceExisting";
+
+// #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
+// can be far larger than the 5 MB global parser allows. Sized to cover the 25 MB total-asset cap
+// after base64 inflation (~1.33×) plus JSON/markdown headroom. Applied to ONLY the course-import
+// route in app.ts (module import cannot carry assets — modules have no sections). Keeping every
+// other endpoint at 5 MB limits the large-body surface.
+export const COURSE_IMPORT_BODY_LIMIT_BYTES = 35 * 1024 * 1024; // 35 MB
+
+// #749 (Layer A): rewrite every `asset:<sourceId>` reference in the serialised section markdown
+// to `asset:<newAssetId>` using the source→new id map produced when the section's assets are
+// re-created. Refs with no mapping are left untouched (defensive — an author-mistyped ref should
+// not be silently mangled). The markdown is the JSON-serialised localized string, so the replace
+// runs across every locale value at once. Mirrors the `asset:` ref grammar in sectionContent.ts.
+function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, string>): string {
+  if (idMap.size === 0) return serializedMarkdown;
+  return serializedMarkdown.replace(/asset:([a-zA-Z0-9]+)/g, (whole, sourceId: string) => {
+    const mapped = idMap.get(sourceId);
+    return mapped ? `asset:${mapped}` : whole;
+  });
+}
+
+// #749: recreate one learning section (title + markdown) AND its inlined figures/images. Ordering
+// matters: the section (and version 1) is created first with the SOURCE markdown, then the assets
+// are re-created to obtain their new ids, then a NEW section version is saved whose markdown refs
+// point at the new asset ids — so the ACTIVE version never references source ids. Sections without
+// assets skip the second save (old asset-less v1 files behave exactly as before). A failure while
+// importing an asset throws with the section title for context; any blobs written before the
+// failure are orphaned (no row references them) — tolerable for v1, matching createSectionAsset.
+async function importSectionPayload(section: SectionExportPayload, actorId: string): Promise<string> {
+  const serializedMarkdown = serializeRequired(section.bodyMarkdown);
+  const created = await createSection({
+    title: serializeRequired(section.title),
+    bodyMarkdown: serializedMarkdown,
+    actorId,
+  });
+
+  const assets = section.assets ?? [];
+  if (assets.length === 0) return created.id;
+
+  let idMap: Map<string, string>;
+  try {
+    idMap = await importSectionAssets(created.id, assets);
+  } catch (error) {
+    const title = typeof section.title === "string" ? section.title : JSON.stringify(section.title);
+    const detail = error instanceof Error ? error.message : String(error);
+    // Keep the client-error status (asset validation failures are 400) while adding section context.
+    throw new ValidationError(`Failed to import assets for section "${title}": ${detail}`);
+  }
+
+  const remapped = remapAssetRefs(serializedMarkdown, idMap);
+  if (remapped !== serializedMarkdown) {
+    await updateSectionContent(created.id, remapped, actorId);
+  }
+  return created.id;
+}
 
 function serializeLocalized(value: LocalizedText | null | undefined): string | undefined {
   if (value === null || value === undefined) return undefined;
@@ -240,12 +298,8 @@ export async function importCourseFromEnvelope(
     const courseItemInputs: CourseItemInput[] = [];
     for (const entry of ordered) {
       if (entry.type === "SECTION") {
-        const section = await createSection({
-          title: serializeRequired(entry.section.title),
-          bodyMarkdown: serializeRequired(entry.section.bodyMarkdown),
-          actorId: options.actorId,
-        });
-        courseItemInputs.push({ type: "SECTION", sectionId: section.id });
+        const sectionId = await importSectionPayload(entry.section, options.actorId);
+        courseItemInputs.push({ type: "SECTION", sectionId });
         sectionCount += 1;
       } else {
         const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" });

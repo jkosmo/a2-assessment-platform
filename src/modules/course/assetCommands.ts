@@ -12,6 +12,10 @@ export const SVG_MIME_TYPE = "image/svg+xml";
 // previously excluded outright (#483/F4) because raw SVG is an XSS vector.
 export const ALLOWED_ASSET_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", SVG_MIME_TYPE];
 export const MAX_ASSET_BYTES = 5 * 1024 * 1024; // 5 MB
+// #749 (Layer A): total decoded-asset budget for one export envelope. Inlined blobs make the
+// file large; this caps the whole course export (sum of every section's base + localized-variant
+// bytes) so an export can never balloon unbounded. Export throws if exceeded — never silently drops.
+export const MAX_EXPORT_ASSET_TOTAL_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export async function createSectionAsset(input: {
   sectionId: string;
@@ -175,4 +179,175 @@ export async function localizeSectionAssets(
   }
 
   return { localizedAssetCount, skippedAssetCount, targetLocales };
+}
+
+// =========================================================================
+// #749 (Layer A) — asset transport through export / import
+// =========================================================================
+
+// One inlined section asset ready to be serialised into an a2-content-export/v1 envelope.
+export interface ExportedSectionAsset {
+  sourceId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentBase64: string;
+  sourceLocale?: string | null;
+  localizedVariants?: Array<{ locale: string; contentBase64: string }>;
+}
+
+/**
+ * #749: load every SectionAsset of a section with its blob binary (base64) plus each localized
+ * SVG variant (#657), ready to inline into an export envelope. Returns the assets and the total
+ * decoded byte count (base + variants) so the export builder can enforce the envelope-wide cap.
+ * The `sizeBytes` reported per asset is the ACTUAL base-blob byte length (not the stored metadata),
+ * so the importer can trust it.
+ */
+export async function loadSectionAssetsForExport(
+  sectionId: string,
+): Promise<{ assets: ExportedSectionAsset[]; totalBytes: number }> {
+  const rows = await prisma.sectionAsset.findMany({
+    where: { sectionId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      filename: true,
+      mimeType: true,
+      blobPath: true,
+      sourceLocale: true,
+      localizedBlobPaths: true,
+    },
+  });
+
+  const assets: ExportedSectionAsset[] = [];
+  let totalBytes = 0;
+
+  for (const row of rows) {
+    const buffer = await getAsset(row.blobPath);
+    totalBytes += buffer.byteLength;
+
+    const localizedPaths = readLocalizedBlobPaths(row.localizedBlobPaths);
+    const localizedVariants: Array<{ locale: string; contentBase64: string }> = [];
+    for (const [locale, variantPath] of Object.entries(localizedPaths)) {
+      const variantBuffer = await getAsset(variantPath);
+      totalBytes += variantBuffer.byteLength;
+      localizedVariants.push({ locale, contentBase64: variantBuffer.toString("base64") });
+    }
+
+    assets.push({
+      sourceId: row.id,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      sizeBytes: buffer.byteLength,
+      contentBase64: buffer.toString("base64"),
+      ...(row.sourceLocale ? { sourceLocale: row.sourceLocale } : {}),
+      ...(localizedVariants.length > 0 ? { localizedVariants } : {}),
+    });
+  }
+
+  return { assets, totalBytes };
+}
+
+// Decode + validate a single inlined blob: enforce the per-asset size cap and (for SVG) run the
+// sanitiser (defence in depth — the source may be a hand-crafted or tampered file). Returns the
+// bytes to store. Throws a clear ValidationError (naming the asset) on any failure.
+function decodeAndValidateAssetBytes(input: {
+  label: string;
+  mimeType: string;
+  contentBase64: string;
+}): Buffer {
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(input.contentBase64, "base64");
+  } catch {
+    throw new ValidationError(`Asset "${input.label}" has invalid base64 content.`);
+  }
+  if (buffer.byteLength === 0) {
+    throw new ValidationError(`Asset "${input.label}" decoded to zero bytes.`);
+  }
+  if (buffer.byteLength > MAX_ASSET_BYTES) {
+    throw new ValidationError(
+      `Asset "${input.label}" too large (${buffer.byteLength} bytes, max ${MAX_ASSET_BYTES}).`,
+    );
+  }
+  if (input.mimeType === SVG_MIME_TYPE) {
+    const sanitized = sanitizeSvg(buffer.toString("utf8"));
+    if (!sanitized) {
+      throw new ValidationError(`Asset "${input.label}" SVG is empty or invalid after sanitisation.`);
+    }
+    return Buffer.from(sanitized, "utf8");
+  }
+  return buffer;
+}
+
+/**
+ * #749: recreate one section's exported assets in the destination. For each asset the blob is
+ * decoded, its mime is checked against the allowlist, the per-asset size cap is enforced, SVG is
+ * re-sanitised (base + every localized variant), the binary is written to a FRESH blob path under
+ * the new section, and a SectionAsset row is created (preserving sourceLocale + localizedBlobPaths
+ * when present). Returns a `sourceId -> newAssetId` map so the caller can remap the section's
+ * `asset:<sourceId>` markdown refs. Any invalid asset throws (no silent skip); the thrown error
+ * names the offending asset.
+ */
+export async function importSectionAssets(
+  sectionId: string,
+  assets: ReadonlyArray<{
+    sourceId: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+    contentBase64: string;
+    sourceLocale?: string | null;
+    localizedVariants?: Array<{ locale: string; contentBase64: string }>;
+  }>,
+): Promise<Map<string, string>> {
+  const idMap = new Map<string, string>();
+
+  for (const asset of assets) {
+    const label = asset.filename || asset.sourceId;
+    if (!ALLOWED_ASSET_MIME_TYPES.includes(asset.mimeType)) {
+      throw new ValidationError(
+        `Asset "${label}" has unsupported type (${asset.mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP, SVG.`,
+      );
+    }
+
+    const storedBuffer = decodeAndValidateAssetBytes({
+      label,
+      mimeType: asset.mimeType,
+      contentBase64: asset.contentBase64,
+    });
+
+    const safeName = (asset.filename || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100) || "file";
+    const blobPath = `sections/${sectionId}/${randomUUID()}-${safeName}`;
+    await putAsset(blobPath, storedBuffer, asset.mimeType);
+
+    // Localized SVG variants (#657): each becomes a sibling blob, re-sanitised for defence in depth.
+    const localizedBlobPaths: Record<string, string> = {};
+    for (const variant of asset.localizedVariants ?? []) {
+      const variantBuffer = decodeAndValidateAssetBytes({
+        label: `${label} (${variant.locale})`,
+        mimeType: asset.mimeType,
+        contentBase64: variant.contentBase64,
+      });
+      const variantPath = `sections/${sectionId}/${randomUUID()}-${variant.locale}-${safeName}`;
+      await putAsset(variantPath, variantBuffer, asset.mimeType);
+      localizedBlobPaths[variant.locale] = variantPath;
+    }
+
+    const created = await prisma.sectionAsset.create({
+      data: {
+        sectionId,
+        filename: safeName,
+        mimeType: asset.mimeType,
+        blobPath,
+        sizeBytes: storedBuffer.byteLength,
+        sourceLocale: asset.sourceLocale ?? null,
+        localizedBlobPaths: Object.keys(localizedBlobPaths).length > 0 ? localizedBlobPaths : undefined,
+      },
+      select: { id: true },
+    });
+    idMap.set(asset.sourceId, created.id);
+  }
+
+  return idMap;
 }

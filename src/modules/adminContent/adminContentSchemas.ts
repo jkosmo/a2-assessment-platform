@@ -351,15 +351,40 @@ export const moduleExportPayloadSchema = z.object({
   }),
 });
 
+// One section figure/image inlined into the export (#749, Layer A). The blob binary
+// travels as base64 so the file is self-contained; on import it is decoded, SVG is
+// re-sanitised, stored to a fresh blob, and the section's `asset:<sourceId>` markdown
+// refs are remapped to the newly created SectionAsset id. `sourceId` is the SectionAsset
+// id in the SOURCE environment — used ONLY to match markdown refs, never persisted as an id.
+// `sourceLocale` + `localizedVariants` carry the #657 localized-SVG variants.
+export const sectionAssetExportSchema = z.object({
+  sourceId: z.string().min(1),
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().min(0),
+  contentBase64: z.string().min(1),
+  sourceLocale: z.string().min(1).nullable().optional(),
+  localizedVariants: z
+    .array(
+      z.object({
+        locale: z.string().min(1),
+        contentBase64: z.string().min(1),
+      }),
+    )
+    .optional(),
+});
+
 // One learning section's payload — title + active-version markdown, both
-// localized. Assets (#483/F4) are not yet inlined; markdown-only for now (#512).
-// Sections legitimately have partial locales (an author may fill only nb), so
-// the export uses the patch schema (string OR partial object), not the strict
-// all-three-locale localizedTextSchema (#512 follow-up).
+// localized. #749 (Layer A) adds an OPTIONAL `assets[]` carrying the section's
+// figures/images inline (base64); old asset-less v1 files omit it and import
+// unchanged. Sections legitimately have partial locales (an author may fill only
+// nb), so the export uses the patch schema (string OR partial object), not the
+// strict all-three-locale localizedTextSchema (#512 follow-up).
 export const sectionExportPayloadSchema = z.object({
   title: localizedTextPatchSchema,
   bodyMarkdown: localizedTextPatchSchema,
   audit: exportAuditSchema.optional(),
+  assets: z.array(sectionAssetExportSchema).optional(),
 });
 
 // Course export inlines each module's full payload so the file is
@@ -405,6 +430,7 @@ export const exportEnvelopeSchema = z.object({
 export type ExportEnvelope = z.infer<typeof exportEnvelopeSchema>;
 export type ModuleExportPayload = z.infer<typeof moduleExportPayloadSchema>;
 export type SectionExportPayload = z.infer<typeof sectionExportPayloadSchema>;
+export type SectionAssetExport = z.infer<typeof sectionAssetExportSchema>;
 export type CourseExportPayload = z.infer<typeof courseExportPayloadSchema>;
 
 export const importBodySchema = z.object({
