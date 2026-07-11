@@ -20,6 +20,21 @@ process, a decision tree, a labelled schematic. Three consequences shape this de
    whose labels are in one language breaks the multilingual promise. Figure text must localize
    alongside the prose.
 
+## Core principle: one figure, one point
+
+**Keep figures simple — each figure makes exactly one point.** A figure is not a place to pack a
+whole section into one dense diagram; it illustrates a single idea (one process, one comparison,
+one relationship). Prefer **several simple figures** over one complex one. This is deliberate on
+three fronts:
+
+- **Pedagogy:** one figure → one takeaway is easier to read and remember than a busy schematic.
+- **Quality:** simple figures are what an LLM can author cleanly as SVG; complex ones drift into
+  messy, mislabelled output.
+- **Localization & maintenance:** few, short labels translate reliably and survive edits.
+
+This principle drives the rest of the design: the skill proposes **one simple figure per discrete
+visual point**, drawn from a small set of simple templates — not bespoke mega-diagrams.
+
 ## Two layers
 
 - **Layer A — Asset transport (foundation).** Export, import and the skill's fallback must carry
@@ -66,9 +81,11 @@ Per-element → External QA → Produce), not as a separate phase.
 
 ### Where figures are decided — Structure gate
 When agreeing the structure, the skill flags sections/modules that would otherwise be dense prose
-and **proposes where a figure earns its place** (a process → a flow diagram; a set of options → a
-decision tree; a relationship → a labelled schematic). The author confirms which figures to design.
-A figure is proposed only where it genuinely aids understanding — not decoration.
+and **proposes where a figure earns its place — one simple figure per discrete visual point**
+(a process → a flow diagram; a set of options → a decision tree; a relationship → a labelled
+schematic). Several small figures across a section beat one crowded diagram. The author confirms
+which figures to design. A figure is proposed only where it genuinely aids understanding of a
+single point — not decoration, and never as a catch-all.
 
 ### Where figures are drawn — Per-element gate
 The figure is designed **in the same turn as the element's text**, so they are reviewed as one
@@ -121,9 +138,11 @@ not redundancy. The loss audit treats a missing/emptied approved figure as unexp
 - **When does a figure earn its place?** A heuristic/checklist for the Structure gate (process,
   comparison, hierarchy, spatial/relational content → figure; a short definition → prose). Worth
   pinning so the skill neither under- nor over-produces figures.
-- **Figure fidelity vs. LLM SVG quality.** LLM-authored SVG can be rough. Do we constrain to a
-  small set of figure templates (flow, tree, boxes-and-arrows, labelled diagram) the skill fills
-  in, for consistent, clean output? (Recommended — templates raise quality and localizability.)
+- **Figure fidelity vs. LLM SVG quality.** LLM-authored SVG can be rough. **Decision (per the
+  one-figure-one-point principle): constrain to a small set of simple templates** (flow, tree,
+  boxes-and-arrows, labelled diagram) the skill fills in — this raises quality and localizability
+  and keeps figures simple by construction. Open sub-question: the exact template set and whether
+  authors can request a free-form figure as an explicit exception.
 - **Total-envelope size cap** and behaviour on exceed (block vs. omit-with-warning) — from #749.
 - **`v1.1` marker vs. purely additive `v1`** — from #749.
 - **Raster localization gap:** author-supplied raster figures with baked-in text can't be
