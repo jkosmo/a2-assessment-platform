@@ -57,6 +57,12 @@ let activeUserRoles = [];
 let _headerValues = {};
 function getHeaders() { return _headerValues; }
 
+// #762: gate ADMINISTRATOR-only controls on the roles resolved from /api/me (activeUserRoles) —
+// never on identityDefaults alone (see CLAUDE.md / FEATURE_SURFACE_MAP #12).
+function isAdministrator() {
+  return Array.isArray(activeUserRoles) && activeUserRoles.includes("ADMINISTRATOR");
+}
+
 // ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
@@ -72,6 +78,7 @@ const deleteDialogText = document.getElementById("deleteDialogText");
 const deleteConfirmBtn = document.getElementById("deleteConfirmBtn");
 const deleteCancelBtn = document.getElementById("deleteCancelBtn");
 const cascadePublishDialog = document.getElementById("cascadePublishDialog");
+const cascadeDeleteDialog = document.getElementById("cascadeDeleteDialog");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -550,6 +557,11 @@ async function renderListView() {
       ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>
          <button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
       : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
+    // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes
+    // her. Delt innhold beholdes. Skjult for ikke-ADMINISTRATOR (rollen løses fra /api/me).
+    const cascadeDeleteBtn = isAdministrator()
+      ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>`
+      : "";
     return `<tr>
       <td class="col-title">${ctitle}</td>
       <td class="col-status">${courseStatusBadge(status)}</td>
@@ -563,6 +575,7 @@ async function renderListView() {
           ${publishToggle}
           <button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>
           ${archiveToggleBtn}
+          ${cascadeDeleteBtn}
         </div>
       </td>
     </tr>`;
@@ -685,6 +698,10 @@ function handleListTableClick(event) {
   }
   if (btn.dataset.action === "delete") {
     openDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
+    return;
+  }
+  if (btn.dataset.action === "cascade-delete") {
+    openCascadeDeleteDialog(btn.dataset.courseId, btn.dataset.courseTitle);
   }
 }
 
@@ -759,6 +776,124 @@ async function confirmDelete() {
     showToast(err?.message ?? "Kunne ikke slette kurs.", "error");
     deleteConfirmBtn.disabled = false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cascade-delete dialog (#762, ADMINISTRATOR-only)
+// ---------------------------------------------------------------------------
+// Destructive cleanup for test content: delete a course together with the modules/sections it
+// EXCLUSIVELY owns. Shared items are spared (only unlinked). The confirm button is only shown when
+// the preview reports no blockers (course completions, or an exclusive module with
+// submissions/certifications).
+
+let pendingCascadeDelete = null; // { courseId }
+
+function cascadeDeleteEntryList(entries) {
+  return `<ul class="cascade-publish-list">${(entries ?? [])
+    .map((entry) => {
+      const title = escapeHtml(localizedText(entry.title) || entry.id);
+      const reason = entry.reason ? `<span class="cascade-publish-blocker">${escapeHtml(entry.reason)}</span>` : "";
+      return `<li class="cascade-publish-item"><span class="cascade-publish-item-title">${title}</span>${reason}</li>`;
+    })
+    .join("")}</ul>`;
+}
+
+function renderCascadeDeletePreview(preview) {
+  const bodyEl = document.getElementById("cascadeDeleteBody");
+  const textEl = document.getElementById("cascadeDeleteText");
+  const confirmBtn = document.getElementById("cascadeDeleteConfirmBtn");
+  const blockers = preview?.blockers ?? [];
+  const delModules = preview?.deletableModules ?? [];
+  const delSections = preview?.deletableSections ?? [];
+  const sparedModules = preview?.sparedModules ?? [];
+  const sparedSections = preview?.sparedSections ?? [];
+  const blocked = blockers.length > 0;
+
+  if (textEl) {
+    textEl.textContent = blocked
+      ? "Kan ikke slette kurset ennå. Løs det følgende først:"
+      : `Dette sletter kurset, ${delModules.length} modul(er) og ${delSections.length} seksjon(er) som kun brukes i dette kurset. Delt innhold beholdes.`;
+  }
+
+  let html = "";
+  if (blocked) {
+    html += `<h3 class="cascade-delete-heading">Blokkeringer</h3>${cascadeDeleteEntryList(blockers)}`;
+  }
+  if (delModules.length > 0 || delSections.length > 0) {
+    html += `<h3 class="cascade-delete-heading">Slettes</h3>${cascadeDeleteEntryList([...delModules, ...delSections])}`;
+  }
+  if (sparedModules.length > 0 || sparedSections.length > 0) {
+    html += `<h3 class="cascade-delete-heading">Beholdes (delt med andre kurs)</h3>${cascadeDeleteEntryList([...sparedModules, ...sparedSections])}`;
+  }
+  if (!html) {
+    html = `<p class="dialog-text">Kun kurset slettes – ingen moduler eller seksjoner er knyttet til det.</p>`;
+  }
+  if (bodyEl) bodyEl.innerHTML = html;
+  if (confirmBtn) {
+    // Confirm only when there are no blockers.
+    setHidden(confirmBtn, blocked);
+    confirmBtn.disabled = blocked;
+  }
+}
+
+async function openCascadeDeleteDialog(courseId, courseTitle) {
+  if (!cascadeDeleteDialog) {
+    showToast("Kunne ikke åpne slettedialogen.", "error");
+    return;
+  }
+  pendingCascadeDelete = { courseId };
+  const titleEl = document.getElementById("cascadeDeleteTitle");
+  const textEl = document.getElementById("cascadeDeleteText");
+  const bodyEl = document.getElementById("cascadeDeleteBody");
+  const confirmBtn = document.getElementById("cascadeDeleteConfirmBtn");
+  if (titleEl) titleEl.textContent = `Slett «${courseTitle}» og ubrukt innhold`;
+  if (textEl) textEl.textContent = "Henter oversikt…";
+  if (bodyEl) bodyEl.innerHTML = "";
+  if (confirmBtn) {
+    setHidden(confirmBtn, true);
+    confirmBtn.disabled = true;
+  }
+  cascadeDeleteDialog.showModal();
+
+  try {
+    const preview = await apiFetch(
+      `/api/admin/content/courses/${encodeURIComponent(courseId)}/cascade-delete-preview`,
+      getHeaders,
+    );
+    renderCascadeDeletePreview(preview);
+  } catch (err) {
+    if (textEl) textEl.textContent = err?.message ?? "Kunne ikke hente forhåndsvisning.";
+  }
+}
+
+function initCascadeDeleteDialog() {
+  const confirmBtn = document.getElementById("cascadeDeleteConfirmBtn");
+  const cancelBtn = document.getElementById("cascadeDeleteCancelBtn");
+  confirmBtn?.addEventListener("click", async () => {
+    if (!pendingCascadeDelete) return;
+    const { courseId } = pendingCascadeDelete;
+    confirmBtn.disabled = true;
+    try {
+      const summary = await apiFetch(
+        `/api/admin/content/courses/${encodeURIComponent(courseId)}/cascade-delete`,
+        getHeaders,
+        { method: "POST" },
+      );
+      cascadeDeleteDialog.close();
+      pendingCascadeDelete = null;
+      const modCount = summary?.deletedModuleIds?.length ?? 0;
+      const secCount = summary?.deletedSectionIds?.length ?? 0;
+      showToast(`Kurset ble slettet (${modCount} modul(er), ${secCount} seksjon(er)).`, "success");
+      await renderListView();
+    } catch (err) {
+      showToast(err?.message ?? "Kunne ikke slette kurs og innhold.", "error");
+      confirmBtn.disabled = false;
+    }
+  });
+  cancelBtn?.addEventListener("click", () => {
+    cascadeDeleteDialog?.close();
+    pendingCascadeDelete = null;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1874,6 +2009,7 @@ async function init() {
 
   initDeleteDialog();
   initCascadePublishDialog();
+  initCascadeDeleteDialog();
 
   const route = detectRoute();
   if (route.view === "list") {

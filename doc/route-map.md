@@ -10,7 +10,7 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | `/admin-content/courses` (nav entry) | «Innholdsforvaltning» lander her by default (#705-UX/E) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/module/:moduleId/conversation` | Module — conversational editor | `admin-content.html` | **Canonical** |
 | `/admin-content/module/:moduleId/advanced` | Module — advanced editor | `admin-content-advanced.html` | **Canonical** |
-| `/admin-content/courses` | Course list | `admin-content-courses.html` | **Canonical** |
+| `/admin-content/courses` | Course list (incl. ADMINISTRATOR-only «Slett kurs og ubrukt innhold» cascade delete, #762) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/courses/new` | New course (conversational flow) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |

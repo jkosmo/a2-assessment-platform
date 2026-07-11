@@ -229,7 +229,21 @@ cascade policy (wording, an escape-hatch option, which items count as publishabl
 | Section list UI | `public/static/admin-content-sections.js` (`sectionStatus`/`statusBadge`/`sectionLifecycle`, archived toggle) | added status column + all lifecycle actions |
 | Shared badge style | `public/static/shared.css` → `.status-badge--{draft,published,archived}` | library has its own scoped `.status-badge` modifiers (richer module statuses) |
 
-**Guards:** `test/m2-content-lifecycle.test.ts` (G2/G3/I3 across all three); `test/m2-module-archive.test.ts` (archive auto-unpublishes); `test/m2-course-cascade-publish.test.ts` (#734 — preview, cascade, blocked-nothing-half-published); `test/e2e/admin-content-workspaces.spec.ts` "courses list can unpublish a published course (#705)" + "sections list shows status and runs the lifecycle actions (#705)"; `test/e2e/admin-content-course-cascade-publish.spec.ts` (#734 dialog: cascade confirm, direct-publish, blocked).
+**Cascade delete (#762, ADMINISTRATOR-only):** the *inverse* of cascade publish — a destructive
+cleanup that deletes a course together with the modules/sections it **exclusively** owns, while
+never destroying preserved records (submissions/certifications/completions). Shared content is
+spared (only unlinked). All-or-nothing: any blocker aborts the whole delete. This spans a course-
+command service, two ADMINISTRATOR-gated routes, and a course-list confirm dialog; a change to the
+exclusivity/preserved-record policy or the FK deletion order must touch all of them. The service
+reuses the proven bulk-purge FK order (`ModuleVersion` before its rubric/prompt/mcq versions).
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Cascade-delete service | `src/modules/course/courseCascadeDeleteService.ts` (`getCourseCascadeDeletePreview`, `cascadeDeleteCourse`) | Exclusivity via `findCoursesContainingModule/Section`; preserved records via `adminContentRepository.findModuleDeleteSummary` (`_count.submissions`/`certificationStatuses`) + `courseCompletion.count`; one transaction, FK order load-bearing; audit `course_cascade_deleted` + per-module `module_deleted` |
+| Cascade-delete routes | `src/routes/adminCourses.ts` (`GET /:id/cascade-delete-preview`, `POST /:id/cascade-delete`) | **ADMINISTRATOR-only** per-route gate (403 otherwise); 400 `validation_error` w/ `details.blockers` when blocked; 200 summary otherwise |
+| Cascade-delete dialog UI | `public/static/admin-content-courses.js` (`isAdministrator`, row `data-action="cascade-delete"`, `openCascadeDeleteDialog`, `renderCascadeDeletePreview`) + `#cascadeDeleteDialog` in `admin-content-courses.html` | Row action gated on `/api/me` ADMINISTRATOR role (surface #12, never identityDefaults); dialog lists deleted/spared/blockers; confirm hidden when blockers (`setHidden`); hardcoded-Norwegian labels |
+
+**Guards:** `test/m2-content-lifecycle.test.ts` (G2/G3/I3 across all three); `test/m2-module-archive.test.ts` (archive auto-unpublishes); `test/m2-course-cascade-publish.test.ts` (#734 — preview, cascade, blocked-nothing-half-published); `test/m2-course-cascade-delete.test.ts` (#762 — deletes exclusive modules+sections, spares shared, blocks on submission/completion, preview shape, SMO 403); `test/e2e/admin-content-workspaces.spec.ts` "courses list can unpublish a published course (#705)" + "sections list shows status and runs the lifecycle actions (#705)"; `test/e2e/admin-content-course-cascade-publish.spec.ts` (#734 dialog: cascade confirm, direct-publish, blocked); `test/e2e/admin-content-course-cascade-delete.spec.ts` (#762 — action hidden for SMO / shown for ADMINISTRATOR, dialog lists preview, confirm fires delete, blockers hide confirm).
 
 ## 14. Admin-content list pages — shared shape across Kurs/Moduler/Seksjoner/Klasser (#705-UX)
 

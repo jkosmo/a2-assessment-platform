@@ -3,6 +3,12 @@ export { getCourseReport, getCourseLearnerReport } from "./courseReport.js";
 export { createCourse, updateCourse, publishCourse, unpublishCourse, archiveCourse, restoreCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
 export type { CourseItemInput } from "./courseCommands.js";
 export { getCoursePublishPreview, publishCourseCascade } from "./coursePublishService.js";
+export { getCourseCascadeDeletePreview, cascadeDeleteCourse } from "./courseCascadeDeleteService.js";
+export type {
+  CourseCascadeDeletePreview,
+  CascadeDeleteEntry,
+  CascadeDeleteSummary,
+} from "./courseCascadeDeleteService.js";
 export type {
   CoursePublishPreview,
   CourseUnpublishedItem,
