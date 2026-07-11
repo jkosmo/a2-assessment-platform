@@ -10,11 +10,14 @@
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
+import { sanitizeSvg } from "../course/svgSanitizer.js";
+import { ALLOWED_ASSET_MIME_TYPES, MAX_ASSET_BYTES, SVG_MIME_TYPE } from "../course/assetCommands.js";
 import {
   AUTHORING_PACKAGE_FORMAT,
   authoringPackageSchema,
   type AuthoringPackage,
   type AuthoringModulePayload,
+  type AuthoringSectionPayload,
 } from "./agentAuthoringSchemas.js";
 
 export type AuthoringIssueSeverity = "error" | "warning";
@@ -170,6 +173,120 @@ function checkAssessmentMode(payload: AuthoringModulePayload, basePath: string):
   return issues;
 }
 
+// #763 (Layer B): every `asset:<ref>` reference in a section's markdown (any locale value).
+// Matches the wider authoring sourceId grammar ([a-zA-Z0-9_-]), a superset of the runtime
+// `asset:<id>` grammar in sectionContent.ts.
+const ASSET_REF_RE = /asset:([a-zA-Z0-9_-]+)/g;
+
+function localizedStringValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (value !== null && typeof value === "object") {
+    return Object.values(value).filter((entry): entry is string => typeof entry === "string");
+  }
+  return [];
+}
+
+function assetRefsInMarkdown(bodyMarkdown: unknown): Set<string> {
+  const refs = new Set<string>();
+  for (const text of localizedStringValues(bodyMarkdown)) {
+    for (const match of text.matchAll(ASSET_REF_RE)) refs.add(match[1]);
+  }
+  return refs;
+}
+
+// #763 (Layer B) — pure section-asset rules. Every `asset:<ref>` in the markdown must have a
+// matching `assets[]` entry (missing_asset); every asset should be referenced
+// (unreferenced_asset — warning); mime must be allowed; the decoded blob must be within the
+// per-asset cap; SVG must survive sanitisation non-empty; a section may not reuse a `sourceId`.
+// No DB access — mirrors the import-time enforcement so the dry-run report matches what a later
+// `POST /sections` (or course import) would accept.
+function checkSectionAssets(payload: AuthoringSectionPayload, basePath: string): AuthoringIssue[] {
+  const issues: AuthoringIssue[] = [];
+  const assets = payload.assets ?? [];
+  if (assets.length === 0) return issues;
+
+  const refs = assetRefsInMarkdown(payload.bodyMarkdown);
+  const firstIndexBySourceId = new Map<string, number>();
+  const sourceIds = new Set<string>();
+
+  assets.forEach((asset, index) => {
+    const assetPath = `${basePath}.assets[${index}]`;
+
+    const firstIndex = firstIndexBySourceId.get(asset.sourceId);
+    if (firstIndex !== undefined) {
+      issues.push({
+        severity: "error",
+        path: `${assetPath}.sourceId`,
+        code: "duplicate_asset_source_id",
+        message: `sourceId '${asset.sourceId}' is already used by ${basePath}.assets[${firstIndex}].`,
+      });
+    } else {
+      firstIndexBySourceId.set(asset.sourceId, index);
+      sourceIds.add(asset.sourceId);
+    }
+
+    if (!ALLOWED_ASSET_MIME_TYPES.includes(asset.mimeType)) {
+      issues.push({
+        severity: "error",
+        path: `${assetPath}.mimeType`,
+        code: "unsupported_asset_mime",
+        message: `Unsupported mime '${asset.mimeType || "unknown"}'. Allowed: ${ALLOWED_ASSET_MIME_TYPES.join(", ")}.`,
+      });
+    }
+
+    const buffer = Buffer.from(asset.contentBase64, "base64");
+    if (buffer.byteLength === 0) {
+      issues.push({
+        severity: "error",
+        path: `${assetPath}.contentBase64`,
+        code: "asset_decode_failed",
+        message: `Asset '${asset.sourceId}' decodes to zero bytes (invalid base64?).`,
+      });
+    } else {
+      if (buffer.byteLength > MAX_ASSET_BYTES) {
+        issues.push({
+          severity: "error",
+          path: `${assetPath}.contentBase64`,
+          code: "asset_too_large",
+          message: `Asset '${asset.sourceId}' decodes to ${buffer.byteLength} bytes (max ${MAX_ASSET_BYTES}).`,
+        });
+      }
+      if (asset.mimeType === SVG_MIME_TYPE && sanitizeSvg(buffer.toString("utf8")) === "") {
+        issues.push({
+          severity: "error",
+          path: `${assetPath}.contentBase64`,
+          code: "asset_svg_unsanitizable",
+          message: `Asset '${asset.sourceId}' SVG is empty or invalid after sanitisation.`,
+        });
+      }
+    }
+  });
+
+  for (const ref of refs) {
+    if (!sourceIds.has(ref)) {
+      issues.push({
+        severity: "error",
+        path: `${basePath}.bodyMarkdown`,
+        code: "missing_asset",
+        message: `Markdown references asset:${ref} but no assets[] entry has sourceId '${ref}'.`,
+      });
+    }
+  }
+
+  for (const [sourceId, index] of firstIndexBySourceId) {
+    if (!refs.has(sourceId)) {
+      issues.push({
+        severity: "warning",
+        path: `${basePath}.assets[${index}]`,
+        code: "unreferenced_asset",
+        message: `Asset '${sourceId}' is never referenced by bodyMarkdown (expected asset:${sourceId}).`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 function buildPlan(pkg: AuthoringPackage): AuthoringPlanStep[] {
   const plan: AuthoringPlanStep[] = [];
   for (const object of pkg.objects) {
@@ -236,6 +353,13 @@ export async function validateAuthoringPackage(
   pkg.objects.forEach((object, index) => {
     if (object.type === "module") {
       issues.push(...checkAssessmentMode(object.payload, `objects[${index}].payload`));
+    }
+  });
+
+  // #763 (Layer B): per-section inline-figure rules (ref/asset consistency, mime, size, SVG-safe).
+  pkg.objects.forEach((object, index) => {
+    if (object.type === "section") {
+      issues.push(...checkSectionAssets(object.payload, `objects[${index}].payload`));
     }
   });
 

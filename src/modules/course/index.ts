@@ -17,6 +17,8 @@ export type {
 } from "./coursePublishService.js";
 export {
   createSection,
+  createSectionWithAssets,
+  remapAssetRefs,
   updateSectionTitle,
   updateSectionContent,
   getSection,
@@ -26,6 +28,8 @@ export {
   archiveSection,
   restoreSection,
   deleteSection,
+  SECTION_CREATE_BODY_LIMIT_BYTES,
+  type SectionAssetImportInput,
 } from "./sectionCommands.js";
 export {
   createSectionAsset,

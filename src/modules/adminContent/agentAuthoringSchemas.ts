@@ -27,6 +27,39 @@ export const AUTHORING_PACKAGE_FORMAT = "a2-authoring-package/v1" as const;
 
 export { clientRefSchema };
 
+// #763 (Layer B): a client-chosen reference token an agent uses to tie a section's inline figure
+// to its markdown. UNLIKE the export `sourceId` (which is a source-environment DB id), an authoring
+// asset's `sourceId` is a free token the agent invents, referenced in `bodyMarkdown` as
+// `asset:<sourceId>`. Wider grammar than clientRef (allows `_` and upper-case) so it round-trips
+// through the export `sourceId` shape; still tight enough to stay a safe markdown ref.
+export const authoringAssetSourceIdSchema = z
+  .string()
+  .regex(/^[a-zA-Z0-9_-]{1,64}$/, "asset sourceId must match [a-zA-Z0-9_-]{1,64}.");
+
+// #763 (Layer B): one inline section figure/image carried in an authoring package. Shape mirrors
+// the export `sectionAssetExportSchema` (base64 blob + optional #657 localized SVG variants), but
+// `sourceId` is a client-chosen ref token (see above). Strict so a hallucinated field fails loudly.
+export const authoringSectionAssetSchema = z
+  .object({
+    sourceId: authoringAssetSourceIdSchema,
+    filename: z.string().min(1),
+    mimeType: z.string().min(1),
+    sizeBytes: z.number().int().min(0),
+    contentBase64: z.string().min(1),
+    sourceLocale: z.string().min(1).nullable().optional(),
+    localizedVariants: z
+      .array(
+        z
+          .object({
+            locale: z.string().min(1),
+            contentBase64: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
 // Module payload = moduleExportPayloadSchema without `audit` (strict).
 export const authoringModulePayloadSchema = z
   .object({
@@ -55,10 +88,13 @@ export const authoringModulePayloadSchema = z
   .strict();
 
 // Section payload = sectionExportPayloadSchema without `audit` (strict).
+// #763 (Layer B): an OPTIONAL `assets[]` carries the section's inline figures/images; markdown
+// references each as `asset:<sourceId>`. Omit it entirely for a text-only section.
 export const authoringSectionPayloadSchema = z
   .object({
     title: localizedTextPatchSchema,
     bodyMarkdown: localizedTextPatchSchema,
+    assets: z.array(authoringSectionAssetSchema).optional(),
   })
   .strict();
 
@@ -120,4 +156,5 @@ export type AuthoringPackage = z.infer<typeof authoringPackageSchema>;
 export type AuthoringObject = z.infer<typeof authoringObjectSchema>;
 export type AuthoringModulePayload = z.infer<typeof authoringModulePayloadSchema>;
 export type AuthoringSectionPayload = z.infer<typeof authoringSectionPayloadSchema>;
+export type AuthoringSectionAsset = z.infer<typeof authoringSectionAssetSchema>;
 export type AuthoringCoursePayload = z.infer<typeof authoringCoursePayloadSchema>;

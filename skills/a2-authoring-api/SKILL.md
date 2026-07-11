@@ -20,6 +20,7 @@ API/fallback mechanics: [references/api-flow.md](references/api-flow.md).
 Preserving approved content: **[references/content-preservation.md](references/content-preservation.md)**.
 Validating the fallback export: **[references/export-validation.md](references/export-validation.md)**.
 Translating to all three languages: **[references/localization.md](references/localization.md)**.
+Designing figures (SVG, "one figure, one point"): **[references/figure-design.md](references/figure-design.md)**.
 Deterministic checks live in `scripts/` (`course-state.mjs`, `export-validate.mjs`,
 `localization-check.mjs`) — run them; they are repo-unit-tested.
 
@@ -84,8 +85,21 @@ the three references above.
    **nb, nn and en-GB** of every student-facing field the schema localizes — not the primary text
    copied into every locale. Preserve meaning, difficulty, the correct answer, option count+order,
    and all formulas/identifiers/URLs; verify MCQ correct answers map to the same option in every
-   locale. Block production if a mandatory localized field is missing. (localization.md;
+   locale. **This extends to figure `<text>`:** each text-bearing SVG figure gets localizedVariants
+   for the other two locales (translate the labels, geometry unchanged). Block production if a
+   mandatory localized field — or a figure variant — is missing. (localization.md;
    `localization-check.mjs`.)
+
+9. **Design figures with the text (Layer B).** Where a section would otherwise be a wall of text,
+   propose **one simple figure per discrete visual point** and draw it as **SVG** integrated with
+   the element's text, so text + figure are approved as one whole. Principle: **one figure, one
+   point** — several simple figures beat one crowded diagram. SVG only (the agent never generates
+   raster; raster is author-supplied, never "translated"); a figure **diagrams approved
+   text/source and never invents data**; short labels in the one primary language as plain,
+   translatable `<text>` (#657). Draw only from the template set (flow / tree-decision /
+   boxes-and-arrows / labelled diagram) unless the author explicitly asks free-form. Figures are
+   proposed at the **Structure gate** and drafted at the **Per-element gate**; an approved figure
+   is **unique content** the preservation audit (#762) must never drop. (figure-design.md.)
 
 ## Two tracks (choose by the user's opening)
 

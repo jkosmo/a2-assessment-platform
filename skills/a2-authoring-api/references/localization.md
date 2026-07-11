@@ -67,9 +67,33 @@ Block production if any mandatory localized field is missing. Equal structure ac
 checks — options are single localized objects shared across locales, so "one language lost an
 option" surfaces as that option missing a locale.
 
+## Figures are localized too (#763, Layer B)
+
+A figure whose labels are in one language breaks the multilingual promise exactly as untranslated
+prose does. After the primary is approved, **each text-bearing SVG figure gets `localizedVariants`
+for the other two locales**: translate the `<text>` runs, keep the geometry identical (same number
+of labels, same positions — geometry never changes, only the label strings). This reuses the #657
+SVG-localization mechanism (`sourceLocale` + per-locale variant blobs); it does not invent a new
+one. **Raster figures cannot be localized** (baked pixels) — if an author-supplied raster carries
+text, flag it as untranslatable and advise an SVG instead.
+
+`checkLocalization` (via `checkFigureLocalization`) extends the check to figures and **blocks** when:
+
+- **missingVariants** — a text-bearing SVG figure lacks a variant for one of the other two locales;
+- **textCountMismatches** — a variant's label count differs from the original's (a label was lost
+  or added — the geometry/structure drifted);
+- **tokenDrift** — a formula / URL / identifier / filename / article-reference present in an
+  original label is missing from a variant;
+- **blindCopies** — a variant's labels are identical to the original's translatable prose (the
+  figure was copied, not translated). Short single-word labels ("Start", "A", "72") that
+  legitimately stay identical are not flagged.
+
+The figure findings are returned under `result.figures` and folded into the top-level `blocks`.
+
 ## What is deterministic vs behavioral
 
 The check deterministically catches missing locales, answer-key drift, token loss and blind
-copies. It cannot judge **translation quality** (is the nynorsk natural? is the meaning faithful?)
-— that remains the skill's behavioral responsibility, ideally confirmed in the Gate 5 external QA
-pass with a reviewer who reads all three languages.
+copies — for prose fields **and** figure labels. It cannot judge **translation quality** (is the
+nynorsk natural? is the meaning faithful? do the translated labels still fit the drawing?) — that
+remains the skill's behavioral responsibility, ideally confirmed in the Gate 5 external QA pass
+with a reviewer who reads all three languages.

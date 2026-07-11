@@ -199,7 +199,7 @@ ordinary create/import endpoints. Publishing is manual and is **not** part of th
 
 | Method | Path | Notes |
 |--------|------|-------|
-| `POST` | `/api/admin/content/agent-authoring/validate` | **AA-1 (#649).** Dry-run validation — **no DB writes**. Body `{ package: <a2-authoring-package/v1> }`. Returns `200 { valid, summary: { errors, warnings, objects }, issues: [{ severity: "error"\|"warning", path, code, message }], plan }` — 200 also for invalid packages (the report is the result). `plan` (topological execution order, ops `create_section`/`create_module`/`create_course`/`set_course_items`) is only populated when `errors == 0`. Covers all three `assessmentMode`s (`required_for_mode`/`forbidden_for_mode`), package rules (`duplicate_client_ref`, `unknown_client_ref`, `client_ref_type_mismatch`, `ref_or_id_required`, `ref_and_id_conflict`, `unknown_module_id`/`unknown_section_id`, `unknown_field` — publish/audit fields are rejected) and non-blocking warnings (`possible_duplicate_title`, `course_without_modules`). `400` only when the body isn't `{ package }` with the right `packageFormat`. |
+| `POST` | `/api/admin/content/agent-authoring/validate` | **AA-1 (#649).** Dry-run validation — **no DB writes**. Body `{ package: <a2-authoring-package/v1> }`. Returns `200 { valid, summary: { errors, warnings, objects }, issues: [{ severity: "error"\|"warning", path, code, message }], plan }` — 200 also for invalid packages (the report is the result). `plan` (topological execution order, ops `create_section`/`create_module`/`create_course`/`set_course_items`) is only populated when `errors == 0`. Covers all three `assessmentMode`s (`required_for_mode`/`forbidden_for_mode`), package rules (`duplicate_client_ref`, `unknown_client_ref`, `client_ref_type_mismatch`, `ref_or_id_required`, `ref_and_id_conflict`, `unknown_module_id`/`unknown_section_id`, `unknown_field` — publish/audit fields are rejected), section inline-figure rules (#763, Layer B: `missing_asset`, `duplicate_asset_source_id`, `unsupported_asset_mime`, `asset_too_large`, `asset_decode_failed`, `asset_svg_unsanitizable` errors; `unreferenced_asset` warning) and non-blocking warnings (`possible_duplicate_title`, `course_without_modules`). `400` only when the body isn't `{ package }` with the right `packageFormat`. |
 
 **Agent-friendly create/import responses (AA-2, #650):** the create/import calls the skill
 orchestrates accept an optional `clientRef` (pattern `[a-z0-9-]{1,64}`, echoed back in the
@@ -210,7 +210,15 @@ orchestrates accept an optional `clientRef` (pattern `[a-z0-9-]{1,64}`, echoed b
 - `POST /sections` → `links: { editor: "/admin-content/sections?id=:id" }`. Also accepts
   `draft: true` — the section is created in Utkast (`activeVersionId` stays `null`; content is
   preserved as version 1, published later via `POST /sections/:id/publish`). Default (omitted)
-  keeps auto-publish-on-save.
+  keeps auto-publish-on-save. **#763 (Layer B):** also accepts an OPTIONAL `assets[]` (inline
+  figures/images, same entry shape as the export/authoring asset — `{ sourceId, filename,
+  mimeType, sizeBytes, contentBase64, sourceLocale?, localizedVariants? }`, but `sourceId` is a
+  client-chosen ref token `[a-zA-Z0-9_-]{1,64}` the markdown references as `asset:<sourceId>`).
+  When present the server creates the section, imports the assets (mime allowlist + 5 MB
+  per-asset cap + SVG re-sanitisation, reusing the #749 importer), remaps every `asset:<sourceId>`
+  ref to the new `SectionAsset` id, and returns the `sourceId → assetId` map as `assetMap`. The
+  section create is auto-published only when `draft` is not `true` (agent-token requests still
+  require `draft: true`). This route accepts a larger 15 MB body to carry inlined assets.
 
 Agent imports must pass `autoPublish: false` (and the authoring contract has no `audit`, so
 source-publish auto-publication can never trigger). Retry-safe `Idempotency-Key` support is
@@ -299,7 +307,7 @@ Course export/import now transport a section's figures/images (`SectionAsset`), 
 
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/admin/content/sections` | Create a section (`title` + `bodyMarkdown`) → section + version 1 |
+| `POST` | `/api/admin/content/sections` | Create a section (`title` + `bodyMarkdown`) → section + version 1. Optional `draft`, `clientRef`, `agentRunId`, and (#763, Layer B) `assets[]` inline figures/images — imported + `asset:<sourceId>` refs remapped, `assetMap` (`sourceId→assetId`) echoed back. Larger 15 MB body for inlined assets |
 | `GET` | `/api/admin/content/sections` | List sections |
 | `GET` | `/api/admin/content/sections/:sectionId` | Section detail (active version's `bodyMarkdown`) |
 | `PATCH` | `/api/admin/content/sections/:sectionId/title` | Update title |

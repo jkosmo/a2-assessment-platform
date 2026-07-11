@@ -25,6 +25,7 @@ export const MANDATORY_CATEGORIES = Object.freeze([
   "templates", // includes required attachments/templates
   "tasks",
   "assessmentCriteria",
+  "figures", // #763 (Layer B): an approved figure's ref + labels — a diagram is unique content, not redundancy
 ]);
 
 // Reductions larger than this fraction of the approved length require explicit approval
@@ -67,21 +68,44 @@ export function contains(haystack, needle) {
 //   unexpectedlyMissing  — absent and NOT approved for removal (this is the silent-drop bug)
 // Mandatory categories may only be preserved or moved: a deliberate OR unexpected loss of a
 // mandatory item is still a loss and blocks (see mandatoryLosses below).
-export function classifyItems({ mandatory = {}, deliberatelyRemoved = [] }, mainText, attachmentsText = "") {
+export function classifyItems({ mandatory = {}, deliberatelyRemoved = [], figures = [] }, mainText, attachmentsText = "") {
   const removedSet = new Set((deliberatelyRemoved ?? []).map(normalizeForSearch));
   const result = { preserved: [], moved: [], deliberatelyRemoved: [], unexpectedlyMissing: [] };
   const categories = new Set([...MANDATORY_CATEGORIES, ...Object.keys(mandatory ?? {})]);
 
+  const classify = (entry) => {
+    if (contains(mainText, entry.item)) result.preserved.push(entry);
+    else if (contains(attachmentsText, entry.item)) result.moved.push(entry);
+    else if (removedSet.has(normalizeForSearch(entry.item))) result.deliberatelyRemoved.push(entry);
+    else result.unexpectedlyMissing.push(entry);
+  };
+
   for (const category of categories) {
+    if (category === "figures") continue; // figures are objects, expanded below — not string items
     for (const item of mandatory?.[category] ?? []) {
-      const entry = { category, item, mandatory: MANDATORY_CATEGORIES.includes(category) };
-      if (contains(mainText, item)) result.preserved.push(entry);
-      else if (contains(attachmentsText, item)) result.moved.push(entry);
-      else if (removedSet.has(normalizeForSearch(item))) result.deliberatelyRemoved.push(entry);
-      else result.unexpectedlyMissing.push(entry);
+      classify({ category, item, mandatory: MANDATORY_CATEGORIES.includes(category) });
+    }
+  }
+
+  // #763 (Layer B): an approved figure is mandatory content. Each figure contributes its markdown
+  // REF (`asset:<sourceId>`) AND every label text as mandatory "figures" items — a dropped figure
+  // (ref gone) or an emptied/renamed label surfaces as an unexpectedly-missing mandatory loss.
+  for (const figure of figures ?? []) {
+    for (const item of figureItems(figure)) {
+      classify({ category: "figures", item, mandatory: true, sourceId: figure.sourceId });
     }
   }
   return result;
+}
+
+// The mandatory strings a single approved figure must keep: its markdown ref token and each label.
+function figureItems(figure) {
+  const items = [];
+  if (figure?.sourceId) items.push(`asset:${figure.sourceId}`);
+  for (const label of figure?.labels ?? []) {
+    if (typeof label === "string" && label.trim().length > 0) items.push(label);
+  }
+  return items;
 }
 
 // A mandatory item is "lost" if it is neither preserved nor moved (i.e. removed or missing).
@@ -223,24 +247,51 @@ function payloadText(payload) {
   return JSON.stringify(payload ?? {});
 }
 
+// #763 (Layer B): a figure's label text lives inside a base64-encoded SVG, so the JSON payload text
+// alone can't confirm a label survived. Decode each SVG asset (base + localized variants), strip
+// tags to expose the label text, and append it (plus the `asset:<sourceId>` ref) so the substring
+// classifier can verify approved figure refs + labels against the produced artifact.
+function figureSearchText(payloadWithAssets) {
+  const assets = payloadWithAssets?.assets ?? [];
+  const parts = [];
+  for (const asset of assets) {
+    if (!asset || typeof asset !== "object") continue;
+    if (asset.sourceId) parts.push(`asset:${asset.sourceId}`);
+    if (asset.mimeType !== "image/svg+xml") continue;
+    parts.push(decodeSvgText(asset.contentBase64));
+    for (const variant of asset.localizedVariants ?? []) parts.push(decodeSvgText(variant.contentBase64));
+  }
+  return parts.join(" ");
+}
+
+function decodeSvgText(contentBase64) {
+  try {
+    const svg = Buffer.from(String(contentBase64 ?? ""), "base64").toString("utf8");
+    return svg.replace(/<[^>]*>/g, " "); // strip tags, keep <text>/<tspan> label content
+  } catch {
+    return "";
+  }
+}
+
 // From an a2-authoring-package/v1 (objects[] carry clientRef) — the natural pre-export artifact.
+// Section objects may carry inline figures; their decoded label text + refs are folded into `text`.
 export function extractPackageElements(pkg) {
   return (pkg.objects ?? []).map((object) => ({
     ref: object.clientRef,
-    text: payloadText(object.payload),
+    text: `${payloadText(object.payload)} ${figureSearchText(object.payload)}`,
     attachmentsText: payloadText(object.payload?.attachments ?? object.payload?.activeVersion?.attachments),
   }));
 }
 
 // From a produced a2-content-export/v1 course envelope. The envelope is self-contained (no
 // clientRef), so items are zipped to `order` by position — the master's final order is the
-// contract that ties them together.
+// contract that ties them together. Section figures' decoded labels + refs are folded into `text`.
 export function extractEnvelopeElements(envelope, order) {
   const items = envelope?.course?.course?.items ?? [];
   const sorted = [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   return sorted.map((item, index) => ({
     ref: order?.[index],
-    text: payloadText(item.module ?? item.section ?? item),
+    text: `${payloadText(item.module ?? item.section ?? item)} ${figureSearchText(item.section)}`,
     attachmentsText: payloadText((item.module ?? item.section)?.attachments),
   }));
 }

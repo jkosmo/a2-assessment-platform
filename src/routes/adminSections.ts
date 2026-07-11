@@ -3,6 +3,7 @@ import multer from "multer";
 import { z } from "zod";
 import {
   createSection,
+  createSectionWithAssets,
   updateSectionTitle,
   updateSectionContent,
   getSection,
@@ -19,6 +20,7 @@ import {
 } from "../modules/course/index.js";
 import { findCoursesForSections } from "../modules/course/contentLifecycle.js";
 import { localizedTextPatchSchema, generationLocaleSchema, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { authoringSectionAssetSchema } from "../modules/adminContent/agentAuthoringSchemas.js";
 import { sectionAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../errors/AppError.js";
@@ -52,6 +54,9 @@ const createSectionSchema = z.object({
   clientRef: clientRefSchema.optional(),
   // AA-5 (#653): stamped into the create's audit event (source: agent_authoring).
   agentRunId: agentRunIdSchema.optional(),
+  // #763 (Layer B): OPTIONAL inline figures/images. When present the section's assets are created
+  // and its `asset:<sourceId>` markdown refs are remapped to the new asset ids.
+  assets: z.array(authoringSectionAssetSchema).optional(),
 });
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
@@ -100,12 +105,36 @@ adminSectionsRouter.post("/", async (request, response, next) => {
     return;
   }
   try {
+    const title = localizedTextCodec.serialize(parsed.data.title);
+    const bodyMarkdown = localizedTextCodec.serialize(parsed.data.bodyMarkdown);
+    const agent = { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId };
+
+    // #763 (Layer B): with inline figures/images, create the section + its assets and remap the
+    // `asset:<sourceId>` refs; echo the sourceId→assetId map back so the skill can map its refs.
+    if (parsed.data.assets && parsed.data.assets.length > 0) {
+      const { section, assetMap } = await createSectionWithAssets({
+        title,
+        bodyMarkdown,
+        actorId: request.context?.userId,
+        draft: parsed.data.draft,
+        agent,
+        assets: parsed.data.assets,
+      });
+      response.status(201).json({
+        section: toDetail(section),
+        links: sectionAdminLinks(section.id),
+        assetMap,
+        ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
+      });
+      return;
+    }
+
     const section = await createSection({
-      title: localizedTextCodec.serialize(parsed.data.title),
-      bodyMarkdown: localizedTextCodec.serialize(parsed.data.bodyMarkdown),
+      title,
+      bodyMarkdown,
       actorId: request.context?.userId,
       draft: parsed.data.draft,
-      agent: { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId },
+      agent,
     });
     response.status(201).json({
       section: toDetail(section),
