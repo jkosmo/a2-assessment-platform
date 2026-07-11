@@ -136,5 +136,10 @@ course import:
    §"Fallback format".
 2. Write it to `kurs-<navn>.json` and tell the author to import via **Innholdsforvaltning → Kurs →
    Importer kurs-pakke**. It creates the same drafts; nothing is published.
+3. **Validate before delivering.** Generate the file with `buildFallbackEnvelope`, then run the
+   read-back **round-trip** (`roundTripFallbackExport`) against the same schema as A2's import —
+   the file is not "validated" until this passes, and the validated file is the delivered file.
+   Report the named checks (never a generic "validated"). See
+   [export-validation.md](export-validation.md).
 
 No token or network needed — only that the author can save a file and use the admin UI.

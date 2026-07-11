@@ -164,7 +164,12 @@ Mapping from an `a2-authoring-package/v1`:
   no `clientRef`).
 - Add `audit: {}` to each module `activeVersion`, each section, and the course. Empty audit
   = no publish history ⇒ import never auto-publishes (drafts only).
-- `exportFormat` / `exportedAt` / `scope: "course"` on the envelope.
+- `exportFormat` / `exportedAt` / `scope: "course"` on the envelope. **`exportedAt` (and any
+  `audit.publishedAt`) MUST be `Date.toISOString()` shape (`YYYY-MM-DDTHH:mm:ss.sssZ`)** — Zod
+  `.datetime()` rejects timezone offsets and microseconds. Build this envelope with
+  `buildFallbackEnvelope` and validate it with the round-trip in
+  [export-validation.md](export-validation.md) (`scripts/export-validate.mjs`); do not hand-roll
+  the date or call the file "validated" without the read-back check.
 
 Only whole courses use this fallback path; a lone module can use the module-scoped envelope
 (`scope: "module"`) the same way.
