@@ -81,6 +81,8 @@ export const auditActions = {
     unpublished: "course_unpublished",
     archived: "course_archived",
     restored: "course_restored",
+    // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
+    cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
   },
   section: {
@@ -300,6 +302,13 @@ export type AuditMetadataByAction = {
   [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
   [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.cascadeDeleted]: EventMetadata<{
+    courseId: string;
+    deletedModuleIds: string[];
+    deletedSectionIds: string[];
+    sparedModuleIds: string[];
+    sparedSectionIds: string[];
+  }>;
   [auditActions.section.created]: EventMetadata<{ sectionId: string; draft: boolean }>;
   [auditActions.section.published]: EventMetadata<{ sectionId: string }>;
   [auditActions.section.unpublished]: EventMetadata<{ sectionId: string }>;

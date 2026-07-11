@@ -16,6 +16,8 @@ import {
   listCourseEnrollments,
   getCoursePublishPreview,
   publishCourseCascade,
+  getCourseCascadeDeletePreview,
+  cascadeDeleteCourse,
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
@@ -440,6 +442,43 @@ adminCoursesRouter.delete("/:courseId", async (request, response, next) => {
   try {
     await deleteCourse(request.params.courseId, request.context?.userId);
     response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #762: ADMINISTRATOR-only destructive cleanup — delete a course together with the modules/sections
+// it exclusively owns. The admin_content mount already lets SMO+ADMIN in; this per-route
+// ADMINISTRATOR gate is the extra guard because the action can destroy content, not just a course.
+function isAdministrator(roles: string[] | undefined): boolean {
+  return roles?.includes("ADMINISTRATOR") ?? false;
+}
+
+// Read-only preview of what would be deleted, spared (shared with other courses), or block the
+// operation (course completions, or an exclusive module with submissions/certifications).
+adminCoursesRouter.get("/:courseId/cascade-delete-preview", async (request, response, next) => {
+  if (!isAdministrator(request.context?.roles)) {
+    response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can preview a course cascade delete." });
+    return;
+  }
+  try {
+    const preview = await getCourseCascadeDeletePreview(request.params.courseId);
+    response.json(preview);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Run the cascade. All-or-nothing: if any blocker exists the service throws a ValidationError (400)
+// carrying the blockers in `details` and deletes nothing; otherwise 200 with the delete summary.
+adminCoursesRouter.post("/:courseId/cascade-delete", async (request, response, next) => {
+  if (!isAdministrator(request.context?.roles)) {
+    response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can cascade-delete a course." });
+    return;
+  }
+  try {
+    const summary = await cascadeDeleteCourse(request.params.courseId, request.context?.userId);
+    response.json(summary);
   } catch (error) {
     next(error);
   }
