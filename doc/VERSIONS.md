@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.22 - 2026-07-11
+
+feat(content): #749 (Layer A) — carry section figures/images through export AND import
+
+Section figures/images (`SectionAsset`, blobs in storage referenced from markdown as
+`![alt](asset:<id>)`) now travel with a course through **export and import**, so figures survive a
+cross-environment round-trip and the `a2-authoring-api` skill's fallback file. Before this, export
+was markdown-only — the blobs were dropped and imported figures broke. This is the transport
+foundation (**Layer A**) for `doc/design/COURSE_FIGURES_AND_ASSETS.md`; the skill-assisted figure
+*design* (Layer B) is a later phase and is NOT included here.
+
+- **Schema (additive, no version-marker change):** `sectionExportPayloadSchema` gains an OPTIONAL
+  `assets[]` — `{ sourceId, filename, mimeType, sizeBytes, contentBase64, sourceLocale?,
+  localizedVariants?: [{ locale, contentBase64 }] }`. Old asset-less `a2-content-export/v1` files
+  import unchanged.
+- **Export** inlines each `SectionAsset` blob (+ #657 localized SVG variants) as base64. Caps:
+  5 MB per asset and a **25 MB total-decoded-asset budget per envelope** — export throws
+  `400 validation_error` if exceeded (never silently drops a figure).
+- **Import** decodes each asset, enforces the mime allowlist + per-asset cap, **re-sanitises SVG**
+  (base + variants, defence in depth), stores to a fresh blob under the new section, creates the
+  `SectionAsset` row (preserving `sourceLocale`/variants), then rewrites the section's active
+  `bodyMarkdown` so every `asset:<sourceId>` points at the new id (create-section → create-assets →
+  re-save remapped markdown; the persisted active version never references source ids). A failing
+  asset surfaces a clear error naming the section/asset — no silent skip.
+- **Body limit:** the course-import route gets a route-specific 35 MB `express.json` parser (covers
+  the 25 MB asset budget after base64 inflation); every other endpoint stays at 5 MB. Module import
+  is unchanged (modules carry no sections/assets).
+- **Skill (docs only this phase):** `skills/a2-authoring-api/references/package-schema.md` documents
+  the optional `assets[]` and the ref/remap contract; `scripts/export-validate.mjs`'s bundled
+  validator + the real-schema round-trip test now cover `assets[]`.
+- **Tests:** new integration file `test/m2-content-export-import-assets.test.ts` (round-trip raster +
+  SVG-with-localized-variant, import-side SVG sanitisation, disallowed-mime/oversized rejection,
+  over-25 MB export rejection, asset-less v1 unchanged); unit coverage that the schema accepts the
+  optional `assets[]`; the skill round-trip test now carries an asset.
+
+No Prisma migration (uses the existing `SectionAsset` model). No deploy.
+
 ## 1.6.21 - 2026-07-11
 
 chore(skill): a2-authoring-api #762 — preserve approved content, import-compatible fallback export, full three-language localization

@@ -2,6 +2,7 @@ import { adminContentRepository } from "./adminContentRepository.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
+import { ValidationError } from "../../errors/AppError.js";
 
 // v1.2.20 (#460): "published_with_draft" skiller mellom (a) modul som aldri har vært
 // publisert (unpublished_draft) og (b) modul som er live med eldre publisert versjon
@@ -207,12 +208,16 @@ export async function buildCourseExportEnvelope(
     throw new Error("Course has no items to export.");
   }
 
+  // #749 (Layer A): running budget for inlined section-asset bytes across the whole envelope.
+  // Enforced inside buildSectionExportPayload; throws a ValidationError if the total exceeds the cap.
+  const assetBudget = { total: 0 };
+
   const itemPayloads = await Promise.all(
     [...courseItems]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map(async (item) => {
         if (item.itemType === "SECTION" && item.section) {
-          const sectionVersion = await buildSectionExportPayload(item.section.id);
+          const sectionVersion = await buildSectionExportPayload(item.section.id, assetBudget);
           return { type: "SECTION" as const, sortOrder: item.sortOrder, section: sectionVersion };
         }
         const moduleId = item.moduleId ?? item.module?.id;
@@ -251,10 +256,30 @@ export async function buildCourseExportEnvelope(
 }
 
 // Inline a learning section's title + active-version markdown for export (#512).
-async function buildSectionExportPayload(sectionId: string): Promise<import("./adminContentSchemas.js").SectionExportPayload> {
+// #749 (Layer A): also inline the section's figures/images (SectionAsset) as base64 so imported
+// figures survive the round-trip. The markdown's `asset:<sourceId>` refs are left unchanged;
+// import remaps them to the newly created asset ids. `assetBudget` accumulates decoded asset bytes
+// across the whole envelope; the envelope-wide cap is enforced here so a figure is never dropped.
+async function buildSectionExportPayload(
+  sectionId: string,
+  assetBudget?: { total: number },
+): Promise<import("./adminContentSchemas.js").SectionExportPayload> {
   const { getSection } = await import("../course/sectionCommands.js");
+  const { loadSectionAssetsForExport, MAX_EXPORT_ASSET_TOTAL_BYTES } = await import("../course/assetCommands.js");
   const section = await getSection(sectionId);
   if (!section) throw new Error("Section not found for export.");
+
+  const { assets, totalBytes } = await loadSectionAssetsForExport(sectionId);
+  if (assetBudget) {
+    assetBudget.total += totalBytes;
+    if (assetBudget.total > MAX_EXPORT_ASSET_TOTAL_BYTES) {
+      throw new ValidationError(
+        `Course export exceeds the ${MAX_EXPORT_ASSET_TOTAL_BYTES}-byte total-asset cap ` +
+          `(figures sum to ${assetBudget.total} bytes). Reduce or split the course before exporting.`,
+      );
+    }
+  }
+
   return {
     title: (decodeLocalizedText(section.title) as never) ?? (section.title as never),
     bodyMarkdown: (section.activeVersion?.bodyMarkdown
@@ -266,6 +291,7 @@ async function buildSectionExportPayload(sectionId: string): Promise<import("./a
       publishedByEmail: null,
       sourceVersionNo: section.activeVersion?.versionNo ?? null,
     },
+    ...(assets.length > 0 ? { assets: assets as never } : {}),
   };
 }
 

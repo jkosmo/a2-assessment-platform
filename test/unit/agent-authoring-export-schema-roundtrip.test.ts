@@ -22,7 +22,37 @@ const pkg = {
   packageFormat: "a2-authoring-package/v1",
   locale: "nb",
   objects: [
-    { clientRef: "intro", type: "section", payload: { title: "Introduksjon", bodyMarkdown: "## Intro\n\nPersonvern og GDPR." } },
+    {
+      clientRef: "intro",
+      type: "section",
+      // #749 (Layer A): the section carries an inline SVG figure referenced from the markdown.
+      payload: {
+        title: "Introduksjon",
+        bodyMarkdown: "## Intro\n\nPersonvern og GDPR.\n\n![Flyt](asset:cmr8source001)",
+        assets: [
+          {
+            sourceId: "cmr8source001",
+            filename: "flyt.svg",
+            mimeType: "image/svg+xml",
+            sizeBytes: 49,
+            contentBase64: Buffer.from(
+              '<svg xmlns="http://www.w3.org/2000/svg"><text>Hei</text></svg>',
+              "utf8",
+            ).toString("base64"),
+            sourceLocale: "nb",
+            localizedVariants: [
+              {
+                locale: "en-GB",
+                contentBase64: Buffer.from(
+                  '<svg xmlns="http://www.w3.org/2000/svg"><text>Hi</text></svg>',
+                  "utf8",
+                ).toString("base64"),
+              },
+            ],
+          },
+        ],
+      },
+    },
     {
       clientRef: "modul-fritekst",
       type: "module",
@@ -81,6 +111,20 @@ describe("#762 fallback export vs the REAL src schema", () => {
     expect(importResult.success).toBe(true);
 
     // The bundled validator agrees with the real schema on this good input.
+    expect(validateExportEnvelopeStructure(envelope).valid).toBe(true);
+  });
+
+  it("#749: the inline section asset survives the re-wrap and passes the real schema", () => {
+    const envelope = buildFallbackEnvelope(pkg, { exportedAt: "2026-07-10T21:05:15.364Z" });
+    const introItem = envelope.course.course.items.find((i: { type: string }) => i.type === "SECTION");
+    const asset = introItem.section.assets[0];
+    expect(asset.sourceId).toBe("cmr8source001");
+    expect(asset.mimeType).toBe("image/svg+xml");
+    expect(asset.localizedVariants).toHaveLength(1);
+    // The markdown still references the SOURCE id (import remaps it) — do NOT pre-remap.
+    expect(introItem.section.bodyMarkdown).toContain("asset:cmr8source001");
+    // Both the real schema and the bundled validator accept the assets[] array.
+    expect(exportEnvelopeSchema.safeParse(envelope).success).toBe(true);
     expect(validateExportEnvelopeStructure(envelope).valid).toBe(true);
   });
 

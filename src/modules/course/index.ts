@@ -32,8 +32,12 @@ export {
   listSectionAssets,
   getSectionAssetContent,
   localizeSectionAssets,
+  loadSectionAssetsForExport,
+  importSectionAssets,
   ALLOWED_ASSET_MIME_TYPES,
   MAX_ASSET_BYTES,
+  MAX_EXPORT_ASSET_TOTAL_BYTES,
+  type ExportedSectionAsset,
 } from "./assetCommands.js";
 export { courseRepository, createCourseRepository } from "./courseRepository.js";
 export { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";

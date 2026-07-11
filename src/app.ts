@@ -3,6 +3,7 @@ import path from "node:path";
 import { appName, appVersion } from "./config/appMetadata.js";
 import { getParticipantConsoleRuntimeConfig } from "./config/participantConsole.js";
 import { SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES } from "./modules/adminContent/sourceMaterialExtractionService.js";
+import { COURSE_IMPORT_BODY_LIMIT_BYTES } from "./modules/adminContent/contentImportService.js";
 import { rolesFor } from "./config/capabilities.js";
 import { authenticate } from "./auth/authenticate.js";
 import { enforceAgentTokenScope } from "./auth/agentTokenScope.js";
@@ -45,6 +46,13 @@ app.use(securityHeadersMiddleware);
 app.use(
   "/api/admin/content/source-material/extract",
   express.json({ limit: SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES }),
+);
+// #749 (Layer A): course import inlines section figures/images (base64) → bodies exceed 5 MB.
+// Registered before the global parser (express.json skips once req._body is set) so ONLY this
+// route gets the larger limit; module import stays at 5 MB (modules carry no assets).
+app.use(
+  "/api/admin/content/courses/import",
+  express.json({ limit: COURSE_IMPORT_BODY_LIMIT_BYTES }),
 );
 app.use(express.json({ limit: "5mb" }));
 app.use("/static", express.static(publicStaticPath));

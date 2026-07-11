@@ -159,6 +159,32 @@ export function validateExportEnvelopeStructure(envelope) {
     if (!section || typeof section !== "object") return err(path, "section payload required");
     if (!isNonEmptyLocalized(section.title) && (section.title == null)) err(`${path}.title`, "required");
     validateAudit(section.audit, `${path}.audit`);
+    // #749 (Layer A): optional inlined figures/images. Mirrors sectionAssetExportSchema — each
+    // asset needs sourceId/filename/mimeType/contentBase64 (strings) + a non-negative sizeBytes;
+    // localizedVariants (if present) each need a locale + base64. Old asset-less files omit it.
+    if (section.assets !== undefined) {
+      if (!Array.isArray(section.assets)) {
+        err(`${path}.assets`, "must be an array");
+      } else {
+        section.assets.forEach((asset, ai) => {
+          const ap = `${path}.assets[${ai}]`;
+          if (!asset || typeof asset !== "object") return err(ap, "asset must be an object");
+          for (const field of ["sourceId", "filename", "mimeType", "contentBase64"]) {
+            if (typeof asset[field] !== "string" || asset[field].length === 0) err(`${ap}.${field}`, "required non-empty string");
+          }
+          if (!Number.isInteger(asset.sizeBytes) || asset.sizeBytes < 0) err(`${ap}.sizeBytes`, "must be a non-negative integer");
+          if (asset.localizedVariants !== undefined) {
+            if (!Array.isArray(asset.localizedVariants)) err(`${ap}.localizedVariants`, "must be an array");
+            else asset.localizedVariants.forEach((v, vi) => {
+              const vp = `${ap}.localizedVariants[${vi}]`;
+              if (!v || typeof v !== "object") return err(vp, "variant must be an object");
+              if (typeof v.locale !== "string" || v.locale.length === 0) err(`${vp}.locale`, "required non-empty string");
+              if (typeof v.contentBase64 !== "string" || v.contentBase64.length === 0) err(`${vp}.contentBase64`, "required non-empty string");
+            });
+          }
+        });
+      }
+    }
   };
 
   if (envelope.scope === "course" && envelope.course) {
