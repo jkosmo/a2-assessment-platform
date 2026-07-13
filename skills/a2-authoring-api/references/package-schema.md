@@ -256,6 +256,14 @@ this, `asset:<id>` markdown refs would break on the destination). Each entry:
   `buildFallbackEnvelope` and validate it with the round-trip in
   [export-validation.md](export-validation.md) (`scripts/export-validate.mjs`); do not hand-roll
   the date or call the file "validated" without the read-back check.
+- **Encoding — write ASCII-safe JSON (#754).** Escape every non-ASCII character as a `\uXXXX` JSON
+  escape so the delivered file is pure ASCII. A `\uXXXX` escape decodes to the correct codepoint in
+  any JSON parser regardless of the file's byte encoding, so Norwegian `æ/ø/å` cannot be corrupted by
+  a download/editor/transfer that re-encodes UTF-8 as Latin-1 (which turns them into `Ã¦/Ã¸/Ã¥`).
+  `buildFallbackEnvelope` + `roundTripFallbackExport` emit ASCII-safe output and **refuse to deliver**
+  a file that already contains such mojibake (the `encoding-integrity` check); if you hand-write the
+  file instead, emit the `\uXXXX` escapes yourself. (SVG figure text is unaffected — it uses XML
+  numeric entities like `&#248;`.)
 
 Only whole courses use this fallback path; a lone module can use the module-scoped envelope
 (`scope: "module"`) the same way.

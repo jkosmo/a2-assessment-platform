@@ -174,5 +174,9 @@ course import:
    the file is not "validated" until this passes, and the validated file is the delivered file.
    Report the named checks (never a generic "validated"). See
    [export-validation.md](export-validation.md).
+4. **Write it ASCII-safe (#754).** The round-trip emits the JSON with every non-ASCII char escaped as
+   `\uXXXX` and fails delivery on any mojibake, so `æ/ø/å` survive download/import intact. If you
+   hand-write the file (no script), escape non-ASCII yourself — a raw UTF-8 file re-encoded as
+   Latin-1 turns Norwegian text into `Ã¦/Ã¸/Ã¥` in the imported course.
 
 No token or network needed — only that the author can save a file and use the admin UI.

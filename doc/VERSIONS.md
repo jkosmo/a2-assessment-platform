@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.26 - 2026-07-13
+
+fix(skill): #754 — ASCII-safe fallback-JSON + mojibake-guard i forfatter-flyten
+
+Andre halvdel av #754-verdikjeden. Ved feilsøking av det ChatGPT-produserte importkurset var de
+norske tegnene mojibake (`ø`→`Ã¸`, `æ`→`Ã¦`, `å`→`Ã¥`) — UTF-8-bytes tolket som Latin-1 et sted i
+generér→last ned→importér-kjeden. Plattformen kan ikke trygt reversere garble som først har «bakt
+seg inn» som ekte codepoints, så fiksen hører hjemme **ved kilden** (skillen), ikke ved import.
+
+- **`export-validate.mjs`:** ny `asciiSafeStringify` (escaper alt ikke-ASCII som `\uXXXX`) brukes nå
+  når fallback-fila skrives, så den leverte fila er **ren ASCII** og immun mot enhver
+  nedlasting/editor/transfer-omkoding. Ny `findMojibake` + navngitt round-trip-sjekk
+  `encoding-integrity` som **nekter å levere** en fil som allerede inneholder dobbelt-kodet tekst
+  (base64-blober hoppes over). `describeChecks` navngir sjekken.
+- **Instruksjoner (det som når ChatGPT):** SKILL.md (regel 7), `package-schema.md` (Fallback),
+  `authoring-playbook.md` (§Fallback) og `export-validation.md` krever nå ASCII-safe `\uXXXX`-JSON,
+  med begrunnelse. SVG-figurtekst er upåvirket (bruker XML-entiteter som `&#248;`).
+- **Tester:** unit-dekning for `asciiSafeStringify` (ren-ASCII output, round-trip), `findMojibake`
+  (fanger garble, ren tekst passerer, hopper over base64, riktig path), og round-trip (leverer ren
+  norsk tekst ASCII-safe / nekter mojibaket kilde). Real-schema round-trip fortsatt grønn (`\uXXXX`
+  dekoder korrekt).
+- Kun skill-script + skill-doc + test. **Ingen server-endring, ingen deploy.** Fiksen når ChatGPT
+  ved å laste den nye zip-en (`a2-authoring-api-v1.6.26.zip`) inn i GPT-en/prosjektet. Skill ompakket.
+
 ## 1.6.25 - 2026-07-13
 
 fix(content): #754 — figurer med bindestrek-/understrek-sourceId brytes ved kurs-import

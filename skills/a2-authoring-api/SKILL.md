@@ -78,7 +78,12 @@ the three references above.
    applies to every `audit.publishedAt`. The fallback file must be generated complete → written →
    read back → parsed → schema-validated → delivered only on pass; the validated file **is** the
    delivered file. Name the checks in the report (JSON parsing / export-schema / import-schema /
-   content-integrity / API dry-run / actual import) — **never say "validated" generically**.
+   content-integrity / encoding-integrity / API dry-run / actual import) — **never say "validated"
+   generically**. **Write the JSON ASCII-safe:** escape every non-ASCII character as `\uXXXX` so the
+   file is pure ASCII and `æ/ø/å` survive download/editor/transfer intact (raw UTF-8 re-encoded as
+   Latin-1 becomes `Ã¦/Ã¸/Ã¥` — unreadable in the course). `buildFallbackEnvelope` +
+   `roundTripFallbackExport` do this and fail delivery on any mojibake; if you hand-write the file,
+   emit `\uXXXX` escapes yourself.
    (export-validation.md; `export-validate.mjs`.)
 8. **Localize to all three languages before production.** Fix one primary language for the
    dialogue (principle 5), then after the primary is approved produce **real translations** for

@@ -12,6 +12,8 @@ import {
   roundTripFallbackExport,
   claimsImportValidated,
   describeChecks,
+  asciiSafeStringify,
+  findMojibake,
   // @ts-expect-error — .mjs skill script consumed as a library
 } from "../../skills/a2-authoring-api/scripts/export-validate.mjs";
 
@@ -165,6 +167,54 @@ describe("#762 round-trip fallback export", () => {
     });
     expect(report.delivered).toBe(false);
     expect(report.checks.contentIntegrity.status).toBe("fail");
+  });
+});
+
+describe("#754 encoding integrity (mojibake guard)", () => {
+  // Build non-ASCII from char codes so THIS test file stays ASCII and its own bytes can't drift.
+  const oe = String.fromCharCode(0xf8); // ø
+  const ae = String.fromCharCode(0xe6); // æ
+  const aa = String.fromCharCode(0xe5); // å
+  const garbledOe = String.fromCharCode(0xc3, 0xb8); // ø as UTF-8 bytes read as Latin-1: Ã¸
+
+  it("asciiSafeStringify escapes every non-ASCII char (delivered file is pure ASCII)", () => {
+    const out = asciiSafeStringify({ t: `Forel${oe}pig l${ae}ringsm${aa}l` });
+    expect(out).toContain("\\u00f8");
+    expect(out).toContain("\\u00e6");
+    expect(out).toContain("\\u00e5");
+    // No raw byte above 0x7f survives.
+    expect([...out].every((c) => c.charCodeAt(0) < 128)).toBe(true);
+    // Round-trips back to the original text.
+    expect(JSON.parse(out).t).toBe(`Forel${oe}pig l${ae}ringsm${aa}l`);
+  });
+
+  it("findMojibake flags double-encoded text, passes clean text, skips base64 blobs", () => {
+    expect(findMojibake({ t: `Forel${garbledOe}pig` })).toHaveLength(1);
+    expect(findMojibake({ t: `Forel${oe}pig` })).toHaveLength(0);
+    expect(findMojibake({ contentBase64: `AAAA${garbledOe}` })).toHaveLength(0);
+    expect(findMojibake({ s: { deep: [`ok`, `bad${garbledOe}`] } })[0].path).toBe("s.deep[1]");
+  });
+
+  it("round-trip delivers clean Norwegian text as ASCII-safe and passes encoding-integrity", async () => {
+    const fs = memoryFs();
+    const envelope = buildFallbackEnvelope(pkg, { exportedAt: "2026-07-10T21:05:15.364Z" });
+    envelope.course.course.description = { nb: `Forel${oe}pig importtest med l${ae}ringsseksjon` };
+    const report = await roundTripFallbackExport(envelope, { filePath: "kurs.json", ...fs });
+    expect(report.delivered).toBe(true);
+    expect(report.checks.encodingIntegrity.status).toBe("pass");
+    // The written file carries no raw non-ASCII bytes — encoding-proof by construction.
+    expect([...(fs.files.get("kurs.json") ?? "")].every((c) => c.charCodeAt(0) < 128)).toBe(true);
+    expect(fs.files.get("kurs.json")).toContain("\\u00f8");
+  });
+
+  it("round-trip does NOT deliver when the source text is already mojibaked", async () => {
+    const fs = memoryFs();
+    const envelope = buildFallbackEnvelope(pkg, { exportedAt: "2026-07-10T21:05:15.364Z" });
+    envelope.course.course.description = { nb: `Forel${garbledOe}pig` };
+    const report = await roundTripFallbackExport(envelope, { filePath: "kurs.json", ...fs });
+    expect(report.delivered).toBe(false);
+    expect(report.checks.encodingIntegrity.status).toBe("fail");
+    expect(report.checks.encodingIntegrity.offenders[0].path).toContain("description");
   });
 });
 
