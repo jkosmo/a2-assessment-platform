@@ -22,8 +22,13 @@ figurer gjennom — agent-flyten via referanse-CLI-en gjorde det ikke.
   kjører en figur-pakke gjennom `importPackage` og verifiserer at `SectionAsset`-raden opprettes,
   blobben er lesbar + sanitert, markdown-referansen remappes fra kilde-token til ny id, `assetMap`
   bobler opp, og seksjonen forblir utkast. Regresjonsvakt for nettopp dette hullet.
+- **Doc-gjeld i `package-schema.md` lukket samtidig:** seksjonseksempelet sa «markdown only, no
+  assets», og figur-transport-avsnittet påsto at skillen «does not yet design figures (Layer B, a
+  later phase)» — begge motsagt av kanonisk SKILL.md + figure-design.md (Layer B er levert).
+  Referansen dokumenterer nå authoring-pakkens valgfrie `assets[]` (klient-valgt `sourceId`,
+  ref/remap, `assetMap`-ekko, validate-kodene) og at figurer designes i strukturporten.
 - Ingen server-/schema-endring (endepunktet støttet allerede `assets[]`). Ingen Prisma-migrasjon.
-  Ingen deploy — skill-script + test. Skill ompakkes til v1.6.24.
+  Ingen deploy — skill-script + doc + test. Skill ompakkes til v1.6.24.
 
 ## 1.6.23 - 2026-07-11
 
