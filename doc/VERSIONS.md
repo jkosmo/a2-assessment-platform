@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.25 - 2026-07-13
+
+fix(content): #754 — figurer med bindestrek-/understrek-sourceId brytes ved kurs-import
+
+Bruker-rapportert: et ChatGPT-produsert kurs (skill v1.6.24) med to SVG-figurer importerte
+tilsynelatende OK, men figurene vistes ikke. Rotårsak er en **grammatikk-mismatch** på asset-ref:
+`sourceId`/ref-grammatikken er `[a-zA-Z0-9_-]{1,64}` (authoring-schema + `figure-design.md`), og
+agenter lager lovlige id-er med bindestrek (`fig-styringslogikker`). To flater brukte en for smal
+regex `[a-zA-Z0-9]+`:
+
+- `contentImportService.ts` (kurs-import-remap) matchet bare `asset:fig`, fant ingen mapping og lot
+  referansen peke på kilde-tokenet → dinglende ref.
+- `sectionContent.ts` (render-omskriving) samme; `asset:fig-…` ble ikke omskrevet til
+  `/api/content-assets/…`, og DOMPurify strippet den ukjente `asset:`-scheme → `<img>` uten `src`
+  (blank figur). De to andre flatene (validate `ASSET_REF_RE`, `/sections`-remap) var allerede brede
+  — derfor virket agent-`/sections`-stien, mens **fallback-fil-importen** feilet.
+
+- **Fix:** begge smale regexene utvidet til den kanoniske `[a-zA-Z0-9_-]+`.
+- **Tester:** integrasjon `(f)` i `m2-content-export-import-assets` — kurs-import med
+  bindestrek/understrek-`sourceId` verifiserer remap + at rendret HTML resolver hver figur (ingen
+  `asset:`-ref igjen); unit-case i `section-content-markdown` for id med `-`/`_`. Begge feilet før
+  fiksen, grønne etter.
+- **Merk:** allerede-importerte kurs må **re-importeres** etter deploy (lagret markdown ble ikke
+  remappet ved den opprinnelige importen). Ingen Prisma-migrasjon. Krever deploy (server-kode).
+
 ## 1.6.24 - 2026-07-13
 
 fix(skill): #749 (Layer B) — CLI-orkestratoren videresender seksjonsfigurer

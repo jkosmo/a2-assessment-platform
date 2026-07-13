@@ -17,6 +17,7 @@ import { prisma } from "../src/db/prisma.js";
 import { createSectionAsset, MAX_ASSET_BYTES } from "../src/modules/course/assetCommands.js";
 import { updateSectionContent } from "../src/modules/course/sectionCommands.js";
 import { putAsset, getAsset } from "../src/modules/course/assetStorage.js";
+import { renderSectionMarkdown } from "../src/modules/course/sectionContent.js";
 
 const adminHeaders = {
   "x-user-id": "admin-1",
@@ -267,6 +268,61 @@ describe("#749 section-asset export/import round-trip", () => {
     expect(exportRes.status).toBe(400);
     expect(exportRes.body.error).toBe("validation_error");
     expect(String(exportRes.body.message)).toMatch(/cap/i);
+  });
+
+  it("(f) #754 remaps refs whose sourceId contains hyphens/underscores (agent fallback files)", async () => {
+    // An agent (e.g. ChatGPT via the skill) invents sourceIds like `fig-styringslogikker`
+    // ([a-zA-Z0-9_-]{1,64}). The import-time remap must rewrite the WHOLE ref, not stop at the
+    // first hyphen — otherwise the ref keeps pointing at the source token and the figure breaks.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>Styringslogikker</text></svg>';
+    const envelope = {
+      exportFormat: "a2-content-export/v1",
+      exportedAt: new Date().toISOString(),
+      scope: "course",
+      course: {
+        course: {
+          title: { "en-GB": `Hyphen ${Date.now()}`, nb: "Bindestrek", nn: "Bindestrek" },
+          certificationLevel: null,
+          audit: {},
+          items: [
+            {
+              type: "SECTION",
+              sortOrder: 0,
+              section: {
+                title: { nb: "Figur-seksjon" },
+                bodyMarkdown: { nb: "# Styring\n\n![Tre logikker](asset:fig-styringslogikker)\n\n![Flyt](asset:fig_nytte-2)" },
+                audit: {},
+                assets: [
+                  { sourceId: "fig-styringslogikker", filename: "a.svg", mimeType: "image/svg+xml", sizeBytes: svg.length, contentBase64: Buffer.from(svg, "utf8").toString("base64") },
+                  { sourceId: "fig_nytte-2", filename: "b.svg", mimeType: "image/svg+xml", sizeBytes: svg.length, contentBase64: Buffer.from(svg, "utf8").toString("base64") },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const importRes = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(adminHeaders)
+      .send({ payload: envelope, mode: "createNew" });
+    expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
+
+    const newSectionId = await newSectionIdOf(importRes.body.courseId);
+    const rows = await prisma.sectionAsset.findMany({ where: { sectionId: newSectionId }, orderBy: { createdAt: "asc" } });
+    expect(rows).toHaveLength(2);
+
+    const section = await prisma.courseSection.findUnique({ where: { id: newSectionId }, include: { activeVersion: true } });
+    const body = section?.activeVersion?.bodyMarkdown ?? "";
+    // Every ref remapped to a real new asset id; no source token survives.
+    for (const row of rows) expect(body).toContain(`asset:${row.id}`);
+    expect(body).not.toContain("asset:fig-styringslogikker");
+    expect(body).not.toContain("asset:fig_nytte-2");
+    // The rendered HTML resolves each figure to the serve endpoint (no dangling asset: ref).
+    const html = renderSectionMarkdown(JSON.parse(body).nb);
+    expect(html).not.toContain('src="asset:');
+    for (const row of rows) expect(html).toContain(`/api/content-assets/${row.id}`);
   });
 
   it("(e) imports an old asset-less v1 file unchanged (no SectionAsset rows)", async () => {

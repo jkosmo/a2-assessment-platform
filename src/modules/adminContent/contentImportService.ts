@@ -54,10 +54,12 @@ export const COURSE_IMPORT_BODY_LIMIT_BYTES = 35 * 1024 * 1024; // 35 MB
 // to `asset:<newAssetId>` using the source→new id map produced when the section's assets are
 // re-created. Refs with no mapping are left untouched (defensive — an author-mistyped ref should
 // not be silently mangled). The markdown is the JSON-serialised localized string, so the replace
-// runs across every locale value at once. Mirrors the `asset:` ref grammar in sectionContent.ts.
+// runs across every locale value at once. Grammar is the canonical `[a-zA-Z0-9_-]` asset-ref set
+// (#754): agent fallback files carry invented sourceIds like `fig-styringslogikker` — a narrower
+// class would match only up to the first hyphen and leave the ref dangling.
 function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, string>): string {
   if (idMap.size === 0) return serializedMarkdown;
-  return serializedMarkdown.replace(/asset:([a-zA-Z0-9]+)/g, (whole, sourceId: string) => {
+  return serializedMarkdown.replace(/asset:([a-zA-Z0-9_-]+)/g, (whole, sourceId: string) => {
     const mapped = idMap.get(sourceId);
     return mapped ? `asset:${mapped}` : whole;
   });
