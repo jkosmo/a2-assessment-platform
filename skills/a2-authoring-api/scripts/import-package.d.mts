@@ -5,6 +5,9 @@ export interface AuthoringCreatedObject {
   type: "section" | "module" | "course";
   id: string;
   links: Record<string, string>;
+  // #763 (Layer B): present on sections created with inline figures/images — maps each
+  // authoring `sourceId` to the new SectionAsset id the endpoint minted.
+  assetMap?: Record<string, string>;
 }
 
 export interface AuthoringValidationReport {

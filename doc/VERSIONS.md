@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.24 - 2026-07-13
+
+fix(skill): #749 (Layer B) — CLI-orkestratoren videresender seksjonsfigurer
+
+Tetter et hull mellom endepunktet og referanse-orkestratoren funnet under test-forberedelse:
+`POST /api/admin/content/sections` tok imot `assets[]` (v1.6.23), men skill-skriptet
+`import-package.mjs` sitt `create_section`-steg sendte bare `title/bodyMarkdown/draft/clientRef/
+agentRunId` — **ikke** `assets`. En full CLI-import av en pakke med figurer validerte grønt og
+rapporterte «ok», men opprettet seksjonen **uten** figuren: markdownen beholdt en dinglende
+`asset:<sourceId>`-referanse uten blob. Bare selve endepunktet (og kurs-eksport/import, Lag A) bar
+figurer gjennom — agent-flyten via referanse-CLI-en gjorde det ikke.
+
+- **Fix:** `create_section` videresender nå `object.payload.assets` når den finnes (utelates for
+  ren-tekst-seksjoner), og eksponerer endepunktets `sourceId→assetId`-`assetMap` på den opprettede
+  seksjonen. Serveren gjør resten (opprett `SectionAsset`, saniter SVG, remap `asset:<sourceId>`→ny
+  id i lagret markdown). `import-package.d.mts` fikk `assetMap?` på `AuthoringCreatedObject`.
+- **Test (CLI-dekning):** ny ende-til-ende-case i `test/agent-authoring-skill-import.test.ts` som
+  kjører en figur-pakke gjennom `importPackage` og verifiserer at `SectionAsset`-raden opprettes,
+  blobben er lesbar + sanitert, markdown-referansen remappes fra kilde-token til ny id, `assetMap`
+  bobler opp, og seksjonen forblir utkast. Regresjonsvakt for nettopp dette hullet.
+- **Doc-gjeld i `package-schema.md` lukket samtidig:** seksjonseksempelet sa «markdown only, no
+  assets», og figur-transport-avsnittet påsto at skillen «does not yet design figures (Layer B, a
+  later phase)» — begge motsagt av kanonisk SKILL.md + figure-design.md (Layer B er levert).
+  Referansen dokumenterer nå authoring-pakkens valgfrie `assets[]` (klient-valgt `sourceId`,
+  ref/remap, `assetMap`-ekko, validate-kodene) og at figurer designes i strukturporten.
+- Ingen server-/schema-endring (endepunktet støttet allerede `assets[]`). Ingen Prisma-migrasjon.
+  Ingen deploy — skill-script + doc + test. Skill ompakkes til v1.6.24.
+
 ## 1.6.23 - 2026-07-11
 
 feat(figures): #749 Lag B — skill-assistert figur-design + assets i agent-flyten

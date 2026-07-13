@@ -38,10 +38,55 @@ accept a partial object (e.g. only `nb`).
   "type": "section",
   "payload": {
     "title": "Introduksjon til GDPR",
-    "bodyMarkdown": "## Hva er GDPR\n…markdown only, no assets…"
+    "bodyMarkdown": "## Hva er GDPR\n\nGDPR regulerer …"
   }
 }
 ```
+
+A text-only section needs just `title` + `bodyMarkdown`. To include a figure, add an optional
+`assets[]` and reference each figure from the markdown as `![alt](asset:<sourceId>)` — see below.
+
+### Section figures — optional `assets[]` (#763, Layer B)
+
+The skill **designs** figures as part of authoring — propose one simple figure per visual point in
+the structure gate, draw it as SVG alongside the text (see [figure-design.md](figure-design.md)) —
+and carries them inline on the section payload:
+
+```json
+{
+  "clientRef": "prosess",
+  "type": "section",
+  "payload": {
+    "title": "Saksgangen",
+    "bodyMarkdown": "## Saksgang\n\n![Saksflyt](asset:fig-flow)",
+    "assets": [
+      {
+        "sourceId": "fig-flow",
+        "filename": "saksflyt.svg",
+        "mimeType": "image/svg+xml",
+        "sizeBytes": 1234,
+        "contentBase64": "PHN2Zy…",
+        "sourceLocale": "nb",
+        "localizedVariants": [ { "locale": "en-GB", "contentBase64": "PHN2Zy…" } ]
+      }
+    ]
+  }
+}
+```
+
+- **`sourceId` is a client-chosen token** (`[a-zA-Z0-9_-]{1,64}`) you invent — NOT a DB id. The
+  markdown references it as `asset:<sourceId>`; leave the ref pointing at your `sourceId`, never
+  pre-remap it.
+- On `create_section`, A2 imports each asset (re-sanitises SVG, mime/size guards), remaps every
+  `asset:<sourceId>` in the stored markdown to the new `SectionAsset` id, and **echoes the
+  `sourceId → assetId` map** back so you can track your refs. Same ref/remap + mime/limit contract as
+  the export `assets[]` (below): allowed mimes `image/svg+xml`, `image/png`, `image/jpeg`,
+  `image/gif`, `image/webp`; 5 MB per asset. Omit `assets` entirely for a text-only section.
+- The validate report checks figure consistency per section: `missing_asset`, `unreferenced_asset`
+  (warning), `unsupported_asset_mime`, `asset_too_large`, `asset_svg_unsanitizable`,
+  `duplicate_asset_source_id`.
+- **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale), added
+  after the primary language is approved; omit for raster or untranslated figures.
 
 ## `type: "module"`
 
@@ -200,8 +245,11 @@ this, `asset:<id>` markdown refs would break on the destination). Each entry:
 - **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale); omit
   for raster or untranslated figures. `assets` is fully optional — omit it entirely for a
   markdown-only section (old asset-less files import unchanged).
-- **Phase 1 (Layer A) is transport only.** The skill does not yet *design* figures (that is Layer B,
-  a later phase) — this documents how figures already present on a section travel through the file.
+- **Figures are designed by the skill (Layer B, shipped).** The skill proposes figures in the
+  structure gate and draws them as SVG alongside the text ([figure-design.md](figure-design.md)); an
+  authoring package carries them on the section payload (see "Section figures" above). This export
+  `assets[]` is the *transport* half — how figures on a section travel through the fallback file —
+  using the same ref/remap contract.
 - `exportFormat` / `exportedAt` / `scope: "course"` on the envelope. **`exportedAt` (and any
   `audit.publishedAt`) MUST be `Date.toISOString()` shape (`YYYY-MM-DDTHH:mm:ss.sssZ`)** — Zod
   `.datetime()` rejects timezone offsets and microseconds. Build this envelope with
