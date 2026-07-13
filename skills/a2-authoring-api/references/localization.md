@@ -6,6 +6,14 @@ language for the whole dialogue (core principle 5 — never mix languages while 
 once the primary version is approved, produce **real translations** for all three before
 production — never the same bokmål text copied into every locale field.
 
+**The delivered course must be complete in all three languages — including sections.** The platform
+*can* translate a missing locale on demand, but it does so with a central LLM call that costs tokens
+every time. Translating once, here at production, avoids that recurring central cost entirely — so
+completeness is **mandatory, not "nice to have."** Note the schema asymmetry that makes this easy to
+get wrong: `section.title`/`bodyMarkdown` accept a *partial* object (only `nb` validates at import),
+so a single-language section will **not** be rejected by the platform — the skill must self-enforce
+completeness via `checkLocalization` before delivering.
+
 Deterministic helper: [scripts/localization-check.mjs](../scripts/localization-check.mjs)
 (`checkLocalization`). Unit-tested in `test/unit/agent-authoring-localization.test.ts`.
 

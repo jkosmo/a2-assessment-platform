@@ -25,10 +25,20 @@ Design rationale: `doc/design/AGENT_AUTHORING_647.md` §2.
 
 ## Localized text
 
-Every `title`/text field accepts either a **plain string** (recommended — applies to all
-locales) or a locale object. Module/course titles use the strict object form
-(`{"en-GB": "…", "nb": "…", "nn": "…"}` — all three required); section `title`/`bodyMarkdown`
-accept a partial object (e.g. only `nb`).
+Every `title`/text field accepts either a **plain string** or a locale object. Module/course titles
+use the strict object form (`{"en-GB": "…", "nb": "…", "nn": "…"}` — all three required); section
+`title`/`bodyMarkdown` accept a *partial* object (e.g. only `nb`).
+
+> **⚠️ Deliver ALL THREE languages (`nb`, `nn`, `en-GB`) for every localized field — sections
+> included.** The partial-object allowance on `section.title`/`bodyMarkdown` exists for incremental
+> edits in the admin UI; it is **NOT** a licence for an agent to ship a single-language course. A
+> course produced by this skill must be complete in nb, nn **and** en-GB at generation time, with
+> **real translations** — never the primary text copied into every locale, and never one locale left
+> out. **Why it is mandatory, not "ideal":** anything left in one language must be translated later
+> by a human via the platform's on-demand LLM localizer — **central token cost we avoid entirely by
+> translating once, here, at production.** `checkLocalization` blocks a missing locale and flags a
+> blind-copy (see [localization.md](localization.md)). Use a plain string ONLY for a genuinely
+> locale-independent value (a proper noun, a number) — never as a shortcut past translating prose.
 
 ## `type: "section"`
 
@@ -37,14 +47,20 @@ accept a partial object (e.g. only `nb`).
   "clientRef": "intro",
   "type": "section",
   "payload": {
-    "title": "Introduksjon til GDPR",
-    "bodyMarkdown": "## Hva er GDPR\n\nGDPR regulerer …"
+    "title": { "nb": "Introduksjon til GDPR", "nn": "Introduksjon til GDPR", "en-GB": "Introduction to GDPR" },
+    "bodyMarkdown": {
+      "nb": "## Hva er GDPR\n\nGDPR regulerer behandling av personopplysninger …",
+      "nn": "## Kva er GDPR\n\nGDPR regulerer behandling av personopplysningar …",
+      "en-GB": "## What is the GDPR\n\nThe GDPR governs the processing of personal data …"
+    }
   }
 }
 ```
 
-A text-only section needs just `title` + `bodyMarkdown`. To include a figure, add an optional
-`assets[]` and reference each figure from the markdown as `![alt](asset:<sourceId>)` — see below.
+A section needs `title` + `bodyMarkdown`, **each carrying all three locales** (`nb`, `nn`, `en-GB`)
+with real translations — see the mandatory-completeness note above. To include a figure, add an
+optional `assets[]` and reference each figure from the markdown as `![alt](asset:<sourceId>)` —
+below.
 
 ### Section figures — optional `assets[]` (#763, Layer B)
 
@@ -57,8 +73,12 @@ and carries them inline on the section payload:
   "clientRef": "prosess",
   "type": "section",
   "payload": {
-    "title": "Saksgangen",
-    "bodyMarkdown": "## Saksgang\n\n![Saksflyt](asset:fig-flow)",
+    "title": { "nb": "Saksgangen", "nn": "Sakshandsaminga", "en-GB": "The case workflow" },
+    "bodyMarkdown": {
+      "nb": "## Saksgang\n\n![Saksflyt](asset:fig-flow)",
+      "nn": "## Sakshandsaming\n\n![Saksflyt](asset:fig-flow)",
+      "en-GB": "## Case workflow\n\n![Case flow](asset:fig-flow)"
+    },
     "assets": [
       {
         "sourceId": "fig-flow",
@@ -67,7 +87,10 @@ and carries them inline on the section payload:
         "sizeBytes": 1234,
         "contentBase64": "PHN2Zy…",
         "sourceLocale": "nb",
-        "localizedVariants": [ { "locale": "en-GB", "contentBase64": "PHN2Zy…" } ]
+        "localizedVariants": [
+          { "locale": "nn", "contentBase64": "PHN2Zy…" },
+          { "locale": "en-GB", "contentBase64": "PHN2Zy…" }
+        ]
       }
     ]
   }

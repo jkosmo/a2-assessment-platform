@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.27 - 2026-07-13
+
+docs(skill): #756 — håndhev komplett tre-språklig innhold (nb/nn/en-GB) ved produksjon
+
+Oppfølging fra samme import-test: et ChatGPT-produsert kurs fikk seksjons-`title`/`bodyMarkdown`
+kun på bokmål. Årsak: `section.title`/`bodyMarkdown` bruker `localizedTextPatchSchema` (delvis
+objekt tillatt), så en ren-bokmål seksjon avvises ikke ved import — i motsetning til kurs/modul-
+titler som krever alle tre. Manglende språk må da oversettes sentralt via plattformens on-demand
+LLM-lokalisering (token-kostnad); oversettes det én gang ved produksjon, unngås dette.
+
+`checkLocalization` (`localization-check.mjs`) fanger allerede manglende locale på seksjoner
+deterministisk — men den kan ikke kjøre i en ChatGPT-økt, så kravet må bæres av instruksjonene.
+Innstramming (skill-doc, ingen kodeendring):
+
+- **SKILL.md regel 8:** eksplisitt at levert fil MÅ være komplett i nb/nn/en-GB, **seksjoner
+  inkludert**; partial-skjemaet er ikke en snarvei (ren-bokmål seksjon = ufullstendig levering, ikke
+  gyldig kurs); token-begrunnelsen «oversett én gang her, unngå sentral kostnad».
+- **package-schema.md:** ny «⚠️ deliver all three»-note under «Localized text» med token-rasjonalet,
+  og seksjons- + figur-**eksemplene gjort tre-språklige** (de modellerte nb-only og var dermed feil
+  mal). Figur-eksempelet viser nå `localizedVariants` for både nn og en-GB.
+- **localization.md:** token-rasjonalet + skjema-asymmetrien (hvorfor ren-bokmål seksjon slipper
+  gjennom import) forklart eksplisitt.
+
+Kun skill-doc + versjon. Ingen kodeendring, ingen server-endring, ingen deploy — når ChatGPT via ny
+zip (`a2-authoring-api-v1.6.27.zip`). Skill ompakket.
+
 ## 1.6.26 - 2026-07-13
 
 fix(skill): #754 — ASCII-safe fallback-JSON + mojibake-guard i forfatter-flyten
