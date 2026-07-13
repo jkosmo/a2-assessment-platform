@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import { readFile } from "node:fs/promises";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { getAsset } from "../src/modules/course/assetStorage.js";
 import {
   importPackage,
   validatePackage,
@@ -115,6 +116,63 @@ describe("#652 a2-authoring-api skill happy path (fixture package → drafts via
       byRef.get("modul-avvik"),
       byRef.get("oppsummering"),
     ]);
+  });
+
+  it("#763 (Layer B): carries a section's inline figure through the CLI orchestrator", async () => {
+    // Regression guard: the reference orchestrator (import-package.mjs) must forward a section's
+    // `assets[]` on create_section. Before this, the endpoint accepted figures but the orchestrator
+    // dropped them — the section was created with a dangling `asset:<sourceId>` ref and no blob.
+    const suffix = `skill-figur-${Date.now()}`;
+    const pkg = await loadFixture(suffix);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" role="img"><text x="10" y="30" font-size="14">Motta</text></svg>';
+    const intro = pkg.objects.find((object: { clientRef: string }) => object.clientRef === "intro");
+    intro.payload.bodyMarkdown += "\n\n![Saksflyt](asset:fig-flow)";
+    intro.payload.assets = [
+      {
+        sourceId: "fig-flow",
+        filename: "saksflyt.svg",
+        mimeType: "image/svg+xml",
+        sizeBytes: svg.length,
+        contentBase64: Buffer.from(svg, "utf8").toString("base64"),
+        sourceLocale: "nb",
+      },
+    ];
+
+    const result = await importPackage({ baseUrl, headers, pkg });
+
+    expect(result.error).toBeNull();
+    expect(result.ok).toBe(true);
+
+    // The orchestrator surfaces the endpoint's sourceId→assetId map on the created section.
+    const introEntry = result.created.find((entry) => entry.clientRef === "intro");
+    expect(introEntry).toBeDefined();
+    const assetMap = introEntry!.assetMap;
+    expect(assetMap).toBeDefined();
+    const newAssetId = assetMap!["fig-flow"];
+    expect(newAssetId).toBeTruthy();
+    expect(newAssetId).not.toBe("fig-flow");
+
+    // A SectionAsset row exists and its sanitised SVG blob is readable.
+    const rows = await prisma.sectionAsset.findMany({ where: { sectionId: introEntry!.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(newAssetId);
+    expect((await getAsset(rows[0].blobPath)).toString("utf8")).toContain("Motta");
+
+    // The stored (draft) markdown ref was remapped from the source token to the new asset id.
+    const version = await prisma.courseSectionVersion.findFirst({
+      where: { sectionId: introEntry!.id },
+      orderBy: { versionNo: "desc" },
+      select: { bodyMarkdown: true },
+    });
+    expect(version?.bodyMarkdown ?? "").toContain(`asset:${newAssetId}`);
+    expect(version?.bodyMarkdown ?? "").not.toContain("asset:fig-flow");
+
+    // The section is still a draft (the remap re-save never auto-published it).
+    const section = await prisma.courseSection.findUniqueOrThrow({
+      where: { id: introEntry!.id },
+      select: { activeVersionId: true },
+    });
+    expect(section.activeVersionId).toBeNull();
   });
 
   it("stops before any write when the package is invalid", async () => {

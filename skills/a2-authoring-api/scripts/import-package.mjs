@@ -87,16 +87,27 @@ export async function importPackage({ baseUrl, headers, pkg, runId, fetchImpl = 
     let result;
 
     if (step.op === "create_section") {
+      // #763 (Layer B): forward the section's inline figures/images. The endpoint creates each
+      // SectionAsset, re-sanitises + remaps `asset:<sourceId>`→new asset id in the stored markdown,
+      // and echoes the sourceId→assetId map. Omit the field entirely for a text-only section.
+      const assets = object.payload.assets;
       result = await requestJson(fetchImpl, "POST", `${baseUrl}/api/admin/content/sections`, headers, {
         title: object.payload.title,
         bodyMarkdown: object.payload.bodyMarkdown,
         draft: true,
         clientRef: step.clientRef,
         agentRunId,
+        ...(assets && assets.length > 0 ? { assets } : {}),
       });
       if (result.ok) {
         idsByRef.set(step.clientRef, result.json.section.id);
-        created.push({ clientRef: step.clientRef, type: "section", id: result.json.section.id, links: result.json.links });
+        created.push({
+          clientRef: step.clientRef,
+          type: "section",
+          id: result.json.section.id,
+          links: result.json.links,
+          ...(result.json.assetMap ? { assetMap: result.json.assetMap } : {}),
+        });
       }
     } else if (step.op === "create_module") {
       result = await requestJson(fetchImpl, "POST", `${baseUrl}/api/admin/content/modules/import`, headers, {
