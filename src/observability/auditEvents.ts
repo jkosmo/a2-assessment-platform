@@ -81,6 +81,8 @@ export const auditActions = {
     unpublished: "course_unpublished",
     archived: "course_archived",
     restored: "course_restored",
+    // #705: plain single-course delete (distinct from archive and from cascadeDeleted).
+    deleted: "course_deleted",
     // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
     cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
@@ -302,6 +304,7 @@ export type AuditMetadataByAction = {
   [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
   [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.deleted]: EventMetadata<{ courseId: string }>;
   [auditActions.course.cascadeDeleted]: EventMetadata<{
     courseId: string;
     deletedModuleIds: string[];
