@@ -1,6 +1,7 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
+import { lifecycleStatusBadge } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -320,8 +321,8 @@ function courseStatus(course) {
 }
 
 function courseStatusBadge(status) {
-  const label = status === "published" ? "Publisert" : status === "archived" ? "Arkivert" : "Utkast";
-  return `<span class="status-badge status-badge--${status}">${label}</span>`;
+  // #705: shared 3-state badge + i18n (was hardcoded Norwegian — en-GB/nn users saw «Publisert»).
+  return lifecycleStatusBadge(status, t);
 }
 
 // #705-UX(A): filtrer kurslista likt modul-biblioteket. Bruker `course` slik den kommer fra API.
