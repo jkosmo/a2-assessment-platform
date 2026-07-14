@@ -41,6 +41,50 @@ export function isStrictDatetime(value) {
   return typeof value === "string" && STRICT_DATETIME_RE.test(value);
 }
 
+// #754: emit ASCII-safe JSON — every non-ASCII char as a `\uXXXX` escape — so the DELIVERED file is
+// pure ASCII and survives any download/editor/transfer that would otherwise re-encode UTF-8. That
+// re-encoding is what turns æ/ø/å into Ã¦/Ã¸/Ã¥ (UTF-8 bytes read as Latin-1). A `\uXXXX` escape is
+// decoded to the correct codepoint by every JSON parser regardless of the file's byte encoding, so
+// the class of bug cannot occur. (SVG asset text already uses XML numeric entities; this covers the
+// title/markdown/description prose.)
+export function asciiSafeStringify(value, space = 2) {
+  return JSON.stringify(value, null, space).replace(
+    /[-￿]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
+// #754: the UTF-8-decoded-as-Latin-1 double-encoding signature — a leading byte Ã (U+00C3) or
+// Â (U+00C2) followed by a continuation byte (U+0080–U+00BF). Norwegian/European prose virtually
+// never contains this legitimately, so it is a high-precision "this text is already mis-encoded"
+// signal. Detection only — a mojibaked source cannot be safely reversed, so the fix is to reject it
+// (and to write ASCII-safe going forward), never to guess the original bytes.
+const MOJIBAKE_RE = /[ÂÃ][-¿]/;
+
+// Walk every string value in an envelope; return [{ path, sample }] for values that look
+// double-encoded. `contentBase64` blobs are skipped — they are not human text.
+export function findMojibake(value, path = "") {
+  const offenders = [];
+  const walk = (v, p) => {
+    if (typeof v === "string") {
+      if (MOJIBAKE_RE.test(v)) offenders.push({ path: p, sample: v.slice(0, 40) });
+      return;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((item, i) => walk(item, `${p}[${i}]`));
+      return;
+    }
+    if (v && typeof v === "object") {
+      for (const [k, child] of Object.entries(v)) {
+        if (k === "contentBase64") continue;
+        walk(child, p ? `${p}.${k}` : k);
+      }
+    }
+  };
+  walk(value, path);
+  return offenders;
+}
+
 // Every datetime field at risk in an export envelope: the top-level exportedAt, and every
 // audit.publishedAt (course audit + each item's module/section audit). Returns [{ path, value }].
 export function collectDatetimeFields(envelope) {
@@ -290,6 +334,7 @@ export async function roundTripFallbackExport(
     exportSchemaValidation: { status: "not-run" },
     importSchemaValidation: { status: "not-run" },
     contentIntegrity: { status: "not-run" },
+    encodingIntegrity: { status: "not-run" },
     apiDryRun: { status: "unavailable", detail: "A2 has no import dry-run endpoint (course import writes)" },
     actualImport: { status: "skipped", detail: "human imports the delivered file via the admin UI; the skill never imports" },
   };
@@ -297,8 +342,9 @@ export async function roundTripFallbackExport(
   // Step 1: normalise dates on the complete, generated envelope before writing.
   const normalized = normalize ? normalizeEnvelopeDates(envelope) : envelope;
 
-  // Step 2: write.
-  await writeFileImpl(filePath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
+  // Step 2: write ASCII-safe (#754) — every non-ASCII char as `\uXXXX` so the delivered file is pure
+  // ASCII and immune to the UTF-8→Latin-1 re-encoding that produces æ/ø/å → Ã¦/Ã¸/Ã¥ mojibake.
+  await writeFileImpl(filePath, `${asciiSafeStringify(normalized, 2)}\n`, "utf8");
 
   // Step 3-4: read back and parse the FINISHED file (never the in-memory object).
   let parsed;
@@ -328,10 +374,17 @@ export async function roundTripFallbackExport(
       : { status: "pass" };
   }
 
+  // Step 5d: encoding integrity (#754) — the read-back file must carry no double-encoded (mojibake)
+  // text. A garbled source cannot be safely reversed, so it is NOT deliverable: the author must fix
+  // the source encoding (or regenerate) rather than ship unreadable Norwegian into the course.
+  const mojibake = findMojibake(parsed);
+  checks.encodingIntegrity = mojibake.length === 0 ? { status: "pass" } : { status: "fail", offenders: mojibake };
+
   const passed =
     checks.jsonParsing.status === "pass" &&
     checks.exportSchemaValidation.status === "pass" &&
     checks.importSchemaValidation.status === "pass" &&
+    checks.encodingIntegrity.status === "pass" &&
     checks.contentIntegrity.status !== "fail";
 
   return { delivered: passed, file: filePath, checks, envelope: parsed };
@@ -350,6 +403,7 @@ export function describeChecks(report) {
     exportSchemaValidation: "export-schema validation",
     importSchemaValidation: "import-schema validation",
     contentIntegrity: "content-integrity",
+    encodingIntegrity: "encoding-integrity",
     apiDryRun: "API dry-run",
     actualImport: "actual import",
   };

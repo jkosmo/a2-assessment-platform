@@ -105,4 +105,12 @@ describe("asset URL resolution (#483/F4)", () => {
     const html = renderSectionMarkdown("![x](https://a-2.no/f.png)");
     expect(html).toContain('src="https://a-2.no/f.png"');
   });
+
+  // #754: the asset-ref grammar allows `-` and `_` (authoring sourceId is [a-zA-Z0-9_-]{1,64}).
+  // The render rewrite must match the whole ref, not stop at the first hyphen.
+  it("rewrites asset ids containing hyphens and underscores", () => {
+    const html = renderSectionMarkdown("![Figur](asset:fig-styringslogikker_2)");
+    expect(html).toContain('src="/api/content-assets/fig-styringslogikker_2"');
+    expect(html).not.toContain("asset:fig-styringslogikker_2");
+  });
 });

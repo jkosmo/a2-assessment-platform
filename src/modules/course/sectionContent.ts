@@ -81,7 +81,11 @@ export function sanitizeSectionHtml(html: string): string {
 // the translated SVG variant for that language pane (raster/untranslated assets ignore it).
 function resolveAssetUrls(html: string, locale?: string): string {
   const suffix = locale ? `?locale=${encodeURIComponent(locale)}` : "";
-  return html.replace(/(<img\b[^>]*\bsrc=")asset:([a-zA-Z0-9]+)(")/gi, `$1/api/content-assets/$2${suffix}$3`);
+  // Canonical asset-ref grammar `[a-zA-Z0-9_-]` (#754). A narrower class stops at the first hyphen,
+  // leaving `asset:fig-x` unresolved — DOMPurify then strips the unknown `asset:` scheme and the
+  // <img> loses its src entirely (a blank figure). Real ids are cuids, but refs may carry an
+  // agent-invented sourceId if an upstream remap missed it, so match the full documented grammar.
+  return html.replace(/(<img\b[^>]*\bsrc=")asset:([a-zA-Z0-9_-]+)(")/gi, `$1/api/content-assets/$2${suffix}$3`);
 }
 
 /**

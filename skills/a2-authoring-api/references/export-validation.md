@@ -45,8 +45,11 @@ object and then hand over a differently-written one.
 
 `roundTripFallbackExport(envelope, { filePath, contentIntegrity? })` performs exactly this
 (dates normalised before the write) and returns `{ delivered, file, checks, envelope }`.
-`delivered` is `true` only when JSON parsing, export-schema validation and import-schema
-validation all pass and content-integrity did not fail.
+`delivered` is `true` only when JSON parsing, export-schema validation, import-schema validation
+and encoding-integrity all pass and content-integrity did not fail. The write is **ASCII-safe**
+(#754): every non-ASCII char is emitted as a `\uXXXX` escape so `æ/ø/å` survive any
+download/editor/transfer re-encoding, and `encoding-integrity` refuses to deliver a file that
+already contains double-encoded (`Ã¦/Ã¸/Ã¥`) text.
 
 ## The bundled validator, and why the repo test matters
 
@@ -72,6 +75,7 @@ The production report must distinguish these by name; `describeChecks(report)` p
 | **export-schema validation** | structure matches `a2-content-export/v1` |
 | **import-schema validation** | passes the same acceptance A2's import applies (incl. strict datetimes) |
 | **content-integrity** | loss audit vs the master (see content-preservation.md) |
+| **encoding-integrity** | the read-back file has no double-encoded (`Ã¦/Ã¸/Ã¥`) text; the delivered file is ASCII-safe (`\uXXXX`) (#754) |
 | **API dry-run** | **unavailable** — A2 has no import dry-run endpoint (course import writes) |
 | **actual import** | done by a human in the admin UI; the skill never imports |
 

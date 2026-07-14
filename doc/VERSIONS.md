@@ -2,6 +2,81 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.27 - 2026-07-13
+
+docs(skill): #756 — håndhev komplett tre-språklig innhold (nb/nn/en-GB) ved produksjon
+
+Oppfølging fra samme import-test: et ChatGPT-produsert kurs fikk seksjons-`title`/`bodyMarkdown`
+kun på bokmål. Årsak: `section.title`/`bodyMarkdown` bruker `localizedTextPatchSchema` (delvis
+objekt tillatt), så en ren-bokmål seksjon avvises ikke ved import — i motsetning til kurs/modul-
+titler som krever alle tre. Manglende språk må da oversettes sentralt via plattformens on-demand
+LLM-lokalisering (token-kostnad); oversettes det én gang ved produksjon, unngås dette.
+
+`checkLocalization` (`localization-check.mjs`) fanger allerede manglende locale på seksjoner
+deterministisk — men den kan ikke kjøre i en ChatGPT-økt, så kravet må bæres av instruksjonene.
+Innstramming (skill-doc, ingen kodeendring):
+
+- **SKILL.md regel 8:** eksplisitt at levert fil MÅ være komplett i nb/nn/en-GB, **seksjoner
+  inkludert**; partial-skjemaet er ikke en snarvei (ren-bokmål seksjon = ufullstendig levering, ikke
+  gyldig kurs); token-begrunnelsen «oversett én gang her, unngå sentral kostnad».
+- **package-schema.md:** ny «⚠️ deliver all three»-note under «Localized text» med token-rasjonalet,
+  og seksjons- + figur-**eksemplene gjort tre-språklige** (de modellerte nb-only og var dermed feil
+  mal). Figur-eksempelet viser nå `localizedVariants` for både nn og en-GB.
+- **localization.md:** token-rasjonalet + skjema-asymmetrien (hvorfor ren-bokmål seksjon slipper
+  gjennom import) forklart eksplisitt.
+
+Kun skill-doc + versjon. Ingen kodeendring, ingen server-endring, ingen deploy — når ChatGPT via ny
+zip (`a2-authoring-api-v1.6.27.zip`). Skill ompakket.
+
+## 1.6.26 - 2026-07-13
+
+fix(skill): #754 — ASCII-safe fallback-JSON + mojibake-guard i forfatter-flyten
+
+Andre halvdel av #754-verdikjeden. Ved feilsøking av det ChatGPT-produserte importkurset var de
+norske tegnene mojibake (`ø`→`Ã¸`, `æ`→`Ã¦`, `å`→`Ã¥`) — UTF-8-bytes tolket som Latin-1 et sted i
+generér→last ned→importér-kjeden. Plattformen kan ikke trygt reversere garble som først har «bakt
+seg inn» som ekte codepoints, så fiksen hører hjemme **ved kilden** (skillen), ikke ved import.
+
+- **`export-validate.mjs`:** ny `asciiSafeStringify` (escaper alt ikke-ASCII som `\uXXXX`) brukes nå
+  når fallback-fila skrives, så den leverte fila er **ren ASCII** og immun mot enhver
+  nedlasting/editor/transfer-omkoding. Ny `findMojibake` + navngitt round-trip-sjekk
+  `encoding-integrity` som **nekter å levere** en fil som allerede inneholder dobbelt-kodet tekst
+  (base64-blober hoppes over). `describeChecks` navngir sjekken.
+- **Instruksjoner (det som når ChatGPT):** SKILL.md (regel 7), `package-schema.md` (Fallback),
+  `authoring-playbook.md` (§Fallback) og `export-validation.md` krever nå ASCII-safe `\uXXXX`-JSON,
+  med begrunnelse. SVG-figurtekst er upåvirket (bruker XML-entiteter som `&#248;`).
+- **Tester:** unit-dekning for `asciiSafeStringify` (ren-ASCII output, round-trip), `findMojibake`
+  (fanger garble, ren tekst passerer, hopper over base64, riktig path), og round-trip (leverer ren
+  norsk tekst ASCII-safe / nekter mojibaket kilde). Real-schema round-trip fortsatt grønn (`\uXXXX`
+  dekoder korrekt).
+- Kun skill-script + skill-doc + test. **Ingen server-endring, ingen deploy.** Fiksen når ChatGPT
+  ved å laste den nye zip-en (`a2-authoring-api-v1.6.26.zip`) inn i GPT-en/prosjektet. Skill ompakket.
+
+## 1.6.25 - 2026-07-13
+
+fix(content): #754 — figurer med bindestrek-/understrek-sourceId brytes ved kurs-import
+
+Bruker-rapportert: et ChatGPT-produsert kurs (skill v1.6.24) med to SVG-figurer importerte
+tilsynelatende OK, men figurene vistes ikke. Rotårsak er en **grammatikk-mismatch** på asset-ref:
+`sourceId`/ref-grammatikken er `[a-zA-Z0-9_-]{1,64}` (authoring-schema + `figure-design.md`), og
+agenter lager lovlige id-er med bindestrek (`fig-styringslogikker`). To flater brukte en for smal
+regex `[a-zA-Z0-9]+`:
+
+- `contentImportService.ts` (kurs-import-remap) matchet bare `asset:fig`, fant ingen mapping og lot
+  referansen peke på kilde-tokenet → dinglende ref.
+- `sectionContent.ts` (render-omskriving) samme; `asset:fig-…` ble ikke omskrevet til
+  `/api/content-assets/…`, og DOMPurify strippet den ukjente `asset:`-scheme → `<img>` uten `src`
+  (blank figur). De to andre flatene (validate `ASSET_REF_RE`, `/sections`-remap) var allerede brede
+  — derfor virket agent-`/sections`-stien, mens **fallback-fil-importen** feilet.
+
+- **Fix:** begge smale regexene utvidet til den kanoniske `[a-zA-Z0-9_-]+`.
+- **Tester:** integrasjon `(f)` i `m2-content-export-import-assets` — kurs-import med
+  bindestrek/understrek-`sourceId` verifiserer remap + at rendret HTML resolver hver figur (ingen
+  `asset:`-ref igjen); unit-case i `section-content-markdown` for id med `-`/`_`. Begge feilet før
+  fiksen, grønne etter.
+- **Merk:** allerede-importerte kurs må **re-importeres** etter deploy (lagret markdown ble ikke
+  remappet ved den opprinnelige importen). Ingen Prisma-migrasjon. Krever deploy (server-kode).
+
 ## 1.6.24 - 2026-07-13
 
 fix(skill): #749 (Layer B) — CLI-orkestratoren videresender seksjonsfigurer

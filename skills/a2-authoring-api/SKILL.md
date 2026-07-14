@@ -78,17 +78,27 @@ the three references above.
    applies to every `audit.publishedAt`. The fallback file must be generated complete → written →
    read back → parsed → schema-validated → delivered only on pass; the validated file **is** the
    delivered file. Name the checks in the report (JSON parsing / export-schema / import-schema /
-   content-integrity / API dry-run / actual import) — **never say "validated" generically**.
+   content-integrity / encoding-integrity / API dry-run / actual import) — **never say "validated"
+   generically**. **Write the JSON ASCII-safe:** escape every non-ASCII character as `\uXXXX` so the
+   file is pure ASCII and `æ/ø/å` survive download/editor/transfer intact (raw UTF-8 re-encoded as
+   Latin-1 becomes `Ã¦/Ã¸/Ã¥` — unreadable in the course). `buildFallbackEnvelope` +
+   `roundTripFallbackExport` do this and fail delivery on any mojibake; if you hand-write the file,
+   emit `\uXXXX` escapes yourself.
    (export-validation.md; `export-validate.mjs`.)
-8. **Localize to all three languages before production.** Fix one primary language for the
-   dialogue (principle 5), then after the primary is approved produce **real translations** for
-   **nb, nn and en-GB** of every student-facing field the schema localizes — not the primary text
-   copied into every locale. Preserve meaning, difficulty, the correct answer, option count+order,
-   and all formulas/identifiers/URLs; verify MCQ correct answers map to the same option in every
-   locale. **This extends to figure `<text>`:** each text-bearing SVG figure gets localizedVariants
-   for the other two locales (translate the labels, geometry unchanged). Block production if a
-   mandatory localized field — or a figure variant — is missing. (localization.md;
-   `localization-check.mjs`.)
+8. **Localize to all three languages before production — the delivered file must be complete.** Fix
+   one primary language for the dialogue (principle 5), then after the primary is approved produce
+   **real translations** for **nb, nn and en-GB** of every student-facing field the schema localizes
+   — not the primary text copied into every locale. **This includes sections:** `section.title` and
+   `bodyMarkdown` accept a *partial* object in the schema (for incremental UI edits), but that is
+   **not** a shortcut — a section shipped in only `nb` is an **incomplete delivery**, not a valid
+   course. Preserve meaning, difficulty, the correct answer, option count+order, and all
+   formulas/identifiers/URLs; verify MCQ correct answers map to the same option in every locale.
+   **This extends to figure `<text>`:** each text-bearing SVG figure gets localizedVariants for the
+   other two locales (translate the labels, geometry unchanged). Block production if a mandatory
+   localized field — or a figure variant — is missing. **Why it's mandatory:** any field left in one
+   language must be translated later by a human through the platform's on-demand LLM localizer —
+   **central token cost avoided entirely by translating once, here.** Translate at production; never
+   defer it to the platform. (localization.md; `localization-check.mjs`.)
 
 9. **Design figures with the text (Layer B).** Where a section would otherwise be a wall of text,
    propose **one simple figure per discrete visual point** and draw it as **SVG** integrated with
