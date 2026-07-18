@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { getAsset } from "../src/modules/course/assetStorage.js";
 
 const adminHeaders = {
   "x-user-id": "admin-1",
@@ -156,5 +157,45 @@ describe("Section asset upload + serve", () => {
   it("returns 404 for an unknown asset id", async () => {
     const res = await request(app).get("/api/content-assets/does-not-exist").set(participantHeaders);
     expect(res.status).toBe(404);
+  });
+
+  // #758: deleting a section must reclaim its stored blobs (base + localized variants), not just the
+  // DB rows — otherwise the images accumulate in storage forever.
+  it("reclaims asset blobs from storage when the section is deleted", async () => {
+    const sectionId = await createSection();
+    await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", PNG_1PX, { filename: "pixel.png", contentType: "image/png" });
+    const svg = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><text x="2" y="12">Start</text></svg>`,
+      "utf8",
+    );
+    await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", svg, { filename: "d.svg", contentType: "image/svg+xml" });
+    // Localize the SVG so at least one variant blob also exists.
+    await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
+      .set(adminHeaders)
+      .send({ sourceLocale: "nb" });
+
+    // Every stored blob path (base blobs + localized variants) — captured before deletion.
+    const rows = await prisma.sectionAsset.findMany({ where: { sectionId }, select: { blobPath: true, localizedBlobPaths: true } });
+    const blobPaths = rows.flatMap((r) => [
+      r.blobPath,
+      ...Object.values((r.localizedBlobPaths as Record<string, string> | null) ?? {}),
+    ]);
+    expect(blobPaths.length).toBeGreaterThanOrEqual(3); // png + svg base + ≥1 variant
+    for (const p of blobPaths) await expect(getAsset(p)).resolves.toBeInstanceOf(Buffer);
+
+    // Delete via the real route (deleteSection → reclaimAssetBlobs).
+    const del = await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
+    expect(del.status).toBe(204);
+
+    // Rows cascaded AND blobs physically reclaimed.
+    expect(await prisma.sectionAsset.count({ where: { sectionId } })).toBe(0);
+    for (const p of blobPaths) await expect(getAsset(p)).rejects.toThrow();
   });
 });

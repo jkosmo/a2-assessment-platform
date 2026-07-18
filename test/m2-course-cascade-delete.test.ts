@@ -3,6 +3,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { auditActions, auditEntityTypes } from "../src/observability/auditEvents.js";
+import { createSectionAsset } from "../src/modules/course/assetCommands.js";
+import { getAsset } from "../src/modules/course/assetStorage.js";
 
 // #762 — ADMINISTRATOR-only cascade delete of a course + the modules/sections it exclusively owns.
 // Verifies the safety model: exclusive deletable content is removed (incl. version rows), shared
@@ -174,6 +176,29 @@ describe("Course cascade delete (#762)", () => {
       where: { entityType: auditEntityTypes.course, entityId: courseId, action: auditActions.course.cascadeDeleted },
     });
     expect(audit).not.toBeNull();
+  });
+
+  // #758: cascade-deleting a course must reclaim the exclusive sections' asset blobs from storage,
+  // not just the DB rows — otherwise the images accumulate in storage forever.
+  it("reclaims the exclusive sections' asset blobs from storage on cascade delete", async () => {
+    const sectionId = await makeSection();
+    await createSectionAsset({
+      sectionId,
+      filename: "fig.svg",
+      mimeType: "image/svg+xml",
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><text>Hei</text></svg>', "utf8"),
+    });
+    const before = await prisma.sectionAsset.findFirstOrThrow({ where: { sectionId }, select: { blobPath: true } });
+    await expect(getAsset(before.blobPath)).resolves.toBeInstanceOf(Buffer);
+
+    const courseId = await makeCourse([{ itemType: "SECTION", sectionId }]);
+    const res = await request(app).post(`/api/admin/content/courses/${courseId}/cascade-delete`).set(adminHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body.deletedSectionIds).toContain(sectionId);
+
+    // Row cascaded AND the blob physically reclaimed.
+    expect(await prisma.sectionAsset.count({ where: { sectionId } })).toBe(0);
+    await expect(getAsset(before.blobPath)).rejects.toThrow();
   });
 
   // (b) A module used by ANOTHER course is spared — still exists, still in the other course, only

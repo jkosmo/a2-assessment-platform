@@ -40,3 +40,14 @@ export async function getAsset(blobPath: string): Promise<Buffer> {
   }
   return fs.readFile(path.join(localDir, blobPath));
 }
+
+// #758: reclaim a stored blob when its owning section/asset is deleted, so we stop paying for
+// orphaned figure/image storage. Idempotent — a missing blob is not an error (`deleteIfExists` /
+// `rm` with `force`), so double-deletes and already-gone paths are safe.
+export async function deleteAsset(blobPath: string): Promise<void> {
+  if (assetStorageMode === "blob") {
+    await getContainerClient().getBlockBlobClient(blobPath).deleteIfExists();
+    return;
+  }
+  await fs.rm(path.join(localDir, blobPath), { force: true });
+}
