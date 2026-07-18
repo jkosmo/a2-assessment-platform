@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.37 - 2026-07-18
+
+chore(observability): #497-incident — ekstern availability-test + alert på worker-rollens /healthz
+
+Oppfølging etter worker-startup-hendelsen: worker var nede ~75 min uten at vi visste det, fordi den
+eneste eksterne tilgjengelighetstesten pinget kun web-appens `/healthz`. Worker-rollen eksponerer samme
+`/healthz`, men hadde ingen ekstern overvåking.
+
+- **`infra/azure/main.bicep`:** ny `workerHealthzAvailabilityTest` (webtest, EMEA ×2) + `workerHealthz
+  AvailabilityAlert` (metric-alert, failedLocationCount 2/2) som pinger worker-appens `/healthz` og
+  pager samme action group som web-testen. Speiler det eksisterende web-mønsteret (#405); additiv,
+  rører ingen identitet/KV/credential/parent-invariant.
+- **`doc/ops/WORKER_STARTUP_STORM_2026-07-18.md`:** incident-retro — tidslinje, rotårsak (oppstarts-
+  tilkoblingsstorm mot burstable DB), tiltak (herding 1.6.35 + denne overvåkingen), restlæring
+  (DB-kapasitet), og gjenopprettings-steg.
+
+**Utrulling:** infra-endring → **full deploy** (`deploy-azure.yml`) + prod what-if først. Additiv og
+lavrisiko (kun to nye Insights-ressurser, gated på `createObservabilityActionGroup`). Rollback:
+fjern de to ressursene. **Ingen app-atferdsendring.**
+
 ## 1.6.36 - 2026-07-18
 
 feat(participant): #767 — «Mine kurs»-område (Pågående/Fullførte) + kurs-fokusert UI på deltaker-sidene
