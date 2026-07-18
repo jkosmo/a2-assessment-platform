@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createClass,
   archiveClass,
+  restoreClass,
   addMember,
   removeMember,
   listClasses,
@@ -49,6 +50,15 @@ adminClassesRouter.delete("/:classId", async (request: Request<{ classId: string
   try {
     await archiveClass(request.params.classId, request.context?.userId ?? null);
     response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminClassesRouter.post("/:classId/restore", async (request: Request<{ classId: string }>, response, next) => {
+  try {
+    await restoreClass(request.params.classId, request.context?.userId ?? null);
+    response.json({ ok: true });
   } catch (error) {
     next(error);
   }

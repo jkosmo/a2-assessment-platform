@@ -125,6 +125,55 @@ test("classes admin: list, create, add a student via search, and assign a course
   await expect(page.locator("#courseChips")).toContainText("Frist: 17.07.2026");
 });
 
+// #705-family: classes render consistently with the other lifecycle lists — Aktive/Arkiverte filter,
+// a Type column (System/Manuell/Entra), an "Arkivert" status badge, and a symmetric Gjenopprett action.
+test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", async ({ page }) => {
+  await mockBaseApis(page);
+  const classes = [
+    { id: "cls_all_participants", name: "Alle deltakere", isSystem: true, kind: "MANUAL", archivedAt: null, _count: { members: 3, courseAssignments: 1 } },
+    { id: "cls-active", name: "Kull Aktiv", isSystem: false, kind: "MANUAL", archivedAt: null, _count: { members: 2, courseAssignments: 0 } },
+    { id: "cls-entra", name: "Entra-gruppe", isSystem: false, kind: "ENTRA", archivedAt: null, _count: { members: 0, courseAssignments: 0 } },
+    { id: "cls-arch", name: "Kull Arkivert", isSystem: false, kind: "MANUAL", archivedAt: "2026-01-01T00:00:00.000Z", _count: { members: 1, courseAssignments: 0 } },
+  ];
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes }) }),
+  );
+  let restoreUrl: string | null = null;
+  await page.route("**/api/admin/content/classes/*/restore", (route: Route) => {
+    restoreUrl = route.request().url();
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+
+  await page.goto("/admin-content/classes");
+  await expect(page.locator("h1")).toContainText("Klasser");
+  const body = page.locator("#classesTableBody");
+
+  // Default "Aktive": active classes shown, archived hidden.
+  await expect(body).toContainText("Kull Aktiv");
+  await expect(body).toContainText("Alle deltakere");
+  await expect(body).not.toContainText("Kull Arkivert");
+
+  // Type column labels are present.
+  await expect(body).toContainText("System");
+  await expect(body).toContainText("Entra");
+  await expect(body).toContainText("Manuell");
+
+  // The system class has no archive/restore action.
+  await expect(body.locator('[data-action="archive"][data-id="cls_all_participants"]')).toHaveCount(0);
+
+  // Switch to "Arkiverte": only the archived class, with an "Arkivert" badge + a Gjenopprett action.
+  await page.locator('.list-filter-btn[data-filter="archived"]').click();
+  await expect(body).toContainText("Kull Arkivert");
+  await expect(body).not.toContainText("Kull Aktiv");
+  await expect(body).toContainText("Arkivert");
+  await expect(body.locator('[data-action="restore"][data-id="cls-arch"]')).toBeVisible();
+
+  // Restore → confirm dialog → POST /:classId/restore.
+  page.once("dialog", (dialog) => dialog.accept());
+  await body.locator('[data-action="restore"][data-id="cls-arch"]').click();
+  await expect.poll(() => restoreUrl).toContain("/classes/cls-arch/restore");
+});
+
 // #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.
 test("classes admin: Entra user-sync button is admin-only and posts to the sync endpoint", async ({ page }) => {
   // SUBJECT_MATTER_OWNER must NOT see the button.

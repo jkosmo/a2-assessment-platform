@@ -41,15 +41,25 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.class.update({ where: { id: classId }, data: { archivedAt: new Date() } });
     },
 
+    // #705-family: reverse of archiveClass — clear the soft-archive so the class is active again.
+    restoreClass(classId: string) {
+      return client.class.update({ where: { id: classId }, data: { archivedAt: null } });
+    },
+
     findClassById(classId: string) {
       return client.class.findUnique({ where: { id: classId } });
     },
 
-    // Non-archived classes, system classes first, then newest.
+    // All classes (active + archived) for the admin list — the frontend filters by Aktive/Arkiverte.
+    // System first, then active before archived, then newest. Includes archivedAt so the client can
+    // render status and offer archive/restore consistently with the other lifecycle lists (#705).
     listClasses() {
       return client.class.findMany({
-        where: { archivedAt: null },
-        orderBy: [{ isSystem: "desc" }, { createdAt: "desc" }],
+        orderBy: [
+          { isSystem: "desc" },
+          { archivedAt: { sort: "asc", nulls: "first" } },
+          { createdAt: "desc" },
+        ],
         select: {
           id: true,
           name: true,
@@ -57,6 +67,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
           kind: true,
           entraGroupId: true,
           isSystem: true,
+          archivedAt: true,
           _count: { select: { members: true, courseAssignments: true } },
         },
       });

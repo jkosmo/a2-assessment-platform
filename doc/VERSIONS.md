@@ -47,6 +47,19 @@ kan testes ende-til-ende i UI. Individuell frist-tildeling har ennå ingen egen 
 datoen betød); (2) tildelte kurs-chips viser nå fristen («Frist: DD.MM.YYYY» / «Ingen frist») i stedet
 for bare tittelen. Formateres fra dato-delen (UTC) så vist dag aldri forskyves av tidssone. E2e utvidet.
 
+**Klasse-livssyklus konsistent med #705:** klasser hadde ingen vei tilbake fra arkivert (verken UI eller
+backend) og arkiverte klasser var usynlige. Nå:
+- Nytt backend-endepunkt `POST /api/admin/content/classes/:id/restore` (+ `classService.restoreClass` +
+  `classRepository.restoreClass` + audit-action `class_restored`). Systemklassen kan ikke gjenopprettes
+  (den arkiveres aldri).
+- `listClasses` returnerer nå både aktive og arkiverte klasser med `archivedAt` (+ `kind`), sortert
+  system → aktive → arkiverte.
+- Klasselista fikk **Aktive/Arkiverte/Alle-filter** (default Aktive), en **Type-kolonne**
+  (System/Manuell/Entra), en **«Arkivert»-status-badge**, og en symmetrisk **Gjenopprett**-handling —
+  samme mønster som kurs/seksjon/modul-listene.
+- Tester: integrasjon (archive→restore, liste eksponerer archivedAt/kind, system kan ikke gjenopprettes,
+  audit-spor) + e2e (filter, Type-kolonne, status-badge, Gjenopprett-handling).
+
 **Utenfor scope:** gjentatte overdue-purringer (v1 = én gang), opt-out (ingen modell finnes), ENTRA-
 klasse-medlemskap i bakgrunnsjobb, in-app/SMS-kanaler.
 
