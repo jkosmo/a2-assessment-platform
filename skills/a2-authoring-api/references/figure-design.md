@@ -42,6 +42,10 @@ never decoration, never a catch-all. A short definition is prose, not a diagram.
 6. **Sanitiser-safe.** The stored SVG passes A2's `sanitizeSvg` (scripts, `on*` handlers,
    `<foreignObject>`, `<a>` are stripped). Author drawings with none of those — a figure that is
    empty after sanitisation is rejected at validate/import time (`asset_svg_unsanitizable`).
+7. **Sans-serif font.** SVG `<text>` defaults to the browser's serif font, which looks out of place
+   against the platform UI. Set `font-family="system-ui, -apple-system, 'Segoe UI', Roboto,
+   sans-serif"` **once on the root `<svg>`** (inherited by all labels). `font-family` is a
+   presentation attribute the sanitiser keeps — verified.
 
 ## The template set (the only shapes the skill draws)
 
@@ -69,7 +73,8 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 
 ### flow
 ```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
   <rect x="10" y="20" width="120" height="40" rx="6" fill="#eef" stroke="#333"/>
   <text x="70" y="45" text-anchor="middle" font-size="14">Steg 1</text>
   <line x1="130" y1="40" x2="180" y2="40" stroke="#333"/>
@@ -83,7 +88,8 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 
 ### tree / decision
 ```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
   <rect x="150" y="10" width="100" height="40" rx="6" fill="#eef" stroke="#333"/>
   <text x="200" y="35" text-anchor="middle" font-size="14">Spørsmål</text>
   <line x1="180" y1="50" x2="90" y2="140" stroke="#333"/>
@@ -97,7 +103,8 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 
 ### boxes-and-arrows
 ```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
   <rect x="10" y="40" width="110" height="40" rx="6" fill="#eef" stroke="#333"/>
   <text x="65" y="65" text-anchor="middle" font-size="14">A</text>
   <line x1="120" y1="60" x2="170" y2="60" stroke="#333" marker-end="url(#a)"/>
@@ -113,7 +120,8 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 
 ### labelled diagram
 ```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
   <circle cx="160" cy="100" r="70" fill="#eef" stroke="#333"/>
   <line x1="160" y1="30" x2="160" y2="10" stroke="#333"/>
   <text x="160" y="8" text-anchor="middle" font-size="13">Del 1</text>

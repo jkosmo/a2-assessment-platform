@@ -23,6 +23,17 @@ ved sletting). Nå fjernet den døde tabellen.
 **Utrulling:** krever migrasjons-deploy. Destruktiv men trygg — tabellen var død (ingen les/skriv som
 sannhet). **Rollback:** gjenopprett tabellen fra create-migrasjonen (`20260325000002`); ingen tap av
 registerdata siden CourseItem er kilden. Ingen server-atferdsendring.
+## 1.6.31 - 2026-07-18
+
+fix(skill): #757 — genererte figurer bruker sans-serif (lukker #757)
+
+Kosmetisk: SVG-`<text>` arvet nettleserens default serif-font (stygg mot plattform-UI-et), fordi
+`figure-design.md`-malene satte kun `font-size`, ingen `font-family`. Lagt til
+`font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"` på **rot-`<svg>`** i alle
+fire maler (arves av alle etiketter), + ny hard-regel 7. Verifisert at `font-family` overlever
+`sanitizeSvg` (round-trip mot DOMPurify SVG-profil). Kun skill-doc; når ChatGPT via ny zip.
+
+(Versjoner 1.6.28–30 er reservert til #758/#705 — egne parallelle PR-er.)
 ## 1.6.30 - 2026-07-18
 
 fix(lifecycle): #705 — seksjonslista lastet ikke (feil oversetter-navn i badge-kallet)
