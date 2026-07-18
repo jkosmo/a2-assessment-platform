@@ -164,7 +164,8 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   await recordAuditEvent({
     entityType: auditEntityTypes.course,
     entityId: courseId,
-    action: auditActions.course.archived,
+    // #705: a delete is a delete — was previously mislogged as `archived`.
+    action: auditActions.course.deleted,
     actorId,
     metadata: { courseId },
   });

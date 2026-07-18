@@ -13,6 +13,73 @@ fire maler (arves av alle etiketter), + ny hard-regel 7. Verifisert at `font-fam
 `sanitizeSvg` (round-trip mot DOMPurify SVG-profil). Kun skill-doc; når ChatGPT via ny zip.
 
 (Versjoner 1.6.28–30 er reservert til #758/#705 — egne parallelle PR-er.)
+## 1.6.30 - 2026-07-18
+
+fix(lifecycle): #705 — seksjonslista lastet ikke (feil oversetter-navn i badge-kallet)
+
+Regresjon fra 1.6.29 Del B: `admin-content-sections.js` sin admin-oversetter heter `tNav` (ikke `t`
+som i kurs-/bibliotek-filene), men den delte badgen ble kalt med `t` → ReferenceError ved lasting →
+Seksjoner-fanen hang på «Laster…». Fikset til `tNav`. Kurs/bibliotek var upåvirket (de har `t`).
+
+Klasse-lærdom (CLAUDE.md): de tre admin-listenes *last*-sti er ikke dekket av automattester (DOM-
+testen dekker kun editoren), så feilen var usynlig for tsc/DOM/supertest. Følges opp med e2e-dekning
+for at hver av de tre listene faktisk laster.
+
+## 1.6.29 - 2026-07-14
+
+fix(lifecycle): #705 — konsistens-opprydding + samkjørt status-badge (lukker #705)
+
+Kjernen i den enhetlige innholds-livssyklusen (`doc/design/CONTENT_LIFECYCLE.md`) ble bygget i
+v1.5.0–v1.6.1 (#706–#709); issuet var bare aldri lukket. Denne lukker de gjenværende residualene.
+(Versjon 1.6.28 er reservert til #758 asset-blob-reclaim, egen åpen PR.)
+
+**Del A — backend-konsistens:**
+- deleteCourse logget en sletting som `course_archived`; ny `course.deleted`-audit-handling brukes nå.
+- Modul-publisering hadde en uvoktet fallthrough (G1/`validateModuleVersionForPublish` kjørte kun
+  hvis versjonsdata fantes i bundelen). Nå: ukjent versjon → 404 `module_version_not_found`, G1
+  kjører alltid — ikke omgåelig.
+- Modul-slett brukte en avvikende telle-melding; bruker nå den delte navngitte-kurs-meldingen
+  (`inUseMessage`, eksportert) som avpubliser/arkiver — beholder 409/`module_in_use`/`courseCount`.
+- `CONTENT_LIFECYCLE.md` §6 reconciled (kun `archiveCourse` har G3; `findCoursesForSections`).
+
+**Del B — samkjørt status-badge (design §6):**
+- Ny delt `public/static/content-status-badge.js` (`lifecycleStatusBadge`/`moduleLibraryStatusBadge`)
+  + i18n-nøkler `adminContent.lifecycle.status.{draft,published,archived}` (nb/nn/en-GB). Kurs-, seksjons-
+  og modul-listene rendrer nå ÉN badge med samme tre-tilstands-vokabular.
+- Kurs-badgen var hardkodet norsk (en-GB/nn så «Publisert») → nå delt i18n.
+- Modul-bibliotekets 5-tilstand (`deriveLibraryStatus`) kollapses til 3 + en «nyere utkast»-`.status-chip`
+  på `published_with_draft`, så ingenting går tapt. Detalj-panelet beholder sin rikere visning.
+- `.status-chip`-stil i shared.css. Handlings-rekkefølge/«Slett kun for arkiverte» var alt samkjørt (#708/#709).
+
+**Tester:** backend — `course_deleted`-audit, 404 på ukjent versjon, 409+navngitt melding (modul-slett);
+frontend — `content-status-badge`-unit (3-tilstands-vokabular + 5→3-kollaps + chip); i18n-nøkler
+verifisert i alle tre språk. DOM-suite grønn. Server-kode + statiske assets → krever deploy.
+## 1.6.28 - 2026-07-14
+
+feat(assets): #758 — reklamer blob-lagring når seksjoner/kurs slettes
+
+Del av #478 (Tier 2 livssyklus). Til nå ble `SectionAsset`-rader cascade-slettet med seksjonen
+(`onDelete: Cascade`), men **selve blobene ble aldri slettet** — `assetStorage` hadde ingen slette-
+funksjon, og ingen kode slettet en blob. Foreldreløse figur-/bilde-blober hopet seg opp i Azure
+Blob Storage og ble betalt for i det uendelige. Prioritert nå fordi video / høyoppløselige bilder
+gjør hver lekket blob dyr — fokus på å sikre framtidige slettinger (ikke rydde eksisterende backlog).
+
+- **`assetStorage.deleteAsset(blobPath)`** — Azure `deleteIfExists` / fs `rm --force`. Idempotent
+  (manglende blob er ikke feil), så dobbel-slett/allerede-borte er trygt.
+- **`assetCommands.collectSectionAssetBlobPaths(sectionIds)`** — samler hver seksjons base-blob +
+  `localizedBlobPaths`-varianter, hentet **før** DB-slettingen (radene cascader bort). Dedup.
+- **`assetCommands.reclaimAssetBlobs(paths)`** — best-effort, kjøres **etter** commit (aldri før: en
+  rullet-tilbake transaksjon må ikke miste blober for en seksjon som fortsatt finnes). Feil logges,
+  velter aldri slettingen.
+- Koblet inn i begge choke points: `deleteSection` og `courseCascadeDeleteService` (#748-cascaden).
+  Størrelse-/type-agnostisk — virker likt for framtidig video/hi-res.
+- Tester: `deleteSection` fjerner base + varianter fysisk (verifisert via `getAsset` som kaster);
+  cascade-slett rydder eksklusive seksjoners blober. Bredere asset-suite grønn (ingen regresjon).
+
+Bevisst UTENFOR scope (lav prio, backlog lite nå): mark-and-sweep GC for eksisterende foreldreløse
+blober + andre kilder (import-feil, fjern-figur-uten-slett-seksjon, erstattede sertifikat-bilder).
+
+Server-kode. Ingen Prisma-migrasjon. Krever deploy for å tre i kraft.
 
 ## 1.6.27 - 2026-07-13
 

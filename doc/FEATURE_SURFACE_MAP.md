@@ -223,11 +223,13 @@ cascade policy (wording, an escape-hatch option, which items count as publishabl
 | Module commands | `src/modules/adminContent/adminContentCommands.ts` (`unpublishModule`, `archiveModule`) + repo `archiveModule` (auto-unpublish) | G2 on unpublish+archive; delete-in-course guard in `adminContent.ts` route |
 | Course commands | `src/modules/course/courseCommands.ts` (`unpublishCourse`, `archiveCourse`) | G3 on both; archive auto-unpublishes (I3); delete blocked by completions (G4) |
 | Section commands | `src/modules/course/sectionCommands.ts` (`publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`/`deleteSection`) | G2 on unpublish/archive/delete; archive auto-unpublishes |
-| Routes | `adminContent.ts` (modules), `adminCourses.ts` (`/unpublish`), `adminSections.ts` (`/publish,/unpublish,/archive,/restore`) | `ValidationError` → 400 with named courses |
-| Module list UI | `public/static/admin-content-library.js` (`statusBadge`, row actions) | already had publish/unpublish/archive/restore + status column |
-| Course list UI | `public/static/admin-content-courses.js` (`courseStatus`/`courseStatusBadge`, `unpublishCourseInAdmin`, Status column) | added Avpubliser + status column |
-| Section list UI | `public/static/admin-content-sections.js` (`sectionStatus`/`statusBadge`/`sectionLifecycle`, archived toggle) | added status column + all lifecycle actions |
-| Shared badge style | `public/static/shared.css` → `.status-badge--{draft,published,archived}` | library has its own scoped `.status-badge` modifiers (richer module statuses) |
+| Routes | `adminContent.ts` (modules), `adminCourses.ts` (`/unpublish`), `adminSections.ts` (`/publish,/unpublish,/archive,/restore`) | `ValidationError` → 400 with named courses; module-delete keeps 409/`module_in_use` but reuses the named-courses message (#705); module publish rejects an unknown version 404 (no unguarded fallthrough) |
+| Shared status badge | `public/static/content-status-badge.js` (`lifecycleStatusBadge`, `moduleLibraryStatusBadge`) + i18n `adminContent.lifecycle.status.*` | **#705: single source for all three lists.** Course/section/library rows all render it (Utkast/Publisert/Arkivert). The module library's 5-state (`deriveLibraryStatus`) is collapsed to 3 + a «nyere utkast» `.status-chip`. Change the badge in ONE place. |
+| Module list UI | `public/static/admin-content-library.js` (`statusBadge` → `moduleLibraryStatusBadge`, row actions) | publish/unpublish/archive/restore + status column; badge now the shared 3-state |
+| Course list UI | `public/static/admin-content-courses.js` (`courseStatus`/`courseStatusBadge` → shared, `unpublishCourseInAdmin`, Status column) | Avpubliser + status column; badge was hardcoded Norwegian, now shared i18n |
+| Section list UI | `public/static/admin-content-sections.js` (`sectionStatus`/`statusBadge` → shared/`sectionLifecycle`, archived toggle) | status column + all lifecycle actions; badge now shared i18n |
+| Shared badge style | `public/static/shared.css` → `.status-badge--{draft,published,archived}` + `.status-chip` | one badge style across all three lists (#705) |
+| Course delete audit | `src/modules/course/courseCommands.ts` (`deleteCourse`) | logs `course_deleted` (#705; was mislogged as `course_archived`) |
 
 **Cascade delete (#762, ADMINISTRATOR-only):** the *inverse* of cascade publish — a destructive
 cleanup that deletes a course together with the modules/sections it **exclusively** owns, while

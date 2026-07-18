@@ -1036,9 +1036,10 @@ test.describe("admin content browser coverage", () => {
     await expect(archivedFilter).toBeVisible();
     await archivedFilter.click();
 
-    // Now visible under the filter: carries the Arkivert badge, archive action gone, restore present.
+    // Now visible under the filter: carries the Archived badge, archive action gone, restore present.
+    // (#705: the course badge is now localised via shared i18n; e2e boots on en-GB → English labels.)
     const archivedRow = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
-    await expect(archivedRow).toContainText("Arkivert");
+    await expect(archivedRow).toContainText("Archived");
     await expect(archivedRow.locator('[data-action="archive"]')).toHaveCount(0);
     await expect(archivedRow.locator('[data-action="restore"]')).toBeVisible();
   });
@@ -1335,7 +1336,8 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses");
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Trade unions" });
-    await expect(row.locator(".status-badge")).toHaveText("Publisert");
+    // #705: course badge is now shared-i18n; e2e boots on en-GB → English labels.
+    await expect(row.locator(".status-badge")).toHaveText("Published");
     await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
 
     page.once("dialog", (dialog) => dialog.accept());
@@ -1343,7 +1345,7 @@ test.describe("admin content browser coverage", () => {
 
     await expect.poll(() => state.mutableCourses[0]?.publishedAt ?? null).toBeNull();
     // Etter avpublisering: status → Utkast, og Publiser-knappen kommer tilbake.
-    await expect(page.locator("#coursesTableBody tr").filter({ hasText: "Trade unions" }).locator(".status-badge")).toHaveText("Utkast");
+    await expect(page.locator("#coursesTableBody tr").filter({ hasText: "Trade unions" }).locator(".status-badge")).toHaveText("Draft");
     await expect(page.locator('[data-action="publish"][data-course-id="course-1"]')).toBeVisible();
   });
 
