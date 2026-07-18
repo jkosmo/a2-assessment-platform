@@ -45,7 +45,7 @@ function buildCertificationWhere(filters: Pick<ReportFilters, "dateFrom" | "date
 
 type CourseRepositoryClient = Pick<
   typeof prisma,
-  "course" | "courseModule" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "submission"
+  "course" | "courseItem" | "courseCompletion" | "courseSectionRead" | "certificationStatus" | "submission"
 >;
 
 export function createCourseRepository(client: CourseRepositoryClient = prisma) {

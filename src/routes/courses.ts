@@ -48,8 +48,8 @@ coursesRouter.get("/", async (request, response, next) => {
 
     const items: CourseListItem[] = await Promise.all(
       courses.map(async (course) => {
-        // Count all elements — modules + sections (#492). Modules come from the
-        // always-populated CourseModule join; sections only exist in CourseItem.
+        // Count all elements — modules + sections (#492). Modules are derived from
+        // CourseItem (itemType MODULE, via the repository); sections only exist in CourseItem.
         const moduleIds = course.modules.map((m) => m.moduleId);
         const courseItems = await courseRepository.findCourseItems(course.id);
         const sectionIds = courseItems
@@ -279,7 +279,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     });
 
     // All elements count toward progress: passed modules + read sections (#492).
-    // Module count from the reliable CourseModule join; sections from CourseItem.
+    // Module count derived from CourseItem (itemType MODULE); sections from CourseItem too.
     const sectionCount = items.filter((i) => i.type === "SECTION").length;
     const totalElements = moduleIds.length + sectionCount;
     const completedElements = passedCount + readSectionCount;
