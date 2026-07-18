@@ -54,6 +54,10 @@ export class AppealSlaMonitor {
     try {
       await this.runMonitor();
       this.lastCycleAt = new Date();
+    } catch (error) {
+      // #497-incident: a failing tick (e.g. a DB connection-pool timeout during the startup storm)
+      // must never escape as an unhandled rejection — log and let the monitor keep ticking.
+      console.warn(`[appeal-sla] monitor tick failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;
     }

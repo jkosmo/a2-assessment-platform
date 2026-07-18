@@ -73,6 +73,29 @@ describe("AppealSlaMonitor", () => {
     monitor.stop();
   });
 
+  // #497-incident: a tick whose DB query rejects (e.g. connection-pool timeout during the worker
+  // startup storm) must be swallowed — never an unhandled rejection — and the monitor must keep
+  // ticking. This is the fragility that crashed the prod worker on 2026-07-18.
+  it("swallows a failing tick and keeps ticking (#497-incident)", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const runMonitor = vi.fn().mockRejectedValue(new Error("Timed out fetching a new connection from the connection pool"));
+    const monitor = new AppealSlaMonitor(100, runMonitor);
+
+    monitor.start(); // immediate tick rejects internally
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runMonitor).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled(); // logged, not thrown
+    expect(monitor.getStatus().lastCycleAt).toBeNull(); // failed tick did not record a cycle
+
+    // running was reset in `finally`, so the next interval tick still fires after a failure.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(runMonitor).toHaveBeenCalledTimes(2);
+
+    monitor.stop();
+    warn.mockRestore();
+  });
+
   it("getStatus returns null lastCycleAt before first tick completes", () => {
     const monitor = new AppealSlaMonitor(1_000, vi.fn());
     expect(monitor.getStatus().lastCycleAt).toBeNull();
