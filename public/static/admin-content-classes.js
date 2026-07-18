@@ -11,7 +11,6 @@ const pageContent = document.getElementById("pageContent");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const localeSelect = document.getElementById("localeSelect");
-const navKalibrering = document.getElementById("navKalibrering");
 const appVersionLabel = document.getElementById("appVersion");
 
 // #705-UX(D): klasser-siden manglet i18n-oppslag, så topp-navet viste råe nøkler (nav.participant …).
@@ -367,14 +366,6 @@ function renderWorkspaceNavigation() {
   renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker, items, buildLabel: (item) => tNav(item.labelKey) || item.id });
 }
 
-// #705-UX(H): vis Kalibrering-fanen for brukere med kalibreringstilgang (likt kurs/modul-sidene).
-function renderContentAreaNav() {
-  const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
-  const userRoles = new Set(resolveActiveWorkspaceRoles());
-  const hasCalibrationRole = [...calibrationRoles].some((r) => userRoles.has(r));
-  if (navKalibrering) navKalibrering.hidden = !hasCalibrationRole;
-}
-
 function buildLocaleSelector() {
   if (!localeSelect) return;
   localeSelect.innerHTML = supportedLocales.map((l) => `<option value="${l}"${l === currentLocale ? " selected" : ""}>${localeLabels[l] ?? l}</option>`).join("");
@@ -413,7 +404,8 @@ async function init() {
   }
   buildLocaleSelector();
   renderWorkspaceNavigation();
-  renderContentAreaNav();
+  // #765: the sub-navigation bar (Klasser | Manuell behandling | Resultater) is rendered/gated by
+  // deltakere-subnav.js; the old admin-content content-area nav no longer lives on this page.
   await initConsentGuard(getHeaders, currentLocale);
   try {
     const body = await apiFetch("/version", { headers: {} });

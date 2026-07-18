@@ -85,7 +85,7 @@ test("classes admin: list, create, add a student via search, and assign a course
   );
 
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
-  await page.goto("/admin-content/classes");
+  await page.goto("/deltakere/klasser");
 
   // List renders the system class with a real heading (no raw i18n keys).
   await expect(page.locator("h1")).toContainText("Klasser");
@@ -144,7 +144,7 @@ test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", 
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
   });
 
-  await page.goto("/admin-content/classes");
+  await page.goto("/deltakere/klasser");
   await expect(page.locator("h1")).toContainText("Klasser");
   const body = page.locator("#classesTableBody");
 
@@ -174,6 +174,28 @@ test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", 
   await expect.poll(() => restoreUrl).toContain("/classes/cls-arch/restore");
 });
 
+// #765: the «Deltakere» sub-navigation (Klasser | Manuell behandling | Resultater) role-gates its tabs
+// and marks the active one by pathname. A pure SUBJECT_MATTER_OWNER sees Klasser + Resultater but NOT
+// Manuell behandling (reviewer-only), and lands on Klasser as the active tab.
+test("deltakere sub-nav: role-gates tabs and marks the current one active", async ({ page }) => {
+  await mockBaseApis(page, ["SUBJECT_MATTER_OWNER"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+
+  await page.goto("/deltakere/klasser");
+  const subnav = page.locator("#deltakereSubnav");
+  await expect(subnav).toBeVisible();
+
+  // SMO can access Klasser + Resultater, but not Manuell behandling → that tab is removed.
+  await expect(subnav.locator("#subnavKlasser")).toBeVisible();
+  await expect(subnav.locator("#subnavResults")).toBeVisible();
+  await expect(subnav.locator("#subnavReview")).toHaveCount(0);
+
+  // The active tab reflects the current page.
+  await expect(subnav.locator("#subnavKlasser")).toHaveClass(/active/);
+});
+
 // #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.
 test("classes admin: Entra user-sync button is admin-only and posts to the sync endpoint", async ({ page }) => {
   // SUBJECT_MATTER_OWNER must NOT see the button.
@@ -181,7 +203,7 @@ test("classes admin: Entra user-sync button is admin-only and posts to the sync 
   await page.route("**/api/admin/content/classes", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
   );
-  await page.goto("/admin-content/classes");
+  await page.goto("/deltakere/klasser");
   await expect(page.locator("h1")).toContainText("Klasser");
   await expect(page.locator("#syncEntraBtn")).toHaveCount(0);
 });
@@ -197,7 +219,7 @@ test("classes admin: ADMINISTRATOR sees the Entra sync button and clicking it po
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ importedUsers: 61, fetchedMembers: 61 }) });
   });
 
-  await page.goto("/admin-content/classes");
+  await page.goto("/deltakere/klasser");
   await expect(page.locator("#syncEntraBtn")).toBeVisible();
   await page.locator("#syncEntraBtn").click();
   await expect.poll(() => syncPosted).toBe(true);
@@ -239,7 +261,7 @@ test("classes admin: admin buttons + top nav render in prod-shaped config (role 
   await page.route("**/api/admin/content/classes", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
   );
-  await page.goto("/admin-content/classes");
+  await page.goto("/deltakere/klasser");
   await expect(page.locator("#importUsersBtn")).toBeVisible();
   await expect(page.locator("#syncEntraBtn")).toBeVisible();
   // Top workspace nav renders both the open item and the role-gated one (live roles applied).
@@ -262,7 +284,7 @@ test("classes admin: importing a users file posts to the delta sync endpoint", a
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { createdCount: 2, updatedCount: 0, failedCount: 0 } }) });
   });
 
-  await page.goto("/admin-content/classes");
+  await page.goto("/deltakere/klasser");
   await expect(page.locator("#importUsersBtn")).toBeVisible();
 
   // Provide the file directly to the hidden input (no OS picker).

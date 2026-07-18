@@ -159,12 +159,6 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
     },
     {
-      id: "review",
-      path: "/review",
-      labelKey: "nav.review",
-      requiredRoles: [AppRole.REVIEWER, AppRole.APPEAL_HANDLER, AppRole.ADMINISTRATOR],
-    },
-    {
       id: "admin-content",
       // #705-UX(E): Innholdsforvaltning lander nå på Kurs (ikke modul-biblioteket). Modul-biblioteket
       // er fortsatt på /admin-content via «Moduler»-fanen.
@@ -173,10 +167,21 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       requiredRoles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR],
     },
     {
-      id: "results",
-      path: "/results",
-      labelKey: "nav.results",
-      requiredRoles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR, AppRole.REPORT_READER],
+      // #765: «Deltakere» samler de person-/utfalls-orienterte flatene (Klasser, Manuell behandling,
+      // Resultater) under ett toppmeny-punkt med en egen undernavigasjon. Punktet vises hvis brukeren
+      // har tilgang til minst én av underfanene; selve underfanene rollegates klient-side (se
+      // public/static/deltakere-subnav.js). Manuell behandling (/review) og Resultater (/results)
+      // beholder sine URL-er — de re-foreldres kun i navigasjonen.
+      id: "deltakere",
+      path: "/deltakere/klasser",
+      labelKey: "nav.deltakere",
+      requiredRoles: [
+        AppRole.SUBJECT_MATTER_OWNER,
+        AppRole.ADMINISTRATOR,
+        AppRole.REVIEWER,
+        AppRole.APPEAL_HANDLER,
+        AppRole.REPORT_READER,
+      ],
     },
     {
       id: "admin-platform",

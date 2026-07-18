@@ -1157,3 +1157,11 @@ dialog::backdrop {
 .courses-popover-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin: 0 0 6px; }
 .courses-popover-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .courses-popover-list li { font-size: 13px; color: var(--color-text); padding: 2px 0; }
+
+/* #765: shared content-area sub-navigation bar (used by the «Deltakere» area on the classes/review/
+   results pages, and by the admin-content tabs). Previously each admin-content page defined these
+   inline; centralised here so review/results can host the same bar. */
+.content-area-nav { display: flex; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
+.content-area-nav-link { padding: 10px var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-meta); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+.content-area-nav-link:hover { color: var(--color-text); }
+.content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }

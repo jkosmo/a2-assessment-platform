@@ -109,6 +109,21 @@ describe("participant console runtime config", () => {
     expect(response.text).toContain("review.js");
   });
 
+  it("serves the classes workspace at its new /deltakere/klasser home (#765)", async () => {
+    const response = await request(app).get("/deltakere/klasser");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("admin-content-classes.js");
+    expect(response.text).toContain("deltakere-subnav.js");
+  });
+
+  it("301-redirects the old /admin-content/classes URL to /deltakere/klasser (#765)", async () => {
+    const response = await request(app).get("/admin-content/classes");
+
+    expect(response.status).toBe(301);
+    expect(response.headers.location).toBe("/deltakere/klasser");
+  });
+
   it("serves dedicated calibration workspace page", async () => {
     const response = await request(app).get("/calibration");
 

@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.34 - 2026-07-18
+
+feat(nav): #765 — nytt «Deltakere»-toppmeny som samler Klasser + Manuell behandling + Resultater
+
+«Klasser» lå som en fane under Innholdsforvaltning, men handler om personer, ikke innhold. De tre
+person-/utfalls-orienterte flatene (Klasser, Manuell behandling, Resultater) er nå samlet under ett
+toppmeny-punkt **«Deltakere»** med en felles, rollegated undernavigasjon. Innholdsforvaltning står
+igjen som en ren innholds-gruppe (Kurs/Moduler/Seksjoner/Kalibrering).
+
+- **Toppnav (`capabilities.ts`):** fjernet de frittstående `review`- og `results`-punktene; nytt
+  `deltakere`-punkt (path `/deltakere/klasser`, `requiredRoles` = union SMO/ADMIN/REVIEWER/
+  APPEAL_HANDLER/REPORT_READER). Vises hvis brukeren har tilgang til minst én underfane.
+- **Undernavigasjon:** ny `public/static/deltakere-subnav.js` — selvstendig, rollegater underfanene
+  klient-side (Klasser: SMO/ADMIN; Manuell behandling: REVIEWER/APPEAL_HANDLER/ADMIN; Resultater:
+  SMO/ADMIN/REPORT_READER), setter aktiv fane ut fra URL, fail-open hvis rolle-oppslag feiler. Baren
+  ligger på klasse-, review- og results-sidene. `.content-area-nav`-stilen sentralisert i `shared.css`.
+- **Ruter (`app.ts`):** ny `/deltakere/klasser` (server klasse-siden); `/admin-content/classes`
+  301-redirecter dit. `/review` + `/results` beholder URL-ene (re-foreldret kun i nav).
+- **Innholds-nav:** «Klasser»-fanen fjernet fra de 4 admin-content-sidene (Kurs/Moduler/Seksjoner/
+  Kalibrering).
+- **i18n:** ny `nav.deltakere` (nb «Deltakere» / nn «Deltakarar» / en «Participants») i participant- +
+  profile-translations.
+- **Tester:** e2e (klasse-sidene lastes fra `/deltakere/klasser`; ny sub-nav rollegating + aktiv-fane;
+  module-library bekrefter at Klasser IKKE lenger er en innholds-fane); backend (ny rute serveres +
+  301-redirect fra gammel URL). route-map oppdatert.
+
+**Merk:** det finnes fra før et `/participant`-punkt merket «Deltaker» (deltakerens egen arbeidsflate).
+Nytt «Deltakere» (administrasjon) står ved siden av; entall/flertall-skillet vurderes på stage.
+
+**Utrulling:** kun server+klient-kode, ingen migrasjon. **Går kun til stage foreløpig** (ikke prod).
+
 ## 1.6.33 - 2026-07-18
 
 feat(course): #497 — automatiske kurs-frist-påminnelser (frist nærmer seg + forfalt) via daglig
