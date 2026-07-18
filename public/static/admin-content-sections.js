@@ -9,12 +9,18 @@ import { resolveWorkspaceNavigationItems } from "/static/participant-console-sta
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
+import {
+  SECTION_EDITOR_LOCALES,
+  nonEmptyLocales,
+  hasSavableContent,
+  detectSectionRoute,
+} from "/static/admin-content-sections-state.js";
 
 // ---------------------------------------------------------------------------
 // Section editor (U1 / #488). Library of reusable course learning sections.
 // ---------------------------------------------------------------------------
 
-const EDITOR_LOCALES = ["nb", "nn", "en-GB"];
+const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 
 // Self-contained labels for this workspace's own UI (kept local to avoid
 // threading dozens of keys through the shared translations file).
@@ -145,11 +151,7 @@ function displayTitle(rawTitle) {
 // ---------------------------------------------------------------------------
 
 function detectRoute() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.has("new")) return { view: "editor", sectionId: null };
-  const id = params.get("id");
-  if (id) return { view: "editor", sectionId: id };
-  return { view: "list" };
+  return detectSectionRoute(window.location.search);
 }
 
 function goTo(view, sectionId) {
@@ -542,16 +544,6 @@ async function refreshPreview() {
   }
 }
 
-// Only send locales the author actually filled — the API rejects empty strings
-// (each present locale must be min 1 char), but accepts a partial object.
-function nonEmptyLocales(obj) {
-  const out = {};
-  for (const loc of EDITOR_LOCALES) {
-    if ((obj[loc] ?? "").trim().length > 0) out[loc] = obj[loc];
-  }
-  return out;
-}
-
 // Persist the section (create on first save, otherwise update title + content).
 // Returns true on success. `silent` suppresses the success toast so callers like
 // the image upload can auto-save transparently without a confusing extra toast.
@@ -560,7 +552,7 @@ async function persistSection({ silent } = {}) {
   const status = document.getElementById("editorStatus");
   const title = nonEmptyLocales(editing.title);
   const bodyMarkdown = nonEmptyLocales(editing.body);
-  if (Object.keys(title).length === 0 || Object.keys(bodyMarkdown).length === 0) {
+  if (!hasSavableContent(editing.title, editing.body)) {
     showToast(L("needContent"), "error");
     return false;
   }
