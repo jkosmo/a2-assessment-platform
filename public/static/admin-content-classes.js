@@ -57,45 +57,107 @@ function courseTitle(raw) {
   }
 }
 
-async function renderListView() {
-  pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
-  let classes = [];
-  try {
-    classes = (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [];
-  } catch (err) {
-    pageContent.innerHTML = `<p>Kunne ikke laste klasser: ${escapeHtml(err?.message ?? "")}</p>`;
-    return;
-  }
-  const rows = classes.map((c) => `
+// #497: a class-assigned due date (dueAt) is stored as UTC midnight of the picked date; format from the
+// date part so the displayed day never shifts by timezone. Returns "DD.MM.YYYY" or null.
+function formatDueDate(iso) {
+  if (!iso) return null;
+  const datePart = String(iso).slice(0, 10); // YYYY-MM-DD
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : null;
+}
+
+// #705-family: classes now render Aktive/Arkiverte consistently with the other lifecycle lists.
+// Classes are 2-state (aktiv/arkivert) — no draft/publish — so the filter has Aktive/Arkiverte/Alle
+// (no "Publiserte"), and status is shown as an "Arkivert"-badge rather than the full 3-state badge.
+let classesFilter = "active";
+let classesCache = [];
+
+function classTypeLabel(c) {
+  if (c.isSystem) return "System";
+  if (c.kind === "ENTRA") return "Entra";
+  return "Manuell";
+}
+
+function filteredClasses() {
+  if (classesFilter === "archived") return classesCache.filter((c) => c.archivedAt);
+  if (classesFilter === "all") return classesCache;
+  return classesCache.filter((c) => !c.archivedAt);
+}
+
+function classFilterBar() {
+  const pills = [["active", "Aktive"], ["archived", "Arkiverte"], ["all", "Alle"]];
+  return `<div class="list-filters" role="group" aria-label="Filtrer klasser">${pills
+    .map(([key, label]) => `<button type="button" class="list-filter-btn${classesFilter === key ? " active" : ""}" data-filter="${key}">${escapeHtml(label)}</button>`)
+    .join("")}</div>`;
+}
+
+function renderClassesTable() {
+  const rows = filteredClasses().map((c) => {
+    const archived = !!c.archivedAt;
+    const systemBadge = c.isSystem ? `<span class="system-badge">System</span>` : "";
+    const statusBadge = archived ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : "";
+    let action = "";
+    if (!c.isSystem) {
+      action = archived
+        ? `<button class="row-action-btn" data-action="restore" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Gjenopprett</button>`
+        : `<button class="row-action-btn destructive" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
+    }
+    return `
     <tr>
-      <td>${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">System</span>` : ""}</td>
+      <td>${escapeHtml(c.name)}${systemBadge}${statusBadge}</td>
+      <td>${escapeHtml(classTypeLabel(c))}</td>
       <td>${c._count?.members ?? 0}</td>
       <td>${c._count?.courseAssignments ?? 0}</td>
       <td class="col-actions">
         <div class="row-actions">
           <button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>
-          ${c.isSystem ? "" : `<button class="row-action-btn destructive" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`}
+          ${action}
         </div>
       </td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
+  const body = document.getElementById("classesTableBody");
+  if (body) body.innerHTML = rows || `<tr><td colspan="5" style="color:var(--color-meta)">Ingen klasser i denne visningen.</td></tr>`;
+  document.querySelectorAll(".list-filter-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.filter === classesFilter);
+  });
+}
+
+async function renderListView() {
+  pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
+  try {
+    classesCache = (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [];
+  } catch (err) {
+    pageContent.innerHTML = `<p>Kunne ikke laste klasser: ${escapeHtml(err?.message ?? "")}</p>`;
+    return;
+  }
   pageContent.innerHTML = `
     <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere fra fil</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div></div>
     <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
+    ${classFilterBar()}
     <table class="classes-table">
-      <thead><tr><th>Navn</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
-      <tbody id="classesTableBody">${rows || `<tr><td colspan="4" style="color:var(--color-meta)">Ingen klasser ennå.</td></tr>`}</tbody>
+      <thead><tr><th>Navn</th><th>Type</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
+      <tbody id="classesTableBody"></tbody>
     </table>`;
+  renderClassesTable();
   document.getElementById("newClassBtn").addEventListener("click", createClassFlow);
   document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
   const importBtn = document.getElementById("importUsersBtn");
   const importFile = document.getElementById("importUsersFile");
   importBtn?.addEventListener("click", () => importFile?.click());
   importFile?.addEventListener("change", () => importUsersFromFile(importFile));
+  pageContent.querySelector(".list-filters")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-filter]");
+    if (!btn) return;
+    classesFilter = btn.dataset.filter;
+    renderClassesTable();
+  });
   document.getElementById("classesTableBody").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
     if (btn.dataset.action === "open") openClass(btn.dataset.id);
     if (btn.dataset.action === "archive") archiveClass(btn.dataset.id, btn.dataset.name);
+    if (btn.dataset.action === "restore") restoreClassInAdmin(btn.dataset.id, btn.dataset.name);
   });
 }
 
@@ -174,6 +236,18 @@ async function archiveClass(id, name) {
   }
 }
 
+// #705-family: reverse of archiveClass — restore an archived class so it is active again.
+async function restoreClassInAdmin(id, name) {
+  if (!window.confirm(`Gjenopprette klassen «${name}»?`)) return;
+  try {
+    await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/restore`, getHeaders, { method: "POST" });
+    showToast("Klasse gjenopprettet.", "success");
+    await renderListView();
+  } catch (err) {
+    showToast(err?.message ?? "Kunne ikke gjenopprette.", "error");
+  }
+}
+
 async function openClass(id) {
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
   let members = [], courses = [], allCourses = [];
@@ -188,7 +262,13 @@ async function openClass(id) {
     return;
   }
   const memberChips = members.map((m) => `<span class="chip">${escapeHtml(m.name)} <button data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">×</button></span>`).join("");
-  const courseChips = courses.map((c) => `<span class="chip">${escapeHtml(courseTitle(c.title))} <button data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">×</button></span>`).join("");
+  const courseChips = courses.map((c) => {
+    const due = formatDueDate(c.dueAt);
+    const dueLabel = due
+      ? `<span class="chip-due" style="color:var(--color-meta);font-size:12px;margin-left:4px">Frist: ${escapeHtml(due)}</span>`
+      : `<span class="chip-due" style="color:var(--color-meta);font-size:12px;margin-left:4px">Ingen frist</span>`;
+    return `<span class="chip">${escapeHtml(courseTitle(c.title))} ${dueLabel} <button data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">×</button></span>`;
+  }).join("");
   const assignedIds = new Set(courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
   const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.title))}</option>`).join("");
@@ -208,9 +288,13 @@ async function openClass(id) {
       <div class="chip-row" id="courseChips">${courseChips || `<span style="color:var(--color-meta);font-size:13px">Ingen kurs tildelt ennå.</span>`}</div>
       <div class="inline-form">
         <select id="courseSelect"><option value="">Velg kurs…</option>${courseOptions}</select>
-        <input type="date" id="dueAtInput" title="Frist (valgfri)" />
+        <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
+          Frist (valgfri)
+          <input type="date" id="dueAtInput" title="Frist for å fullføre kurset (valgfri)" />
+        </label>
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
       </div>
+      <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
     </div>`;
   document.getElementById("backToClasses").addEventListener("click", renderListView);
 

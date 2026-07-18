@@ -1,4 +1,5 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
+import { AppRole } from "../db/prismaRuntime.js";
 import type { AuthPrincipal } from "../auth/principal.js";
 import { parseEntraGroupRoleMapJson } from "../auth/entraRoleMap.js";
 import { prisma } from "../db/prisma.js";
@@ -126,6 +127,26 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
       },
     });
   }
+}
+
+// #497 fase 2: resolves the dynamic membership of the built-in "Alle deltakere" system class — all
+// active, non-anonymized users holding an active PARTICIPANT role. Mirrors the role-active predicate
+// used elsewhere (validFrom <= now, validTo null-or-future).
+export async function findActiveParticipants(at = new Date()) {
+  return prisma.user.findMany({
+    where: {
+      activeStatus: true,
+      isAnonymized: false,
+      roleAssignments: {
+        some: {
+          appRole: AppRole.PARTICIPANT,
+          validFrom: { lte: at },
+          OR: [{ validTo: null }, { validTo: { gte: at } }],
+        },
+      },
+    },
+    select: { id: true, name: true, email: true },
+  });
 }
 
 export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRoleType[]> {

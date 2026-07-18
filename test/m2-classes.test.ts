@@ -107,6 +107,49 @@ describe("Class (cohort) management + dynamic assignment (#645/CL-2)", () => {
     expect((await request(app).post("/api/admin/content/classes").set(participantHeaders(`cls-forbid-${Date.now()}`)).send({ name: "Nope" })).status).toBe(403);
   });
 
+  // #705-family: a class can be archived AND restored (symmetric lifecycle), the list returns both
+  // active and archived classes with archivedAt + kind so the admin UI can filter/badge them, and the
+  // system class can never be restored (it is never archived).
+  it("archives then restores a class; the list exposes archivedAt + kind; system class cannot be restored", async () => {
+    const created = await request(app).post("/api/admin/content/classes").set(adminHeaders).send({ name: "Kull lifecycle" });
+    const classId = created.body.class.id as string;
+
+    type ClassRow = { id: string; kind: string; isSystem: boolean; archivedAt: string | null };
+    const findRow = async (): Promise<ClassRow | undefined> => {
+      const list = await request(app).get("/api/admin/content/classes").set(adminHeaders);
+      return (list.body.classes as ClassRow[]).find((c) => c.id === classId);
+    };
+
+    // Freshly created → active, MANUAL, and present in the list with archivedAt null + kind exposed.
+    let row = await findRow();
+    expect(row).toBeTruthy();
+    expect(row?.archivedAt).toBeNull();
+    expect(row?.kind).toBe("MANUAL");
+
+    // Archive → still in the list (so the UI can show it under "Arkiverte"), now with archivedAt set.
+    expect((await request(app).delete(`/api/admin/content/classes/${classId}`).set(adminHeaders)).status).toBe(204);
+    row = await findRow();
+    expect(row?.archivedAt).not.toBeNull();
+
+    // Restore → active again.
+    expect((await request(app).post(`/api/admin/content/classes/${classId}/restore`).set(adminHeaders)).status).toBe(200);
+    row = await findRow();
+    expect(row?.archivedAt).toBeNull();
+
+    // An audit trail records both transitions.
+    const auditActionsForClass = (
+      await prisma.auditEvent.findMany({ where: { entityType: "class", entityId: classId }, select: { action: true } })
+    ).map((e) => e.action);
+    expect(auditActionsForClass).toContain("class_archived");
+    expect(auditActionsForClass).toContain("class_restored");
+
+    // The system class is never archived → restoring it is rejected.
+    expect((await request(app).post(`/api/admin/content/classes/${SYSTEM_ALL_PARTICIPANTS_CLASS_ID}/restore`).set(adminHeaders)).status).toBe(400);
+
+    await prisma.auditEvent.deleteMany({ where: { entityType: "class", entityId: classId } });
+    await prisma.class.delete({ where: { id: classId } });
+  });
+
   // #688: archived courses must not be assignable to a class.
   it("refuses to assign an archived course to a class", async () => {
     const courseId = await createRestrictedCourse();

@@ -86,6 +86,9 @@ export const auditActions = {
     // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
     cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
+    // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
+    reminderSent: "course_reminder_sent",
+    reminderFailed: "course_reminder_failed",
   },
   section: {
     created: "section_created",
@@ -102,6 +105,7 @@ export const auditActions = {
   class: {
     created: "class_created",
     archived: "class_archived",
+    restored: "class_restored",
     memberAdded: "class_member_added",
     memberRemoved: "class_member_removed",
     courseAssigned: "class_course_assigned",
@@ -322,6 +326,29 @@ export type AuditMetadataByAction = {
     courseId: string;
     certificateId: string;
   }>;
+  // #497: frist-påminnelse sendt/feilet. `daysBefore` er kun satt for kind="due_soon".
+  [auditActions.course.reminderSent]: EventMetadata<{
+    courseId: string;
+    userId: string;
+    kind: "due_soon" | "overdue";
+    daysBefore?: number;
+    asOfDate: string;
+    dueAt: string;
+    channel: string;
+    delivered: boolean;
+    failureReason?: string | null;
+  }>;
+  [auditActions.course.reminderFailed]: EventMetadata<{
+    courseId: string;
+    userId: string;
+    kind: "due_soon" | "overdue";
+    daysBefore?: number;
+    asOfDate: string;
+    dueAt: string;
+    channel: string;
+    delivered: boolean;
+    failureReason?: string | null;
+  }>;
   [auditActions.enrollment.assigned]: EventMetadata<{
     userId: string;
     courseId: string;
@@ -331,6 +358,7 @@ export type AuditMetadataByAction = {
   [auditActions.enrollment.selfEnrolled]: EventMetadata<{ userId: string; courseId: string }>;
   [auditActions.class.created]: EventMetadata<{ classId: string; name: string }>;
   [auditActions.class.archived]: EventMetadata<{ classId: string }>;
+  [auditActions.class.restored]: EventMetadata<{ classId: string }>;
   [auditActions.class.memberAdded]: EventMetadata<{ classId: string; userId: string }>;
   [auditActions.class.memberRemoved]: EventMetadata<{ classId: string; userId: string }>;
   [auditActions.class.courseAssigned]: EventMetadata<{ classId: string; courseId: string }>;

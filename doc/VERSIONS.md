@@ -2,6 +2,70 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.33 - 2026-07-18
+
+feat(course): #497 — automatiske kurs-frist-påminnelser (frist nærmer seg + forfalt) via daglig
+bakgrunnsjobb, for både individuelle OG klasse-tildelte frister
+
+Siste «Done når»-pilar i Epic #478 (Tier 2 LMS): innhold ✓ + vurdering ✓ + progress ✓ + **varsling**.
+Deltakere med kurs-frister får nå automatiske e-post-påminnelser, uten at læreren følger opp manuelt.
+Kloner recert-påminnelses-mønsteret: audit-basert dedup gjør re-kjøring idempotent og restart-trygg.
+
+- **Ny orkestrator:** `runCourseReminderSchedule({ asOf, sendImpl? })`. **due-soon** fyrer på
+  konfigurerbare offsets (standard 7 og 1 dag før), **overdue** fyrer én gang etter passert frist.
+  Hopper over fullførte (`deriveStatus === COMPLETED`), avmeldte, deaktiverte/anonymiserte brukere og
+  tildelinger uten frist.
+- **To frist-kilder:**
+  - **Individuelle** `CourseEnrollment.dueAt` (eksplisitt tildelte deltakere).
+  - **Klasse-tildelte** `CourseGroupAssignment.dueAt` — ekspandert til medlemmer: **MANUAL**-klasser
+    (`ClassMember`-rader) + system-klassen **«Alle deltakere»** (alle aktive deltakere). **ENTRA**-
+    klasser kan ikke oppløses i en bakgrunnsjobb (ingen token/lagrede medlemskanter) og hoppes over,
+    på samme måte som tildelings-e-posten.
+  - Per (bruker, kurs) beregnes **én effektiv frist**: individuell vinner over klasse; ved flere
+    klasse-frister vinner den tidligste. Dedup + presedens hindrer dobbel-varsling.
+- **Ny monitor:** `CourseReminderMonitor` — env-gated `setInterval`-klasse (daglig,
+  `COURSE_REMINDER_INTERVAL_MS`), kjører kun i worker-rollen når `PARTICIPANT_NOTIFICATION_CHANNEL !=
+  disabled`; tick-feil logges og velter aldri workeren. Wiret i `src/index.ts` (kjører også én gang
+  umiddelbart ved worker-oppstart).
+- **Gjenbruk:** ACS-send via `sendViaAcs`, statusutledning via `deriveStatus`, audit via
+  `recordAuditEvent`. Nye audit-actions `course_reminder_sent` / `course_reminder_failed`. Nye repo-
+  spørringer `findCourseGroupAssignmentsWithDueDate` (classRepository) + `findActiveParticipants`
+  (userRepository, for «Alle deltakere»).
+- **E-post:** `getCourseReminderNotificationMessage` (nb/nn/en-GB), ingen lenker (#688 — «Logg inn
+  på plattformen selv»).
+- **Config:** `courseReminders.reminderDaysBefore` (standard `[7, 1]`) i assessment-rules.
+- **Tester:** integrasjon (native pg) — individuell due-soon/overdue-matching; klasse MANUAL-
+  ekspansjon; «Alle deltakere»-systemklasse; presedens (individuell > klasse, tidligste klasse vinner);
+  ENTRA-skip; ingen send for fullført/avmeldt/inaktiv/uten-frist; idempotent re-kjøring. Unit — monitor
+  env-gate/feil-svelging, e-post-copy i alle tre språk uten lenker. tsc grønn.
+
+**UI-testbar:** klasse-tildeling har en frist-datovelger (Klasser → tildel kurs), så hele funksjonen
+kan testes ende-til-ende i UI. Individuell frist-tildeling har ennå ingen egen datovelger (kun API).
+
+**Klasse-UI-forbedringer (samme arc):** (1) datofeltet ved kurs-tildeling har nå en synlig etikett
+«Frist (valgfri)» + hjelpetekst om at fristen driver påminnelser (var før kun en tooltip — uklart hva
+datoen betød); (2) tildelte kurs-chips viser nå fristen («Frist: DD.MM.YYYY» / «Ingen frist») i stedet
+for bare tittelen. Formateres fra dato-delen (UTC) så vist dag aldri forskyves av tidssone. E2e utvidet.
+
+**Klasse-livssyklus konsistent med #705:** klasser hadde ingen vei tilbake fra arkivert (verken UI eller
+backend) og arkiverte klasser var usynlige. Nå:
+- Nytt backend-endepunkt `POST /api/admin/content/classes/:id/restore` (+ `classService.restoreClass` +
+  `classRepository.restoreClass` + audit-action `class_restored`). Systemklassen kan ikke gjenopprettes
+  (den arkiveres aldri).
+- `listClasses` returnerer nå både aktive og arkiverte klasser med `archivedAt` (+ `kind`), sortert
+  system → aktive → arkiverte.
+- Klasselista fikk **Aktive/Arkiverte/Alle-filter** (default Aktive), en **Type-kolonne**
+  (System/Manuell/Entra), en **«Arkivert»-status-badge**, og en symmetrisk **Gjenopprett**-handling —
+  samme mønster som kurs/seksjon/modul-listene.
+- Tester: integrasjon (archive→restore, liste eksponerer archivedAt/kind, system kan ikke gjenopprettes,
+  audit-spor) + e2e (filter, Type-kolonne, status-badge, Gjenopprett-handling).
+
+**Utenfor scope:** gjentatte overdue-purringer (v1 = én gang), opt-out (ingen modell finnes), ENTRA-
+klasse-medlemskap i bakgrunnsjobb, in-app/SMS-kanaler.
+
+**Utrulling:** kun server-kode, ingen migrasjon. Monitoren er env-gated og trygg å merge før den slås
+på i prod. **Rollback:** ingen datamigrasjon — reverter koden.
+
 ## 1.6.32 - 2026-07-18
 
 fix(course): #502 — drop den deprecated CourseModule-join-tabellen (lukker #502)

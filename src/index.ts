@@ -7,6 +7,7 @@ import { AppealSlaMonitor } from "./modules/appeal/index.js";
 import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.js";
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
+import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -25,6 +26,7 @@ const appealSlaMonitor = startWorkers ? new AppealSlaMonitor(env.APPEAL_SLA_MONI
 const pseudonymizationMonitor = startWorkers ? new PseudonymizationMonitor() : null;
 const auditRetentionMonitor = startWorkers ? new AuditRetentionMonitor() : null;
 const entraUserSyncMonitor = startWorkers ? new EntraUserSyncMonitor() : null;
+const courseReminderMonitor = startWorkers ? new CourseReminderMonitor() : null;
 
 const gracefulShutdown = (exitCode = 0) => {
   if (shuttingDown) {
@@ -37,6 +39,7 @@ const gracefulShutdown = (exitCode = 0) => {
   pseudonymizationMonitor?.stop();
   auditRetentionMonitor?.stop();
   entraUserSyncMonitor?.stop();
+  courseReminderMonitor?.stop();
 
   if (!server) {
     process.exit(exitCode);
@@ -74,6 +77,7 @@ async function startServer() {
           pseudonymizationMonitor: pseudonymizationMonitor?.getStatus() ?? null,
           auditRetentionMonitor: auditRetentionMonitor?.getStatus() ?? null,
           entraUserSyncMonitor: entraUserSyncMonitor?.getStatus() ?? null,
+          courseReminderMonitor: courseReminderMonitor?.getStatus() ?? null,
         },
       }));
     }).listen(env.PORT, () => {
@@ -88,6 +92,7 @@ async function startServer() {
     pseudonymizationMonitor!.start();
     auditRetentionMonitor!.start();
     entraUserSyncMonitor!.start();
+    courseReminderMonitor!.start();
   }
 }
 

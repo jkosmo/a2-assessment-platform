@@ -41,15 +41,25 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.class.update({ where: { id: classId }, data: { archivedAt: new Date() } });
     },
 
+    // #705-family: reverse of archiveClass — clear the soft-archive so the class is active again.
+    restoreClass(classId: string) {
+      return client.class.update({ where: { id: classId }, data: { archivedAt: null } });
+    },
+
     findClassById(classId: string) {
       return client.class.findUnique({ where: { id: classId } });
     },
 
-    // Non-archived classes, system classes first, then newest.
+    // All classes (active + archived) for the admin list — the frontend filters by Aktive/Arkiverte.
+    // System first, then active before archived, then newest. Includes archivedAt so the client can
+    // render status and offer archive/restore consistently with the other lifecycle lists (#705).
     listClasses() {
       return client.class.findMany({
-        where: { archivedAt: null },
-        orderBy: [{ isSystem: "desc" }, { createdAt: "desc" }],
+        orderBy: [
+          { isSystem: "desc" },
+          { archivedAt: { sort: "asc", nulls: "first" } },
+          { createdAt: "desc" },
+        ],
         select: {
           id: true,
           name: true,
@@ -57,6 +67,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
           kind: true,
           entraGroupId: true,
           isSystem: true,
+          archivedAt: true,
           _count: { select: { members: true, courseAssignments: true } },
         },
       });
@@ -112,6 +123,34 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
         where: { classId },
         orderBy: { createdAt: "desc" },
         include: { course: { select: { id: true, title: true } } },
+      });
+    },
+
+    // #497 fase 2: class-assigned due dates for the reminder schedule. Only non-null dueAt on a
+    // non-archived class. Includes the course (id + localized title) and the class kind/isSystem so
+    // the service can expand membership (MANUAL rows are included; the system "Alle deltakere" class
+    // has no rows and is resolved separately; ENTRA classes are not resolvable in a background job
+    // and are skipped by the service).
+    findCourseGroupAssignmentsWithDueDate() {
+      return client.courseGroupAssignment.findMany({
+        where: { dueAt: { not: null }, class: { archivedAt: null } },
+        include: {
+          course: { select: { id: true, title: true } },
+          class: {
+            select: {
+              id: true,
+              kind: true,
+              isSystem: true,
+              members: {
+                select: {
+                  user: {
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
     },
   };

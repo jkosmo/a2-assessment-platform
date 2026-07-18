@@ -44,6 +44,20 @@ export async function archiveClass(classId: string, actorId: string | null) {
   });
 }
 
+export async function restoreClass(classId: string, actorId: string | null) {
+  const klass = await requireClass(classId);
+  if (klass.isSystem) throw new ValidationError("System classes are never archived.");
+  if (!klass.archivedAt) return; // already active — idempotent no-op
+  await classRepository.restoreClass(classId);
+  await recordAuditEvent({
+    entityType: auditEntityTypes.class,
+    entityId: classId,
+    action: auditActions.class.restored,
+    actorId: actorId ?? undefined,
+    metadata: { classId },
+  });
+}
+
 export async function addMember(classId: string, userId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem || klass.kind !== "MANUAL") {
