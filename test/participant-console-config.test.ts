@@ -231,9 +231,9 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="draftBrowserNote"');
         expect(response.text).toContain('id="appealNextSteps"');
         expect(response.text).toContain('id="resultSummary" class="summary-stack"');
-        expect(response.text).toContain('id="historySummary" class="history-list"');
         expect(response.text).not.toContain('<pre id="resultSummary"');
-        expect(response.text).not.toContain('<pre id="historySummary"');
+        // #767: «Min historikk» removed from /participant (overlapped with the «Fullførte» tab).
+        expect(response.text).not.toContain('id="historySummary"');
         expect(response.text).not.toContain('id="flowProgress"');
         expect(response.text).not.toContain('data-step="4"');
       }
@@ -260,7 +260,7 @@ describe("participant console runtime config", () => {
       if (pagePath === "/participant") {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('id="previewModeBanner"');
-        expect(response.text).toContain('id="historySection"');
+        expect(response.text).not.toContain('id="historySection"'); // #767: removed (overlapped with Fullførte)
       }
 
       if (pagePath === "/participant/completed") {

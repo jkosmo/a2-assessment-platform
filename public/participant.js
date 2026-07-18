@@ -318,7 +318,8 @@ function applyTranslations() {
   if (!resultSummary.dataset.hasResult) {
     resultSummary.textContent = t("defaults.noResult");
   }
-  if (!historySummary.dataset.hasHistory) {
+  // #767: «Min historikk» removed — guard the default-text seeding for the now-absent element.
+  if (historySummary && !historySummary.dataset.hasHistory) {
     historySummary.textContent = t("defaults.noHistory");
   }
 
@@ -2193,6 +2194,9 @@ function renderResultSummary(body) {
 }
 
 function renderHistorySummary(body) {
+  // #767: the «Min historikk» section was removed from the page; keep this a no-op if its container
+  // is gone so the callers (submission flow, load button) don't throw on a missing element.
+  if (!historySummary) return;
   hideLoading(historySummary);
   latestHistory = body;
   const history = body?.history ?? [];
@@ -2658,7 +2662,7 @@ createAppealButton.addEventListener("click", async () => {
   }, renderFlowGating);
 });
 
-loadHistoryButton.addEventListener("click", async () => {
+loadHistoryButton?.addEventListener("click", async () => {
   await runWithBusyButton(loadHistoryButton, async () => {
     try {
       showLoading(historySummary, { rows: 4 });
