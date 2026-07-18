@@ -1,6 +1,7 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
+import { moduleLibraryStatusBadge } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -119,16 +120,6 @@ let sortDirection = "asc"; // "asc" | "desc"
 // Status badge helpers
 // ---------------------------------------------------------------------------
 
-// v1.2.18 (#457): bytt fra hardkodet norsk til i18n-keys så en-GB og nn også viser
-// riktige labels. Faller tilbake til statuskode (rå) hvis i18n-key mangler.
-const STATUS_I18N_KEYS = {
-  archived: "library.status.archived",
-  unpublished_draft: "library.status.unpublishedDraft",
-  published_with_draft: "library.status.publishedWithDraft",
-  published: "library.status.published",
-  ready: "library.status.ready",
-};
-
 // v1.2.17: bruk i18n-keyene fra adminContent.promptDialog.certificationLevel{Basic,
 // Intermediate,Advanced} i stedet for hardkodet engelsk. "Foundation" var dead-code —
 // skjemaet aksepterer kun basic/intermediate/advanced.
@@ -138,10 +129,11 @@ const CERT_I18N_KEYS = {
   advanced: "adminContent.promptDialog.certificationLevelAdvanced",
 };
 
+// #705: unify to the shared 3-state badge (Utkast/Publisert/Arkivert) — same vocabulary as the
+// course/section lists. The library's richer 5-state (deriveLibraryStatus) is collapsed here, with
+// `published_with_draft` kept as a «nyere utkast»-chip so nothing is lost.
 function statusBadge(status) {
-  const key = STATUS_I18N_KEYS[status];
-  const label = key ? t(key) : status;
-  return `<span class="status-badge ${escapeHtml(status)}">${escapeHtml(label)}</span>`;
+  return moduleLibraryStatusBadge(status, t);
 }
 
 function certBadge(level) {

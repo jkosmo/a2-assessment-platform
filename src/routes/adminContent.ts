@@ -70,6 +70,7 @@ import {
   checkScenarioAnswerability,
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish } from "../modules/adminContent/contentValidationService.js";
+import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
 import {
   submitParseJob,
   getParsedResult,
@@ -286,12 +287,14 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
 
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    const courseCount = await adminContentRepository.countModuleCourses(request.params.moduleId);
-    if (courseCount > 0) {
+    // #705: G2 use-lock — reuse the shared named-courses message (same as unpublish/archive) so the
+    // three withdrawing actions read identically; keep the 409/`module_in_use`/`courseCount` shape.
+    const courses = await findCoursesContainingModule(request.params.moduleId);
+    if (courses.length > 0) {
       response.status(409).json({
         error: "module_in_use",
-        message: `Cannot delete module: it is used in ${courseCount} course(s). Remove it from all courses first.`,
-        courseCount,
+        message: inUseMessage("Modulen", "slettes", courses),
+        courseCount: courses.length,
       });
       return;
     }
@@ -730,59 +733,57 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     const moduleVersionData = bundle.versions.moduleVersions.find(
       (v) => v.id === request.params.moduleVersionId,
     );
-    if (moduleVersionData) {
-      const mcqSetVersion = bundle.versions.mcqSetVersions.find(
-        (v) => v.id === moduleVersionData.mcqSetVersionId,
-      );
-      let blueprint: unknown = null;
-      const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
-      if (rawBlueprint && typeof rawBlueprint === "string") {
-        try { blueprint = JSON.parse(rawBlueprint); } catch { blueprint = null; }
-      }
-      // taskText / assessorExpectedContent are LocalizedText (string OR
-      // {en-GB, nb, nn} object after decode). The validator only needs a
-      // representative string — pick the first non-empty locale value.
-      const flattenLocalized = (value: unknown): string | null => {
-        if (typeof value === "string") return value;
-        if (value && typeof value === "object") {
-          const candidate = (value as Record<string, unknown>)["en-GB"]
-            ?? (value as Record<string, unknown>).nb
-            ?? (value as Record<string, unknown>).nn;
-          return typeof candidate === "string" ? candidate : null;
-        }
-        return null;
-      };
-      const validation = validateModuleVersionForPublish({
-        taskText: flattenLocalized(moduleVersionData.taskText) ?? "",
-        candidateTaskConstraints: flattenLocalized(moduleVersionData.candidateTaskConstraints),
-        assessorExpectedContent: flattenLocalized(moduleVersionData.assessorExpectedContent),
-        blueprint: blueprint as never,
-        mcqQuestionCount: mcqSetVersion?.questions?.length ?? 0,
+    // #705: G1 must be single-source — no unguarded fallthrough. A version that isn't present on the
+    // module can't be validated, so it can't be published; reject instead of publishing blind.
+    if (!moduleVersionData) {
+      response.status(404).json({
+        error: "module_version_not_found",
+        message: "The module version to publish was not found on this module.",
       });
-      if (!validation.valid) {
-        response.status(422).json({
-          error: "publish_blocked_by_validation",
-          message: "Pre-publish validation found blocking issues. See `issues` for details.",
-          issues: validation.issues,
-        });
-        return;
-      }
-      // Warnings still go through; surfaced in response so the UI can display them.
-      const moduleVersion = await publishModuleVersion(
-        request.params.moduleId,
-        request.params.moduleVersionId,
-        actorId,
-      );
-      response.json({ moduleVersion, validationWarnings: validation.issues });
       return;
     }
-
+    const mcqSetVersion = bundle.versions.mcqSetVersions.find(
+      (v) => v.id === moduleVersionData.mcqSetVersionId,
+    );
+    let blueprint: unknown = null;
+    const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
+    if (rawBlueprint && typeof rawBlueprint === "string") {
+      try { blueprint = JSON.parse(rawBlueprint); } catch { blueprint = null; }
+    }
+    // taskText / assessorExpectedContent are LocalizedText (string OR {en-GB, nb, nn} object after
+    // decode). The validator only needs a representative string — pick the first non-empty locale.
+    const flattenLocalized = (value: unknown): string | null => {
+      if (typeof value === "string") return value;
+      if (value && typeof value === "object") {
+        const candidate = (value as Record<string, unknown>)["en-GB"]
+          ?? (value as Record<string, unknown>).nb
+          ?? (value as Record<string, unknown>).nn;
+        return typeof candidate === "string" ? candidate : null;
+      }
+      return null;
+    };
+    const validation = validateModuleVersionForPublish({
+      taskText: flattenLocalized(moduleVersionData.taskText) ?? "",
+      candidateTaskConstraints: flattenLocalized(moduleVersionData.candidateTaskConstraints),
+      assessorExpectedContent: flattenLocalized(moduleVersionData.assessorExpectedContent),
+      blueprint: blueprint as never,
+      mcqQuestionCount: mcqSetVersion?.questions?.length ?? 0,
+    });
+    if (!validation.valid) {
+      response.status(422).json({
+        error: "publish_blocked_by_validation",
+        message: "Pre-publish validation found blocking issues. See `issues` for details.",
+        issues: validation.issues,
+      });
+      return;
+    }
+    // Warnings still go through; surfaced in response so the UI can display them.
     const moduleVersion = await publishModuleVersion(
       request.params.moduleId,
       request.params.moduleVersionId,
       actorId,
     );
-    response.json({ moduleVersion });
+    response.json({ moduleVersion, validationWarnings: validation.issues });
   } catch (error) {
     if (error instanceof AppError) {
       response.status(error.httpStatus).json({ error: error.code, message: error.message });
