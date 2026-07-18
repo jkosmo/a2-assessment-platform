@@ -90,6 +90,49 @@ test("section editor: no raw i18n keys, and image upload is sent as multipart", 
   await expect(page.locator("#markdownInput")).toHaveValue(/asset:a1/);
 });
 
+// #524 (regression guard for the #705 `tNav` bug): the sections LIST must render its rows without a
+// client-side error. That bug threw ReferenceError only when a row rendered (`statusBadge` referenced
+// an undefined `t`), so an EMPTY-list mock hid it and the tab stuck on «Laster…». Load a NON-empty
+// list so the badge is actually invoked, and fail on any uncaught page error.
+test("section list renders rows (status badge) without a client-side error", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  await mockBaseApis(page);
+  await page.route("**/api/admin/content/sections", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        sections: [
+          {
+            id: "sec-1",
+            title: JSON.stringify({ nb: "Testseksjon", "en-GB": "Test section", nn: "Testseksjon" }),
+            activeVersionId: "v1",
+            archivedAt: null,
+            versionNo: 1,
+            courseCount: 0,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    }),
+  );
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  await page.goto("/admin-content/sections");
+
+  // The row rendered — the tab is NOT stuck on «Laster…».
+  await expect(page.getByText("Testseksjon")).toBeVisible();
+  await expect(page.locator("#main-content")).not.toContainText("Laster");
+  // The shared 3-state status badge rendered (published → «Publisert» in nb).
+  await expect(page.locator(".status-badge").first()).toHaveText("Publisert");
+  // No uncaught client-side error (guards the tNav/t ReferenceError class).
+  expect(pageErrors).toEqual([]);
+});
+
 // #662: the markdown input must grow to match the (taller) preview pane instead of staying pinned
 // at its 320px minimum, so the author isn't editing in a small box beside a tall preview.
 test("section editor: markdown input grows to match a taller preview pane", async ({ page }) => {

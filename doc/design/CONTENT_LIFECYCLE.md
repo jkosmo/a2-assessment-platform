@@ -1,6 +1,7 @@
 # Enhetlig innholds-livssyklus — Kurs · Modul · Seksjon
 
-> Status: vedtatt 2026-06-28. Erstatter den ujevne, per-entitet-implementerte livssyklusen
+> Status: vedtatt 2026-06-28; implementert v1.5.0–v1.6.1 (#706–#709), konsistens-opprydding i #705.
+> Erstatter den ujevne, per-entitet-implementerte livssyklusen
 > som lot et publisert kurs ende opp med en arkivert/avpublisert modul (lappet i deltaker-UI
 > via #502-followup, «Ikke tilgjengelig»). Målet er **én gjenkjennbar modell** for alle tre
 > innholdstypene, slik at en forfatter lærer reglene én gang og kjenner dem igjen overalt.
@@ -115,12 +116,13 @@ kan man ikke slette hvis det ødelegger bevarte registre — arkiver i stedet.
 **Backend**
 - Modul: `unpublishModule` + `archiveModule` får G2-vakt (slett har den alt). Arkiver
   auto-avpubliserer (I3).
-- Kurs: ny `unpublishCourse`; `archiveCourse` + `unpublishCourse` får G3-vakt; arkiver
-  auto-avpubliserer (I3). Slett beholder G4 (completions).
+- Kurs: ny `unpublishCourse`; **kun `archiveCourse` får G3-vakt** — avpublisering er bevisst unntatt
+  fra G3 (se §3, justert v1.5.1). Arkiver auto-avpubliserer (I3). Slett beholder G4 (completions).
 - Seksjon: nye `publishSection`/`unpublishSection`/`archiveSection`/`restoreSection`; G2-vakt
   på avpubliser/arkiver/slett.
 - Delt hjelper: `findCoursesContainingModule/Section` (id+tittel, alle publiseringstilstander)
-  for navngitte feilmeldinger; `countSectionCourses`.
+  for navngitte feilmeldinger, og `findCoursesForSections` (batch, for seksjonsliste-UI). Modul-slett
+  bruker samme navngitte-kurs-melding som avpubliser/arkiver (G2), ikke en avvikende telle-melding.
 
 **Frontend (samkjør de tre listene)**
 - Felles status-merkelapp (Utkast/Publisert/Arkivert) med samme farger.

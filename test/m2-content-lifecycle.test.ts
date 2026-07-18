@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { archiveModule, unpublishModule } from "../src/modules/adminContent/adminContentCommands.js";
-import { archiveCourse, unpublishCourse } from "../src/modules/course/courseCommands.js";
+import { archiveCourse, unpublishCourse, deleteCourse } from "../src/modules/course/courseCommands.js";
 import {
   archiveSection,
   unpublishSection,
@@ -26,6 +26,13 @@ const userIds: string[] = [];
 
 let seq = 0;
 const uniq = () => `lc-${Date.now()}-${seq++}`;
+
+const adminHeaders = {
+  "x-user-id": "admin-1",
+  "x-user-email": "admin@company.com",
+  "x-user-name": "Admin",
+  "x-user-roles": "ADMINISTRATOR",
+};
 
 async function makePublishedModule(): Promise<string> {
   const module = await prisma.module.create({ data: { title: `LC Module ${uniq()}` }, select: { id: true } });
@@ -189,5 +196,41 @@ describe("Unified content lifecycle (#705)", () => {
     const row = (res.body.sections as Array<{ id: string; activeVersionId: string | null }>).find((s) => s.id === sectionId);
     expect(row).toBeTruthy();
     expect(row?.activeVersionId).toBeTruthy(); // publisert → status «Publisert», ikke «Utkast»
+  });
+
+  // A1 (#705): en sletting skal logges som `course_deleted`, ikke `course_archived`.
+  it("logger course_deleted når et kurs slettes (ikke archived)", async () => {
+    const courseId = await makeCourse({ published: false });
+    await deleteCourse(courseId, ACTOR);
+    const audit = await prisma.auditEvent.findFirst({
+      where: { entityType: "course", entityId: courseId },
+      orderBy: { timestamp: "desc" },
+    });
+    expect(audit?.action).toBe("course_deleted");
+  });
+
+  // A2 (#705): G1 er enkelt-kilde — publisering av en versjon som ikke finnes på modulen avvises,
+  // ingen uvoktet fallthrough.
+  it("avviser publisering av en versjon som ikke finnes på modulen (404)", async () => {
+    const moduleId = await makePublishedModule();
+    const res = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions/does-not-exist/publish`)
+      .set(adminHeaders);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("module_version_not_found");
+  });
+
+  // A3 (#705): modul-slett i bruk gir 409 med den navngitte-kurs-meldingen (som avpubliser/arkiver).
+  it("modul-slett i bruk gir 409 med navngitt-kurs-melding", async () => {
+    const moduleId = await makePublishedModule();
+    await makeCourse({ moduleId, published: false });
+    const res = await request(app)
+      .delete(`/api/admin/content/modules/${moduleId}`)
+      .set(adminHeaders);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("module_in_use");
+    expect(res.body.courseCount).toBe(1);
+    expect(res.body.message).toContain("i bruk i 1 kurs");
+    expect(res.body.message).toContain("«LC Kurs»");
   });
 });

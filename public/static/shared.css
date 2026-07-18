@@ -1073,6 +1073,19 @@ dialog::backdrop {
 .status-badge--draft     { background: #edf1f7; color: #42526b; }  /* grå  — utkast (ikke synlig) */
 .status-badge--published { background: #e6f4ea; color: #12613a; }  /* grønn — live */
 .status-badge--archived  { background: #f0f0f0; color: #666; }     /* dempet — pensjonert */
+/* #705: sekundær-markør ved siden av status-badgen (f.eks. «nyere utkast» på en publisert modul). */
+.status-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: middle;
+  white-space: nowrap;
+  background: #fff5e6;
+  color: #8a5a00;
+}
 
 /* #705-UX(B): felles handlings-knapperad + knapp i admin-listene, så alle fire listene (kurs/
    moduler/seksjoner/klasser) ser like ut. Tidligere definerte hver side sin egen .row-action-btn

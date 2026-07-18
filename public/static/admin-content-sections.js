@@ -8,6 +8,7 @@ import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
+import { lifecycleStatusBadge } from "/static/content-status-badge.js";
 
 // ---------------------------------------------------------------------------
 // Section editor (U1 / #488). Library of reusable course learning sections.
@@ -174,8 +175,9 @@ function sectionStatus(s) {
 }
 
 function statusBadge(status) {
-  const label = status === "published" ? L("statusPublished") : status === "archived" ? L("statusArchived") : L("statusDraft");
-  return `<span class="status-badge status-badge--${status}">${escapeHtml(label)}</span>`;
+  // #705: shared 3-state badge + i18n (same vocabulary as course/module lists).
+  // NB: this file's admin-translations accessor is `tNav`, not `t`.
+  return lifecycleStatusBadge(status, tNav);
 }
 
 // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.

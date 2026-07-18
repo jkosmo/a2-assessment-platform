@@ -55,7 +55,9 @@ export async function findCoursesForSections(
   return result;
 }
 
-function inUseMessage(
+// #705: exported so the module-delete route can reuse the exact G2 named-courses message
+// (keeping its own 409 status) instead of a divergent count-only message.
+export function inUseMessage(
   subject: "Modulen" | "Seksjonen",
   verb: string,
   courses: Array<{ title: string }>,
