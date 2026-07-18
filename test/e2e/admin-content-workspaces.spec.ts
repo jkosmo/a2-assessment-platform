@@ -13,6 +13,11 @@ import {
   buildMockModuleExport,
 } from "./admin-content-helpers.js";
 
+// #613: the conversational shell (`admin-content.html`) has no bare production route — it lives at
+// `/admin-content/module/:id/conversation`, while `/admin-content` serves the module library. The
+// shell tests below exercise its in-page flows (idle "create new module", source step), so they load
+// the shell HTML directly via its `/admin-content.html` file path (the static server's public-file
+// fallback), independent of the library route.
 test.describe("admin content browser coverage", () => {
   test("advanced editor can save, publish, and unpublish a module version", async ({ page }) => {
     await mockCommonApis(page, {
@@ -238,7 +243,7 @@ test.describe("admin content browser coverage", () => {
   test("shell can create a new module, generate content, and save without losing the module ID", async ({ page }) => {
     await mockCommonApis(page);
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Trade unions");
@@ -293,7 +298,7 @@ test.describe("admin content browser coverage", () => {
       await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ mcqSetVersion: { id: "mcq-1" } }) });
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Essay module");
     await submitActiveChatInput(page, "Source notes for a free-text-only essay module.");
@@ -342,7 +347,7 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Crawl module");
 
@@ -362,7 +367,7 @@ test.describe("admin content browser coverage", () => {
   test("shell source step accepts a file between 2 and 10 MB", async ({ page }) => {
     await mockCommonApis(page);
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Big file module");
 
@@ -400,7 +405,7 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Image-heavy module");
 
@@ -437,7 +442,7 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "URL module");
 
@@ -465,7 +470,7 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Quiz module");
@@ -877,7 +882,7 @@ test.describe("admin content browser coverage", () => {
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
     const state = await mockCommonApis(page);
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
 
     await clickEnabledButton(page, "Create new module");
     await submitActiveChatInput(page, "Upload module");
@@ -1093,7 +1098,7 @@ test.describe("admin content browser coverage", () => {
       ],
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
 
     await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
     await expect(page.getByText("What would you like to do?")).toBeVisible();
@@ -1385,7 +1390,7 @@ test.describe("admin content browser coverage", () => {
       courses: [],
     });
 
-    await page.goto("/admin-content");
+    await page.goto("/admin-content.html");
     const shellResults = await new AxeBuilder({ page })
       .disableRules(["color-contrast"])
       .analyze();
