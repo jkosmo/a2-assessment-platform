@@ -147,15 +147,12 @@ export function rolesFor(id: ApiRouteCapability["id"]): AppRoleType[] {
 export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleType[]): WorkspaceNavigationItem[] {
   return [
     {
+      // #767: «Mine kurs» — deltakerens egen kurs-arbeidsflate. «Fullførte» er ikke lenger et eget
+      // toppmeny-punkt; den nås via undernavigasjonen (Pågående | Fullførte) rendret av
+      // public/static/mine-kurs-subnav.js på /participant og /participant/completed.
       id: "participant",
       path: "/participant",
       labelKey: "nav.participant",
-      requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
-    },
-    {
-      id: "completed",
-      path: "/participant/completed",
-      labelKey: "nav.completedModules",
       requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
     },
     {

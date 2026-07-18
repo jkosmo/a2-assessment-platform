@@ -23,8 +23,13 @@
         <select id="localeSelect" class="locale-select-compact"></select>
       </div>
     </div>
-    <h1 data-i18n="completedPage.title">Completed Modules</h1>
-    <p class="small" data-i18n="completedPage.subtitle">See what you have finished and your latest score per module.</p>
+    <!-- #767: «Mine kurs»-området deler denne undernavigasjonen (Pågående | Fullførte). -->
+    <nav id="mineKursSubnav" class="content-area-nav" aria-label="Mine kurs">
+      <a href="/participant" class="content-area-nav-link" id="subnavPagaende" data-i18n="mineKurs.ongoing">Ongoing</a>
+      <a href="/participant/completed" class="content-area-nav-link" id="subnavFullforte" data-i18n="mineKurs.completed">Completed</a>
+    </nav>
+    <h1 data-i18n="completedPage.title">Completed</h1>
+    <p class="small" data-i18n="completedPage.subtitle">Course certificates you have earned, and the modules you have completed with your latest score.</p>
 
     <section class="card mock-identity-card">
       <details class="mock-identity-panel">
@@ -52,8 +57,14 @@
       </details>
     </section>
 
+    <!-- #767: kurs-fokus — led med kursbevis (kurs-nivå), deretter fullførte moduler (modul-nivå). -->
+    <section class="card" id="courseCertSection">
+      <h2 data-i18n="courseCert.title">My course certificates</h2>
+      <div id="courseCertList"></div>
+    </section>
+
     <section class="card">
-      <h2 data-i18n="completed.title">My completed modules</h2>
+      <h2 data-i18n="completed.title">Completed modules</h2>
       <div class="row">
         <div>
           <label for="completedLimit" data-i18n="completed.limit">Max modules</label>
@@ -96,20 +107,17 @@
       <div class="small field-success" id="completedAppealFeedback" hidden></div>
     </section>
 
-    <section class="card" id="courseCertSection">
-      <h2 data-i18n="courseCert.title">Mine kursbevis</h2>
-      <div id="courseCertList"></div>
-    </section>
-
-    <section class="card">
-      <h2 data-i18n="output.title">System response</h2>
-      <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
+    <!-- #767: «Systemsvar» (debug/System response) fjernet fra deltaker-visningen. Elementene beholdes
+         skjult så log()-maskineriet fortsatt har et sted å skrive (ingen JS-endring nødvendig). -->
+    <div hidden aria-hidden="true">
+      <div id="outputStatus"></div>
       <pre id="output" class="pre-content"></pre>
-    </section>
+    </div>
 
     </main>
     <script src="/static/i18n/participant-completed-translations.js" type="module"></script>
     <script src="/static/participant-completed.js" type="module"></script>
+    <script src="/static/mine-kurs-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
   </body>
 </html>

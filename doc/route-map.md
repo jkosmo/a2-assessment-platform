@@ -38,8 +38,8 @@ only Klasser moved (from `/admin-content/classes`).
 
 | Route | Workspace |
 |---|---|
-| `/participant` | Participant submission workspace |
-| `/participant/completed` | Completed assessment result view (incl. course certificates list) |
+| `/participant` | «Mine kurs» → **Pågående**-fane: deltakerens kurs + innleveringsflyt (#767) |
+| `/participant/completed` | «Mine kurs» → **Fullførte**-fane: kursbevis + fullførte moduler (#767) |
 | `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
