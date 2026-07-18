@@ -114,6 +114,34 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
         include: { course: { select: { id: true, title: true } } },
       });
     },
+
+    // #497 fase 2: class-assigned due dates for the reminder schedule. Only non-null dueAt on a
+    // non-archived class. Includes the course (id + localized title) and the class kind/isSystem so
+    // the service can expand membership (MANUAL rows are included; the system "Alle deltakere" class
+    // has no rows and is resolved separately; ENTRA classes are not resolvable in a background job
+    // and are skipped by the service).
+    findCourseGroupAssignmentsWithDueDate() {
+      return client.courseGroupAssignment.findMany({
+        where: { dueAt: { not: null }, class: { archivedAt: null } },
+        include: {
+          course: { select: { id: true, title: true } },
+          class: {
+            select: {
+              id: true,
+              kind: true,
+              isSystem: true,
+              members: {
+                select: {
+                  user: {
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    },
   };
 }
 

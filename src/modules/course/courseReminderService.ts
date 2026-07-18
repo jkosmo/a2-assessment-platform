@@ -13,12 +13,20 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { sendViaAcs } from "../certification/participantNotificationService.js";
 import { deriveStatus } from "./enrollmentService.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
+import { classRepository } from "./classRepository.js";
+import { findActiveParticipants } from "../../repositories/userRepository.js";
 
 // #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Klon av
 // recert-påminnelses-mønsteret (recertificationService.ts): audit-basert dedup gjør re-kjøring
-// idempotent og restart-trygg. v1 dekker INDIVIDUELLE (eksplisitt tildelte) CourseEnrollment.dueAt;
-// klasse-tildelte frister er fase 2. Ingen per-bruker locale finnes ennå → org-default (nb),
-// samme som diskusjonsvarsler.
+// idempotent og restart-trygg. Dekker to kilder til kurs-frister:
+//   1. INDIVIDUELLE (eksplisitt tildelte) CourseEnrollment.dueAt.
+//   2. KLASSE-tildelte CourseGroupAssignment.dueAt (fase 2), ekspandert til medlemmer — MANUAL-
+//      klasser (ClassMember-rader) + system-klassen «Alle deltakere» (alle aktive deltakere).
+//      ENTRA-klasser kan ikke oppløses i en bakgrunnsjobb (ingen token/lagrede medlemskanter) og
+//      hoppes over, på samme måte som tildelings-e-posten (classService).
+// Per (bruker, kurs) beregnes ÉN effektiv frist: individuell frist vinner over klasse; ved flere
+// klasse-frister vinner den tidligste. Slik unngås dobbel-varsling. Ingen per-bruker locale finnes
+// ennå → org-default (nb), samme som diskusjonsvarsler.
 
 const NOTIFY_LOCALE = "nb" as const;
 const NOTIFICATION_TYPE = "course_reminder";
@@ -53,6 +61,20 @@ export type CourseReminderScheduleSummary = {
   skippedNoTrigger: number;
   skippedCompleted: number;
   skippedInactive: number;
+  skippedEntraClass: number;
+};
+
+// En effektiv frist-kandidat per (bruker, kurs) etter sammenslåing av individuelle + klasse-kilder.
+type ReminderCandidate = {
+  userId: string;
+  courseId: string;
+  dueAt: Date;
+  recipientEmail: string;
+  recipientName: string | null;
+  courseTitle: string; // lokalisert
+  activeStatus: boolean;
+  isAnonymized: boolean;
+  source: "individual" | "class";
 };
 
 async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
@@ -177,6 +199,87 @@ function dueDateIsBefore(dueAt: Date, asOf: Date): boolean {
   return due < now;
 }
 
+function localizeTitle(title: string): string {
+  return localizeContentText(NOTIFY_LOCALE, title) ?? title ?? "";
+}
+
+// Samler individuelle + klasse-tildelte frister til ÉN effektiv kandidat per (bruker, kurs).
+// Presedens: individuell frist vinner over klasse; ved flere klasse-frister vinner den tidligste.
+async function gatherCandidates(summary: CourseReminderScheduleSummary): Promise<ReminderCandidate[]> {
+  const map = new Map<string, ReminderCandidate>();
+  const keyOf = (userId: string, courseId: string) => `${userId}::${courseId}`;
+
+  // 1. Individuelle (eksplisitt tildelte) enrollments med frist.
+  const enrollments = await enrollmentRepository.findIndividualEnrollmentsWithDueDate();
+  for (const enrollment of enrollments) {
+    if (!enrollment.dueAt) continue;
+    map.set(keyOf(enrollment.userId, enrollment.courseId), {
+      userId: enrollment.userId,
+      courseId: enrollment.courseId,
+      dueAt: enrollment.dueAt,
+      recipientEmail: enrollment.user.email,
+      recipientName: enrollment.user.name,
+      courseTitle: localizeTitle(enrollment.course.title),
+      activeStatus: enrollment.user.activeStatus,
+      isAnonymized: enrollment.user.isAnonymized,
+      source: "individual",
+    });
+  }
+
+  // 2. Klasse-tildelte frister → ekspander til medlemmer. MANUAL = ClassMember-rader;
+  //    system-klassen «Alle deltakere» = alle aktive deltakere (ingen rader). ENTRA hoppes over.
+  const assignments = await classRepository.findCourseGroupAssignmentsWithDueDate();
+  let allParticipants: Array<{ id: string; name: string; email: string }> | null = null;
+
+  for (const assignment of assignments) {
+    if (!assignment.dueAt) continue;
+    if (assignment.class.kind === "ENTRA") {
+      summary.skippedEntraClass += 1;
+      continue;
+    }
+
+    const members: Array<{
+      id: string;
+      name: string;
+      email: string;
+      activeStatus: boolean;
+      isAnonymized: boolean;
+    }> = assignment.class.isSystem
+      ? (allParticipants ??= await findActiveParticipants()).map((u) => ({
+          ...u,
+          activeStatus: true,
+          isAnonymized: false,
+        }))
+      : assignment.class.members.map((m) => m.user);
+
+    const courseTitle = localizeTitle(assignment.course.title);
+    for (const user of members) {
+      const key = keyOf(user.id, assignment.courseId);
+      const existing = map.get(key);
+      if (existing) {
+        // Individuell frist vinner; ellers behold tidligste klasse-frist.
+        if (existing.source === "class" && assignment.dueAt < existing.dueAt) {
+          existing.dueAt = assignment.dueAt;
+        }
+        continue;
+      }
+      map.set(key, {
+        userId: user.id,
+        courseId: assignment.courseId,
+        dueAt: assignment.dueAt,
+        recipientEmail: user.email,
+        recipientName: user.name,
+        courseTitle,
+        activeStatus: user.activeStatus,
+        isAnonymized: user.isAnonymized,
+        source: "class",
+      });
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export async function runCourseReminderSchedule(input?: {
   asOf?: Date;
   sendImpl?: CourseReminderSendImpl;
@@ -198,22 +301,18 @@ export async function runCourseReminderSchedule(input?: {
     skippedNoTrigger: 0,
     skippedCompleted: 0,
     skippedInactive: 0,
+    skippedEntraClass: 0,
   };
 
-  const enrollments = await enrollmentRepository.findIndividualEnrollmentsWithDueDate();
+  const candidates = await gatherCandidates(summary);
 
-  for (const enrollment of enrollments) {
-    const dueAt = enrollment.dueAt;
-    if (!dueAt) {
-      summary.skippedNoTrigger += 1;
-      continue;
-    }
-    if (!enrollment.user.activeStatus || enrollment.user.isAnonymized) {
+  for (const candidate of candidates) {
+    if (!candidate.activeStatus || candidate.isAnonymized) {
       summary.skippedInactive += 1;
       continue;
     }
 
-    const status = await deriveStatus(enrollment.userId, enrollment.courseId, dueAt, asOf);
+    const status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
     if (status === "COMPLETED") {
       summary.skippedCompleted += 1;
       continue;
@@ -223,10 +322,10 @@ export async function runCourseReminderSchedule(input?: {
     let kind: CourseReminderKind | null = null;
     let daysBefore: number | undefined;
 
-    if (dueDateIsBefore(dueAt, asOf)) {
+    if (dueDateIsBefore(candidate.dueAt, asOf)) {
       kind = "overdue";
     } else {
-      const matched = reminderDaysBefore.find((d) => sameUtcDate(addDays(asOf, d), dueAt));
+      const matched = reminderDaysBefore.find((d) => sameUtcDate(addDays(asOf, d), candidate.dueAt));
       if (matched != null) {
         kind = "due_soon";
         daysBefore = matched;
@@ -238,8 +337,8 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
-    const userId = enrollment.userId;
-    const alreadySent = await hasReminderBeenSent(enrollment.courseId, (metadataJson) => {
+    const userId = candidate.userId;
+    const alreadySent = await hasReminderBeenSent(candidate.courseId, (metadataJson) => {
       if (!metadataJson.includes(`"userId":"${userId}"`)) return false;
       if (kind === "overdue") {
         return metadataJson.includes('"kind":"overdue"');
@@ -257,32 +356,29 @@ export async function runCourseReminderSchedule(input?: {
 
     summary.processed += 1;
 
-    const courseTitle =
-      localizeContentText(NOTIFY_LOCALE, enrollment.course.title) ?? enrollment.course.title ?? "";
-
     const result = await send({
-      courseId: enrollment.courseId,
+      courseId: candidate.courseId,
       userId,
-      recipientEmail: enrollment.user.email,
-      recipientName: enrollment.user.name,
-      courseTitle,
+      recipientEmail: candidate.recipientEmail,
+      recipientName: candidate.recipientName,
+      courseTitle: candidate.courseTitle,
       kind,
-      dueAt,
+      dueAt: candidate.dueAt,
       daysBefore,
     });
 
     await recordAuditEvent({
       entityType: auditEntityTypes.course,
-      entityId: enrollment.courseId,
+      entityId: candidate.courseId,
       action: result.delivered ? auditActions.course.reminderSent : auditActions.course.reminderFailed,
       actorId: undefined,
       metadata: {
-        courseId: enrollment.courseId,
+        courseId: candidate.courseId,
         userId,
         kind,
         ...(daysBefore != null ? { daysBefore } : {}),
         asOfDate,
-        dueAt: dueAt.toISOString(),
+        dueAt: candidate.dueAt.toISOString(),
         channel: result.channel,
         delivered: result.delivered,
         failureReason: result.failureReason ?? null,

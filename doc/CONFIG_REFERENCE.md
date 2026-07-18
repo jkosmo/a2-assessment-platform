@@ -90,11 +90,13 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 | `dueSoonDays` | `14` | Days before expiry when "due soon" state activates |
 | `reminderDaysBefore` | `[30, 7, 1]` | Days before expiry to send reminder notifications |
 
-**`courseReminders`** *(optional, has defaults)* - #497: schedule for course due-date reminders sent to
-enrolled participants (individual `CourseEnrollment.dueAt`). Driven by the daily `CourseReminderMonitor`
-(env `COURSE_REMINDER_INTERVAL_MS`, default 86_400_000 ms), which only runs in the worker role when
-`PARTICIPANT_NOTIFICATION_CHANNEL != disabled`. Emits audit actions `course_reminder_sent` /
-`course_reminder_failed`.
+**`courseReminders`** *(optional, has defaults)* - #497: schedule for course due-date reminders. Covers
+both individual `CourseEnrollment.dueAt` and class-assigned `CourseGroupAssignment.dueAt` (MANUAL classes
++ the "Alle deltakere" system class; ENTRA classes are skipped as their membership is not resolvable in a
+background job). Per (user, course) one effective due date is used — individual wins over class, earliest
+class wins among classes. Driven by the daily `CourseReminderMonitor` (env `COURSE_REMINDER_INTERVAL_MS`,
+default 86_400_000 ms), which only runs in the worker role when `PARTICIPANT_NOTIFICATION_CHANNEL !=
+disabled`. Emits audit actions `course_reminder_sent` / `course_reminder_failed`.
 
 | Field | Default | Description |
 |---|---|---|
