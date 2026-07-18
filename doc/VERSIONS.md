@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.35 - 2026-07-18
+
+fix(worker): herd oppstart mot connection-pool-storm som crashet prod-worker (#497-incident)
+
+**Hendelse (2026-07-18):** etter prod-deploy av 1.6.33 klarte ikke worker-rollen å starte. Ved oppstart
+fyrte alle seks bakgrunns-monitorene sin første DB-spørring samtidig → Prisma connection-pool (limit 10)
+gikk tom mot den burstable Postgres-en → `Bus error (core dumped)` / exit 135 → warmup-timeout → Azure
+stoppet worker-siten. Web-appen var upåvirket (frisk `/healthz`). Mitigert med worker-restart (kom opp
+på nytt forsøk — transient storm). Denne fiksen hindrer gjentakelse.
+
+- **Spredt oppstart:** `src/index.ts` starter nå de seks monitorene med en forsinkelse mellom hver
+  (`WORKER_STARTUP_STAGGER_MS`, default 3000 ms), så første tick ikke treffer DB samtidig. Assessment-
+  workeren starter først (ingen forsinkelse) så køprosessering begynner raskt. Spredningen hopper over
+  monitorer hvis prosessen allerede stenger ned.
+- **Feil-svelging:** `AppealSlaMonitor`, `PseudonymizationMonitor` og `AuditRetentionMonitor` manglet
+  `catch` i `tick()` — en feilende tick propagerte som en unhandled rejection. Alle tre logger nå og
+  fortsetter (samme mønster som de andre monitorene). Påminnelses-monitorens tick er allerede spredt
+  til sist av stagger-en, så den beholder sin oppstarts-kjøring uten å bidra til stormen.
+- **Config:** ny `WORKER_STARTUP_STAGGER_MS` i env (default 3000, 0 = ingen spredning).
+- **Tester:** unit — «tick-feil svelges + fortsetter å ticke» (AppealSla). tsc grønn.
+
+**Utrulling:** kun server-kode, ingen migrasjon. **Bør til prod før neste feature-deploy**, siden hver
+deploy restarter workeren og kan trigge stormen på nytt. **Rollback:** reverter koden (worker-restart
+er uansett en trygg gjenoppretting).
+
 ## 1.6.34 - 2026-07-18
 
 feat(nav): #765 — nytt «Deltakere»-toppmeny som samler Klasser + Manuell behandling + Resultater

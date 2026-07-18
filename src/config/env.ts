@@ -102,6 +102,10 @@ const envSchema = z.object({
   // #497: daglig bakgrunnsjobb for kurs-frist-påminnelser. Kjører kun i worker-rollen når
   // varselkanalen er aktiv (PARTICIPANT_NOTIFICATION_CHANNEL !== "disabled").
   COURSE_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
+  // #497-incident: ms mellom oppstart av hver bakgrunns-monitor i worker-rollen, slik at deres
+  // første DB-spørring ikke treffer samtidig (unngår connection-pool-storm ved oppstart). 0 = ingen
+  // spredning (start alle samtidig).
+  WORKER_STARTUP_STAGGER_MS: z.coerce.number().int().min(0).default(3000),
   AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),

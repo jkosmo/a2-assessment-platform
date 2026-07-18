@@ -48,6 +48,9 @@ export class AuditRetentionMonitor {
     try {
       await this.runScan();
       this.lastCycleAt = new Date();
+    } catch (error) {
+      // #497-incident: never let a failing tick escape as an unhandled rejection — log and continue.
+      console.warn(`[audit-retention] monitor tick failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;
     }

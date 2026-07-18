@@ -87,12 +87,25 @@ async function startServer() {
   }
 
   if (startWorkers) {
-    assessmentWorker!.start();
-    appealSlaMonitor!.start();
-    pseudonymizationMonitor!.start();
-    auditRetentionMonitor!.start();
-    entraUserSyncMonitor!.start();
-    courseReminderMonitor!.start();
+    // #497-incident (2026-07-18): starting all six background monitors at once made them fire their
+    // first DB query simultaneously. That startup connection storm exhausted the Prisma pool
+    // (limit 10) against the burstable Postgres and crashed the worker (SIGBUS / exit 135), failing
+    // container warm-up. Stagger the starts so first ticks are spread a few seconds apart, keeping
+    // peak connection demand well under the pool limit. The assessment worker starts first (no delay)
+    // so queue processing begins promptly.
+    const staggeredWorkers = [
+      assessmentWorker,
+      appealSlaMonitor,
+      pseudonymizationMonitor,
+      auditRetentionMonitor,
+      entraUserSyncMonitor,
+      courseReminderMonitor,
+    ];
+    staggeredWorkers.forEach((worker, index) => {
+      setTimeout(() => {
+        if (!shuttingDown) worker!.start();
+      }, index * env.WORKER_STARTUP_STAGGER_MS);
+    });
   }
 }
 
