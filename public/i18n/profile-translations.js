@@ -9,7 +9,7 @@ export const localeLabels = {
 export const translations = {
   "en-GB": {
     "nav.skipToContent": "Skip to main content",
-    "nav.participant": "Assessments",
+    "nav.participant": "My courses",
     "nav.completedModules": "Completed modules",
     "nav.manualReview": "Manual review",
     "nav.review": "Manual review",
@@ -129,7 +129,7 @@ export const translations = {
   },
   nb: {
     "nav.skipToContent": "Hopp til innhold",
-    "nav.participant": "Deltaker",
+    "nav.participant": "Mine kurs",
     "nav.completedModules": "Fullførte moduler",
     "nav.manualReview": "Manuell gjennomgang",
     "nav.review": "Manuell behandling",
@@ -242,7 +242,7 @@ export const translations = {
   },
   nn: {
     "nav.skipToContent": "Hopp til innhald",
-    "nav.participant": "Deltakar",
+    "nav.participant": "Kursa mine",
     "nav.completedModules": "Fullførte modular",
     "nav.manualReview": "Manuell gjennomgang",
     "nav.review": "Manuell handsaming",

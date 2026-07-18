@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.36 - 2026-07-18
+
+feat(participant): #767 — «Mine kurs»-område (Pågående/Fullførte) + kurs-fokusert UI på deltaker-sidene
+
+Fokuset er kurs, ikke moduler. Toppmeny-punktet «Deltaker» var modul-sentrisk og kolliderte med det nye
+«Deltakere»-området (#765). De to deltaker-sidene er nå samlet og kurs-innrammet.
+
+- **Toppnav:** «Deltaker» → **«Mine kurs»** (nb «Mine kurs» / nn «Kursa mine» / en «My courses»). Løser
+  entall/flertall-forvirringen mot «Deltakere».
+- **Undernavigasjon:** «Fullførte moduler» er ikke lenger et eget toppmeny-punkt. Ny felles sub-nav
+  (`public/static/mine-kurs-subnav.js`): **Pågående** (`/participant`) · **Fullførte**
+  (`/participant/completed`). Aktiv fane settes ut fra URL (mest spesifikke path vinner).
+- **Overskrifter/terminologi (modul→kurs der riktig):** `/participant` H1 → «Mine kurs» + deltaker-
+  vennlig undertittel; `/participant/completed` H1 → «Fullførte», leder med «Mine kursbevis», deretter
+  «Fullførte moduler»-tabellen. Beholdt «modul» der det gjelder moduler inne i et kurs.
+- **«Min historikk» fjernet fra Pågående-siden** — den overlappet med «Fullførte»-fanen (som nå er
+  hjemmet for det man har gjort); Pågående-kurs-trekkspillet viser allerede per-modul-status.
+- **Dev-scaffolding:** allerede skjult i prod (mock-identitetskort / modul-liste / debug).
+- **Tester:** e2e (sub-nav aktiv-fane + prefix-matching, kurs-innramming) + oppdatert oversettelses-
+  parity. tsc grønn. route-map oppdatert.
+
+Kun server+klient-kode, ingen migrasjon. **Går kun til stage foreløpig.**
+
 ## 1.6.35 - 2026-07-18
 
 fix(worker): herd oppstart mot connection-pool-storm som crashet prod-worker (#497-incident)

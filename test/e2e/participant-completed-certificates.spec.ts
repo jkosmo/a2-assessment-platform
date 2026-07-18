@@ -63,6 +63,37 @@ test("completed page: auto-loads course certificates on open (no button click)",
   expect(completionsFetched).toBe(true);
 });
 
+// #767: the «Mine kurs» sub-nav (Pågående | Fullførte) marks the active tab by pathname. On the
+// completed page «Fullførte» must be active even though `/participant` is a prefix of the URL — the
+// more specific path has to win. The page is also course-framed: H1 is "Completed" (not "Completed
+// Modules"), and it leads with the course-certificates section.
+test("completed page: mine-kurs sub-nav marks «Fullførte» active (specific path wins)", async ({ page }) => {
+  await mockConfig(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "en-GB"); } catch { /* ignore */ }
+  });
+  await page.route("**/api/courses/completions", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ completions: [] }) }),
+  );
+
+  await page.goto("/participant/completed");
+
+  const subnav = page.locator("#mineKursSubnav");
+  await expect(subnav).toBeVisible();
+  await expect(subnav.locator("#subnavPagaende")).toHaveText("Ongoing");
+  await expect(subnav.locator("#subnavFullforte")).toHaveText("Completed");
+  await expect(subnav.locator("#subnavFullforte")).toHaveClass(/active/);
+  await expect(subnav.locator("#subnavPagaende")).not.toHaveClass(/active/);
+
+  // Course-framing: H1 dropped "Modules", and the certificates section leads the page.
+  await expect(page.locator("h1")).toHaveText("Completed");
+  const cert = page.locator("#courseCertSection");
+  const modules = page.locator("#completedBody");
+  const certY = (await cert.boundingBox())?.y ?? Infinity;
+  const modulesY = (await modules.boundingBox())?.y ?? -Infinity;
+  expect(certY).toBeLessThan(modulesY);
+});
+
 test("completed page: shows the empty state when there are no certificates", async ({ page }) => {
   await mockConfig(page);
   await page.addInitScript(() => {

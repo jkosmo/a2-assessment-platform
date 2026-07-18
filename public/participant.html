@@ -115,8 +115,13 @@
         <select id="localeSelect" class="locale-select-compact"></select>
       </div>
     </div>
-    <h1 data-i18n="page.title">Participant Test Console</h1>
-    <p class="small" data-i18n="page.subtitle">Manual flow: modules -&gt; submission -&gt; MCQ -&gt; assessment/result.</p>
+    <!-- #767: «Mine kurs»-området deler denne undernavigasjonen (Pågående | Fullførte). -->
+    <nav id="mineKursSubnav" class="content-area-nav" aria-label="Mine kurs">
+      <a href="/participant" class="content-area-nav-link" id="subnavPagaende" data-i18n="mineKurs.ongoing">Ongoing</a>
+      <a href="/participant/completed" class="content-area-nav-link" id="subnavFullforte" data-i18n="mineKurs.completed">Completed</a>
+    </nav>
+    <h1 data-i18n="page.title">My courses</h1>
+    <p class="small" data-i18n="page.subtitle">Track your progress across your courses.</p>
     <section id="previewModeBanner" class="card hidden">
       <h2 data-i18n="preview.title">Draft preview</h2>
       <div id="previewModeMessage" class="small" data-i18n="preview.description">This page shows the current admin draft only. Nothing is saved, submitted, or scored.</div>
@@ -241,6 +246,7 @@
     </main>
     <script src="/static/i18n/participant-translations.js" type="module"></script>
     <script src="/static/participant.js" type="module"></script>
+    <script src="/static/mine-kurs-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
   </body>
   </html>
