@@ -10,13 +10,10 @@ import { clickEnabledButton, mockCommonApis } from "./admin-content-helpers.js";
 // harness + mock API used by `admin-content-workspaces.spec.ts` (shared via
 // `admin-content-helpers.ts`).
 //
-// Routing note: the canonical production route for the library is `/admin-content`
-// (see doc/route-map.md), but the e2e static server (`admin-content-static-server.mjs`)
-// still maps `/admin-content` to the conversational shell (tracked in #613). The library
-// HTML is reached here via its static file path `/admin-content-library.html`, which the
-// static server serves through its public-file fallback. The library page's behaviour is
-// identical regardless of the URL that served the HTML.
-const LIBRARY_PATH = "/admin-content-library.html";
+// #613: the e2e static server now mirrors production — `/admin-content` serves the module library
+// (`admin-content-library.html`), matching doc/route-map.md + src/app.ts. Navigate via the canonical
+// route, not the raw file path.
+const LIBRARY_PATH = "/admin-content";
 
 test.describe("admin content module library", () => {
   test("lists library modules in a table with per-row open actions", async ({ page }) => {

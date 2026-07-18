@@ -26,8 +26,10 @@ function send(response, statusCode, body, headers = {}) {
 }
 
 function resolvePublicFile(requestPath) {
+  // #613: mirror production — `/admin-content` serves the module library (route-map.md canonical),
+  // NOT the conversation shell. The shell lives at `/admin-content/module/:id/conversation` (below).
   if (requestPath === "/" || requestPath === "/admin-content") {
-    return path.join(publicRoot, "admin-content.html");
+    return path.join(publicRoot, "admin-content-library.html");
   }
   if (requestPath === "/admin-content/advanced") {
     return path.join(publicRoot, "admin-content-advanced.html");
