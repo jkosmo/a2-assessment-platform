@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.33 - 2026-07-18
+
+feat(course): #497 — automatiske kurs-frist-påminnelser (frist nærmer seg + forfalt) via daglig
+bakgrunnsjobb
+
+Siste «Done når»-pilar i Epic #478 (Tier 2 LMS): innhold ✓ + vurdering ✓ + progress ✓ + **varsling**.
+Deltakere med individuelle kurs-frister får nå automatiske e-post-påminnelser, uten at læreren følger
+opp manuelt. Kloner recert-påminnelses-mønsteret: audit-basert dedup gjør re-kjøring idempotent og
+restart-trygg.
+
+- **Ny orkestrator:** `runCourseReminderSchedule({ asOf, sendImpl? })` — henter individuelle
+  `CourseEnrollment.dueAt`-kandidater, hopper over fullførte (`deriveStatus === COMPLETED`), avmeldte,
+  deaktiverte/anonymiserte brukere og enrolments uten frist. **due-soon** fyrer på konfigurerbare
+  offsets (standard 7 og 1 dag før), **overdue** fyrer én gang etter passert frist.
+- **Ny monitor:** `CourseReminderMonitor` — env-gated `setInterval`-klasse (daglig,
+  `COURSE_REMINDER_INTERVAL_MS`), kjører kun i worker-rollen når `PARTICIPANT_NOTIFICATION_CHANNEL !=
+  disabled`; tick-feil logges og velter aldri workeren. Wiret i `src/index.ts`.
+- **Gjenbruk:** ACS-send via `sendViaAcs`, statusutledning via `deriveStatus`, audit via
+  `recordAuditEvent`. Nye audit-actions `course_reminder_sent` / `course_reminder_failed`.
+- **E-post:** `getCourseReminderNotificationMessage` (nb/nn/en-GB), ingen lenker (#688 — «Logg inn
+  på plattformen selv»).
+- **Config:** `courseReminders.reminderDaysBefore` (standard `[7, 1]`) i assessment-rules.
+- **Tester:** integrasjon (native pg) — due-soon/overdue-matching, ingen send for fullført/avmeldt/
+  inaktiv/uten-frist, idempotent re-kjøring; unit — monitor env-gate/feil-svelging, e-post-copy i alle
+  tre språk uten lenker. tsc grønn.
+
+**Scope v1 (bevisst avgrenset):** individuelle frister. Klasse-tildelte frister
+(`CourseGroupAssignment.dueAt` + «Alle deltakere»-ekspansjon), gjentatte overdue-purringer og opt-out
+er fase 2 innenfor #497.
+
+**Utrulling:** kun server-kode, ingen migrasjon. Monitoren er env-gated og trygg å merge før den slås
+på i prod. **Rollback:** ingen datamigrasjon — reverter koden.
+
 ## 1.6.32 - 2026-07-18
 
 fix(course): #502 — drop den deprecated CourseModule-join-tabellen (lukker #502)

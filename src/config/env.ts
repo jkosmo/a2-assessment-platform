@@ -99,6 +99,9 @@ const envSchema = z.object({
     z.string().url().optional(),
   ),
   PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  // #497: daglig bakgrunnsjobb for kurs-frist-påminnelser. Kjører kun i worker-rollen når
+  // varselkanalen er aktiv (PARTICIPANT_NOTIFICATION_CHANNEL !== "disabled").
+  COURSE_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
   AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),

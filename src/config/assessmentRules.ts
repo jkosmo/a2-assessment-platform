@@ -125,6 +125,15 @@ export const rulesSchema = z.object({
       dueSoonDays: 14,
       reminderDaysBefore: [30, 7, 1],
     }),
+  // #497: kurs-frist-påminnelser. `reminderDaysBefore` = offsets (dager før dueAt) for
+  // "frist nærmer seg"-påminnelser; standard 7 og 1 dag før forfall.
+  courseReminders: z
+    .object({
+      reminderDaysBefore: z.array(z.number().int().min(0)).default([7, 1]),
+    })
+    .default({
+      reminderDaysBefore: [7, 1],
+    }),
 });
 
 export type AssessmentRules = z.infer<typeof rulesSchema>;

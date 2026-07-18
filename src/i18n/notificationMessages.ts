@@ -242,3 +242,80 @@ export function getDiscussionReplyNotificationMessage(
     nextStepGuidance: t.replyGuidance.replace("{title}", context.threadTitle),
   };
 }
+
+// #497: kurs-frist-påminnelser. To typer: due_soon (frist nærmer seg, N dager før) og overdue
+// (frist passert). Ingen lenker i e-post (#688) — mottakeren bes logge inn selv.
+export type CourseReminderKind = "due_soon" | "overdue";
+
+type CourseReminderLabels = {
+  dueSoonSubject: string; // {course}
+  dueSoonToday: string; // {course}
+  dueSoonInDays: string; // {course} {date} {days}
+  overdueSubject: string; // {course}
+  overdueGuidance: string; // {course} {date}
+};
+
+const courseReminderMessages: Record<SupportedLocale, CourseReminderLabels> = {
+  "en-GB": {
+    dueSoonSubject: "Reminder: «{course}» is due soon",
+    dueSoonToday: "The course «{course}» is due today ({date}).\n\nLog in to the platform to complete it.",
+    dueSoonInDays:
+      "The course «{course}» is due on {date} — {days} day(s) from now.\n\nLog in to the platform to complete it in time.",
+    overdueSubject: "Overdue: «{course}» has passed its due date",
+    overdueGuidance:
+      "The course «{course}» was due on {date} and is not yet completed.\n\nLog in to the platform to complete it as soon as possible.",
+  },
+  nb: {
+    dueSoonSubject: "Påminnelse: «{course}» har frist snart",
+    dueSoonToday: "Kurset «{course}» har frist i dag ({date}).\n\nLogg inn på plattformen for å fullføre det.",
+    dueSoonInDays:
+      "Kurset «{course}» har frist {date} — om {days} dag(er).\n\nLogg inn på plattformen for å fullføre det i tide.",
+    overdueSubject: "Forfalt: «{course}» har passert fristen",
+    overdueGuidance:
+      "Kurset «{course}» hadde frist {date} og er ennå ikke fullført.\n\nLogg inn på plattformen for å fullføre det så snart som mulig.",
+  },
+  nn: {
+    dueSoonSubject: "Påminning: «{course}» har frist snart",
+    dueSoonToday: "Kurset «{course}» har frist i dag ({date}).\n\nLogg inn på plattforma for å fullføre det.",
+    dueSoonInDays:
+      "Kurset «{course}» har frist {date} — om {days} dag(ar).\n\nLogg inn på plattforma for å fullføre det i tide.",
+    overdueSubject: "Forfalle: «{course}» har passert fristen",
+    overdueGuidance:
+      "Kurset «{course}» hadde frist {date} og er enno ikkje fullført.\n\nLogg inn på plattforma for å fullføre det så snart som mogleg.",
+  },
+};
+
+function formatDateOnly(date: Date, locale: SupportedLocale): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+export function getCourseReminderNotificationMessage(
+  locale: SupportedLocale,
+  kind: CourseReminderKind,
+  context: { courseTitle: string; dueAt: Date; daysBefore?: number },
+): NotificationMessage {
+  const t = courseReminderMessages[locale];
+  const dateText = formatDateOnly(context.dueAt, locale);
+  if (kind === "overdue") {
+    return {
+      subject: t.overdueSubject.replace("{course}", context.courseTitle),
+      nextStepGuidance: t.overdueGuidance.replace("{course}", context.courseTitle).replace("{date}", dateText),
+    };
+  }
+  const days = context.daysBefore ?? 0;
+  const guidance =
+    days <= 0
+      ? t.dueSoonToday.replace("{course}", context.courseTitle).replace("{date}", dateText)
+      : t.dueSoonInDays
+          .replace("{course}", context.courseTitle)
+          .replace("{date}", dateText)
+          .replace("{days}", String(days));
+  return {
+    subject: t.dueSoonSubject.replace("{course}", context.courseTitle),
+    nextStepGuidance: guidance,
+  };
+}

@@ -86,6 +86,9 @@ export const auditActions = {
     // #762: destruktiv opprydding — slett kurs + dets eksklusivt-eide moduler/seksjoner.
     cascadeDeleted: "course_cascade_deleted",
     completionIssued: "course_completion_issued",
+    // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
+    reminderSent: "course_reminder_sent",
+    reminderFailed: "course_reminder_failed",
   },
   section: {
     created: "section_created",
@@ -321,6 +324,29 @@ export type AuditMetadataByAction = {
     userId: string;
     courseId: string;
     certificateId: string;
+  }>;
+  // #497: frist-påminnelse sendt/feilet. `daysBefore` er kun satt for kind="due_soon".
+  [auditActions.course.reminderSent]: EventMetadata<{
+    courseId: string;
+    userId: string;
+    kind: "due_soon" | "overdue";
+    daysBefore?: number;
+    asOfDate: string;
+    dueAt: string;
+    channel: string;
+    delivered: boolean;
+    failureReason?: string | null;
+  }>;
+  [auditActions.course.reminderFailed]: EventMetadata<{
+    courseId: string;
+    userId: string;
+    kind: "due_soon" | "overdue";
+    daysBefore?: number;
+    asOfDate: string;
+    dueAt: string;
+    channel: string;
+    delivered: boolean;
+    failureReason?: string | null;
   }>;
   [auditActions.enrollment.assigned]: EventMetadata<{
     userId: string;
