@@ -24,6 +24,8 @@ import {
   detectCoursesRoute,
   buildCourseDeleteDialogText,
   deriveCourseListRows,
+  moveItem,
+  courseItemTypeBadge,
 } from "/static/admin-content-courses-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
@@ -1546,7 +1548,7 @@ function renderModuleList() {
       return `
       <div class="module-list-item" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="module-list-item-order">${i + 1}.</span>
-        <span class="item-type-badge">${m.type === "SECTION" ? "SEKSJON" : "MODUL"}</span>
+        <span class="item-type-badge">${courseItemTypeBadge(m.type)}</span>
         <span class="module-list-item-title">${escapeHtml(m.title)}</span>
         <div class="module-list-item-actions">
           <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--color-meta);" title="Tillat diskusjon på dette elementet">
@@ -1589,9 +1591,7 @@ function handleModuleListClick(e) {
 }
 
 function moveModule(idx, dir) {
-  const swap = dir === "up" ? idx - 1 : idx + 1;
-  if (swap < 0 || swap >= courseModules.length) return;
-  [courseModules[idx], courseModules[swap]] = [courseModules[swap], courseModules[idx]];
+  courseModules = moveItem(courseModules, idx, dir);
   renderModuleList();
 }
 
