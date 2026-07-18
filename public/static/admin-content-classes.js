@@ -57,6 +57,15 @@ function courseTitle(raw) {
   }
 }
 
+// #497: a class-assigned due date (dueAt) is stored as UTC midnight of the picked date; format from the
+// date part so the displayed day never shifts by timezone. Returns "DD.MM.YYYY" or null.
+function formatDueDate(iso) {
+  if (!iso) return null;
+  const datePart = String(iso).slice(0, 10); // YYYY-MM-DD
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : null;
+}
+
 async function renderListView() {
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
   let classes = [];
@@ -188,7 +197,13 @@ async function openClass(id) {
     return;
   }
   const memberChips = members.map((m) => `<span class="chip">${escapeHtml(m.name)} <button data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">×</button></span>`).join("");
-  const courseChips = courses.map((c) => `<span class="chip">${escapeHtml(courseTitle(c.title))} <button data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">×</button></span>`).join("");
+  const courseChips = courses.map((c) => {
+    const due = formatDueDate(c.dueAt);
+    const dueLabel = due
+      ? `<span class="chip-due" style="color:var(--color-meta);font-size:12px;margin-left:4px">Frist: ${escapeHtml(due)}</span>`
+      : `<span class="chip-due" style="color:var(--color-meta);font-size:12px;margin-left:4px">Ingen frist</span>`;
+    return `<span class="chip">${escapeHtml(courseTitle(c.title))} ${dueLabel} <button data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">×</button></span>`;
+  }).join("");
   const assignedIds = new Set(courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
   const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.title))}</option>`).join("");
@@ -208,9 +223,13 @@ async function openClass(id) {
       <div class="chip-row" id="courseChips">${courseChips || `<span style="color:var(--color-meta);font-size:13px">Ingen kurs tildelt ennå.</span>`}</div>
       <div class="inline-form">
         <select id="courseSelect"><option value="">Velg kurs…</option>${courseOptions}</select>
-        <input type="date" id="dueAtInput" title="Frist (valgfri)" />
+        <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
+          Frist (valgfri)
+          <input type="date" id="dueAtInput" title="Frist for å fullføre kurset (valgfri)" />
+        </label>
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
       </div>
+      <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
     </div>`;
   document.getElementById("backToClasses").addEventListener("click", renderListView);
 

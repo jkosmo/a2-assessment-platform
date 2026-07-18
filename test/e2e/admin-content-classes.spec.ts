@@ -59,6 +59,10 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.route("**/api/admin/content/classes/*/courses", (route: Route) => {
     if (route.request().method() === "POST") {
       coursePosted = true;
+      // #497: mirror the server — persist the assigned course WITH its due date so the re-rendered
+      // chip can display the frist.
+      const body = route.request().postDataJSON() as { courseId: string; dueAt?: string };
+      state.assignedCourses.push({ courseId: body.courseId, title: JSON.stringify({ nb: "Arbeidsmiljø" }), dueAt: body.dueAt ?? null });
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true }) });
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: state.assignedCourses }) });
@@ -107,10 +111,18 @@ test("classes admin: list, create, add a student via search, and assign a course
   await expect(page.locator('#courseSelect option[value="course-arch"]')).toHaveCount(0);
   await expect(page.locator('#courseSelect option[value="course-1"]')).toHaveCount(1);
 
-  // Assign a course.
+  // #497: the due-date input carries a visible label so it is clear what the date means.
+  await expect(page.locator('label[for="dueAtInput"]')).toContainText("Frist");
+
+  // Assign a course WITH a due date.
   await page.locator("#courseSelect").selectOption("course-1");
+  await page.locator("#dueAtInput").fill("2026-07-17");
   await page.locator("#assignCourseBtn").click();
   await expect.poll(() => coursePosted).toBe(true);
+
+  // #497: the assigned-course chip shows the frist (formatted DD.MM.YYYY, no timezone shift).
+  await expect(page.locator("#courseChips")).toContainText("Arbeidsmiljø");
+  await expect(page.locator("#courseChips")).toContainText("Frist: 17.07.2026");
 });
 
 // #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.

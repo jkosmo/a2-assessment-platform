@@ -39,9 +39,13 @@ Kloner recert-påminnelses-mønsteret: audit-basert dedup gjør re-kjøring idem
   ENTRA-skip; ingen send for fullført/avmeldt/inaktiv/uten-frist; idempotent re-kjøring. Unit — monitor
   env-gate/feil-svelging, e-post-copy i alle tre språk uten lenker. tsc grønn.
 
-**UI-testbar:** klasse-tildeling har allerede en frist-datovelger (Klasser → tildel kurs), så hele
-funksjonen kan testes ende-til-ende i UI. Individuell frist-tildeling har ennå ingen egen datovelger
-(kun API).
+**UI-testbar:** klasse-tildeling har en frist-datovelger (Klasser → tildel kurs), så hele funksjonen
+kan testes ende-til-ende i UI. Individuell frist-tildeling har ennå ingen egen datovelger (kun API).
+
+**Klasse-UI-forbedringer (samme arc):** (1) datofeltet ved kurs-tildeling har nå en synlig etikett
+«Frist (valgfri)» + hjelpetekst om at fristen driver påminnelser (var før kun en tooltip — uklart hva
+datoen betød); (2) tildelte kurs-chips viser nå fristen («Frist: DD.MM.YYYY» / «Ingen frist») i stedet
+for bare tittelen. Formateres fra dato-delen (UTC) så vist dag aldri forskyves av tidssone. E2e utvidet.
 
 **Utenfor scope:** gjentatte overdue-purringer (v1 = én gang), opt-out (ingen modell finnes), ENTRA-
 klasse-medlemskap i bakgrunnsjobb, in-app/SMS-kanaler.
