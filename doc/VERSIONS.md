@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.30 - 2026-07-18
+
+fix(lifecycle): #705 — seksjonslista lastet ikke (feil oversetter-navn i badge-kallet)
+
+Regresjon fra 1.6.29 Del B: `admin-content-sections.js` sin admin-oversetter heter `tNav` (ikke `t`
+som i kurs-/bibliotek-filene), men den delte badgen ble kalt med `t` → ReferenceError ved lasting →
+Seksjoner-fanen hang på «Laster…». Fikset til `tNav`. Kurs/bibliotek var upåvirket (de har `t`).
+
+Klasse-lærdom (CLAUDE.md): de tre admin-listenes *last*-sti er ikke dekket av automattester (DOM-
+testen dekker kun editoren), så feilen var usynlig for tsc/DOM/supertest. Følges opp med e2e-dekning
+for at hver av de tre listene faktisk laster.
+
 ## 1.6.29 - 2026-07-14
 
 fix(lifecycle): #705 — konsistens-opprydding + samkjørt status-badge (lukker #705)

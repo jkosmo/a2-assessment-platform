@@ -176,7 +176,8 @@ function sectionStatus(s) {
 
 function statusBadge(status) {
   // #705: shared 3-state badge + i18n (same vocabulary as course/module lists).
-  return lifecycleStatusBadge(status, t);
+  // NB: this file's admin-translations accessor is `tNav`, not `t`.
+  return lifecycleStatusBadge(status, tNav);
 }
 
 // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
