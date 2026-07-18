@@ -296,3 +296,59 @@ test("section editor: top workspace nav renders in prod-shaped config (roles fro
   await expect(page.locator('#workspaceNav a', { hasText: "Oversikt" })).toBeVisible();
   await expect(page.locator('#workspaceNav a', { hasText: "Vurdering" })).toBeVisible();
 });
+
+// #524 (U1): «Oversett» (#514) must LOCK the editor while the LLM translates the active language into
+// the others — the author must not edit/navigate mid-call — and then fill the other locales' fields.
+// Guards both the GUI-lock and the translated content landing in the right locale.
+test("section editor: «Oversett» locks the editor while translating, then fills the other locales", async ({ page }) => {
+  await mockBaseApis(page);
+  await page.route("**/api/admin/content/sections", (route: Route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ section: { id: "sec1", versionNo: 1 } }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) });
+  });
+  await page.route("**/api/admin/content/sections/preview", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ html: "<p>x</p>" }) }),
+  );
+
+  // Hold the localize response so the intermediate LOCKED state is observable.
+  let releaseLocalize: () => void = () => {};
+  const localizeHold = new Promise<void>((resolve) => { releaseLocalize = resolve; });
+  const requestedTargets: string[] = [];
+  await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
+    const body = route.request().postDataJSON() as { targetLocale: string };
+    requestedTargets.push(body.targetLocale);
+    await localizeHold;
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ title: `T-${body.targetLocale}`, bodyMarkdown: `B-${body.targetLocale}` }),
+    });
+  });
+
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/admin-content/sections");
+  await page.getByRole("button", { name: /Ny seksjon/ }).click();
+
+  // Fill the source (nb) language, then start translating.
+  await page.locator("#titleInput").fill("Tittel");
+  await page.locator("#markdownInput").fill("# Innhold");
+  await page.locator("#translateBtn").click();
+
+  // LOCKED: button shows the translating label and the edit controls are disabled.
+  await expect(page.locator("#translateBtn")).toHaveText(/Oversetter/);
+  await expect(page.locator("#saveBtn")).toBeDisabled();
+  await expect(page.locator("#titleInput")).toBeDisabled();
+  await expect(page.locator("#markdownInput")).toBeDisabled();
+
+  // Release the translation → unlocks and restores the button label.
+  releaseLocalize();
+  await expect(page.locator("#translateBtn")).toHaveText(/Oversett fra/);
+  await expect(page.locator("#saveBtn")).toBeEnabled();
+
+  // Both other locales were requested, and the nn tab now holds the translated title.
+  await expect.poll(() => [...requestedTargets].sort()).toEqual(["en-GB", "nn"]);
+  await page.locator('.lang-tab[data-locale="nn"]').click();
+  await expect(page.locator("#titleInput")).toHaveValue("T-nn");
+});
