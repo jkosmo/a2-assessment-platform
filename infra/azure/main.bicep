@@ -1738,6 +1738,77 @@ resource healthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' =
   }
 }
 
+// #497-incident (2026-07-18): the WORKER role crashed on startup and stayed down ~75 min, invisible to
+// us because the only external availability test pinged the WEB app's /healthz. The worker exposes the
+// same /healthz endpoint (siteConfig.healthCheckPath above), so give it its own external ping + alert —
+// a worker outage now pages the same action group instead of waiting for a chance email.
+resource workerHealthzAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (createObservabilityActionGroup) {
+  name: toLower('${appNamePrefix}-${envCode}-worker-healthz-ping')
+  location: location
+  kind: 'standard'
+  tags: {
+    'hidden-link:${appInsights.id}': 'Resource'
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    SyntheticMonitorId: toLower('${appNamePrefix}-${envCode}-worker-healthz-ping')
+    Name: '${appNamePrefix}-${envCode} worker /healthz availability'
+    Description: 'External ping of the WORKER role /healthz from EMEA — catches a worker-role outage that the web-app test cannot see (#497-incident).'
+    Enabled: true
+    Frequency: 300
+    Timeout: 30
+    Kind: 'standard'
+    RetryEnabled: true
+    Locations: [
+      { Id: 'emea-nl-ams-azr' }
+      { Id: 'emea-gb-db3-azr' }
+    ]
+    Request: {
+      RequestUrl: 'https://${workerApp.properties.defaultHostName}/healthz'
+      HttpVerb: 'GET'
+    }
+    ValidationRules: {
+      ExpectedHttpStatusCode: 200
+      SSLCheck: true
+      SSLCertRemainingLifetimeCheck: 7
+    }
+  }
+}
+
+resource workerHealthzAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (createObservabilityActionGroup) {
+  name: toLower('${appNamePrefix}-${envCode}-worker-healthz-availability')
+  location: 'global'
+  tags: {
+    environment: environmentName
+    costCenter: costCenter
+    owner: owner
+  }
+  properties: {
+    description: 'External worker-role /healthz availability test is failing — the worker (assessment/SLA/reminder jobs) is unreachable. See #497-incident.'
+    severity: 1
+    enabled: true
+    scopes: [
+      workerHealthzAvailabilityTest.id
+      appInsights.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: workerHealthzAvailabilityTest.id
+      componentId: appInsights.id
+      failedLocationCount: 2
+    }
+    actions: [
+      {
+        actionGroupId: observabilityActionGroup.id
+      }
+    ]
+  }
+}
+
 // Production resource group CanNotDelete lock (#405). Blocks all DELETE operations on
 // resources in the prod RG. The May 2026 incident where a staging deactivate workflow
 // targeted production resources would have been blocked here with a 409 Conflict before
