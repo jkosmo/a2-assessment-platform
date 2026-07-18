@@ -4,7 +4,7 @@ import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
-import { importSectionAssets } from "./assetCommands.js";
+import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 
 // #763 (Layer B): the agent section-create route inlines figures/images (base64), so the JSON body
 // can exceed the 5 MB global parser. Sized to cover a handful of SVG figures + localized variants
@@ -301,12 +301,17 @@ export async function deleteSection(sectionId: string) {
   await assertSectionExists(sectionId);
   // G2: navngir kursene (konsistent med modul-sletting).
   await assertSectionNotInAnyCourse(sectionId, "slettes");
+  // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
+  // with the section, so afterwards there is nothing left to look them up from.
+  const blobPaths = await collectSectionAssetBlobPaths([sectionId]);
   await runInTransaction(async (tx) => {
     // Detach activeVersion FK before deleting versions to avoid the self-reference.
     await tx.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
     await tx.courseSectionVersion.deleteMany({ where: { sectionId } });
     await tx.courseSection.delete({ where: { id: sectionId } });
   });
+  // After commit: reclaim the storage (best-effort — a failed blob delete never fails the delete).
+  await reclaimAssetBlobs(blobPaths);
 }
 
 async function assertSectionExists(sectionId: string) {

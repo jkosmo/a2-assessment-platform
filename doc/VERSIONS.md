@@ -43,6 +43,32 @@ v1.5.0–v1.6.1 (#706–#709); issuet var bare aldri lukket. Denne lukker de gje
 **Tester:** backend — `course_deleted`-audit, 404 på ukjent versjon, 409+navngitt melding (modul-slett);
 frontend — `content-status-badge`-unit (3-tilstands-vokabular + 5→3-kollaps + chip); i18n-nøkler
 verifisert i alle tre språk. DOM-suite grønn. Server-kode + statiske assets → krever deploy.
+## 1.6.28 - 2026-07-14
+
+feat(assets): #758 — reklamer blob-lagring når seksjoner/kurs slettes
+
+Del av #478 (Tier 2 livssyklus). Til nå ble `SectionAsset`-rader cascade-slettet med seksjonen
+(`onDelete: Cascade`), men **selve blobene ble aldri slettet** — `assetStorage` hadde ingen slette-
+funksjon, og ingen kode slettet en blob. Foreldreløse figur-/bilde-blober hopet seg opp i Azure
+Blob Storage og ble betalt for i det uendelige. Prioritert nå fordi video / høyoppløselige bilder
+gjør hver lekket blob dyr — fokus på å sikre framtidige slettinger (ikke rydde eksisterende backlog).
+
+- **`assetStorage.deleteAsset(blobPath)`** — Azure `deleteIfExists` / fs `rm --force`. Idempotent
+  (manglende blob er ikke feil), så dobbel-slett/allerede-borte er trygt.
+- **`assetCommands.collectSectionAssetBlobPaths(sectionIds)`** — samler hver seksjons base-blob +
+  `localizedBlobPaths`-varianter, hentet **før** DB-slettingen (radene cascader bort). Dedup.
+- **`assetCommands.reclaimAssetBlobs(paths)`** — best-effort, kjøres **etter** commit (aldri før: en
+  rullet-tilbake transaksjon må ikke miste blober for en seksjon som fortsatt finnes). Feil logges,
+  velter aldri slettingen.
+- Koblet inn i begge choke points: `deleteSection` og `courseCascadeDeleteService` (#748-cascaden).
+  Størrelse-/type-agnostisk — virker likt for framtidig video/hi-res.
+- Tester: `deleteSection` fjerner base + varianter fysisk (verifisert via `getAsset` som kaster);
+  cascade-slett rydder eksklusive seksjoners blober. Bredere asset-suite grønn (ingen regresjon).
+
+Bevisst UTENFOR scope (lav prio, backlog lite nå): mark-and-sweep GC for eksisterende foreldreløse
+blober + andre kilder (import-feil, fjern-figur-uten-slett-seksjon, erstattede sertifikat-bilder).
+
+Server-kode. Ingen Prisma-migrasjon. Krever deploy for å tre i kraft.
 
 ## 1.6.27 - 2026-07-13
 

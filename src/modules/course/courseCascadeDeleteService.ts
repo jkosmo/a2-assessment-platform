@@ -7,6 +7,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { adminContentRepository } from "../adminContent/adminContentRepository.js";
 import { courseRepository } from "./courseRepository.js";
 import { findCoursesContainingModule, findCoursesContainingSection } from "./contentLifecycle.js";
+import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 
 // #762 — ADMINISTRATOR-only destructive cleanup: delete a course together with the modules and
 // sections that ONLY that course owns, while never destroying real assessment/achievement records.
@@ -192,6 +193,10 @@ export async function cascadeDeleteCourse(
   const sparedModuleIds = analysis.sparedModules.map((m) => m.id);
   const sparedSectionIds = analysis.sparedSections.map((s) => s.id);
 
+  // #758: capture the exclusive sections' asset blob paths before the transaction deletes them —
+  // SectionAsset cascades away with each section, so this is the last chance to learn the paths.
+  const sectionBlobPaths = await collectSectionAssetBlobPaths(deletedSectionIds);
+
   await runInTransaction(async (tx) => {
     // 1. Unlink modules/sections from this course so the CourseItem Restrict FK no longer blocks
     //    deleting them. CourseModule is the deprecated join (kept during expand-contract) — remove
@@ -227,6 +232,10 @@ export async function cascadeDeleteCourse(
     //    guaranteed empty by the blocker check above.
     await tx.course.delete({ where: { id: courseId } });
   });
+
+  // #758: after commit, reclaim the deleted sections' asset blobs (best-effort — a failed blob
+  // delete never fails the cascade; the section rows are already gone).
+  await reclaimAssetBlobs(sectionBlobPaths);
 
   // Audit: one summary event for the course, plus a per-module deleted event (consistent with the
   // bulk purge). Audit rows have no FK to the deleted entities, so referencing removed ids is safe.

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
-import { putAsset, getAsset } from "./assetStorage.js";
+import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
@@ -81,6 +81,43 @@ function readLocalizedBlobPaths(value: unknown): Record<string, string> {
     return value as Record<string, string>;
   }
   return {};
+}
+
+// #758: every stored blob path the given sections' assets occupy — each asset's base blob plus every
+// localized SVG variant. Query this BEFORE the sections are deleted: `SectionAsset` cascades away
+// with the section (`onDelete: Cascade`), so afterwards there is nothing left to look the paths up
+// from. Returns a flat, de-duplicated list.
+export async function collectSectionAssetBlobPaths(sectionIds: string[]): Promise<string[]> {
+  if (sectionIds.length === 0) return [];
+  const assets = await prisma.sectionAsset.findMany({
+    where: { sectionId: { in: sectionIds } },
+    select: { blobPath: true, localizedBlobPaths: true },
+  });
+  const paths = new Set<string>();
+  for (const asset of assets) {
+    paths.add(asset.blobPath);
+    for (const variant of Object.values(readLocalizedBlobPaths(asset.localizedBlobPaths))) {
+      if (variant) paths.add(variant);
+    }
+  }
+  return [...paths];
+}
+
+// #758: best-effort blob reclamation. Call AFTER the DB delete has COMMITTED — never before, or a
+// rolled-back transaction would strand a live section whose blobs were already gone. A failed delete
+// is logged and skipped (the row is already deleted; a rare leftover blob is cheaper than a failed
+// user-facing delete), so this never throws.
+export async function reclaimAssetBlobs(blobPaths: string[]): Promise<void> {
+  for (const blobPath of blobPaths) {
+    try {
+      await deleteAsset(blobPath);
+    } catch (error) {
+      console.warn(
+        `[asset-reclaim] failed to delete blob "${blobPath}":`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
 }
 
 export async function getSectionAssetContent(
