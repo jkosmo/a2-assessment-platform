@@ -157,7 +157,6 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   }
 
   await runInTransaction(async (tx) => {
-    await tx.courseModule.deleteMany({ where: { courseId } });
     await tx.course.delete({ where: { id: courseId } });
   });
 

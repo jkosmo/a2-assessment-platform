@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.32 - 2026-07-18
+
+fix(course): #502 — drop den deprecated CourseModule-join-tabellen (lukker #502)
+
+Fullfører expand-contract-en fra #480: `CourseItem` har vært eneste sannhetskilde for et kurs' ordnede
+moduler+seksjoner siden lese- og skrive-cutover-en (bekreftet: alle lesninger deriveres fra
+`CourseItem` itemType=MODULE, alle skrivninger går via `CourseItem`; CourseModule-rader ble kun ryddet
+ved sletting). Nå fjernet den døde tabellen.
+
+- **Schema:** fjernet `model CourseModule` + relasjonene `Module.courseModules` og `Course.modules`.
+- **Kode:** fjernet de to gjenværende opprydnings-`tx.courseModule.deleteMany` (deleteCourse +
+  cascade-delete) og `"courseModule"`-literalen i to tx-klient-type-unioner. Ryddet utdaterte
+  «CourseModule-join»-kommentarer.
+- **Migrasjon:** `20260718000000_drop_course_module` → `DROP TABLE "CourseModule"` (ren join-tabell,
+  ingen innkommende FK-er, så PK/FK/indeks dropper med den).
+- **Verifisert:** prisma-klient regenerert, tsc grønn, native reset replayer alle migrasjoner inkl.
+  DROP rent, tabellen borte (`to_regclass` = null), 18 kurs-/completion-tester grønne.
+
+**Utrulling:** krever migrasjons-deploy. Destruktiv men trygg — tabellen var død (ingen les/skriv som
+sannhet). **Rollback:** gjenopprett tabellen fra create-migrasjonen (`20260325000002`); ingen tap av
+registerdata siden CourseItem er kilden. Ingen server-atferdsendring.
 ## 1.6.31 - 2026-07-18
 
 fix(skill): #757 — genererte figurer bruker sans-serif (lukker #757)

@@ -199,10 +199,8 @@ export async function cascadeDeleteCourse(
 
   await runInTransaction(async (tx) => {
     // 1. Unlink modules/sections from this course so the CourseItem Restrict FK no longer blocks
-    //    deleting them. CourseModule is the deprecated join (kept during expand-contract) — remove
-    //    it too so the course delete's own FKs are clear.
+    //    deleting them.
     await tx.courseItem.deleteMany({ where: { courseId } });
-    await tx.courseModule.deleteMany({ where: { courseId } });
 
     // 2. Delete each exclusive module + its version rows. The blocker check guarantees no submissions
     //    exist, so no MCQAttempt/AssessmentDecision/CertificationStatus references the version rows.
