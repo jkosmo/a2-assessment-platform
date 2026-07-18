@@ -107,11 +107,12 @@
       <div class="small field-success" id="completedAppealFeedback" hidden></div>
     </section>
 
-    <section class="card">
-      <h2 data-i18n="output.title">System response</h2>
-      <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true"></div>
+    <!-- #767: «Systemsvar» (debug/System response) fjernet fra deltaker-visningen. Elementene beholdes
+         skjult så log()-maskineriet fortsatt har et sted å skrive (ingen JS-endring nødvendig). -->
+    <div hidden aria-hidden="true">
+      <div id="outputStatus"></div>
       <pre id="output" class="pre-content"></pre>
-    </section>
+    </div>
 
     </main>
     <script src="/static/i18n/participant-completed-translations.js" type="module"></script>
