@@ -162,9 +162,13 @@ app.get("/admin-content/sections", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-sections.html"));
 });
 
-// Classes workspace (#645 / CL-3)
-app.get("/admin-content/classes", (_request, response) => {
+// Classes workspace (#645 / CL-3) — #765: moved under the new «Deltakere» area at /deltakere/klasser.
+app.get("/deltakere/klasser", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-classes.html"));
+});
+// #765: 301 the old classes URL to its new home (same redirect pattern as the other moved routes).
+app.get("/admin-content/classes", (_request, response) => {
+  response.redirect(301, "/deltakere/klasser");
 });
 
 // Calibration workspace (Issue #326)

@@ -37,6 +37,12 @@
           <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
+      <!-- #765: «Deltakere»-området deler denne undernavigasjonen (rollegates av deltakere-subnav.js). -->
+      <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere">
+        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser">Klasser</a>
+        <a href="/review" class="content-area-nav-link" id="subnavReview">Manuell behandling</a>
+        <a href="/results" class="content-area-nav-link" id="subnavResults">Resultater</a>
+      </nav>
       <h1 data-i18n="resultsPage.title">Results Workspace</h1>
       <p class="small" data-i18n="resultsPage.subtitle">Overview of module pass rates and completion status.</p>
 
@@ -201,6 +207,7 @@
     </main>
     <script src="/static/i18n/results-translations.js" type="module"></script>
     <script src="/static/results.js" type="module"></script>
+    <script src="/static/deltakere-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
   </body>
 </html>

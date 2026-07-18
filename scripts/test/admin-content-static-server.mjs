@@ -41,8 +41,15 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/admin-content/sections") {
     return path.join(publicRoot, "admin-content-sections.html");
   }
-  if (requestPath === "/admin-content/classes") {
+  // #765: classes moved under the «Deltakere» area. Mirror production's canonical route.
+  if (requestPath === "/deltakere/klasser") {
     return path.join(publicRoot, "admin-content-classes.html");
+  }
+  if (requestPath === "/review") {
+    return path.join(publicRoot, "review.html");
+  }
+  if (requestPath === "/results") {
+    return path.join(publicRoot, "results.html");
   }
   if (requestPath === "/participant") {
     return path.join(publicRoot, "participant.html");

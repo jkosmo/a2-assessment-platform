@@ -27,8 +27,11 @@ test.describe("admin content module library", () => {
 
     await page.goto(LIBRARY_PATH);
 
-    // #645/CL-3: the content-area nav must expose the "Klasser" tab on every admin-content page.
-    await expect(page.locator('a.content-area-nav-link[href="/admin-content/classes"]')).toHaveText("Klasser");
+    // #765: Klasser moved out of the admin-content content-area nav into the «Deltakere» area, so the
+    // admin-content nav must NOT expose a Klasser tab anymore (it still shows the content tabs).
+    await expect(page.locator('a.content-area-nav-link[href="/admin-content/classes"]')).toHaveCount(0);
+    await expect(page.locator('a.content-area-nav-link[href="/deltakere/klasser"]')).toHaveCount(0);
+    await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText("Kurs");
 
     const table = page.locator(".library-table");
     await expect(table).toBeVisible();

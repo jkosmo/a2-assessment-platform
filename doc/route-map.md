@@ -15,7 +15,7 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | `/admin-content/courses/:courseId` | Course detail (builder: mixed modules + sections) | `admin-content-courses.html` | **Canonical** |
 | `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new) | `admin-content-sections.html` | **Canonical** |
-| `/admin-content/classes` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3) | `admin-content-classes.html` | **Canonical** |
+| `/admin-content/classes` | **Moved (#765)** — 301-redirects to `/deltakere/klasser` (now under the «Deltakere» area) | — | Legacy redirect |
 | `/admin-content/calibration` | Calibration workspace | `admin-content-calibration.html` | **Canonical** |
 
 ### Legacy routes (present during pilot, not primary)
@@ -29,16 +29,22 @@ This map covers all admin-content entry points and their status for pilot. Use i
 
 The conversational and advanced editors are two modes of the same module workspace, not independent surfaces. Switching between them via the mode rail preserves working draft state. `/admin-content/advanced` as a standalone top-level route has no module context and is a legacy artifact.
 
-## Participant and review workspaces
+## Participant, «Deltakere» and review workspaces
+
+The **«Deltakere»** top-nav area (#765) groups the participant-/outcome-oriented surfaces —
+`/deltakere/klasser`, `/review`, `/results` — behind one menu item, with a shared, role-gated
+sub-navigation bar (`public/static/deltakere-subnav.js`). `/review` and `/results` keep their URLs;
+only Klasser moved (from `/admin-content/classes`).
 
 | Route | Workspace |
 |---|---|
 | `/participant` | Participant submission workspace |
 | `/participant/completed` | Completed assessment result view (incl. course certificates list) |
 | `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
-| `/review` | Manual review queue and workspace |
+| `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
+| `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
 | `/calibration` | Calibration reviewer workspace |
-| `/results` | Results / history view |
+| `/results` | Results / history view (a «Deltakere» sub-tab) |
 | `/profile` | User profile |
 | `/admin-platform` | Platform administration |
 

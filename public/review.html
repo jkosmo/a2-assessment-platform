@@ -59,6 +59,12 @@
           <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
+      <!-- #765: «Deltakere»-området deler denne undernavigasjonen (rollegates av deltakere-subnav.js). -->
+      <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere">
+        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser">Klasser</a>
+        <a href="/review" class="content-area-nav-link" id="subnavReview">Manuell behandling</a>
+        <a href="/results" class="content-area-nav-link" id="subnavResults">Resultater</a>
+      </nav>
       <h1 data-i18n="reviewPage.title">Manual Review</h1>
       <p class="small" data-i18n="reviewPage.subtitle">Handle manual assessments and appeals in one place.</p>
       <div id="reviewWorkspaceTabs" class="workspace-section-tabs" role="tablist" aria-label="Review workspace sections">
@@ -282,6 +288,7 @@
     </main>
     <script src="/static/i18n/review-translations.js" type="module"></script>
     <script src="/static/review.js" type="module"></script>
+    <script src="/static/deltakere-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
   </body>
 </html>
