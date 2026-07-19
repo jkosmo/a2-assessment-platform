@@ -26,6 +26,7 @@ import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
 import { cohortStatusRouter } from "./routes/cohortStatus.js";
 import { adminContentRouter } from "./routes/adminContent.js";
+import { contentOwnersRouter } from "./routes/contentOwners.js";
 import { adminModulesRouter } from "./routes/adminModules.js";
 import { adminPlatformRouter } from "./routes/adminPlatform.js";
 import { orgSyncRouter } from "./routes/orgSync.js";
@@ -237,6 +238,10 @@ app.use(
   calibrationRouter,
 );
 app.use("/api/admin/content", requireAnyRole(rolesFor("admin_content")), adminContentRouter);
+// #787: owner-set management. Distinct sibling path (not nested under /api/admin/content) so it doesn't
+// collide with adminContentRouter. Content-admin capability (SMO/ADMIN) to reach it; each handler then
+// calls assertContentOwnership so only an owner (or admin) of the specific object can manage its owners.
+app.use("/api/admin/content-owners", requireAnyRole(rolesFor("admin_content")), contentOwnersRouter);
 app.use("/api/admin/modules", requireAnyRole(rolesFor("admin_modules")), adminModulesRouter);
 app.use("/api/admin/platform", requireAnyRole(rolesFor("admin_platform")), adminPlatformRouter);
 app.use("/api/admin/sync/org", requireAnyRole(rolesFor("admin_sync_org")), orgSyncRouter);

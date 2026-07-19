@@ -62,6 +62,7 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/api/cohort-status` | SMO / Admin / Report reader | Cohort enrollment-status aggregate per course (#498) |
 | `/api/appeals` | Appeal Handler / Admin | Appeal queue and resolution |
 | `/api/admin/content` | SMO / Admin | Module, course, and learning-section content management |
+| `/api/admin/content-owners` | SMO / Admin (+ per-object owner check) | Manage the owner set of a content object — `GET/POST/DELETE /:contentType/:contentId[/:userId]` (#787) |
 | `/api/admin/platform` | Admin | Platform administration |
 | `/participant/config` | Public (rate-limited) | Participant console bootstrap config |
 | `/healthz` | Public | Health check (no version info) |

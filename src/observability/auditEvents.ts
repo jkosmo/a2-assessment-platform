@@ -23,6 +23,7 @@ export const auditEntityTypes = {
   promptTemplateVersion: "prompt_template_version",
   submission: "submission",
   user: "user",
+  contentOwner: "content_owner",
 } as const;
 
 export type AuditEntityType = NestedValue<typeof auditEntityTypes>;
@@ -72,6 +73,10 @@ export const auditActions = {
   agentAuthoring: {
     tokenIssued: "agent_authoring_token_issued",
     tokenRevoked: "agent_authoring_token_revoked",
+  },
+  contentOwner: {
+    added: "content_owner_added",
+    removed: "content_owner_removed",
   },
   course: {
     created: "course_created",
@@ -434,6 +439,16 @@ export type AuditMetadataByAction = {
     trigger: string;
     cancelledJobCount: number;
     pseudonymizedAt: string;
+  }>;
+  [auditActions.contentOwner.added]: EventMetadata<{
+    contentType: string;
+    contentId: string;
+    ownerUserId: string;
+  }>;
+  [auditActions.contentOwner.removed]: EventMetadata<{
+    contentType: string;
+    contentId: string;
+    ownerUserId: string;
   }>;
 };
 
