@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.6 - 2026-07-19
+
+feat(auth): #787 skive 1 — `ContentOwner`-tabell + backfill (multi-eier-fundament)
+
+Første skive av eierskaps-funksjonen (design: `doc/design/CONTENT_OWNERSHIP_787.md`). **Rent additivt —
+ingenting leser tabellen enda** (guard/API/UI kommer i senere skiver), så ingen atferdsendring.
+
+- **`prisma/schema.prisma` + migrasjon `20260719130000_add_content_owner`:** polymorf `ContentOwner`
+  (contentType + contentId + userId, unik per (type,innhold,bruker), FK userId→User onDelete Cascade),
+  enum `ContentOwnerType {COURSE, SECTION, CLASS, MODULE}`, `User.contentOwnerships` back-relasjon.
+- **Backfill (Q3: oppretter = første eier):** `Class.createdById` + `Module.createdById` → første eier.
+  Course/CourseSection har ingen `createdById` → forblir eierløse (admin-styrt til eier tildeles).
+- **`test/m2-content-owner.test.ts`:** modell + unikhet + cascade.
+
+**Utrulling:** additiv migrasjon (ny tabell, ingen endring på eksisterende), kjøres ved web-oppstart →
+`deploy-app.yml`. **Stage først; hvis sunn → prod.** Rollback: DROP TABLE + TYPE. Neste skive: guard.
+
 ## 2.0.5 - 2026-07-19
 
 perf(data): #800 — additive secondary indexes on hot assessment/course fact tables

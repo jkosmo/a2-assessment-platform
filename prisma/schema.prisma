@@ -103,6 +103,7 @@ model User {
   discussionRepliesDeleted      DiscussionReply[]        @relation("DiscussionReplyDeletedBy")
   discussionSubscriptions       DiscussionSubscription[]
   agentAuthoringTokens          AgentAuthoringToken[]    @relation("AgentAuthoringTokens")
+  contentOwnerships             ContentOwner[]           @relation("ContentOwnerships")
 }
 
 // AA-3 (#651): kortlivet, scopet token for agent-orkestrerte draft-operasjoner.
@@ -810,4 +811,29 @@ model DiscussionSubscription {
 
   @@unique([threadId, userId])
   @@index([userId])
+}
+
+// #787: multi-owner content ownership. An owner *set* (not a single createdById) per content object,
+// transferable by any current owner or an ADMINISTRATOR. Polymorphic (contentType + contentId) so one
+// table + one guard covers Course/CourseSection/Class/Module. Referential cleanup of the content side is
+// application-level on delete (polymorphic, no per-type FK); the userId side has a real FK + cascade.
+model ContentOwner {
+  id          String           @id @default(cuid())
+  contentType ContentOwnerType
+  contentId   String
+  userId      String
+  addedById   String? // who granted ownership (a current owner or admin); null for migration backfill
+  addedAt     DateTime         @default(now())
+  user        User             @relation("ContentOwnerships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([contentType, contentId, userId])
+  @@index([contentType, contentId])
+  @@index([userId])
+}
+
+enum ContentOwnerType {
+  COURSE
+  SECTION
+  CLASS
+  MODULE
 }
