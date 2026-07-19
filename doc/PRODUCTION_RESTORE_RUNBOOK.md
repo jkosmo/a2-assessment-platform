@@ -14,7 +14,7 @@ Related documents:
 - [OBSERVABILITY_RUNBOOK.md](OBSERVABILITY_RUNBOOK.md)
 - [PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md](PRODUCTION_LOGICAL_EXPORT_RUNBOOK.md)
 - [design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md](design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md)
-- [design/PRODUCTION_RESTORE_DRILL_2026-04-15.md](design/PRODUCTION_RESTORE_DRILL_2026-04-15.md)
+- [design/PRODUCTION_RESTORE_DRILL_2026-07-19.md](design/PRODUCTION_RESTORE_DRILL_2026-07-19.md)
 - [INCIDENTS.md](INCIDENTS.md)
 
 ## Current Production Baseline
@@ -25,7 +25,7 @@ Current production PostgreSQL runtime:
 - FQDN: `a2-assessment-platform-prd-pg-hea5kl.postgres.database.azure.com`
 - location: `Norway East`
 - version: `16`
-- backup retention: `35` days
+- backup retention: `7` days (verified 2026-07-19 drill; earliest PITR point tracks a rolling 7-day window)
 - geo-redundant backup: `Disabled`
 - high availability: `Disabled`
 
@@ -378,7 +378,7 @@ Expected operator steps:
 5. run the same post-restore verification checklist as PITR
 
 Current validation status:
-- configured and evidenced through [design/PRODUCTION_RESTORE_DRILL_2026-04-15.md](design/PRODUCTION_RESTORE_DRILL_2026-04-15.md)
+- configured and evidenced through [design/PRODUCTION_RESTORE_DRILL_2026-07-19.md](design/PRODUCTION_RESTORE_DRILL_2026-07-19.md)
 
 ## Logical Export Recovery Runbook
 
@@ -398,6 +398,32 @@ Expected operator steps:
 3. restore into isolated PostgreSQL target
 4. verify the same domain objects and participant history as PITR
 5. use the restored copy for targeted reconstruction or cutover as explicitly approved
+
+## Drill / throwaway-restore teardown and workstation verification
+
+Notes established by the 2026-07-19 restore drill; apply when rehearsing or when a restored server is
+a temporary verification copy that must be removed afterward.
+
+**Run az from PowerShell, not Git Bash.** Commands that take a full ARM resource ID
+(`--source-server /subscriptions/...`) fail under Git Bash/MSYS, which rewrites the leading slash into
+a Windows path. Use PowerShell, or pass the bare server *name* instead of the ARM ID.
+
+**Verifying row counts from an operator workstation.** Public network access alone is not enough — add
+a temporary firewall rule for the operator's egress IP (`az postgres flexible-server firewall-rule
+create ... --start-ip-address <ip> --end-ip-address <ip>`). `az.cmd` on Windows strips double-quoted
+SQL identifiers passed via `-q`, so `COUNT(*)` against PascalCase (Prisma) tables fails; either use
+`psql`, or run `ANALYZE` first and read exact-enough counts from `pg_stat_user_tables` (which needs
+only single-quote string literals). A freshly restored server has empty planner statistics until
+`ANALYZE` runs.
+
+**Deleting a throwaway restored server (prod RG is delete-locked).** The production resource group
+carries a `CanNotDelete` lock (`rg-production-do-not-delete`, #405) that blocks deleting the restored
+server and its firewall rules. Teardown, as one guarded block:
+1. `az lock delete --name rg-production-do-not-delete -g rg-a2-assessment-production`
+2. Wait ~60s — lock removal is eventually-consistent; deleting sooner still fails `ScopeLocked`.
+3. `az postgres flexible-server delete -g rg-a2-assessment-production -n <restored-server> --yes`
+4. **Immediately recreate the identical lock** (`az lock create ... --lock-type CanNotDelete`) and
+   verify with `az lock list`. Never leave the lock off.
 
 ## Evidence to Capture
 
