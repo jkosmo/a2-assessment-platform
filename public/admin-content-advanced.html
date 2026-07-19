@@ -303,7 +303,12 @@
       <span><strong style="color:var(--color-text);font-weight:600" data-i18n="adminContent.privacy.warning.title">Special category data risk</strong> — <span data-i18n="adminContent.privacy.warning.body">Participants may include health information, political views, or other special category data in free-text submissions.</span></span>
     </div>
 
-    <div class="content-tab-nav" role="tablist">
+    <!-- #787 QA r4: the legacy in-page content tabs (Moduler/Kurs/Kalibrering) duplicated the new
+         content-area sub-nav at the top. Kurs and Kalibrering now live on their own routes reached via
+         that sub-nav, so the Avansert page is purely the module editor. Bar kept in DOM (its ids are
+         referenced by admin-content.js) but hidden — inline display:none beats the .content-tab-nav
+         flex rule (a plain [hidden] would lose the cascade). -->
+    <div class="content-tab-nav" role="tablist" style="display:none">
       <button type="button" id="tabModuler" role="tab" class="content-tab active" aria-selected="true" data-i18n="adminContent.tab.modules">Moduler</button>
       <button type="button" id="tabKurs" role="tab" class="content-tab" aria-selected="false" data-i18n="adminContent.tab.courses">Kurs</button>
       <button type="button" id="tabKalibrering" role="tab" class="content-tab" aria-selected="false" data-i18n="nav.calibration">Kalibrering</button>

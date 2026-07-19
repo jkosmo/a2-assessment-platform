@@ -30,6 +30,9 @@ function errorMessage(error, fallback) {
 export async function renderOwnerPanel({ container, contentType, contentId, getHeaders }) {
   let owners = [];
   let canManage = false; // only owners/admin may change owners; everyone with access can view
+  // Ownership is mostly read, rarely edited — so the panel is a compact one-line summary by default and
+  // only expands into the full add/remove UI when the user chooses to edit.
+  let expanded = false;
   container.innerHTML = `<div class="owner-panel"><p class="owner-panel-loading">Laster eiere…</p></div>`;
 
   async function load() {
@@ -39,6 +42,10 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
   }
 
   function paint() {
+    if (!expanded) {
+      paintCompact();
+      return;
+    }
     const rows = owners.length
       ? owners
           .map(
@@ -58,14 +65,39 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       : "";
     container.innerHTML = `
       <div class="owner-panel">
-        <h3 class="owner-panel-title">Eiere</h3>
+        <div class="owner-panel-head">
+          <h3 class="owner-panel-title">Eiere</h3>
+          <button type="button" class="owner-collapse">Ferdig</button>
+        </div>
         <ul class="owner-list">${rows}</ul>
         ${addBox}
       </div>`;
     wire();
   }
 
+  // Compact default: "Eiere: Name A, Name B" on one line, plus an inline "Rediger" affordance for
+  // those who can manage. Keeps the panel to a slim strip since it's shown far more than edited.
+  function paintCompact() {
+    const names = owners.length
+      ? owners.map((o) => escapeHtml(o.name)).join(", ")
+      : `<span class="owner-none">Ingen eiere ennå</span>`;
+    container.innerHTML = `
+      <div class="owner-panel owner-panel--compact">
+        <span class="owner-compact-label">Eiere</span>
+        <span class="owner-compact-names">${names}</span>
+        ${canManage ? `<button type="button" class="owner-edit-toggle">Rediger</button>` : ""}
+      </div>`;
+    container.querySelector(".owner-edit-toggle")?.addEventListener("click", () => {
+      expanded = true;
+      paint();
+    });
+  }
+
   function wire() {
+    container.querySelector(".owner-collapse")?.addEventListener("click", () => {
+      expanded = false;
+      paint();
+    });
     for (const btn of container.querySelectorAll(".owner-remove")) {
       btn.addEventListener("click", () => removeOwner(btn.dataset.userId));
     }
