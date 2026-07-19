@@ -45,8 +45,26 @@ describe("Section asset upload + serve", () => {
     await prisma.courseSection.delete({ where: { id: sectionId } });
   }
 
-  it("uploads an image, lists it, and serves it back to a participant", async () => {
+  // #778/#786: a participant may only fetch a section asset if the section is in a published course
+  // they can access. Link an OPEN published course so the participant-serve cases stay realistic.
+  async function linkSectionToOpenCourse(sectionId: string): Promise<string> {
+    const course = await prisma.course.create({
+      data: { title: `Asset course ${Date.now()}`, publishedAt: new Date() }, // enrollmentPolicy defaults OPEN
+      select: { id: true },
+    });
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId, sortOrder: 0 } });
+    return course.id;
+  }
+  // Delete the course first (cascades the CourseItem) so the section is no longer Restrict-referenced.
+  async function deleteSectionAndCourse(sectionId: string, courseId: string): Promise<void> {
+    await prisma.courseCompletion.deleteMany({ where: { courseId } });
+    await prisma.course.delete({ where: { id: courseId } });
+    await deleteSectionFully(sectionId);
+  }
+
+  it("uploads an image, lists it, and serves it back to a participant in an accessible course", async () => {
     const sectionId = await createSection();
+    const courseId = await linkSectionToOpenCourse(sectionId);
 
     const upload = await request(app)
       .post(`/api/admin/content/sections/${sectionId}/assets`)
@@ -70,13 +88,14 @@ describe("Section asset upload + serve", () => {
     expect(served.headers["content-type"]).toContain("image/png");
     expect(served.body.length).toBe(PNG_1PX.length);
 
-    await deleteSectionFully(sectionId);
+    await deleteSectionAndCourse(sectionId, courseId);
   });
 
   // #657: SVG is accepted but sanitised before storage; the served bytes must be inert and the
   // serve endpoint must add hardening headers.
   it("sanitises an uploaded SVG and serves it with hardening headers", async () => {
     const sectionId = await createSection();
+    const courseId = await linkSectionToOpenCourse(sectionId);
     const dirtySvg = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><script>alert(1)</script><rect onload="x()" width="50" height="20"/><text x="2" y="12">Hei</text></svg>`,
       "utf8",
@@ -101,13 +120,14 @@ describe("Section asset upload + serve", () => {
     expect(body).not.toMatch(/onload/i);
     expect(body).toMatch(/Hei/);
 
-    await deleteSectionFully(sectionId);
+    await deleteSectionAndCourse(sectionId, courseId);
   });
 
   // #657: the explicit localize action generates a translated SVG variant per other locale; the
   // serve endpoint returns the variant for `?locale=`. LLM stub mode tags text as `[<locale>] …`.
   it("localises SVG text and serves the per-locale variant", async () => {
     const sectionId = await createSection();
+    const courseId = await linkSectionToOpenCourse(sectionId);
     const svg = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><text x="2" y="12">Start</text></svg>`,
       "utf8",
@@ -141,7 +161,7 @@ describe("Section asset upload + serve", () => {
     const english = await request(app).get(`/api/content-assets/${assetId}?locale=en-GB`).set(participantHeaders);
     expect((english.text ?? english.body.toString())).toMatch(/\[en-GB\] Start/);
 
-    await deleteSectionFully(sectionId);
+    await deleteSectionAndCourse(sectionId, courseId);
   });
 
   it("rejects a disallowed mime type", async () => {

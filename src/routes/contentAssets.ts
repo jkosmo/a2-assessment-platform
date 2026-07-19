@@ -7,7 +7,8 @@ const contentAssetsRouter = Router();
 // storage via its managed identity — assets are never publicly accessible. Referenced from
 // section markdown as `asset:<id>`, resolved to `/api/content-assets/<id>` at render time.
 contentAssetsRouter.get("/:assetId", async (request, response, next) => {
-  if (!request.context?.userId) {
+  const userId = request.context?.userId;
+  if (!userId) {
     response.status(401).json({ error: "unauthorized" });
     return;
   }
@@ -15,7 +16,13 @@ contentAssetsRouter.get("/:assetId", async (request, response, next) => {
     // #657: `?locale=` selects a translated SVG variant when one exists (set by the section
     // markdown renderer, which knows which locale pane it is rendering). Falls back to original.
     const localeParam = typeof request.query.locale === "string" ? request.query.locale : undefined;
-    const { mimeType, buffer } = await getSectionAssetContent(request.params.assetId, localeParam);
+    // #778/#786: pass the viewer so the command enforces object-level access (participant must have
+    // access to the asset's section's published course; authors bypass for draft preview).
+    const { mimeType, buffer } = await getSectionAssetContent(request.params.assetId, localeParam, {
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
     response.setHeader("Content-Type", mimeType);
     response.setHeader("Cache-Control", "private, max-age=3600");
     // #657: defence-in-depth for SVG. The stored bytes are already sanitised, but if a victim

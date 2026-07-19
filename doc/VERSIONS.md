@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.4 - 2026-07-19
+
+fix(security): #786 — content-asset object-level authorization (IDOR)
+
+Epic #778, andre skive. `getSectionAssetContent` hentet asset kun på ID uten å sjekke seksjon/kurs/
+enrollment, så enhver innlogget bruker med en asset-ID kunne hente media fra en restricted/upublisert
+seksjon.
+
+- **`src/modules/course/enrollmentService.ts`:** ny `isSectionInAccessibleCourse` — er seksjonen del av
+  et publisert kurs deltakeren har tilgang til (via `CourseItem.sectionId` → synlighet).
+- **`src/modules/course/assetCommands.ts` + `src/routes/contentAssets.ts`:** `getSectionAssetContent`
+  tar nå en `viewer`; deltaker må ha tilgang til seksjonens publiserte kurs, forfattere (SMO/ADMIN)
+  bypasser for draft-preview. 404 (ikke 403) ved nekt.
+- **Tester:** ny `test/m2-section-asset-authz.test.ts` (uinnmeldt→404, innmeldt→200, forfatter-bypass på
+  kursløs seksjon→200). Eksisterende `m2-section-assets.test.ts`: de tre deltaker-serve-casene lenker nå
+  seksjonen inn i et publisert OPEN-kurs (den realistiske stien) — gammel oppførsel serverte assets fra
+  kursløse seksjoner, som var nettopp sårbarheten.
+
+**Utrulling:** kun app-kode → `deploy-app.yml`. Ingen skjemaendring. Rollback: fjern `viewer`-sjekken.
+Lukker #786.
+
 ## 2.0.3 - 2026-07-19
 
 fix(security): #785 — restricted-course authorization on direct endpoints (IDOR)
