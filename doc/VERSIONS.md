@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.3 - 2026-07-19
+
+fix(security): #785 — restricted-course authorization on direct endpoints (IDOR)
+
+Arkitektur-gjennomgangens topp-prioritet (epic #778). Kurs-LISTE-endepunktet filtrerte RESTRICTED-kurs
+på enrollment/klasse-synlighet, men de direkte endepunktene (detalj, seksjonsinnhold, marker-lest) gated
+kun på `publishedAt` — så en innlogget, uinnmeldt deltaker med en RESTRICTED kurs-ID kunne lese hele
+sekvensen + seksjonsinnhold og skrive lese-progresjon.
+
+- **`src/modules/course/enrollmentService.ts`:** ny `isCourseVisibleToUser` — enkelt-kurs-synlighet
+  (OPEN kortslutter; RESTRICTED krever enrollment ELLER klasse-tildeling), speiler liste-logikken.
+- **`src/routes/courses.ts`:** guard på `GET /:courseId`, `GET /:courseId/sections/:sectionId`, og
+  `POST /:courseId/sections/:sectionId/read` — 404 (ikke 403) når ikke synlig.
+- **`test/m2-course-restricted-visibility.test.ts`:** uinnmeldt → 404 ×3 (og ingen lese-rad skrevet);
+  innmeldt → 200/200/204; OPEN uendret (200).
+
+**Utrulling:** kun app-kode → `deploy-app.yml`. Ingen skjemaendring. Rollback: fjern guardene.
+`enrollmentPolicy` defaulter til OPEN, så eksisterende kurs er upåvirket. Lukker #785. (#786 asset-IDOR
+kommer som egen PR — bredere test-endring.)
+
 ## 2.0.2 - 2026-07-19
 
 fix(security): nøytraliser CSV-formel-injeksjon i rapporteksport

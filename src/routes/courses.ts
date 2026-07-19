@@ -8,6 +8,7 @@ import {
   listUserEnrollments,
   selfEnroll,
   filterVisibleCourseIds,
+  isCourseVisibleToUser,
   getUserClassIds,
   getClassAssignedCourseDueDates,
   deriveStatus,
@@ -221,6 +222,11 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     if (!course || !course.publishedAt || course.archivedAt) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
+    // #778/#785: RESTRICTED courses are visible only to enrolled/class-assigned users. Gate the direct
+    // detail endpoint the same way the list endpoint does; 404 (not 403) so we don't confirm existence.
+    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
+      throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    }
 
     const moduleIds = course.modules.map((cm) => cm.moduleId);
     const [certStatuses, passedCount, latestSubmissions] = await Promise.all([
@@ -336,6 +342,10 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     if (!course || !course.publishedAt || course.archivedAt) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
+    // #778/#785: gate RESTRICTED-course section content on enrolment/class visibility.
+    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
+      throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    }
     const courseItems = await courseRepository.findCourseItems(course.id);
     const belongs = courseItems.some(
       (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
@@ -365,6 +375,10 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
   try {
     const course = await courseRepository.findCourseById(request.params.courseId);
     if (!course || !course.publishedAt || course.archivedAt) {
+      throw new NotFoundError("Course", "course_not_found", "Course not found.");
+    }
+    // #778/#785: gate RESTRICTED-course read-progress writes on enrolment/class visibility.
+    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
     const courseItems = await courseRepository.findCourseItems(course.id);
