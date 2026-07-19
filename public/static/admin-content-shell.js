@@ -29,6 +29,7 @@ import {
 } from "/static/admin-content-shell-state.js";
 import { buildAdminContentAdvancedUrl } from "/static/admin-content-handoff-routes.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
+import { renderOwnerPanel } from "/static/owner-panel.js";
 import {
   buildExternalLlmAuthoringPrompt,
   parseExternalLlmJson,
@@ -1138,6 +1139,19 @@ function updateStateRail() {
   if (!stateRail) return;
   const hasModule = !!selectedModuleId;
   stateRail.hidden = !hasModule;
+  // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
+  // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
+  const ownerHost = document.getElementById("moduleOwnerPanelHost");
+  if (ownerHost) {
+    if (!hasModule) {
+      ownerHost.hidden = true;
+      ownerHost.dataset.moduleId = "";
+    } else if (ownerHost.dataset.moduleId !== selectedModuleId) {
+      ownerHost.dataset.moduleId = selectedModuleId;
+      ownerHost.hidden = false;
+      renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders }).catch(() => {});
+    }
+  }
   if (!hasModule) return;
 
   const chains = bundle ? deriveModuleStatusChains(bundle) : null;
