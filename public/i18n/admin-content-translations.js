@@ -9,7 +9,7 @@ export const localeLabels = baseLocaleLabels;
 
 const adminContentBase = {
   "nav.profile": "Profile",
-  "adminContentPage.title": "Content Setup Workspace",
+  "adminContentPage.title": "Module",
   "adminContentPage.chatLink": "Back to conversational editor",
   "adminContentPage.subtitle": "Define module content and scoring rules in a guided sequence.",
   "adminContentPage.versionLabel": "Version:",
@@ -384,7 +384,7 @@ const adminContentBase = {
   "adminContent.courses.dialog.save": "Save",
 
   // ── Conversational shell (admin-content-shell.js) ─────────────────────────
-  "shell.page.title": "Content Workspace",
+  "shell.page.title": "Module",
   "shell.page.advancedLink": "Advanced editor \u2197",
   "shell.idle.prompt": "What would you like to do?",
   "shell.idle.openExisting": "Open existing module",
@@ -771,7 +771,7 @@ const adminContentBase = {
 };
 const nbOverrides = {
   "nav.profile": "Profil",
-  "adminContentPage.title": "Arbeidsflate for innholdsoppsett",
+  "adminContentPage.title": "Modul",
   "adminContentPage.chatLink": "Tilbake til samtaledrevet editor",
   "adminContentPage.subtitle": "Definer modulinnhold og vurderingsregler i en tydelig rekkefølge.",
   "adminContentPage.versionLabel": "Versjon:",
@@ -1162,7 +1162,7 @@ const nbOverrides = {
 };
 const nnOverrides = {
   "nav.profile": "Profil",
-  "adminContentPage.title": "Arbeidsflate for innhaldsoppsett",
+  "adminContentPage.title": "Modul",
   "adminContentPage.chatLink": "Tilbake til samtaledriven editor",
   "adminContentPage.subtitle": "Definer modulinnhald og vurderingsreglar i ei tydeleg rekkjefølgje.",
   "adminContentPage.versionLabel": "Versjon:",
@@ -1570,7 +1570,7 @@ const adminContentLateOverrides = {
     "adminContent.help.moduleVersionIds": "ID-er fylles automatisk n\u00e5r du lagrer steg 5-8.",
 
     // ── Conversational shell ─────────────────────────────────────────────────
-    "shell.page.title": "Innholdsarbeidsrom",
+    "shell.page.title": "Modul",
     "shell.page.advancedLink": "Avansert redigering \u2197",
     "shell.idle.prompt": "Hva vil du gj\u00f8re?",
     "shell.idle.openExisting": "\u00c5pne eksisterende modul",
@@ -1987,7 +1987,7 @@ const adminContentLateOverrides = {
     "adminContent.help.moduleVersionIds": "ID-ar blir fylte automatisk n\u00e5r du lagrar steg 5-8.",
 
     // ── Conversational shell ─────────────────────────────────────────────────
-    "shell.page.title": "Innhaldsarbeidsrom",
+    "shell.page.title": "Modul",
     "shell.page.advancedLink": "Avansert redigering \u2197",
     "shell.idle.prompt": "Kva vil du gj\u00f8re?",
     "shell.idle.openExisting": "Opne eksisterande modul",

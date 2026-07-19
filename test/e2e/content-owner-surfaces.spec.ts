@@ -52,6 +52,14 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
   await expect(panel).toBeVisible();
   await expect(panel.locator(".owner-row")).toHaveCount(1);
   await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");
+
+  // QA r3 #3: the Avansert editor shows the same content-area sub-nav as Kurs/Seksjoner, with Moduler active.
+  const nav = page.locator("#contentAreaNav");
+  await expect(nav.locator("#navModuler")).toHaveClass(/active/);
+  await expect(nav.locator("#navKurs")).toBeVisible();
+  await expect(nav.locator("#navSeksjoner")).toBeVisible();
+  // QA r3 #1/#2: the page title is now "Modul", not the old vague workspace label.
+  await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Modul");
 });
 
 // QA #2 — classes were never wired for ownership; the panel goes in the openClass detail view.

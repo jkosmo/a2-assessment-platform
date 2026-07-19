@@ -405,6 +405,7 @@ async function renderEditorView(sectionId) {
       <a href="#" class="back-link" id="backLink">${escapeHtml(L("back"))}</a>
       <span id="sectionStatusBadge"></span>
     </div>
+    ${sectionId ? `<div id="ownerPanelHost" class="card" style="margin-bottom:var(--space-2)"></div>` : ""}
     <div class="section-editor">
       <div class="lang-tabs" id="langTabs">
         ${EDITOR_LOCALES.map((loc) => `<button type="button" class="lang-tab${loc === editing.editLocale ? " active" : ""}" data-locale="${loc}">${escapeHtml(localeLabels[loc] ?? loc)}</button>`).join("")}
@@ -433,7 +434,6 @@ async function renderEditorView(sectionId) {
         <button type="button" id="sectionLifecycleBtn" class="btn btn-secondary" style="width:auto;display:none"></button>
         <span class="editor-status" id="editorStatus"></span>
       </div>
-      ${sectionId ? `<div id="ownerPanelHost" style="margin-top:var(--space-3);border-top:1px solid var(--color-border-soft);padding-top:var(--space-2)"></div>` : ""}
     </div>`;
 
   document.getElementById("backLink")?.addEventListener("click", (e) => { e.preventDefault(); goTo("list"); });

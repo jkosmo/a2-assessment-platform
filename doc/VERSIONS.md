@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.15 - 2026-07-19
+
+fix(ui): #787 QA runde 3 — konsistens på innholds-flatene (tittel, sub-nav, eier-plassering)
+
+- **Modul-editor-titler** (QA #1/#2): «Innholdsarbeidsrom» (samtale) og «Arbeidsflate for innholdsoppsett»
+  (avansert) → **«Modul»** (som Kurs/Klasse bruker innholdstype-navnet). Redigeringsmodus vises allerede
+  av Samtale/Avansert-bryteren, og modulnavnet av state-rail-en.
+- **Innholds-sub-nav** (QA #3): begge modul-editorene får nå samme topp-meny som Kurs/Seksjoner
+  (Kurs · Moduler · Seksjoner · Kalibrering), med «Moduler» aktiv. Kalibrering-lenken er rolle-gated
+  likt de andre sidene (både samtale-shell og avansert).
+- **Eier-plassering** (QA #4): «Eiere» står nå **øverst** på alle fire flatene. Kurs og Modul var alt
+  øverst; Seksjon og Klasse flyttet fra bunn til topp for konsistens.
+
+Kalibrering (QA #5) tas som eget interaksjons-design-spor (#836) — ikke i denne releasen.
+
+Ny e2e-dekning i `content-owner-surfaces.spec.ts` (sub-nav aktiv-state + tittel på avansert). Ingen
+regresjon i de 61 berørte admin-content-e2e-ene.
+
 ## 2.0.14 - 2026-07-19
 
 fix(auth): #787 QA runde 2 — owner-panel på de faktisk manglende flatene + kompakt GDPR-varsel

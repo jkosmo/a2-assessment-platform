@@ -275,6 +275,7 @@ async function openClass(id) {
   pageContent.innerHTML = `
     <a class="back-link" id="backToClasses">← Tilbake til klasser</a>
     <div class="page-header"><h1>Klasse</h1></div>
+    <div class="detail-section" id="classOwnerPanelHost"></div>
     <div class="detail-section">
       <h2>Studenter (${members.length})</h2>
       <div class="chip-row" id="memberChips">${memberChips || `<span style="color:var(--color-meta);font-size:13px">Ingen studenter ennå.</span>`}</div>
@@ -295,8 +296,7 @@ async function openClass(id) {
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
       </div>
       <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
-    </div>
-    <div class="detail-section" id="classOwnerPanelHost"></div>`;
+    </div>`;
   document.getElementById("backToClasses").addEventListener("click", renderListView);
 
   // #787: content-owner management for the class.
