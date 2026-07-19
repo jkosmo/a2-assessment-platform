@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.14 - 2026-07-19
+
+fix(auth): #787 QA runde 2 — owner-panel på de faktisk manglende flatene + kompakt GDPR-varsel
+
+QA-runde 1 (2.0.13) trodde modul-avansert var dekket, men **avansert-editoren kjører `admin-content.js`**
+(egen `updateStateRail`), ikke samtale-shellen (`admin-content-shell.js`) — så owner-panelet ble aldri
+rendret der. Denne runden fikser de tre gjenstående flatene, hver bevist med en Playwright-e2e som
+driver den ekte front-end-JS-en:
+
+- **Modul-avansert** (`admin-content.js`): owner-panel rendres nå fra `setSelectedModule` inn i
+  `#moduleOwnerPanelHost` (én gang per modul-id), uavhengig av om modul-status er ferdig hentet. QA #1.
+- **Klasse** (`admin-content-classes.js`): owner-panel i `openClass`-detaljvisningen — klasser var aldri
+  koblet for eierskap. QA #2.
+- **Seksjon**: e2e bekrefter at editor-visningen allerede rendrer panelet for eksisterende seksjoner
+  (åpne en seksjon via `?id=`); panelet vises i editoren, ikke i liste-visningen. QA #3.
+- **GDPR-varsel**: gjort kompakt (én linje, mindre skrift, lettere ramme) på begge modul-editorene så
+  det ikke dominerer arbeidsflaten. QA #5 (plassering/størrelse).
+
+Ny e2e: `test/e2e/content-owner-surfaces.spec.ts` (3 tester). Ingen regresjon i de 55 berørte
+admin-content-e2e-ene.
+
 ## 2.0.13 - 2026-07-19
 
 feat(auth): #787 QA #2/#4 — owner-panel på modul- + seksjon-flatene

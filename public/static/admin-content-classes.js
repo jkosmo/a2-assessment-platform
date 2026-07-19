@@ -4,6 +4,7 @@ import { resolveWorkspaceNavigationItems } from "/static/participant-console-sta
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
+import { renderOwnerPanel } from "/static/owner-panel.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -294,8 +295,13 @@ async function openClass(id) {
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
       </div>
       <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
-    </div>`;
+    </div>
+    <div class="detail-section" id="classOwnerPanelHost"></div>`;
   document.getElementById("backToClasses").addEventListener("click", renderListView);
+
+  // #787: content-owner management for the class.
+  const ownerHost = document.getElementById("classOwnerPanelHost");
+  if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "CLASS", contentId: id, getHeaders }).catch(() => {});
 
   // Member add via search.
   const searchInput = document.getElementById("studentSearch");
