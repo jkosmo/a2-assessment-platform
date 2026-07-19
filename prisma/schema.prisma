@@ -316,6 +316,8 @@ model MCQAttempt {
   submission      Submission    @relation(fields: [submissionId], references: [id], onDelete: Restrict)
   mcqSetVersion   MCQSetVersion @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
   responses       MCQResponse[]
+
+  @@index([submissionId, completedAt])
 }
 
 model MCQResponse {
@@ -327,6 +329,8 @@ model MCQResponse {
   createdAt      DateTime    @default(now())
   mcqAttempt     MCQAttempt  @relation(fields: [mcqAttemptId], references: [id], onDelete: Restrict)
   question       MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@index([mcqAttemptId])
 }
 
 model RubricVersion {
@@ -381,6 +385,8 @@ model LLMEvaluation {
   submission              Submission            @relation(fields: [submissionId], references: [id], onDelete: Restrict)
   moduleVersion           ModuleVersion         @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
   promptTemplateVersion   PromptTemplateVersion @relation(fields: [promptTemplateVersionId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, createdAt])
 }
 
 model AssessmentDecision {
@@ -464,6 +470,7 @@ model CertificationStatus {
   latestDecision         AssessmentDecision @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
 
   @@unique([userId, moduleId])
+  @@index([moduleId, status])
 }
 
 model AuditEvent {
@@ -535,6 +542,7 @@ model CourseCompletion {
   course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
   @@unique([userId, courseId])
+  @@index([courseId, completedAt])
 }
 
 // #496/EN-1: assignment of a course to a participant (individual, department, or self-enrollment),
