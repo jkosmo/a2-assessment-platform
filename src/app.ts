@@ -33,6 +33,13 @@ import { calibrationRouter } from "./routes/calibration.js";
 import { queueCountsRouter } from "./routes/queueCounts.js";
 
 const app = express();
+// Azure App Service terminates TLS at a single front-end hop and forwards the real client IP in
+// X-Forwarded-For. Trust exactly that one hop so req.ip resolves to the client instead of the proxy.
+// Without this, every anonymous request shares one proxy-side req.ip, collapsing the IP-keyed rate
+// limiters (rateLimiting.ts resolveRateLimitKey falls back to req.ip for unauthenticated callers)
+// into a single shared bucket — one noisy client 429s all other anonymous participants. Trust 1 hop
+// (not `true`) so a client cannot spoof X-Forwarded-For to forge its key.
+app.set("trust proxy", 1);
 const participantConsoleRuntimeConfig = getParticipantConsoleRuntimeConfig();
 const publicRootPath = path.resolve(process.cwd(), "public");
 const publicStaticPath = path.resolve(publicRootPath, "static");

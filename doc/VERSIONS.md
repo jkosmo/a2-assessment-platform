@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.1 - 2026-07-19
+
+fix(security): sett `trust proxy` — hindre at anonym IP-basert rate-limiting kollapser til én delt bøtte
+
+Første findings→action fra arkitektur-gjennomgangen (`doc/design/ARCHITECTURE_REVIEW_2026-07-19.md`).
+Rate-limiterne (`src/middleware/rateLimiting.ts`) nøkler anonyme kall på `req.ip`. Uten `trust proxy`
+bak Azure App Services front-end blir `req.ip` proxy-ens IP — lik for alle — så alle anonyme klienter
+deler én bøtte, og én støyende klient gir `429` til alle andre anonyme deltakere (selv-påført throttle).
+
+- **`src/app.ts`:** `app.set("trust proxy", 1)` — stol på nøyaktig ett proxy-hopp, så `req.ip` løses
+  fra `X-Forwarded-For` til den reelle klienten. `1` (ikke `true`) hindrer at en klient spoofer XFF.
+- **`test/trust-proxy.test.ts`:** guard-test som feiler hvis innstillingen fjernes.
+
+**Utrulling:** kun app-kode → `deploy-app.yml`. Lavrisiko atferdsendring (påvirker `req.ip`-utledning
+for logging + rate-limit-nøkkel). Rollback: fjern linja.
+
 ## 2.0.0 - 2026-07-19
 
 **Milepæl — Tier 2 LMS komplett (#478): fra assessment-motor til kursforløp.** Med kohort-status-
