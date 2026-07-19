@@ -13,6 +13,21 @@ This document records notable staging/production incidents so symptoms, root cau
 - Follow-up:
 - References:
 
+## 2026-07-19 - DR Restore Drill (planned exercise, not an incident)
+- Date: `2026-07-19`
+- Environment: `production` (isolated throwaway restore; live runtime never touched)
+- Type: scheduled disaster-recovery drill (#403, EPIC #443)
+- Summary:
+  - Native PITR restore of production PostgreSQL executed end-to-end to a new isolated server; data
+    verified coherent (User 61, Submission 6, decision/certification/appeal lineage intact, 90 audit
+    events); throwaway server torn down and prod RG lock verified restored.
+  - Vaulted-backup and logical-export paths verified available (recovery points + export script
+    present); full reconstruct of those two paths deferred to the next quarterly drill.
+- Runbook weaknesses found and fixed: retention stated 35d vs actual 7d; broken drill-doc reference;
+  added notes for Windows az quoting/pathconv and prod-RG-lock teardown.
+- References: `doc/design/PRODUCTION_RESTORE_DRILL_2026-07-19.md`, `doc/PRODUCTION_RESTORE_RUNBOOK.md`,
+  #403, #443. Next drill target: 2026-10 (quarterly).
+
 ## 2026-03-18 - Staging SQLite Corruption (Recurrence) — Container Timeout
 - Date: `2026-03-18`
 - Environment: `staging`

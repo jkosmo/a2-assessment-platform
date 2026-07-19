@@ -24,6 +24,7 @@ import { auditRouter } from "./routes/audit.js";
 import { reviewsRouter } from "./routes/reviews.js";
 import { appealsRouter } from "./routes/appeals.js";
 import { reportsRouter } from "./routes/reports.js";
+import { cohortStatusRouter } from "./routes/cohortStatus.js";
 import { adminContentRouter } from "./routes/adminContent.js";
 import { adminModulesRouter } from "./routes/adminModules.js";
 import { adminPlatformRouter } from "./routes/adminPlatform.js";
@@ -195,6 +196,11 @@ app.get("/results", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "results.html"));
 });
 
+// #498: teacher/SMO cohort-status dashboard — a «Deltakere»-area sub-tab.
+app.get("/deltakere/status", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "cohort-status.html"));
+});
+
 app.get("/participant/config", generalApiLimiter, (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });
@@ -222,6 +228,7 @@ app.use("/api/reviews", requireAnyRole(rolesFor("reviews")), reviewsRouter);
 app.use("/api/appeals", requireAnyRole(rolesFor("appeals")), appealsRouter);
 app.use("/api/queue-counts", requireAnyRole(rolesFor("queue_counts")), queueCountsRouter);
 app.use("/api/reports", requireAnyRole(rolesFor("reports")), reportsRouter);
+app.use("/api/cohort-status", requireAnyRole(rolesFor("cohort_dashboard")), cohortStatusRouter);
 // Calibration access is a runtime-configurable override — see CALIBRATION_ACCESS_OVERRIDE note in capabilities.ts.
 // Roles come from calibrationWorkspace.accessRoles in participant-console.json, not from API_ROUTE_CAPABILITIES.
 app.use(

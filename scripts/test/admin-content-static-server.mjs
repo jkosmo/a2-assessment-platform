@@ -45,6 +45,10 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/deltakere/klasser") {
     return path.join(publicRoot, "admin-content-classes.html");
   }
+  // #498: cohort-status dashboard, a «Deltakere» sub-tab.
+  if (requestPath === "/deltakere/status") {
+    return path.join(publicRoot, "cohort-status.html");
+  }
   if (requestPath === "/review") {
     return path.join(publicRoot, "review.html");
   }
