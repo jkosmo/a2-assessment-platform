@@ -28,6 +28,7 @@ import {
   courseItemTypeBadge,
 } from "/static/admin-content-courses-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import { renderOwnerPanel } from "/static/owner-panel.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -1428,6 +1429,8 @@ async function renderDetailView(courseId) {
     </div>
     <div class="detail-layout">
 
+      <div class="detail-section" id="ownerPanelHost"></div>
+
       <div class="detail-section">
         <h2 class="detail-section-title">Kursdetaljer</h2>
 
@@ -1517,6 +1520,11 @@ async function renderDetailView(courseId) {
 
   renderModuleList();
   initDetailEventListeners(courseId);
+  // #787 slice 5: content-owner management for this course.
+  const ownerHost = document.getElementById("ownerPanelHost");
+  if (ownerHost) {
+    renderOwnerPanel({ container: ownerHost, contentType: "COURSE", contentId: courseId, getHeaders }).catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------
