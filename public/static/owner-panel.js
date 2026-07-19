@@ -43,7 +43,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
             (o) => `<li class="owner-row">
         <span class="owner-name">${escapeHtml(o.name)}</span>
         <span class="owner-email">${escapeHtml(o.email)}</span>
-        <button type="button" class="owner-remove" data-user-id="${escapeHtml(o.userId)}">Fjern</button>
+        <button type="button" class="owner-remove btn-secondary" data-user-id="${escapeHtml(o.userId)}">Fjern</button>
       </li>`,
           )
           .join("")
