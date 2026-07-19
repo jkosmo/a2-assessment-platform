@@ -9,6 +9,7 @@ import { resolveWorkspaceNavigationItems } from "/static/participant-console-sta
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
+import { renderOwnerPanel } from "/static/owner-panel.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -432,6 +433,7 @@ async function renderEditorView(sectionId) {
         <button type="button" id="sectionLifecycleBtn" class="btn btn-secondary" style="width:auto;display:none"></button>
         <span class="editor-status" id="editorStatus"></span>
       </div>
+      ${sectionId ? `<div id="ownerPanelHost" style="margin-top:var(--space-3);border-top:1px solid var(--color-border-soft);padding-top:var(--space-2)"></div>` : ""}
     </div>`;
 
   document.getElementById("backLink")?.addEventListener("click", (e) => { e.preventDefault(); goTo("list"); });
@@ -457,6 +459,11 @@ async function renderEditorView(sectionId) {
   document.getElementById("sectionLifecycleBtn")?.addEventListener("click", toggleSectionLifecycle);
   refreshSectionLifecycleUI();
   refreshPreview();
+  // #787: content-owner management for an existing section (new sections have no id yet).
+  if (sectionId) {
+    const ownerHost = document.getElementById("ownerPanelHost");
+    if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "SECTION", contentId: sectionId, getHeaders }).catch(() => {});
+  }
 }
 
 // #705: status i editoren (samme vokabular som modul) + Publiser/Avpubliser-knapp. Seksjoner

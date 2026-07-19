@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.13 - 2026-07-19
+
+feat(auth): #787 QA #2/#4 — owner-panel på modul- + seksjon-flatene
+
+Kobler det gjenbrukbare owner-panelet (samme som kurs) inn på de resterende innholds-flatene:
+- **Seksjon-editor** (`admin-content-sections.js`): panel for eksisterende seksjoner (nye har ingen id enda).
+- **Modul-arbeidsflate** (`admin-content-shell.js` + `admin-content.html` + `admin-content-advanced.html`):
+  panel under «Modulstatus»-raden når en modul er lastet — dekker BÅDE samtale- og avansert-modus (begge
+  bruker samme shell/`updateStateRail`). Rendres én gang per modul (guardet), skjules når ingen modul.
+
+Inert (eksponerer bare eier-API-et). Panel-logikken er e2e-dekket (kurs-spec); wiringen er mekanisk +
+syntaks-verifisert, og eksisterende admin-content-e2e-specs fanger side-brudd. → `deploy-app.yml`.
+
 ## 2.0.12 - 2026-07-19
 
 fix(auth): #787 QA #6 — eiere er lesbare for enhver SMO/admin (panelet vises på innhold du ikke eier)
