@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.11 - 2026-07-19
+
+fix(ui): #787 — owner-panel styling matcher design-systemet (liten «Fjern»-knapp, design-tokens)
+
+Rettet at «Fjern» ble full-bredde (global `button { width: 100% }`-felle) + brukte ad-hoc-farger. Nå:
+design-tokens (`--color-*`, `--space-*`), `btn-secondary` + `width:auto` på knappen, ryddig rad-layout.
+Kun CSS + én klasse → `deploy-app.yml`.
+
 ## 2.0.10 - 2026-07-19
 
 feat(auth): #787 skive 5 — owner-forvaltnings-UI (gjenbrukbart panel, koblet på kurs-siden)
