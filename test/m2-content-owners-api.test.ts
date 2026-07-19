@@ -44,11 +44,15 @@ describe("content-owners API (#787)", () => {
     const listA = await request(app).get(`/api/admin/content-owners/COURSE/${contentId}`).set(smo(a.externalId));
     expect(listA.status).toBe(200);
     expect((listA.body.owners as Array<{ userId: string }>).map((o) => o.userId)).toEqual([a.id]);
+    expect(listA.body.canManage).toBe(true); // A owns it
 
-    // Non-owner B (has SMO capability but doesn't own this object) is blocked.
+    // Non-owner B can VIEW owners (transparency, canManage=false) but cannot mutate them.
     const listB = await request(app).get(`/api/admin/content-owners/COURSE/${contentId}`).set(smo(b.externalId));
-    expect(listB.status).toBe(403);
-    expect(listB.body.error).toBe("content_ownership");
+    expect(listB.status).toBe(200);
+    expect(listB.body.canManage).toBe(false);
+    const bAdd = await request(app).post(`/api/admin/content-owners/COURSE/${contentId}`).set(smo(b.externalId)).send({ userId: b.id });
+    expect(bAdd.status).toBe(403);
+    expect(bAdd.body.error).toBe("content_ownership");
 
     // Owner A adds B as a co-owner.
     const add = await request(app).post(`/api/admin/content-owners/COURSE/${contentId}`).set(smo(a.externalId)).send({ userId: b.id });
@@ -70,10 +74,14 @@ describe("content-owners API (#787)", () => {
     expect(adminRemove.status).toBe(200);
     expect(adminRemove.body.owners).toEqual([]);
 
-    // Unowned now: a non-admin SMO is blocked (content_unowned); admin can still add an owner.
+    // Unowned now: any SMO can still VIEW (empty owners, canManage=false); mutating is admin-only.
     const smoUnowned = await request(app).get(`/api/admin/content-owners/COURSE/${contentId}`).set(smo(a.externalId));
-    expect(smoUnowned.status).toBe(403);
-    expect(smoUnowned.body.error).toBe("content_unowned");
+    expect(smoUnowned.status).toBe(200);
+    expect(smoUnowned.body.owners).toEqual([]);
+    expect(smoUnowned.body.canManage).toBe(false);
+    const smoAddUnowned = await request(app).post(`/api/admin/content-owners/COURSE/${contentId}`).set(smo(a.externalId)).send({ userId: a.id });
+    expect(smoAddUnowned.status).toBe(403);
+    expect(smoAddUnowned.body.error).toBe("content_unowned");
     const adminAdd = await request(app).post(`/api/admin/content-owners/COURSE/${contentId}`).set(admin(adminUser.externalId)).send({ userId: a.id });
     expect(adminAdd.status).toBe(201);
 

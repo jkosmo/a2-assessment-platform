@@ -29,11 +29,13 @@ function errorMessage(error, fallback) {
 
 export async function renderOwnerPanel({ container, contentType, contentId, getHeaders }) {
   let owners = [];
+  let canManage = false; // only owners/admin may change owners; everyone with access can view
   container.innerHTML = `<div class="owner-panel"><p class="owner-panel-loading">Laster eiere…</p></div>`;
 
   async function load() {
     const data = await apiFetch(ownersPath(contentType, contentId), getHeaders);
     owners = Array.isArray(data.owners) ? data.owners : [];
+    canManage = data.canManage === true;
   }
 
   function paint() {
@@ -43,19 +45,22 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
             (o) => `<li class="owner-row">
         <span class="owner-name">${escapeHtml(o.name)}</span>
         <span class="owner-email">${escapeHtml(o.email)}</span>
-        <button type="button" class="owner-remove btn-secondary" data-user-id="${escapeHtml(o.userId)}">Fjern</button>
+        ${canManage ? `<button type="button" class="owner-remove btn-secondary" data-user-id="${escapeHtml(o.userId)}">Fjern</button>` : ""}
       </li>`,
           )
           .join("")
       : `<li class="owner-empty">Ingen eiere ennå — kun administrator kan redigere til en eier tildeles.</li>`;
+    const addBox = canManage
+      ? `<div class="owner-add">
+          <input type="text" class="owner-search-input" placeholder="Søk navn/e-post for å legge til eier…" aria-label="Søk etter eier" autocomplete="off" />
+          <ul class="owner-search-results" hidden></ul>
+        </div>`
+      : "";
     container.innerHTML = `
       <div class="owner-panel">
         <h3 class="owner-panel-title">Eiere</h3>
         <ul class="owner-list">${rows}</ul>
-        <div class="owner-add">
-          <input type="text" class="owner-search-input" placeholder="Søk navn/e-post for å legge til eier…" aria-label="Søk etter eier" autocomplete="off" />
-          <ul class="owner-search-results" hidden></ul>
-        </div>
+        ${addBox}
       </div>`;
     wire();
   }
