@@ -180,7 +180,18 @@ Both staging and production require **manual `workflow_dispatch`** — push to `
 1. **Staging only:** dispatch `deploy-azure.yml` (or `deploy-app.yml`) with defaults. Verify staging `/healthz` green before considering prod.
 2. **Production:** dispatch `deploy-azure.yml` with `deploy_production=true`. If staging is already verified green on the same `main` HEAD, also set `skip_staging=true` to bypass the redundant staging redeploy. The production GitHub environment has the approval gate.
 
-## Deploy mechanics — pre-flight, credential guard, KV grant
+### Deploy-window policy (interim, until #808) — production has user-facing downtime on every deploy
+
+Production runs on a **single-instance B1 plan with no deployment slots** (#808), so **every** production
+deploy restarts the one web instance: **~5–8 min** cold start for `deploy-app.yml`, **~10–16 min** for a
+full `deploy-azure.yml` (two restarts for the KV-reference refresh). During that window, in-flight and
+new requests get resets / 5xx / timeouts.
+
+**Decision (2026-07-19):** rather than pay for the slot-capable tier now, we **schedule production
+deploys off-hours** and avoid deploying while candidates may be mid-assessment. This is a *process*
+mitigation, not a fix — #808 (slots + tier, true zero-downtime) remains the tracked infra item to do
+**before** the platform is in active use with real candidates. Staging has no such constraint; deploy it
+freely.
 
 The full deploy (`deploy-azure.yml` → `deploy-environment.ps1`) does several **idempotency-preserving checks** before invoking Bicep. Knowing what they print helps diagnose deploys quickly.
 
