@@ -126,6 +126,34 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       });
     },
 
+    // #498: all class assignments for ONE course (on non-archived classes), with the class kind/isSystem
+    // + member users, so the cohort-status dashboard can expand the effective audience. Unlike the
+    // reminder reader below, this is course-scoped and NOT filtered on dueAt (the dashboard shows every
+    // participant, due or not). ENTRA classes are included but the service skips their (unresolvable)
+    // membership; the system "Alle deltakere" class has no rows and is resolved separately.
+    findCourseGroupAssignmentsForCourse(courseId: string) {
+      return client.courseGroupAssignment.findMany({
+        where: { courseId, class: { archivedAt: null } },
+        include: {
+          class: {
+            select: {
+              id: true,
+              name: true,
+              kind: true,
+              isSystem: true,
+              members: {
+                select: {
+                  user: {
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+
     // #497 fase 2: class-assigned due dates for the reminder schedule. Only non-null dueAt on a
     // non-archived class. Includes the course (id + localized title) and the class kind/isSystem so
     // the service can expand membership (MANUAL rows are included; the system "Alle deltakere" class

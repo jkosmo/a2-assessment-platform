@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.0 - 2026-07-19
+
+**Milepæl — Tier 2 LMS komplett (#478): fra assessment-motor til kursforløp.** Med kohort-status-
+dashboardet (#498) er alle «Done når»-pilarene i Epic #478 levert (innhold ✓ vurdering ✓ progresjon ✓
+varsling ✓ dashboard ✓). Major-bump markerer at plattformen har utviklet seg fra en ren
+vurderings-motor til en kurs-basert LMS.
+
+feat(dashboard): #498 — lærer/SMO kohort-status-dashboard (siste Tier 2-pilar, lukker #478)
+
+Ny «Status»-fane under «Deltakere»-området (`/deltakere/status`): velg et kurs → se deltakernes
+enrollment-status (**Tildelt / Påbegynt / Forfalt / Fullført**) aggregert over kursets **effektive
+audience** (individuelle CourseEnrollment + klasse-tildelte medlemmer), med per-klasse-breakdown.
+Siste «Done når»-pilar i Epic #478 (Tier 2 LMS).
+
+- **Backend:** `cohortStatusService.ts` — `resolveCourseAudience(courseId)` (kurs-scoped, individuell +
+  klasse-ekspandert audience, presedens individuell>klasse/tidligste klasse-frist, MANUAL + «Alle
+  deltakere», hopper over ENTRA) + `getCohortStatus` (status-count-aggregat + per-klasse via
+  `deriveStatus`). Ny `classRepository.findCourseGroupAssignmentsForCourse` (kurs-scoped, uten
+  dueAt-filter). Read-time-analog av påminnelses-jobbens audience-ekspansjon.
+- **API:** ny capability `cohort_dashboard` (`/api/cohort-status`, roller SMO/ADMIN/REPORT_READER) +
+  `cohortStatus.ts`-router: `GET /courses` (publiserte kurs-picker) + `GET /course/:id` (aggregat).
+- **UI:** `cohort-status.html` + `cohort-status.js` + `cohort-status-translations.js` (nb/nn/en).
+  Ny «Status»-fane i `deltakere-subnav.js` (rollegated) + i de andre Deltakere-sidenes bar.
+- **Tester:** integrasjon (aggregat med individuell+klasse-ekspansjon, per-klasse, /courses-picker,
+  403 for PARTICIPANT) + e2e (picker→last→status-kort+per-klasse, aktiv fane, rollegating). tsc grønn.
+- **Design-writeup:** `doc/design/COHORT_STATUS_DASHBOARD_498.md` (beslutninger + trade-offs + neste
+  steg) for review.
+
+**Kjent MVP-avgrensning:** `deriveStatus` kjører 1–2 spørringer per deltaker (N+1); greit for typiske
+kohorter, batch ved store. Individuelle enrollments filtreres ikke på aktiv/anonymisert (klasse-medlemmer
+gjør det). Detaljer i writeup-en.
+
+**Utrulling:** kun server+klient-kode, ingen migrasjon. **Går kun til stage foreløpig** (ikke prod).
+
 ## 1.6.37 - 2026-07-18
 
 chore(observability): #497-incident — ekstern availability-test + alert på worker-rollens /healthz

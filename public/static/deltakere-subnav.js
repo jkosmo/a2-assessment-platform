@@ -9,12 +9,15 @@ import { getConsoleConfig, buildConsoleHeaders, apiFetch } from "/static/api-cli
 
 const LINK_ROLES = {
   subnavKlasser: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
+  // #498: cohort-status dashboard — same audience as Resultater.
+  subnavStatus: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"],
   subnavReview: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"],
   subnavResults: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"],
 };
 
 const ACTIVE_BY_PREFIX = [
   ["/deltakere/klasser", "subnavKlasser"],
+  ["/deltakere/status", "subnavStatus"],
   ["/review", "subnavReview"],
   ["/results", "subnavResults"],
 ];
