@@ -4681,6 +4681,14 @@ function renderWorkspaceNavigation() {
     items,
     buildLabel: (item) => t(item.labelKey) || item.id,
   });
+  // #787 QA r3: role-gate the content-area sub-nav's Kalibrering link (same accessRoles as the
+  // calibration workspace) so the Samtale editor shows the same top menu as courses/sections.
+  const navKalibrering = document.getElementById("navKalibrering");
+  if (navKalibrering) {
+    const calibrationRoles = ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"];
+    const current = new Set(activeUserRoles.length ? activeUserRoles : (participantRuntimeConfig.identityDefaults?.roles ?? []));
+    navKalibrering.hidden = !calibrationRoles.some((role) => current.has(role));
+  }
 }
 
 // Translates static text that lives in the HTML source (not rendered by chat flow).

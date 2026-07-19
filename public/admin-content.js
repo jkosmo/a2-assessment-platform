@@ -1505,6 +1505,10 @@ function renderCalibrationTabVisibility() {
 
   const visible = canAccessCalibrationTab();
   tabKalibrering.hidden = !visible;
+  // #787 QA r3: the content-area sub-nav's Kalibrering link is role-gated the same way (parity with the
+  // courses/sections pages) so the Avansert editor shows the same top menu.
+  const navKalibrering = document.getElementById("navKalibrering");
+  if (navKalibrering) navKalibrering.hidden = !visible;
   if (calibrationTab) {
     calibrationTab.hidden = !visible || activeContentTab !== "calibration";
   }
