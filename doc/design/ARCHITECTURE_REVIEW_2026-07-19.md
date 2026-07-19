@@ -263,10 +263,26 @@ Prisma parameterization (no raw SQL), widespread Zod, strong SSRF controls · re
 - **Strategic (plan deliberately):** deploy topology → slots + tier + split plans (#1); course/
   adminContent kernel extraction (#10); worker health/liveness + drain overhaul (#8).
 
+## Tracking — epics & issues
+
+The findings are tracked in GitHub under milestone **M5 Stabilization**. This report is the rationale;
+the issues are the work.
+
+| Epic | Theme | Issues |
+|---|---|---|
+| **#778** | Object-level access control (authorization) `p1` | #785 restricted-course IDOR · #786 asset IDOR · #787 ownership scoping (design) · #788 body-before-auth DoS · #789 agent-token revocation gap |
+| **#779** | Data integrity — DB-enforced concurrency `p1` | #790 appeal races · #791 manual-review races · #792 lease fencing · #793 enqueue partial-unique · #794 MCQ atomicity · #795 notification outbox · #796 import transaction |
+| **#780** | Data-model scaling & performance `p2` | #797 audit-lookup DoS · #798 scheduled scans · #799 interactive fan-out · #800 hot-table indexes · #801 rate-limit store · #802 discussion pagination |
+| **#781** | Audit integrity & compliance `p1` | #803 non-transactional audit · #804 tamper-evidence · #805 missing audit events · #806 PII-in-audit (GDPR) · #807 retention delete |
+| **#782** | Runtime robustness & deploy continuity `p1` | #808 zero-downtime deploys · #809 liveness/readiness · #810 shutdown draining · #811 migration ordering · #812 external-call deadlines · #813 unhandled rejection |
+| **#783** | Security defense-in-depth `p2` | #814 client sanitizer · #815 parse DoS · #816 parser HMAC replay · ✅ trust proxy (#775, 2.0.1) · ✅ CSV injection (#776, 2.0.2) |
+| **#784** | Structural debt `p4` | #817 module cycle · #818 duplicated controllers · #819 agent-scope test · #820 cert-status enum (latent) |
+
 ## Caveats
 
-- Codex-reported findings are evidence-cited but **not independently re-verified**; the deferred
-  cross-review (each model auditing the other's report) is the cheap next step to lift their confidence
-  and resolve the two models' scope asymmetry before committing large effort.
+- Codex-reported findings were subsequently **cross-verified in Phase 4** (13 CONFIRMED / 1 REFUTED /
+  1 PLAUSIBLE); the refuted one (agent tokens corrupting another author's course) was folded into the
+  SMO-ownership gap (#787), not tracked separately.
 - Severities blend both models' judgments; where they differed the higher is shown with attribution.
-- This review reflects the code at 2026-07-19 (version 2.0.0, post-#478 Tier 2). No fixes applied.
+- Baseline: code at 2026-07-19, **version 2.0.0** (post-#478 Tier 2). Two quick wins from this review
+  are already shipped: `trust proxy` (#775 → 2.0.1) and CSV formula injection (#776 → 2.0.2).
