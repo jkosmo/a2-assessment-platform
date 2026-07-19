@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.7 - 2026-07-19
+
+feat(auth): #787 skive 2 — eierskaps-guard (`assertContentOwnership`)
+
+Andre skive. **Inert** — ingenting kaller guarden enda (skive 4 kobler den på skrive-/slette-stiene), så
+ingen atferdsendring. Generaliserer den gamle single-eier `assertModuleOwnership` til multi-eier-settet.
+
+- **`src/modules/content/contentOwnershipService.ts`:** `decideOwnershipAccess` (ren beslutning: admin
+  alltid tillatt; ellers må aktør være i eier-settet; tomt sett → eierløst = admin-only), pluss
+  `listContentOwnerUserIds` + `assertContentOwnership` (kaster `ForbiddenError` `content_ownership` /
+  `content_unowned`).
+- **`test/unit/content-ownership.test.ts`:** hele tilgangs-matrisen (kjørt lokalt, ingen DB).
+
+**Utrulling:** kun ny (ubrukt) kode → `deploy-app.yml`. Ingen migrasjon, ingen atferdsendring.
+Neste skive: eier-API (`GET/POST/DELETE /owners`).
+
 ## 2.0.6 - 2026-07-19
 
 feat(auth): #787 skive 1 — `ContentOwner`-tabell + backfill (multi-eier-fundament)
