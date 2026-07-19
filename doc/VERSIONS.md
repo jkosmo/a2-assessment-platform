@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.16 - 2026-07-19
+
+fix(ui): #787 QA runde 4 — fjern dobbel-meny i Avansert + kompakt eier-panel
+
+- **Dobbel meny i Avansert** (QA #1): den nye innholds-sub-nav-en (2.0.15) kolliderte med Avansert-editorens
+  gamle interne fane-rad (Moduler/Kurs/Kalibrering). De interne fanene er utdatert — Kurs og Kalibrering
+  har egne ruter nådd via topp-nav-en. Fane-raden skjules nå (`display:none`), så Avansert er rent
+  modul-editoren. (Konsoliderer også bort Avansert sin kalibrerings-fane, jf. #836.)
+- **Kompakt eier-panel** (QA #2): «Eiere» er nå en slank én-linje som standard («Eiere: Navn A, Navn B»)
+  med en «Rediger»-lenke; hele legg-til/fjern-UI-et utvides kun ved behov. Eierskap vises ofte, endres
+  sjelden — panelet tar nå minimalt med plass til det faktisk skal endres.
+
+e2e (`content-owner-surfaces` + `content-owner-panel`) oppdatert for kompakt-standard (verifiser kompakt
+visning, utvid for administrasjon). 44 berørte specs grønne.
+
 ## 2.0.15 - 2026-07-19
 
 fix(ui): #787 QA runde 3 — konsistens på innholds-flatene (tittel, sub-nav, eier-plassering)

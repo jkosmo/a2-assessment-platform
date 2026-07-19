@@ -40,9 +40,11 @@ test("course owner panel: lists, adds via search, and removes owners", async ({ 
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   await page.goto("/admin-content/courses/course-1");
 
-  // Panel renders with the initial owner.
+  // Panel renders compact with the initial owner; expand to manage.
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
+  await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
+  await panel.locator(".owner-edit-toggle").click();
   await expect(panel.locator(".owner-row")).toHaveCount(1);
   await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");
 
@@ -80,8 +82,9 @@ test("owner panel is read-only when the viewer cannot manage owners", async ({ p
 
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.locator(".owner-name").first()).toHaveText("Someone Else");
-  // No management controls for a non-owner viewer.
+  await expect(panel.locator(".owner-compact-names")).toContainText("Someone Else");
+  // No edit affordance and no management controls for a non-owner viewer.
+  await expect(panel.locator(".owner-edit-toggle")).toHaveCount(0);
   await expect(panel.locator(".owner-remove")).toHaveCount(0);
   await expect(panel.locator(".owner-search-input")).toHaveCount(0);
 });

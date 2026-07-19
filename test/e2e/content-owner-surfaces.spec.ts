@@ -50,6 +50,9 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
 
   const panel = page.locator("#moduleOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
+  // QA r4: compact by default — owner name shown inline, full list only after expanding.
+  await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
+  await panel.locator(".owner-edit-toggle").click();
   await expect(panel.locator(".owner-row")).toHaveCount(1);
   await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");
 
@@ -84,8 +87,7 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
 
   const panel = page.locator("#classOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.locator(".owner-row")).toHaveCount(1);
-  await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");
+  await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
 });
 
 // QA #3 — the standalone section editor (admin-content-sections.js), reachable directly via ?id=.
@@ -105,6 +107,5 @@ test("seksjon: owner panel renders in the section editor for an existing section
 
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.locator(".owner-row")).toHaveCount(1);
-  await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");
+  await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
 });
