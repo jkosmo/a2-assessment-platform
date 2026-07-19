@@ -17,7 +17,6 @@ const pagesWithHelp = [
   "public/participant-completed.html",
   "public/profile.html",
   "public/review.html",
-  "public/calibration.html",
   "public/results.html",
   "public/admin-platform.html",
   "public/admin-content-library.html",
