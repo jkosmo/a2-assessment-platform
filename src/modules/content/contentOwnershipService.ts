@@ -5,7 +5,9 @@
 
 import type { AppRole as AppRoleType, ContentOwnerType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { ForbiddenError } from "../../errors/AppError.js";
+import { ForbiddenError, NotFoundError } from "../../errors/AppError.js";
+import { recordAuditEvent } from "../../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 
 export type OwnershipDecision = "allow" | "unowned" | "not_owner";
 
@@ -55,4 +57,96 @@ export async function assertContentOwnership(input: {
     );
   }
   throw new ForbiddenError("You can only modify content you own.", "content_ownership");
+}
+
+// --- #787 slice 3: owner-set management (used by the owners API). Managing owners is itself an
+// owner-or-admin action (the route calls assertContentOwnership first). ---
+
+export interface ContentOwnerView {
+  userId: string;
+  name: string;
+  email: string;
+  addedAt: string;
+}
+
+export async function listContentOwners(
+  contentType: ContentOwnerType,
+  contentId: string,
+): Promise<ContentOwnerView[]> {
+  const rows = await prisma.contentOwner.findMany({
+    where: { contentType, contentId },
+    select: { userId: true, addedAt: true, user: { select: { name: true, email: true } } },
+    orderBy: { addedAt: "asc" },
+  });
+  return rows.map((r) => ({ userId: r.userId, name: r.user.name, email: r.user.email, addedAt: r.addedAt.toISOString() }));
+}
+
+// Idempotent: adding an existing owner is a no-op (unique constraint). Audited.
+export async function addContentOwner(input: {
+  contentType: ContentOwnerType;
+  contentId: string;
+  ownerUserId: string;
+  actorUserId: string;
+}): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: input.ownerUserId }, select: { id: true } });
+  if (!user) {
+    throw new NotFoundError("User", "user_not_found", "That user does not exist.");
+  }
+  const existing = await prisma.contentOwner.findUnique({
+    where: {
+      contentType_contentId_userId: {
+        contentType: input.contentType,
+        contentId: input.contentId,
+        userId: input.ownerUserId,
+      },
+    },
+    select: { id: true },
+  });
+  if (existing) return; // already an owner
+  const owner = await prisma.contentOwner.create({
+    data: {
+      contentType: input.contentType,
+      contentId: input.contentId,
+      userId: input.ownerUserId,
+      addedById: input.actorUserId,
+    },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.contentOwner,
+    entityId: owner.id,
+    action: auditActions.contentOwner.added,
+    actorId: input.actorUserId,
+    metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
+  });
+}
+
+// Last-owner protection: a non-admin cannot remove the final owner (would orphan the content). An
+// administrator may (it becomes unowned → admin-managed until reassigned). Audited.
+export async function removeContentOwner(input: {
+  contentType: ContentOwnerType;
+  contentId: string;
+  ownerUserId: string;
+  actorUserId: string;
+  isAdmin: boolean;
+}): Promise<void> {
+  const ownerIds = await listContentOwnerUserIds(input.contentType, input.contentId);
+  if (!ownerIds.includes(input.ownerUserId)) {
+    throw new NotFoundError("ContentOwner", "owner_not_found", "That user is not an owner of this content.");
+  }
+  if (ownerIds.length === 1 && !input.isAdmin) {
+    throw new ForbiddenError(
+      "You cannot remove the last owner. Add another owner first, or ask an administrator.",
+      "last_owner",
+    );
+  }
+  await prisma.contentOwner.deleteMany({
+    where: { contentType: input.contentType, contentId: input.contentId, userId: input.ownerUserId },
+  });
+  await recordAuditEvent({
+    entityType: auditEntityTypes.contentOwner,
+    entityId: `${input.contentType}:${input.contentId}:${input.ownerUserId}`,
+    action: auditActions.contentOwner.removed,
+    actorId: input.actorUserId,
+    metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
+  });
 }

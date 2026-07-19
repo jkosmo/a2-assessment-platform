@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.8 - 2026-07-19
+
+feat(auth): #787 skive 3 — eier-forvaltnings-API (`/api/admin/content-owners`)
+
+Tredje skive. **Nye endepunkter** (ingen eksisterende oppførsel endres):
+- `GET /:contentType/:contentId` — list eiere (med navn/e-post)
+- `POST /:contentType/:contentId` `{ userId }` — legg til med-eier (idempotent)
+- `DELETE /:contentType/:contentId/:userId` — fjern eier (siste-eier-beskyttet)
+
+To-lags authz: mount krever `admin_content` (SMO/ADMIN), og hver handler kaller `assertContentOwnership`
+så bare en eier (eller admin) av *det* objektet kan forvalte dets eiere. Siste-eier kan ikke fjernes av
+ikke-admin (hindrer foreldreløst innhold); admin kan (→ eierløst = admin-styrt). Alle mutasjoner
+audit-logges (`content_owner_added`/`_removed`).
+
+- **`src/routes/contentOwners.ts`** (Zod-validert), mount i `app.ts`, `src/modules/content/
+  contentOwnershipService.ts` (add/remove/list), audit-actions/entity-type i `auditEvents.ts`.
+- **`test/m2-content-owners-api.test.ts`:** eier + admin forvalter; ikke-eier blokkert; siste-eier
+  beskyttet; eierløst → admin-only. Agent-tokens blokkeres (global `enforceAgentTokenScope`).
+
+**Utrulling:** kun nye endepunkter → `deploy-app.yml`. Ingen migrasjon. Neste (skive 4): koble guarden
+på eksisterende skrive-/slette-stier (den eneste atferdsendringen — grundig stage-QA der).
+
 ## 2.0.7 - 2026-07-19
 
 feat(auth): #787 skive 2 — eierskaps-guard (`assertContentOwnership`)
