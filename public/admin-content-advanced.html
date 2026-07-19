@@ -223,6 +223,22 @@
       <a href="/admin-content/sections" class="content-area-nav-link" id="navSeksjoner">Seksjoner</a>
       <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden>Vurderingskvalitet</a>
     </nav>
+
+    <!-- QA r5 #2/#3: mirror the Kurs page — back-link + page title at the top, before status/owners. -->
+    <div class="page-header-back" style="margin-bottom:var(--space-1)">
+      <a href="/admin-content" class="back-link">← Tilbake til modulliste</a>
+    </div>
+    <div class="module-workspace-header">
+      <div style="display:flex; align-items:baseline; gap:var(--space-2); flex-wrap:wrap;">
+        <h1 id="moduleWorkspaceTitle" data-i18n="adminContentPage.title" style="margin:0">Modul</h1>
+        <button id="advPreviewToggleBtn" type="button" class="adv-preview-toggle" data-i18n="advPreview.toggle.open" aria-pressed="false">Vis forhåndsvisning</button>
+      </div>
+      <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
+        <button class="module-mode-btn" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="false">Samtale</button>
+        <button class="module-mode-btn active" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="true">Avansert</button>
+      </div>
+    </div>
+
     <div id="stateRail" class="state-rail" hidden aria-label="Modulstatus">
       <div class="state-rail-item">
         <span class="state-rail-label" data-i18n="stateRail.label.module">Modul</span>
@@ -257,18 +273,6 @@
 
     <!-- #787: content-owner management for the loaded module -->
     <div id="moduleOwnerPanelHost" class="card" hidden style="margin-top:var(--space-2)"></div>
-
-    <div class="module-workspace-header">
-      <div style="display:flex; align-items:baseline; gap:var(--space-2); flex-wrap:wrap;">
-        <h1 id="moduleWorkspaceTitle" data-i18n="adminContentPage.title" style="margin:0">Content Setup Workspace</h1>
-        <button id="advPreviewToggleBtn" type="button" class="adv-preview-toggle" data-i18n="advPreview.toggle.open" aria-pressed="false">Vis forhåndsvisning</button>
-      </div>
-      <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
-        <button class="module-mode-btn" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="false">Samtale</button>
-        <button class="module-mode-btn active" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="true">Avansert</button>
-      </div>
-    </div>
-    <p class="small" data-i18n="adminContentPage.subtitle">Define module content and scoring rules in a guided sequence.</p>
 
     <div id="advWorkspaceLayout" class="adv-workspace-layout">
     <div id="advEditorContent">

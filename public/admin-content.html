@@ -354,12 +354,25 @@
         </div>
       </div>
 
+      <!-- QA r5 #2/#3: back-link + page title first, mirroring the Kurs page. Header markup moved up
+           from below the GDPR notice; the old position left the H1 stranded mid-page. -->
       <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
         <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link active" id="navModuler">Moduler</a>
         <a href="/admin-content/sections" class="content-area-nav-link" id="navSeksjoner">Seksjoner</a>
         <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden>Vurderingskvalitet</a>
       </nav>
+
+      <div class="page-header-back" style="margin-bottom:var(--space-1)">
+        <a href="/admin-content" class="back-link">← Tilbake til modulliste</a>
+      </div>
+      <div class="module-workspace-header">
+        <h1 id="moduleWorkspaceTitle" style="margin:0; font-size:22px" data-i18n="shell.page.title">Modul</h1>
+        <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
+          <button class="module-mode-btn active" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="true">Samtale</button>
+          <button class="module-mode-btn" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="false">Avansert</button>
+        </div>
+      </div>
 
       <div id="stateRail" class="state-rail" hidden aria-label="Modulstatus">
         <div class="state-rail-item">
@@ -399,14 +412,6 @@
       <div role="note" style="display:flex;gap:8px;align-items:baseline;border:1px solid #f0d9b5;background:#fffdf7;border-radius:var(--radius-card);padding:6px 10px;margin:var(--space-1) 0;font-size:12px;line-height:1.4;color:var(--color-meta)">
         <span aria-hidden="true">⚠️</span>
         <span><strong style="color:var(--color-text);font-weight:600" data-i18n="adminContent.privacy.warning.title">Special category data risk</strong> — <span data-i18n="adminContent.privacy.warning.body">Participants may include health information, political views, or other special category data in free-text submissions.</span></span>
-      </div>
-
-      <div class="module-workspace-header">
-        <h1 id="moduleWorkspaceTitle" style="margin:0; font-size:22px" data-i18n="shell.page.title">Content Workspace</h1>
-        <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
-          <button class="module-mode-btn active" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="true">Samtale</button>
-          <button class="module-mode-btn" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="false">Avansert</button>
-        </div>
       </div>
 
       <div class="workspace-shell">

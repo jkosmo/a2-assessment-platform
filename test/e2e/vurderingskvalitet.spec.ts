@@ -115,3 +115,41 @@ test("vurderingskvalitet: no access shows the access-denied state", async ({ pag
   await expect(page.locator(".access-denied-title")).toBeVisible();
   await expect(page.locator("#qModuleSelect")).toHaveCount(0);
 });
+
+// QA r5 #4: for MCQ_ONLY modules pass/fail is decided by the MCQ percentage — totalScore is the MCQ
+// score scaled into its weighting band, so the total-score histogram/threshold view is misleading.
+// The card must swap to the MCQ-minimum rule and publish must keep totalMin unchanged.
+test("vurderingskvalitet: MCQ-only module shows the MCQ rule instead of the total histogram", async ({ page }) => {
+  await mockBase(page, ["SUBJECT_MATTER_OWNER"]);
+  // Override the export: active version is MCQ_ONLY.
+  await page.route("**/api/admin/content/modules/*/export", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ moduleExport: {
+      module: { activeVersionId: "v4" },
+      versions: [{ id: "v4", versionNo: 4, publishedAt: "2026-07-19T00:00:00.000Z", assessmentMode: "MCQ_ONLY" }],
+    } }) }));
+  await page.route(/\/api\/calibration\/workspace\?/, (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot(60)) }));
+  let publishBody: any = null;
+  await page.route("**/api/calibration/workspace/publish-thresholds", (route: Route) => {
+    publishBody = JSON.parse(route.request().postData() ?? "{}");
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+
+  await page.goto("/admin-content/calibration");
+  await page.locator("#qModuleSelect").selectOption("mod-own");
+  await page.locator("#qLoad").click();
+
+  // Distribution/total hidden; MCQ rule shown with the explanatory note.
+  await expect(page.locator("#qModeNote")).toBeVisible();
+  await expect(page.locator("#qDistBlock")).toBeHidden();
+  await expect(page.locator("#qMcqField")).toBeVisible();
+  await expect(page.locator("#qTotalMin")).toBeHidden();
+
+  // Publish keeps totalMin at the effective value and sends the edited MCQ minimum.
+  await page.locator("#qMcqMin").fill("80");
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#qPublish").click();
+  await expect(page.locator(".toast, #toast, [role='status']").first()).toContainText(/publisert/i);
+  expect(publishBody.totalMin).toBe(60);
+  expect(publishBody.mcqMinPercent).toBe(80);
+});

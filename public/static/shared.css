@@ -1184,6 +1184,9 @@ dialog::backdrop {
 .owner-panel-loading, .owner-panel-error { color: var(--color-text); opacity: 0.7; }
 /* #787 QA r4: compact-by-default owner panel — a slim one-line summary that expands to the full
    add/remove UI only on demand. Ownership is shown far more than it is edited. */
+/* QA r5 #1: the host (.card/.detail-section) carries section-sized padding; slim it to a strip while
+   the panel is compact. owner-panel.js toggles this class with the expanded state. */
+.owner-host--compact { padding: 6px var(--space-2); margin-bottom: var(--space-1); }
 .owner-panel--compact { display: flex; align-items: baseline; gap: var(--space-1); flex-wrap: wrap; }
 .owner-compact-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-meta); }
 .owner-compact-names { color: var(--color-text); font-weight: 600; flex: 1 1 auto; min-width: 0; }

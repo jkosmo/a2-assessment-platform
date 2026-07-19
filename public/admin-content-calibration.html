@@ -143,17 +143,21 @@
         <!-- Signals -->
         <section class="card" id="qSignalsCard" hidden>
           <h2 data-i18n="quality.signals.title">Kvalitetssignaler</h2>
+          <p class="small" data-i18n="quality.signals.note">Bestått-andelen bygger på de lagrede avgjørelsene (reglene som gjaldt da hvert svar ble scoret).</p>
           <div class="q-signals" id="qSignals"></div>
         </section>
 
         <!-- Score distribution + threshold -->
         <section class="card" id="qThresholdCard" hidden>
-          <h2 data-i18n="quality.distribution.title">Poengfordeling</h2>
-          <p class="small" data-i18n="quality.distribution.subtitle">Blå søyler består ved valgt grense. Juster grensa for å se effekten.</p>
-          <div class="q-hist-bars" id="qHistogram"></div>
-          <div class="q-hist-x"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+          <div id="qDistBlock">
+            <h2 data-i18n="quality.distribution.title">Poengfordeling</h2>
+            <p class="small" data-i18n="quality.distribution.subtitle">Blå søyler består ved valgt grense. Juster grensa for å se effekten.</p>
+            <div class="q-hist-bars" id="qHistogram"></div>
+            <div class="q-hist-x"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+          </div>
 
           <h3 style="margin:var(--space-3) 0 var(--space-1);font-size:15px" data-i18n="quality.threshold.title">Bestått-grense</h3>
+          <p class="small" id="qModeNote" hidden></p>
           <div class="q-thr-grid">
             <div class="q-thr-field">
               <label for="qTotalMin" data-i18n="quality.threshold.totalMin">Total (min av 100)</label>

@@ -92,6 +92,10 @@ let ownerFilter = "mine"; // "mine" | "all"
 let courseFilter = ""; // courseId or ""
 let snapshotBody = null;
 let effective = null; // effectiveThresholds from the last snapshot
+// QA r5 #4: the pass rule depends on the module's assessment mode. For MCQ_ONLY modules pass/fail is
+// decided by the MCQ percentage (mcqMinPercent, default 70) — totalScore is the MCQ score scaled into
+// its weighting band, so the 0–100 total-histogram/threshold view is misleading and must be replaced.
+let currentAssessmentMode = null;
 
 function resolveContentAdminDefaults() {
   const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;
@@ -165,10 +169,15 @@ async function onModuleChange() {
     el.qOwnPill.textContent = mod.ownedByMe ? t("quality.pill.owned") : t("quality.pill.notOwned");
     el.qOwnPill.classList.toggle("notmine", !mod.ownedByMe);
   }
-  // Populate the version dropdown from the module export (versions carry versionNo + id).
+  // Populate the version dropdown from the module export (versions carry versionNo + id), and capture
+  // the module's assessment mode (active version's, else newest) for the mode-aware threshold card.
+  currentAssessmentMode = null;
   try {
     const data = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
     const versions = data?.moduleExport?.versions ?? [];
+    const activeVersionId = data?.moduleExport?.module?.activeVersionId ?? null;
+    const modeVersion = versions.find((v) => v.id === activeVersionId) ?? versions[0];
+    currentAssessmentMode = modeVersion?.assessmentMode ?? null;
     for (const v of versions) {
       const opt = document.createElement("option");
       opt.value = v.id;
@@ -276,21 +285,44 @@ function outcomeScores() {
     .filter((s) => typeof s === "number" && Number.isFinite(s));
 }
 
+function isMcqOnly() {
+  return currentAssessmentMode === "MCQ_ONLY";
+}
+
 function renderThresholdCard(body) {
   el.qTotalMin.value = String(effective.totalMin ?? 60);
-  // Contextual sub-gates: only show when the module's policy actually uses them.
-  const showMcq = effective.mcqMinPercent != null;
-  const showPractical = effective.practicalMinPercent != null;
-  el.qMcqField.hidden = !showMcq;
-  el.qPracticalField.hidden = !showPractical;
-  if (showMcq) el.qMcqMin.value = String(effective.mcqMinPercent);
-  if (showPractical) el.qPracticalMin.value = String(effective.practicalMinPercent);
+  const mcqOnly = isMcqOnly();
+
+  if (mcqOnly) {
+    // MCQ-only: pass/fail is decided by the MCQ percentage. Hide the misleading total-score
+    // histogram/threshold/preview and expose the one rule that actually applies.
+    el.qDistBlock.hidden = true;
+    el.qPreview.hidden = true;
+    el.qTotalMin.closest(".q-thr-field").hidden = true;
+    el.qMcqField.hidden = false;
+    el.qMcqMin.value = String(effective.mcqMinPercent ?? 70);
+    el.qPracticalField.hidden = true;
+    el.qModeNote.hidden = false;
+    el.qModeNote.textContent = t("quality.threshold.mcqOnlyNote");
+  } else {
+    el.qDistBlock.hidden = false;
+    el.qPreview.hidden = false;
+    el.qTotalMin.closest(".q-thr-field").hidden = false;
+    el.qModeNote.hidden = true;
+    // Contextual sub-gates: only show when the module's policy actually uses them.
+    const showMcq = effective.mcqMinPercent != null;
+    const showPractical = effective.practicalMinPercent != null;
+    el.qMcqField.hidden = !showMcq;
+    el.qPracticalField.hidden = !showPractical;
+    if (showMcq) el.qMcqMin.value = String(effective.mcqMinPercent);
+    if (showPractical) el.qPracticalMin.value = String(effective.practicalMinPercent);
+    renderHistogram();
+    updatePreview();
+  }
 
   el.qThresholdSource.textContent =
     effective.source === "module_policy" ? t("quality.threshold.source.module") : t("quality.threshold.source.global");
 
-  renderHistogram();
-  updatePreview();
   el.qPublish.disabled = false;
   el.qThresholdCard.hidden = false;
 }
@@ -394,7 +426,8 @@ async function publish() {
     showToast(t("quality.errors.moduleRequired"), "error");
     return;
   }
-  const totalMin = Number(el.qTotalMin.value);
+  // MCQ-only modules keep their (unused) totalMin unchanged — the edited rule is mcqMinPercent.
+  const totalMin = isMcqOnly() ? Number(effective?.totalMin ?? 60) : Number(el.qTotalMin.value);
   if (!Number.isFinite(totalMin) || totalMin < 0 || totalMin > 100) {
     showToast(t("quality.errors.totalMinRange"), "error");
     return;
@@ -434,7 +467,7 @@ function mountWorkspace() {
   el = {};
   for (const id of [
     "qOwnerSeg", "qCourseFilter", "qModuleSelect", "qVersionSelect", "qModuleCount", "qLoad", "qOwnPill", "qMeta",
-    "qSignalsCard", "qSignals", "qThresholdCard", "qHistogram", "qTotalMin", "qMcqField", "qMcqMin",
+    "qSignalsCard", "qSignals", "qThresholdCard", "qDistBlock", "qModeNote", "qHistogram", "qTotalMin", "qMcqField", "qMcqMin",
     "qPracticalField", "qPracticalMin", "qPreview", "qThresholdSource", "qPublish",
     "qAnchorCard", "qAnchorSummary", "qAnchorLink", "qOutcomesCard", "qOutcomesBody",
   ]) el[id] = document.getElementById(id);
