@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type { AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
+import { isSectionInAccessibleCourse } from "./enrollmentService.js";
 import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
@@ -122,11 +124,29 @@ export async function reclaimAssetBlobs(blobPaths: string[]): Promise<void> {
 
 export async function getSectionAssetContent(
   assetId: string,
-  locale?: string,
+  locale: string | undefined,
+  viewer: { userId: string; roles: AppRoleType[]; groupIds?: string[] },
 ): Promise<{ mimeType: string; filename: string; buffer: Buffer }> {
   const asset = await prisma.sectionAsset.findUnique({ where: { id: assetId } });
   if (!asset) {
     throw new NotFoundError("SectionAsset", "asset_not_found", "Asset not found.");
+  }
+  // #778/#786: object-level authz. Assets are referenced from section markdown; a participant may
+  // fetch one only if its section belongs to a published course they can access. Authors (SMO/ADMIN)
+  // bypass so they can preview assets in unpublished/draft sections in the editor. 404 (not 403) so we
+  // never confirm the asset's existence to an unauthorized caller.
+  const isAuthor =
+    viewer.roles.includes("SUBJECT_MATTER_OWNER") || viewer.roles.includes("ADMINISTRATOR");
+  if (!isAuthor) {
+    const accessible = await isSectionInAccessibleCourse({
+      sectionId: asset.sectionId,
+      userId: viewer.userId,
+      roles: viewer.roles,
+      groupIds: viewer.groupIds,
+    });
+    if (!accessible) {
+      throw new NotFoundError("SectionAsset", "asset_not_found", "Asset not found.");
+    }
   }
   // #657: serve the localized SVG variant for the viewer's locale when one exists; otherwise the
   // original. Raster assets and untranslated SVGs always serve the original blob.

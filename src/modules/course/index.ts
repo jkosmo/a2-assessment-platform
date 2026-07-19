@@ -73,6 +73,7 @@ export {
   filterVisibleCourseIds,
   isCourseVisibleToUser,
   isModuleInAccessibleCourse,
+  isSectionInAccessibleCourse,
   deriveStatus,
 } from "./enrollmentService.js";
 export type {

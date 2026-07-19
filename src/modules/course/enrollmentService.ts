@@ -285,3 +285,36 @@ export async function isModuleInAccessibleCourse(input: {
   const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
   return courses.some((c) => visible.has(c.id));
 }
+
+// #778/#786: is a section part of a published course this participant can access? Backs object-level
+// authz on the section-asset endpoint (assets are referenced from section markdown as `asset:<id>`).
+// Mirrors isModuleInAccessibleCourse but resolves via CourseItem.sectionId. Authors (SMO/ADMIN) bypass
+// this at the call site so they can preview assets in unpublished/draft sections.
+export async function isSectionInAccessibleCourse(input: {
+  sectionId: string;
+  userId: string;
+  roles: AppRoleType[];
+  groupIds?: string[];
+}): Promise<boolean> {
+  const links = await prisma.courseItem.findMany({
+    where: { sectionId: input.sectionId },
+    select: { courseId: true },
+  });
+  const courseIds = [...new Set(links.map((l) => l.courseId))];
+  if (courseIds.length === 0) return false;
+
+  const courses = await prisma.course.findMany({
+    where: { id: { in: courseIds }, publishedAt: { not: null }, archivedAt: null },
+    select: { id: true, enrollmentPolicy: true },
+  });
+  if (courses.length === 0) return false;
+
+  const classIds = await getUserClassIds({
+    userId: input.userId,
+    roles: input.roles,
+    groupIds: input.groupIds,
+  });
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+  const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
+  return courses.some((c) => visible.has(c.id));
+}
