@@ -25,6 +25,7 @@ import {
   buildAdminContentConversationUrl,
   resolveConversationModuleId,
 } from "/static/admin-content-handoff-routes.js";
+import { renderOwnerPanel } from "/static/owner-panel.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -1742,6 +1743,27 @@ function setSelectedModule(nextModuleId, syncInput = true) {
   renderCalibrationModuleOptions();
   renderModuleMeta();
   renderModuleStatus();
+  renderModuleOwnerPanel();
+}
+
+// #787: content-owner panel for the loaded module in the Avansert editor. The Avansert page runs THIS
+// file (admin-content.js), which has its own state-rail code separate from the conversational shell —
+// so the shell's owner-panel wiring never applied here. Render into the static host once per module id
+// (guarded on dataset), driven by setSelectedModule so it appears as soon as a module is loaded,
+// independent of whether module status has finished fetching.
+function renderModuleOwnerPanel() {
+  const ownerHost = document.getElementById("moduleOwnerPanelHost");
+  if (!ownerHost) return;
+  if (!selectedModuleId) {
+    ownerHost.hidden = true;
+    ownerHost.dataset.moduleId = "";
+    ownerHost.innerHTML = "";
+    return;
+  }
+  if (ownerHost.dataset.moduleId === selectedModuleId) return;
+  ownerHost.dataset.moduleId = selectedModuleId;
+  ownerHost.hidden = false;
+  renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders: headers }).catch(() => {});
 }
 
 function resolveModuleIdOrThrow() {
