@@ -1166,15 +1166,19 @@ dialog::backdrop {
 .content-area-nav-link:hover { color: var(--color-text); }
 .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 
-/* #787 slice 5: content-owner management panel (owner-panel.js) */
-.owner-list { list-style: none; padding: 0; margin: 0 0 0.75rem; }
-.owner-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border-subtle, #e5e7eb); }
-.owner-row .owner-name { font-weight: 600; }
-.owner-row .owner-email, .owner-search-results .owner-email { color: var(--text-muted, #6b7280); font-size: 0.9em; }
-.owner-remove { margin-left: auto; }
-.owner-empty { color: var(--text-muted, #6b7280); font-style: italic; padding: 0.35rem 0; }
-.owner-add { position: relative; }
+/* #787 slice 5: content-owner management panel (owner-panel.js). Uses the design tokens + shares the
+   .btn styling so it matches the rest of the workspace. The remove button MUST set width:auto to escape
+   the global `button { width: 100% }` form rule. */
+.owner-panel-title { font-size: 1rem; font-weight: 600; margin: 0 0 var(--space-1); color: var(--color-text); }
+.owner-list { list-style: none; padding: 0; margin: 0 0 var(--space-2); }
+.owner-row { display: flex; align-items: center; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--color-border-soft); }
+.owner-row .owner-name { font-weight: 600; color: var(--color-text); }
+.owner-row .owner-email, .owner-search-results .owner-email { color: var(--color-text); opacity: 0.65; font-size: 0.9em; }
+.owner-remove { width: auto; margin-left: auto; flex: 0 0 auto; padding: 4px 14px; font-size: 0.85rem; }
+.owner-empty { color: var(--color-text); opacity: 0.65; font-style: italic; padding: 8px 0; }
+.owner-add { position: relative; max-width: 32rem; }
 .owner-search-input { width: 100%; box-sizing: border-box; }
-.owner-search-results { list-style: none; margin: 0.25rem 0 0; padding: 0; border: 1px solid var(--border-subtle, #e5e7eb); border-radius: 4px; max-height: 12rem; overflow-y: auto; }
-.owner-search-results li { padding: 0.4rem 0.6rem; cursor: pointer; }
-.owner-search-results li:hover { background: var(--surface-hover, #f3f4f6); }
+.owner-search-results { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--color-border-soft); border-radius: 8px; max-height: 12rem; overflow-y: auto; background: var(--color-surface); }
+.owner-search-results li { padding: 8px 12px; cursor: pointer; display: flex; gap: var(--space-1); align-items: baseline; }
+.owner-search-results li:hover { background: var(--color-bg); }
+.owner-panel-loading, .owner-panel-error { color: var(--color-text); opacity: 0.7; }
