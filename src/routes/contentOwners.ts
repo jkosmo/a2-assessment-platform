@@ -33,9 +33,14 @@ contentOwnersRouter.get("/:contentType/:contentId", async (request, response, ne
   const type = contentTypeSchema.safeParse(request.params.contentType);
   if (!type.success) return void response.status(400).json({ error: "invalid_content_type" });
   const contentType = type.data as ContentOwnerType;
+  const roles = request.context?.roles ?? [];
   try {
-    await assertContentOwnership({ contentType, contentId: request.params.contentId, actorUserId: userId, roles: request.context?.roles ?? [] });
-    response.json({ owners: await listContentOwners(contentType, request.params.contentId) });
+    // #787 QA: any content-admin (the mount already requires SMO/ADMIN) may VIEW the owners for
+    // transparency — the panel must render on content you don't own too. Only an owner or admin may
+    // CHANGE owners (POST/DELETE stay ownership-gated). `canManage` tells the UI whether to show controls.
+    const owners = await listContentOwners(contentType, request.params.contentId);
+    const canManage = roles.includes("ADMINISTRATOR") || owners.some((o) => o.userId === userId);
+    response.json({ owners, canManage });
   } catch (error) {
     if (!sendAppError(response, error)) next(error);
   }
