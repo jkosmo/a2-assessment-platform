@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.10 - 2026-07-19
+
+feat(auth): #787 skive 5 — owner-forvaltnings-UI (gjenbrukbart panel, koblet på kurs-siden)
+
+Femte skive. **Inert** — eksponerer bare eier-API-et (`/api/admin/content-owners`) i UI-et; endrer ingen
+redigerings-oppførsel. Lar admins/eiere *se og forvalte* eiere (og verifisere backfill-en) **før**
+håndhevelsen (skive 4) slår inn.
+
+- **`public/static/owner-panel.js`:** gjenbrukbart panel — lister eiere, søk-og-legg-til (via
+  `/users/search`), fjern-per-eier, med human-readable feilmeldinger (siste-eier osv.). Tar container +
+  contentType + contentId, så samme komponent kan dryppes på seksjon/klasse/modul-flatene senere.
+- **`admin-content-courses.js`:** koblet inn i kurs-detaljvisningen (`#ownerPanelHost`).
+- **`shared.css`:** minimal styling. **`test/e2e/content-owner-panel.spec.ts`:** last → render → søk-legg-
+  til → fjern (mot mocket API).
+
+**Utrulling:** kun klient-kode → `deploy-app.yml`. Ingen migrasjon, ingen atferdsendring. Neste (skive 4):
+håndhevelse — koble guarden på skrive-/slette-stiene (den eneste atferdsendringen).
+
 ## 2.0.9 - 2026-07-19
 
 chore(auth): #787 — backfill kurs/seksjon-eiere fra «opprettet»-audit (før håndhevelse)
