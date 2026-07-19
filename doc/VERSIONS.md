@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 1.6.39 - 2026-07-19
+
+fix(security): nøytraliser CSV-formel-injeksjon i rapporteksport
+
+Funn fra arkitektur-gjennomgangen (`doc/design/ARCHITECTURE_REVIEW_2026-07-19.md`, CONFIRMED i Fase 4).
+`escapeCsvValue` håndterte anførselstegn/skilletegn men lot celler som starter med `=`, `+`, `-`, `@`,
+tab eller CR stå urørt. Eksportene inneholder forfatter-/deltaker-kontrollert tekst (modul-/kurstitler,
+navn), så en tittel som `=HYPERLINK(...)` kjøres som formel når en report-reader åpner CSV-en i Excel/
+Sheets (CWE-1236 → phishing/eksfiltrering fra deres maskin).
+
+- **`src/modules/reporting/csvExport.ts`:** prefiks apostrof på **string-celler** som starter med en
+  formel-trigger (spreadsheets tolker det som «tving tekst» og skjuler det). Kun string-celler, så
+  tall (f.eks. negative `-5`) og datoer forblir urørt.
+- **`test/csv-formula-injection.test.ts`:** dekker triggere, ekte `=HYPERLINK`, og at tall/datoer og
+  vanlig tekst ikke korrumperes.
+
+**Utrulling:** kun app-kode → `deploy-app.yml`. Rollback: fjern formel-guarden. **Merk:** grenet fra
+`main` (1.6.37); reversjoner ved merge avhengig av rekkefølge med #773 (2.0.0) og #775 (trust proxy).
+
 ## 1.6.37 - 2026-07-18
 
 chore(observability): #497-incident — ekstern availability-test + alert på worker-rollens /healthz
