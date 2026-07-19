@@ -1,10 +1,20 @@
 import { prisma } from "../../db/prisma.js";
 import type { AssessmentMode } from "@prisma/client";
 
-type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem">;
+type AdminContentRepositoryClient = Pick<typeof prisma, "module" | "moduleVersion" | "rubricVersion" | "promptTemplateVersion" | "mCQSetVersion" | "courseItem" | "contentOwner">;
 
 export function createAdminContentRepository(client: AdminContentRepositoryClient = prisma) {
   return {
+    // #787/#836: module ids the given user is a content-owner of. Used to annotate the module library
+    // with `ownedByMe` so the calibration/quality picker can default to "my modules".
+    async listModuleIdsOwnedBy(userId: string): Promise<Set<string>> {
+      const rows = await client.contentOwner.findMany({
+        where: { contentType: "MODULE", userId },
+        select: { contentId: true },
+      });
+      return new Set(rows.map((row) => row.contentId));
+    },
+
     listModuleSummaries() {
       return client.module.findMany({
         where: { archivedAt: null },

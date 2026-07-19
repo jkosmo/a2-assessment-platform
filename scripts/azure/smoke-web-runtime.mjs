@@ -18,7 +18,7 @@ const htmlRoutes = [
   { path: "/participant", marker: '/static/participant.js' },
   { path: "/participant/completed", marker: '/static/participant-completed.js' },
   { path: "/review", marker: '/static/review.js' },
-  { path: "/calibration", marker: '/static/calibration.js' },
+  { path: "/admin-content/calibration", marker: '/static/admin-content-calibration.js' },
   { path: "/results", marker: '/static/results.js' },
   { path: "/admin-content", marker: '/static/admin-content-shell.js' },
   { path: "/admin-content/advanced", marker: '/static/admin-content.js' },

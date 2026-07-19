@@ -3,68 +3,76 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kalibrering – A2 Content</title>
+    <title>Vurderingskvalitet – A2 Content</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
       /* ── Content area nav ────────────────────────────────────────────────── */
-      .content-area-nav {
-        display: flex;
-        gap: 0;
-        border-bottom: 2px solid var(--color-border-soft);
-        margin-bottom: var(--space-3);
-      }
-      .content-area-nav-link {
-        padding: 10px var(--space-2);
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--color-meta);
-        text-decoration: none;
-        border-bottom: 2px solid transparent;
-        margin-bottom: -2px;
-        white-space: nowrap;
-      }
+      .content-area-nav { display: flex; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
+      .content-area-nav-link { padding: 10px var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-meta); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
       .content-area-nav-link:hover { color: var(--color-text); }
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 
       /* ── Access denied ───────────────────────────────────────────────────── */
-      .access-denied {
-        text-align: center;
-        padding: var(--space-5) var(--space-3);
-        background: var(--color-surface);
-        border: 1px solid var(--color-table-wrap-border);
-        border-radius: var(--radius-card);
-        max-width: 480px;
-        margin: var(--space-3) auto;
-      }
+      .access-denied { text-align: center; padding: var(--space-5) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); max-width: 480px; margin: var(--space-3) auto; }
       .access-denied-title { font-size: 20px; font-weight: 700; margin: 0 0 10px; }
       .access-denied-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
 
-      /* ── Calibration layout ──────────────────────────────────────────────── */
-      .calibration-workspace { display: flex; flex-direction: column; gap: var(--space-2); }
-
-      .calibration-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-        margin-bottom: var(--space-2);
-        flex-wrap: wrap;
-      }
-      .calibration-header h1 { margin: 0; font-size: 22px; }
-      .calibration-module-label {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--color-link-active);
-        background: var(--color-blue-light);
-        border: 1px solid var(--color-blue);
-        border-radius: 999px;
-        padding: 3px 10px;
-      }
-
-      /* ── Loading ─────────────────────────────────────────────────────────── */
       .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
+      .quality-workspace { display: flex; flex-direction: column; gap: var(--space-2); }
+      .quality-header h1 { margin: 0 0 2px; font-size: 22px; }
+      .quality-header .subtitle { margin: 0; font-size: 13px; color: var(--color-meta); }
+
+      /* ── Picker ──────────────────────────────────────────────────────────── */
+      .q-filters { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: flex-end; }
+      .q-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+      .q-field > label { margin: 0; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--color-meta); font-weight: 700; }
+      .q-field select { width: auto; min-width: 210px; max-width: 340px; }
+      .q-field select.sm { min-width: 150px; }
+      .q-seg { display: inline-flex; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); overflow: hidden; }
+      .q-seg button { width: auto; min-height: 34px; border: 0; background: var(--color-surface); color: var(--color-meta); font-size: 13px; font-weight: 600; padding: 6px 14px; }
+      .q-seg button.on { background: var(--color-blue); color: #fff; }
+      .q-count { font-size: 12px; color: var(--color-meta); padding-bottom: 9px; }
+      .q-count b { color: var(--color-text); }
+      .q-actions { display: flex; align-items: flex-end; gap: var(--space-2); }
+      .q-ownpill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #e6f5ee; color: #1a6b1a; }
+      .q-ownpill.notmine { background: var(--color-blue-light); color: var(--color-link-active); }
+
+      /* ── Signal cards ────────────────────────────────────────────────────── */
+      .q-signals { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+      @media (max-width: 720px) { .q-signals { grid-template-columns: 1fr; } .q-hist-bars { height: 90px; } }
+      .q-sig { border: 1px solid var(--color-border-soft); border-radius: 10px; padding: 14px 14px 14px 18px; background: var(--color-surface); position: relative; overflow: hidden; }
+      .q-sig::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--color-border-soft); }
+      .q-sig.good::before { background: #1a6b1a; } .q-sig.warn::before { background: #b8860b; } .q-sig.crit::before { background: #c0392b; }
+      .q-sig .k { font-size: 12px; color: var(--color-meta); font-weight: 600; }
+      .q-sig .v { font-size: 26px; font-weight: 800; letter-spacing: -.01em; margin: 3px 0; font-variant-numeric: tabular-nums; }
+      .q-sig .note { font-size: 12px; }
+      .q-sig.good .note { color: #1a6b1a; } .q-sig.warn .note { color: #b8860b; } .q-sig.crit .note { color: #c0392b; } .q-sig.neutral .note { color: var(--color-meta); }
+
+      /* ── Histogram ───────────────────────────────────────────────────────── */
+      .q-hist-bars { display: flex; align-items: flex-end; gap: 3px; height: 130px; position: relative; padding-top: 6px; }
+      .q-hist-bars .bar { flex: 1; background: var(--color-border-soft); border-radius: 3px 3px 0 0; min-height: 2px; transition: background .15s; }
+      .q-hist-bars .bar.pass { background: var(--color-blue); }
+      .q-hist-thr { position: absolute; top: -2px; bottom: -20px; width: 2px; background: #c0392b; z-index: 3; }
+      .q-hist-thr::after { content: attr(data-label); position: absolute; top: -19px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; color: #fff; background: #c0392b; padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+      .q-hist-x { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-meta); margin-top: 24px; font-variant-numeric: tabular-nums; }
+
+      /* ── Threshold editor ────────────────────────────────────────────────── */
+      .q-thr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-2); }
+      .q-thr-field label { font-size: 12px; }
+      .q-preview { margin-top: var(--space-2); padding: 12px 14px; border-radius: 8px; background: var(--color-row-selected); border: 1px dashed var(--color-border-soft); font-size: 14px; }
+      .q-preview b { color: var(--color-link-active); font-variant-numeric: tabular-nums; }
+      .q-preview .delta { color: #b8860b; font-weight: 600; }
+      .q-publish-row { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); flex-wrap: wrap; }
+      .q-publish-row button { width: auto; }
+      .q-consequence { font-size: 12.5px; color: var(--color-meta); max-width: 46ch; }
+      .q-consequence b { color: var(--color-text); }
+      .q-source { font-size: 12px; color: var(--color-meta); margin-top: 6px; }
+
+      .q-anchor-link { font-size: 13px; }
+      .q-empty-hint { color: var(--color-meta); font-size: 14px; padding: var(--space-3); text-align: center; }
+      details.q-details > summary { cursor: pointer; font-weight: 600; color: var(--color-text); }
     </style>
   </head>
   <body>
@@ -84,7 +92,7 @@
         <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link" id="navModuler">Moduler</a>
         <a href="/admin-content/sections" class="content-area-nav-link" id="navSeksjoner">Seksjoner</a>
-        <a href="/admin-content/calibration" class="content-area-nav-link active" id="navKalibrering">Kalibrering</a>
+        <a href="/admin-content/calibration" class="content-area-nav-link active" id="navKalibrering">Vurderingskvalitet</a>
       </nav>
 
       <div id="pageContent">
@@ -93,116 +101,109 @@
 
     </main>
 
-    <!-- Calibration workspace content (hidden until access confirmed) -->
-    <template id="calibrationWorkspaceTemplate">
-      <div class="calibration-workspace">
+    <template id="qualityWorkspaceTemplate">
+      <div class="quality-workspace">
 
-        <div class="calibration-header">
-          <h1>Kalibrering</h1>
-          <span id="calibrationModuleLabel" class="calibration-module-label" hidden></span>
+        <div class="quality-header">
+          <h1 data-i18n="quality.title">Vurderingskvalitet</h1>
+          <p class="subtitle" data-i18n="quality.subtitle">Se hvordan en modul scorer, og juster bestått-grensa.</p>
         </div>
 
+        <!-- Picker -->
         <section class="card">
-          <h2 data-i18n="calibration.filters.title">Calibration filters</h2>
-          <div class="row">
-            <div>
-              <label for="calibrationModuleId" data-i18n="calibration.filters.moduleId">Module ID</label>
-              <select id="calibrationModuleId"></select>
+          <div class="q-filters">
+            <div class="q-field">
+              <label data-i18n="quality.filter.owner">Eier</label>
+              <div class="q-seg" id="qOwnerSeg" role="group" aria-label="Eier-filter">
+                <button type="button" data-owner="mine" class="on" data-i18n="quality.filter.owner.mine">Mine moduler</button>
+                <button type="button" data-owner="all" data-i18n="quality.filter.owner.all">Alle</button>
+              </div>
             </div>
-            <div>
-              <label for="calibrationModuleVersionId" data-i18n="calibration.filters.moduleVersionId">Module version ID</label>
-              <input id="calibrationModuleVersionId" data-i18n-placeholder="calibration.filters.moduleVersionPlaceholder" placeholder="Optional module version ID" />
+            <div class="q-field">
+              <label for="qCourseFilter" data-i18n="quality.filter.course">Brukt i kurs</label>
+              <select id="qCourseFilter" class="sm"></select>
             </div>
-          </div>
-          <div class="row">
-            <div>
-              <fieldset class="pill-group-fieldset">
-                <legend id="calibrationStatusesLegend" data-i18n="calibration.filters.statuses">Submission statuses</legend>
-                <div id="calibrationStatuses" class="pill-group" role="group" aria-labelledby="calibrationStatusesLegend"></div>
-              </fieldset>
+            <div class="q-field">
+              <label for="qModuleSelect" data-i18n="quality.filter.module">Modul</label>
+              <select id="qModuleSelect"></select>
             </div>
-            <div>
-              <label for="calibrationLimit" data-i18n="calibration.filters.limit">Max outcomes</label>
-              <input id="calibrationLimit" type="number" min="1" max="500" />
+            <div class="q-field">
+              <label for="qVersionSelect" data-i18n="quality.filter.version">Versjon</label>
+              <select id="qVersionSelect" class="sm"></select>
             </div>
-          </div>
-          <div class="row">
-            <div>
-              <label for="calibrationDateFrom" data-i18n="calibration.filters.dateFrom">Date from</label>
-              <input id="calibrationDateFrom" type="date" />
-            </div>
-            <div>
-              <label for="calibrationDateTo" data-i18n="calibration.filters.dateTo">Date to</label>
-              <input id="calibrationDateTo" type="date" />
+            <span class="q-count" id="qModuleCount"></span>
+            <div class="q-actions">
+              <button id="qLoad" class="btn-secondary" style="width:auto" data-i18n="quality.filter.load">Vis kvalitet</button>
+              <span id="qOwnPill" class="q-ownpill" hidden></span>
             </div>
           </div>
-          <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
-            <div><button id="loadCalibration" class="btn-secondary" data-i18n="calibration.filters.load">Load calibration snapshot</button></div>
-            <div class="small" id="calibrationMeta"></div>
+          <div class="small" id="qMeta" style="margin-top:var(--space-1)"></div>
+        </section>
+
+        <!-- Signals -->
+        <section class="card" id="qSignalsCard" hidden>
+          <h2 data-i18n="quality.signals.title">Kvalitetssignaler</h2>
+          <div class="q-signals" id="qSignals"></div>
+        </section>
+
+        <!-- Score distribution + threshold -->
+        <section class="card" id="qThresholdCard" hidden>
+          <h2 data-i18n="quality.distribution.title">Poengfordeling</h2>
+          <p class="small" data-i18n="quality.distribution.subtitle">Blå søyler består ved valgt grense. Juster grensa for å se effekten.</p>
+          <div class="q-hist-bars" id="qHistogram"></div>
+          <div class="q-hist-x"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+
+          <h3 style="margin:var(--space-3) 0 var(--space-1);font-size:15px" data-i18n="quality.threshold.title">Bestått-grense</h3>
+          <div class="q-thr-grid">
+            <div class="q-thr-field">
+              <label for="qTotalMin" data-i18n="quality.threshold.totalMin">Total (min av 100)</label>
+              <input id="qTotalMin" type="number" min="0" max="100" step="1" />
+            </div>
+            <div class="q-thr-field" id="qMcqField" hidden>
+              <label for="qMcqMin" data-i18n="quality.threshold.mcqMin">MCQ-minimum (%)</label>
+              <input id="qMcqMin" type="number" min="0" max="100" step="1" />
+            </div>
+            <div class="q-thr-field" id="qPracticalField" hidden>
+              <label for="qPracticalMin" data-i18n="quality.threshold.practicalMin">Praktisk-minimum (%)</label>
+              <input id="qPracticalMin" type="number" min="0" max="100" step="1" />
+            </div>
+          </div>
+          <div class="q-preview" id="qPreview"></div>
+          <div class="q-source" id="qThresholdSource"></div>
+
+          <div class="q-publish-row">
+            <button id="qPublish" class="btn-secondary" data-i18n="quality.threshold.publish" disabled>Publiser ny terskel</button>
+            <span class="q-consequence" data-i18n="quality.threshold.consequence">Lager og publiserer en ny modul-versjon. Påvirker bare framtidige vurderinger — ingen tidligere svar re-scores.</span>
           </div>
         </section>
 
-        <section class="card">
-          <h2 data-i18n="calibration.signals.title">Quality signals</h2>
-          <pre id="calibrationSignals"></pre>
+        <!-- Reference-answer coverage -->
+        <section class="card" id="qAnchorCard" hidden>
+          <h2 data-i18n="quality.anchors.title">Referanse-svar</h2>
+          <p class="small" id="qAnchorSummary"></p>
+          <a class="q-anchor-link" id="qAnchorLink" href="#" data-i18n="quality.anchors.edit">Rediger referanse-svar i modul-editoren →</a>
         </section>
 
-        <section id="thresholdEditorSection" class="card" style="display:none">
-          <h2 data-i18n="calibration.thresholds.title">Calibration thresholds</h2>
-          <p class="small" data-i18n="calibration.thresholds.subtitle">Sets the minimum total score required to pass this module.</p>
-
-          <div class="row">
-            <div>
-              <label for="thresholdTotalMin" data-i18n="calibration.thresholds.totalMin">Pass score (min out of 100)</label>
-              <input id="thresholdTotalMin" type="number" min="0" max="100" step="1" />
-              <div class="small" data-i18n="calibration.thresholds.totalMinHelp">Minimum total score to pass.</div>
+        <!-- Outcomes (collapsed detail) -->
+        <section class="card" id="qOutcomesCard" hidden>
+          <details class="q-details">
+            <summary data-i18n="quality.outcomes.title">Enkeltsvar (detaljer)</summary>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Enkeltsvar" style="margin-top:var(--space-1)">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col" data-i18n="quality.outcomes.submittedAt">Levert</th>
+                    <th scope="col" data-i18n="quality.outcomes.status">Status</th>
+                    <th scope="col" data-i18n="quality.outcomes.moduleVersion">Versjon</th>
+                    <th scope="col" data-i18n="quality.outcomes.totalScore">Total</th>
+                    <th scope="col" data-i18n="quality.outcomes.passFail">Bestått</th>
+                    <th scope="col" data-i18n="quality.outcomes.manualReview">Manuell</th>
+                  </tr>
+                </thead>
+                <tbody id="qOutcomesBody"></tbody>
+              </table>
             </div>
-          </div>
-
-          <div class="row" style="margin-top: calc(var(--space-1) * 1.25);">
-            <div>
-              <button id="publishThresholds" class="btn-secondary" data-i18n="calibration.thresholds.publish" disabled>Publish thresholds</button>
-            </div>
-          </div>
-          <div id="thresholdPublishResult" class="small"></div>
-        </section>
-
-        <section class="card">
-          <h2 data-i18n="calibration.outcomes.title">Historical outcomes</h2>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Historical outcomes">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col" data-i18n="calibration.outcomes.submissionId">Submission</th>
-                  <th scope="col" data-i18n="calibration.outcomes.submittedAt">Submitted</th>
-                  <th scope="col" data-i18n="calibration.outcomes.status">Status</th>
-                  <th scope="col" data-i18n="calibration.outcomes.moduleVersion">Module version</th>
-                  <th scope="col" data-i18n="calibration.outcomes.totalScore">Total score</th>
-                  <th scope="col" data-i18n="calibration.outcomes.passFail">Pass/fail</th>
-                  <th scope="col" data-i18n="calibration.outcomes.manualReview">Manual review signal</th>
-                </tr>
-              </thead>
-              <tbody id="calibrationOutcomesBody"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="card">
-          <h2 data-i18n="calibration.anchors.title">Benchmark anchors</h2>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Benchmark anchors">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col" data-i18n="calibration.anchors.promptVersion">Prompt version</th>
-                  <th scope="col" data-i18n="calibration.anchors.benchmarkCount">Benchmark examples</th>
-                  <th scope="col" data-i18n="calibration.anchors.sourcePromptVersion">Source prompt version</th>
-                  <th scope="col" data-i18n="calibration.anchors.sourceModuleVersion">Source module version</th>
-                  <th scope="col" data-i18n="calibration.anchors.createdAt">Created</th>
-                </tr>
-              </thead>
-              <tbody id="calibrationAnchorsBody"></tbody>
-            </table>
-          </div>
+          </details>
         </section>
 
       </div>

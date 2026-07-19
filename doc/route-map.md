@@ -16,7 +16,7 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | `/admin-content/sections` | Learning sections library + editor (#476) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/sections?id=<id>` or `?new` | Section editor (open existing / new) | `admin-content-sections.html` | **Canonical** |
 | `/admin-content/classes` | **Moved (#765)** — 301-redirects to `/deltakere/klasser` (now under the «Deltakere» area) | — | Legacy redirect |
-| `/admin-content/calibration` | Calibration workspace | `admin-content-calibration.html` | **Canonical** |
+| `/admin-content/calibration` | «Vurderingskvalitet» workspace (rebranded from Calibration, #836) | `admin-content-calibration.html` | **Canonical** |
 
 ### Legacy routes (present during pilot, not primary)
 
@@ -44,7 +44,7 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
 | `/deltakere/status` | Teacher/SMO cohort-status dashboard — enrollment status counts per course (#498) |
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
-| `/calibration` | Calibration reviewer workspace |
+| `/calibration` | **Retired (#836)** — 301-redirects to `/admin-content/calibration` |
 | `/results` | Results / history view (a «Deltakere» sub-tab) |
 | `/profile` | User profile |
 | `/admin-platform` | Platform administration |

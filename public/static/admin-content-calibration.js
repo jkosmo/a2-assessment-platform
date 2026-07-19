@@ -14,12 +14,13 @@ import {
   fetchQueueCounts,
   applyNavReviewBadge,
 } from "/static/api-client.js";
-import {
-  resolveWorkspaceNavigationItems,
-} from "/static/participant-console-state.js";
-import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+
+// #836: "Vurderingskvalitet" (tidl. Kalibrering) — les hvordan en modul scorer (signaler + fordeling)
+// og juster bestått-grensa med en klient-side konsekvens-preview. Erstatter de tre gamle
+// kalibrerings-kopiene. Eier-/kurs-filter holder modul-lista kort (#787 #5).
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -39,6 +40,12 @@ function t(key) {
   if (cal !== undefined) return cal;
   return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
 }
+// Interpolating variant: t("key", { count: 3 }) replaces {count}.
+function tf(key, vars = {}) {
+  let s = t(key);
+  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
 
 // ---------------------------------------------------------------------------
 // Runtime config / auth
@@ -47,10 +54,19 @@ function t(key) {
 let participantRuntimeConfig = {
   identityDefaults: { roles: ["SUBJECT_MATTER_OWNER"] },
   navigation: { items: [] },
-  calibrationWorkspace: { accessRoles: [], defaults: { maxRows: 120, statuses: ["COMPLETED", "UNDER_REVIEW"] } },
+  calibrationWorkspace: {
+    accessRoles: [],
+    defaults: { maxRows: 120, statuses: ["COMPLETED", "UNDER_REVIEW"] },
+    signalThresholds: { passRateMinimum: 0.6, manualReviewRateMaximum: 0.35, benchmarkCoverageMinimum: 0.5 },
+  },
 };
 
-let getHeaders = {};
+// apiFetch treats a non-function 2nd arg as the options object and ignores the 3rd — so getHeaders MUST
+// be a function for POST bodies to be sent. (The old page passed an object here, dropping the body.)
+let headerValues = {};
+function getHeaders() {
+  return headerValues;
+}
 let activeUserRoles = [];
 
 // ---------------------------------------------------------------------------
@@ -64,512 +80,435 @@ const localeSelect = document.getElementById("localeSelect");
 const pageContent = document.getElementById("pageContent");
 const navKalibrering = document.getElementById("navKalibrering");
 
-// ---------------------------------------------------------------------------
-// Calibration DOM refs (populated after template instantiation)
-// ---------------------------------------------------------------------------
-
-let calibrationModuleIdSelect;
-let calibrationModuleVersionIdInput;
-let calibrationStatuses;
-let calibrationLimitInput;
-let calibrationDateFromInput;
-let calibrationDateToInput;
-let loadCalibrationButton;
-let calibrationMeta;
-let calibrationSignals;
-let thresholdEditorSection;
-let thresholdTotalMinInput;
-let publishThresholdsButton;
-let thresholdPublishResult;
-let calibrationOutcomesBody;
-let calibrationAnchorsBody;
+// Workspace refs (populated on mount)
+let el = {};
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-let allModules = [];
-let latestCalibrationWorkspaceBody = null;
-
-const allSubmissionStatuses = ["SUBMITTED", "PROCESSING", "SCORED", "UNDER_REVIEW", "COMPLETED", "REJECTED"];
+let allModules = []; // { id, title, ownedByMe, courses: [{id,title}], ... }
+let ownerFilter = "mine"; // "mine" | "all"
+let courseFilter = ""; // courseId or ""
+let snapshotBody = null;
+let effective = null; // effectiveThresholds from the last snapshot
 
 function resolveContentAdminDefaults() {
   const defaults = participantRuntimeConfig?.identityDefaults?.contentAdmin;
-  if (defaults && typeof defaults === "object") {
-    return defaults;
-  }
+  if (defaults && typeof defaults === "object") return defaults;
   return participantRuntimeConfig?.identityDefaults ?? {
-    userId: "content-owner-1",
-    email: "content.owner@company.com",
-    name: "Platform Content Owner",
-    department: "Learning",
-    roles: ["SUBJECT_MATTER_OWNER"],
+    userId: "content-owner-1", email: "content.owner@company.com", name: "Platform Content Owner",
+    department: "Learning", roles: ["SUBJECT_MATTER_OWNER"],
   };
 }
-
-// ---------------------------------------------------------------------------
-// Role gate
-// ---------------------------------------------------------------------------
 
 function hasCalibrationAccess() {
   const calibrationRoles = new Set(participantRuntimeConfig.calibrationWorkspace?.accessRoles ?? []);
   const userRoles = new Set(activeUserRoles);
-  return [...calibrationRoles].some(r => userRoles.has(r));
+  return [...calibrationRoles].some((r) => userRoles.has(r));
 }
-
-// ---------------------------------------------------------------------------
-// Access denied state
-// ---------------------------------------------------------------------------
 
 function renderAccessDenied() {
   pageContent.innerHTML = `
     <div class="access-denied">
-      <p class="access-denied-title">Ingen tilgang</p>
-      <p class="access-denied-text">Du mangler rollen som kreves for å bruke kalibrering.</p>
-      <a href="/admin-content" class="btn btn-secondary">Tilbake til Moduler</a>
+      <p class="access-denied-title">${t("quality.access.title")}</p>
+      <p class="access-denied-text">${t("quality.access.text")}</p>
+      <a href="/admin-content" class="btn btn-secondary">${t("quality.access.back")}</a>
     </div>`;
 }
 
 // ---------------------------------------------------------------------------
-// Formatters
+// Filters + module/version selection
 // ---------------------------------------------------------------------------
 
-
-
-function localizeSubmissionStatus(value) {
-  const normalized = typeof value === "string" ? value.toUpperCase() : "";
-  return t(`result.statusValue.${normalized || "UNKNOWN"}`);
+function ownerFilteredModules() {
+  return ownerFilter === "mine" ? allModules.filter((m) => m.ownedByMe) : allModules;
 }
 
-// ---------------------------------------------------------------------------
-// Pill helpers
-// ---------------------------------------------------------------------------
-
-function getCheckedPillValues(container) {
-  if (!container) return [];
-  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value);
+function visibleModules() {
+  return ownerFilteredModules().filter((m) => !courseFilter || (m.courses ?? []).some((c) => c.id === courseFilter));
 }
 
-function enablePillArrowNavigation(container) {
-  if (!container) return;
-  container.addEventListener("keydown", event => {
-    const isPrevious = event.key === "ArrowLeft" || event.key === "ArrowUp";
-    const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
-    if (!isPrevious && !isNext) return;
-
-    const checkboxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
-    if (checkboxes.length === 0) return;
-
-    const focusedIndex = checkboxes.findIndex(cb => cb === document.activeElement);
-    const nextIndex = isPrevious
-      ? (focusedIndex <= 0 ? checkboxes.length - 1 : focusedIndex - 1)
-      : (focusedIndex >= checkboxes.length - 1 ? 0 : focusedIndex + 1);
-    checkboxes[nextIndex]?.focus();
-    event.preventDefault();
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Module select
-// ---------------------------------------------------------------------------
-
-function renderCalibrationModuleOptions(preferredId) {
-  if (!calibrationModuleIdSelect) return;
-
-  const previousValue = preferredId ?? calibrationModuleIdSelect.value;
-  calibrationModuleIdSelect.innerHTML = "";
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = t("calibration.filters.moduleSelectPlaceholder");
-  calibrationModuleIdSelect.appendChild(placeholder);
-
-  for (const mod of allModules) {
-    const option = document.createElement("option");
-    option.value = mod.id;
-    option.textContent = `${mod.title ?? mod.id} (${mod.id})`;
-    calibrationModuleIdSelect.appendChild(option);
+function renderCourseFilterOptions() {
+  const seen = new Map();
+  for (const m of ownerFilteredModules()) {
+    for (const c of m.courses ?? []) if (!seen.has(c.id)) seen.set(c.id, c.title);
   }
+  const prev = courseFilter;
+  el.qCourseFilter.innerHTML =
+    `<option value="">${t("quality.filter.course.all")}</option>` +
+    [...seen.entries()].map(([id, title]) => `<option value="${escapeAttr(id)}">${escapeHtml(title)}</option>`).join("");
+  if (prev && seen.has(prev)) el.qCourseFilter.value = prev;
+  else courseFilter = "";
+}
 
-  if (previousValue && allModules.some(m => m.id === previousValue)) {
-    calibrationModuleIdSelect.value = previousValue;
+function renderModuleOptions() {
+  const mods = visibleModules();
+  const prev = el.qModuleSelect.value;
+  el.qModuleSelect.innerHTML =
+    `<option value="">${t("quality.filter.module.placeholder")}</option>` +
+    mods.map((m) => `<option value="${escapeAttr(m.id)}">${escapeHtml(m.title ?? m.id)}</option>`).join("");
+  if (prev && mods.some((m) => m.id === prev)) el.qModuleSelect.value = prev;
+  el.qModuleCount.innerHTML = tf("quality.filter.count", { count: `<b>${mods.length}</b>` });
+  onModuleChange();
+}
+
+async function onModuleChange() {
+  const moduleId = el.qModuleSelect.value;
+  el.qVersionSelect.innerHTML = `<option value="">${t("quality.filter.version.all")}</option>`;
+  el.qOwnPill.hidden = true;
+  if (!moduleId) return;
+
+  const mod = allModules.find((m) => m.id === moduleId);
+  if (mod) {
+    el.qOwnPill.hidden = false;
+    el.qOwnPill.textContent = mod.ownedByMe ? t("quality.pill.owned") : t("quality.pill.notOwned");
+    el.qOwnPill.classList.toggle("notmine", !mod.ownedByMe);
   }
+  // Populate the version dropdown from the module export (versions carry versionNo + id).
+  try {
+    const data = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
+    const versions = data?.moduleExport?.versions ?? [];
+    for (const v of versions) {
+      const opt = document.createElement("option");
+      opt.value = v.id;
+      opt.textContent = tf("quality.filter.version.item", { no: v.versionNo, state: v.publishedAt ? t("quality.version.published") : t("quality.version.draft") });
+      el.qVersionSelect.appendChild(opt);
+    }
+  } catch { /* version list optional */ }
 }
 
 // ---------------------------------------------------------------------------
-// Calibration status pills
+// Load snapshot
 // ---------------------------------------------------------------------------
 
-function getSelectedCalibrationStatuses() {
-  const selected = getCheckedPillValues(calibrationStatuses);
-  if (selected.length > 0) return selected;
-  return participantRuntimeConfig?.calibrationWorkspace?.defaults?.statuses ?? ["COMPLETED", "UNDER_REVIEW"];
-}
-
-function populateCalibrationStatusOptions() {
-  if (!calibrationStatuses) return;
-  const selected = new Set(getSelectedCalibrationStatuses());
-  calibrationStatuses.innerHTML = "";
-
-  for (const status of allSubmissionStatuses) {
-    const optionLabel = document.createElement("label");
-    optionLabel.className = "pill-option";
-
-    const optionInput = document.createElement("input");
-    optionInput.type = "checkbox";
-    optionInput.value = status;
-    optionInput.checked = selected.has(status);
-    optionInput.setAttribute("aria-label", localizeSubmissionStatus(status));
-
-    const optionText = document.createElement("span");
-    optionText.textContent = localizeSubmissionStatus(status);
-
-    optionLabel.appendChild(optionInput);
-    optionLabel.appendChild(optionText);
-    calibrationStatuses.appendChild(optionLabel);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Threshold editor
-// ---------------------------------------------------------------------------
-
-function getThresholdInputValues() {
-  return { totalMin: Number(thresholdTotalMinInput?.value ?? 0) };
-}
-
-function renderThresholds(effectiveThresholds) {
-  if (!thresholdEditorSection || !thresholdTotalMinInput || !thresholdPublishResult) return;
-  thresholdTotalMinInput.value = String(effectiveThresholds.totalMin);
-  thresholdPublishResult.textContent = t(
-    effectiveThresholds.source === "module_policy"
-      ? "calibration.thresholds.source.module"
-      : "calibration.thresholds.source.global",
-  );
-  thresholdEditorSection.style.display = "";
-  if (publishThresholdsButton) publishThresholdsButton.disabled = false;
-}
-
-// ---------------------------------------------------------------------------
-// Render calibration results
-// ---------------------------------------------------------------------------
-
-function renderCalibrationWorkspace(body) {
-  if (!calibrationSignals || !calibrationOutcomesBody || !calibrationAnchorsBody || !thresholdEditorSection) return;
-
-  hideLoading(calibrationSignals);
-  hideLoading(calibrationOutcomesBody);
-  hideLoading(calibrationAnchorsBody);
-  latestCalibrationWorkspaceBody = body;
-
-  if (!body) {
-    showEmpty(calibrationSignals, t("calibration.signals.none"));
-    if (calibrationMeta) calibrationMeta.textContent = "";
-    showEmpty(calibrationOutcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
-    showEmpty(calibrationAnchorsBody, t("calibration.anchors.empty"), { columns: 5 });
-    thresholdEditorSection.style.display = "none";
-    if (thresholdPublishResult) thresholdPublishResult.textContent = "";
+async function loadQuality() {
+  const moduleId = el.qModuleSelect.value;
+  if (!moduleId) {
+    showToast(t("quality.errors.moduleRequired"), "error");
     return;
   }
-
-  const signals = body.signals ?? {};
-  const flags = Array.isArray(signals.flags) ? signals.flags : [];
-  const flagLines = flags.length > 0
-    ? flags.map(flag => `- ${flag.code}: ${flag.message} (${formatNumber(flag.actual)} / ${formatNumber(flag.threshold)})`)
-    : [t("calibration.flags.none")];
-
-  calibrationSignals.textContent = [
-    `${t("calibration.outcomes.title")}: ${signals.outcomeCount ?? 0}`,
-    `${t("calibration.signals.passRate")}: ${formatNumber(signals.passRate)}`,
-    `${t("calibration.signals.manualReviewRate")}: ${formatNumber(signals.manualReviewRate)}`,
-    `${t("calibration.signals.averageTotalScore")}: ${formatNumber(signals.averageTotalScore)}`,
-    `${t("calibration.signals.benchmarkPromptTemplates")}: ${signals.benchmarkPromptTemplateCount ?? 0}`,
-    `${t("calibration.signals.coveredPromptTemplates")}: ${signals.coveredPromptTemplateCount ?? 0}`,
-    `${t("calibration.signals.benchmarkCoverageRate")}: ${formatNumber(signals.benchmarkCoverageRate)}`,
-    `${t("calibration.signals.flags")}:`,
-    ...flagLines,
-  ].join("\n");
-
-  if (calibrationMeta) {
-    calibrationMeta.textContent = `${t("calibration.meta.loadedPrefix")}: ${body.module?.title ?? "-"} (${body.module?.id ?? "-"})`;
-  }
-
-  // Outcomes
-  const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [];
-  calibrationOutcomesBody.innerHTML = "";
-  if (outcomes.length === 0) {
-    showEmpty(calibrationOutcomesBody, t("calibration.outcomes.empty"), { columns: 7 });
-  } else {
-    for (const outcome of outcomes) {
-      const row = document.createElement("tr");
-      const values = [
-        outcome.submissionId ?? "-",
-        formatDateTimeValue(outcome.submittedAt),
-        localizeSubmissionStatus(outcome.submissionStatus),
-        `${outcome.moduleVersionNo ?? "-"} (${outcome.moduleVersionId ?? "-"})`,
-        formatNumber(outcome?.decision?.totalScore),
-        outcome?.decision?.passFailTotal === true ? t("calibration.value.pass")
-          : outcome?.decision?.passFailTotal === false ? t("calibration.value.fail")
-          : "-",
-        outcome?.llm?.manualReviewRecommended === true ? t("calibration.value.yes") : t("calibration.value.no"),
-      ];
-      for (const value of values) {
-        const cell = document.createElement("td");
-        cell.textContent = String(value);
-        row.appendChild(cell);
-      }
-      calibrationOutcomesBody.appendChild(row);
-    }
-  }
-
-  // Anchors
-  const anchors = Array.isArray(body.benchmarkAnchors) ? body.benchmarkAnchors : [];
-  calibrationAnchorsBody.innerHTML = "";
-  if (anchors.length === 0) {
-    showEmpty(calibrationAnchorsBody, t("calibration.anchors.empty"), { columns: 5 });
-  } else {
-    for (const anchor of anchors) {
-      const row = document.createElement("tr");
-      const values = [
-        `${anchor.promptTemplateVersionNo ?? "-"} (${anchor.promptTemplateVersionId ?? "-"})`,
-        String(anchor.benchmarkExampleCount ?? "-"),
-        anchor.sourcePromptTemplateVersionId ?? "-",
-        anchor.sourceModuleVersionId ?? "-",
-        formatDateTimeValue(anchor.createdAt),
-      ];
-      for (const value of values) {
-        const cell = document.createElement("td");
-        cell.textContent = String(value);
-        row.appendChild(cell);
-      }
-      calibrationAnchorsBody.appendChild(row);
-    }
-  }
-
-  if (body.effectiveThresholds) {
-    renderThresholds(body.effectiveThresholds);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Load calibration workspace
-// ---------------------------------------------------------------------------
-
-async function loadCalibrationWorkspace() {
-  if (!loadCalibrationButton || !calibrationModuleIdSelect) return;
-
-  loadCalibrationButton.disabled = true;
-  const origText = loadCalibrationButton.textContent;
-  loadCalibrationButton.textContent = "…";
-
+  el.qLoad.disabled = true;
+  const orig = el.qLoad.textContent;
+  el.qLoad.textContent = "…";
+  el.qMeta.textContent = t("quality.loading");
   try {
-    if (calibrationMeta) calibrationMeta.textContent = "";
-    showLoading(calibrationSignals, { rows: 6 });
-    showLoading(calibrationOutcomesBody, { rows: 4, columns: 7 });
-    showLoading(calibrationAnchorsBody, { rows: 3, columns: 5 });
+    const params = new URLSearchParams({ moduleId });
+    if (el.qVersionSelect.value) params.set("moduleVersionId", el.qVersionSelect.value);
+    const statuses = participantRuntimeConfig?.calibrationWorkspace?.defaults?.statuses ?? ["COMPLETED", "UNDER_REVIEW"];
+    params.set("status", statuses.join(","));
+    const limit = participantRuntimeConfig?.calibrationWorkspace?.defaults?.maxRows ?? 120;
+    params.set("limit", String(limit));
 
-    const moduleId = calibrationModuleIdSelect.value;
-    if (!moduleId) {
-      throw new Error(t("calibration.errors.moduleRequired"));
-    }
-
-    const params = new URLSearchParams();
-    params.set("moduleId", moduleId);
-
-    const moduleVersionId = calibrationModuleVersionIdInput?.value.trim();
-    if (moduleVersionId) params.set("moduleVersionId", moduleVersionId);
-
-    const statuses = getSelectedCalibrationStatuses();
-    if (statuses.length > 0) params.set("status", statuses.join(","));
-
-    const limit = Number(calibrationLimitInput?.value);
-    if (Number.isFinite(limit) && limit > 0) params.set("limit", String(limit));
-
-    if (calibrationDateFromInput?.value) params.set("dateFrom", calibrationDateFromInput.value);
-    if (calibrationDateToInput?.value) params.set("dateTo", calibrationDateToInput.value);
-
-    const body = await apiFetch(`/api/calibration/workspace?${params.toString()}`, getHeaders);
-    renderCalibrationWorkspace(body);
+    snapshotBody = await apiFetch(`/api/calibration/workspace?${params.toString()}`, getHeaders);
+    renderWorkspace();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (calibrationMeta) calibrationMeta.textContent = "";
-    showEmpty(calibrationSignals, message);
-    showEmpty(calibrationOutcomesBody, message, { columns: 7 });
-    showEmpty(calibrationAnchorsBody, message, { columns: 5 });
+    el.qMeta.textContent = message;
+    hideResults();
   } finally {
-    loadCalibrationButton.disabled = false;
-    loadCalibrationButton.textContent = origText;
+    el.qLoad.disabled = false;
+    el.qLoad.textContent = orig;
   }
 }
 
+function hideResults() {
+  for (const id of ["qSignalsCard", "qThresholdCard", "qAnchorCard", "qOutcomesCard"]) el[id].hidden = true;
+}
+
 // ---------------------------------------------------------------------------
-// Publish thresholds
+// Render
 // ---------------------------------------------------------------------------
 
-async function publishThresholds() {
-  if (!publishThresholdsButton || !calibrationModuleIdSelect) return;
+function renderWorkspace() {
+  const body = snapshotBody;
+  if (!body) return hideResults();
+  el.qMeta.textContent = tf("quality.meta.loaded", { title: body.module?.title ?? "-", count: (body.outcomes ?? []).length });
+  effective = body.effectiveThresholds ?? { totalMin: 60, mcqMinPercent: null, practicalMinPercent: null };
+  renderSignals(body.signals ?? {});
+  renderThresholdCard(body);
+  renderAnchors(body);
+  renderOutcomes(body.outcomes ?? []);
+}
 
-  const moduleId = calibrationModuleIdSelect.value;
-  if (!moduleId) {
-    showToast(t("calibration.errors.moduleRequired"), "error");
+function sigClass(ok, warn) {
+  return ok ? "good" : warn ? "warn" : "crit";
+}
+
+function renderSignals(signals) {
+  const th = participantRuntimeConfig?.calibrationWorkspace?.signalThresholds ?? {};
+  const passMin = th.passRateMinimum ?? 0.6;
+  const mrMax = th.manualReviewRateMaximum ?? 0.35;
+  const covMin = th.benchmarkCoverageMinimum ?? 0.5;
+  const pct = (v) => (v == null ? "—" : `${Math.round(v * 100)}%`);
+
+  const passRate = signals.passRate ?? null;
+  const mrRate = signals.manualReviewRate ?? null;
+  const cov = signals.benchmarkCoverageRate ?? null;
+
+  const cards = [
+    {
+      cls: passRate == null ? "neutral" : sigClass(passRate >= passMin, passRate >= passMin * 0.8),
+      k: t("quality.signal.passRate"), v: pct(passRate),
+      note: passRate == null ? t("quality.signal.noData") : passRate >= passMin ? t("quality.signal.passRate.ok") : t("quality.signal.passRate.low"),
+    },
+    {
+      cls: mrRate == null ? "neutral" : sigClass(mrRate <= mrMax, mrRate <= mrMax * 1.2),
+      k: t("quality.signal.manualReview"), v: pct(mrRate),
+      note: mrRate == null ? t("quality.signal.noData") : mrRate <= mrMax ? t("quality.signal.manualReview.ok") : t("quality.signal.manualReview.high"),
+    },
+    {
+      cls: cov == null ? "neutral" : sigClass(cov >= covMin, cov >= covMin * 0.8),
+      k: t("quality.signal.coverage"), v: pct(cov),
+      note: cov == null ? t("quality.signal.noData") : cov >= covMin ? t("quality.signal.coverage.ok") : t("quality.signal.coverage.low"),
+    },
+  ];
+  el.qSignals.innerHTML = cards
+    .map((c) => `<div class="q-sig ${c.cls}"><div class="k">${escapeHtml(c.k)}</div><div class="v">${escapeHtml(c.v)}</div><div class="note">${escapeHtml(c.note)}</div></div>`)
+    .join("");
+  el.qSignalsCard.hidden = false;
+}
+
+// Scores that are numeric, for histogram + preview.
+function outcomeScores() {
+  return (snapshotBody?.outcomes ?? [])
+    .map((o) => o?.decision?.totalScore)
+    .filter((s) => typeof s === "number" && Number.isFinite(s));
+}
+
+function renderThresholdCard(body) {
+  el.qTotalMin.value = String(effective.totalMin ?? 60);
+  // Contextual sub-gates: only show when the module's policy actually uses them.
+  const showMcq = effective.mcqMinPercent != null;
+  const showPractical = effective.practicalMinPercent != null;
+  el.qMcqField.hidden = !showMcq;
+  el.qPracticalField.hidden = !showPractical;
+  if (showMcq) el.qMcqMin.value = String(effective.mcqMinPercent);
+  if (showPractical) el.qPracticalMin.value = String(effective.practicalMinPercent);
+
+  el.qThresholdSource.textContent =
+    effective.source === "module_policy" ? t("quality.threshold.source.module") : t("quality.threshold.source.global");
+
+  renderHistogram();
+  updatePreview();
+  el.qPublish.disabled = false;
+  el.qThresholdCard.hidden = false;
+}
+
+function renderHistogram() {
+  const scores = outcomeScores();
+  const bins = 20; // 0-100 in steps of 5
+  const counts = new Array(bins).fill(0);
+  for (const s of scores) {
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor(s / (100 / bins))));
+    counts[idx] += 1;
+  }
+  const max = Math.max(1, ...counts);
+  const totalMin = Number(el.qTotalMin.value) || 0;
+  const bars = counts
+    .map((c, i) => {
+      const binLow = i * (100 / bins);
+      const pass = binLow + 100 / bins / 2 >= totalMin;
+      return `<div class="bar ${pass ? "pass" : ""}" style="height:${Math.round((c / max) * 100)}%" title="${Math.round(binLow)}–${Math.round(binLow + 100 / bins)}: ${c}"></div>`;
+    })
+    .join("");
+  const thr = `<div class="q-hist-thr" data-label="${t("quality.threshold.marker")} ${totalMin}" style="left:${Math.min(100, Math.max(0, totalMin))}%"></div>`;
+  el.qHistogram.innerHTML = bars + thr;
+}
+
+function passCountAt(min) {
+  return outcomeScores().filter((s) => s >= min).length;
+}
+
+function updatePreview() {
+  const scores = outcomeScores();
+  const total = scores.length;
+  const newMin = Number(el.qTotalMin.value) || 0;
+  if (total === 0) {
+    el.qPreview.innerHTML = t("quality.preview.noData");
     return;
   }
+  const passNew = passCountAt(newMin);
+  const passEff = passCountAt(effective.totalMin ?? newMin);
+  const pct = Math.round((passNew / total) * 100);
+  const delta = passNew - passEff;
+  const deltaText =
+    delta === 0
+      ? ""
+      : ` <span class="delta">${tf(delta > 0 ? "quality.preview.deltaUp" : "quality.preview.deltaDown", { n: Math.abs(delta) })}</span>`;
+  el.qPreview.innerHTML = tf("quality.preview.body", {
+    min: `<b>${newMin}</b>`,
+    pass: `<b>${passNew}</b>`,
+    total: `<b>${total}</b>`,
+    pct,
+  }) + deltaText;
+}
 
-  const values = getThresholdInputValues();
+function renderAnchors(body) {
+  const cov = body.signals?.benchmarkCoverageRate;
+  const benchmark = body.signals?.benchmarkPromptTemplateCount ?? 0;
+  const covered = body.signals?.coveredPromptTemplateCount ?? 0;
+  el.qAnchorSummary.textContent = tf("quality.anchors.summary", {
+    covered, benchmark, pct: cov == null ? "—" : `${Math.round(cov * 100)}%`,
+  });
+  // Deep-link into the module editor where prompt-template anchors are versioned.
+  const moduleId = el.qModuleSelect.value;
+  el.qAnchorLink.href = `/admin-content/module/${encodeURIComponent(moduleId)}/advanced`;
+  el.qAnchorCard.hidden = false;
+}
 
-  publishThresholdsButton.disabled = true;
-  const origText = publishThresholdsButton.textContent;
-  publishThresholdsButton.textContent = "…";
+function renderOutcomes(outcomes) {
+  if (!outcomes.length) {
+    el.qOutcomesCard.hidden = true;
+    return;
+  }
+  el.qOutcomesBody.innerHTML = outcomes
+    .map((o) => {
+      const pf = o?.decision?.passFailTotal === true ? t("quality.value.pass") : o?.decision?.passFailTotal === false ? t("quality.value.fail") : "-";
+      const mr = o?.llm?.manualReviewRecommended === true ? t("quality.value.yes") : t("quality.value.no");
+      return `<tr>
+        <td>${escapeHtml(formatDateTimeValue(o.submittedAt))}</td>
+        <td>${escapeHtml(localizeStatus(o.submissionStatus))}</td>
+        <td>${escapeHtml(String(o.moduleVersionNo ?? "-"))}</td>
+        <td>${escapeHtml(formatNumber(o?.decision?.totalScore))}</td>
+        <td>${escapeHtml(pf)}</td>
+        <td>${escapeHtml(mr)}</td>
+      </tr>`;
+    })
+    .join("");
+  el.qOutcomesCard.hidden = false;
+}
 
+function localizeStatus(value) {
+  const normalized = typeof value === "string" ? value.toUpperCase() : "UNKNOWN";
+  return t(`result.statusValue.${normalized}`);
+}
+
+// ---------------------------------------------------------------------------
+// Publish
+// ---------------------------------------------------------------------------
+
+async function publish() {
+  const moduleId = el.qModuleSelect.value;
+  if (!moduleId) {
+    showToast(t("quality.errors.moduleRequired"), "error");
+    return;
+  }
+  const totalMin = Number(el.qTotalMin.value);
+  if (!Number.isFinite(totalMin) || totalMin < 0 || totalMin > 100) {
+    showToast(t("quality.errors.totalMinRange"), "error");
+    return;
+  }
+  // Consequence is shown inline; confirm the version-cutting side effect before publishing.
+  if (!window.confirm(t("quality.threshold.confirm"))) return;
+
+  const payload = { moduleId, totalMin };
+  if (!el.qMcqField.hidden && el.qMcqMin.value !== "") payload.mcqMinPercent = Number(el.qMcqMin.value);
+  if (!el.qPracticalField.hidden && el.qPracticalMin.value !== "") payload.practicalMinPercent = Number(el.qPracticalMin.value);
+
+  el.qPublish.disabled = true;
+  const orig = el.qPublish.textContent;
+  el.qPublish.textContent = "…";
   try {
-    await apiFetch("/api/calibration/workspace/publish-thresholds", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({ moduleId, totalMin: values.totalMin }),
-    });
-    showToast(t("calibration.thresholds.published") ?? "Terskler publisert.", "success");
-    if (thresholdPublishResult) thresholdPublishResult.textContent = t("calibration.thresholds.publishedAt") ?? "Published.";
+    await apiFetch("/api/calibration/workspace/publish-thresholds", getHeaders, { method: "POST", body: JSON.stringify(payload) });
+    showToast(t("quality.publish.success"), "success");
+    await loadQuality(); // reload so the new effective threshold + version show
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke publisere terskler.", "error");
+    showToast(err?.message ?? t("quality.publish.error"), "error");
   } finally {
-    publishThresholdsButton.disabled = false;
-    publishThresholdsButton.textContent = origText;
+    el.qPublish.disabled = false;
+    el.qPublish.textContent = orig;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Mount calibration workspace template
+// Mount
 // ---------------------------------------------------------------------------
 
-function mountCalibrationWorkspace(preferredModuleId) {
-  const template = document.getElementById("calibrationWorkspaceTemplate");
+function mountWorkspace() {
+  const template = document.getElementById("qualityWorkspaceTemplate");
   if (!template) return;
-
-  const clone = template.content.cloneNode(true);
   pageContent.innerHTML = "";
-  pageContent.appendChild(clone);
+  pageContent.appendChild(template.content.cloneNode(true));
 
-  // Wire up DOM refs
-  calibrationModuleIdSelect = document.getElementById("calibrationModuleId");
-  calibrationModuleVersionIdInput = document.getElementById("calibrationModuleVersionId");
-  calibrationStatuses = document.getElementById("calibrationStatuses");
-  calibrationLimitInput = document.getElementById("calibrationLimit");
-  calibrationDateFromInput = document.getElementById("calibrationDateFrom");
-  calibrationDateToInput = document.getElementById("calibrationDateTo");
-  loadCalibrationButton = document.getElementById("loadCalibration");
-  calibrationMeta = document.getElementById("calibrationMeta");
-  calibrationSignals = document.getElementById("calibrationSignals");
-  thresholdEditorSection = document.getElementById("thresholdEditorSection");
-  thresholdTotalMinInput = document.getElementById("thresholdTotalMin");
-  publishThresholdsButton = document.getElementById("publishThresholds");
-  thresholdPublishResult = document.getElementById("thresholdPublishResult");
-  calibrationOutcomesBody = document.getElementById("calibrationOutcomesBody");
-  calibrationAnchorsBody = document.getElementById("calibrationAnchorsBody");
+  el = {};
+  for (const id of [
+    "qOwnerSeg", "qCourseFilter", "qModuleSelect", "qVersionSelect", "qModuleCount", "qLoad", "qOwnPill", "qMeta",
+    "qSignalsCard", "qSignals", "qThresholdCard", "qHistogram", "qTotalMin", "qMcqField", "qMcqMin",
+    "qPracticalField", "qPracticalMin", "qPreview", "qThresholdSource", "qPublish",
+    "qAnchorCard", "qAnchorSummary", "qAnchorLink", "qOutcomesCard", "qOutcomesBody",
+  ]) el[id] = document.getElementById(id);
 
-  // Show module label badge when deep-linked
-  if (preferredModuleId) {
-    const mod = allModules.find(m => m.id === preferredModuleId);
-    const label = document.getElementById("calibrationModuleLabel");
-    if (label) {
-      label.textContent = `Modul: ${mod?.title ?? preferredModuleId}`;
-      label.hidden = false;
-    }
-  }
-
-  // Set default limit
-  if (calibrationLimitInput) {
-    calibrationLimitInput.value = String(participantRuntimeConfig?.calibrationWorkspace?.defaults?.maxRows ?? 120);
-  }
-
-  // Apply i18n to data-i18n attributes
-  pageContent.querySelectorAll("[data-i18n]").forEach(el => {
-    const key = el.getAttribute("data-i18n");
+  // i18n static text
+  pageContent.querySelectorAll("[data-i18n]").forEach((node) => {
+    const key = node.getAttribute("data-i18n");
     const text = t(key);
-    if (text && text !== key) el.textContent = text;
-  });
-  pageContent.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-    const key = el.getAttribute("data-i18n-placeholder");
-    const text = t(key);
-    if (text && text !== key) el.placeholder = text;
+    if (text && text !== key) node.textContent = text;
   });
 
-  // Populate filters
-  renderCalibrationModuleOptions(preferredModuleId);
-  populateCalibrationStatusOptions();
-  renderCalibrationWorkspace(null);
-  enablePillArrowNavigation(calibrationStatuses);
+  // Owner segmented control
+  el.qOwnerSeg.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-owner]");
+    if (!btn) return;
+    ownerFilter = btn.dataset.owner;
+    for (const b of el.qOwnerSeg.querySelectorAll("button")) b.classList.toggle("on", b === btn);
+    renderCourseFilterOptions();
+    renderModuleOptions();
+  });
+  el.qCourseFilter.addEventListener("change", () => { courseFilter = el.qCourseFilter.value; renderModuleOptions(); });
+  el.qModuleSelect.addEventListener("change", onModuleChange);
+  el.qLoad.addEventListener("click", loadQuality);
+  el.qPublish.addEventListener("click", publish);
+  el.qTotalMin.addEventListener("input", () => { renderHistogram(); updatePreview(); });
 
-  // Event listeners
-  loadCalibrationButton?.addEventListener("click", loadCalibrationWorkspace);
-  publishThresholdsButton?.addEventListener("click", publishThresholds);
-
+  renderCourseFilterOptions();
+  renderModuleOptions();
 }
 
 // ---------------------------------------------------------------------------
-// Workspace navigation
+// Nav / locale / init (scaffolding)
 // ---------------------------------------------------------------------------
 
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
   const roles = activeUserRoles.join(",") || "SUBJECT_MATTER_OWNER";
-  const items = resolveWorkspaceNavigationItems(
-    participantRuntimeConfig?.navigation?.items,
-    roles,
-    window.location.pathname,
-  );
-  renderWorkspaceNavigationWithProfile({
-    workspaceNav,
-    localePicker,
-    items,
-    buildLabel: (item) => t(item.labelKey) || item.id,
-  });
+  const items = resolveWorkspaceNavigationItems(participantRuntimeConfig?.navigation?.items, roles, window.location.pathname);
+  renderWorkspaceNavigationWithProfile({ workspaceNav, localePicker, items, buildLabel: (item) => t(item.labelKey) || item.id });
+  if (navKalibrering) navKalibrering.hidden = !hasCalibrationAccess();
 }
-
-function renderContentAreaNav() {
-  // Kalibrering nav is always shown as active on this page (visible because the user navigated here)
-  // but hide it for users without role (role gate is enforced by renderAccessDenied)
-  const hasAccess = hasCalibrationAccess();
-  if (navKalibrering) navKalibrering.hidden = !hasAccess;
-}
-
-// ---------------------------------------------------------------------------
-// Locale selector
-// ---------------------------------------------------------------------------
 
 function buildLocaleSelector() {
   if (!localeSelect) return;
   localeSelect.innerHTML = supportedLocales
-    .map(l => `<option value="${l}"${l === currentLocale ? " selected" : ""}>${localeLabels[l] ?? l}</option>`)
+    .map((l) => `<option value="${l}"${l === currentLocale ? " selected" : ""}>${localeLabels[l] ?? l}</option>`)
     .join("");
   localeSelect.addEventListener("change", () => {
     currentLocale = localeSelect.value;
     localStorage.setItem("participant.locale", currentLocale);
-    if (getHeaders && typeof getHeaders === "object") {
-      getHeaders["x-locale"] = currentLocale;
-    }
+    headerValues["x-locale"] = currentLocale;
+    window.location.reload();
   });
 }
 
-// ---------------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------------
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
 
 async function init() {
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
     const defaults = resolveContentAdminDefaults();
-    getHeaders = buildConsoleHeaders({
-      userId: defaults.userId,
-      email: defaults.email,
-      name: defaults.name,
-      department: defaults.department,
-      roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
-      locale: currentLocale,
+    headerValues = buildConsoleHeaders({
+      userId: defaults.userId, email: defaults.email, name: defaults.name, department: defaults.department,
+      roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles, locale: currentLocale,
     });
   } catch {
-    getHeaders = {};
+    headerValues = {};
   }
-
   try {
     const me = await apiFetch("/api/me", getHeaders);
     activeUserRoles = me?.user?.roles ?? [];
@@ -579,39 +518,37 @@ async function init() {
 
   buildLocaleSelector();
   renderWorkspaceNavigation();
-  renderContentAreaNav();
 
   try {
     const body = await apiFetch("/version", { headers: {} });
     const version = body.version ?? "unknown";
-    document.title = `Kalibrering – A2 v${version}`;
+    document.title = `Vurderingskvalitet – A2 v${version}`;
     if (appVersionLabel) appVersionLabel.textContent = `v${version}`;
   } catch {
     if (appVersionLabel) appVersionLabel.textContent = "unknown";
   }
 
-  if (workspaceNav) {
-    fetchQueueCounts(getHeaders).then(counts => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
-  }
+  if (workspaceNav) fetchQueueCounts(getHeaders).then((counts) => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
 
-  // Role gate check
   if (!hasCalibrationAccess()) {
     renderAccessDenied();
     return;
   }
 
-  // Load modules for the filter dropdown
   try {
     const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    allModules = (libData.modules ?? []).filter(m => m.status !== "archived");
+    allModules = (libData.modules ?? []).filter((m) => m.status !== "archived");
   } catch {
     allModules = [];
   }
+  // Default to "Mine moduler" unless the user owns none (then show all so the page isn't empty).
+  if (!allModules.some((m) => m.ownedByMe)) ownerFilter = "all";
 
-  // Deep-link: prefill moduleId from query string
-  const preferredModuleId = new URLSearchParams(window.location.search).get("moduleId") ?? null;
-
-  mountCalibrationWorkspace(preferredModuleId);
+  mountWorkspace();
+  if (ownerFilter === "all") {
+    const btn = el.qOwnerSeg?.querySelector('button[data-owner="all"]');
+    if (btn) for (const b of el.qOwnerSeg.querySelectorAll("button")) b.classList.toggle("on", b === btn);
+  }
 }
 
 init();

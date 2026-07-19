@@ -41,6 +41,9 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/admin-content/sections") {
     return path.join(publicRoot, "admin-content-sections.html");
   }
+  if (requestPath === "/admin-content/calibration") {
+    return path.join(publicRoot, "admin-content-calibration.html");
+  }
   // #765: classes moved under the «Deltakere» area. Mirror production's canonical route.
   if (requestPath === "/deltakere/klasser") {
     return path.join(publicRoot, "admin-content-classes.html");

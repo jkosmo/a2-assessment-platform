@@ -1,68 +1,38 @@
-# Kalibrerer (kalibreringssarbeidsflate)
+# Vurderingskvalitet (tidligere «Kalibrering»)
 
-Kalibrering brukes for å justere vurderingsterskler slik at AI-vurderingen er kalibrert mot faktiske forventninger.
+> Rebrandet i #836. Den gamle «Kalibrering»-flata lovde et interaktivt verktøy (glidebrytere per
+> rubrikk-punkt, kalibreringsprøver med referansepoeng, hva-om-simulering) som aldri ble bygget.
+> Denne siden beskriver det som **faktisk** finnes: et vurderingskvalitet-dashboard + én terskel-lever.
+
+Vurderingskvalitet lar fagansvarlige se hvordan en modul scorer, og justere bestått-grensa.
 
 ## Roller og tilgang
 
-Kalibreringstilgang er **konfigurerbar per miljø**. Som standard har `SUBJECT_MATTER_OWNER` tilgang, men administrator kan endre dette i plattformkonfigurasjonen (`participant-console.json`, feltet `calibrationWorkspace.accessRoles`).
+Konfigurerbar per miljø via `participant-console.json` → `calibrationWorkspace.accessRoles`. Som standard
+har `SUBJECT_MATTER_OWNER` og `ADMINISTRATOR` tilgang.
 
-- `/calibration` — kalibreringssarbeidsflate
-- API: `GET/POST /api/calibration/*`
+- `/admin-content/calibration` — flata «Vurderingskvalitet» (nås fra innholds-sub-nav-en).
+- `/calibration` — **utgått** (301 → `/admin-content/calibration`).
+- API: `GET /api/calibration/workspace`, `POST /api/calibration/workspace/publish-thresholds`.
 
-## Hva kalibrering er
+## Hva flata gjør
 
-AI-vurderingssystemet bruker tersklene i rubrikken til å avgjøre om en besvarelse er bestått eller ikke. Kalibrering lar fagansvarlige:
-
-1. Se historiske vurderinger og justere poenggrenser
-2. Sette terskel for hva som regnes som «bestått» per rubrikk-punkt
-3. Vurdere kalibreringsprøver (eksempelbessvarelser) og gi referansepoeng
-
-Kalibreringsdataene brukes av AI-en i påfølgende vurderinger.
-
-## Kalibreringssarbeidsflate — steg for steg
-
-### 1. Starte en kalibreringssesjon
-
-1. Gå til `/calibration`
-2. Velg modul fra nedtrekkslisten
-3. Klikk **Start kalibrering** — arbeidsflaten laster siste publiserte modulversjon
-
-### 2. Gjennomgå og sette terskler
-
-1. Arbeidsflaten viser rubrikken med alle vurderingspunkter
-2. For hvert punkt vises:
-   - Nåværende terskel
-   - Historiske poengfordelinger fra faktiske vurderinger
-3. Juster terskel per punkt ved å dra glidebryteren eller skrive inn verdi
-4. Se live-forhåndsvisning av hvordan ny terskel ville ha påvirket tidligere vurderinger
-
-### 3. Vurdere kalibreringsprøver
-
-Kalibreringsprøver er eksempelbessvarelser med fasit-poeng.
-
-1. Klikk **Last kalibreringsprøver** i arbeidsflaten
-2. For hvert eksempel:
-   - Les besvarelsen
-   - Gi referansepoeng per rubrikk-punkt
-   - Merk om det er et «bestått»- eller «ikke bestått»-eksempel
-3. Lagre kalibreringsprøvene
-
-### 4. Fullføre kalibreringen
-
-1. Klikk **Lagre kalibrering**
-2. Systemet lagrer tersklene og kalibreringsprøvene
-3. Fremtidige vurderinger av denne modulen bruker de nye tersklene
+1. **Velg modul.** Eier-filter defaulter til «Mine moduler» (bruk «Alle» for admin/andre); valgfritt
+   filter på «Brukt i kurs». Velg deretter modul + versjon fra nedtrekk.
+2. **Les kvalitetssignaler.** Tre kort med farge (bra / se-på / kritisk) + ren tekst:
+   - **Bestått-andel** — hvor stor andel som består.
+   - **Til manuell vurdering** — hvor ofte AI-en flagger svar for manuell gjennomgang.
+   - **Referanse-dekning** — hvor godt modulens prompt-versjoner har referanse-svar (eksempel-svar AI-en
+     kalibrerer mot). Redigeres i modul-editoren — flata lenker dit.
+3. **Se poengfordelingen.** Histogram over de siste svarenes totalscore, med bestått-grensa tegnet inn.
+4. **Juster grensa med preview.** Endre bestått-grensa (total; MCQ-/praktisk-minimum vises kun for moduler
+   som bruker dem). En klient-side preview viser «X av Y siste svar består ved ny grense», med delta mot
+   nåværende grense — beregnet fra de allerede-lastede svarene (siste N).
+5. **Publiser.** «Publiser ny terskel» **lager og publiserer en ny modul-versjon** (bekreftes eksplisitt).
 
 ## Viktige notater
 
-- Kalibrering påvirker kun **fremtidige** vurderinger — allerede fullførte besvarelser revurderes ikke automatisk
-- Kalibreringssendringer logges i audit-loggen
-- Om du er usikker på terskelverdier, start med en konservativ justering og evaluer effekten over noen uker
-
-## Vanlige spørsmål
-
-**Kan jeg se hvilken effekt endringen ville ha hatt historisk?**
-Ja. Arbeidsflaten viser en simulering («hva-om») basert på historiske poeng.
-
-**Hva om jeg gjør en feil i kalibreringen?**
-Rediger kalibreringen og lagre nye verdier. Tidligere vurderinger revurderes ikke, men du kan triggere manuell gjennomgang for enkeltbesvarelser om nødvendig.
+- Publisering påvirker kun **framtidige** vurderinger — tidligere svar re-scores ikke.
+- Både lasting og publisering logges i audit-loggen.
+- Preview-tallet gjelder utvalget som er lastet (siste N svar), ikke hele historikken.
+- Usikker på terskelen? Start konservativt og evaluer effekten over noen uker.
