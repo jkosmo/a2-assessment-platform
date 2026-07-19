@@ -189,8 +189,10 @@ app.get("/review", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "review.html"));
 });
 
+// #836: the standalone /calibration page was an orphaned prototype (no nav link, "Dev only" card)
+// duplicating the calibration workspace. Retired — 301 to the canonical, rebranded flate.
 app.get("/calibration", (_request, response) => {
-  response.sendFile(path.resolve(process.cwd(), "public", "calibration.html"));
+  response.redirect(301, "/admin-content/calibration");
 });
 
 app.get("/results", (_request, response) => {

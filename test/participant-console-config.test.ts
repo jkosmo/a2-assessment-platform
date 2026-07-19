@@ -124,11 +124,11 @@ describe("participant console runtime config", () => {
     expect(response.headers.location).toBe("/deltakere/klasser");
   });
 
-  it("serves dedicated calibration workspace page", async () => {
+  it("redirects the retired /calibration page to the canonical quality workspace (#836)", async () => {
     const response = await request(app).get("/calibration");
 
-    expect(response.status).toBe(200);
-    expect(response.text).toContain("calibration.js");
+    expect(response.status).toBe(301);
+    expect(response.headers.location).toBe("/admin-content/calibration");
   });
 
   it("serves dedicated participant completed-modules page", async () => {
@@ -196,7 +196,8 @@ describe("participant console runtime config", () => {
       // /admin-content is the new conversational shell (no mock-identity-card panel)
       // /admin-content/module/:id/advanced is the full editor that retains the panel
       "/admin-content/module/test-module/advanced",
-      "/calibration",
+      // #836: /calibration is retired (301 → /admin-content/calibration, covered by its own test);
+      // the canonical quality workspace has no mock-identity-card so it doesn't belong in this loop.
     ];
 
     for (const pagePath of workspacePages) {
@@ -207,7 +208,7 @@ describe("participant console runtime config", () => {
       expect(response.text).toContain('class="card mock-identity-card"');
       expect(response.text).toContain('class="mock-identity-panel"');
 
-      if (["/participant", "/review", "/calibration"].includes(pagePath)) {
+      if (["/participant", "/review"].includes(pagePath)) {
         expect(response.text).toContain('href="/static/loading.css"');
       }
 
@@ -247,14 +248,6 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('class="pill-group"');
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('id="reviewActionSequenceHint"');
-      }
-
-      if (pagePath === "/calibration") {
-        expect(response.text).toContain('id="calibrationStatuses"');
-        expect(response.text).toContain('class="pill-group"');
-        expect(response.text).not.toContain('<select id="calibrationStatuses"');
-        expect(response.text).toContain('<details id="outputDetails">');
-        expect(response.text).toContain("<summary>View raw response</summary>");
       }
 
       if (pagePath === "/participant") {

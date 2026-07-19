@@ -29,8 +29,11 @@ function deriveLibraryStatus(module: {
   return "published";
 }
 
-export async function listLibraryModules(locale: SupportedLocale = "en-GB") {
+export async function listLibraryModules(locale: SupportedLocale = "en-GB", viewerUserId?: string) {
   const modules = await adminContentRepository.listLibraryModules();
+  // #787/#836: annotate each module with whether the viewer owns it, so the quality/calibration picker
+  // can default to "my modules". Only queried when a viewer id is supplied (unauthenticated → all false).
+  const ownedIds = viewerUserId ? await adminContentRepository.listModuleIdsOwnedBy(viewerUserId) : new Set<string>();
 
   return modules.map((module) => ({
     id: module.id,
@@ -42,6 +45,7 @@ export async function listLibraryModules(locale: SupportedLocale = "en-GB") {
     activeVersionId: module.activeVersionId,
     activeVersionNo: module.activeVersion?.versionNo ?? null,
     latestVersionNo: module.versions[0]?.versionNo ?? null,
+    ownedByMe: ownedIds.has(module.id),
     courseCount: module._count.courseItems,
     courses: module.courseItems.map((ci) => ({
       id: ci.course.id,

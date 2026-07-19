@@ -7,7 +7,6 @@ const workspacePages = [
   "public/admin-content.html",
   "public/admin-content-advanced.html",
   "public/review.html",
-  "public/calibration.html",
   "public/participant-completed.html",
 ];
 

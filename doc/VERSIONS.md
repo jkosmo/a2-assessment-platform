@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.1.0 - 2026-07-19
+
+feat(quality): #836 «Vurderingskvalitet» — rebrand + konsolidering av kalibrering
+
+Erstatter den forvirrende «Kalibrering»-flata (som lovde et slider/what-if-verktøy som aldri ble bygget)
+med et ærlig **vurderingskvalitet-dashboard**. Interaksjonsdesign godkjent av produkteier; fire
+beslutninger + eier/kurs-filter låst.
+
+- **Én flate** (`/admin-content/calibration`, rebrandet «Vurderingskvalitet»). Foreldet `/calibration`
+  (prototyp uten nav-lenke) **fjernet** → 301 til den kanoniske flata. Avansert-editorens kalibrerings-fane
+  ble skjult i 2.0.16.
+- **Eier- + kurs-filter** på modul-velgeren (default «Mine moduler») så lista holdes kort. Backend:
+  `listLibraryModules` returnerer nå `ownedByMe` (join `ContentOwner`), drevet av innlogget bruker (#787 #5).
+- **Signal-kort** med farge (bra/se-på/kritisk) + ren tekst i stedet for `<pre>`-dump og rå flagg-koder.
+- **Poengfordeling-histogram** med bestått-grensa tegnet inn.
+- **Kontekstuelle terskler** — total alltid; MCQ-/praktisk-minimum kun når modulens policy bruker dem.
+- **Klient-side konsekvens-preview** — «X av Y siste svar består ved ny grense», med delta.
+- **Versjons-nedtrekk** (ikke fritekst-CUID), **publiser-med-konsekvens**-bekreftelse, og **fikset** den rå
+  i18n-nøkkelen på suksess-toasten. Referanse-svar: lenke inn i modul-editoren.
+- **Bug fikset:** `getHeaders` var et objekt, så `apiFetch(url, getHeaders, {method,body})` slapp POST-body
+  (publisering sendte en tom GET). `getHeaders` er nå en funksjon.
+
+Ny e2e `test/e2e/vurderingskvalitet.spec.ts` (filtre → last → signaler → histogram → preview → publiser →
+lokalisert toast; + access-denied). 105 admin-content-e2e + 2 nye grønne; tsc rent.
+
 ## 2.0.16 - 2026-07-19
 
 fix(ui): #787 QA runde 4 — fjern dobbel-meny i Avansert + kompakt eier-panel
