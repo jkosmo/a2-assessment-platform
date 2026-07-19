@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.5 - 2026-07-19
+
+perf(data): #800 — additive secondary indexes on hot assessment/course fact tables
+
+Første migrasjon fra arkitektur-gjennomgangen (epic #780). MCQAttempt/MCQResponse/LLMEvaluation/
+CourseCompletion/CertificationStatus hadde ingen sekundær-indekser; foreign keys lager ikke disse
+automatisk, så hot-spørringer (last en innleverings MCQ-forsøk/-svar/LLM-evalueringer; kurs-fullførings-
+tellinger per kurs; sertifiserings-tellinger per modul/status) skannet voksende barn-tabeller.
+
+- **`prisma/schema.prisma` + migrasjon `20260719120000_add_hot_table_indexes`:** 5 additive indekser —
+  `MCQAttempt(submissionId, completedAt)`, `MCQResponse(mcqAttemptId)`, `LLMEvaluation(submissionId,
+  createdAt)`, `CertificationStatus(moduleId, status)`, `CourseCompletion(courseId, completedAt)`.
+
+**Utrulling:** additiv DB-migrasjon (ingen data-/atferdsendring). Migrasjonen kjøres ved web-oppstart
+(`prisma migrate deploy` i `startup.mjs`), så **`deploy-app.yml`** holder — ingen Bicep-endring. Additivt
+→ rekkefølge web/worker er uproblematisk. **Stage først; hvis sunn → prod.** Tabellene er små, så
+CREATE INDEX er umiddelbar (bruk CONCURRENTLY i fremtidig migrasjon hvis de vokser). Rollback: DROP INDEX.
+
 ## 2.0.4 - 2026-07-19
 
 fix(security): #786 — content-asset object-level authorization (IDOR)
