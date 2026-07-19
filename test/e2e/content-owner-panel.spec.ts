@@ -14,7 +14,7 @@ test("course owner panel: lists, adds via search, and removes owners", async ({ 
   await page.route("**/api/admin/content-owners/COURSE/course-1", async (route: Route) => {
     const method = route.request().method();
     if (method === "GET") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners, canManage: true }) });
     }
     if (method === "POST") {
       const { userId } = JSON.parse(route.request().postData() ?? "{}");
@@ -57,4 +57,31 @@ test("course owner panel: lists, adds via search, and removes owners", async ({ 
   await panel.locator(".owner-remove[data-user-id='u1']").click();
   await expect(panel.locator(".owner-row")).toHaveCount(1);
   await expect(panel.locator(".owner-name").first()).toHaveText("Bob New");
+});
+
+// #787 QA #6: a content-admin who is NOT an owner (and not admin) still sees the owners (transparency),
+// but gets no add/remove controls (canManage=false). This is what makes the panel render on content you
+// don't own — previously the ownership-gated GET returned 403 and the panel failed to render.
+test("owner panel is read-only when the viewer cannot manage owners", async ({ page }) => {
+  await mockCommonApis(page, {
+    courses: [{ id: "course-2", title: { nb: "Kurs" }, certificationLevel: "basic", moduleCount: 0, modules: [] }],
+    libraryModules: [],
+  });
+  await page.route("**/api/admin/content-owners/COURSE/course-2", async (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ owners: [{ userId: "u9", name: "Someone Else", email: "else@x.no", addedAt: "2026-07-19T00:00:00.000Z" }], canManage: false }),
+    }),
+  );
+
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/admin-content/courses/course-2");
+
+  const panel = page.locator("#ownerPanelHost .owner-panel");
+  await expect(panel).toBeVisible();
+  await expect(panel.locator(".owner-name").first()).toHaveText("Someone Else");
+  // No management controls for a non-owner viewer.
+  await expect(panel.locator(".owner-remove")).toHaveCount(0);
+  await expect(panel.locator(".owner-search-input")).toHaveCount(0);
 });

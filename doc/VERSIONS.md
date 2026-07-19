@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.12 - 2026-07-19
+
+fix(auth): #787 QA #6 — eiere er lesbare for enhver SMO/admin (panelet vises på innhold du ikke eier)
+
+GET-eiere var gated på eierskap, så åpnet du et kurs du ikke eide fikk owner-panelet 403 og viste ikke.
+Nå: enhver content-admin kan SE eiere (transparens); kun eier/admin kan ENDRE (POST/DELETE gated).
+GET returnerer `canManage` så UI-en skjuler legg-til/fjern for ikke-eiere.
+
+- `contentOwners.ts`: GET capability-gated + `canManage`. `owner-panel.js`: skjul kontroller når
+  `!canManage`. Tester (integrasjon + e2e read-only) oppdatert.
+
 ## 2.0.11 - 2026-07-19
 
 fix(ui): #787 — owner-panel styling matcher design-systemet (liten «Fjern»-knapp, design-tokens)
