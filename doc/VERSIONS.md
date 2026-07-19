@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.2 - 2026-07-19
+
+fix(security): nøytraliser CSV-formel-injeksjon i rapporteksport
+
+Andre findings→action fra arkitektur-gjennomgangen (`doc/design/ARCHITECTURE_REVIEW_2026-07-19.md`,
+CONFIRMED i Fase 4). `escapeCsvValue` håndterte anførselstegn/skilletegn men lot celler som starter med
+`=`, `+`, `-`, `@`, tab eller CR stå urørt. Eksportene inneholder forfatter-/deltaker-kontrollert tekst
+(modul-/kurstitler, navn), så en tittel som `=HYPERLINK(...)` kjøres som formel når en report-reader
+åpner CSV-en i Excel/Sheets (CWE-1236 → phishing/eksfiltrering fra deres maskin).
+
+- **`src/modules/reporting/csvExport.ts`:** prefiks apostrof på **string-celler** som starter med en
+  formel-trigger (spreadsheets tolker det som «tving tekst» og skjuler det). Kun string-celler, så
+  tall (f.eks. negative `-5`) og datoer forblir urørt.
+- **`test/csv-formula-injection.test.ts`:** dekker triggere, ekte `=HYPERLINK`, og at tall/datoer og
+  vanlig tekst ikke korrumperes.
+
+**Utrulling:** kun app-kode → `deploy-app.yml`. Rollback: fjern formel-guarden.
+
 ## 2.0.1 - 2026-07-19
 
 fix(security): sett `trust proxy` — hindre at anonym IP-basert rate-limiting kollapser til én delt bøtte

@@ -19,12 +19,21 @@ export function toCsv(
   return [header, ...dataLines].join("\n");
 }
 
+// A cell whose text begins with one of these is executed as a formula when the CSV is opened in
+// Excel / Google Sheets (CSV formula injection, CWE-1236).
+const CSV_FORMULA_TRIGGERS = /^[=+\-@\t\r]/;
+
 function escapeCsvValue(value: unknown) {
   if (value == null) {
     return "";
   }
   const asString = value instanceof Date ? value.toISOString() : String(value);
-  const escaped = asString.replaceAll('"', '""');
+  // Neutralize formula injection for author/participant-controlled text (module/course titles, names,
+  // free-text) by prefixing an apostrophe, which spreadsheets treat as "force text" and hide. Only for
+  // string-origin cells, so numeric columns (e.g. a negative number like -5) and dates are untouched.
+  const guarded =
+    typeof value === "string" && CSV_FORMULA_TRIGGERS.test(asString) ? `'${asString}` : asString;
+  const escaped = guarded.replaceAll('"', '""');
   if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
     return `"${escaped}"`;
   }
