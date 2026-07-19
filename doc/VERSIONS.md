@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.0.9 - 2026-07-19
+
+chore(auth): #787 — backfill kurs/seksjon-eiere fra «opprettet»-audit (før håndhevelse)
+
+Forberedelse til eierskaps-håndhevelsen (skive 4). Kurs/seksjoner mangler `createdById`, så uten dette
+ville de vært eierløse → admin-only når håndhevelsen slår inn. Denne data-migrasjonen utleder eier fra
+den tidligste `course_created`/`section_created` audit-eventens aktør.
+
+- **Migrasjon `20260719140000_backfill_course_section_owners`:** INSERT eier per kurs/seksjon fra audit-
+  aktør (ikke-null actorId ⇒ gyldig User, siden actor-FK er SetNull). Idempotent (NOT EXISTS). Innhold
+  uten «created»-audit forblir eierløst (admin-styrt) — bevisst.
+
+**Utrulling:** data-only migrasjon (kun INSERT i `ContentOwner`), kjøres ved oppstart → `deploy-app.yml`.
+Kjører mot tomme tabeller i CI (0 rader), mot ekte data på stage/prod. **Stage først.** Neste: håndhevelse.
+
 ## 2.0.8 - 2026-07-19
 
 feat(auth): #787 skive 3 — eier-forvaltnings-API (`/api/admin/content-owners`)
