@@ -32,9 +32,9 @@ The conversational and advanced editors are two modes of the same module workspa
 ## Participant, «Deltakere» and review workspaces
 
 The **«Deltakere»** top-nav area (#765) groups the participant-/outcome-oriented surfaces —
-`/deltakere/klasser`, `/review`, `/results` — behind one menu item, with a shared, role-gated
-sub-navigation bar (`public/static/deltakere-subnav.js`). `/review` and `/results` keep their URLs;
-only Klasser moved (from `/admin-content/classes`).
+`/deltakere/klasser`, `/deltakere/status`, `/review`, `/results` — behind one menu item, with a shared,
+role-gated sub-navigation bar (`public/static/deltakere-subnav.js`). `/review` and `/results` keep their
+URLs; only Klasser moved (from `/admin-content/classes`).
 
 | Route | Workspace |
 |---|---|
@@ -42,6 +42,7 @@ only Klasser moved (from `/admin-content/classes`).
 | `/participant/completed` | «Mine kurs» → **Fullførte**-fane: kursbevis + fullførte moduler (#767) |
 | `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
+| `/deltakere/status` | Teacher/SMO cohort-status dashboard — enrollment status counts per course (#498) |
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
 | `/calibration` | Calibration reviewer workspace |
 | `/results` | Results / history view (a «Deltakere» sub-tab) |
@@ -58,6 +59,7 @@ only Klasser moved (from `/admin-content/classes`).
 | `/api/courses` | Participant | Browse courses; read learning sections + mark read (#476); discussion/Q&A threads + replies (#495) |
 | `/api/me` | All | Current user identity and roles |
 | `/api/reviews` | Reviewer / Admin | Manual review queue and override |
+| `/api/cohort-status` | SMO / Admin / Report reader | Cohort enrollment-status aggregate per course (#498) |
 | `/api/appeals` | Appeal Handler / Admin | Appeal queue and resolution |
 | `/api/admin/content` | SMO / Admin | Module, course, and learning-section content management |
 | `/api/admin/platform` | Admin | Platform administration |
