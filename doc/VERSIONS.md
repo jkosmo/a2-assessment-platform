@@ -2,15 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
-## 1.6.39 - 2026-07-19
+## 2.0.2 - 2026-07-19
 
 fix(security): nøytraliser CSV-formel-injeksjon i rapporteksport
 
-Funn fra arkitektur-gjennomgangen (`doc/design/ARCHITECTURE_REVIEW_2026-07-19.md`, CONFIRMED i Fase 4).
-`escapeCsvValue` håndterte anførselstegn/skilletegn men lot celler som starter med `=`, `+`, `-`, `@`,
-tab eller CR stå urørt. Eksportene inneholder forfatter-/deltaker-kontrollert tekst (modul-/kurstitler,
-navn), så en tittel som `=HYPERLINK(...)` kjøres som formel når en report-reader åpner CSV-en i Excel/
-Sheets (CWE-1236 → phishing/eksfiltrering fra deres maskin).
+Andre findings→action fra arkitektur-gjennomgangen (`doc/design/ARCHITECTURE_REVIEW_2026-07-19.md`,
+CONFIRMED i Fase 4). `escapeCsvValue` håndterte anførselstegn/skilletegn men lot celler som starter med
+`=`, `+`, `-`, `@`, tab eller CR stå urørt. Eksportene inneholder forfatter-/deltaker-kontrollert tekst
+(modul-/kurstitler, navn), så en tittel som `=HYPERLINK(...)` kjøres som formel når en report-reader
+åpner CSV-en i Excel/Sheets (CWE-1236 → phishing/eksfiltrering fra deres maskin).
 
 - **`src/modules/reporting/csvExport.ts`:** prefiks apostrof på **string-celler** som starter med en
   formel-trigger (spreadsheets tolker det som «tving tekst» og skjuler det). Kun string-celler, så
@@ -18,8 +18,57 @@ Sheets (CWE-1236 → phishing/eksfiltrering fra deres maskin).
 - **`test/csv-formula-injection.test.ts`:** dekker triggere, ekte `=HYPERLINK`, og at tall/datoer og
   vanlig tekst ikke korrumperes.
 
-**Utrulling:** kun app-kode → `deploy-app.yml`. Rollback: fjern formel-guarden. **Merk:** grenet fra
-`main` (1.6.37); reversjoner ved merge avhengig av rekkefølge med #773 (2.0.0) og #775 (trust proxy).
+**Utrulling:** kun app-kode → `deploy-app.yml`. Rollback: fjern formel-guarden.
+
+## 2.0.1 - 2026-07-19
+
+fix(security): sett `trust proxy` — hindre at anonym IP-basert rate-limiting kollapser til én delt bøtte
+
+Første findings→action fra arkitektur-gjennomgangen (`doc/design/ARCHITECTURE_REVIEW_2026-07-19.md`).
+Rate-limiterne (`src/middleware/rateLimiting.ts`) nøkler anonyme kall på `req.ip`. Uten `trust proxy`
+bak Azure App Services front-end blir `req.ip` proxy-ens IP — lik for alle — så alle anonyme klienter
+deler én bøtte, og én støyende klient gir `429` til alle andre anonyme deltakere (selv-påført throttle).
+
+- **`src/app.ts`:** `app.set("trust proxy", 1)` — stol på nøyaktig ett proxy-hopp, så `req.ip` løses
+  fra `X-Forwarded-For` til den reelle klienten. `1` (ikke `true`) hindrer at en klient spoofer XFF.
+- **`test/trust-proxy.test.ts`:** guard-test som feiler hvis innstillingen fjernes.
+
+**Utrulling:** kun app-kode → `deploy-app.yml`. Lavrisiko atferdsendring (påvirker `req.ip`-utledning
+for logging + rate-limit-nøkkel). Rollback: fjern linja.
+
+## 2.0.0 - 2026-07-19
+
+**Milepæl — Tier 2 LMS komplett (#478): fra assessment-motor til kursforløp.** Med kohort-status-
+dashboardet (#498) er alle «Done når»-pilarene i Epic #478 levert (innhold ✓ vurdering ✓ progresjon ✓
+varsling ✓ dashboard ✓). Major-bump markerer at plattformen har utviklet seg fra en ren
+vurderings-motor til en kurs-basert LMS.
+
+feat(dashboard): #498 — lærer/SMO kohort-status-dashboard (siste Tier 2-pilar, lukker #478)
+
+Ny «Status»-fane under «Deltakere»-området (`/deltakere/status`): velg et kurs → se deltakernes
+enrollment-status (**Tildelt / Påbegynt / Forfalt / Fullført**) aggregert over kursets **effektive
+audience** (individuelle CourseEnrollment + klasse-tildelte medlemmer), med per-klasse-breakdown.
+Siste «Done når»-pilar i Epic #478 (Tier 2 LMS).
+
+- **Backend:** `cohortStatusService.ts` — `resolveCourseAudience(courseId)` (kurs-scoped, individuell +
+  klasse-ekspandert audience, presedens individuell>klasse/tidligste klasse-frist, MANUAL + «Alle
+  deltakere», hopper over ENTRA) + `getCohortStatus` (status-count-aggregat + per-klasse via
+  `deriveStatus`). Ny `classRepository.findCourseGroupAssignmentsForCourse` (kurs-scoped, uten
+  dueAt-filter). Read-time-analog av påminnelses-jobbens audience-ekspansjon.
+- **API:** ny capability `cohort_dashboard` (`/api/cohort-status`, roller SMO/ADMIN/REPORT_READER) +
+  `cohortStatus.ts`-router: `GET /courses` (publiserte kurs-picker) + `GET /course/:id` (aggregat).
+- **UI:** `cohort-status.html` + `cohort-status.js` + `cohort-status-translations.js` (nb/nn/en).
+  Ny «Status»-fane i `deltakere-subnav.js` (rollegated) + i de andre Deltakere-sidenes bar.
+- **Tester:** integrasjon (aggregat med individuell+klasse-ekspansjon, per-klasse, /courses-picker,
+  403 for PARTICIPANT) + e2e (picker→last→status-kort+per-klasse, aktiv fane, rollegating). tsc grønn.
+- **Design-writeup:** `doc/design/COHORT_STATUS_DASHBOARD_498.md` (beslutninger + trade-offs + neste
+  steg) for review.
+
+**Kjent MVP-avgrensning:** `deriveStatus` kjører 1–2 spørringer per deltaker (N+1); greit for typiske
+kohorter, batch ved store. Individuelle enrollments filtreres ikke på aktiv/anonymisert (klasse-medlemmer
+gjør det). Detaljer i writeup-en.
+
+**Utrulling:** kun server+klient-kode, ingen migrasjon. **Går kun til stage foreløpig** (ikke prod).
 
 ## 1.6.37 - 2026-07-18
 

@@ -97,6 +97,13 @@ export const API_ROUTE_CAPABILITIES = [
     roles: [AppRole.ADMINISTRATOR, AppRole.REPORT_READER],
   },
   {
+    // #498: teacher/SMO cohort-status dashboard. Same audience as the «Deltakere → Resultater» sub-tab
+    // (SMO + ADMINISTRATOR + REPORT_READER) — SMO is intentionally included here (unlike /api/reports).
+    id: "cohort_dashboard",
+    prefix: "/api/cohort-status",
+    roles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR, AppRole.REPORT_READER],
+  },
+  {
     id: "admin_content",
     prefix: "/api/admin/content",
     roles: [AppRole.ADMINISTRATOR, AppRole.SUBJECT_MATTER_OWNER],
