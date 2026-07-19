@@ -14,14 +14,11 @@ is never checked). Today a single compromised author account can damage all auth
 
 ## Scope
 - **In:** `Course`, `CourseSection`, `Class` ownership + enforcement on their admin write/delete paths.
-- **Consider:** `Module` already has single-owner `createdById` + `assertModuleOwnership`. Recommendation:
-  **migrate modules onto the same owner-set model** for consistency (one mental model, one guard), in the
-  same migration. Alternative: leave modules as-is to shrink blast radius. *Owner decision needed —
-  see Open Questions Q1.*
-- **Separate finding (same issue):** SMO can enumerate **all** participants via `GET /adminUsers/search`.
-  That is an authorization scope question, not ownership. Recommendation: keep it for SMO (legitimate
-  enrolment/class-management need) but log access; revisit if it should be admin/report-reader-only.
-  *Owner decision — Q2.*
+- **Module (DECIDED Q1 = yes):** `Module` already has single-owner `createdById` + `assertModuleOwnership`;
+  it will be **migrated onto the same owner-set model** in the same migration (one mental model, one guard).
+- **Separate finding (same issue) — DECIDED Q2 = keep + audit:** SMO can enumerate **all** participants via
+  `GET /adminUsers/search`. This stays SMO-accessible (legitimate enrolment/class-management need), but
+  every search writes an `AuditEvent` for traceability.
 
 ## Data model
 
@@ -109,11 +106,17 @@ security-critical authz change.
   add/remove owner flow + last-owner protection; audit rows written.
 - Regression: participant read paths unaffected (ownership gates authoring only).
 
-## Open questions (need your answer before build)
-- **Q1 — Migrate Module onto the owner-set too?** Recommended **yes** (one model, one guard). Say no to
-  keep modules on their current single-owner field and shrink the change.
-- **Q2 — Participant search (`adminUsers/search`)** stays SMO-accessible (recommended, with audit) or
-  becomes admin/report-reader-only?
-- **Q3 — Default owners on create:** the creating user becomes the sole initial owner (recommended). Any
-  role that should be auto-added (e.g. a department lead)? (Ties into whether department-scope, option B
-  from the decision, is wanted later.)
+## Resolved decisions (2026-07-19)
+- **Q1 = YES — migrate Module onto the owner-set too.** All four content types (Course, CourseSection,
+  Class, Module) use the one `ContentOwner` model + one guard. Backfill each `Module.createdById` (and
+  `Class.createdById`) as its first owner; drop the `createdById` columns in a later contract migration.
+  `assertModuleOwnership` is replaced by the generic `assertContentOwnership`.
+- **Q2 = KEEP for SMO + audit.** `GET /adminUsers/search` stays SMO-accessible (real enrolment need),
+  but every search writes an `AuditEvent` (actor + query) for traceability. Revisit if it becomes a
+  privacy concern.
+- **Q3 = Creator = sole initial owner.** On create, the acting user is the single initial owner; they
+  add co-owners afterwards. No auto-added role owner (department auto-ownership is deferred with the
+  department-scope option).
+
+Design is fully locked. Implementation is gated only on a DB-capable session (migration generation +
+backfill + integration tests against Postgres).
