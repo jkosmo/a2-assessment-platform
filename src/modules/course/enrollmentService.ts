@@ -230,6 +230,30 @@ export async function filterVisibleCourseIds(
   return visible;
 }
 
+/**
+ * #778/#785: single-course visibility guard for the direct course endpoints (detail / section
+ * content / mark-read). The course LIST endpoint filters by `filterVisibleCourseIds`, but the direct
+ * endpoints gated only on `publishedAt`, so an unenrolled participant with a RESTRICTED course id
+ * could read its content. This mirrors the list logic for one already-fetched course. OPEN
+ * short-circuits (no class/enrolment lookups); RESTRICTED requires an enrolment OR class assignment.
+ */
+export async function isCourseVisibleToUser(input: {
+  course: { id: string; enrollmentPolicy: string };
+  userId: string;
+  roles: AppRoleType[];
+  groupIds?: string[];
+}): Promise<boolean> {
+  if (input.course.enrollmentPolicy === "OPEN") return true;
+  const classIds = await getUserClassIds({
+    userId: input.userId,
+    roles: input.roles,
+    groupIds: input.groupIds,
+  });
+  const classCourseDue = await getClassAssignedCourseDueDates(classIds);
+  const visible = await filterVisibleCourseIds(input.userId, [input.course], new Set(classCourseDue.keys()));
+  return visible.has(input.course.id);
+}
+
 // #495-follow-up (PARTICIPANT_COURSE_ONLY): er modulen del av et publisert kurs som brukeren har
 // tilgang til? Brukes til å gate frittstående modul-innlevering for deltakere — modul tatt via
 // course player passerer (modulen ligger jo i et tilgjengelig kurs).

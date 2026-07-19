@@ -71,6 +71,7 @@ export {
   listUserEnrollments,
   listCourseEnrollments,
   filterVisibleCourseIds,
+  isCourseVisibleToUser,
   isModuleInAccessibleCourse,
   deriveStatus,
 } from "./enrollmentService.js";
