@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.1.1 - 2026-07-19
+
+fix(ui): QA runde 5 — tynn eier-stripe, modul-navigasjon/tittel, MCQ-bevisst Vurderingskvalitet, klasse-kort
+
+- **Eier-stripa vesentlig tynnere** (QA #1): verts-kortet slankes til en stripe i kompakt modus
+  (`.owner-host--compact`, 6px padding). Navn får e-post-tooltip (to eiere med samme navn er to ulike
+  brukere, f.eks. mock- + Entra-identitet).
+- **«← Tilbake til modulliste»** (QA #2): begge modul-editorene har nå back-link øverst, som Kurs.
+- **Tittel-plassering** (QA #3): back-link + «Modul»-tittel (+ Samtale/Avansert-bryter) står nå øverst
+  under sub-nav-en — før status-rail, eiere og GDPR-notis — i stedet for strandet midt på siden.
+- **Vurderingskvalitet er modus-bevisst** (QA #4): for **MCQ-moduler** avgjøres bestått av MCQ-prosenten
+  (mcqMinPercent, standard 70) — lagret totalScore er MCQ-en skalert inn i vektings-båndet sitt, så
+  total-histogrammet/grensa var misvisende («Bestått 100 %» men søyle under grensa). MCQ-moduler viser nå
+  MCQ-minimum-regelen med forklarende notis; histogram/total/preview skjules. Publisering beholder
+  totalMin uendret og sender redigert mcqMinPercent. Signal-kortet fikk også en notis om at bestått-andelen
+  bygger på lagrede avgjørelser (reglene ved scoring-tidspunkt).
+- **Klasse-kort med hvit bakgrunn** (QA #5): `.detail-section` på klasse-siden fikk surface-bakgrunn + skygge.
+
+e2e: ny MCQ-only-test i `vurderingskvalitet.spec.ts`; alle 106 admin-content-e2e grønne.
+
 ## 2.1.0 - 2026-07-19
 
 feat(quality): #836 «Vurderingskvalitet» — rebrand + konsolidering av kalibrering

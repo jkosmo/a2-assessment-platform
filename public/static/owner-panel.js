@@ -46,6 +46,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       paintCompact();
       return;
     }
+    container.classList.remove("owner-host--compact");
     const rows = owners.length
       ? owners
           .map(
@@ -78,8 +79,13 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
   // Compact default: "Eiere: Name A, Name B" on one line, plus an inline "Rediger" affordance for
   // those who can manage. Keeps the panel to a slim strip since it's shown far more than edited.
   function paintCompact() {
+    // Slim the host card down to a strip while compact (QA r5 #1): the host brings .card/.detail-section
+    // padding meant for full sections — override it for the one-line default.
+    container.classList.add("owner-host--compact");
     const names = owners.length
-      ? owners.map((o) => escapeHtml(o.name)).join(", ")
+      ? // Same-name owners are distinct users (e.g. mock + Entra identity) — expose the email in a
+        // tooltip so "Joakim Kosmo, Joakim Kosmo" is explainable at a glance.
+        owners.map((o) => `<span title="${escapeHtml(o.email)}">${escapeHtml(o.name)}</span>`).join(", ")
       : `<span class="owner-none">Ingen eiere ennå</span>`;
     container.innerHTML = `
       <div class="owner-panel owner-panel--compact">
