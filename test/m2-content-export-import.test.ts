@@ -202,7 +202,8 @@ describe("#433 module export-import round-trip", () => {
       .set(otherSmo)
       .send({ payload: envelope, mode: "replaceExisting", targetId: moduleId });
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe("module_ownership");
+    // #787 slice 4b: module ownership now reads ContentOwner — a non-owner SMO gets content_ownership.
+    expect(res.body.error).toBe("content_ownership");
 
     // Sanity: the owner (admin) can still replaceExisting into their own module.
     const ownerRes = await request(app)

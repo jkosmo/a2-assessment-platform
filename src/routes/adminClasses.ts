@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import { requireContentOwnership } from "./requireContentOwnership.js";
 import { z } from "zod";
 import {
   createClass,
@@ -46,7 +47,7 @@ adminClassesRouter.post("/", async (request, response, next) => {
   }
 });
 
-adminClassesRouter.delete("/:classId", async (request: Request<{ classId: string }>, response, next) => {
+adminClassesRouter.delete("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
     await archiveClass(request.params.classId, request.context?.userId ?? null);
     response.status(204).send();
@@ -55,7 +56,7 @@ adminClassesRouter.delete("/:classId", async (request: Request<{ classId: string
   }
 });
 
-adminClassesRouter.post("/:classId/restore", async (request: Request<{ classId: string }>, response, next) => {
+adminClassesRouter.post("/:classId/restore", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
     await restoreClass(request.params.classId, request.context?.userId ?? null);
     response.json({ ok: true });
@@ -72,7 +73,7 @@ adminClassesRouter.get("/:classId/members", async (request: Request<{ classId: s
   }
 });
 
-adminClassesRouter.post("/:classId/members", async (request: Request<{ classId: string }>, response, next) => {
+adminClassesRouter.post("/:classId/members", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   const parsed = addMemberSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -86,7 +87,7 @@ adminClassesRouter.post("/:classId/members", async (request: Request<{ classId: 
   }
 });
 
-adminClassesRouter.delete("/:classId/members/:userId", async (request: Request<{ classId: string; userId: string }>, response, next) => {
+adminClassesRouter.delete("/:classId/members/:userId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string; userId: string }>, response, next) => {
   try {
     await removeMember(request.params.classId, request.params.userId, request.context?.userId ?? null);
     response.status(204).send();
@@ -103,7 +104,7 @@ adminClassesRouter.get("/:classId/courses", async (request: Request<{ classId: s
   }
 });
 
-adminClassesRouter.post("/:classId/courses", async (request: Request<{ classId: string }>, response, next) => {
+adminClassesRouter.post("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   const parsed = assignCourseSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -122,7 +123,7 @@ adminClassesRouter.post("/:classId/courses", async (request: Request<{ classId: 
   }
 });
 
-adminClassesRouter.delete("/:classId/courses/:courseId", async (request: Request<{ classId: string; courseId: string }>, response, next) => {
+adminClassesRouter.delete("/:classId/courses/:courseId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string; courseId: string }>, response, next) => {
   try {
     await unassignCourseFromClass(request.params.courseId, request.params.classId, request.context?.userId ?? null);
     response.status(204).send();

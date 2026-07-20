@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.0 - 2026-07-20
+
+feat(#787 slice 4b): eierskaps-HÅNDHEVING på innholds-skrivestier (ATFERDSENDRING)
+
+Den bevisste atferdsendringen bak #787: en ikke-eier SMO får nå **403** på å endre innhold de ikke eier.
+ADMINISTRATOR forbigår; eier tillates; eierløst innhold er admin-only (`content_unowned`).
+
+- **Ny middleware** `requireContentOwnership(type, param)` på 26 eksisterende-id-mutasjoner:
+  Kurs (PUT/moduler/items, publish/unpublish/archive/restore, delete, enrollments),
+  Seksjon (title/content, assets, publish/unpublish/archive/restore, delete),
+  Klasse (delete/restore/members/courses).
+- **Modul**: gamle single-creator `assertModuleOwnership` (createdById) delegerer nå til
+  `assertContentOwnership` (ContentOwner, multi-eier). Feilkoder: `legacy_module`→`content_unowned`,
+  `module_ownership`→`content_ownership`.
+- **Kalibrering**: `publish-thresholds` er nå modul-eier-guardet (audit-funn: en SMO kunne publisere
+  terskler for moduler de ikke eide).
+- **Cascade-delete forblir ADMINISTRATOR-only** (ikke eier-guardet — destruktivt utover eget kurs).
+
+Verifisert lokalt mot Postgres FØR deploy: ny `m2-content-ownership-enforcement.test.ts` (kurs/seksjon/
+klasse: ikke-eier 403, eier + admin OK), oppdaterte feilkode-tester, og 3 atferdsendrings-berørte fixtures
+(kalibrering/diskusjoner/cascade) rettet. Full suite grønn: 806 unit + 387 integrasjon.
+
+Utrulling: til STAGE for QA av 403-semantikken → prod via godkjenningsgaten.
+
 ## 2.1.5 - 2026-07-20
 
 feat(#787 slice 4a): tildel skaper som eier ved oppretting (INERT) + catch-up backfill

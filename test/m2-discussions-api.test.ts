@@ -31,6 +31,16 @@ async function makeOpenCourse() {
     select: { id: true },
   });
   createdCourseIds.push(course.id);
+  // #787 slice 4b: these tests mutate the course via the admin API as `smo`; grant that SMO ownership so
+  // ownership enforcement doesn't block them (they exercise discussions, not ownership). The course is
+  // created directly (not via the API), so no owner is assigned automatically.
+  const smoUser = await prisma.user.upsert({
+    where: { externalId: smo["x-user-id"] },
+    update: {},
+    create: { externalId: smo["x-user-id"], name: smo["x-user-name"], email: smo["x-user-email"] },
+    select: { id: true },
+  });
+  await prisma.contentOwner.create({ data: { contentType: "COURSE", contentId: course.id, userId: smoUser.id } });
   return course.id;
 }
 

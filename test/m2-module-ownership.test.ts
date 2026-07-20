@@ -122,7 +122,9 @@ describe("API-002: Module ownership isolation for SUBJECT_MATTER_OWNER", () => {
       .delete(`/api/admin/content/modules/${legacy.id}`)
       .set(smoAHeaders);
     expect(smoRes.status).toBe(403);
-    expect(smoRes.body.error).toBe("legacy_module");
+    // #787 slice 4b: module ownership now reads ContentOwner. A legacy module (created directly, no
+    // ContentOwner row) is "unowned" → admin-only (was the createdById-era "legacy_module" code).
+    expect(smoRes.body.error).toBe("content_unowned");
 
     // Admin can delete legacy module
     const adminRes = await request(app)

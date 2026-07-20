@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireContentOwnership } from "./requireContentOwnership.js";
 import { z } from "zod";
 import {
   createCourse,
@@ -264,7 +265,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   }
 });
 
-adminCoursesRouter.put("/:courseId", async (request, response, next) => {
+adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = courseBodySchema.partial().safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -285,7 +286,7 @@ adminCoursesRouter.put("/:courseId", async (request, response, next) => {
   }
 });
 
-adminCoursesRouter.put("/:courseId/modules", async (request, response, next) => {
+adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = setCourseModulesBodySchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -322,7 +323,7 @@ adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
   }
 });
 
-adminCoursesRouter.put("/:courseId/items", async (request, response, next) => {
+adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = setCourseItemsBodySchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -371,7 +372,7 @@ adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, n
 // agent-token allowlist — this route is unchanged in that respect).
 const publishCourseBodySchema = z.object({ publishItems: z.boolean().optional() });
 
-adminCoursesRouter.post("/:courseId/publish", async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = publishCourseBodySchema.safeParse(request.body ?? {});
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -410,7 +411,7 @@ adminCoursesRouter.post("/:courseId/publish", async (request, response, next) =>
 });
 
 // #705: avpubliser et kurs (motstykke til publish). G3-vakt (påbegynt deltaker) i kommandolaget.
-adminCoursesRouter.post("/:courseId/unpublish", async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/unpublish", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const course = await unpublishCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
@@ -419,7 +420,7 @@ adminCoursesRouter.post("/:courseId/unpublish", async (request, response, next) 
   }
 });
 
-adminCoursesRouter.post("/:courseId/archive", async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/archive", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const course = await archiveCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
@@ -429,7 +430,7 @@ adminCoursesRouter.post("/:courseId/archive", async (request, response, next) =>
 });
 
 // #673: gjenopprett et arkivert kurs.
-adminCoursesRouter.post("/:courseId/restore", async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/restore", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const course = await restoreCourse(request.params.courseId, request.context?.userId);
     response.json({ course });
@@ -438,7 +439,7 @@ adminCoursesRouter.post("/:courseId/restore", async (request, response, next) =>
   }
 });
 
-adminCoursesRouter.delete("/:courseId", async (request, response, next) => {
+adminCoursesRouter.delete("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     await deleteCourse(request.params.courseId, request.context?.userId);
     response.status(204).send();
@@ -472,6 +473,8 @@ adminCoursesRouter.get("/:courseId/cascade-delete-preview", async (request, resp
 // Run the cascade. All-or-nothing: if any blocker exists the service throws a ValidationError (400)
 // carrying the blockers in `details` and deletes nothing; otherwise 200 with the delete summary.
 adminCoursesRouter.post("/:courseId/cascade-delete", async (request, response, next) => {
+  // #787 slice 4b: NOT ownership-guarded — cascade-delete is deliberately ADMINISTRATOR-only (it can
+  // destroy modules/sections beyond the course itself), enforced by the isAdministrator check below.
   if (!isAdministrator(request.context?.roles)) {
     response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can cascade-delete a course." });
     return;
@@ -504,7 +507,7 @@ adminCoursesRouter.get("/:courseId/enrollments", async (request, response, next)
   }
 });
 
-adminCoursesRouter.post("/:courseId/enrollments", async (request, response, next) => {
+adminCoursesRouter.post("/:courseId/enrollments", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const parsed = assignEnrollmentsSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -526,7 +529,7 @@ adminCoursesRouter.post("/:courseId/enrollments", async (request, response, next
   }
 });
 
-adminCoursesRouter.delete("/:courseId/enrollments/:userId", async (request, response, next) => {
+adminCoursesRouter.delete("/:courseId/enrollments/:userId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     await revokeEnrollment(request.params.courseId, request.params.userId, request.context?.userId ?? null);
     response.status(204).send();
