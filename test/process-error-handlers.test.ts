@@ -11,11 +11,11 @@ afterEach(() => {
 });
 
 describe("process error handlers", () => {
-  it("logs unhandled rejections with structured metadata", async () => {
+  it("logs unhandled rejections and requests shutdown (#813)", async () => {
     const { logUnhandledRejection } = await import("../src/process/processErrorHandlers.js");
-
+    const gracefulShutdown = vi.fn();
     const error = new Error("worker tick failed");
-    logUnhandledRejection(error);
+    logUnhandledRejection(error, gracefulShutdown);
 
     expect(logOperationalEvent).toHaveBeenCalledWith(
       "unhandled_rejection",
@@ -25,6 +25,8 @@ describe("process error handlers", () => {
       }),
       "error",
     );
+    // #813: an unhandled rejection must exit non-zero so App Service restarts a clean process.
+    expect(gracefulShutdown).toHaveBeenCalledWith(1);
   });
 
   it("logs uncaught exceptions and requests shutdown", async () => {
