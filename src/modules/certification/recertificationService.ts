@@ -194,9 +194,12 @@ export async function runRecertificationReminderSchedule(input?: { asOf?: Date }
         : auditActions.certification.recertificationReminderFailed,
       actorId: undefined,
       metadata: {
+        // #806 (GDPR): store userId only, never email/name, in indefinitely-retained audit metadata.
+        // The email is still used to SEND the reminder above — it is just not persisted here, so a
+        // pseudonymized user's email is not left searchable in AuditEvent.metadataJson. Resolve
+        // recipient details from userId at read time if ever needed.
         certificationId: certification.id,
         userId: certification.user.id,
-        recipientEmail: certification.user.email,
         moduleId: certification.module.id,
         reminderDaysBefore: matchedReminderDay,
         asOfDate,
