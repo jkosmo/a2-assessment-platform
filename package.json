@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -9,6 +9,7 @@
     "dev:local": "dotenv -e .env.postgres.local -- tsx watch src/index.ts",
     "skill:package": "node scripts/package-authoring-skill.mjs",
     "dev:seed:consent": "dotenv -e .env.postgres.local -- tsx scripts/dev/seed-mock-consent.ts",
+    "maint:scrub-audit-pii": "tsx scripts/maintenance/scrub-audit-pii.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/runtime/startup.mjs",
     "postgres:setup": "node scripts/postgres/localSetup.mjs setup",
