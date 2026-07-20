@@ -47,6 +47,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       return;
     }
     container.classList.remove("owner-host--compact");
+    container.style.padding = "";
     const rows = owners.length
       ? owners
           .map(
@@ -79,9 +80,11 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
   // Compact default: "Eiere: Name A, Name B" on one line, plus an inline "Rediger" affordance for
   // those who can manage. Keeps the panel to a slim strip since it's shown far more than edited.
   function paintCompact() {
-    // Slim the host card down to a strip while compact (QA r5 #1): the host brings .card/.detail-section
-    // padding meant for full sections — override it for the one-line default.
+    // Slim the host card down to a strip while compact (QA r5/r6 #1): the host brings .card/.detail-section
+    // padding meant for full sections. Page-level styles load after shared.css and win the cascade at equal
+    // specificity (bit us on the courses page), so set the padding inline — inline always wins.
     container.classList.add("owner-host--compact");
+    container.style.padding = "6px 16px";
     const names = owners.length
       ? // Same-name owners are distinct users (e.g. mock + Entra identity) — expose the email in a
         // tooltip so "Joakim Kosmo, Joakim Kosmo" is explainable at a glance.

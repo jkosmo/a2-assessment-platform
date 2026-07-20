@@ -22,9 +22,13 @@
       .system-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--color-blue-light); color: var(--color-link-active); font-size: 11px; font-weight: 600; }
       .detail-section { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: var(--space-2); margin-bottom: var(--space-3); }
       .detail-section h2 { font-size: 16px; margin: 0 0 var(--space-2); }
-      .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-1); }
-      .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--color-surface-muted, #f0f0f0); border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 13px; }
-      .chip button { background: none; border: none; color: var(--color-error); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+      /* QA r6 #3: rows (same visual language as owner rows) instead of grey chips. */
+      .assign-list { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+      .assign-row { display: flex; align-items: baseline; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--color-border-soft); }
+      .assign-name { font-weight: 600; color: var(--color-text); }
+      .assign-meta { color: var(--color-meta); font-size: 12.5px; }
+      .assign-remove { width: auto; margin-left: auto; flex: 0 0 auto; min-height: 0; padding: 3px 12px; font-size: 0.85rem; }
+      .assign-empty { color: var(--color-meta); font-style: italic; font-size: 13px; padding: 6px 0; }
       .search-results { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); max-height: 220px; overflow-y: auto; }
       .search-results:empty { display: none; }
       .search-results li { padding: 6px 10px; cursor: pointer; font-size: 13px; }
