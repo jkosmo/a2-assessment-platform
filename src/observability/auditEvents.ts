@@ -24,6 +24,7 @@ export const auditEntityTypes = {
   submission: "submission",
   user: "user",
   contentOwner: "content_owner",
+  audit: "audit",
 } as const;
 
 export type AuditEntityType = NestedValue<typeof auditEntityTypes>;
@@ -144,6 +145,10 @@ export const auditActions = {
   orgSync: {
     recordFailed: "org_sync_record_failed",
     completed: "org_sync_completed",
+  },
+  audit: {
+    // #843/#806: records a historical PII scrub of audit metadata (re-seal approach A). No PII itself.
+    metadataScrubbed: "audit_metadata_scrubbed",
   },
   submission: {
     created: "submission_created",
@@ -416,6 +421,11 @@ export type AuditMetadataByAction = {
   [auditActions.manualReview.superseded]: EventMetadata<{
     newSubmissionId: string;
     supersededAt: string;
+  }>;
+  [auditActions.audit.metadataScrubbed]: EventMetadata<{
+    scrubbedCount: number;
+    actions: string[];
+    fields: string[];
   }>;
   [auditActions.orgSync.recordFailed]: EventMetadata<{
     source: string;

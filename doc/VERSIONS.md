@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.1 - 2026-07-20
+
+feat(#843): historisk audit-PII-skrubb (re-seal, approach A) — backend + maintenance-script
+
+Oppfølger til #806-forward-fixen. Rydder e-post ut av EKSISTERENDE evig-lagrede audit-rader:
+
+- **`scrubHistoricalAuditPii()`** (`src/services/auditPiiScrub.ts`): for hver mål-handling
+  (recertification_reminder_sent/failed → recipientEmail, org_sync_record_failed → email) fjernes
+  feltet fra metadataJson, `payloadHash` rekomputeres over den rensede raden (seglet forblir konsistent),
+  og én auditbar `audit_metadata_scrubbed`-hendelse (kun antall, ingen PII) skrives. Idempotent — en
+  skrubbet rad velges ikke på nytt.
+- **Script** `scripts/maintenance/scrub-audit-pii.ts` (`npm run maint:scrub-audit-pii`) for å kjøre
+  skrubben mot valgt env. **Kjøres IKKE automatisk** — en bevisst maintenance-handling.
+
+Ny integrasjonstest `m2-audit-pii-scrub.test.ts`: e-post fjernet, hash re-seglet (matcher fersk sha256),
+rene rader urørt, skrubb-hendelse logget, idempotent. Verifisert lokalt mot Postgres.
+
 ## 2.2.0 - 2026-07-20
 
 feat(#787 slice 4b): eierskaps-HÅNDHEVING på innholds-skrivestier (ATFERDSENDRING)
