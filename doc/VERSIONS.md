@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.1.3 - 2026-07-19
+
+fix(privacy): #806 — slutt å skrive person-PII (e-post) i evig-lagret audit-metadata (GDPR)
+
+Pseudonymisering skrubber User-raden, men audit-metadata beholdt original e-post i evig-lagrede
+AuditEvent-rader → en «pseudonymisert» brukers e-post var fortsatt direkte søkbar (bryter
+u-lenkbarhet). Forward-fix — nye hendelser lagrer kun stabil id, ikke e-post/navn:
+
+- **recertification_reminder_sent/failed** (`recertificationService.ts`): fjernet `recipientEmail`
+  fra metadata; beholder `userId` (+ certificationId, moduleId, kanal, leveringsstatus). E-posten
+  brukes fortsatt til å SENDE påminnelsen — den persisteres bare ikke.
+- **org_sync_record_failed** (`orgSyncService.ts`): fjernet `email` fra metadata; `externalId`
+  identifiserer den feilede posten uten PII (matcher allerede den deklarerte metadata-typen).
+
+Operasjonell logg (`console.log`, begrenset oppbevaring) beholder e-post for leveringsfeilsøking —
+ikke den evig-lagrede audit-tabellen. Historisk skrubb av eksisterende rader er egen sak (henger
+sammen med payloadHash-invalidering, #D2/#806-oppfølger). Ingen leser e-post ut av audit-metadata,
+så ingen lese-side påvirkes.
+
+Tester: unit-assertions på at recert-metadata ikke har recipientEmail/recipientName. tsc + berørte
+unit-suiter grønne. Backend-only.
+
 ## 2.1.2 - 2026-07-19
 
 fix(ui): QA runde 6 — ekte slank eier-stripe, forklart bestått-avvik, klasse-rader i stedet for chips

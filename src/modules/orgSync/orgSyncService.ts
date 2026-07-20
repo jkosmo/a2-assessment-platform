@@ -80,9 +80,11 @@ export async function applyOrgDeltaSync(input: ApplyOrgDeltaSyncInput) {
         action: auditActions.orgSync.recordFailed,
         actorId: input.actorId,
         metadata: {
+          // #806 (GDPR): externalId identifies the failed record without persisting the email into
+          // indefinitely-retained audit metadata. (Email is still in the operational log above, which
+          // has bounded retention.)
           source: input.source,
           externalId: record.externalId,
-          email: record.email,
           reason,
         },
       });

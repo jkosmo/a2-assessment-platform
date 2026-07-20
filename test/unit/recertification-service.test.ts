@@ -307,5 +307,14 @@ describe("recertification service", () => {
         action: "recertification_reminder_sent",
       }),
     );
+
+    // #806 (GDPR): recipient PII (email/name) must NOT be persisted in indefinitely-retained audit
+    // metadata — only userId, which stays un-linkable after pseudonymization scrubs the User row.
+    const auditCall = (recordAuditEvent as unknown as { mock: { calls: Array<[{ action: string; metadata: Record<string, unknown> }]> } }).mock.calls.find(
+      (c) => c[0]?.action === "recertification_reminder_sent",
+    );
+    expect(auditCall?.[0]?.metadata).toMatchObject({ certificationId: "cert-1", userId: "user-1" });
+    expect(auditCall?.[0]?.metadata).not.toHaveProperty("recipientEmail");
+    expect(auditCall?.[0]?.metadata).not.toHaveProperty("recipientName");
   });
 });

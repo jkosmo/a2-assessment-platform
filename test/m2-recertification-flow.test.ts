@@ -120,11 +120,15 @@ describe("Recertification status and reminders", () => {
       where: {
         entityType: "certification_status",
         action: "recertification_reminder_sent",
-        metadataJson: {
-          contains: participantHeaders["x-user-email"],
-        },
       },
     });
     expect(reminderAuditEvents.length).toBeGreaterThan(0);
+    // #806 (GDPR): the reminder audit must record the event but NOT persist the recipient's email in
+    // indefinitely-retained metadata — it should carry userId only, so a pseudonymized user stays
+    // un-linkable. (The email is still used to send the reminder and appears in the live report above.)
+    for (const event of reminderAuditEvents) {
+      expect(event.metadataJson).not.toContain(participantHeaders["x-user-email"]);
+      expect(event.metadataJson).toContain("userId");
+    }
   });
 });

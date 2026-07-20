@@ -289,15 +289,16 @@ export type AuditMetadataByAction = {
     moduleId: string;
     decisionId: string;
   }>;
+  // #806 (GDPR): recipient PII (email/name) must NOT be persisted in indefinitely-retained audit
+  // metadata — store userId only and resolve details at read time. Other fields (moduleId, channel,
+  // reminderDaysBefore, asOfDate, expiryDate, delivered, failureReason) are also recorded by the writer.
   [auditActions.certification.recertificationReminderSent]: EventMetadata<{
     certificationId: string;
     userId: string;
-    recipientEmail: string;
   }>;
   [auditActions.certification.recertificationReminderFailed]: EventMetadata<{
     certificationId: string;
     userId: string;
-    recipientEmail: string;
   }>;
   [auditActions.certification.participantNotificationSent]: EventMetadata<{
     channel: string;
