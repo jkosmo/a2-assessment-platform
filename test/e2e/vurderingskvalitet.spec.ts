@@ -101,6 +101,16 @@ test("vurderingskvalitet: owner filter, load, signals, histogram, preview, publi
   await expect(page.locator("#qPreview")).toContainText("5");
   await expect(page.locator("#qPreview .delta")).toBeVisible();
 
+  // QA r6 #2: when the stored pass rate contradicts the current threshold, the signal card says so.
+  // At 75 only 2 of 6 (33%) of the loaded scores would pass vs the stored 67% — the divergent note shows.
+  await page.locator("#qTotalMin").fill("75");
+  await page.locator("#qTotalMin").dispatchEvent("input");
+  await expect(page.locator("#qSignals .q-sig").first()).toContainText("33 %");
+  // Back to 50 (5/6 = 83% ≠ stored 67% → note still shows, now with 83).
+  await page.locator("#qTotalMin").fill("50");
+  await page.locator("#qTotalMin").dispatchEvent("input");
+  await expect(page.locator("#qSignals .q-sig").first()).toContainText("83 %");
+
   // Publish → confirm dialog → localised toast (NOT a raw i18n key).
   page.once("dialog", (d) => d.accept());
   await page.locator("#qPublish").click();

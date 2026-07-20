@@ -12,6 +12,7 @@ const extraTranslations = {
     "quality.title": "Assessment quality",
     "quality.threshold.mcqOnlyNote": "This is an MCQ module: pass/fail is decided by the MCQ minimum below. The total-score threshold does not apply.",
     "quality.signals.note": "The pass rate reflects stored decisions (the rules in effect when each response was scored).",
+    "quality.signal.passRate.divergent": "At the current threshold ({threshold}) only {pct}% of the loaded responses would pass.",
 
     "quality.subtitle": "See how a module scores, and adjust the pass mark.",
     "quality.filter.owner": "Owner",
@@ -157,6 +158,7 @@ const extraTranslations = {
     "quality.title": "Vurderingskvalitet",
     "quality.threshold.mcqOnlyNote": "Dette er en MCQ-modul: bestått avgjøres av MCQ-minimumet under. Total-grensa gjelder ikke.",
     "quality.signals.note": "Bestått-andelen bygger på lagrede avgjørelser (reglene som gjaldt da hvert svar ble scoret).",
+    "quality.signal.passRate.divergent": "Ved dagens grense ({threshold}) ville bare {pct} % av de lastede svarene bestått.",
 
     "quality.subtitle": "Se hvordan en modul scorer, og juster best\u00e5tt-grensa.",
     "quality.filter.owner": "Eier",
@@ -302,6 +304,7 @@ const extraTranslations = {
     "quality.title": "Vurderingskvalitet",
     "quality.threshold.mcqOnlyNote": "Dette er ein MCQ-modul: bestått blir avgjort av MCQ-minimumet under. Total-grensa gjeld ikkje.",
     "quality.signals.note": "Bestått-delen byggjer på lagra avgjerder (reglane som gjaldt då kvart svar blei scora).",
+    "quality.signal.passRate.divergent": "Ved dagens grense ({threshold}) ville berre {pct} % av dei lasta svara bestått.",
 
     "quality.subtitle": "Sj\u00e5 korleis ein modul scorar, og juster best\u00e5tt-grensa.",
     "quality.filter.owner": "Eigar",

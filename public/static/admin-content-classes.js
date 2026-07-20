@@ -261,13 +261,20 @@ async function openClass(id) {
     pageContent.innerHTML = `<p>Kunne ikke laste klassen: ${escapeHtml(err?.message ?? "")}</p>`;
     return;
   }
-  const memberChips = members.map((m) => `<span class="chip">${escapeHtml(m.name)} <button data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">×</button></span>`).join("");
-  const courseChips = courses.map((c) => {
+  // QA r6 #3: rows instead of grey chips — same visual language as the owner rows (name + meta,
+  // separator line, slim «Fjern» on the right).
+  const memberRows = members.map((m) => `<li class="assign-row">
+      <span class="assign-name">${escapeHtml(m.name)}</span>
+      ${m.email ? `<span class="assign-meta">${escapeHtml(m.email)}</span>` : ""}
+      <button type="button" class="assign-remove btn-secondary" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button>
+    </li>`).join("");
+  const courseRows = courses.map((c) => {
     const due = formatDueDate(c.dueAt);
-    const dueLabel = due
-      ? `<span class="chip-due" style="color:var(--color-meta);font-size:12px;margin-left:4px">Frist: ${escapeHtml(due)}</span>`
-      : `<span class="chip-due" style="color:var(--color-meta);font-size:12px;margin-left:4px">Ingen frist</span>`;
-    return `<span class="chip">${escapeHtml(courseTitle(c.title))} ${dueLabel} <button data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">×</button></span>`;
+    return `<li class="assign-row">
+      <span class="assign-name">${escapeHtml(courseTitle(c.title))}</span>
+      <span class="assign-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
+      <button type="button" class="assign-remove btn-secondary" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button>
+    </li>`;
   }).join("");
   const assignedIds = new Set(courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
@@ -278,7 +285,7 @@ async function openClass(id) {
     <div class="detail-section" id="classOwnerPanelHost"></div>
     <div class="detail-section">
       <h2>Studenter (${members.length})</h2>
-      <div class="chip-row" id="memberChips">${memberChips || `<span style="color:var(--color-meta);font-size:13px">Ingen studenter ennå.</span>`}</div>
+      <ul class="assign-list" id="memberChips">${memberRows || `<li class="assign-empty">Ingen studenter ennå.</li>`}</ul>
       <div class="inline-form">
         <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" style="min-width:280px" />
       </div>
@@ -286,7 +293,7 @@ async function openClass(id) {
     </div>
     <div class="detail-section">
       <h2>Tildelte kurs (${courses.length})</h2>
-      <div class="chip-row" id="courseChips">${courseChips || `<span style="color:var(--color-meta);font-size:13px">Ingen kurs tildelt ennå.</span>`}</div>
+      <ul class="assign-list" id="courseChips">${courseRows || `<li class="assign-empty">Ingen kurs tildelt ennå.</li>`}</ul>
       <div class="inline-form">
         <select id="courseSelect"><option value="">Velg kurs…</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">

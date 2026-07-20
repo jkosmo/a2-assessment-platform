@@ -44,6 +44,12 @@ test("course owner panel: lists, adds via search, and removes owners", async ({ 
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
   await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
+  // QA r6 #1: the compact strip must actually BE a strip. The courses page's own .detail-section
+  // padding overrode the shared compact class (page styles load after shared.css), which kept the
+  // panel tall — the inline padding fix must win. Pin the rendered height.
+  const strip = await page.locator("#ownerPanelHost").boundingBox();
+  expect(strip).not.toBeNull();
+  expect(strip!.height).toBeLessThanOrEqual(52);
   await panel.locator(".owner-edit-toggle").click();
   await expect(panel.locator(".owner-row")).toHaveCount(1);
   await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");

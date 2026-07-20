@@ -234,8 +234,9 @@ function renderWorkspace() {
   if (!body) return hideResults();
   el.qMeta.textContent = tf("quality.meta.loaded", { title: body.module?.title ?? "-", count: (body.outcomes ?? []).length });
   effective = body.effectiveThresholds ?? { totalMin: 60, mcqMinPercent: null, practicalMinPercent: null };
-  renderSignals(body.signals ?? {});
+  // Threshold card first so qTotalMin holds THIS module's value before the signal note reads it.
   renderThresholdCard(body);
+  renderSignals(body.signals ?? {});
   renderAnchors(body);
   renderOutcomes(body.outcomes ?? []);
 }
@@ -255,11 +256,27 @@ function renderSignals(signals) {
   const mrRate = signals.manualReviewRate ?? null;
   const cov = signals.benchmarkCoverageRate ?? null;
 
+  // QA r6 #2: the stored pass rate can contradict the current threshold (decisions were made under the
+  // rules in effect at scoring time — e.g. a lower totalMin, or the module was MCQ-only back then). When
+  // they diverge, say so explicitly instead of leaving two conflicting numbers on screen.
+  let passNote =
+    passRate == null ? t("quality.signal.noData") : passRate >= passMin ? t("quality.signal.passRate.ok") : t("quality.signal.passRate.low");
+  if (passRate != null && !isMcqOnly()) {
+    const scores = outcomeScores();
+    const threshold = el.qTotalMin?.value !== "" ? Number(el.qTotalMin?.value) : Number(effective?.totalMin ?? NaN);
+    if (scores.length > 0 && Number.isFinite(threshold)) {
+      const wouldPassRate = scores.filter((s) => s >= threshold).length / scores.length;
+      if (Math.abs(wouldPassRate - passRate) > 0.005) {
+        passNote = tf("quality.signal.passRate.divergent", { threshold, pct: Math.round(wouldPassRate * 100) });
+      }
+    }
+  }
+
   const cards = [
     {
       cls: passRate == null ? "neutral" : sigClass(passRate >= passMin, passRate >= passMin * 0.8),
       k: t("quality.signal.passRate"), v: pct(passRate),
-      note: passRate == null ? t("quality.signal.noData") : passRate >= passMin ? t("quality.signal.passRate.ok") : t("quality.signal.passRate.low"),
+      note: passNote,
     },
     {
       cls: mrRate == null ? "neutral" : sigClass(mrRate <= mrMax, mrRate <= mrMax * 1.2),
@@ -492,7 +509,7 @@ function mountWorkspace() {
   el.qModuleSelect.addEventListener("change", onModuleChange);
   el.qLoad.addEventListener("click", loadQuality);
   el.qPublish.addEventListener("click", publish);
-  el.qTotalMin.addEventListener("input", () => { renderHistogram(); updatePreview(); });
+  el.qTotalMin.addEventListener("input", () => { renderHistogram(); updatePreview(); renderSignals(snapshotBody?.signals ?? {}); });
 
   renderCourseFilterOptions();
   renderModuleOptions();

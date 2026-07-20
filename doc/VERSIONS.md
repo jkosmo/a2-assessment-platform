@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.1.2 - 2026-07-19
+
+fix(ui): QA runde 6 — ekte slank eier-stripe, forklart bestått-avvik, klasse-rader i stedet for chips
+
+- **Eier-stripa faktisk slank** (QA #1): r5-fiksen tapte kaskaden mot side-nivå `.detail-section`-padding
+  (side-styles lastes etter shared.css og vinner ved lik spesifisitet). Padding settes nå inline fra
+  owner-panel.js (vinner alltid), og «Rediger»-knappen fikk `min-height:0` (global
+  `button{min-height:40px}` blåste opp høyden). Målt: 36px (var ~54+). Permanent boundingBox-assertion
+  (≤52px) i e2e piner fiksen.
+- **«Bestått 100 % men ingen består» forklart** (QA #2): Bestått-andel-kortet viser den LAGREDE andelen
+  (avgjørelsene da svarene ble scoret). Når den avviker fra hva dagens grense ville gitt, viser kortet nå
+  eksplisitt «Ved dagens grense (70) ville bare 0 % av de lastede svarene bestått» — og oppdateres live
+  når grensa endres.
+- **Klasse-detalj: rader i stedet for grå chips** (QA #3): Studenter og Tildelte kurs bruker nå samme
+  rad-språk som eier-panelet (navn + meta, skillelinje, slank «Fjern» til høyre).
+
+**Prosess:** visuell verifikasjon lokalt før deploy (headless render + måling + skjermbilder inspisert)
+er nå standard for CSS/layout-endringer — stage brukes som akseptanse, ikke feilsøking.
+
+e2e: avviks-notis-assertions + stripe-høyde; alle 106 grønne.
+
 ## 2.1.1 - 2026-07-19
 
 fix(ui): QA runde 5 — tynn eier-stripe, modul-navigasjon/tittel, MCQ-bevisst Vurderingskvalitet, klasse-kort
