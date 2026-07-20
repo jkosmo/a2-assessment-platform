@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.3 - 2026-07-20
+
+fix(#816): bind body-digest + nonce i parser-worker HMAC (replay-herding)
+
+Klienten signerte kun `timestamp:method:path`, så en observert gyldig `POST /parse`-signatur kunne
+replayes i 60s med vilkårlig body. Nå signeres en kanonisk verdi som binder **SHA-256 av body + en
+tilfeldig nonce**, og worker avviser gjensette nonces innen vinduet.
+
+- **Delt modul** `src/parser/parserHmac.ts`: kanonisk melding + signering + nonce-cache — brukt av BÅDE
+  klient og worker, så de aldri kan drifte fra hverandre.
+- Klient (`parserWorkerClient.ts`): signerer body + `X-Parser-Nonce`.
+- Worker (`parserApp.ts`): fanger rå body (`express.json` verify), verifiserer body-digest, avviser
+  manglende/replayet nonce. Begge sider deployes atomisk (samme kodebase).
+
+Unit-test beviser klient↔worker-symmetri + at bytt-body/nonce ikke verifiserer + nonce-cache-oppførsel.
+810 unit + 388 integrasjon grønne. Backend-only, intern service-auth (ingen bruker-vendt endring).
+
 ## 2.2.2 - 2026-07-20
 
 fix(#813): unhandled promise rejection restarter nå prosessen (web + parser)
