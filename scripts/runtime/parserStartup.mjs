@@ -26,7 +26,10 @@ function writeStartupLog(level, message, error) {
 }
 
 process.on("unhandledRejection", (error) => {
+  // #813: exit non-zero so App Service restarts a clean parser process — an unhandled rejection means a
+  // defect escaped handling and the process can no longer be trusted (was: log-only, left running).
   writeStartupLog("ERROR", "Unhandled promise rejection during parser startup/runtime.", error);
+  process.exit(1);
 });
 
 process.on("uncaughtException", (error) => {

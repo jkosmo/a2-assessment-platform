@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.2 - 2026-07-20
+
+fix(#813): unhandled promise rejection restarter nå prosessen (web + parser)
+
+`unhandledRejection`-handleren logget bare og lot prosessen kjøre videre — en defekt som rejecter etter
+delvis mutasjon etterlot en upålitelig prosess som fortsatt serverte/planla arbeid. Nå logges + graceful-
+shutdown med exit≠0 (som `uncaughtException`), så App Service restarter en ren prosess. Håndterte
+domene-feil når aldri hit.
+
+- `src/process/processErrorHandlers.ts`: `logUnhandledRejection` tar nå `gracefulShutdown` og kaller
+  `gracefulShutdown(1)`.
+- `scripts/runtime/parserStartup.mjs`: parser-worker `unhandledRejection` gjør nå `process.exit(1)`.
+
+Test oppdatert (asserterer shutdown ved unhandled rejection). Backend-only.
+
 ## 2.2.1 - 2026-07-20
 
 feat(#843): historisk audit-PII-skrubb (re-seal, approach A) — backend + maintenance-script

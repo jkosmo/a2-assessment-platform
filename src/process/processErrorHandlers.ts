@@ -3,7 +3,11 @@ import { operationalEvents } from "../observability/operationalEvents.js";
 
 export type GracefulShutdown = (exitCode?: number) => void;
 
-export function logUnhandledRejection(reason: unknown) {
+// #813: an unhandled rejection means a defect escaped all handling — the process may have partially
+// mutated state and can no longer be trusted to serve/schedule reliably. Log, then graceful-shutdown
+// with a non-zero exit so App Service restarts a clean process (same treatment as an uncaught exception;
+// handled domain failures never reach here). Node would otherwise leave the process running.
+export function logUnhandledRejection(reason: unknown, gracefulShutdown: GracefulShutdown) {
   logOperationalEvent(
     operationalEvents.process.unhandledRejection,
     {
@@ -12,6 +16,7 @@ export function logUnhandledRejection(reason: unknown) {
     },
     "error",
   );
+  gracefulShutdown(1);
 }
 
 export function logUncaughtException(error: unknown, gracefulShutdown: GracefulShutdown) {
@@ -28,7 +33,7 @@ export function logUncaughtException(error: unknown, gracefulShutdown: GracefulS
 
 export function registerProcessErrorHandlers(gracefulShutdown: GracefulShutdown) {
   const handleUnhandledRejection = (reason: unknown) => {
-    logUnhandledRejection(reason);
+    logUnhandledRejection(reason, gracefulShutdown);
   };
   const handleUncaughtException = (error: unknown) => {
     logUncaughtException(error, gracefulShutdown);
