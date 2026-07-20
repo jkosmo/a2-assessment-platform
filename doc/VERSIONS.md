@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.1.4 - 2026-07-19
+
+fix(ui): QA runde 7 — to forenklinger på modul-/seksjon-editorene (bundlet, ikke egen deploy)
+
+- **Slankere status-linje** (QA #1): fjernet de redundante «Modul» (modulnavnet står i modul-kortet) og
+  «Språk» (finnes i språk-velgeren) fra status-raden på begge modul-editorene. Rad viser nå «Du redigerer
+  · Live nå · Endringer · Preview viser» på én linje.
+- **Seksjon-editor bruker full bredde** (QA #2): fjernet 720px-taket på `.section-editor` slik at
+  Markdown- og Forhåndsvisning-kolonnene deler hele sidebredden 50/50 (målt 542px hver, var ~350).
+  Enkelt-kolonne-feltene (tittel + språk-faner) er fortsatt kappet på 720px.
+
+Verifisert visuelt lokalt før commit (målte kolonnebredder + status-rad-etiketter + skjermbilder).
+Berørte kontrakt-/e2e-tester oppdatert (status-rad-parity, rename-e2e verifiseres via patch-body).
+106 e2e + 61 kontraktstester grønne.
+
 ## 2.1.3 - 2026-07-19
 
 fix(privacy): #806 — slutt å skrive person-PII (e-post) i evig-lagret audit-metadata (GDPR)
