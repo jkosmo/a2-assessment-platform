@@ -5,6 +5,7 @@ import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole.js";
 import { getCalibrationWorkspaceSnapshot } from "../modules/calibration/index.js";
 import { publishModuleVersionWithThresholds } from "../modules/adminContent/index.js";
+import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
 import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
 
 const calibrationRouter = Router();
@@ -113,6 +114,10 @@ calibrationRouter.post("/workspace/publish-thresholds", async (request, response
   }
 
   try {
+    // #787 slice 4b: publishing thresholds cuts a new module version, so it's a module-owner action.
+    // The role gate above only proves SMO/ADMIN; this enforces ownership of THIS module (audit finding:
+    // an SMO could previously publish thresholds for modules they don't own).
+    await assertContentOwnership({ contentType: "MODULE", contentId: parsed.data.moduleId, actorUserId: actorId, roles });
     const published = await publishModuleVersionWithThresholds({
       moduleId: parsed.data.moduleId,
       totalMin: parsed.data.totalMin,

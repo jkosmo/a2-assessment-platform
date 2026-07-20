@@ -43,7 +43,9 @@ export async function assertContentOwnership(input: {
   contentType: ContentOwnerType;
   contentId: string;
   actorUserId: string;
-  roles: AppRoleType[];
+  // Only checked for "ADMINISTRATOR"; typed as string[] so both AppRole[] callers and the string[]
+  // module-guard delegate pass without a cast.
+  roles: string[];
 }): Promise<void> {
   const isAdmin = input.roles.includes("ADMINISTRATOR");
   // Admin short-circuits before any DB read.

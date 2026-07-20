@@ -1,4 +1,5 @@
 import { Router, type Request, type RequestHandler } from "express";
+import { requireContentOwnership } from "./requireContentOwnership.js";
 import multer from "multer";
 import { z } from "zod";
 import {
@@ -219,7 +220,7 @@ adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
   }
 });
 
-adminSectionsRouter.patch("/:sectionId/title", async (request, response, next) => {
+adminSectionsRouter.patch("/:sectionId/title", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   const parsed = titleSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -236,7 +237,7 @@ adminSectionsRouter.patch("/:sectionId/title", async (request, response, next) =
   }
 });
 
-adminSectionsRouter.put("/:sectionId/content", async (request, response, next) => {
+adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   const parsed = contentSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -255,7 +256,7 @@ adminSectionsRouter.put("/:sectionId/content", async (request, response, next) =
 });
 
 // Asset upload (#483/F4) — multipart image upload to a section's blob storage.
-adminSectionsRouter.post("/:sectionId/assets", uploadAsset, async (request: Request<{ sectionId: string }>, response, next) => {
+adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION", "sectionId"), uploadAsset, async (request: Request<{ sectionId: string }>, response, next) => {
   const file = request.file;
   if (!file) {
     response.status(400).json({ error: "validation_error", message: "Missing file (field name 'file')." });
@@ -286,7 +287,7 @@ adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) =>
 // #657: generate translated SVG variants for the section's SVG assets. Triggered explicitly by the
 // author's "Translate" action (never implicit on save), consistent with module/MCQ localisation.
 const localizeAssetsSchema = z.object({ sourceLocale: generationLocaleSchema });
-adminSectionsRouter.post("/:sectionId/assets/localize", generateLimiter, async (request: Request<{ sectionId: string }>, response, next) => {
+adminSectionsRouter.post("/:sectionId/assets/localize", requireContentOwnership("SECTION", "sectionId"), generateLimiter, async (request: Request<{ sectionId: string }>, response, next) => {
   const parsed = localizeAssetsSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -302,7 +303,7 @@ adminSectionsRouter.post("/:sectionId/assets/localize", generateLimiter, async (
 
 // #705: enhetlig livssyklus — seksjoner får samme Publiser/Avpubliser/Arkiver/Gjenopprett som
 // moduler/kurs. Bruk-lås (G2) håndheves i kommandolaget og gir 400 med navngitte kurs.
-adminSectionsRouter.post("/:sectionId/publish", async (request, response, next) => {
+adminSectionsRouter.post("/:sectionId/publish", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     const section = await publishSection(request.params.sectionId, request.context?.userId);
     response.json({ section: toDetail(section) });
@@ -311,7 +312,7 @@ adminSectionsRouter.post("/:sectionId/publish", async (request, response, next) 
   }
 });
 
-adminSectionsRouter.post("/:sectionId/unpublish", async (request, response, next) => {
+adminSectionsRouter.post("/:sectionId/unpublish", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     const section = await unpublishSection(request.params.sectionId, request.context?.userId);
     response.json({ section: toDetail(section) });
@@ -320,7 +321,7 @@ adminSectionsRouter.post("/:sectionId/unpublish", async (request, response, next
   }
 });
 
-adminSectionsRouter.post("/:sectionId/archive", async (request, response, next) => {
+adminSectionsRouter.post("/:sectionId/archive", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     const section = await archiveSection(request.params.sectionId, request.context?.userId);
     response.json({ section: toDetail(section) });
@@ -329,7 +330,7 @@ adminSectionsRouter.post("/:sectionId/archive", async (request, response, next) 
   }
 });
 
-adminSectionsRouter.post("/:sectionId/restore", async (request, response, next) => {
+adminSectionsRouter.post("/:sectionId/restore", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     const section = await restoreSection(request.params.sectionId, request.context?.userId);
     response.json({ section: toDetail(section) });
@@ -338,7 +339,7 @@ adminSectionsRouter.post("/:sectionId/restore", async (request, response, next) 
   }
 });
 
-adminSectionsRouter.delete("/:sectionId", async (request, response, next) => {
+adminSectionsRouter.delete("/:sectionId", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     await deleteSection(request.params.sectionId);
     response.status(204).send();

@@ -94,6 +94,20 @@ describe("Calibration workspace Phase A", () => {
     expect(thresholds).not.toHaveProperty("borderlineMin");
     expect(thresholds).not.toHaveProperty("borderlineMax");
 
+    // #787 slice 4b: publish-thresholds is now owner-guarded. This uses a SEEDED module (no owner), so
+    // grant the acting SMO ownership — the test exercises the threshold contract, not ownership.
+    const smoUser = await prisma.user.upsert({
+      where: { externalId: subjectMatterOwnerHeaders["x-user-id"] },
+      update: {},
+      create: { externalId: subjectMatterOwnerHeaders["x-user-id"], name: "SMO", email: subjectMatterOwnerHeaders["x-user-email"] },
+      select: { id: true },
+    });
+    await prisma.contentOwner.upsert({
+      where: { contentType_contentId_userId: { contentType: "MODULE", contentId: module!.id, userId: smoUser.id } },
+      update: {},
+      create: { contentType: "MODULE", contentId: module!.id, userId: smoUser.id },
+    });
+
     // 2. Publish a new totalMin
     const originalTotalMin = thresholds.totalMin as number;
     const newTotalMin = originalTotalMin === 70 ? 75 : 70;

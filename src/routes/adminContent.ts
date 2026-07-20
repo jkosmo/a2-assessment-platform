@@ -87,19 +87,16 @@ import { adminUsersRouter } from "./adminUsers.js";
 import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
+import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
 
 const adminContentRouter = Router();
 
+// #787 slice 4b: migrate module authoring guard from the old single-creator (createdById) model to the
+// polymorphic ContentOwner table (multi-owner, backfilled from createdById). Kept as a thin delegate so
+// all ~8 call sites switch at once. Semantics: ADMIN bypasses, an owner is allowed, unowned → admin-only
+// (error codes move from legacy_module/module_ownership → content_unowned/content_ownership).
 async function assertModuleOwnership(moduleId: string, actorId: string, roles: string[]) {
-  if (roles.includes("ADMINISTRATOR")) return;
-  const module = await adminContentRepository.findModuleOwner(moduleId);
-  if (!module) throw new NotFoundError("Module");
-  if (module.createdById === null) {
-    throw new ForbiddenError("This module was created before ownership tracking. Only an ADMINISTRATOR can modify it.", "legacy_module");
-  }
-  if (module.createdById !== actorId) {
-    throw new ForbiddenError("You can only modify modules you created.", "module_ownership");
-  }
+  await assertContentOwnership({ contentType: "MODULE", contentId: moduleId, actorUserId: actorId, roles });
 }
 
 adminContentRouter.use("/courses", adminCoursesRouter);
