@@ -6,6 +6,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
+import { addContentOwner } from "../content/contentOwnershipService.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -28,6 +29,10 @@ export async function createClass(input: { name: string; description?: string | 
     actorId: actorId ?? undefined,
     metadata: { classId: created.id, name },
   });
+  // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
+  if (actorId) {
+    await addContentOwner({ contentType: "CLASS", contentId: created.id, ownerUserId: actorId, actorUserId: actorId });
+  }
   return created;
 }
 

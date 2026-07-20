@@ -5,6 +5,7 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
 import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
+import { addContentOwner } from "../content/contentOwnershipService.js";
 
 // #763 (Layer B): the agent section-create route inlines figures/images (base64), so the JSON body
 // can exceed the 5 MB global parser. Sized to cover a handful of SVG figures + localized variants
@@ -87,6 +88,10 @@ export async function createSection(input: {
       ...agentAuthoringAuditMetadata(input.agent),
     },
   });
+  // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
+  if (input.actorId) {
+    await addContentOwner({ contentType: "SECTION", contentId: created.id, ownerUserId: input.actorId, actorUserId: input.actorId });
+  }
   return created;
 }
 

@@ -4,6 +4,7 @@ import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
+import { addContentOwner } from "../content/contentOwnershipService.js";
 
 export async function createCourse(input: {
   title: string;
@@ -32,6 +33,13 @@ export async function createCourse(input: {
     actorId: input.actorId,
     metadata: { courseId: course.id, ...agentAuthoringAuditMetadata(input.agent) },
   });
+
+  // #787 slice 4a: the creator becomes the sole initial owner (Q3 decision). Inert until enforcement
+  // (slice 4b) — this only populates ContentOwner so creators aren't locked out once guards land.
+  // Idempotent + audited. Skipped when there's no actor (system/seed creation stays admin-managed).
+  if (input.actorId) {
+    await addContentOwner({ contentType: "COURSE", contentId: course.id, ownerUserId: input.actorId, actorUserId: input.actorId });
+  }
 
   return course;
 }
