@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.1.5 - 2026-07-20
+
+feat(#787 slice 4a): tildel skaper som eier ved oppretting (INERT) + catch-up backfill
+
+Forberedelse til eierskaps-håndheving (4b). **Ingen atferdsendring** — populerer bare ContentOwner.
+
+- **Oppretting tildeler eier:** `createCourse`/`createSection`/`createClass`/`createModule` skriver nå en
+  ContentOwner-rad for skaperen (Q3: eneste initielle eier), idempotent + auditert, hoppes over uten aktor
+  (system/seed → admin-forvaltet). Lagt i service-laget så alle opprettings-stier dekkes.
+- **Catch-up backfill** (`20260720120000_backfill_content_owner_gap`): idempotent (NOT EXISTS) seeding av
+  ContentOwner for innhold opprettet etter de opprinnelige backfillene (2.0.6/2.0.9) som mangler eier-rad
+  — Class/Module fra createdById, Course/Section fra created-audit. Hindrer at eksisterende innhold blir
+  «unowned» (admin-only) når 4b lander.
+
+Hvorfor først: håndheving alene ville låst skapere ute av eget nytt innhold. 4a er den trygge grunnmuren;
+4b (assertContentOwnership-vakter, 403 for ikke-eiere) er den bevisste atferdsendringen.
+
+Ny integrasjonstest `m2-content-owner-assignment.test.ts` (alle fire typer + unowned-uten-aktor); migrasjon
+verifisert via lokal `migrate reset`. Backend-only.
+
 ## 2.1.4 - 2026-07-19
 
 fix(ui): QA runde 7 — to forenklinger på modul-/seksjon-editorene (bundlet, ikke egen deploy)

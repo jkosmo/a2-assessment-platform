@@ -8,6 +8,7 @@ import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
 import { NotFoundError } from "../../errors/AppError.js";
 import { assertModuleNotInAnyCourse } from "../course/contentLifecycle.js";
+import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
   generateModuleRubric,
   type AssessmentBlueprint,
@@ -115,6 +116,13 @@ export async function createModule(input: CreateModuleInput) {
       validTo: module.validTo?.toISOString() ?? null,
     },
   });
+
+  // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
+  // populated ContentOwner from it, but new modules need an explicit row so 4b enforcement (which reads
+  // ContentOwner, not createdById) recognises the creator. Inert until 4b. Idempotent + audited.
+  if (input.actorId) {
+    await addContentOwner({ contentType: "MODULE", contentId: module.id, ownerUserId: input.actorId, actorUserId: input.actorId });
+  }
 
   return module;
 }

@@ -54,6 +54,12 @@ vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
 
+// #787 slice 4a: createModule now assigns the creator as owner (addContentOwner → prisma.contentOwner).
+// This unit test mocks the repository/prisma, so stub the ownership side-effect out.
+vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({
+  addContentOwner: vi.fn(),
+}));
+
 vi.mock("../../src/config/benchmarkExamples.js", () => ({
   getBenchmarkExamplesConfig: () => ({
     maxExamplesPerVersion: 3,
