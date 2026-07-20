@@ -1,5 +1,6 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { env } from "../config/env.js";
+import { signParserRequest } from "../parser/parserHmac.js";
 import {
   extractSourceMaterialText,
   type SourceMaterialExtractionInput,
@@ -39,13 +40,16 @@ function purgeLocalJobs(): void {
   }
 }
 
-function signRequest(method: string, path: string): Record<string, string> {
+// #816: sign the body digest + a per-request nonce (not just timestamp:method:path), so an observed
+// signature can't be replayed with a different body, and the worker can reject repeated nonces.
+function signRequest(method: string, path: string, body: string): Record<string, string> {
   const timestamp = Math.floor(Date.now() / 1000);
-  const message = `${timestamp}:${method.toUpperCase()}:${path}`;
-  const signature = createHmac("sha256", env.PARSER_WORKER_AUTH_KEY!).update(message).digest("hex");
+  const nonce = randomUUID();
+  const signature = signParserRequest(env.PARSER_WORKER_AUTH_KEY!, { timestamp, method, path, body, nonce });
   return {
     "X-Parser-Auth": `hmac-sha256 ${signature}`,
     "X-Parser-Timestamp": String(timestamp),
+    "X-Parser-Nonce": nonce,
     "Content-Type": "application/json",
   };
 }
@@ -56,10 +60,11 @@ export async function submitParseJob(input: SourceMaterialExtractionInput): Prom
   }
 
   const path = "/parse";
+  const body = JSON.stringify(input);
   const response = await fetch(`${env.PARSER_WORKER_URL}${path}`, {
     method: "POST",
-    headers: signRequest("POST", path),
-    body: JSON.stringify(input),
+    headers: signRequest("POST", path, body),
+    body,
   });
 
   if (!response.ok) {
@@ -79,7 +84,7 @@ export async function getParsedResult(jobId: string): Promise<ParseJobStatus | n
   const path = `/parse/${encodeURIComponent(jobId)}`;
   const response = await fetch(`${env.PARSER_WORKER_URL}${path}`, {
     method: "GET",
-    headers: signRequest("GET", path),
+    headers: signRequest("GET", path, ""),
   });
 
   if (response.status === 404) return null;

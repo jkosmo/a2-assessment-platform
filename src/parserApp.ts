@@ -1,7 +1,8 @@
 import "dotenv/config";
 import express from "express";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { signParserRequest, parserSignaturesMatch, NonceReplayCache } from "./parser/parserHmac.js";
 import {
   extractSourceMaterialText,
   detectSourceMaterialFormat,
@@ -87,19 +88,38 @@ function hmacAuthMiddleware(
   }
   const signature = authHeader.slice(spaceIdx + 1);
 
-  const message = `${timestamp}:${req.method.toUpperCase()}:${req.path}`;
-  const expected = createHmac("sha256", parserEnv.PARSER_WORKER_AUTH_KEY).update(message).digest("hex");
+  // #816: require a nonce, and verify the signature over the body digest too, so a captured signature
+  // can't be replayed with a different body.
+  const nonceHeader = req.headers["x-parser-nonce"];
+  if (typeof nonceHeader !== "string" || !nonceHeader) {
+    res.status(401).json({ error: "missing_nonce" });
+    return;
+  }
 
-  const sigBuf = Buffer.from(signature, "hex");
-  const expBuf = Buffer.from(expected, "hex");
+  const body = (req as express.Request & { rawBody?: string }).rawBody ?? "";
+  const expected = signParserRequest(parserEnv.PARSER_WORKER_AUTH_KEY, {
+    timestamp,
+    method: req.method,
+    path: req.path,
+    body,
+    nonce: nonceHeader,
+  });
 
-  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
+  if (!parserSignaturesMatch(signature, expected)) {
     res.status(401).json({ error: "invalid_signature" });
+    return;
+  }
+
+  // Reject a nonce already seen within the replay window (belt-and-suspenders with the body binding).
+  if (!nonceCache.checkAndRecord(nonceHeader, now)) {
+    res.status(401).json({ error: "replayed_nonce" });
     return;
   }
 
   next();
 }
+
+const nonceCache = new NonceReplayCache(REPLAY_WINDOW_SECONDS);
 
 const parseRequestSchema = z.object({
   fileName: z.string().min(1),
@@ -113,7 +133,16 @@ const parserApp = express();
 // file after the per-file cap was raised to 10 MB (#479 Slice A) — the cap was raised in the
 // extraction service and main app, but this separate service's limit was missed. Deriving from the
 // shared constant prevents that drift.
-parserApp.use(express.json({ limit: SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES }));
+parserApp.use(
+  express.json({
+    limit: SOURCE_MATERIAL_UPLOAD_BODY_LIMIT_BYTES,
+    // #816: capture the exact raw body so hmacAuthMiddleware can verify the signed body digest against
+    // the bytes actually received (not a re-serialization, which could differ).
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: string }).rawBody = buf.toString("utf8");
+    },
+  }),
+);
 
 // Health endpoint — no auth (used by Azure App Service probes)
 parserApp.get("/health", (_req, res) => {
