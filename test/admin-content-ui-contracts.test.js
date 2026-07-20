@@ -28,14 +28,13 @@ describe("admin content workspace UI contracts", () => {
   it("keeps state-rail parity between conversational and advanced module workspaces", () => {
     const shellHtml = readFile("public/admin-content.html");
     const advancedHtml = readFile("public/admin-content-advanced.html");
+    // QA r7 #1: srModuleName + srLang were removed as redundant; parity is on the remaining slots.
     const ids = [
       "stateRail",
-      "srModuleName",
       "srEditing",
       "srLive",
       "srChanges",
       "srPreview",
-      "srLang",
     ];
 
     for (const id of ids) {

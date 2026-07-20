@@ -179,17 +179,21 @@ describe("state rail HTML structure", () => {
         expect(html).toContain('aria-label=');
       });
 
-      it("has all four state rail value slots", () => {
+      // QA r7 #1: «Modul» (srModuleName) and «Språk» (srLang) were dropped from the rail as redundant
+      // (module name is in the module card; language in the locale picker).
+      it("has the state rail value slots", () => {
         html = readFile(page);
-        expect(html).toContain('id="srModuleName"');
+        expect(html).not.toContain('id="srModuleName"');
         expect(html).toContain('id="srEditing"');
         expect(html).toContain('id="srLive"');
         expect(html).toContain('id="srChanges"');
+        expect(html).toContain('id="srPreview"');
       });
 
       it("has i18n keys on state rail labels", () => {
         html = readFile(page);
-        expect(html).toContain('data-i18n="stateRail.label.module"');
+        expect(html).not.toContain('data-i18n="stateRail.label.module"');
+        expect(html).not.toContain('data-i18n="stateRail.label.language"');
         expect(html).toContain('data-i18n="stateRail.label.editing"');
         expect(html).toContain('data-i18n="stateRail.label.live"');
         expect(html).toContain('data-i18n="stateRail.label.changes"');

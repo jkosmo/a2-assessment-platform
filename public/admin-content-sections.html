@@ -76,7 +76,11 @@
       .sections-table .col-actions { white-space: nowrap; }
 
       /* Editor */
-      .section-editor { max-width: 720px; }
+      /* QA r7 #2: let the editor fill the page width so the Markdown/Preview columns are a true 50/50
+         split of the available width (they were 50/50 of a 720px cap). Constrain only the single-column
+         fields so the title input doesn't stretch uncomfortably wide. */
+      .section-editor { max-width: none; }
+      .section-editor > .editor-field, .section-editor > .lang-tabs { max-width: 720px; }
       .editor-field { margin-bottom: var(--space-2); }
       .editor-field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
       .editor-field input[type="text"] { width: 100%; padding: 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 14px; }

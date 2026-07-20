@@ -628,7 +628,8 @@ test.describe("admin content browser coverage", () => {
 
     await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Fagforeninger");
     await expect(state.lastTitlePatchBody?.title?.["en-GB"]).toContain("[en-GB]");
-    await expect(page.locator("#srModuleName")).toHaveText("Fagforeninger");
+    // QA r7 #1: the module name was removed from the status rail (redundant with the module card).
+    // The rename is verified by the title-patch body above.
   });
 
   test("chat revision can rename the module title through a bounded free-text instruction", async ({ page }) => {
@@ -680,12 +681,11 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.getByText('I will update the module title to "Trade union dialogue" and refresh the localized variants.')).toBeVisible();
     await expect.poll(() => state.lastDraftLocalizationBody?.title).toBe("Trade union dialogue");
-    await expect(page.locator("#srModuleName")).toHaveText("Trade union dialogue");
 
     await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
+    // QA r7 #1: module name removed from the status rail; rename verified via the localization + patch bodies.
     await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Trade union dialogue");
-    await expect(page.locator("#srModuleName")).toHaveText("Trade union dialogue");
   });
 
   test("direct edit keeps MCQ visible and editable through translation and save", async ({ page }) => {
