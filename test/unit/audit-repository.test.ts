@@ -41,11 +41,11 @@ describe("audit repository", () => {
 
     await repository.findSubmissionAuditEvents("submission-1");
 
+    // #797: indexed equality on the denormalized submissionId column + a bounded take (no metadataJson LIKE).
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.any(Array),
-        }),
+        where: { submissionId: "submission-1" },
+        take: 500,
         include: expect.objectContaining({
           actor: expect.any(Object),
         }),

@@ -11,6 +11,7 @@ const generateStore = new MemoryStore();
 const extractStore = new MemoryStore();
 const intentLogStore = new MemoryStore();
 const discussionWriteStore = new MemoryStore();
+const auditTrailStore = new MemoryStore();
 
 function resolveRateLimitKey(request: Request) {
   return request.context?.userId ?? request.ip ?? "unknown";
@@ -50,6 +51,17 @@ export const generalApiLimiter = createLimiter({
   message: {
     error: "rate_limited",
     message: "Too many API requests. Retry in 60 seconds.",
+  },
+});
+
+// #797: the participant-reachable submission audit-trail read must be rate-limited — even with the
+// indexed query, a scripted refresh shouldn't be able to tie up connections in a tight loop.
+export const auditTrailLimiter = createLimiter({
+  store: auditTrailStore,
+  limit: 30,
+  message: {
+    error: "rate_limited",
+    message: "Too many audit-trail requests. Retry in 60 seconds.",
   },
 });
 
