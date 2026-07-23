@@ -81,6 +81,8 @@ export const auditActions = {
   },
   course: {
     created: "course_created",
+    // #805: course metadata edits (title/description/level/policy/discussions) had no audit trail.
+    updated: "course_updated",
     // AA-5 (#653): item-sekvensen er en write i agent-orkestreringen og må være sporbar.
     itemsUpdated: "course_items_updated",
     published: "course_published",
@@ -105,6 +107,9 @@ export const auditActions = {
   },
   enrollment: {
     assigned: "course_enrollment_assigned",
+    // #805: a summary of a bulk assignment so the compliance record stays coherent even if the per-user
+    // loop only partially succeeds (records requested vs actually-assigned counts).
+    bulkAssigned: "course_enrollment_bulk_assigned",
     revoked: "course_enrollment_revoked",
     selfEnrolled: "course_self_enrolled",
   },
@@ -314,6 +319,7 @@ export type AuditMetadataByAction = {
   [auditActions.agentAuthoring.tokenIssued]: EventMetadata<{ tokenId: string; expiresAt: string }>;
   [auditActions.agentAuthoring.tokenRevoked]: EventMetadata<{ tokenId: string }>;
   [auditActions.course.created]: EventMetadata<{ courseId: string }>;
+  [auditActions.course.updated]: EventMetadata<{ courseId: string; changedFields: string[] }>;
   [auditActions.course.itemsUpdated]: EventMetadata<{ courseId: string; itemCount: number }>;
   [auditActions.course.published]: EventMetadata<{ courseId: string }>;
   [auditActions.course.unpublished]: EventMetadata<{ courseId: string }>;
@@ -364,6 +370,12 @@ export type AuditMetadataByAction = {
     userId: string;
     courseId: string;
     source: string;
+  }>;
+  [auditActions.enrollment.bulkAssigned]: EventMetadata<{
+    courseId: string;
+    source: string;
+    requestedCount: number;
+    assignedCount: number;
   }>;
   [auditActions.enrollment.revoked]: EventMetadata<{ userId: string; courseId: string }>;
   [auditActions.enrollment.selfEnrolled]: EventMetadata<{ userId: string; courseId: string }>;

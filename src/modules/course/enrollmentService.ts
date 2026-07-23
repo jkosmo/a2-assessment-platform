@@ -72,22 +72,39 @@ export async function assignEnrollments(
   }
 
   const assignedUserIds: string[] = [];
-  for (const userId of userIds) {
-    await enrollmentRepository.assignEnrollment({
-      userId,
-      courseId,
-      assignedById: actorId,
-      source,
-      dueAt: input.dueAt ?? null,
-    });
-    await recordAuditEvent({
-      entityType: auditEntityTypes.course,
-      entityId: courseId,
-      action: auditActions.enrollment.assigned,
-      actorId: actorId ?? undefined,
-      metadata: { userId, courseId, source },
-    });
-    assignedUserIds.push(userId);
+  try {
+    for (const userId of userIds) {
+      await enrollmentRepository.assignEnrollment({
+        userId,
+        courseId,
+        assignedById: actorId,
+        source,
+        dueAt: input.dueAt ?? null,
+      });
+      await recordAuditEvent({
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.enrollment.assigned,
+        actorId: actorId ?? undefined,
+        metadata: { userId, courseId, source },
+      });
+      assignedUserIds.push(userId);
+    }
+  } finally {
+    // #805: record a bulk summary even if the loop only partially succeeded, so the compliance record
+    // shows the intended vs actual scope (requested N, assigned M). Guarded so a failure to write the
+    // summary never masks the enrollment outcome propagating to the caller.
+    try {
+      await recordAuditEvent({
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.enrollment.bulkAssigned,
+        actorId: actorId ?? undefined,
+        metadata: { courseId, source, requestedCount: userIds.length, assignedCount: assignedUserIds.length },
+      });
+    } catch {
+      /* summary is best-effort; the per-user events above are the authoritative trail */
+    }
   }
 
   return { assignedUserIds, source };
