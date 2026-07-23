@@ -1,6 +1,7 @@
 import { DefaultAzureCredential } from "@azure/identity";
 import { env } from "../../config/env.js";
 import { ValidationError } from "../../errors/AppError.js";
+import { fetchWithDeadlineAndRetry, withTimeout } from "../../clients/externalCall.js";
 import { applyOrgDeltaSync } from "./orgSyncService.js";
 
 // #690: import the members of a configured Entra group (e.g. "Alle i A-2 Norge", ~61 employees) into
@@ -52,7 +53,12 @@ export function mapGraphMemberToOrgSyncRecord(member: GraphMember): EntraUserSyn
 }
 
 async function getGraphToken(): Promise<string> {
-  const token = await new DefaultAzureCredential().getToken(GRAPH_SCOPE);
+  // #812: token acquisition (IMDS / managed identity) can hang — bound it so it can't wedge the sync tick.
+  const token = await withTimeout(
+    new DefaultAzureCredential().getToken(GRAPH_SCOPE),
+    env.ENTRA_GRAPH_TIMEOUT_MS,
+    "graph_token",
+  );
   if (!token?.token) throw new Error("Could not acquire a Microsoft Graph token (managed identity).");
   return token.token;
 }
@@ -63,7 +69,13 @@ async function fetchAllGroupMembers(groupId: string, accessToken: string): Promi
     `${GRAPH_BASE}/groups/${encodeURIComponent(groupId)}/members` +
     `?$select=id,displayName,mail,userPrincipalName,department,accountEnabled&$top=100`;
   while (url) {
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    // #812: idempotent GET → per-request deadline + bounded retry with backoff, so a hung or transiently
+    // failing Graph page can't wedge the Entra sync tick.
+    const response = await fetchWithDeadlineAndRetry(
+      url,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      { timeoutMs: env.ENTRA_GRAPH_TIMEOUT_MS, label: "graph_group_members" },
+    );
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       throw new Error(`Graph group members request failed (${response.status}): ${body.slice(0, 300)}`);

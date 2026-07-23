@@ -63,6 +63,10 @@ const envSchema = z.object({
   // #690: how often the scheduled Entra user sync runs (worker). Default 24h. Only active when
   // ENTRA_USER_SYNC_GROUP_ID is set.
   ENTRA_USER_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
+  // #812: per-request deadline for Microsoft Graph calls (token + group-member pages). Node's fetch has
+  // no default timeout, so a hung Graph response would wedge the Entra sync tick. Idempotent GETs, so
+  // the fetch is retried with backoff on timeout/5xx/429.
+  ENTRA_GRAPH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   MOCK_DEFAULT_USER_ID: z.string().default("dev-user-1"),
   MOCK_DEFAULT_EMAIL: z.string().email().default("dev.user@company.com"),
   MOCK_DEFAULT_NAME: z.string().default("Dev User"),
@@ -99,6 +103,9 @@ const envSchema = z.object({
     z.string().url().optional(),
   ),
   PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  // #812: deadline for an ACS email send (beginSend + pollUntilDone). Without it a slow/unresponsive
+  // ACS could block a worker tick (course reminders, recert, appeal SLA) indefinitely → wedged loop.
+  ACS_EMAIL_SEND_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   // #497: daglig bakgrunnsjobb for kurs-frist-påminnelser. Kjører kun i worker-rollen når
   // varselkanalen er aktiv (PARTICIPANT_NOTIFICATION_CHANNEL !== "disabled").
   COURSE_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(86_400_000),
