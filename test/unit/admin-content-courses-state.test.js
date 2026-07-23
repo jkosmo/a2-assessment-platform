@@ -58,6 +58,7 @@ describe("admin content courses state helpers", () => {
         publishedAt: null,
         archivedAt: null,
         inProgressCount: 0,
+        canManage: true,
       },
       {
         courseId: "course-2",
@@ -68,8 +69,22 @@ describe("admin content courses state helpers", () => {
         publishedAt: "2026-03-02T08:15:00.000Z",
         archivedAt: null,
         inProgressCount: 0,
+        canManage: true,
       },
     ]);
+  });
+
+  // #787 slice 5: canManage passes through — absent ⇒ true (older payload / admin), explicit false ⇒ false.
+  it("deriveCourseListRows carries canManage (false only when explicitly false)", () => {
+    const rows = deriveCourseListRows(
+      [
+        { id: "owned", title: {}, canManage: true },
+        { id: "not-owned", title: {}, canManage: false },
+        { id: "legacy", title: {} },
+      ],
+      { localizeTitle: () => "", formatDate: () => "" },
+    );
+    expect(rows.map((r) => r.canManage)).toEqual([true, false, true]);
   });
 
   // #524 (U3): the course-builder mixed module/section list — reorder + type-badge logic.

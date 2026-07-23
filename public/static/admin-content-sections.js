@@ -37,6 +37,7 @@ const LABELS = {
     published: "Section published.", unpublished: "Section unpublished.",
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Edit", del: "Delete", empty: "No sections yet.",
+    readonly: "Read-only", readonlyHint: "Only an owner or an administrator can change this section.",
     back: "← Back", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Delete this section?", loadError: "Could not load sections.",
@@ -56,6 +57,7 @@ const LABELS = {
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Rediger", del: "Slett", empty: "Ingen seksjoner ennå.",
+    readonly: "Skrivebeskyttet", readonlyHint: "Bare en eier eller administrator kan endre denne seksjonen.",
     back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
@@ -75,6 +77,7 @@ const LABELS = {
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Rediger", del: "Slett", empty: "Ingen seksjonar enno.",
+    readonly: "Skrivebeskytta", readonlyHint: "Berre ein eigar eller administrator kan endre denne seksjonen.",
     back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
@@ -287,6 +290,9 @@ async function renderListView() {
   const rows = visible.map((s) => {
     const status = sectionStatus(s);
     const id = escapeHtml(s.id);
+    // #787 slice 5: skjul rediger/livssyklus-handlingene for innhold brukeren ikke eier (og ikke er admin
+    // for) — samme regel som eierskaps-vakta, så vi ikke viser knapper som gir 403 ved lagring.
+    const canManage = s.canManage !== false;
     // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
     const lifecycle = status === "archived"
       ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>
@@ -308,8 +314,10 @@ async function renderListView() {
       <td style="white-space:nowrap">${escapeHtml(new Date(s.updatedAt).toLocaleDateString(currentLocale))}</td>
       <td class="col-actions">
         <div class="row-actions">
-          <button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
-          ${lifecycle}
+          ${canManage
+            ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
+          ${lifecycle}`
+            : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`}
         </div>
       </td>
     </tr>`;

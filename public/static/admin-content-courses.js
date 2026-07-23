@@ -549,6 +549,8 @@ async function renderListView() {
     const status = courseStatus(course);
     const cid = escapeHtml(course.courseId);
     const ctitle = escapeHtml(course.title);
+    // #787 slice 5: eier/admin styrer om rediger/livssyklus-handlingene vises (speiler eierskaps-vakta).
+    const canManage = course.canManage !== false;
     // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
     const publishToggle = canPublishCourse(course)
       ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>`
@@ -575,11 +577,12 @@ async function renderListView() {
       <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
       <td class="col-actions">
         <div class="row-actions">
-          <a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>
-          ${publishToggle}
+          ${canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>` : ""}
+          ${canManage ? publishToggle : ""}
           <button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>
-          ${archiveToggleBtn}
-          ${cascadeDeleteBtn}
+          ${canManage ? archiveToggleBtn : ""}
+          ${canManage ? cascadeDeleteBtn : ""}
+          ${canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre dette kurset.">Skrivebeskyttet</span>`}
         </div>
       </td>
     </tr>`;

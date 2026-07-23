@@ -96,6 +96,9 @@ function renderClassesTable() {
     const archived = !!c.archivedAt;
     const systemBadge = c.isSystem ? `<span class="system-badge">System</span>` : "";
     const statusBadge = archived ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : "";
+    // #787 slice 5: eier/admin styrer om Administrer/Arkiver-handlingene vises (speiler eierskaps-vakta).
+    // Systemklasser er ueide → bare admin forvalter dem, som før.
+    const canManage = c.canManage !== false;
     let action = "";
     if (!c.isSystem) {
       action = archived
@@ -110,8 +113,9 @@ function renderClassesTable() {
       <td>${c._count?.courseAssignments ?? 0}</td>
       <td class="col-actions">
         <div class="row-actions">
-          <button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>
-          ${action}
+          ${canManage
+            ? `<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>${action}`
+            : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne klassen.">Skrivebeskyttet</span>`}
         </div>
       </td>
     </tr>`;

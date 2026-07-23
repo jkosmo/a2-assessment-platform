@@ -52,6 +52,9 @@ export interface AdminCourseListItem {
   archivedAt: string | null;
   // #705-UX(F): antall deltakere som er midt i kurset (påbegynt, ikke fullført).
   inProgressCount: number;
+  // #787 slice 5: may the viewer manage this course (admin, or an owner)? Drives whether the list shows
+  // the edit/lifecycle actions — mirrors the ownership guard so we don't render buttons that 403.
+  canManage: boolean;
 }
 
 export interface AdminCourseDetail {

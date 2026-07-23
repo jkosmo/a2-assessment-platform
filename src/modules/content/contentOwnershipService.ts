@@ -36,6 +36,28 @@ export function listContentOwnerUserIds(
 }
 
 /**
+ * #787 slice 5 (list UX): batch version of the ownership decision for list views. Returns the subset of
+ * `contentIds` the actor may manage (edit / publish / archive / delete) — exactly the ids where
+ * assertContentOwnership would NOT throw. Same rule as decideOwnershipAccess: an ADMINISTRATOR manages
+ * all; a non-admin manages only the ids they own (unowned → not manageable). Lets a list endpoint annotate
+ * each row with `canManage`, so the UI can hide the action buttons the server would otherwise 403 on save.
+ */
+export async function listManageableContentIds(input: {
+  contentType: ContentOwnerType;
+  contentIds: string[];
+  actorUserId: string;
+  roles: string[];
+}): Promise<Set<string>> {
+  if (input.roles.includes("ADMINISTRATOR")) return new Set(input.contentIds);
+  if (input.contentIds.length === 0 || !input.actorUserId) return new Set();
+  const rows = await prisma.contentOwner.findMany({
+    where: { contentType: input.contentType, contentId: { in: input.contentIds }, userId: input.actorUserId },
+    select: { contentId: true },
+  });
+  return new Set(rows.map((r) => r.contentId));
+}
+
+/**
  * Throws ForbiddenError unless the actor may modify the given content object (admin, or an owner).
  * Gates AUTHORING only — participant read/visibility is governed elsewhere (enrollmentPolicy, #785/#786).
  */

@@ -235,6 +235,17 @@ Current application roles:
 - a claimed appeal should only be resolved by the same handler unless an admin intervenes
 - participants cannot alter historical decisions directly
 
+### Content ownership (#787) — authoring guard + list annotation
+
+Course/Section/Class/Module authoring mutations are gated by `requireContentOwnership` →
+`assertContentOwnership` (`decideOwnershipAccess`): `ADMINISTRATOR` bypasses; an owner (a `ContentOwner`
+row) is allowed; content with no owner is admin-only (`content_unowned`); any other non-owner is blocked
+(`content_ownership`). To keep the UI honest, the four admin list endpoints (`GET /api/admin/content/{courses,sections,classes,modules/library}`)
+annotate each row with **`canManage`** — the batch equivalent of the same decision (`listManageableContentIds`:
+admin ⇒ all; non-admin ⇒ only rows they own). The front-end hides edit/lifecycle actions (and the editor
+entry points) when `canManage=false`, showing a read-only marker instead, so a non-owner never sees a
+button the guard would 403. Read/copy actions (export, duplicate) stay available.
+
 ## Domain Invariants
 
 The key invariants that should stay true:

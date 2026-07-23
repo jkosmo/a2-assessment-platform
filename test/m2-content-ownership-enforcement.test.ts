@@ -54,4 +54,42 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
 
     expect([200, 204]).toContain((await request(app).delete(`/api/admin/content/classes/${id}`).set(smoA)).status);
   });
+
+  // #787 slice 5 (list UX): the list endpoints annotate each row with `canManage` so the UI hides the
+  // edit/lifecycle actions the guard above would 403 on. Owner + admin ⇒ true; a non-owner SMO ⇒ false.
+  const canManageOf = (rows: Array<{ id: string; canManage?: boolean }>, id: string) =>
+    rows.find((r) => r.id === id)?.canManage;
+
+  it("SECTION list: canManage true for owner+admin, false for non-owner", async () => {
+    const create = await request(app).post("/api/admin/content/sections").set(smoA).send({ title: L("Mng section"), bodyMarkdown: "# S" });
+    const id = create.body.section.id as string;
+    expect(canManageOf((await request(app).get("/api/admin/content/sections").set(smoA)).body.sections, id)).toBe(true);
+    expect(canManageOf((await request(app).get("/api/admin/content/sections").set(smoB)).body.sections, id)).toBe(false);
+    expect(canManageOf((await request(app).get("/api/admin/content/sections").set(admin)).body.sections, id)).toBe(true);
+  });
+
+  it("COURSE list: canManage true for owner+admin, false for non-owner", async () => {
+    const create = await request(app).post("/api/admin/content/courses").set(smoA).send({ title: L("Mng course") });
+    const id = create.body.course.id as string;
+    expect(canManageOf((await request(app).get("/api/admin/content/courses").set(smoA)).body.courses, id)).toBe(true);
+    expect(canManageOf((await request(app).get("/api/admin/content/courses").set(smoB)).body.courses, id)).toBe(false);
+    expect(canManageOf((await request(app).get("/api/admin/content/courses").set(admin)).body.courses, id)).toBe(true);
+  });
+
+  it("CLASS list: canManage true for owner+admin, false for non-owner", async () => {
+    const create = await request(app).post("/api/admin/content/classes").set(smoA).send({ name: `Mng-${Date.now()}` });
+    const id = create.body.class.id as string;
+    expect(canManageOf((await request(app).get("/api/admin/content/classes").set(smoA)).body.classes, id)).toBe(true);
+    expect(canManageOf((await request(app).get("/api/admin/content/classes").set(smoB)).body.classes, id)).toBe(false);
+    expect(canManageOf((await request(app).get("/api/admin/content/classes").set(admin)).body.classes, id)).toBe(true);
+  });
+
+  it("MODULE library: canManage true for owner+admin, false for non-owner", async () => {
+    const create = await request(app).post("/api/admin/content/modules").set(smoA).send({ title: L(`Mng module ${Date.now()}`) });
+    expect(create.status).toBe(201);
+    const id = create.body.module.id as string;
+    expect(canManageOf((await request(app).get("/api/admin/content/modules/library").set(smoA)).body.modules, id)).toBe(true);
+    expect(canManageOf((await request(app).get("/api/admin/content/modules/library").set(smoB)).body.modules, id)).toBe(false);
+    expect(canManageOf((await request(app).get("/api/admin/content/modules/library").set(admin)).body.modules, id)).toBe(true);
+  });
 });

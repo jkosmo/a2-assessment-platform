@@ -279,6 +279,9 @@ function renderLibrary() {
     const openConvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/conversation`;
     const openAdvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/advanced`;
     const isArchived = m.status === "archived";
+    // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
+    // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
+    const canManage = m.canManage !== false;
 
     const courseCountCell = m.courseCount > 0
       ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
@@ -305,12 +308,13 @@ function renderLibrary() {
       <td class="col-updated">${formatDate(m.updatedAt)}</td>
       <td class="col-actions">
         <div class="row-actions">
-          <a href="${openConvUrl}" class="row-action-btn">Åpne i Samtale</a>
-          <a href="${openAdvUrl}" class="row-action-btn">Åpne i Avansert</a>
+          ${canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne i Samtale</a>` : ""}
+          ${canManage ? `<a href="${openAdvUrl}" class="row-action-btn">Åpne i Avansert</a>` : ""}
           <button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>
           <button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>
-          ${unpublishAction}
-          ${archiveAction}
+          ${canManage ? unpublishAction : ""}
+          ${canManage ? archiveAction : ""}
+          ${canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne modulen.">Skrivebeskyttet</span>`}
         </div>
       </td>
     </tr>`;

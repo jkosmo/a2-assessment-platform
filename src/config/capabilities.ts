@@ -157,10 +157,14 @@ export function buildWorkspaceNavigationItems(calibrationAccessRoles: AppRoleTyp
       // #767: «Mine kurs» — deltakerens egen kurs-arbeidsflate. «Fullførte» er ikke lenger et eget
       // toppmeny-punkt; den nås via undernavigasjonen (Pågående | Fullførte) rendret av
       // public/static/mine-kurs-subnav.js på /participant og /participant/completed.
+      // #787 QA: synlig for ALLE roller (tom requiredRoles). Deltaker-arbeidsflaten viser kun den
+      // publiserte modulkatalogen (participantFacing=true → ingen utkast/admin-data) og er uansett nåbar
+      // via URL for enhver innlogget bruker. Tidligere manglet f.eks. en ren SUBJECT_MATTER_OWNER punktet
+      // og fikk en usammenhengende meny (skjult punkt, men nåbar side) — nå matcher nav faktisk tilgang.
       id: "participant",
       path: "/participant",
       labelKey: "nav.participant",
-      requiredRoles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
+      requiredRoles: [],
     },
     {
       id: "admin-content",

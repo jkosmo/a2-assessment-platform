@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
+import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
   createCourse,
@@ -130,13 +131,21 @@ adminCoursesRouter.post("/localize-copy", generateLimiter, async (request, respo
   }
 });
 
-adminCoursesRouter.get("/", async (_request, response, next) => {
+adminCoursesRouter.get("/", async (request, response, next) => {
   try {
     const courses = await courseRepository.listCourses();
     // #705-UX(F): vis antall påbegynte-ufullførte deltakere per kurs (samme signal som G3-vakta).
     const inProgressCounts = await Promise.all(
       courses.map((c) => countCourseInProgressParticipants(c.id)),
     );
+    // #787 slice 5: hvilke kurs kan innlogget bruker forvalte (admin eller eier)? Styrer om lista viser
+    // rediger/livssyklus-handlingene — speiler eierskaps-vakta så vi ikke rendrer knapper som gir 403.
+    const manageable = await listManageableContentIds({
+      contentType: "COURSE",
+      contentIds: courses.map((c) => c.id),
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
@@ -147,6 +156,7 @@ adminCoursesRouter.get("/", async (_request, response, next) => {
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
       inProgressCount: inProgressCounts[i],
+      canManage: manageable.has(c.id),
     }));
     response.json({ courses: items });
   } catch (error) {
