@@ -121,3 +121,27 @@ export function evaluateWorkerHealth(
     monitors,
   };
 }
+
+// #810: graceful shutdown must not kill an in-flight tick mid-work — a half-processed assessment job or
+// a partial sync should be allowed to finish. After the timers are stopped (no new ticks), poll each
+// monitor's `running` flag until every in-flight tick has settled, bounded by `timeoutMs` so a wedged
+// loop (the #809 case) can't block shutdown forever. Returns true if fully drained, false if it timed out
+// (the caller then force-exits, which is correct — a wedged tick is not going to finish).
+export interface DrainableMonitor {
+  health(): { running: boolean };
+}
+
+export async function drainInFlightTicks(
+  monitors: Array<DrainableMonitor | null | undefined>,
+  timeoutMs: number,
+  nowMs: () => number = () => Date.now(),
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  pollMs = 25,
+): Promise<boolean> {
+  const deadline = nowMs() + timeoutMs;
+  const anyRunning = () => monitors.some((m) => m?.health().running === true);
+  while (anyRunning() && nowMs() < deadline) {
+    await sleep(pollMs);
+  }
+  return !anyRunning();
+}

@@ -11,6 +11,7 @@ import { AuditRetentionMonitor } from "../../src/modules/retention/AuditRetentio
 import { AssessmentWorker } from "../../src/modules/assessment/AssessmentWorker.js";
 import {
   evaluateWorkerHealth,
+  drainInFlightTicks,
   type MonitorHealthSnapshot,
 } from "../../src/observability/workerHealth.js";
 
@@ -151,5 +152,33 @@ describe("monitor.health() exposes in-flight tick state (#809)", () => {
     expect(settled.running).toBe(false);
     expect(settled.tickStartedAt).toBeNull();
     expect(settled.lastCycleAt).not.toBeNull();
+  });
+});
+
+// #810: graceful shutdown drains in-flight ticks (bounded) before exiting.
+describe("drainInFlightTicks (#810)", () => {
+  it("resolves drained=true immediately when nothing is running", async () => {
+    const idle = { health: () => ({ running: false }) };
+    expect(await drainInFlightTicks([idle, null], 1_000)).toBe(true);
+  });
+
+  it("waits while a tick is running, then reports drained once it settles", async () => {
+    let running = true;
+    const monitor = { health: () => ({ running }) };
+    let clock = 0;
+    const nowMs = () => clock;
+    const sleep = async (ms: number) => {
+      clock += ms;
+      if (clock >= 60) running = false; // the in-flight tick finishes after ~60ms
+    };
+    expect(await drainInFlightTicks([monitor], 1_000, nowMs, sleep, 20)).toBe(true);
+    expect(running).toBe(false);
+  });
+
+  it("returns drained=false when a tick stays wedged past the timeout", async () => {
+    const wedged = { health: () => ({ running: true }) }; // never settles
+    let clock = 0;
+    const drained = await drainInFlightTicks([wedged], 100, () => clock, async (ms) => { clock += ms; }, 20);
+    expect(drained).toBe(false);
   });
 });
