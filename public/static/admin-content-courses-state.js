@@ -42,5 +42,7 @@ export function deriveCourseListRows(courses, { localizeTitle, formatDate }) {
     publishedAt: course.publishedAt ?? null,
     archivedAt: course.archivedAt ?? null,
     inProgressCount: course.inProgressCount ?? 0,
+    // #787 slice 5: may the viewer manage this course (admin or owner)? Absent (older payload) ⇒ true.
+    canManage: course.canManage !== false,
   }));
 }

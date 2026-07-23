@@ -29,7 +29,11 @@ function deriveLibraryStatus(module: {
   return "published";
 }
 
-export async function listLibraryModules(locale: SupportedLocale = "en-GB", viewerUserId?: string) {
+export async function listLibraryModules(
+  locale: SupportedLocale = "en-GB",
+  viewerUserId?: string,
+  viewerIsAdmin = false,
+) {
   const modules = await adminContentRepository.listLibraryModules();
   // #787/#836: annotate each module with whether the viewer owns it, so the quality/calibration picker
   // can default to "my modules". Only queried when a viewer id is supplied (unauthenticated → all false).
@@ -46,6 +50,9 @@ export async function listLibraryModules(locale: SupportedLocale = "en-GB", view
     activeVersionNo: module.activeVersion?.versionNo ?? null,
     latestVersionNo: module.versions[0]?.versionNo ?? null,
     ownedByMe: ownedIds.has(module.id),
+    // #787 slice 5: admin manages all; a non-admin manages only modules they own (unowned → admin-only).
+    // Same rule as the ownership guard, so the library hides the edit/lifecycle actions that would 403.
+    canManage: viewerIsAdmin || ownedIds.has(module.id),
     courseCount: module._count.courseItems,
     courses: module.courseItems.map((ci) => ({
       id: ci.course.id,

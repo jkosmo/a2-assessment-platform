@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.4 - 2026-07-23
+
+fix(#787): skjul rediger/livssyklus-handlinger for ikke-eiere + vis «Mine kurs» for alle roller (QA)
+
+To QA-oppfølginger på eierskaps-håndhevingen (#787):
+
+1. **Listene speiler nå eierskaps-vakta.** Kurs-, seksjon-, modul- og klasse-listene annoterer hver rad
+   med `canManage` (= admin eller eier — samme regel som `requireContentOwnership`), og frontend skjuler
+   Rediger/Publiser/Avpubliser/Arkiver/Gjenopprett/Slett (og editor-inngangene) når `canManage=false`.
+   En dempet «Skrivebeskyttet»-markør vises i stedet. Tidligere fikk en ikke-eier opp knappene og ble
+   først stoppet ved lagring (403). Lese-/kopi-handlinger (Eksporter, Dupliser) beholdes.
+   - Backend: ny batch-hjelper `listManageableContentIds` + `canManage` i de fire liste-endepunktene.
+   - Frontend: gating i `admin-content-{sections,courses,library,classes}.js` + `.row-readonly-note`-stil.
+2. **«Mine kurs» er nå synlig for alle roller** (tom `requiredRoles`). En ren SUBJECT_MATTER_OWNER fikk
+   tidligere et skjult meny-punkt mens `/participant` var nåbar via URL. Siden viser kun den publiserte
+   modulkatalogen (`participantFacing=true`, ingen utkast/admin-data), så nav matcher nå faktisk tilgang.
+
+Tester: 811 unit + DOM + integrasjon grønne; ny e2e beviser at rediger/livssyklus skjules for
+`canManage:false` og vises for `true`; ny regresjonsvakt på at «Mine kurs» er synlig for alle roller.
+Kun kode (ingen infra) — deploy via `deploy-app.yml`.
+
 ## 2.2.3 - 2026-07-20
 
 fix(#816): bind body-digest + nonce i parser-worker HMAC (replay-herding)

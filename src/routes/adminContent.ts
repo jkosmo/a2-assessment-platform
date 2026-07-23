@@ -239,7 +239,11 @@ adminContentRouter.post("/modules", async (request, response) => {
 adminContentRouter.get("/modules/library", async (request, response) => {
   const locale = (request.query.locale as string) || request.context?.locale || "en-GB";
   try {
-    const modules = await listLibraryModules(locale as Parameters<typeof listLibraryModules>[0], request.context?.userId);
+    const modules = await listLibraryModules(
+      locale as Parameters<typeof listLibraryModules>[0],
+      request.context?.userId,
+      request.context?.roles?.includes("ADMINISTRATOR") ?? false,
+    );
     response.json({ modules });
   } catch {
     response.status(500).json({ error: "list_library_failed" });

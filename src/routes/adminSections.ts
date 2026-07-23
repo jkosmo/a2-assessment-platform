@@ -1,5 +1,6 @@
 import { Router, type Request, type RequestHandler } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
+import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import multer from "multer";
 import { z } from "zod";
 import {
@@ -182,11 +183,19 @@ adminSectionsRouter.post("/localize", generateLimiter, async (request, response,
   }
 });
 
-adminSectionsRouter.get("/", async (_request, response, next) => {
+adminSectionsRouter.get("/", async (request, response, next) => {
   try {
     const sections = await listSections();
     // #705-UX(G): «Brukt i kurs»-kolonne med popover (likt modul-biblioteket).
     const coursesBySection = await findCoursesForSections(sections.map((s) => s.id));
+    // #787 slice 5: annotate each row with whether the viewer may manage it, so the list can hide the
+    // edit/lifecycle actions the ownership guard would 403 on (mirrors requireContentOwnership exactly).
+    const manageable = await listManageableContentIds({
+      contentType: "SECTION",
+      contentIds: sections.map((s) => s.id),
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
     response.json({
       sections: sections.map((s) => {
         const courses = coursesBySection.get(s.id) ?? [];
@@ -200,6 +209,7 @@ adminSectionsRouter.get("/", async (_request, response, next) => {
           archivedAt: s.archivedAt?.toISOString() ?? null,
           courseCount: courses.length,
           courses,
+          canManage: manageable.has(s.id),
         };
       }),
     });

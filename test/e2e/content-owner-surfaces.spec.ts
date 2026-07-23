@@ -90,6 +90,33 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
   await expect(panel.locator(".owner-compact-names")).toContainText("Alice Owner");
 });
 
+// #787 slice 5 — the section LIST hides edit/lifecycle actions for rows the viewer can't manage
+// (canManage:false), so a non-owner never sees a button the server would 403 on save. Drives the real
+// admin-content-sections.js list render with a mixed owned/not-owned payload.
+test("seksjon-liste: edit/lifecycle hidden for canManage:false, shown for canManage:true", async ({ page }) => {
+  await page.route("**/participant/config", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authMode: "mock", navigation: { items: [], workspaceItems: [] }, identityDefaults: { userId: "c1", email: "c@x.no", name: "C", roles: ["SUBJECT_MATTER_OWNER"] } }) }));
+  await page.route("**/version", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "e2e" }) }));
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "c1", email: "c@x.no", name: "C", roles: ["SUBJECT_MATTER_OWNER"] }, consent: { accepted: true }, pendingDeletion: null }) }));
+  await page.route("**/api/admin/content/sections", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [
+      { id: "sec-mine", title: { nb: "Min seksjon", nn: "", "en-GB": "" }, activeVersionId: "v1", versionNo: 1, updatedAt: "2026-07-20T00:00:00.000Z", archivedAt: null, courseCount: 0, courses: [], canManage: true },
+      { id: "sec-theirs", title: { nb: "Andres seksjon", nn: "", "en-GB": "" }, activeVersionId: "v1", versionNo: 1, updatedAt: "2026-07-20T00:00:00.000Z", archivedAt: null, courseCount: 0, courses: [], canManage: false },
+    ] }) }));
+
+  await page.goto("/admin-content/sections");
+
+  // Owned row: edit + lifecycle present.
+  await expect(page.locator('[data-action="edit"][data-id="sec-mine"]')).toBeVisible();
+  await expect(page.locator('[data-action="unpublish"][data-id="sec-mine"]')).toBeVisible();
+  // Not-owned row: no edit, no lifecycle — a read-only marker instead.
+  await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toHaveCount(0);
+  await expect(page.locator('[data-action="unpublish"][data-id="sec-theirs"]')).toHaveCount(0);
+  await expect(page.locator(".row-readonly-note")).toHaveCount(1);
+  await expect(page.locator(".row-readonly-note")).toHaveText("Skrivebeskyttet");
+});
+
 // QA #3 — the standalone section editor (admin-content-sections.js), reachable directly via ?id=.
 test("seksjon: owner panel renders in the section editor for an existing section", async ({ page }) => {
   await page.route("**/participant/config", (route: Route) =>

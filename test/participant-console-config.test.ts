@@ -3,6 +3,13 @@ import { app } from "../src/app.js";
 import { buildWorkspaceNavigationItems } from "../src/config/capabilities.js";
 
 describe("participant console runtime config", () => {
+  // #787 QA: «Mine kurs» must be visible to EVERY role (empty requiredRoles) — a pure SUBJECT_MATTER_OWNER
+  // previously got a hidden nav item while the page stayed reachable by URL. Guards that regression.
+  it("«Mine kurs» nav item is visible to all roles (empty requiredRoles)", () => {
+    const participant = buildWorkspaceNavigationItems([]).find((i) => i.id === "participant");
+    expect(participant?.requiredRoles).toEqual([]);
+  });
+
   it("returns runtime config with role presets and auth metadata", async () => {
     const response = await request(app).get("/participant/config");
 

@@ -1,5 +1,6 @@
 import { Router, type Request } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
+import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
   createClass,
@@ -25,9 +26,19 @@ const createClassSchema = z.object({
 const addMemberSchema = z.object({ userId: z.string().min(1) });
 const assignCourseSchema = z.object({ courseId: z.string().min(1), dueAt: z.string().datetime().nullish() });
 
-adminClassesRouter.get("/", async (_request, response, next) => {
+adminClassesRouter.get("/", async (request, response, next) => {
   try {
-    response.json({ classes: await listClasses() });
+    const classes = await listClasses();
+    // #787 slice 5: annotate each class with whether the viewer may manage it (admin or owner), so the
+    // list hides the archive/restore/manage actions the ownership guard would 403 on. System classes are
+    // unowned, so only an administrator manages them — which is the existing behaviour.
+    const manageable = await listManageableContentIds({
+      contentType: "CLASS",
+      contentIds: classes.map((c) => c.id),
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
+    response.json({ classes: classes.map((c) => ({ ...c, canManage: manageable.has(c.id) })) });
   } catch (error) {
     next(error);
   }

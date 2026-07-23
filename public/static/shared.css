@@ -1114,6 +1114,12 @@ dialog::backdrop {
 .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
 .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
 .row-action-btn.destructive:hover { background: #fdf0ef; }
+/* #787 slice 5: nøytral «Skrivebeskyttet»-markør når brukeren verken eier innholdet eller er admin —
+   samme høyde som knappene så radene ikke hopper, men tydelig ikke-interaktiv (dempet, hjelpe-markør). */
+.row-readonly-note {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0 4px;
+  font-size: 12px; color: var(--color-meta); font-style: italic; cursor: help; white-space: nowrap;
+}
 
 /* #705-UX(A): felles filter-piller (Alle/Aktive/Publiserte/Arkiverte) på tvers av admin-listene,
    samme uttrykk som modul-bibliotekets .library-filter-btn. */
