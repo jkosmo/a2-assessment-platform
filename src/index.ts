@@ -8,6 +8,7 @@ import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
 import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
+import { evaluateWorkerHealth, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -64,21 +65,28 @@ async function startServer() {
       console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${env.PROCESS_ROLE}]`);
     });
   } else {
-    // Worker-only mode: bind health endpoint so Azure App Service keeps the process alive
+    // Worker-only mode: bind the health endpoint Azure App Service probes. #809: this is READINESS, not
+    // just liveness — the endpoint returns 503 when a background loop is permanently stuck (a wedged
+    // in-flight tick, or no successful cycle within its staleness window), so the platform restarts the
+    // container. A hardcoded 200 previously hid a stuck loop from the probe. `startedAt` is the grace
+    // reference for monitors that haven't completed their first cycle yet.
     server = http.createServer((_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
+      const snapshots: MonitorHealthSnapshot[] = [
+        assessmentWorker?.health(),
+        appealSlaMonitor?.health(),
+        pseudonymizationMonitor?.health(),
+        auditRetentionMonitor?.health(),
+        entraUserSyncMonitor?.health(),
+        courseReminderMonitor?.health(),
+      ].filter((s): s is MonitorHealthSnapshot => Boolean(s));
+
+      const report = evaluateWorkerHealth(snapshots, new Date(), startedAt);
+      res.writeHead(report.healthy ? 200 : 503, { "content-type": "application/json" });
       res.end(JSON.stringify({
-        status: "ok",
+        status: report.healthy ? "ok" : "degraded",
         role: env.PROCESS_ROLE,
         startedAt: startedAt.toISOString(),
-        workers: {
-          assessmentWorker: assessmentWorker?.getStatus() ?? null,
-          appealSlaMonitor: appealSlaMonitor?.getStatus() ?? null,
-          pseudonymizationMonitor: pseudonymizationMonitor?.getStatus() ?? null,
-          auditRetentionMonitor: auditRetentionMonitor?.getStatus() ?? null,
-          entraUserSyncMonitor: entraUserSyncMonitor?.getStatus() ?? null,
-          courseReminderMonitor: courseReminderMonitor?.getStatus() ?? null,
-        },
+        health: report,
       }));
     }).listen(env.PORT, () => {
       // eslint-disable-next-line no-console

@@ -1,3 +1,4 @@
+import type { MonitorHealthSnapshot } from "../../observability/workerHealth.js";
 import { runAuditRetentionScan, type AuditRetentionResult } from "./auditRetentionService.js";
 
 type ScanRunner = () => Promise<AuditRetentionResult>;
@@ -13,6 +14,7 @@ export type AuditRetentionMonitorStatus = {
 export class AuditRetentionMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private tickStartedAt: Date | null = null;
   private lastCycleAt: Date | null = null;
 
   constructor(
@@ -42,9 +44,23 @@ export class AuditRetentionMonitor {
     return { lastCycleAt: this.lastCycleAt?.toISOString() ?? null };
   }
 
+  // #809: standardized snapshot for the worker readiness check. Always enabled while workers run.
+  health(): MonitorHealthSnapshot {
+    return {
+      name: "auditRetentionMonitor",
+      enabled: true,
+      intervalMs: this.pollIntervalMs,
+      running: this.running,
+      tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
+      lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
+      lastError: null,
+    };
+  }
+
   private async tick() {
     if (this.running) return;
     this.running = true;
+    this.tickStartedAt = new Date();
     try {
       await this.runScan();
       this.lastCycleAt = new Date();
@@ -53,6 +69,7 @@ export class AuditRetentionMonitor {
       console.warn(`[audit-retention] monitor tick failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;
+      this.tickStartedAt = null;
     }
   }
 }

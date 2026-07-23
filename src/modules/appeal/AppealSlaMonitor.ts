@@ -1,4 +1,5 @@
 import { env } from "../../config/env.js";
+import type { MonitorHealthSnapshot } from "../../observability/workerHealth.js";
 import { runAppealSlaMonitorNow, type AppealSlaMonitorSnapshot } from "./appealSlaMonitorService.js";
 
 type AppealSlaMonitorRunner = () => Promise<AppealSlaMonitorSnapshot>;
@@ -10,6 +11,7 @@ export type AppealSlaMonitorStatus = {
 export class AppealSlaMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private tickStartedAt: Date | null = null;
   private lastCycleAt: Date | null = null;
 
   constructor(
@@ -45,12 +47,26 @@ export class AppealSlaMonitor {
     return { lastCycleAt: this.lastCycleAt?.toISOString() ?? null };
   }
 
+  // #809: standardized snapshot for the worker readiness check. Always enabled while workers run.
+  health(): MonitorHealthSnapshot {
+    return {
+      name: "appealSlaMonitor",
+      enabled: true,
+      intervalMs: this.pollIntervalMs,
+      running: this.running,
+      tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
+      lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
+      lastError: null,
+    };
+  }
+
   private async tick() {
     if (this.running) {
       return;
     }
 
     this.running = true;
+    this.tickStartedAt = new Date();
     try {
       await this.runMonitor();
       this.lastCycleAt = new Date();
@@ -60,6 +76,7 @@ export class AppealSlaMonitor {
       console.warn(`[appeal-sla] monitor tick failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;
+      this.tickStartedAt = null;
     }
   }
 }

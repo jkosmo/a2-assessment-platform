@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { env } from "../../config/env.js";
+import type { MonitorHealthSnapshot } from "../../observability/workerHealth.js";
 import { processNextJob } from "./assessmentJobService.js";
 
 type AssessmentWorkerRunner = () => Promise<boolean>;
@@ -12,6 +13,7 @@ export type AssessmentWorkerStatus = {
 export class AssessmentWorker {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private tickStartedAt: Date | null = null;
   private lastCycleAt: Date | null = null;
   readonly instanceId: string;
 
@@ -54,12 +56,26 @@ export class AssessmentWorker {
     };
   }
 
+  // #809: standardized snapshot for the worker readiness check. Always enabled while workers run.
+  health(): MonitorHealthSnapshot {
+    return {
+      name: "assessmentWorker",
+      enabled: true,
+      intervalMs: this.pollIntervalMs,
+      running: this.running,
+      tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
+      lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
+      lastError: null,
+    };
+  }
+
   private async tick() {
     if (this.running) {
       return;
     }
 
     this.running = true;
+    this.tickStartedAt = new Date();
     try {
       await this.runJob();
       this.lastCycleAt = new Date();
@@ -68,6 +84,7 @@ export class AssessmentWorker {
       // Suppress here so the void-fired tick does not become an unhandled rejection.
     } finally {
       this.running = false;
+      this.tickStartedAt = null;
     }
   }
 }
