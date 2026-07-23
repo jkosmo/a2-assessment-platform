@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.6 - 2026-07-23
+
+M5 stabilization — participant attachment hardening (#815) + certification-status enum (#820)
+
+- **#815 — bound participant PDF/DOCX attachment parsing.** Submission attachments were parsed inline
+  in the web request (pdf-parse/mammoth) with no size cap, decompressed-size limit, or timeout — a DOCX
+  zip-bomb or pathological file could exhaust web memory/CPU below the per-minute limit. Hardened in
+  process: a decoded-byte cap, file-signature (magic-byte) validation (PDF `%PDF`, DOCX ZIP `PK\x03\x04`),
+  a **DOCX decompressed-size + entry-count cap read from the ZIP central directory without inflating**
+  (the zip-bomb defense — mammoth is never invoked on a bomb), and a 10s wall-clock timeout. A rejected
+  file falls back to the submission's raw text if present. Full parser-worker isolation remains a
+  follow-up (parent #783).
+- **#820 — CertificationStatus.status is now a Postgres enum (DB-level CHECK).** It was free-text String
+  with "passed" inferred as `status != 'NOT_CERTIFIED'` — safe only because the sole writer is
+  union-typed; a raw-SQL/untyped writer could store a typo that reads as passed. New
+  `CertificationLifecycleStatus` enum + an in-place `USING`-cast migration (no data loss). Passing states
+  are now listed explicitly (`CERTIFICATION_PASSED_STATUSES`/`isCertificationPassed`) so the check stays
+  correct if a future non-passing state is added.
+
+Tests: attachment signature/zip-bomb/entry-cap rejection; the enum rejects an out-of-set value via raw
+SQL and accepts all five. tsc 0 · 836 unit · 395 integration.
+
+Note: this version includes a DB migration (applied on web startup via `prisma migrate deploy`).
+
 ## 2.2.5 - 2026-07-23
 
 M5 stabilization — worker reliability cluster (#809 + #810 + #812)
