@@ -495,9 +495,18 @@ model AuditEvent {
   timestamp    DateTime @default(now())
   payloadHash  String
   metadataJson String
+  // #797: denormalized copy of the related submission id (from entityId when entityType='submission', or
+  // from metadata.submissionId otherwise) so the participant audit-trail read is an indexed equality
+  // lookup instead of an unindexable `metadataJson LIKE '%…%'` seq scan. Not an FK — the audit row must
+  // survive submission deletion.
+  submissionId String?
   actor        User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId, timestamp])
+  @@index([submissionId, timestamp])
+  // #807: retention purges by (action IN … AND timestamp < cutoff); without this index that was a seq
+  // scan over the whole indefinitely-growing table on every run.
+  @@index([action, timestamp])
 }
 
 model AssessmentJob {

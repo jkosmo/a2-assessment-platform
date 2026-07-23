@@ -15,12 +15,24 @@ export async function recordAuditEvent<TAction extends AuditAction>(
   const metadataJson = JSON.stringify(input.metadata ?? {});
   const repo = tx ? createAuditRepository(tx) : auditRepository;
 
+  // #797: denormalize the related submission id so the audit-trail read is an indexed lookup. Derived
+  // centrally here (not per call site): the entity id when this event is about a submission, else a
+  // submissionId carried in metadata. Not part of payloadHash — it's derived from already-hashed fields.
+  const metadataSubmissionId = (input.metadata as { submissionId?: unknown } | undefined)?.submissionId;
+  const submissionId =
+    input.entityType === "submission"
+      ? input.entityId
+      : typeof metadataSubmissionId === "string"
+        ? metadataSubmissionId
+        : null;
+
   await repo.createAuditEvent({
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,
     actorId: input.actorId,
     metadataJson,
+    submissionId,
     payloadHash: sha256(`${input.entityType}:${input.entityId}:${input.action}:${metadataJson}`),
   });
 }

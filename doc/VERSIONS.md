@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.7 - 2026-07-23
+
+M5 stabilization — security/audit quick-wins (#788 + #797 + #805 + #807)
+
+Four contained hardening fixes accumulated onto the stage batch.
+
+- **#788 — large-body pre-auth DoS.** Route-specific (up to ~35MB) and global JSON parsers ran before
+  authenticate, so an unauthenticated client could make Express buffer+parse a huge body before the 401.
+  A new IP-keyed `preBodyApiLimiter` (600/min) + `authenticate` now run on `/api` **before** the body
+  parsers (authenticate reads only headers). Verified structurally on the middleware stack.
+- **#797 — participant audit-trail read was a `metadataJson LIKE` seq scan.** New denormalized
+  `AuditEvent.submissionId` column + `@@index([submissionId, timestamp])` (derived centrally in
+  `recordAuditEvent`; backfilled by migration). Read is now indexed equality with a bounded take (500) +
+  a dedicated 30/min rate limiter.
+- **#805 — missing audit coverage.** Course-metadata edits now emit `course_updated` (with changed
+  fields); bulk enrollment emits a `course_enrollment_bulk_assigned` summary (requested vs assigned) in a
+  finally block so the trail stays coherent on partial success.
+- **#807 — audit-retention purge.** New `@@index([action, timestamp])`; the purge deletes in bounded
+  keyset batches instead of one unbounded transaction (short locks, autovacuum-friendly).
+
+Tests: 18 new (pre-body ordering; submissionId derivation + indexed read + pipeline parity; course_updated
++ bulk summary; batched retention across multiple batches). tsc 0 · 840 unit · integration green. Two DB
+migrations (audit action/timestamp index; audit submissionId column + backfill), applied on web startup.
+
 ## 2.2.6 - 2026-07-23
 
 M5 stabilization — participant attachment hardening (#815) + certification-status enum (#820)

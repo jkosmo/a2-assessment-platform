@@ -1,9 +1,12 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { getSubmissionAuditTrail } from "../services/auditService.js";
+import { auditTrailLimiter } from "../middleware/rateLimiting.js";
 
 const auditRouter = Router();
 
-auditRouter.get("/submissions/:submissionId", async (request, response, next) => {
+// Params typed explicitly: mounting a middleware before the inline handler widens Express's param
+// inference to `string | string[]`, so pin it back to a string submissionId.
+auditRouter.get("/submissions/:submissionId", auditTrailLimiter, async (request: Request<{ submissionId: string }>, response, next) => {
   const userId = request.context?.userId;
   const roles = request.context?.roles ?? [];
 

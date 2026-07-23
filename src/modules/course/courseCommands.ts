@@ -53,8 +53,21 @@ export async function updateCourse(
     enrollmentPolicy?: "OPEN" | "RESTRICTED";
     discussionsEnabled?: boolean;
   },
+  actorId?: string,
 ) {
-  return prisma.course.update({ where: { id: courseId }, data: input });
+  const course = await prisma.course.update({ where: { id: courseId }, data: input });
+  // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
+  await recordAuditEvent({
+    entityType: auditEntityTypes.course,
+    entityId: courseId,
+    action: auditActions.course.updated,
+    actorId,
+    metadata: {
+      courseId,
+      changedFields: Object.keys(input).filter((key) => input[key as keyof typeof input] !== undefined),
+    },
+  });
+  return course;
 }
 
 export async function publishCourse(courseId: string, actorId?: string) {

@@ -289,7 +289,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
-    });
+    }, request.context?.userId);
     response.json({ course });
   } catch (error) {
     next(error);
