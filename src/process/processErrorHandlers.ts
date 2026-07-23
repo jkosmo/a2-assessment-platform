@@ -1,7 +1,9 @@
 import { logOperationalEvent } from "../observability/operationalLog.js";
 import { operationalEvents } from "../observability/operationalEvents.js";
 
-export type GracefulShutdown = (exitCode?: number) => void;
+// #810: gracefulShutdown is async (it drains in-flight worker ticks before exiting). Error handlers
+// fire-and-forget it — they don't await — so a void-or-Promise return type keeps both callers valid.
+export type GracefulShutdown = (exitCode?: number) => void | Promise<void>;
 
 // #813: an unhandled rejection means a defect escaped all handling — the process may have partially
 // mutated state and can no longer be trusted to serve/schedule reliably. Log, then graceful-shutdown

@@ -1,6 +1,7 @@
 import { EmailClient } from "@azure/communication-email";
 import type { AppealStatus } from "@prisma/client";
 import { env } from "../../config/env.js";
+import { withTimeout } from "../../clients/externalCall.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { getAppealNotificationMessage, getAssessmentResultNotificationMessage } from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
@@ -194,8 +195,18 @@ export async function sendViaAcs(input: {
   };
 
   try {
-    const poller = await emailClient.beginSend(message);
-    const result = await poller.pollUntilDone();
+    // #812: bound the whole send (beginSend + pollUntilDone) so a slow/unresponsive ACS can't wedge the
+    // calling worker tick. No retry here — a re-send after a timeout could duplicate the email; the
+    // scheduled monitors re-run on their next cycle and are audit-deduped, so a dropped send is recovered
+    // safely without risking a double-send.
+    const result = await withTimeout(
+      (async () => {
+        const poller = await emailClient.beginSend(message);
+        return poller.pollUntilDone();
+      })(),
+      env.ACS_EMAIL_SEND_TIMEOUT_MS,
+      "acs_email_send",
+    );
 
     if (result.status === "Succeeded") {
       logOperationalEvent(operationalEvents.certification.participantNotificationSent, {

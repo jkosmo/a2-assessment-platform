@@ -1,4 +1,5 @@
 import { env } from "../../config/env.js";
+import type { MonitorHealthSnapshot } from "../../observability/workerHealth.js";
 import { syncEntraUsersFromGroup } from "./entraUserSyncService.js";
 
 // #690: scheduled background sync of the configured Entra group's members into the platform's user
@@ -16,6 +17,7 @@ const SYSTEM_ACTOR = "system_entra_user_sync";
 export class EntraUserSyncMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private tickStartedAt: Date | null = null;
   private lastCycleAt: Date | null = null;
   private lastError: string | null = null;
 
@@ -48,9 +50,23 @@ export class EntraUserSyncMonitor {
     };
   }
 
+  // #809: standardized snapshot for the worker readiness check.
+  health(): MonitorHealthSnapshot {
+    return {
+      name: "entraUserSyncMonitor",
+      enabled: Boolean(env.ENTRA_USER_SYNC_GROUP_ID),
+      intervalMs: this.pollIntervalMs,
+      running: this.running,
+      tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
+      lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
+      lastError: this.lastError,
+    };
+  }
+
   private async tick() {
     if (this.running || !env.ENTRA_USER_SYNC_GROUP_ID) return;
     this.running = true;
+    this.tickStartedAt = new Date();
     try {
       await this.runSync(SYSTEM_ACTOR);
       this.lastCycleAt = new Date();
@@ -60,6 +76,7 @@ export class EntraUserSyncMonitor {
       console.warn(`[#690] Entra user sync failed: ${this.lastError}`);
     } finally {
       this.running = false;
+      this.tickStartedAt = null;
     }
   }
 }

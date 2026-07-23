@@ -8,6 +8,7 @@ import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
 import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
+import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -28,18 +29,33 @@ const auditRetentionMonitor = startWorkers ? new AuditRetentionMonitor() : null;
 const entraUserSyncMonitor = startWorkers ? new EntraUserSyncMonitor() : null;
 const courseReminderMonitor = startWorkers ? new CourseReminderMonitor() : null;
 
-const gracefulShutdown = (exitCode = 0) => {
+const backgroundMonitors = [
+  assessmentWorker,
+  appealSlaMonitor,
+  pseudonymizationMonitor,
+  auditRetentionMonitor,
+  entraUserSyncMonitor,
+  courseReminderMonitor,
+];
+
+// #810: on shutdown, stop scheduling AND drain any in-flight tick before exiting, so we don't kill work
+// mid-flight (e.g. an assessment job being processed). Bounded so a wedged loop (#809) can't block the
+// exit — Azure allows ~30 s before SIGKILL, so 10 s of drain is safe headroom.
+const SHUTDOWN_DRAIN_TIMEOUT_MS = 10_000;
+
+const gracefulShutdown = async (exitCode = 0) => {
   if (shuttingDown) {
     return;
   }
 
   shuttingDown = true;
-  appealSlaMonitor?.stop();
-  assessmentWorker?.stop();
-  pseudonymizationMonitor?.stop();
-  auditRetentionMonitor?.stop();
-  entraUserSyncMonitor?.stop();
-  courseReminderMonitor?.stop();
+  for (const monitor of backgroundMonitors) monitor?.stop();
+
+  const drained = await drainInFlightTicks(backgroundMonitors, SHUTDOWN_DRAIN_TIMEOUT_MS);
+  if (!drained) {
+    // eslint-disable-next-line no-console
+    console.warn(`[#810] shutdown drain timed out after ${SHUTDOWN_DRAIN_TIMEOUT_MS}ms; a tick was still in flight`);
+  }
 
   if (!server) {
     process.exit(exitCode);
@@ -64,21 +80,23 @@ async function startServer() {
       console.log(`a2-assessment-platform listening on port ${env.PORT} [role=${env.PROCESS_ROLE}]`);
     });
   } else {
-    // Worker-only mode: bind health endpoint so Azure App Service keeps the process alive
+    // Worker-only mode: bind the health endpoint Azure App Service probes. #809: this is READINESS, not
+    // just liveness — the endpoint returns 503 when a background loop is permanently stuck (a wedged
+    // in-flight tick, or no successful cycle within its staleness window), so the platform restarts the
+    // container. A hardcoded 200 previously hid a stuck loop from the probe. `startedAt` is the grace
+    // reference for monitors that haven't completed their first cycle yet.
     server = http.createServer((_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
+      const snapshots: MonitorHealthSnapshot[] = backgroundMonitors
+        .map((m) => m?.health())
+        .filter((s): s is MonitorHealthSnapshot => Boolean(s));
+
+      const report = evaluateWorkerHealth(snapshots, new Date(), startedAt);
+      res.writeHead(report.healthy ? 200 : 503, { "content-type": "application/json" });
       res.end(JSON.stringify({
-        status: "ok",
+        status: report.healthy ? "ok" : "degraded",
         role: env.PROCESS_ROLE,
         startedAt: startedAt.toISOString(),
-        workers: {
-          assessmentWorker: assessmentWorker?.getStatus() ?? null,
-          appealSlaMonitor: appealSlaMonitor?.getStatus() ?? null,
-          pseudonymizationMonitor: pseudonymizationMonitor?.getStatus() ?? null,
-          auditRetentionMonitor: auditRetentionMonitor?.getStatus() ?? null,
-          entraUserSyncMonitor: entraUserSyncMonitor?.getStatus() ?? null,
-          courseReminderMonitor: courseReminderMonitor?.getStatus() ?? null,
-        },
+        health: report,
       }));
     }).listen(env.PORT, () => {
       // eslint-disable-next-line no-console

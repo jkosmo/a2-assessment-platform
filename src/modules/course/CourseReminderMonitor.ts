@@ -1,4 +1,5 @@
 import { env } from "../../config/env.js";
+import type { MonitorHealthSnapshot } from "../../observability/workerHealth.js";
 import { runCourseReminderSchedule } from "./courseReminderService.js";
 
 // #497: scheduled background job that sends course due-date reminders (due-soon + overdue) to
@@ -16,6 +17,7 @@ export type CourseReminderMonitorStatus = {
 export class CourseReminderMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private tickStartedAt: Date | null = null;
   private lastCycleAt: Date | null = null;
   private lastError: string | null = null;
   private lastSummary: unknown | null = null;
@@ -54,9 +56,23 @@ export class CourseReminderMonitor {
     };
   }
 
+  // #809: standardized snapshot for the worker readiness check.
+  health(): MonitorHealthSnapshot {
+    return {
+      name: "courseReminderMonitor",
+      enabled: this.enabled,
+      intervalMs: this.pollIntervalMs,
+      running: this.running,
+      tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
+      lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
+      lastError: this.lastError,
+    };
+  }
+
   private async tick() {
     if (this.running || !this.enabled) return;
     this.running = true;
+    this.tickStartedAt = new Date();
     try {
       this.lastSummary = await this.runSchedule();
       this.lastCycleAt = new Date();
@@ -66,6 +82,7 @@ export class CourseReminderMonitor {
       console.warn(`[#497] Course reminder schedule failed: ${this.lastError}`);
     } finally {
       this.running = false;
+      this.tickStartedAt = null;
     }
   }
 }
