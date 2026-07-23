@@ -455,12 +455,24 @@ model ManualReview {
   @@index([reviewStatus, createdAt])
 }
 
+// #820: certification lifecycle states. Previously CertificationStatus.status was free-text String and
+// "passed" was inferred as status != 'NOT_CERTIFIED' — safe only because the sole writer is union-typed;
+// a raw-SQL/untyped writer could store a typo that reads as "passed". A Postgres enum is a DB-level CHECK
+// that rejects any value outside this set. Passing states are all of these except NOT_CERTIFIED.
+enum CertificationLifecycleStatus {
+  ACTIVE
+  DUE_SOON
+  DUE
+  EXPIRED
+  NOT_CERTIFIED
+}
+
 model CertificationStatus {
   id                     String             @id @default(cuid())
   userId                 String
   moduleId               String
   latestDecisionId       String
-  status                 String
+  status                 CertificationLifecycleStatus
   passedAt               DateTime?
   expiryDate             DateTime?
   recertificationDueDate DateTime?

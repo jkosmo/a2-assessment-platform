@@ -1,5 +1,20 @@
 import path from "node:path";
 import { createRequire } from "node:module";
+import { withTimeout } from "../../clients/externalCall.js";
+
+// #815: participant submission attachments (PDF/DOCX, base64 within the upload cap) are parsed inline in
+// the web request. Without guards a DOCX zip-bomb or pathological file exhausts web memory/CPU below the
+// per-minute rate limit. These bounds neutralize that in-process:
+//   - a hard byte cap on the decoded attachment,
+//   - magic-byte (file-signature) validation so the bytes actually match the claimed PDF/DOCX,
+//   - a DOCX decompressed-size + entry-count cap read from the ZIP central directory WITHOUT inflating
+//     (the classic zip-bomb defense — a bomb declares a huge uncompressed size that we reject up front),
+//   - a wall-clock timeout around the parse.
+// Full out-of-process isolation (routing through the parser worker) is deliberately out of scope here.
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // decoded payload cap (matches the ~5MB upload limit)
+export const MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024; // a real .docx is well under this; bombs aren't
+export const MAX_DOCX_ENTRIES = 512; // a real .docx has tens of parts; bombs pack far more
+export const DOCUMENT_PARSE_TIMEOUT_MS = 10_000;
 
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse") as (buffer: Buffer) => Promise<{ text?: string }>;
@@ -87,8 +102,16 @@ export async function resolveSubmissionResponseJson(
   const payload = decodeAttachmentBase64(attachmentBase64);
 
   try {
-    const extracted =
-      format === "pdf" ? await adapters.parsePdf(payload) : await adapters.parseDocx(payload);
+    // #815: reject before handing anything to pdf-parse/mammoth.
+    assertAttachmentWithinByteCap(payload);
+    assertFileSignatureMatches(payload, format);
+    if (format === "docx") assertDocxWithinDecompressionLimits(payload);
+
+    const extracted = await withTimeout(
+      format === "pdf" ? adapters.parsePdf(payload) : adapters.parseDocx(payload),
+      DOCUMENT_PARSE_TIMEOUT_MS,
+      `parse_${format}`,
+    );
     const normalized = extracted.trim();
     if (!normalized) {
       if (hasResponseJson) {
@@ -154,6 +177,70 @@ function detectDocumentFormat(mimeType: string | undefined, fileName: string | u
     return "docx";
   }
   return "unknown";
+}
+
+// #815: hard cap on the decoded attachment — defense in depth behind the upload body limit.
+function assertAttachmentWithinByteCap(payload: Buffer) {
+  if (payload.length > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`attachment_too_large_${payload.length}`);
+  }
+}
+
+// #815: verify the bytes actually start with the expected file signature, so a file can't be disguised
+// (e.g. a zip bomb sent with a .pdf name) to reach the wrong parser. PDF = "%PDF"; DOCX is a ZIP = "PK\x03\x04".
+function assertFileSignatureMatches(payload: Buffer, format: "pdf" | "docx") {
+  if (format === "pdf") {
+    if (!(payload.length >= 4 && payload[0] === 0x25 && payload[1] === 0x50 && payload[2] === 0x44 && payload[3] === 0x46)) {
+      throw new Error("pdf_signature_mismatch");
+    }
+    return;
+  }
+  // docx → local file header of a ZIP archive.
+  if (!(payload.length >= 4 && payload[0] === 0x50 && payload[1] === 0x4b && payload[2] === 0x03 && payload[3] === 0x04)) {
+    throw new Error("docx_signature_mismatch");
+  }
+}
+
+// #815: zip-bomb defense. A .docx is a ZIP; mammoth inflates it into memory. Read the declared uncompressed
+// size + entry count from the ZIP central directory WITHOUT inflating, and reject an archive that would
+// expand past the caps. Sizes hidden behind a ZIP64 marker (0xFFFFFFFF) are conservatively rejected.
+function assertDocxWithinDecompressionLimits(payload: Buffer) {
+  const EOCD_SIG = 0x06054b50; // End Of Central Directory record
+  const CDH_SIG = 0x02014b50; // Central Directory File Header
+
+  // EOCD sits at the end, before an optional comment (max 64KB). Scan backwards for its signature.
+  let eocd = -1;
+  const scanFloor = Math.max(0, payload.length - 22 - 0xffff);
+  for (let i = payload.length - 22; i >= scanFloor; i--) {
+    if (payload.readUInt32LE(i) === EOCD_SIG) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd === -1) throw new Error("docx_zip_eocd_not_found");
+
+  const totalEntries = payload.readUInt16LE(eocd + 10);
+  if (totalEntries > MAX_DOCX_ENTRIES) throw new Error(`docx_too_many_entries_${totalEntries}`);
+  const cdOffset = payload.readUInt32LE(eocd + 16);
+  if (cdOffset === 0xffffffff) throw new Error("docx_zip64_unsupported");
+
+  let ptr = cdOffset;
+  let totalUncompressed = 0;
+  for (let n = 0; n < totalEntries; n++) {
+    if (ptr + 46 > payload.length || payload.readUInt32LE(ptr) !== CDH_SIG) {
+      throw new Error("docx_central_directory_malformed");
+    }
+    const uncompressedSize = payload.readUInt32LE(ptr + 24);
+    if (uncompressedSize === 0xffffffff) throw new Error("docx_zip64_unsupported");
+    totalUncompressed += uncompressedSize;
+    if (totalUncompressed > MAX_DOCX_UNCOMPRESSED_BYTES) {
+      throw new Error(`docx_decompressed_too_large_${totalUncompressed}`);
+    }
+    const nameLen = payload.readUInt16LE(ptr + 28);
+    const extraLen = payload.readUInt16LE(ptr + 30);
+    const commentLen = payload.readUInt16LE(ptr + 32);
+    ptr += 46 + nameLen + extraLen + commentLen;
+  }
 }
 
 function decodeAttachmentBase64(input: string) {
