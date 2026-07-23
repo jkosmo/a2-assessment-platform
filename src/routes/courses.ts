@@ -15,6 +15,7 @@ import {
 } from "../modules/course/index.js";
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
+import { isCertificationPassed } from "../modules/certification/certificationRepository.js";
 import { hasCertificateBackground } from "../modules/platformConfig/certificateBackgroundService.js";
 import { discussionsRouter } from "./discussions.js";
 
@@ -265,7 +266,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       }
       const moduleId = item.moduleId ?? item.module?.id ?? "";
       const certStatus = certStatusByModuleId.get(moduleId);
-      const passed = certStatus !== undefined && certStatus !== "NOT_CERTIFIED";
+      const passed = isCertificationPassed(certStatus);
       const hasStarted = latestSubmissionByModuleId.has(moduleId);
       // #502-followup: en modul er «tilgjengelig» for deltaker når den har en publisert aktiv
       // versjon og ikke er arkivert. Avpubliserte moduler markeres i UI (ikke en blindvei).
@@ -309,7 +310,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       },
       modules: course.modules.map((cm) => {
         const certStatus = certStatusByModuleId.get(cm.moduleId);
-        const passed = certStatus !== undefined && certStatus !== "NOT_CERTIFIED";
+        const passed = isCertificationPassed(certStatus);
         const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
         return {
           moduleId: cm.moduleId,

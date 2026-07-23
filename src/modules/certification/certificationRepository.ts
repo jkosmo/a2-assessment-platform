@@ -1,6 +1,21 @@
+import type { CertificationLifecycleStatus } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 
 type CertificationRepositoryClient = Pick<typeof prisma, "certificationStatus">;
+
+// #820: "passed a module" = any certification lifecycle state except NOT_CERTIFIED. Listing the passing
+// states explicitly (rather than the old `status != 'NOT_CERTIFIED'`) keeps the check correct if a future
+// non-passing state is ever added — the CertificationLifecycleStatus enum makes this set authoritative.
+export const CERTIFICATION_PASSED_STATUSES: CertificationLifecycleStatus[] = [
+  "ACTIVE",
+  "DUE_SOON",
+  "DUE",
+  "EXPIRED",
+];
+
+export function isCertificationPassed(status: CertificationLifecycleStatus | null | undefined): boolean {
+  return status != null && (CERTIFICATION_PASSED_STATUSES as string[]).includes(status);
+}
 
 export function createCertificationRepository(client: CertificationRepositoryClient = prisma) {
   return {

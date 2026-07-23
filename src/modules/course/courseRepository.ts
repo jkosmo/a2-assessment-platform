@@ -1,5 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
+import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
   return {
@@ -76,7 +77,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         where: {
           userId,
           moduleId: { in: moduleIds },
-          status: { not: "NOT_CERTIFIED" },
+          status: { in: CERTIFICATION_PASSED_STATUSES },
         },
       });
     },
@@ -268,7 +269,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       return client.certificationStatus.count({
         where: {
           moduleId,
-          status: { not: "NOT_CERTIFIED" },
+          status: { in: CERTIFICATION_PASSED_STATUSES },
           ...buildCertificationWhere(filters),
         },
       });
