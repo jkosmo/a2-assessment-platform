@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.5 - 2026-07-23
+
+M5 stabilization — worker reliability cluster (#809 + #810 + #812)
+
+Three related fixes so a stuck background loop is detected, survived, and prevented. All code-only
+(no infra), deployed as one bundle.
+
+- **#809 — worker health returns 503 when a loop is stuck (liveness ≠ readiness).** The worker
+  `/healthz` returned a hardcoded 200 regardless of monitor state, so a permanently stuck loop was
+  invisible to Azure's probe and the container was never auto-replaced. New pure
+  `evaluateWorkerHealth` with per-monitor thresholds derived from each monitor's own interval (the six
+  span 4s..24h): **wedged** (in-flight tick running > interval×3) or **stalled** (no success within
+  interval×3), both floored at 60s so short-interval monitors / warm-up don't flap. Each monitor
+  exposes `health()` (adds `tickStartedAt`); `getStatus()` unchanged. Worker `healthCheckPath=/healthz`
+  is already wired in bicep, so Azure now auto-restarts a stuck worker.
+- **#810 — graceful shutdown drains in-flight work.** `gracefulShutdown` stopped scheduling but didn't
+  wait for a tick already running, so shutdown could kill work mid-flight. It now drains (bounded 10s;
+  Azure allows ~30s before SIGKILL) before exiting; a wedged tick can't block the exit.
+- **#812 — deadlines + bounded retries on ACS email and Microsoft Graph.** Node's fetch has no default
+  timeout and the ACS poller waits indefinitely, so a hung dependency could wedge a tick. New
+  `src/clients/externalCall.ts`: `withTimeout` bounds the ACS send (30s, no retry — audit-deduped
+  re-run avoids double-send) and Graph token; `fetchWithDeadlineAndRetry` gives the idempotent Graph
+  GETs a 15s per-attempt deadline + backoff retry.
+
+Tests: 18 new (health evaluator wedged/stalled/disabled/grace/floor/aggregate, in-flight snapshot,
+drain idle/settle/wedged, external-call timeout + retry + abort). tsc 0 · 829 unit · 393 integration.
+
 ## 2.2.4 - 2026-07-23
 
 fix(#787): skjul rediger/livssyklus-handlinger for ikke-eiere + vis «Mine kurs» for alle roller (QA)
