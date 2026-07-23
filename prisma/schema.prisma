@@ -498,6 +498,9 @@ model AuditEvent {
   actor        User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId, timestamp])
+  // #807: retention purges by (action IN … AND timestamp < cutoff); without this index that was a seq
+  // scan over the whole indefinitely-growing table on every run.
+  @@index([action, timestamp])
 }
 
 model AssessmentJob {
