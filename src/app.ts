@@ -11,7 +11,7 @@ import { enforceAgentTokenScope } from "./auth/agentTokenScope.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
 import { securityHeadersMiddleware } from "./middleware/securityHeaders.js";
-import { generalApiLimiter } from "./middleware/rateLimiting.js";
+import { generalApiLimiter, preBodyApiLimiter } from "./middleware/rateLimiting.js";
 import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
 import { meRouter } from "./routes/me.js";
@@ -48,6 +48,12 @@ const publicStaticPath = path.resolve(publicRootPath, "static");
 app.use(attachCorrelationId);
 app.use(requestLoggingMiddleware);
 app.use(securityHeadersMiddleware);
+// #788: throttle (IP-keyed) and authenticate BEFORE the JSON body parsers below. Otherwise an
+// unauthenticated client can POST an honest up-to-~35MB body to a large-limit route (course-import,
+// source-material, sections) and Express buffers + parses it — event-loop-blocking — only to reject it
+// with a 401 further down, consuming no rate-limit quota. authenticate reads only headers, so it is safe
+// to run before body parsing; the per-user generalApiLimiter + consent still run after auth (see below).
+app.use("/api", preBodyApiLimiter, authenticate);
 // #479 (Slice A): source-material upload sends files as base64 in JSON (10 MB max → ~13.3 MB
 // encoded). Give just that route a larger body limit, derived from the shared single-source-of-
 // truth constant so it can never be smaller than a max-size file's base64. Registered before the
@@ -218,7 +224,9 @@ app.get("/admin-platform", (_request, response) => {
 
 // AA-3 (#651): agent-token-autentiserte requests scopes til draft-authoring-
 // endepunktene rett etter autentisering — før noe annet får kjøre.
-app.use("/api", authenticate, enforceAgentTokenScope, generalApiLimiter, requireConsent);
+// #788: authenticate now runs earlier (before the body parsers, above). The remaining per-request chain
+// — agent-token scoping, the per-user rate limit, and consent — still applies to every /api route here.
+app.use("/api", enforceAgentTokenScope, generalApiLimiter, requireConsent);
 
 app.use("/api/me", meRouter);
 app.use("/api/courses", requireAnyRole(rolesFor("courses")), coursesRouter);
