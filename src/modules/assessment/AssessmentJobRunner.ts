@@ -129,17 +129,39 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
     return false;
   }
 
+  // #792: (WORKER_INSTANCE_ID, now) is the fence for THIS lock acquisition. A heartbeat renews the lease
+  // while the assessment runs (a long two-LLM-call run must not have its lease expire and get re-claimed),
+  // and every terminal write is conditioned on the fence, so if we DID lose the lease we no-op instead of
+  // overwriting the new owner's result.
+  const leaseDurationMs = env.ASSESSMENT_JOB_LEASE_DURATION_MS;
+  const heartbeat = setInterval(() => {
+    void assessmentJobRepository
+      .renewLease(candidate.id, WORKER_INSTANCE_ID, now, new Date(Date.now() + leaseDurationMs))
+      .catch(() => {
+        /* renewal is best-effort — the fenced terminal write is the real guard */
+      });
+  }, Math.max(1_000, Math.floor(leaseDurationMs / 3)));
+  heartbeat.unref?.();
+
   try {
     await runAssessment(candidate.id);
-    await assessmentJobRepository.markJobSucceeded(candidate.id);
+    const succeeded = await assessmentJobRepository.markJobSucceeded(candidate.id, WORKER_INSTANCE_ID, now);
+    if (succeeded.count === 0) {
+      logLeaseLost(candidate.id, candidate.submissionId, "success");
+      return true;
+    }
   } catch (error) {
     const job = await assessmentJobRepository.findAssessmentJobOrThrow(candidate.id);
     const willRetry = job.attempts < job.maxAttempts;
-    await assessmentJobRepository.markJobForRetryOrFailure(candidate.id, {
+    const finalised = await assessmentJobRepository.markJobForRetryOrFailure(candidate.id, WORKER_INSTANCE_ID, now, {
       status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
       availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
       errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
     });
+    if (finalised.count === 0) {
+      logLeaseLost(candidate.id, candidate.submissionId, "failure");
+      return true;
+    }
 
     await recordAuditEvent({
       entityType: auditEntityTypes.assessmentJob,
@@ -155,9 +177,18 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
       },
     });
   } finally {
+    clearInterval(heartbeat);
     await logQueueBacklog("worker_cycle", candidate.submissionId);
   }
   return true;
+}
+
+// #792: the lease was reset + re-claimed by another worker before we could finalize — do not overwrite it.
+function logLeaseLost(jobId: string, submissionId: string, phase: "success" | "failure") {
+  console.warn(
+    `[#792] assessment job ${jobId} (submission ${submissionId}) lost its lease before the ${phase} write; ` +
+      "another worker now owns it — skipping the terminal write to avoid clobbering its result.",
+  );
 }
 
 async function logQueueBacklog(trigger: string, submissionId: string) {

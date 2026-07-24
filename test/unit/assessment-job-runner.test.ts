@@ -4,6 +4,7 @@ const findNextRunnableJob = vi.fn();
 const tryLockPendingJob = vi.fn();
 const markJobSucceeded = vi.fn();
 const markJobForRetryOrFailure = vi.fn();
+const renewLease = vi.fn();
 const findAssessmentJobOrThrow = vi.fn();
 const findPendingOrRunningJobForSubmission = vi.fn();
 const findPendingOrRunningJobIdForSubmission = vi.fn();
@@ -21,6 +22,7 @@ vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
     tryLockPendingJob,
     markJobSucceeded,
     markJobForRetryOrFailure,
+    renewLease,
     findAssessmentJobOrThrow,
     findPendingOrRunningJobForSubmission,
     findPendingOrRunningJobIdForSubmission,
@@ -46,7 +48,13 @@ describe("AssessmentJobRunner", () => {
     findNextRunnableJob.mockReset();
     tryLockPendingJob.mockReset();
     markJobSucceeded.mockReset();
+    // #792: terminal writes are now fenced updateMany calls returning { count }. Default to the winning
+    // case so the existing behavioural tests exercise the normal (lease-held) path.
+    markJobSucceeded.mockResolvedValue({ count: 1 });
     markJobForRetryOrFailure.mockReset();
+    markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
+    renewLease.mockReset();
+    renewLease.mockResolvedValue({ count: 1 });
     findAssessmentJobOrThrow.mockReset();
     findPendingOrRunningJobForSubmission.mockReset();
     findPendingOrRunningJobIdForSubmission.mockReset();
@@ -90,7 +98,7 @@ describe("AssessmentJobRunner", () => {
     it("returns true and marks job succeeded when runAssessment succeeds", async () => {
       findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "sub-1" });
       tryLockPendingJob.mockResolvedValue({ count: 1 });
-      markJobSucceeded.mockResolvedValue(undefined);
+      markJobSucceeded.mockResolvedValue({ count: 1 });
       const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn().mockResolvedValue(undefined);
 
@@ -98,7 +106,8 @@ describe("AssessmentJobRunner", () => {
 
       expect(result).toBe(true);
       expect(runAssessment).toHaveBeenCalledWith("job-1");
-      expect(markJobSucceeded).toHaveBeenCalledWith("job-1");
+      // #792: fenced terminal write — job id + the lock owner + the lock timestamp.
+      expect(markJobSucceeded).toHaveBeenCalledWith("job-1", expect.any(String), expect.any(Date));
     });
 
     it("schedules retry when runAssessment fails and attempts < maxAttempts", async () => {
@@ -110,7 +119,7 @@ describe("AssessmentJobRunner", () => {
         maxAttempts: 3,
         availableAt: new Date(),
       });
-      markJobForRetryOrFailure.mockResolvedValue(undefined);
+      markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
       const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn().mockRejectedValue(new Error("LLM timeout"));
 
@@ -119,6 +128,8 @@ describe("AssessmentJobRunner", () => {
       expect(result).toBe(true);
       expect(markJobForRetryOrFailure).toHaveBeenCalledWith(
         "job-1",
+        expect.any(String),
+        expect.any(Date),
         expect.objectContaining({ status: "PENDING" }),
       );
       expect(recordAuditEvent).toHaveBeenCalledWith(
@@ -135,7 +146,7 @@ describe("AssessmentJobRunner", () => {
         maxAttempts: 3,
         availableAt: new Date(),
       });
-      markJobForRetryOrFailure.mockResolvedValue(undefined);
+      markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
       const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
       const runAssessment = vi.fn().mockRejectedValue(new Error("Persistent error"));
 
@@ -143,6 +154,8 @@ describe("AssessmentJobRunner", () => {
 
       expect(markJobForRetryOrFailure).toHaveBeenCalledWith(
         "job-1",
+        expect.any(String),
+        expect.any(Date),
         expect.objectContaining({ status: "FAILED" }),
       );
       expect(recordAuditEvent).toHaveBeenCalledWith(
