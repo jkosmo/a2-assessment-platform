@@ -109,3 +109,33 @@ export async function revokeAgentAuthoringToken(input: {
   });
   return revoked;
 }
+
+// #789: an agent-authoring token freezes the issuer's effective roles at issuance, so a role removed
+// afterwards would otherwise stay authoring-capable until the token expires (up to 60 min). Revoke all of
+// a user's outstanding tokens when their privileges change, so the next request must re-authenticate with
+// current roles. Returns the number of tokens revoked.
+export async function revokeAllAgentTokensForUser(
+  userId: string,
+  reason: string,
+  at = new Date(),
+): Promise<number> {
+  const active = await prisma.agentAuthoringToken.findMany({
+    where: { userId, revokedAt: null },
+    select: { id: true },
+  });
+  if (active.length === 0) return 0;
+
+  await prisma.agentAuthoringToken.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: at },
+  });
+  for (const token of active) {
+    await recordAuditEvent({
+      entityType: auditEntityTypes.agentAuthoringToken,
+      entityId: token.id,
+      action: auditActions.agentAuthoring.tokenRevoked,
+      metadata: { tokenId: token.id, reason },
+    });
+  }
+  return active.length;
+}

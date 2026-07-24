@@ -116,6 +116,22 @@ describe("evaluateWorkerHealth (#809)", () => {
     expect(stalled.monitors[0].reason).toBe("stalled");
   });
 
+  it("a never-completed short-interval monitor is 'starting' (healthy) within the startup grace (#809 cold-start)", () => {
+    // The prod incident: the 4s assessment poller (60s stale window) had not completed its first cycle
+    // ~5 min into a B1 cold-start → it was wrongly flagged stalled → worker 503 → failed the smoke test.
+    const coldStart = new Date(nowMs - 5 * 60_000);
+    const report = evaluateWorkerHealth([snap({ intervalMs: 4_000, lastCycleAt: null })], NOW, coldStart);
+    expect(report.healthy).toBe(true);
+    expect(report.monitors[0].reason).toBe("ok");
+  });
+
+  it("a monitor that has never completed a cycle PAST the startup grace is stalled", () => {
+    const longDeadStart = new Date(nowMs - 20 * 60_000); // 20 min, beyond the 15 min startup grace
+    const report = evaluateWorkerHealth([snap({ intervalMs: 4_000, lastCycleAt: null })], NOW, longDeadStart);
+    expect(report.healthy).toBe(false);
+    expect(report.monitors[0].reason).toBe("stalled");
+  });
+
   it("one unhealthy monitor makes the whole worker unhealthy (all must be ready)", () => {
     const report = evaluateWorkerHealth(
       [snap({ lastCycleAt: iso(60_000) }), snap({ name: "stuck", lastCycleAt: iso(40 * 60_000) })],

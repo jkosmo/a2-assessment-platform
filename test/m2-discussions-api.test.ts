@@ -72,6 +72,23 @@ describe("Discussions API (#495/T-QA-2)", () => {
     expect(list.body.threads.some((t: { id: string }) => t.id === create.body.thread.id)).toBe(true);
   });
 
+  it("#802: isSubscribed is per-viewer (existence check), not 'any subscriber exists'", async () => {
+    const courseId = await makeOpenCourse();
+    const create = await request(app)
+      .post(`/api/courses/${courseId}/discussions`)
+      .set(asker)
+      .send({ kind: "DISCUSSION", title: "Sub", bodyMarkdown: "x" });
+    const threadId = create.body.thread.id;
+
+    // The author is auto-subscribed → true for them.
+    const askerView = await request(app).get(`/api/courses/${courseId}/discussions/${threadId}`).set(asker);
+    expect(askerView.body.thread.isSubscribed).toBe(true);
+
+    // The SMO has NOT subscribed → false, even though another subscriber (the author) exists.
+    const smoView = await request(app).get(`/api/courses/${courseId}/discussions/${threadId}`).set(smo);
+    expect(smoView.body.thread.isSubscribed).toBe(false);
+  });
+
   it("QUESTION-flyt: svar + aksepter svar (av spørrer) → RESOLVED", async () => {
     const courseId = await makeOpenCourse();
     const q = await request(app)
