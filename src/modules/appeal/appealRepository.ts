@@ -254,13 +254,20 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
       });
     },
 
-    markAppealInReview(appealId: string, handlerId: string, claimedAt?: Date | null) {
-      return client.appeal.update({
-        where: { id: appealId },
+    // #790: atomic guarded claim. The WHERE encodes the preconditions (not already terminal; and, unless an
+    // admin takeover, not already claimed by someone else), so two concurrent claims can't both succeed —
+    // exactly one updateMany affects a row; the loser gets count 0 and the caller raises ConflictError.
+    markAppealInReviewGuarded(appealId: string, handlerId: string, allowTakeover: boolean, alreadyClaimed: boolean) {
+      return client.appeal.updateMany({
+        where: {
+          id: appealId,
+          appealStatus: { notIn: ["RESOLVED", "REJECTED", "SUPERSEDED"] },
+          ...(allowTakeover ? {} : { OR: [{ resolvedById: null }, { resolvedById: handlerId }] }),
+        },
         data: {
           appealStatus: "IN_REVIEW",
           resolvedById: handlerId,
-          ...(claimedAt ? {} : { claimedAt: new Date() }),
+          ...(alreadyClaimed ? {} : { claimedAt: new Date() }),
         },
       });
     },
@@ -294,9 +301,27 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
       return client.assessmentDecision.create({ data });
     },
 
-    markAppealResolved(appealId: string, handlerId: string, resolvedAt: Date, resolutionNote: string) {
-      return client.appeal.update({
-        where: { id: appealId },
+    // #790: plain row re-read after a guarded transition (the guarded updateMany can't return the row).
+    findAppealById(appealId: string) {
+      return client.appeal.findUniqueOrThrow({ where: { id: appealId } });
+    },
+
+    // #790: atomic guarded resolve. Same guard as the claim: the appeal must not already be terminal, and
+    // (unless admin takeover) must be unassigned or ours. count 0 → another handler resolved first → the
+    // caller raises ConflictError, rolling back the transaction BEFORE any resolution decision is appended.
+    markAppealResolvedGuarded(
+      appealId: string,
+      handlerId: string,
+      resolvedAt: Date,
+      resolutionNote: string,
+      allowTakeover: boolean,
+    ) {
+      return client.appeal.updateMany({
+        where: {
+          id: appealId,
+          appealStatus: { notIn: ["RESOLVED", "REJECTED", "SUPERSEDED"] },
+          ...(allowTakeover ? {} : { OR: [{ resolvedById: null }, { resolvedById: handlerId }] }),
+        },
         data: {
           appealStatus: "RESOLVED",
           resolvedAt,

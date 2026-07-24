@@ -11,9 +11,10 @@ const createAppeal = vi.fn();
 const updateSubmissionStatus = vi.fn();
 const findUserNotificationRecipient = vi.fn();
 const findAppealForClaim = vi.fn();
-const markAppealInReview = vi.fn();
+const markAppealInReviewGuarded = vi.fn();
 const findAppealForResolution = vi.fn();
-const markAppealResolved = vi.fn();
+const markAppealResolvedGuarded = vi.fn();
+const findAppealById = vi.fn();
 const recordAuditEvent = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 const logOperationalEvent = vi.fn();
@@ -31,13 +32,14 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
     supersedeMany,
     findUserNotificationRecipient,
     findAppealForClaim,
-    markAppealInReview,
+    markAppealInReviewGuarded,
     findAppealForResolution,
   },
   createAppealRepository: () => ({
     createAppeal,
     updateSubmissionStatus,
-    markAppealResolved,
+    markAppealResolvedGuarded,
+    findAppealById,
     findOpenByUserAndModule,
     supersedeMany,
   }),
@@ -69,9 +71,10 @@ describe("appeal service", () => {
     updateSubmissionStatus.mockReset();
     findUserNotificationRecipient.mockReset();
     findAppealForClaim.mockReset();
-    markAppealInReview.mockReset();
+    markAppealInReviewGuarded.mockReset();
     findAppealForResolution.mockReset();
-    markAppealResolved.mockReset();
+    markAppealResolvedGuarded.mockReset();
+    findAppealById.mockReset();
     recordAuditEvent.mockReset();
     notifyAppealStatusTransition.mockReset();
     logOperationalEvent.mockReset();
@@ -201,7 +204,7 @@ describe("appeal service", () => {
       code: "appeal_already_assigned",
     });
 
-    expect(markAppealInReview).not.toHaveBeenCalled();
+    expect(markAppealInReviewGuarded).not.toHaveBeenCalled();
   });
 
   it("resolves an appeal by creating a new immutable decision and completing the submission", async () => {
@@ -236,7 +239,8 @@ describe("appeal service", () => {
       passFailTotal: true,
       decisionType: DecisionType.APPEAL_RESOLUTION,
     });
-    markAppealResolved.mockResolvedValue({
+    markAppealResolvedGuarded.mockResolvedValue({ count: 1 });
+    findAppealById.mockResolvedValue({
       id: "appeal-1",
       appealStatus: AppealStatus.RESOLVED,
     });
@@ -264,11 +268,12 @@ describe("appeal service", () => {
       }),
       expect.anything(),
     );
-    expect(markAppealResolved).toHaveBeenCalledWith(
+    expect(markAppealResolvedGuarded).toHaveBeenCalledWith(
       "appeal-1",
       "handler-1",
       expect.any(Date),
       "Resolved after human review.",
+      false,
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -316,7 +321,7 @@ describe("appeal service", () => {
     await expect(claimAppeal("appeal-1", "handler-1")).rejects.toMatchObject({
       code: "appeal_already_resolved",
     });
-    expect(markAppealInReview).not.toHaveBeenCalled();
+    expect(markAppealInReviewGuarded).not.toHaveBeenCalled();
   });
 
   it("supersedes open appeals for a user+module", async () => {

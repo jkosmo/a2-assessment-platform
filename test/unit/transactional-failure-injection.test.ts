@@ -34,7 +34,8 @@ const notifyAssessmentResult = vi.fn();
 
 const findAppealForResolution = vi.fn();
 const createResolutionDecision = vi.fn();
-const markAppealResolved = vi.fn();
+const markAppealResolvedGuarded = vi.fn();
+const findAppealById = vi.fn();
 const appealSubmissionUpdate = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 
@@ -84,12 +85,14 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findAppealForResolution,
     createResolutionDecision,
-    markAppealResolved,
+    markAppealResolvedGuarded,
+    findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
   },
   createAppealRepository: () => ({
     createResolutionDecision,
-    markAppealResolved,
+    markAppealResolvedGuarded,
+    findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
   }),
 }));
@@ -243,7 +246,10 @@ describe("transactional failure injection", () => {
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
     findAppealForResolution.mockReset();
     createResolutionDecision.mockReset();
-    markAppealResolved.mockReset();
+    markAppealResolvedGuarded.mockReset();
+    markAppealResolvedGuarded.mockResolvedValue({ count: 1 });
+    findAppealById.mockReset();
+    findAppealById.mockResolvedValue({ id: "appeal-1", appealStatus: AppealStatus.RESOLVED });
     appealSubmissionUpdate.mockReset();
     notifyAppealStatusTransition.mockReset().mockResolvedValue(undefined);
   });
@@ -436,7 +442,9 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("DB write failed");
 
-      expect(markAppealResolved).not.toHaveBeenCalled();
+      // #790: the guarded transition runs FIRST now; the later failure rolls the whole transaction back
+      // (nothing persists), but the guard call itself was made before the failure.
+      expect(markAppealResolvedGuarded).toHaveBeenCalled();
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
@@ -451,7 +459,7 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      markAppealResolved.mockRejectedValue(new Error("Optimistic lock conflict"));
+      markAppealResolvedGuarded.mockRejectedValue(new Error("Optimistic lock conflict"));
 
       const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
@@ -489,7 +497,9 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("Deadlock detected");
 
-      expect(markAppealResolved).not.toHaveBeenCalled();
+      // #790: the guarded transition runs FIRST now; the later failure rolls the whole transaction back
+      // (nothing persists), but the guard call itself was made before the failure.
+      expect(markAppealResolvedGuarded).toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
@@ -503,10 +513,6 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      markAppealResolved.mockResolvedValue({
-        id: "appeal-1",
-        appealStatus: AppealStatus.RESOLVED,
-      });
       notifyAppealStatusTransition.mockRejectedValue(new Error("webhook timeout"));
 
       const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
