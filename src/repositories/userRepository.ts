@@ -2,6 +2,7 @@ import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
 import type { AuthPrincipal } from "../auth/principal.js";
 import { parseEntraGroupRoleMapJson } from "../auth/entraRoleMap.js";
+import { revokeAllAgentTokensForUser } from "../auth/agentAuthoringTokenService.js";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import fs from "node:fs";
@@ -296,13 +297,21 @@ export async function syncEntraGroupRoles(userId: string, principal: AuthPrincip
     }
   }
 
+  let revokedAnyRole = false;
   for (const assignment of activeAssignments) {
     if (!desiredRoles.has(assignment.appRole)) {
       await prisma.roleAssignment.update({
         where: { id: assignment.id },
         data: { validTo: at },
       });
+      revokedAnyRole = true;
     }
+  }
+
+  // #789: a role just went away — invalidate this user's outstanding agent-authoring tokens, which froze
+  // the old (broader) role set at issuance and would otherwise stay authoring-capable until they expire.
+  if (revokedAnyRole) {
+    await revokeAllAgentTokensForUser(userId, "entra_group_role_revoked", at);
   }
 
   // Marker som synket først etter vellykket reconcile (så et kast → retry neste request).
