@@ -140,12 +140,14 @@ export type ThreadDetailRow = ThreadSummaryRow & {
   authorId: string;
   bodyMarkdown: string;
   replies: ReplyRow[];
-  subscriptions: Array<{ userId: string }>;
 };
 
 export function toThreadDetailDto(
   row: ThreadDetailRow,
   viewer: ViewerContext,
+  // #802: computed from an existence check on the viewer's own subscription, not by loading every
+  // subscriber row into memory.
+  isSubscribed: boolean,
 ): DiscussionThreadDetailDto {
   const deleted = row.deletedAt !== null;
   const isOwn = row.authorId === viewer.userId;
@@ -163,7 +165,7 @@ export function toThreadDetailDto(
     author: toAuthorDto(row.author),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    isSubscribed: row.subscriptions.some((s) => s.userId === viewer.userId),
+    isSubscribed,
     canEdit: !deleted && isOwn,
     canDelete: !deleted && (isOwn || viewer.canModerate),
     // Akseptert svar settes av spørrer (på QUESTION) eller moderator.

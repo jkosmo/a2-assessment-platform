@@ -63,12 +63,19 @@ const threadSummarySelect = {
   _count: { select: { replies: { where: { deletedAt: null } } } },
 } as const;
 
+// #802: bound reads so a thread with many replies / a board with many threads can't load an unbounded
+// set into memory. These are safety caps (well above any realistic thread); UX-visible cursor pagination
+// can layer on later if a board grows past them.
+export const DISCUSSION_MAX_THREADS = 500;
+export const DISCUSSION_MAX_REPLIES = 500;
+
 const threadDetailSelect = {
   ...threadSummarySelect,
   authorId: true,
   bodyMarkdown: true,
   replies: {
     orderBy: { createdAt: "asc" },
+    take: DISCUSSION_MAX_REPLIES,
     select: {
       id: true,
       authorId: true,
@@ -79,7 +86,7 @@ const threadDetailSelect = {
       author: authorSelect,
     },
   },
-  subscriptions: { select: { userId: true } },
+  // #802: no longer selects every subscriber — isSubscribed is an existence check on the viewer's own row.
 } as const;
 
 /**
@@ -150,6 +157,19 @@ async function assertScopeWritable(
   }
 }
 
+// #802: resolve the thread-detail DTO, computing isSubscribed via a targeted existence check on the
+// viewer's own subscription row rather than loading every subscriber. Used by every detail-returning path.
+async function detailDtoWithSubscription(
+  thread: Parameters<typeof toThreadDetailDto>[0],
+  viewer: Parameters<typeof toThreadDetailDto>[1],
+): Promise<DiscussionThreadDetailDto> {
+  const subscription = await prisma.discussionSubscription.findFirst({
+    where: { threadId: thread.id, userId: viewer.userId },
+    select: { id: true },
+  });
+  return toThreadDetailDto(thread, viewer, subscription !== null);
+}
+
 export async function listThreads(params: {
   courseId: string;
   courseItemId: string | null;
@@ -169,6 +189,7 @@ export async function listThreads(params: {
   const rows = await prisma.discussionThread.findMany({
     where: { courseId: course.id, courseItemId: params.courseItemId },
     orderBy: [{ pinnedAt: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }],
+    take: DISCUSSION_MAX_THREADS,
     select: threadSummarySelect,
   });
   const viewer = viewerOf(params.access);
@@ -223,7 +244,7 @@ export async function createThread(params: {
     }
   }
 
-  return toThreadDetailDto(thread, viewerOf(params.access));
+  return await detailDtoWithSubscription(thread, viewerOf(params.access));
 }
 
 async function loadThreadInCourse(courseId: string, threadId: string) {
@@ -244,7 +265,7 @@ export async function getThread(params: {
 }): Promise<DiscussionThreadDetailDto> {
   const course = await loadAccessibleCourse(params.courseId, params.access);
   const thread = await loadThreadInCourse(course.id, params.threadId);
-  return toThreadDetailDto(thread, viewerOf(params.access));
+  return await detailDtoWithSubscription(thread, viewerOf(params.access));
 }
 
 export type ThreadPatch = {
@@ -370,14 +391,14 @@ export async function updateThread(params: {
 
   if (Object.keys(data).length === 0) {
     // Ingen gyldige felter — returner uendret.
-    return toThreadDetailDto(thread, viewer);
+    return await detailDtoWithSubscription(thread, viewer);
   }
 
   await prisma.discussionThread.update({ where: { id: thread.id }, data });
   for (const call of auditCalls) await call();
 
   const updated = await loadThreadInCourse(course.id, thread.id);
-  return toThreadDetailDto(updated, viewer);
+  return await detailDtoWithSubscription(updated, viewer);
 }
 
 export async function deleteThread(params: {
@@ -455,7 +476,7 @@ export async function createReply(params: {
   }
 
   const updated = await loadThreadInCourse(course.id, thread.id);
-  return toThreadDetailDto(updated, viewerOf(params.access));
+  return await detailDtoWithSubscription(updated, viewerOf(params.access));
 }
 
 async function loadReplyInThread(courseId: string, threadId: string, replyId: string) {
@@ -496,7 +517,7 @@ export async function updateReply(params: {
     metadata: { courseId: course.id, threadId: params.threadId },
   });
   const updated = await loadThreadInCourse(course.id, params.threadId);
-  return toThreadDetailDto(updated, viewerOf(params.access));
+  return await detailDtoWithSubscription(updated, viewerOf(params.access));
 }
 
 export async function deleteReply(params: {

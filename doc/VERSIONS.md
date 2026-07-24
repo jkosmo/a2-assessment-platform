@@ -4,22 +4,26 @@ This document tracks release versions and what each version includes.
 
 ## 2.2.8 - 2026-07-24
 
-fix(#809 follow-up): worker startup grace so cold-start doesn't report 503
+M5 stabilization — #809 cold-start grace + #789 token revocation + #802 discussion pagination
 
-The 2.2.7 prod promotion's post-deploy smoke test failed: the worker `/healthz` returned 503 for ~4
-minutes during the B1 cold-start (then recovered to 200). Root cause was the #809 readiness check —
-a monitor that had not yet completed its FIRST cycle was flagged "stalled" once the process passed the
-monitor's normal stale window (60s floor for the 4s assessment poller), but a cold container + cold
-burstable Postgres + staggered worker starts can take minutes for that first tick. That not only fails
-the deploy smoke test but risks Azure's runtime health check restart-looping the worker before it warms.
+- **#809 follow-up — worker startup grace.** The 2.2.7 prod promotion's post-deploy smoke test failed:
+  the worker `/healthz` returned 503 for ~4 min during the B1 cold-start (then recovered). The #809
+  readiness check flagged a monitor that hadn't completed its FIRST cycle as "stalled" once the process
+  passed its normal stale window (60s floor for the 4s poller) — but a cold container + cold burstable
+  Postgres + staggered starts can take minutes for that first tick. Besides failing the smoke test, that
+  risks Azure restart-looping the worker before it warms. Fix: a monitor that has NEVER completed a cycle
+  gets a 15-min startup grace before it can be "stalled"; once it has ticked the tight window applies, and
+  a hanging first tick is still caught by the wedge check.
+- **#789 — agent-token revocation on role change.** An agent-authoring token freezes the issuer's roles
+  at issuance, so a removed SMO/ADMINISTRATOR role stayed authoring-capable until expiry (≤60 min). The
+  group→role reconciliation now revokes a user's outstanding tokens whenever it revokes a role.
+- **#802 — discussion read pagination.** Thread-list and thread-detail loaded every thread / every reply /
+  every subscriber into memory with no matching index. Now: composite indexes matching the sorts
+  (`[courseId, courseItemId, pinnedAt, updatedAt]`, `[threadId, createdAt]`), bounded reads (safety caps),
+  and `isSubscribed` via a per-viewer existence check instead of loading all subscribers.
 
-Fix: `evaluateWorkerHealth` now gives a monitor that has NEVER completed a cycle a generous startup
-grace (15 min from process start) before it can be "stalled"; once it has completed a cycle the normal
-tight stale window applies, and a HANGING first tick is still caught by the wedge check. So the worker
-reports 200 while warming up and only 503 once a loop is genuinely stuck.
-
-Tests: a never-completed 4s poller 5 min into cold-start is healthy; past the 15 min grace it is stalled.
-Code-only, no infra, no migration.
+Tests: cold-start grace (healthy while warming, stalled past grace); token revoke helper + group-sync
+path; per-viewer isSubscribed existence check. One migration (discussion index swap). tsc 0.
 
 ## 2.2.7 - 2026-07-23
 

@@ -800,7 +800,8 @@ model DiscussionThread {
   replies         DiscussionReply[]        @relation("ThreadReplies")
   subscriptions   DiscussionSubscription[]
 
-  @@index([courseId, courseItemId])
+  // #802: covers the thread-list query (WHERE courseId, courseItemId ORDER BY pinnedAt desc, updatedAt desc).
+  @@index([courseId, courseItemId, pinnedAt, updatedAt])
   @@index([authorId])
 }
 
@@ -818,7 +819,8 @@ model DiscussionReply {
   deletedBy         User?             @relation("DiscussionReplyDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   acceptedForThread DiscussionThread? @relation("AcceptedReply")
 
-  @@index([threadId])
+  // #802: covers the reply load (WHERE threadId ORDER BY createdAt asc).
+  @@index([threadId, createdAt])
   @@index([authorId])
 }
 
