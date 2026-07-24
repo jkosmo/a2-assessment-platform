@@ -178,7 +178,7 @@ describe("assessment job service traffic-light policy", () => {
       submission: buildSubmissionFixture(),
     });
     createLlmEvaluation.mockResolvedValue({ id: "llm-eval-1" });
-    markJobSucceeded.mockResolvedValue(undefined);
+    markJobSucceeded.mockResolvedValue({ count: 1 });
     countJobsByStatus.mockResolvedValue(0);
     createAssessmentDecision.mockResolvedValue({
       decision: { id: "decision-1" },
