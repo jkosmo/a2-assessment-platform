@@ -75,7 +75,17 @@ export async function claimManualReview(reviewId: string, reviewerId: string, is
     });
   }
 
-  const claimed = await manualReviewRepository.markManualReviewClaimed(reviewId, reviewerId, ReviewStatus.IN_REVIEW);
+  // #791: atomic guarded claim. count===0 → a concurrent reviewer claimed first → we lost the race.
+  const claimResult = await manualReviewRepository.markManualReviewClaimedGuarded(
+    reviewId,
+    reviewerId,
+    ReviewStatus.IN_REVIEW,
+    isAdmin,
+  );
+  if (claimResult.count === 0) {
+    throw new ConflictError("review_already_assigned", "This manual review was just claimed by another reviewer.");
+  }
+  const claimed = await manualReviewRepository.findManualReviewById(reviewId);
 
   await recordAuditEvent({
     entityType: auditEntityTypes.manualReview,
@@ -178,12 +188,30 @@ type LatestDecision = NonNullable<OverrideReview["submission"]["decisions"][numb
 
 async function finalizeManualReviewOverrideCommand(
   review: OverrideReview,
-  input: { reviewerId: string; passFailTotal: boolean; decisionReason: string; overrideReason: string },
+  input: { reviewerId: string; passFailTotal: boolean; decisionReason: string; overrideReason: string; isAdmin?: boolean },
   latestDecision: LatestDecision,
   finalisedAt: Date,
 ) {
   return runInTransaction(async (tx) => {
     const repo = createManualReviewRepository(tx);
+
+    // #791: guarded transition FIRST. If a concurrent override already resolved this review, count===0 →
+    // ConflictError rolls back before we append a second MANUAL_OVERRIDE decision (duplicate lineage).
+    const transition = await repo.resolveManualReviewGuarded({
+      reviewId: review.id,
+      reviewerId: input.reviewerId,
+      reviewStatus: ReviewStatus.RESOLVED,
+      reviewedAt: finalisedAt,
+      overrideDecision: input.passFailTotal ? "PASS" : "FAIL",
+      overrideReason: input.overrideReason,
+      allowTakeover: input.isAdmin ?? false,
+    });
+    if (transition.count === 0) {
+      throw new ConflictError(
+        "review_already_resolved",
+        "This manual review was just resolved by another reviewer. Refresh the queue to view the latest status.",
+      );
+    }
 
     const overrideDecision = await appendDecisionWithLineage(
       {
@@ -205,14 +233,7 @@ async function finalizeManualReviewOverrideCommand(
       tx,
     );
 
-    const resolvedReview = await repo.resolveManualReview({
-      reviewId: review.id,
-      reviewerId: input.reviewerId,
-      reviewStatus: ReviewStatus.RESOLVED,
-      reviewedAt: finalisedAt,
-      overrideDecision: input.passFailTotal ? "PASS" : "FAIL",
-      overrideReason: input.overrideReason,
-    });
+    const resolvedReview = await repo.findManualReviewById(review.id);
 
     await recordAuditEvent({
       entityType: auditEntityTypes.manualReview,

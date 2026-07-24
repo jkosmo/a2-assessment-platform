@@ -155,14 +155,23 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
       });
     },
 
-    markManualReviewClaimed(reviewId: string, reviewerId: string, reviewStatus: ReviewStatusType) {
-      return client.manualReview.update({
-        where: { id: reviewId },
-        data: {
-          reviewerId,
-          reviewStatus,
+    // #791: atomic guarded claim (same shape as the appeal fix, #790). WHERE encodes the preconditions —
+    // not already terminal, and (unless admin takeover) unassigned or ours — so two concurrent claims can't
+    // both succeed; the loser gets count 0 and the service raises ConflictError.
+    markManualReviewClaimedGuarded(reviewId: string, reviewerId: string, reviewStatus: ReviewStatusType, allowTakeover: boolean) {
+      return client.manualReview.updateMany({
+        where: {
+          id: reviewId,
+          reviewStatus: { notIn: ["RESOLVED", "SUPERSEDED"] },
+          ...(allowTakeover ? {} : { OR: [{ reviewerId: null }, { reviewerId } ] }),
         },
+        data: { reviewerId, reviewStatus },
       });
+    },
+
+    // #791: plain row re-read after a guarded transition (updateMany can't return the row).
+    findManualReviewById(reviewId: string) {
+      return client.manualReview.findUniqueOrThrow({ where: { id: reviewId } });
     },
 
     findManualReviewForOverride(reviewId: string) {
@@ -196,16 +205,23 @@ export function createManualReviewRepository(client: ManualReviewRepositoryClien
       return client.assessmentDecision.create({ data });
     },
 
-    resolveManualReview(data: {
+    // #791: atomic guarded resolve. Same guard as the claim; count 0 → another reviewer finalized first →
+    // ConflictError rolls the transaction back BEFORE a second MANUAL_OVERRIDE decision is appended.
+    resolveManualReviewGuarded(data: {
       reviewId: string;
       reviewerId: string;
       reviewStatus: ReviewStatusType;
       reviewedAt: Date;
       overrideDecision: string;
       overrideReason: string;
+      allowTakeover: boolean;
     }) {
-      return client.manualReview.update({
-        where: { id: data.reviewId },
+      return client.manualReview.updateMany({
+        where: {
+          id: data.reviewId,
+          reviewStatus: { notIn: ["RESOLVED", "SUPERSEDED"] },
+          ...(data.allowTakeover ? {} : { OR: [{ reviewerId: null }, { reviewerId: data.reviewerId }] }),
+        },
         data: {
           reviewerId: data.reviewerId,
           reviewStatus: data.reviewStatus,
