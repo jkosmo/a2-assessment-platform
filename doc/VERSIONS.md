@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.2.8 - 2026-07-24
+
+fix(#809 follow-up): worker startup grace so cold-start doesn't report 503
+
+The 2.2.7 prod promotion's post-deploy smoke test failed: the worker `/healthz` returned 503 for ~4
+minutes during the B1 cold-start (then recovered to 200). Root cause was the #809 readiness check —
+a monitor that had not yet completed its FIRST cycle was flagged "stalled" once the process passed the
+monitor's normal stale window (60s floor for the 4s assessment poller), but a cold container + cold
+burstable Postgres + staggered worker starts can take minutes for that first tick. That not only fails
+the deploy smoke test but risks Azure's runtime health check restart-looping the worker before it warms.
+
+Fix: `evaluateWorkerHealth` now gives a monitor that has NEVER completed a cycle a generous startup
+grace (15 min from process start) before it can be "stalled"; once it has completed a cycle the normal
+tight stale window applies, and a HANGING first tick is still caught by the wedge check. So the worker
+reports 200 while warming up and only 503 once a loop is genuinely stuck.
+
+Tests: a never-completed 4s poller 5 min into cold-start is healthy; past the 15 min grace it is stalled.
+Code-only, no infra, no migration.
+
 ## 2.2.7 - 2026-07-23
 
 M5 stabilization — security/audit quick-wins (#788 + #797 + #805 + #807)

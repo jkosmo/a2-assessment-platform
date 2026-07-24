@@ -58,6 +58,16 @@ export interface WorkerHealthThresholds {
   minStaleFloorMs: number;
   /** Lower bound on the wedge window, so a brief-but-legitimate slow tick isn't called wedged. */
   minWedgeFloorMs: number;
+  /**
+   * #809-followup: grace for a monitor that has NEVER completed a cycle yet. On a B1 cold-start (cold
+   * container + cold burstable Postgres + staggered worker starts) the first tick of a short-interval
+   * monitor can legitimately take minutes — longer than its normal stale window — so during warm-up we
+   * must NOT report the worker unhealthy (that fails the deploy smoke test and, worse, can make Azure's
+   * runtime health check restart-loop the worker before it ever warms up). A never-completed monitor is
+   * "starting" (healthy) until the process has been up longer than this; a HANGING first tick is still
+   * caught by the wedge check.
+   */
+  startupGraceMs: number;
 }
 
 // Factor 3 + 60 s floors: the 4 s assessment poller tolerates ~60 s of no progress before "stalled"
@@ -69,6 +79,9 @@ export const DEFAULT_WORKER_HEALTH_THRESHOLDS: WorkerHealthThresholds = {
   wedgeFactor: 3,
   minStaleFloorMs: 60_000,
   minWedgeFloorMs: 60_000,
+  // 15 min: comfortably longer than an observed B1 cold-start worker warm-up (~10 min). A worker that
+  // has not completed a SINGLE cycle of a monitor in 15 min is genuinely broken; until then it's warming.
+  startupGraceMs: 900_000,
 };
 
 function parseIso(value: string | null): number | null {
@@ -105,10 +118,14 @@ export function evaluateWorkerHealth(
       return { name: s.name, enabled: true, healthy: false, reason: "wedged", staleMs: null, runningMs };
     }
 
-    // No success yet → measure the grace window from process start.
-    const referenceMs = parseIso(s.lastCycleAt) ?? startMs;
+    // No success yet → measure from process start, and give it the (larger) startup grace: a monitor
+    // that has never completed a cycle is warming up, not stalled, until the process exceeds that grace.
+    // Once it HAS completed a cycle, the normal (tight) stale window applies.
+    const lastCycleMs = parseIso(s.lastCycleAt);
+    const referenceMs = lastCycleMs ?? startMs;
+    const effectiveStaleWindow = lastCycleMs === null ? Math.max(staleWindow, thresholds.startupGraceMs) : staleWindow;
     const staleMs = nowMs - referenceMs;
-    if (staleMs > staleWindow) {
+    if (staleMs > effectiveStaleWindow) {
       return { name: s.name, enabled: true, healthy: false, reason: "stalled", staleMs, runningMs };
     }
 
