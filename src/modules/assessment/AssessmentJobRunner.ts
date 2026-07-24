@@ -17,21 +17,37 @@ import { alertOnStuckJobs, scanAndResetStaleJobs } from "./staleLockScanner.js";
 
 export type AssessmentRunFn = (jobId: string) => Promise<void>;
 
+const ACTIVE_JOB_STATUSES = [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING];
+
 export async function enqueueAssessmentJob(submissionId: string) {
-  const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(submissionId, [
-    AssessmentJobStatus.PENDING,
-    AssessmentJobStatus.RUNNING,
-  ]);
+  const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(
+    submissionId,
+    ACTIVE_JOB_STATUSES,
+  );
 
   if (existingPending) {
     return existingPending;
   }
 
-  const job = await assessmentJobRepository.createAssessmentJob({
-    submissionId,
-    status: AssessmentJobStatus.PENDING,
-    maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
-  });
+  let job;
+  try {
+    job = await assessmentJobRepository.createAssessmentJob({
+      submissionId,
+      status: AssessmentJobStatus.PENDING,
+      maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
+    });
+  } catch (error) {
+    // #793: the partial unique index (one active job per submission) rejected this create — a concurrent
+    // enqueue won the race. Return the job it created instead of a duplicate (no extra LLM run/decision).
+    if (isActiveJobUniqueViolation(error)) {
+      const winner = await assessmentJobRepository.findPendingOrRunningJobForSubmission(
+        submissionId,
+        ACTIVE_JOB_STATUSES,
+      );
+      if (winner) return winner;
+    }
+    throw error;
+  }
 
   await recordAuditEvent({
     entityType: auditEntityTypes.assessmentJob,
@@ -42,6 +58,16 @@ export async function enqueueAssessmentJob(submissionId: string) {
   await logQueueBacklog("enqueue", submissionId);
 
   return job;
+}
+
+// A P2002 on the AssessmentJob active-submission unique index — the concurrent-enqueue loser.
+function isActiveJobUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
 }
 
 export async function processAssessmentJobsNow(runAssessment: AssessmentRunFn, maxJobs = 1) {
