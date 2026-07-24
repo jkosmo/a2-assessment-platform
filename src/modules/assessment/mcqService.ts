@@ -1,8 +1,10 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
-import { mcqRepository } from "./mcqRepository.js";
+import { mcqRepository, createMcqRepository } from "./mcqRepository.js";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "./assessmentJobService.js";
+import { runInTransaction } from "../../db/transaction.js";
+import { ConflictError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -109,18 +111,6 @@ export async function submitMcqAttempt(input: {
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
-  await mcqRepository.deleteResponsesForAttempt(attempt.id);
-  if (evaluated.length > 0) {
-    await mcqRepository.createResponses(
-      evaluated.map((item) => ({
-        mcqAttemptId: attempt.id,
-        questionId: item.questionId,
-        selectedAnswer: item.selectedAnswer,
-        isCorrect: item.isCorrect,
-      })),
-    );
-  }
-
   const rawScore = evaluated.filter((response) => response.isCorrect).length;
   const totalQuestions = questions.length || 1;
   const percentScore = (rawScore / totalQuestions) * 100;
@@ -128,16 +118,40 @@ export async function submitMcqAttempt(input: {
   const scaledScore = (rawScore / totalQuestions) * rules.weights.mcqMaxScore;
   const passFailMcq = percentScore >= 50;
 
-  const completedAttempt = await mcqRepository.completeAttempt({
-    attemptId: attempt.id,
-    completedAt: new Date(),
-    rawScore,
-    percentScore,
-    scaledScore,
-    passFailMcq,
+  // #794: finalize atomically — replace the responses, guard-complete the attempt (only while still open),
+  // and move the submission to PROCESSING in ONE transaction. A failure can no longer leave a completed
+  // attempt with no responses / wrong status, and two concurrent submits can't both finalize (count 0 →
+  // ConflictError). The @@unique([mcqAttemptId, questionId]) backs the response replacement.
+  const completedAttempt = await runInTransaction(async (tx) => {
+    const repo = createMcqRepository(tx);
+    await repo.deleteResponsesForAttempt(attempt.id);
+    if (evaluated.length > 0) {
+      await repo.createResponses(
+        evaluated.map((item) => ({
+          mcqAttemptId: attempt.id,
+          questionId: item.questionId,
+          selectedAnswer: item.selectedAnswer,
+          isCorrect: item.isCorrect,
+        })),
+      );
+    }
+    const done = await repo.completeAttemptGuarded({
+      attemptId: attempt.id,
+      completedAt: new Date(),
+      rawScore,
+      percentScore,
+      scaledScore,
+      passFailMcq,
+    });
+    if (done.count === 0) {
+      throw new ConflictError("mcq_already_submitted", "This MCQ attempt was already submitted.");
+    }
+    await tx.submission.update({
+      where: { id: submission.id },
+      data: { submissionStatus: SubmissionStatus.PROCESSING },
+    });
+    return repo.findAttemptById(attempt.id);
   });
-
-  await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
   await enqueueAssessmentJob(submission.id);
 

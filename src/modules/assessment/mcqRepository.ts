@@ -54,7 +54,9 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
       return client.mCQResponse.createMany({ data });
     },
 
-    completeAttempt(data: {
+    // #794: guarded finalization — only completes an attempt that is still open (completedAt IS NULL), so
+    // two concurrent submits can't both finalize it. count===0 → already submitted → the caller conflicts.
+    completeAttemptGuarded(data: {
       attemptId: string;
       completedAt: Date;
       rawScore: number;
@@ -62,8 +64,8 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
       scaledScore: number;
       passFailMcq: boolean;
     }) {
-      return client.mCQAttempt.update({
-        where: { id: data.attemptId },
+      return client.mCQAttempt.updateMany({
+        where: { id: data.attemptId, completedAt: null },
         data: {
           completedAt: data.completedAt,
           rawScore: data.rawScore,
@@ -72,6 +74,11 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
           passFailMcq: data.passFailMcq,
         },
       });
+    },
+
+    // #794: plain row re-read after the guarded finalization (updateMany can't return the row).
+    findAttemptById(attemptId: string) {
+      return client.mCQAttempt.findUniqueOrThrow({ where: { id: attemptId } });
     },
   };
 }
