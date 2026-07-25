@@ -287,6 +287,7 @@ These rules exist because their violation caused or worsened the May 2026 produc
 10. **Always** verify staging `/healthz` is healthy before triggering a production deploy.
 11. **Always** propose `az deployment group what-if` output for staging (and prod) before implementing non-trivial Bicep changes. ARM what-if is the only check that catches schema drift before deploy.
 12. **Always** apply credential changes atomically: a KV secret and the underlying resource (PostgreSQL server, Storage account, etc.) must be updated in the same deploy, or one must explicitly re-read the existing value. Drift between KV and the underlying resource is silent until the next app restart.
+13. **Always** keep DB migrations expand/contract-safe (#811) — see Deploy discipline → Process rule 5. Both web and worker run `prisma migrate deploy` on startup, so old containers run against the new schema and new code runs briefly against the old schema during a rollout. Additive within a deploy; drop/rename in a follow-up; never both on the same object in one deploy.
 
 ---
 
@@ -302,6 +303,7 @@ See `doc/DEPLOY_OPTIMIZATION.md` for the full incident narrative and wave-based 
 2. **CI-only fixes before prod fixes.** If a fix can be validated in CI (e.g. `actionlint`, type check, unit tests), ship it BEFORE any deploy that depends on the workflow being correct. Saves whole 45-min deploy cycles.
 3. **One released version per confirmed fix, not per attempt.** Don't bump `package.json` version for every failed-attempt commit. Wait for the fix to be confirmed correct, then bump. Failed attempts can be additional commits on the same in-progress version.
 4. **Never push Bicep or workflow changes that another commit could be bundled with.** Push-to-main does not auto-deploy, but the next manual deploy will include all pending main commits. Coordinate timing or stage the change in a branch until ready.
+5. **Migrations MUST be expand/contract-safe (#811).** Both web AND worker now run `prisma migrate deploy` on startup (`SKIP_MIGRATE=false` on both; Prisma advisory-locks concurrent deploys). But during a rollout, OLD containers still run against the NEW schema, and new code runs briefly against the OLD schema before its own migrate finishes. So: **expand within a deploy** (additive only — add columns/tables/indexes), and **contract in a follow-up deploy** (drop/rename only after all code using the object is gone). Never combine an additive and a destructive change to the same object in one deploy — a destructive migration bundled with code that still reads the dropped object breaks old containers mid-rollout (the 2026-05-21 incident class). See `doc/OPERATIONS_RUNBOOK.md` → "Migrations and Schema Changes".
 
 ### Diagnostic rules
 
