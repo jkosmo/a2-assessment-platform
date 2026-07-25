@@ -11,6 +11,7 @@ import { enforceAgentTokenScope } from "./auth/agentTokenScope.js";
 import { requireAnyRole } from "./auth/authorization.js";
 import { attachCorrelationId, requestLoggingMiddleware } from "./middleware/requestObservability.js";
 import { securityHeadersMiddleware } from "./middleware/securityHeaders.js";
+import { isWebReady } from "./observability/webReadiness.js";
 import { generalApiLimiter, preBodyApiLimiter } from "./middleware/rateLimiting.js";
 import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
@@ -85,8 +86,11 @@ app.get("/", (_request, response) => {
   response.status(200).send("a2-assessment-platform");
 });
 
-app.get("/healthz", (_request, response) => {
-  response.json({ status: "ok" });
+app.get("/healthz", async (_request, response) => {
+  // #809: readiness, not just liveness — 200 only when the DB is reachable, so Azure's health check +
+  // the deploy smoke test reflect a truly-ready web (was a static 200 stub).
+  const ready = await isWebReady();
+  response.status(ready ? 200 : 503).json({ status: ready ? "ok" : "degraded" });
 });
 
 app.get("/version", generalApiLimiter, (_request, response) => {

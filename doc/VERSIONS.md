@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.7.3 - 2026-07-25
+
+#809 — **web `/healthz` is now a readiness probe, not a static liveness stub.** It returned `200` as soon
+as Express bound the port — before/without DB connectivity — so Azure's health check
+(`healthCheckPath=/healthz`), the external availability pings, and the post-deploy smoke test couldn't
+tell a truly-ready web from a bound-but-broken one. Parent #782.
+
+- New `src/observability/webReadiness.ts` `isWebReady()`: probes the DB (`SELECT 1`), **cached 5s** (so
+  Azure's frequent pings don't hammer the DB) and **bounded by a 2s timeout** (so a hung DB can't hang
+  `/healthz` itself). `/healthz` returns `200 {status:"ok"}` when ready, `503 {status:"degraded"}` when
+  the DB is unreachable. A transient blip self-heals on the next check; a sustained outage now surfaces
+  honestly instead of being masked.
+- Complements #866 (worker self-heal) + #811 (worker migrate-on-startup) and is the readiness gate a
+  future #808 slot-swap would warm/gate on (instead of the old stub).
+
+Code-only, no migration. tsc 0; unit 862/862 (+ `web-readiness` 4). Bundled to stage with #818 (v2.7.2).
+
 ## 2.7.2 - 2026-07-25
 
 #818 (Phase 1) — de-duplicate the two authoring shells (`public/admin-content.js` advanced +
