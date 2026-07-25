@@ -4,6 +4,7 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/admin
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { showToast } from "/static/toast.js";
+import { escapeHtml } from "/static/html-escape.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -177,7 +178,7 @@ async function loadSettings() {
   } catch (err) {
     if (settingsContent) {
       settingsContent.style.display = "";
-      settingsContent.innerHTML = `<p style="color:var(--color-error,red);padding:16px">${String(err)}</p>`;
+      settingsContent.innerHTML = `<p style="color:var(--color-error,red);padding:16px">${escapeHtml(String(err))}</p>`;
     }
   }
 }

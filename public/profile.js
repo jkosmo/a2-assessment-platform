@@ -4,6 +4,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
+import { escapeHtml } from "/static/html-escape.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -787,7 +788,7 @@ setLocale(currentLocale);
   } catch (err) {
     if (profileContent) {
       profileContent.style.display = "";
-      profileContent.innerHTML = `<p style="color:var(--color-error,red);padding:16px">${String(err)}</p>`;
+      profileContent.innerHTML = `<p style="color:var(--color-error,red);padding:16px">${escapeHtml(String(err))}</p>`;
     }
   }
 })();

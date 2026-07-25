@@ -115,6 +115,24 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts` (~5s, no Docker/Postgres). The last spec is the consistency guard (section + module both inline, one open, workspace relocated).
 
+## 6c. Section HTML sinks + client/server sanitizer parity (#814)
+
+Server-rendered learning-section HTML is injected via `innerHTML` in **two** places; both re-sanitize
+client-side (defense-in-depth). The client policy MUST match the server or allowed embeds get stripped.
+
+| Surface | Where |
+| --- | --- |
+| Server policy (source of truth) | `src/modules/course/sectionContent.ts` — DOMPurify + `ADD_TAGS:["iframe"]` + embed attrs + `ALLOWED_VIDEO_IFRAME_HOSTS` (youtube×3 + player.vimeo.com, https only) |
+| Client sanitizer (mirror) | `public/static/sanitize.js` `sanitizeSectionHtml` — vendored DOMPurify `public/static/vendor/purify-3.4.10.es.js` |
+| Sink 1: participant section reader | `public/participant.js` `renderSectionReaderInto` → `bodyEl.innerHTML = sanitizeSectionHtml(body.html)` |
+| Sink 2: SMO editor live preview | `public/static/admin-content-sections.js` `refreshPreview` → `pane.innerHTML = sanitizeSectionHtml(data.html)` |
+
+**Maintenance hazard:** if you change the server's allowed tags/attrs or the iframe host allowlist in
+`sectionContent.ts`, update `sanitize.js` in the SAME change (the host list is duplicated). Guard test:
+`test/e2e/participant-section-sanitize.spec.ts` (strips script/onerror/non-allowlisted iframe, keeps the
+YouTube embed). Error strings must never be interpolated raw into `innerHTML` — `escapeHtml(String(err))`
+or `showToast` (textContent); see `public/admin-platform.js` / `public/profile.js`.
+
 ## 7. Conditional visibility — the `.hidden` cascade trap
 
 `.hidden` (`display:none` without `!important`) loses the cascade to `display`-setting classes

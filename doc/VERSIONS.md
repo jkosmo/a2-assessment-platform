@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.6.2 - 2026-07-25
+
+#814 — **client-side sanitization for raw-HTML sinks + escape error strings into markup**
+(defense-in-depth; the server CSP is already `script-src 'self'` so the residual risk closed here is
+markup/UI injection, not script XSS). Parent #783.
+
+- **Scoped client sanitizer** `public/static/sanitize.js` (`sanitizeSectionHtml`) re-applies the SAME
+  policy as the server (`src/modules/course/sectionContent.ts`) in the browser before the section HTML
+  reaches an `innerHTML` sink — matching allowlist (not a blanket DOMPurify default, which would strip
+  the allowed YouTube/Vimeo section embeds): default DOMPurify tags + `iframe` with the embed attrs, and
+  an iframe host allowlist (`www.youtube.com`, `youtube.com`, `www.youtube-nocookie.com`,
+  `player.vimeo.com`) over https. DOMPurify 3.4.10 is **vendored locally**
+  (`public/static/vendor/purify-3.4.10.es.js`) since the CSP forbids external CDNs.
+  - Wired into the two section-HTML sinks: `public/participant.js` (section reader) and
+    `public/static/admin-content-sections.js` (editor live preview).
+- **Error strings no longer interpolated raw into markup**: `public/admin-platform.js` and
+  `public/profile.js` error banners now `escapeHtml(String(err))` (the `apiFetch` error carries a
+  JSON-stringified server body that can echo attacker-influenced input). Other error surfaces already
+  escape / use `showToast` (textContent).
+
+Frontend only, no migration, no infra. tsc 0; new e2e `participant-section-sanitize` (strips
+script/onerror/non-allowlisted iframe, keeps allowed content + YouTube embed, injected script never
+executes); existing section/inline/mcq e2e unchanged.
+
 ## 2.6.1 - 2026-07-25
 
 #866 — **worker self-heals from the recurring zombie-connection wedge** (3rd occurrence, 1st in prod on

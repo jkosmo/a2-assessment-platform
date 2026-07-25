@@ -4,6 +4,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
+import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { mountDiscussionPanel } from "/static/discussion-panel.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
@@ -3317,9 +3318,10 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     const titleEl = panel.querySelector("#sectionReaderTitle");
     const bodyEl = panel.querySelector("#sectionReaderBody");
     if (titleEl && body.title) titleEl.textContent = body.title;
-    // body.html is already sanitised server-side with the F3/X1 policy.
+    // body.html is already sanitised server-side with the F3/X1 policy; #814 re-applies the same
+    // policy client-side (defense-in-depth) before this innerHTML sink.
     if (bodyEl) {
-      bodyEl.innerHTML = body.html ?? "";
+      bodyEl.innerHTML = sanitizeSectionHtml(body.html);
       // Private asset images can't carry auth headers as a plain <img>; hydrate them.
       await hydrateContentAssetImages(bodyEl, headers);
     }
