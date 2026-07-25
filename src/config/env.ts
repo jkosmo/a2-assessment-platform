@@ -135,6 +135,15 @@ const envSchema = z.object({
   // the deadline the runner fails/retries the job (fenced) so the tick returns instead of wedging.
   ASSESSMENT_JOB_MAX_RUNTIME_MS: z.coerce.number().int().positive().default(300000),
   ASSESSMENT_JOB_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(600000),
+  // #866: Postgres session timeouts applied ONLY to the dedicated worker container's DB connections
+  // (PROCESS_ROLE=worker). A worker's first tick query (stale-lock scan / outbox claim) can block on a
+  // row lock held by a zombie `idle in transaction` connection from an abruptly-killed pre-deploy
+  // container, wedging /healthz for ~10–20 min. lock_timeout aborts a query that waits too long for a
+  // lock (the wedge); statement_timeout is the outer safety net for any single statement. On abort the
+  // tick fails+retries instead of hanging, so the worker self-heals without a manual restart. Web
+  // (PROCESS_ROLE=web) and all-in-one dev/test (all) connections are unaffected.
+  WORKER_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  WORKER_LOCK_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   // #795: outbox delivery worker cadence + lease.
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   OUTBOX_LEASE_DURATION_MS: z.coerce.number().int().positive().default(60000),

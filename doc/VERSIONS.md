@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.6.1 - 2026-07-25
+
+#866 — **worker self-heals from the recurring zombie-connection wedge** (3rd occurrence, 1st in prod on
+the v2.5.5 deploy). An abruptly-killed pre-deploy worker container leaves an `idle in transaction`
+Postgres connection holding a row lock; the new worker's first tick query (assessment stale-lock scan /
+outbox claim) blocks on it and wedges `/healthz` for ~10–20 min until Postgres reaps the dead connection
+(manual `az webapp restart` otherwise). #856's per-job/-delivery timeouts don't help — the hang is in the
+CLAIM query, before any handler runs.
+
+- **Part 1 (the fix):** apply Postgres `statement_timeout` (30s) + `lock_timeout` (10s) to the worker's
+  DB connections via the connection-string `options` param, scoped to the dedicated worker container
+  (`PROCESS_ROLE=worker`) — web (`=web`) and all-in-one dev/test (`=all`) are unaffected. A blocked
+  claim/scan now ABORTS → the tick fails+retries instead of hanging → the worker self-heals with no
+  manual restart. New `src/db/workerDatasource.ts` (pure URL builder), wired in `src/db/prisma.ts`; env
+  `WORKER_STATEMENT_TIMEOUT_MS` / `WORKER_LOCK_TIMEOUT_MS`. **Verified end-to-end against real Postgres**
+  (a `pg_sleep(2)` aborts at a 500ms `statement_timeout` — Prisma 6 honours the param).
+- **Part 2 (defense-in-depth):** graceful shutdown now `prisma.$disconnect()`s (bounded 3s) after
+  draining in-flight ticks — worker before exit, web after in-flight requests finish — so a SIGTERM'd
+  container rolls back its open transaction and releases locks before dying, reducing zombie formation.
+
+Code-only, no migration, no infra change (defaults apply). tsc 0; unit 851/851 + new
+`worker-datasource` unit spec (5) + `m2-worker-db-timeout` integration spec (real PG). Logged in
+`doc/INCIDENTS.md`.
+
 ## 2.6.0 - 2026-07-25
 
 #865 — participant course view: **modules and sections now open the same way** — inline, in-place under
