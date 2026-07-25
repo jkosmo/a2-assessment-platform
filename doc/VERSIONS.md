@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.5.4 - 2026-07-25
+
+Participant-console UX fixes (frontend only, no migration).
+
+- **Mine Kurs accordion keeps the expanded course after "mark as read".** Marking a section read
+  re-rendered the course list and collapsed the course the user was in. `renderParticipantCourseAccordion`
+  now captures the expanded courses and re-opens them after the re-render; the `?courseId` deep-link only
+  fires on the first render so it no longer fights the preservation.
+- **#495 FOUC fix.** The legacy standalone module section (`#moduleListSection`) flashed for a couple
+  seconds then hid, because it rendered visible and was only hidden client-side once the runtime config
+  loaded. It is now hidden by DEFAULT (inline style) and revealed only when course-only mode is OFF, so in
+  production it stays hidden from first paint — no flash. The standalone flow itself is retained (it is
+  still the test suite's module selector); fully removing it + migrating the ~2 e2e / ~25 integration
+  tests that submit on standalone modules is a separate follow-up.
+
 ## 2.5.3 - 2026-07-25
 
 #799 (parent #780) — kill the N+1 query fan-out on the participant course listing. `GET /api/courses` did
