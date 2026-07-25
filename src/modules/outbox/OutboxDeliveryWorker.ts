@@ -8,7 +8,9 @@ type OutboxProcessFn = (workerId: string, leaseMs: number) => Promise<boolean>;
 // #795: background delivery worker for the transactional outbox. Each tick drains up to MAX_PER_TICK due
 // events (claim → deliver → mark), so a backlog is worked down without one tick running unbounded. Modeled
 // on AssessmentWorker (re-entrancy guard, health snapshot). Idempotent handlers make re-delivery safe.
-const MAX_PER_TICK = 10;
+// Each delivery is itself bounded (OUTBOX_DELIVERY_TIMEOUT_MS), so a tick's worst case is MAX_PER_TICK ×
+// that timeout — which the wedge window (maxTickMs below) is sized to exceed.
+const MAX_PER_TICK = 5;
 
 export type OutboxDeliveryWorkerStatus = {
   instanceId: string;
@@ -63,9 +65,10 @@ export class OutboxDeliveryWorker {
       tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
       lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
       lastError: null,
-      // #856: a tick can deliver up to MAX_PER_TICK events, each an email/ACS or DB call, so its wedge
-      // window is governed by the drain budget + lease — not the poll interval.
-      maxTickMs: this.leaseMs + 120_000,
+      // #856: a tick delivers up to MAX_PER_TICK events, each bounded by OUTBOX_DELIVERY_TIMEOUT_MS, so its
+      // wedge window is the worst-case drain time + buffer — NOT the poll interval. The per-delivery
+      // deadline guarantees the tick returns within this, making wedge a pure backstop.
+      maxTickMs: MAX_PER_TICK * env.OUTBOX_DELIVERY_TIMEOUT_MS + 60_000,
     };
   }
 

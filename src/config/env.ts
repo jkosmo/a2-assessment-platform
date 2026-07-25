@@ -138,6 +138,10 @@ const envSchema = z.object({
   // #795: outbox delivery worker cadence + lease.
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   OUTBOX_LEASE_DURATION_MS: z.coerce.number().int().positive().default(60000),
+  // #795-followup: per-delivery wall-clock cap. A hung handler (e.g. an ACS email call with no timeout)
+  // would otherwise wedge the worker's tick forever (no return). On timeout the delivery is abandoned and
+  // the row is retried; idempotent handlers make a later completion of the abandoned call safe.
+  OUTBOX_DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   PARSER_WORKER_URL: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().url().optional(),
