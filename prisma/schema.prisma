@@ -140,6 +140,49 @@ model UserConsent {
   @@index([userId])
 }
 
+// #726: retry-safe idempotency for create/import POST endpoints. A request may carry an `Idempotency-Key`
+// header; the first request for (userId, endpoint, key) reserves a row (status "pending"), runs the
+// handler, and stores its response. A replay with the SAME key + SAME payloadHash returns the stored
+// response (no second write); a SAME key + DIFFERENT payloadHash is rejected (409). Rows expire after a
+// TTL (no relation to User on purpose — the record is ephemeral and must survive user changes for its TTL).
+model IdempotencyKey {
+  id           String   @id @default(cuid())
+  userId       String
+  endpoint     String
+  key          String
+  payloadHash  String
+  status       String   @default("pending") // "pending" while the handler runs, "completed" once stored
+  statusCode   Int?
+  responseJson String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@unique([userId, endpoint, key])
+  @@index([expiresAt])
+}
+
+// #795: transactional outbox for the post-decision side effects (participant notification + course-
+// completion check) that were previously fire-and-forget — a SIGTERM/crash after the job was marked
+// SUCCEEDED but before those promises settled lost the email/completion with no retry. Now the decision
+// path enqueues a durable OutboxEvent, and a delivery worker leases pending rows and delivers them with
+// bounded retries (the handlers are idempotent, so re-delivery is safe).
+model OutboxEvent {
+  id          String    @id @default(cuid())
+  type        String // "assessment_notification" | "course_completion_check"
+  payloadJson String
+  status      String    @default("pending") // "pending" | "delivered" | "failed"
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  availableAt DateTime  @default(now())
+  lockedBy    String?
+  lockedAt    DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  deliveredAt DateTime?
+
+  @@index([status, availableAt])
+}
+
 model DeletionRequest {
   id           String                @id @default(cuid())
   userId       String

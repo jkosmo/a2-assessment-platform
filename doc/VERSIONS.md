@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.5.0 - 2026-07-25
+
+EPIC #779 durability batch, part 2 — retry-safe idempotency + a transactional outbox. Two additive
+migrations (IdempotencyKey, OutboxEvent); no change to existing behaviour unless the new header is sent.
+
+- **#726 — Idempotency-Key for create/import endpoints.** `POST /api/admin/content/{modules/import,
+  sections,courses}` accept an optional `Idempotency-Key` header. The first request for (userId, endpoint,
+  key) reserves a row, runs the handler, and stores the response; a replay with the same key + same body
+  returns the stored response without a second write; the same key + a different body is a 409
+  `idempotency_key_reuse`; an in-flight duplicate is a 409 `idempotency_in_progress`. Rows have a 24h TTL;
+  a failed request releases its reservation. No header → unchanged behaviour. (`src/middleware/idempotency.ts`.)
+- **#795 — transactional outbox for post-decision side effects.** Participant notification + course-
+  completion check were fire-and-forget after the assessment decision committed, so a crash after the job
+  was marked SUCCEEDED lost them with no retry. They are now enqueued as durable `OutboxEvent` rows
+  (awaited before SUCCEEDED), and a new `OutboxDeliveryWorker` leases pending rows and delivers them with
+  bounded exponential-backoff retries (fenced on lockedBy/lockedAt; the handlers are idempotent, so
+  re-delivery is safe). A failed enqueue now propagates so the job retries rather than silently dropping
+  the side effect. The worker is part of the worker role's health readiness (`#856` maxTickMs) and drains
+  on shutdown.
+
+Proof: `test/m2-idempotency` (replay / reuse-409 / no-key) + `test/m2-outbox` (enqueue persists;
+delivery marks delivered; failing delivery retries then fails after maxAttempts), both real Postgres.
+tsc 0; unit 847/847; full integration 424/424. Completes the #779 durability batch (#796 shipped in 2.4.0).
+
 ## 2.4.0 - 2026-07-25
 
 #796 — content import is now atomic (EPIC #779). A module/course import previously wrote its components

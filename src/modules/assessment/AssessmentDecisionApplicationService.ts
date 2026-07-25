@@ -1,10 +1,7 @@
 import { createAssessmentDecision, createMcqOnlyDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { operationalEvents } from "../../observability/operationalEvents.js";
-import { notifyAssessmentResult } from "../certification/index.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -61,7 +58,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
   });
 
   if (!decisionResult.needsManualReview) {
-    notifyAndCheckCompletion(input, decisionResult.decision.passFailTotal);
+    await enqueuePostDecisionSideEffects(input, decisionResult.decision.passFailTotal);
   }
 
   await recordJobCompletedAudit(input.jobId, input.submissionId, input.userId);
@@ -98,7 +95,7 @@ export async function applyMcqOnlyDecision(input: ApplyMcqOnlyDecisionInput): Pr
     assessmentPolicy: input.assessmentPolicy,
   });
 
-  notifyAndCheckCompletion(input, decisionResult.decision.passFailTotal);
+  await enqueuePostDecisionSideEffects(input, decisionResult.decision.passFailTotal);
 
   await recordJobCompletedAudit(input.jobId, input.submissionId, input.userId);
 }
@@ -114,44 +111,31 @@ type NotifyInput = {
   recipientName: string;
 };
 
-/** Fire-and-forget participant notification + course-completion check (shared by both paths). */
-function notifyAndCheckCompletion(input: NotifyInput, passFailTotal: boolean): void {
-  const moduleTitle =
-    localizeContentText(input.submissionLocale, input.moduleTitle) ?? input.moduleId;
+// #795: durably enqueue the participant notification + course-completion check instead of firing them
+// and forgetting. Awaited before the job is marked SUCCEEDED, so a crash after SUCCEEDED can no longer
+// lose them — the outbox delivery worker delivers them (with retries) from the persisted rows.
+async function enqueuePostDecisionSideEffects(input: NotifyInput, passFailTotal: boolean): Promise<void> {
+  const moduleTitle = localizeContentText(input.submissionLocale, input.moduleTitle) ?? input.moduleId;
 
-  notifyAssessmentResult({
-    submissionId: input.submissionId,
-    submittedAt: input.submittedAt,
-    recipientEmail: input.recipientEmail,
-    recipientName: input.recipientName,
-    moduleTitle,
-    moduleId: input.moduleId,
-    passFailTotal,
-    locale: input.submissionLocale,
-  }).catch((error: unknown) => {
-    logOperationalEvent(
-      operationalEvents.certification.participantNotificationPipelineFailed,
-      {
+  await enqueueOutboxEvents([
+    {
+      type: OUTBOX_EVENT_TYPES.assessmentNotification,
+      payload: {
         submissionId: input.submissionId,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        submittedAt: input.submittedAt.toISOString(),
+        recipientEmail: input.recipientEmail,
+        recipientName: input.recipientName,
+        moduleTitle,
+        moduleId: input.moduleId,
+        passFailTotal,
+        locale: input.submissionLocale,
       },
-      "error",
-    );
-  });
-
-  checkAndIssueCourseCompletions({ userId: input.userId, moduleId: input.moduleId }).catch(
-    (error: unknown) => {
-      logOperationalEvent(
-        operationalEvents.course.completionCheckFailed,
-        {
-          userId: input.userId,
-          moduleId: input.moduleId,
-          errorMessage: error instanceof Error ? error.message : "Unknown error",
-        },
-        "error",
-      );
     },
-  );
+    {
+      type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+      payload: { userId: input.userId, moduleId: input.moduleId },
+    },
+  ]);
 }
 
 async function recordJobCompletedAudit(jobId: string, submissionId: string, userId: string): Promise<void> {

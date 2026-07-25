@@ -13,6 +13,7 @@ const createAssessmentDecision = vi.fn();
 const evaluatePracticalWithLlm = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
+const enqueueOutboxEvents = vi.fn();
 
 vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
   const repo = {
@@ -40,6 +41,15 @@ vi.mock("../../src/db/transaction.js", () => ({
 
 vi.mock("../../src/modules/assessment/decisionService.js", () => ({
   createAssessmentDecision,
+}));
+
+// #795: the decision path enqueues its side effects to the outbox — mock it so the unit test needs no DB.
+vi.mock("../../src/modules/outbox/outboxService.js", () => ({
+  enqueueOutboxEvents,
+  OUTBOX_EVENT_TYPES: {
+    assessmentNotification: "assessment_notification",
+    courseCompletionCheck: "course_completion_check",
+  },
 }));
 
 vi.mock("../../src/modules/assessment/llmAssessmentService.js", () => ({
@@ -82,6 +92,7 @@ function buildSubmissionFixture() {
     moduleId: "module-1",
     moduleVersionId: "module-version-1",
     locale: "nb",
+    submittedAt: new Date("2026-03-13T22:00:00.000Z"),
     responseJson: JSON.stringify({ response: "raw text", reflection: "reflection text", promptExcerpt: "prompt excerpt" }),
     user: {
       email: "participant@company.com",
@@ -174,6 +185,7 @@ describe("assessment job service traffic-light policy", () => {
     evaluatePracticalWithLlm.mockReset();
     recordAuditEvent.mockReset();
     logOperationalEvent.mockReset();
+    enqueueOutboxEvents.mockReset().mockResolvedValue({ count: 2 });
 
     findNextRunnableJob.mockResolvedValue({
       id: "job-1",

@@ -5,6 +5,17 @@ const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const notifyAssessmentResult = vi.fn();
 const localizeContentText = vi.fn((_, text) => text ?? null);
+// #795: the decision path now enqueues the post-decision side effects to the durable outbox instead of
+// firing them and forgetting.
+const enqueueOutboxEvents = vi.fn();
+
+vi.mock("../../src/modules/outbox/outboxService.js", () => ({
+  enqueueOutboxEvents,
+  OUTBOX_EVENT_TYPES: {
+    assessmentNotification: "assessment_notification",
+    courseCompletionCheck: "course_completion_check",
+  },
+}));
 
 vi.mock("../../src/modules/assessment/decisionService.js", () => ({
   createAssessmentDecision,
@@ -74,6 +85,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     logOperationalEvent.mockReset();
     notifyAssessmentResult.mockReset();
     localizeContentText.mockReset();
+    enqueueOutboxEvents.mockReset().mockResolvedValue({ count: 2 });
 
     recordAuditEvent.mockResolvedValue(undefined);
     localizeContentText.mockImplementation((_locale, text) => text ?? null);
@@ -83,12 +95,11 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     vi.clearAllMocks();
   });
 
-  it("creates a decision and sends notification when manual review is not needed", async () => {
+  it("creates a decision and enqueues the notification + completion outbox events when no manual review", async () => {
     createAssessmentDecision.mockResolvedValue({
       decision: { id: "decision-1", passFailTotal: true },
       needsManualReview: false,
     });
-    notifyAssessmentResult.mockResolvedValue(undefined);
 
     const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
     await applyAssessmentDecision({ ...BASE_INPUT, llmResult: buildLlmResult() });
@@ -101,14 +112,16 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
         mcqPercentScore: 100,
       }),
     );
-    expect(notifyAssessmentResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        submissionId: "sub-1",
-        recipientEmail: "participant@example.com",
-        passFailTotal: true,
-        locale: "en-GB",
-      }),
+    // #795: side effects go to the durable outbox (awaited), not fire-and-forget notification calls.
+    expect(notifyAssessmentResult).not.toHaveBeenCalled();
+    expect(enqueueOutboxEvents).toHaveBeenCalledTimes(1);
+    const enqueued = enqueueOutboxEvents.mock.calls[0][0] as Array<{ type: string; payload: Record<string, unknown> }>;
+    const notification = enqueued.find((e) => e.type === "assessment_notification");
+    const completion = enqueued.find((e) => e.type === "course_completion_check");
+    expect(notification?.payload).toEqual(
+      expect.objectContaining({ submissionId: "sub-1", recipientEmail: "participant@example.com", passFailTotal: true, locale: "en-GB" }),
     );
+    expect(completion?.payload).toEqual(expect.objectContaining({ userId: "user-1", moduleId: "module-1" }));
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "assessment_job",
@@ -131,34 +144,28 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
       forceManualReviewReason: "Escalated for review.",
     });
 
-    expect(notifyAssessmentResult).not.toHaveBeenCalled();
+    expect(enqueueOutboxEvents).not.toHaveBeenCalled();
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: "assessment_job_completed" }),
     );
   });
 
-  it("logs and swallows notification errors rather than propagating them", async () => {
+  it("propagates when the outbox enqueue fails, so the job retries instead of losing the side effects", async () => {
     createAssessmentDecision.mockResolvedValue({
       decision: { id: "decision-3", passFailTotal: true },
       needsManualReview: false,
     });
-    notifyAssessmentResult.mockRejectedValue(new Error("Email service unavailable"));
+    // #795: the enqueue is awaited (not fire-and-forget). A failure must propagate so the runner fails/
+    // retries the job — the side effects are then re-enqueued rather than silently lost.
+    enqueueOutboxEvents.mockRejectedValue(new Error("DB unavailable"));
 
     const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
 
-    // Should not throw even though notification failed
     await expect(
       applyAssessmentDecision({ ...BASE_INPUT, llmResult: buildLlmResult() }),
-    ).resolves.toBeUndefined();
-
-    // Wait a tick for the catch in the fire-and-forget notifyAssessmentResult to run
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(logOperationalEvent).toHaveBeenCalledWith(
-      "participant_notification_pipeline_failed",
-      expect.objectContaining({ submissionId: "sub-1" }),
-      "error",
-    );
+    ).rejects.toThrow("DB unavailable");
+    // The job-completed audit must NOT be written when the side effects weren't durably enqueued.
+    expect(recordAuditEvent).not.toHaveBeenCalled();
   });
 
   it("passes forceManualReviewReason through to createAssessmentDecision", async () => {

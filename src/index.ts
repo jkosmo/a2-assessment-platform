@@ -8,6 +8,7 @@ import { PseudonymizationMonitor } from "./modules/user/PseudonymizationMonitor.
 import { AuditRetentionMonitor } from "./modules/retention/AuditRetentionMonitor.js";
 import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js";
 import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
+import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
 
 export function resolveProcessRoleFlags(role: string) {
@@ -28,6 +29,7 @@ const pseudonymizationMonitor = startWorkers ? new PseudonymizationMonitor() : n
 const auditRetentionMonitor = startWorkers ? new AuditRetentionMonitor() : null;
 const entraUserSyncMonitor = startWorkers ? new EntraUserSyncMonitor() : null;
 const courseReminderMonitor = startWorkers ? new CourseReminderMonitor() : null;
+const outboxDeliveryWorker = startWorkers ? new OutboxDeliveryWorker() : null;
 
 const backgroundMonitors = [
   assessmentWorker,
@@ -36,6 +38,7 @@ const backgroundMonitors = [
   auditRetentionMonitor,
   entraUserSyncMonitor,
   courseReminderMonitor,
+  outboxDeliveryWorker,
 ];
 
 // #810: on shutdown, stop scheduling AND drain any in-flight tick before exiting, so we don't kill work
@@ -118,6 +121,7 @@ async function startServer() {
       auditRetentionMonitor,
       entraUserSyncMonitor,
       courseReminderMonitor,
+      outboxDeliveryWorker,
     ];
     staggeredWorkers.forEach((worker, index) => {
       setTimeout(() => {
