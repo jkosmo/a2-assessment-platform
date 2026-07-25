@@ -99,6 +99,16 @@ test("participant: section and module both open inline in-place; only one open a
   await expect(sectionItem.locator(".course-inline-panel")).toBeVisible();
   await expect(sectionItem.locator("#sectionReaderBody")).toContainText("Seksjonstekst");
 
+  // #865 cosmetic guard: the action buttons sit side by side (auto-width), not stacked full-width.
+  const markReadBtn = sectionItem.locator("#sectionReaderMarkRead");
+  const nextBtn = sectionItem.locator('[data-role="next"]');
+  await expect(nextBtn).toBeVisible();
+  const boxA = await markReadBtn.boundingBox();
+  const boxB = await nextBtn.boundingBox();
+  expect(boxA && boxB && Math.abs(boxA.y - boxB.y) < 5).toBe(true); // same horizontal row
+  const panelBox = await sectionItem.locator(".course-inline-panel").boundingBox();
+  expect(boxA && panelBox && boxA.width < panelBox.width * 0.9).toBe(true); // not full-width
+
   // Open the MODULE → the workspace relocates INLINE under the module row (in-place, same pattern),
   // and the section panel collapses (one open at a time).
   await moduleItem.locator(".course-module-row").click();
