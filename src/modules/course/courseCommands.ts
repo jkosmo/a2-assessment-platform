@@ -81,8 +81,10 @@ export async function updateCourse(
   });
 }
 
-export async function publishCourse(courseId: string, actorId?: string) {
-  const course = await prisma.course.findUnique({
+export async function publishCourse(courseId: string, actorId?: string, tx?: DbTransactionClient) {
+  // #796: the has-modules check runs on the tx client when composing an import, so it sees the course
+  // items created earlier in the SAME transaction.
+  const course = await (tx ?? prisma).course.findUnique({
     where: { id: courseId },
     include: { _count: { select: { items: { where: { itemType: "MODULE" } } } } },
   });
@@ -92,8 +94,8 @@ export async function publishCourse(courseId: string, actorId?: string) {
   }
 
   // #803: publish + audit commit atomically.
-  return runInTransaction(async (tx) => {
-    const updated = await tx.course.update({
+  const run = async (client: DbTransactionClient) => {
+    const updated = await client.course.update({
       where: { id: courseId },
       data: { publishedAt: new Date() },
     });
@@ -105,10 +107,11 @@ export async function publishCourse(courseId: string, actorId?: string) {
         actorId,
         metadata: { courseId },
       },
-      tx,
+      client,
     );
     return updated;
-  });
+  };
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 // #705: avpubliser et kurs (motstykke til publishCourse). Symmetri med modul/seksjon.
@@ -238,7 +241,10 @@ export async function setCourseItems(
   options?: { actorId?: string; agent?: AgentAuthoringContext },
   tx?: DbTransactionClient,
 ) {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  // #796: when composing an import, existence checks must run on the tx client so they see the course,
+  // modules, and sections created earlier in the SAME transaction.
+  const reader = tx ?? prisma;
+  const course = await reader.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
   const moduleIds = items.flatMap((i) => (i.type === "MODULE" ? [i.moduleId] : []));
@@ -250,11 +256,11 @@ export async function setCourseItems(
     throw new ValidationError("A section may appear only once in a course.");
   }
   if (moduleIds.length > 0) {
-    const found = await prisma.module.count({ where: { id: { in: moduleIds } } });
+    const found = await reader.module.count({ where: { id: { in: moduleIds } } });
     if (found !== moduleIds.length) throw new ValidationError("One or more modules do not exist.");
   }
   if (sectionIds.length > 0) {
-    const found = await prisma.courseSection.count({ where: { id: { in: sectionIds } } });
+    const found = await reader.courseSection.count({ where: { id: { in: sectionIds } } });
     if (found !== sectionIds.length) throw new ValidationError("One or more sections do not exist.");
   }
 

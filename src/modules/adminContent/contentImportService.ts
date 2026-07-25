@@ -21,11 +21,13 @@ import {
   createModuleVersion,
   publishModuleVersion,
 } from "./adminContentCommands.js";
-import { adminContentRepository } from "./adminContentRepository.js";
+import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { courseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
-import { createSection, updateSectionContent } from "../course/sectionCommands.js";
-import { importSectionAssets } from "../course/assetCommands.js";
+import { randomUUID } from "node:crypto";
+import { createSection } from "../course/sectionCommands.js";
+import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
 import { ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -50,6 +52,11 @@ export type ImportMode = "createNew" | "replaceExisting";
 // other endpoint at 5 MB limits the large-body surface.
 export const COURSE_IMPORT_BODY_LIMIT_BYTES = 35 * 1024 * 1024; // 35 MB
 
+// #796: a content import builds its whole module/course graph in one interactive transaction, which can
+// exceed Prisma's 5s default (many rows; a large course). Asset blob uploads are staged BEFORE the tx, so
+// no network I/O happens inside it — this bounds only the DB work.
+const IMPORT_TX_TIMEOUT_MS = 30_000;
+
 // #749 (Layer A): rewrite every `asset:<sourceId>` reference in the serialised section markdown
 // to `asset:<newAssetId>` using the source→new id map produced when the section's assets are
 // re-created. Refs with no mapping are left untouched (defensive — an author-mistyped ref should
@@ -65,39 +72,70 @@ function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, string>):
   });
 }
 
-// #749: recreate one learning section (title + markdown) AND its inlined figures/images. Ordering
-// matters: the section (and version 1) is created first with the SOURCE markdown, then the assets
-// are re-created to obtain their new ids, then a NEW section version is saved whose markdown refs
-// point at the new asset ids — so the ACTIVE version never references source ids. Sections without
-// assets skip the second save (old asset-less v1 files behave exactly as before). A failure while
-// importing an asset throws with the section title for context; any blobs written before the
-// failure are orphaned (no row references them) — tolerable for v1, matching createSectionAsset.
-async function importSectionPayload(section: SectionExportPayload, actorId: string): Promise<string> {
+// #796: a section prepared for a transactional course import. Its asset blobs are already written to
+// storage (staged, keyed by the pre-generated `sectionId`); its `bodyMarkdown` already has `asset:<id>`
+// refs rewritten to the pre-generated asset row ids; and `blobPaths` lists every blob written so a
+// rolled-back import can reclaim them. `persistStagedSection` creates the DB rows inside the import tx.
+type StagedImportSection = {
+  sectionId: string;
+  title: string;
+  bodyMarkdown: string;
+  stagedAssets: Array<{ id: string; rowData: StagedSectionAsset["rowData"] }>;
+  blobPaths: string[];
+};
+
+// #796 (staging half — runs BEFORE the import transaction, does blob I/O, no DB writes): pre-generate the
+// section id + its asset row ids, write the asset blobs to storage, and rewrite the markdown's
+// `asset:<sourceId>` refs to the new asset ids so the persisted version never references source ids.
+async function stageSectionForImport(section: SectionExportPayload): Promise<StagedImportSection> {
+  const sectionId = randomUUID();
   const serializedMarkdown = serializeRequired(section.bodyMarkdown);
-  const created = await createSection({
-    title: serializeRequired(section.title),
-    bodyMarkdown: serializedMarkdown,
-    actorId,
-  });
-
+  const title = serializeRequired(section.title);
   const assets = section.assets ?? [];
-  if (assets.length === 0) return created.id;
 
-  let idMap: Map<string, string>;
+  if (assets.length === 0) {
+    return { sectionId, title, bodyMarkdown: serializedMarkdown, stagedAssets: [], blobPaths: [] };
+  }
+
+  let staged: StagedSectionAsset[];
   try {
-    idMap = await importSectionAssets(created.id, assets);
+    staged = await stageSectionAssets(sectionId, assets);
   } catch (error) {
-    const title = typeof section.title === "string" ? section.title : JSON.stringify(section.title);
+    const label = typeof section.title === "string" ? section.title : JSON.stringify(section.title);
     const detail = error instanceof Error ? error.message : String(error);
     // Keep the client-error status (asset validation failures are 400) while adding section context.
-    throw new ValidationError(`Failed to import assets for section "${title}": ${detail}`);
+    throw new ValidationError(`Failed to import assets for section "${label}": ${detail}`);
   }
 
-  const remapped = remapAssetRefs(serializedMarkdown, idMap);
-  if (remapped !== serializedMarkdown) {
-    await updateSectionContent(created.id, remapped, actorId);
+  const idMap = new Map<string, string>();
+  const stagedAssets = staged.map((asset) => {
+    const id = randomUUID();
+    idMap.set(asset.sourceId, id);
+    return { id, rowData: asset.rowData };
+  });
+
+  return {
+    sectionId,
+    title,
+    bodyMarkdown: remapAssetRefs(serializedMarkdown, idMap),
+    stagedAssets,
+    blobPaths: staged.flatMap((asset) => asset.blobPaths),
+  };
+}
+
+// #796 (persist half — runs INSIDE the import transaction): create the section (with its pre-generated id
+// and already-remapped markdown) and its SectionAsset rows (with pre-generated ids referencing the staged
+// blobs). No blob I/O here.
+async function persistStagedSection(
+  tx: DbTransactionClient,
+  staged: StagedImportSection,
+  actorId: string,
+): Promise<string> {
+  await createSection({ id: staged.sectionId, title: staged.title, bodyMarkdown: staged.bodyMarkdown, actorId }, tx);
+  for (const asset of staged.stagedAssets) {
+    await tx.sectionAsset.create({ data: { id: asset.id, sectionId: staged.sectionId, ...asset.rowData } });
   }
-  return created.id;
+  return staged.sectionId;
 }
 
 function serializeLocalized(value: LocalizedText | null | undefined): string | undefined {
@@ -120,13 +158,16 @@ async function importModulePayload(
     // forfatter eksplisitt publiserer. Default true bevarer fil-import-flytens atferd.
     autoPublish?: boolean;
   },
+  // #796: the whole module graph is built on this single transaction client, so a failure partway
+  // through rolls back every row (no standalone module / partial versions / missing audit).
+  tx: DbTransactionClient,
 ): Promise<{ moduleId: string; moduleVersionId: string }> {
   let moduleId: string;
   if (options.mode === "replaceExisting") {
     if (!options.targetModuleId) {
       throw new Error("targetModuleId is required when mode is replaceExisting.");
     }
-    const existing = await adminContentRepository.findModuleTitle(options.targetModuleId);
+    const existing = await createAdminContentRepository(tx).findModuleTitle(options.targetModuleId);
     if (!existing) {
       throw new Error("Target module not found for replaceExisting.");
     }
@@ -139,7 +180,7 @@ async function importModulePayload(
         ? serializeLocalized(payload.module.certificationLevel as LocalizedText)
         : undefined,
       actorId: options.actorId,
-    });
+    }, tx);
     moduleId = newModule.id;
   }
 
@@ -155,7 +196,7 @@ async function importModulePayload(
           criteria: payload.activeVersion.rubric.criteria,
           scalingRule: payload.activeVersion.rubric.scalingRule,
           active: true,
-        });
+        }, tx);
 
   const promptTemplate =
     isMcqOnly || !payload.activeVersion.promptTemplate
@@ -166,7 +207,7 @@ async function importModulePayload(
           userPromptTemplate: serializeRequired(payload.activeVersion.promptTemplate.userPromptTemplate),
           examples: payload.activeVersion.promptTemplate.examples ?? [],
           active: true,
-        });
+        }, tx);
 
   const mcqSet =
     isFreetextOnly || !payload.activeVersion.mcqSet
@@ -181,7 +222,7 @@ async function importModulePayload(
             correctAnswer: serializeRequired(question.correctAnswer),
             rationale: question.rationale ? serializeRequired(question.rationale) : undefined,
           })),
-        });
+        }, tx);
 
   const moduleVersion = await createModuleVersion({
     moduleId,
@@ -201,7 +242,7 @@ async function importModulePayload(
     assessmentPolicyJson: payload.activeVersion.assessmentPolicy
       ? JSON.stringify(payload.activeVersion.assessmentPolicy)
       : undefined,
-  });
+  }, tx);
 
   // If the source had this module published (audit.publishedAt set), auto-
   // publish the imported version too. Matches the user's design choice for
@@ -212,7 +253,7 @@ async function importModulePayload(
   // v1.2.14 (#456): in-app duplisering passerer autoPublish=false så kopier alltid
   // starter som utkast — forfatter skal eksplisitt publisere etter gjennomgang.
   if (options.autoPublish !== false && payload.activeVersion.audit?.publishedAt) {
-    await publishModuleVersion(moduleId, moduleVersion.id, options.actorId);
+    await publishModuleVersion(moduleId, moduleVersion.id, options.actorId, tx);
   }
 
   return { moduleId, moduleVersionId: moduleVersion.id };
@@ -232,25 +273,36 @@ export async function importModuleFromEnvelope(
   if (envelope.scope !== "module" || !envelope.module) {
     throw new Error("Envelope is not a module export.");
   }
-  const result = await importModulePayload(envelope.module, options);
+  const moduleEnvelope = envelope.module;
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: result.moduleId,
-    action: auditActions.adminContent.moduleImported,
-    actorId: options.actorId,
-    metadata: {
-      moduleId: result.moduleId,
-      moduleVersionId: result.moduleVersionId,
-      mode: options.mode,
-      sourcePublishedAt: envelope.module.activeVersion.audit.publishedAt ?? null,
-      sourcePublishedBy: envelope.module.activeVersion.audit.publishedBy ?? null,
-      sourceVersionNo: envelope.module.activeVersion.audit.sourceVersionNo ?? null,
-      ...agentAuthoringAuditMetadata(options.agent),
+  // #796: the whole module graph (module + rubric/prompt/mcq versions + module version + publish) and its
+  // import audit commit in ONE transaction. A failure on any step rolls the entire import back — no
+  // standalone module, partial versions, or missing audit. Modules carry no blobs, so this is pure DB.
+  return runInTransaction(
+    async (tx) => {
+      const result = await importModulePayload(moduleEnvelope, options, tx);
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.module,
+          entityId: result.moduleId,
+          action: auditActions.adminContent.moduleImported,
+          actorId: options.actorId,
+          metadata: {
+            moduleId: result.moduleId,
+            moduleVersionId: result.moduleVersionId,
+            mode: options.mode,
+            sourcePublishedAt: moduleEnvelope.activeVersion.audit.publishedAt ?? null,
+            sourcePublishedBy: moduleEnvelope.activeVersion.audit.publishedBy ?? null,
+            sourceVersionNo: moduleEnvelope.activeVersion.audit.sourceVersionNo ?? null,
+            ...agentAuthoringAuditMetadata(options.agent),
+          },
+        },
+        tx,
+      );
+      return result;
     },
-  });
-
-  return result;
+    { timeout: IMPORT_TX_TIMEOUT_MS },
+  );
 }
 
 export async function importCourseFromEnvelope(
@@ -266,84 +318,130 @@ export async function importCourseFromEnvelope(
   }
   const payload = envelope.course;
 
-  let courseId: string;
-  if (options.mode === "replaceExisting") {
-    if (!options.targetCourseId) {
-      throw new Error("targetCourseId is required when mode is replaceExisting.");
-    }
-    const existing = await courseRepository.findCourseById(options.targetCourseId);
-    if (!existing) {
-      throw new Error("Target course not found for replaceExisting.");
-    }
-    courseId = options.targetCourseId;
-  } else {
-    const newCourse = await createCourse({
-      title: serializeRequired(payload.course.title),
-      description: serializeLocalized(payload.course.description),
-      certificationLevel: payload.course.certificationLevel
-        ? serializeLocalized(payload.course.certificationLevel as LocalizedText)
-        : null,
-      actorId: options.actorId,
-    });
-    courseId = newCourse.id;
-  }
+  // #512: prefer the full mixed `items` sequence; fall back to the legacy modules-only list (v1 files).
+  const orderedItems =
+    payload.course.items && payload.course.items.length > 0
+      ? [...payload.course.items].sort((a, b) => a.sortOrder - b.sortOrder)
+      : null;
 
-  // Each inlined module payload is imported via createNew (a course import never
-  // tries to replace existing modules — that would conflate two different
-  // collision questions). Sections are recreated likewise. #512: prefer the full
-  // mixed `items` sequence; fall back to the legacy modules-only list (v1 files).
-  const importedModuleIds: string[] = [];
-  let sectionCount = 0;
-
-  if (payload.course.items && payload.course.items.length > 0) {
-    const ordered = [...payload.course.items].sort((a, b) => a.sortOrder - b.sortOrder);
-    const courseItemInputs: CourseItemInput[] = [];
-    for (const entry of ordered) {
+  // #796: STAGE every section's asset blobs BEFORE the transaction — blob I/O must not happen inside the
+  // DB tx (a B1 pool must not hold a connection open across uploads, and the tx would blow its timeout).
+  // Each staged section carries its pre-generated id + remapped markdown so the graph builds atomically.
+  const stagedSections = new Map<number, StagedImportSection>();
+  const stagedBlobPaths: string[] = [];
+  if (orderedItems) {
+    for (let i = 0; i < orderedItems.length; i += 1) {
+      const entry = orderedItems[i];
       if (entry.type === "SECTION") {
-        const sectionId = await importSectionPayload(entry.section, options.actorId);
-        courseItemInputs.push({ type: "SECTION", sectionId });
-        sectionCount += 1;
-      } else {
-        const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" });
-        courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
-        importedModuleIds.push(imported.moduleId);
+        const staged = await stageSectionForImport(entry.section);
+        stagedSections.set(i, staged);
+        stagedBlobPaths.push(...staged.blobPaths);
       }
     }
-    await setCourseItems(courseId, courseItemInputs);
-  } else {
-    const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
-    for (const item of payload.course.modules ?? []) {
-      const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" });
-      importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
-    }
-    importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
-    importedModuleIds.push(...importedModules.map((m) => m.moduleId));
-    await setCourseModules(
-      courseId,
-      importedModules.map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
+  }
+
+  try {
+    // #796: build (or extend) the whole course graph — course, sections + their asset rows, modules +
+    // their version graphs, the ordered items, the publish flip, and the import audit — in ONE
+    // transaction. A failure on any item rolls the entire import back (no standalone modules/sections,
+    // partial versions, or a course with no final audit).
+    return await runInTransaction(
+      async (tx) => {
+        let courseId: string;
+        if (options.mode === "replaceExisting") {
+          if (!options.targetCourseId) {
+            throw new Error("targetCourseId is required when mode is replaceExisting.");
+          }
+          const existing = await tx.course.findUnique({ where: { id: options.targetCourseId }, select: { id: true } });
+          if (!existing) {
+            throw new Error("Target course not found for replaceExisting.");
+          }
+          courseId = options.targetCourseId;
+        } else {
+          const newCourse = await createCourse(
+            {
+              title: serializeRequired(payload.course.title),
+              description: serializeLocalized(payload.course.description),
+              certificationLevel: payload.course.certificationLevel
+                ? serializeLocalized(payload.course.certificationLevel as LocalizedText)
+                : null,
+              actorId: options.actorId,
+            },
+            tx,
+          );
+          courseId = newCourse.id;
+        }
+
+        // Each inlined module payload is imported via createNew (a course import never replaces existing
+        // modules — that would conflate two different collision questions). Sections are recreated likewise.
+        const importedModuleIds: string[] = [];
+        let sectionCount = 0;
+
+        if (orderedItems) {
+          const courseItemInputs: CourseItemInput[] = [];
+          for (let i = 0; i < orderedItems.length; i += 1) {
+            const entry = orderedItems[i];
+            if (entry.type === "SECTION") {
+              const staged = stagedSections.get(i);
+              if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
+              await persistStagedSection(tx, staged, options.actorId);
+              courseItemInputs.push({ type: "SECTION", sectionId: staged.sectionId });
+              sectionCount += 1;
+            } else {
+              const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" }, tx);
+              courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
+              importedModuleIds.push(imported.moduleId);
+            }
+          }
+          await setCourseItems(courseId, courseItemInputs, undefined, tx);
+        } else {
+          const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
+          for (const item of payload.course.modules ?? []) {
+            const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" }, tx);
+            importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
+          }
+          importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
+          importedModuleIds.push(...importedModules.map((m) => m.moduleId));
+          await setCourseModules(
+            courseId,
+            importedModules.map((m) => ({ moduleId: m.moduleId, sortOrder: m.sortOrder })),
+            tx,
+          );
+        }
+
+        // Same publish-state-preservation rule as for modules: if the source course was published, publish
+        // the destination too — AFTER the items exist so the has-modules check passes.
+        if (payload.course.audit?.publishedAt) {
+          await publishCourse(courseId, options.actorId, tx);
+        }
+
+        await recordAuditEvent(
+          {
+            entityType: auditEntityTypes.course,
+            entityId: courseId,
+            action: auditActions.adminContent.courseImported,
+            actorId: options.actorId,
+            metadata: {
+              courseId,
+              mode: options.mode,
+              moduleCount: importedModuleIds.length,
+              sectionCount,
+              sourcePublishedAt: payload.course.audit.publishedAt ?? null,
+            },
+          },
+          tx,
+        );
+
+        return { courseId, moduleIds: importedModuleIds };
+      },
+      { timeout: IMPORT_TX_TIMEOUT_MS },
     );
+  } catch (error) {
+    // #796: the transaction rolled back (or staging/DB failed) — reclaim every blob staged for this failed
+    // import so a failure leaves no orphaned storage. Best-effort; a failed reclaim never masks the error.
+    if (stagedBlobPaths.length > 0) {
+      await reclaimAssetBlobs(stagedBlobPaths);
+    }
+    throw error;
   }
-
-  // Same publish-state-preservation rule as for modules: if source course was
-  // published (audit.publishedAt set), publish the destination course too.
-  // Must happen AFTER setCourseModules so the published course has its modules.
-  if (payload.course.audit?.publishedAt) {
-    await publishCourse(courseId, options.actorId);
-  }
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.adminContent.courseImported,
-    actorId: options.actorId,
-    metadata: {
-      courseId,
-      mode: options.mode,
-      moduleCount: importedModuleIds.length,
-      sectionCount,
-      sourcePublishedAt: payload.course.audit.publishedAt ?? null,
-    },
-  });
-
-  return { courseId, moduleIds: importedModuleIds };
 }
