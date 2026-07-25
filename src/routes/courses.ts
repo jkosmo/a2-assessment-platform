@@ -48,49 +48,60 @@ coursesRouter.get("/", async (request, response, next) => {
     const visibleIds = await filterVisibleCourseIds(userId, allCourses, new Set(classCourseDue.keys()));
     const courses = allCourses.filter((course) => visibleIds.has(course.id));
 
-    const items: CourseListItem[] = await Promise.all(
-      courses.map(async (course) => {
-        // Count all elements — modules + sections (#492). Modules are derived from
-        // CourseItem (itemType MODULE, via the repository); sections only exist in CourseItem.
-        const moduleIds = course.modules.map((m) => m.moduleId);
-        const courseItems = await courseRepository.findCourseItems(course.id);
-        const sectionIds = courseItems
-          .filter((i) => i.itemType === "SECTION")
-          .map((i) => i.sectionId)
-          .filter((id): id is string => Boolean(id));
-        const [passed, readIds, latestSubmissions] = await Promise.all([
-          moduleIds.length > 0
-            ? courseRepository.countPassedModulesForUser(userId, moduleIds)
-            : Promise.resolve(0),
-          sectionIds.length > 0
-            ? courseRepository.findReadSectionIds(userId, course.id)
-            : Promise.resolve([] as string[]),
-          moduleIds.length > 0
-            ? queryLatestSubmissionsForModules(userId, moduleIds)
-            : Promise.resolve([]),
-        ]);
-        const readCount = readIds.filter((id) => sectionIds.includes(id)).length;
-        const total = moduleIds.length + sectionIds.length;
-        const completed = passed + readCount;
-        const hasStarted = latestSubmissions.length > 0 || readCount > 0;
+    // #799: batch every per-course read across ALL visible courses (a fixed number of queries) instead of
+    // ~4 queries per course, then derive each course's progress in memory. Behaviour-preserving — the same
+    // counts as the previous per-course version, just fetched together.
+    const courseIds = courses.map((course) => course.id);
+    const allModuleIds = courses.flatMap((course) => course.modules.map((m) => m.moduleId));
 
-        return {
-          id: course.id,
-          title: localizeContentText(locale, course.title) ?? course.title,
-          description: localizeContentText(locale, course.description) ?? course.description,
-          moduleCount: moduleIds.length,
-          progress: {
-            completed,
-            total,
-            courseStatus: computeCourseStatus(completed, total, hasStarted),
-            moduleCompleted: passed,
-            moduleTotal: moduleIds.length,
-            sectionCompleted: readCount,
-            sectionTotal: sectionIds.length,
-          },
-        };
-      }),
-    );
+    const [sectionRows, passedModuleIds, readRows, latestSubmissions] = await Promise.all([
+      courseRepository.findCourseItemSectionIdsForCourses(courseIds),
+      courseRepository.findPassedModuleIds(userId, allModuleIds),
+      courseRepository.findReadSectionIdsForCourses(userId, courseIds),
+      allModuleIds.length > 0 ? queryLatestSubmissionsForModules(userId, allModuleIds) : Promise.resolve([]),
+    ]);
+
+    const sectionIdsByCourse = new Map<string, string[]>();
+    for (const row of sectionRows) {
+      const list = sectionIdsByCourse.get(row.courseId);
+      if (list) list.push(row.sectionId);
+      else sectionIdsByCourse.set(row.courseId, [row.sectionId]);
+    }
+    const passedModuleSet = new Set(passedModuleIds);
+    const readSectionsByCourse = new Map<string, Set<string>>();
+    for (const row of readRows) {
+      const set = readSectionsByCourse.get(row.courseId);
+      if (set) set.add(row.sectionId);
+      else readSectionsByCourse.set(row.courseId, new Set([row.sectionId]));
+    }
+    const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
+
+    const items: CourseListItem[] = courses.map((course) => {
+      const moduleIds = course.modules.map((m) => m.moduleId);
+      const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
+      const passed = moduleIds.filter((id) => passedModuleSet.has(id)).length;
+      const readSet = readSectionsByCourse.get(course.id);
+      const readCount = readSet ? sectionIds.filter((id) => readSet.has(id)).length : 0;
+      const total = moduleIds.length + sectionIds.length;
+      const completed = passed + readCount;
+      const hasStarted = moduleIds.some((id) => startedModuleIds.has(id)) || readCount > 0;
+
+      return {
+        id: course.id,
+        title: localizeContentText(locale, course.title) ?? course.title,
+        description: localizeContentText(locale, course.description) ?? course.description,
+        moduleCount: moduleIds.length,
+        progress: {
+          completed,
+          total,
+          courseStatus: computeCourseStatus(completed, total, hasStarted),
+          moduleCompleted: passed,
+          moduleTotal: moduleIds.length,
+          sectionCompleted: readCount,
+          sectionTotal: sectionIds.length,
+        },
+      };
+    });
 
     response.json({ courses: items });
   } catch (error) {
