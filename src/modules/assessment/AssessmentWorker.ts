@@ -66,6 +66,11 @@ export class AssessmentWorker {
       tickStartedAt: this.tickStartedAt?.toISOString() ?? null,
       lastCycleAt: this.lastCycleAt?.toISOString() ?? null,
       lastError: null,
+      // #856: a tick spans a full job execution (up to a couple of LLM calls), so its wedge window is
+      // governed by the per-job runtime cap — NOT the 4 s poll interval. Sized above the cap so the
+      // runner's own deadline (which fails the job and returns the tick) fires first; wedge is the
+      // backstop for if that deadline mechanism itself breaks.
+      maxTickMs: env.ASSESSMENT_JOB_MAX_RUNTIME_MS + 60_000,
     };
   }
 

@@ -128,6 +128,12 @@ const envSchema = z.object({
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   ASSESSMENT_JOB_LEASE_DURATION_MS: z.coerce.number().int().positive().default(300000),
+  // #856: hard wall-clock cap on a single job's in-process execution. The #792 lease heartbeat renews a
+  // running job's lease forever, so without this an in-process-stuck job (a DB lock-wait, not the LLM —
+  // that self-aborts at AZURE_OPENAI_TIMEOUT_MS) never returns and wedges the worker. Must exceed the
+  // worst-case legit assessment (primary + secondary LLM ≈ 2 × AZURE_OPENAI_TIMEOUT_MS + overhead). At
+  // the deadline the runner fails/retries the job (fenced) so the tick returns instead of wedging.
+  ASSESSMENT_JOB_MAX_RUNTIME_MS: z.coerce.number().int().positive().default(300000),
   ASSESSMENT_JOB_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(600000),
   PARSER_WORKER_URL: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),

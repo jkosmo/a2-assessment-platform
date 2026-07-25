@@ -28,6 +28,14 @@ export interface MonitorHealthSnapshot {
   lastCycleAt: string | null;
   /** Last error message, if the most recent tick failed. Informational — does not by itself mark unhealthy. */
   lastError: string | null;
+  /**
+   * #856: explicit upper bound on how long a SINGLE legitimate tick may run, overriding the
+   * interval-derived wedge window. The assessment worker's tick includes a full job execution (up to a
+   * couple of LLM calls), so its tolerable tick time is governed by the job runtime cap, NOT its 4 s
+   * poll interval. Omit for monitors whose tick is short relative to their interval (the default
+   * `intervalMs × wedgeFactor` window applies).
+   */
+  maxTickMs?: number;
 }
 
 export type MonitorHealthReason = "ok" | "disabled" | "wedged" | "stalled";
@@ -109,27 +117,37 @@ export function evaluateWorkerHealth(
       return { name: s.name, enabled: false, healthy: true, reason: "disabled", staleMs: null, runningMs: null };
     }
 
-    const wedgeWindow = Math.max(s.intervalMs * thresholds.wedgeFactor, thresholds.minWedgeFloorMs);
+    // #856: the wedge window is the monitor's explicit max-tick bound when given (the assessment worker's
+    // tick spans a full job execution, not its 4 s poll interval), else the interval-derived window.
+    const wedgeWindow = s.maxTickMs ?? Math.max(s.intervalMs * thresholds.wedgeFactor, thresholds.minWedgeFloorMs);
     const staleWindow = Math.max(s.intervalMs * thresholds.staleFactor, thresholds.minStaleFloorMs);
 
     const tickStartedMs = parseIso(s.tickStartedAt);
     const runningMs = s.running && tickStartedMs !== null ? nowMs - tickStartedMs : null;
-    if (runningMs !== null && runningMs > wedgeWindow) {
-      return { name: s.name, enabled: true, healthy: false, reason: "wedged", staleMs: null, runningMs };
+
+    // #856: a tick that is actively in flight is either wedged (running past its budget) or healthy
+    // (still working) — it is NOT "stalled". Only fall through to the stale check when idle; otherwise a
+    // long-but-legitimate job (running for minutes, so its lastCycleAt is old) would be mis-flagged
+    // stalled the moment it passes the stale window, even though the loop is plainly alive.
+    if (runningMs !== null) {
+      if (runningMs > wedgeWindow) {
+        return { name: s.name, enabled: true, healthy: false, reason: "wedged", staleMs: null, runningMs };
+      }
+      return { name: s.name, enabled: true, healthy: true, reason: "ok", staleMs: null, runningMs };
     }
 
-    // No success yet → measure from process start, and give it the (larger) startup grace: a monitor
-    // that has never completed a cycle is warming up, not stalled, until the process exceeds that grace.
-    // Once it HAS completed a cycle, the normal (tight) stale window applies.
+    // Idle (no tick in flight). No success yet → measure from process start, and give it the (larger)
+    // startup grace: a monitor that has never completed a cycle is warming up, not stalled, until the
+    // process exceeds that grace. Once it HAS completed a cycle, the normal (tight) stale window applies.
     const lastCycleMs = parseIso(s.lastCycleAt);
     const referenceMs = lastCycleMs ?? startMs;
     const effectiveStaleWindow = lastCycleMs === null ? Math.max(staleWindow, thresholds.startupGraceMs) : staleWindow;
     const staleMs = nowMs - referenceMs;
     if (staleMs > effectiveStaleWindow) {
-      return { name: s.name, enabled: true, healthy: false, reason: "stalled", staleMs, runningMs };
+      return { name: s.name, enabled: true, healthy: false, reason: "stalled", staleMs, runningMs: null };
     }
 
-    return { name: s.name, enabled: true, healthy: true, reason: "ok", staleMs, runningMs };
+    return { name: s.name, enabled: true, healthy: true, reason: "ok", staleMs, runningMs: null };
   });
 
   return {

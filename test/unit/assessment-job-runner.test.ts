@@ -172,6 +172,39 @@ describe("AssessmentJobRunner", () => {
         expect.anything(),
       );
     });
+
+    // #856: a job whose runAssessment never returns within the runtime cap must NOT wedge the worker —
+    // the deadline fires, the tick takes the (fenced) failure path, and processNextJob returns.
+    it("fails a job that exceeds the runtime deadline instead of running forever", async () => {
+      const prev = process.env.ASSESSMENT_JOB_MAX_RUNTIME_MS;
+      process.env.ASSESSMENT_JOB_MAX_RUNTIME_MS = "30"; // 30ms deadline for the test
+      try {
+        vi.resetModules(); // re-read env so the tiny deadline takes effect
+        findNextRunnableJob.mockResolvedValue({ id: "job-slow", submissionId: "sub-slow" });
+        tryLockPendingJob.mockResolvedValue({ count: 1 });
+        findAssessmentJobOrThrow.mockResolvedValue({ id: "job-slow", attempts: 0, maxAttempts: 3, availableAt: new Date() });
+        markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
+
+        const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
+        // runAssessment that never settles — only the deadline can end the tick.
+        const runAssessment = vi.fn(() => new Promise<void>(() => {}));
+
+        const result = await processNextJob(runAssessment);
+
+        expect(result).toBe(true);
+        // Deadline → failure path: retry scheduled (attempts 0 < max 3), never marked succeeded.
+        expect(markJobForRetryOrFailure).toHaveBeenCalledWith(
+          "job-slow",
+          expect.any(String),
+          expect.any(Date),
+          expect.objectContaining({ status: "PENDING" }),
+        );
+        expect(markJobSucceeded).not.toHaveBeenCalled();
+      } finally {
+        if (prev === undefined) delete process.env.ASSESSMENT_JOB_MAX_RUNTIME_MS;
+        else process.env.ASSESSMENT_JOB_MAX_RUNTIME_MS = prev;
+      }
+    });
   });
 
   describe("enqueueAssessmentJob", () => {

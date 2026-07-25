@@ -153,7 +153,17 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
   heartbeat.unref?.();
 
   try {
-    await runAssessment(candidate.id);
+    // #856: bound the in-process runtime. #792's lease heartbeat renews the lease forever, so without a
+    // hard cap a stuck job (observed: a DB lock-wait against a zombie connection — NOT the LLM, which
+    // self-aborts at AZURE_OPENAI_TIMEOUT_MS) runs forever and wedges the worker's poll loop. On the
+    // deadline we abandon the run and fall into the failure path below (fenced retry), so the tick
+    // returns and the scanner/retry re-runs the job instead of it wedging. The deadline is set above the
+    // worst-case legit assessment (primary + secondary LLM ≈ 2 × AZURE_OPENAI_TIMEOUT_MS + overhead).
+    await runWithDeadline(
+      runAssessment(candidate.id),
+      env.ASSESSMENT_JOB_MAX_RUNTIME_MS,
+      `Assessment job ${candidate.id} exceeded the ${env.ASSESSMENT_JOB_MAX_RUNTIME_MS}ms runtime deadline (#856).`,
+    );
     const succeeded = await assessmentJobRepository.markJobSucceeded(candidate.id, WORKER_INSTANCE_ID, now);
     if (succeeded.count === 0) {
       logLeaseLost(candidate.id, candidate.submissionId, "success");
@@ -205,6 +215,21 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
     await logQueueBacklog("worker_cycle", candidate.submissionId);
   }
   return true;
+}
+
+// #856: race a unit of work against a wall-clock deadline. If the deadline wins, reject (the caller
+// treats it as a job failure). The abandoned work keeps running to completion in the background — we
+// cannot cancel it — but its terminal job write is a no-op once the fence has moved on. The timer is
+// cleared as soon as the work settles so a fast job doesn't keep a pending timer alive.
+function runWithDeadline<T>(work: Promise<T>, deadlineMs: number, timeoutMessage: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(timeoutMessage)), deadlineMs);
+    timer.unref?.();
+  });
+  return Promise.race([work, deadline]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 // #792: the lease was reset + re-claimed by another worker before we could finalize — do not overwrite it.
