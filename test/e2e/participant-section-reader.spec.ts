@@ -101,7 +101,10 @@ test("participant: open a course section, render its image, and mark it read", a
   await expect(sectionRow).toBeVisible();
   await sectionRow.click();
 
-  // The reader overlay opens with the section title and body.
+  // #865: the section now opens INLINE, in-place under its row — NOT in a fixed-position modal.
+  await expect(page.locator("#sectionReaderOverlay")).toHaveCount(0); // no modal exists anymore
+  const panel = page.locator(".course-item .course-inline-panel");
+  await expect(panel).toBeVisible();
   await expect(page.locator("#sectionReaderTitle")).toHaveText("Seksjon");
   await expect(page.locator("#sectionReaderBody")).toContainText("Innhold");
 
@@ -110,8 +113,8 @@ test("participant: open a course section, render its image, and mark it read", a
   await expect(img).toHaveCount(1);
   await expect.poll(async () => (await img.getAttribute("src")) ?? "").toMatch(/^blob:/);
 
-  // Mark as read fires the POST and closes the reader (#550 feedback).
+  // Mark as read fires the POST and collapses the inline panel (#550 feedback: close on mark-read).
   await page.locator("#sectionReaderMarkRead").click();
   await expect.poll(() => markReadCalled).toBe(true);
-  await expect(page.locator("#sectionReaderOverlay")).toHaveCount(0);
+  await expect(page.locator("#sectionReaderBody")).toHaveCount(0); // panel content cleared on collapse
 });

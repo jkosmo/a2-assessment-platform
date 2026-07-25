@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.6.0 - 2026-07-25
+
+#865 — participant course view: **modules and sections now open the same way** — inline, in-place under
+their row in the «Mine kurs» accordion (nested disclosure). Previously a **section** opened in a
+fixed-position modal overlay while a **module** opened in the workspace far below the course list — two
+different interaction models in one list, which participants found unintuitive.
+
+- **Section reader is now inline.** `openSectionReader` (the `#sectionReaderOverlay` modal) is replaced by
+  `renderSectionReaderInto(panel, …)` which renders the same server-sanitised HTML + hydrated asset images
+  + discussion board into a `.course-inline-panel` under the row — **natural height** (no fixed max-height /
+  inner scroll), so long sections read as one continuous flow.
+- **Module workspace relocates inline.** The singleton workspace (`#submissionSection`/`#mcqSection`/
+  `#assessmentSection`/`#appealSection`, now wrapped in `#moduleWorkspace` inside `#moduleWorkspaceHome`) is
+  moved under the active module's row when opened via a course, and moved back home before every accordion
+  re-render (so `innerHTML=""` can't destroy it) then re-mounted. All draft/MCQ/assessment-polling/appeal
+  machinery is untouched (it addresses elements by id, not DOM position). In course-only mode the home
+  location is hidden (CSS); the standalone dev/test module flow is unchanged.
+- **One open at a time**, a **sticky panel header** (title + explicit «Lukk seksjonen»/«Lukk modulen»), and a
+  **«Gå til neste element: {tittel} →»** navigation button (navigation only — does not change read status).
+- **Copy** (unambiguous, per #865): `courses.section.markRead` → «Marker seksjonen som lest»;
+  `courses.section.close` → «Lukk seksjonen»; new `courses.item.next`, `courses.section.readerTag`,
+  `courses.section.progressHint`, `courses.module.workspaceTag`, `courses.module.close` (all locales).
+
+Frontend only, no migration. e2e 7/7 (section-reader retargeted to inline; mcq-only standalone unchanged;
+new `participant-inline-open` consistency spec); i18n + a11y contract tests green. Locked design reference:
+mockup artifacts in #865.
+
 ## 2.5.5 - 2026-07-25
 
 #495 consistency — a content producer (`SUBJECT_MATTER_OWNER`) can read course sections and open a module,
