@@ -13,6 +13,36 @@ This document records notable staging/production incidents so symptoms, root cau
 - Follow-up:
 - References:
 
+## 2026-07-25 - PROD deploy smoke-test failed on worker wedge (zombie-connection lock) — self-recovered
+- Date: `2026-07-25`
+- Environment: `production`
+- Symptom:
+  - the v2.5.5 prod promotion (run 30160925066, tag v2.5.5, deploy_production=true skip_staging=true) finished
+    with GitHub conclusion=**failure**. The failing step was **"Post-deploy /healthz smoke test"**.
+  - web `/healthz` = 200 on attempt 1; **worker `/healthz` = 503 on all 6 attempts** (14:18:52→14:22:40Z),
+    so the smoke gate failed. parser 401 (expected). Deploy of the code itself SUCCEEDED.
+- Impact:
+  - deploy run marked failed (false negative on the gate). Prod app healthy throughout: web `/version`=2.5.5,
+    `/healthz` ok. Worker background processing stalled only for the ~10–20 min wedge window after boot.
+- Root cause:
+  - SAME recurring class as the 2.5.0 outbox wedge, #856, and the 2026-07-25 stage 2.5.4 wedge: the killed
+    pre-deploy worker container left an `idle in transaction` connection holding a row lock; the new worker's
+    first DB query blocked at the DB (not the LLM). NOT the v2.5.5 code (SMO capability fix, code-only).
+- Mitigation:
+  - **NONE taken — it self-recovered.** Unlike the stage cases (which needed `az webapp restart`), here the
+    zombie connection was reaped by Postgres TCP keepalive after ~10–15 min and the blocked query cleared on
+    its own. Worker `startedAt`=14:10:16Z stayed unchanged (no restart), healthy by 14:27Z.
+- Recovery verification:
+  - worker `/healthz` 200, all 7 monitors `ok` (assessmentWorker + outboxDeliveryWorker + courseReminderMonitor
+    reason=ok, runningMs=null), verified twice 12 min apart (14:27Z, 14:39Z); web `/version`=2.5.5 + `/healthz` ok.
+- Follow-up:
+  - **A failed post-deploy smoke test does NOT mean the prod deploy failed** — verify `/version` + web/worker
+    `/healthz` before concluding. Self-recovery here confirms keepalive eventually reaps the zombie lock, but
+    the wedge window is still ~10–20 min. Real fix stays #856: worker DB `statement_timeout`/`lock_timeout` so a
+    blocked query aborts+retries instead of wedging, and a pre-swap graceful shutdown that commits/rolls back the
+    old worker's transactions before the new worker starts. First PROD occurrence → raises #856 priority.
+- References: `#856`, run 30160925066, the two 2026-07-25 stage entries below, `batch-prod-releases` memory.
+
 ## 2026-07-25 - Staging worker wedged after 2.5.4 deploy (zombie-connection lock)
 - Date: `2026-07-25`
 - Environment: `staging`

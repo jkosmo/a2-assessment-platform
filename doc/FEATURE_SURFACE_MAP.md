@@ -98,6 +98,23 @@ incl. module-less). All four surfaces now have guards.
 **Pre-deploy gate:** run the journey locally before deploying any cert change —
 `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/participant-completed-certificates.spec.ts test/e2e/profile-certificate-link.spec.ts` (~9s, no Docker/Postgres).
 
+## 6b. Participant course view — opening an item inline (#865)
+
+A course item opens in the SAME inline, in-place model whether it is a **section** or a **module** — a
+`.course-inline-panel` under the row in `#courseDetail_<id>`, natural height, one open at a time. There
+are two distinct code paths + a relocated singleton to keep in sync when touching this.
+
+| Surface | Where | Notes |
+| --- | --- | --- |
+| Section open | `public/participant.js` `renderSectionReaderInto(panel, courseId, entry)` | Was the `#sectionReaderOverlay` modal (removed). Fetches `/api/courses/:id/sections/:sid`, hydrates asset images, mounts discussion, mark-read. Reuses ids `#sectionReaderTitle`/`#sectionReaderBody`/`#sectionReaderMarkRead`. |
+| Module open | `openInlineItemByEntry` → `openCourseModule` → `renderCourseDetailModules` → `reopenInlineAfterRender` → `buildModuleInlinePanel` | Relocates the singleton `#moduleWorkspace` (wraps `#submissionSection`/`#mcqSection`/`#assessmentSection`/`#appealSection`) into the row's panel. |
+| Re-render safety | `restoreModuleWorkspaceHomeIfInside(container)` before every `innerHTML=""` in `renderCourseDetailModules` **and** `renderParticipantCourseAccordion`; `reopenInlineAfterRender` after | The accordion rebuilds via `innerHTML=""` frequently — the workspace MUST be moved back to `#moduleWorkspaceHome` first or it is destroyed. |
+| Standalone module path | `renderModules` card click | Non-course-only (dev/test) flow uses the workspace at home; the click first `collapseInlineOpen()` + `restoreModuleWorkspaceHome()`. |
+| Home visibility | CSS `body.participant-course-only #moduleWorkspaceHome { display:none }`; set in `applyCourseOnlyMode` | Course-only shows the workspace ONLY inline; standalone keeps the home location. |
+| Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time + «Gå til neste element» nav. |
+
+**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts` (~5s, no Docker/Postgres). The last spec is the consistency guard (section + module both inline, one open, workspace relocated).
+
 ## 7. Conditional visibility — the `.hidden` cascade trap
 
 `.hidden` (`display:none` without `!important`) loses the cascade to `display`-setting classes

@@ -848,6 +848,10 @@ function renderModules() {
     button.classList.toggle("failed", latestFailed);
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
+      // #865: the standalone module path uses the workspace at its home location. If it was moved
+      // inline under a course row, collapse that and bring it home first (no-op in course-only mode).
+      collapseInlineOpen();
+      restoreModuleWorkspaceHome();
       activateParticipantModule(module.id);
     });
 
@@ -1576,7 +1580,11 @@ function applyCourseOnlyMode() {
   // longer flashes-then-hides (FOUC) while the runtime config loads. Reveal it only when course-only mode
   // is OFF — i.e. the legacy standalone flow is explicitly enabled (dev/test). In prod (courseOnly) it
   // simply stays hidden from first paint.
-  if (!participantRuntimeConfig?.courseOnly) {
+  const courseOnly = Boolean(participantRuntimeConfig?.courseOnly);
+  // #865: in course-only mode the module workspace only ever appears inline under a course row, so
+  // its "home" location is hidden (CSS). The standalone (dev/test) flow keeps the home workspace.
+  document.body.classList.toggle("participant-course-only", courseOnly);
+  if (!courseOnly) {
     setHidden(document.getElementById("moduleListSection"), false);
   }
 }
@@ -2898,11 +2906,9 @@ function findNextIncompleteEntry(sequence) {
 
 function openCourseItemEntry(courseId, entry) {
   if (!entry) return;
-  if (entry.type === "SECTION") {
-    openSectionReader(courseId, entry.sectionId, entry.courseItemId, entry.discussionsEnabled);
-  } else {
-    openCourseModule(courseId, entry.moduleId);
-  }
+  // #865: both sections and modules now open inline, in-place under their row (no modal, no
+  // far-below workspace). openInlineItemByEntry handles fetch/mount + one-open-at-a-time.
+  openInlineItemByEntry(courseId, entry);
 }
 
 function buildCourseAccordionItem(course) {
@@ -2973,6 +2979,10 @@ function renderCourseDetailModules(courseId, course) {
     ? course.items
     : (Array.isArray(course?.modules) ? course.modules.map((m) => ({ type: "MODULE", ...m })) : null);
   if (!sequence) return;
+  courseSequences[courseId] = sequence;
+  // #865: the wipe below rebuilds all rows via innerHTML="". If the singleton module workspace is
+  // currently mounted inline in THIS course's detail, move it back home first so it survives.
+  restoreModuleWorkspaceHomeIfInside(container);
   container.innerHTML = "";
   if (sequence.length === 0) {
     // Tomt kurs (ingen moduler/seksjoner) — vis melding, men fall gjennom så kurs-nivå
@@ -2991,65 +3001,73 @@ function renderCourseDetailModules(courseId, course) {
     container.appendChild(resumeBtn);
   }
   for (const entry of sequence) {
+    // #865: wrap each row in a .course-item so its inline disclosure panel can live directly under it.
+    const key = courseItemKey(entry);
+    const itemWrap = document.createElement("div");
+    itemWrap.className = "course-item";
+    itemWrap.dataset.key = key;
+    itemWrap.dataset.type = entry.type;
+
+    let row;
     if (entry.type === "SECTION") {
-      const sectionRow = document.createElement("button");
-      sectionRow.type = "button";
-      sectionRow.className = "btn-secondary course-module-row course-module-button";
-      if (entry === nextEntry) sectionRow.classList.add("course-module-row--next");
-      sectionRow.addEventListener("click", () => openSectionReader(courseId, entry.sectionId, entry.courseItemId, entry.discussionsEnabled));
+      row = document.createElement("button");
+      row.type = "button";
+      row.className = "btn-secondary course-module-row course-module-button";
+      if (entry === nextEntry) row.classList.add("course-module-row--next");
+      row.addEventListener("click", () => openCourseItemEntry(courseId, entry));
       const readBadge = entry.read ? t("courses.section.doneBadge") : t("courses.section.todoBadge");
-      sectionRow.innerHTML = `
+      row.innerHTML = `
         <span class="course-module-row-copy">
           <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(entry.title))}</span>
           <span class="course-module-row-action">${escapeHtmlP(t("courses.section.read"))}</span>
         </span>
         <span class="module-status-badge ${entry.read ? "completed" : ""}">${escapeHtmlP(readBadge)}</span>
       `;
-      container.appendChild(sectionRow);
-      continue;
-    }
-    const m = entry;
-    const passed = m.moduleStatus === "PASSED";
-    const inProgress = m.moduleStatus === "IN_PROGRESS";
-    const selected = selectedModuleId === m.moduleId;
-    // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
-    const available = m.available !== false;
-    // #714-followup: status ligger i pillen (som admin-oversiktene) — også «ikke tilgjengelig».
-    const badgeText = !available
-      ? t("courses.module.unavailableShort")
-      : passed ? t("courses.module.passed")
-      : inProgress ? t("courses.module.inProgress")
-      : t("courses.module.notStarted");
-    const badgeClass = !available ? "unavailable" : passed ? "completed" : inProgress ? "retake" : "";
-    // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
-    const actionText = selected ? t("courses.module.selectedShort") : t("courses.module.go");
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
-    if (entry === nextEntry) row.classList.add("course-module-row--next");
-    row.setAttribute("aria-pressed", selected ? "true" : "false");
-    if (!available) {
-      row.disabled = true;
     } else {
-      row.addEventListener("click", async () => {
+      const m = entry;
+      const passed = m.moduleStatus === "PASSED";
+      const inProgress = m.moduleStatus === "IN_PROGRESS";
+      const selected = selectedModuleId === m.moduleId;
+      // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
+      const available = m.available !== false;
+      // #714-followup: status ligger i pillen (som admin-oversiktene) — også «ikke tilgjengelig».
+      const badgeText = !available
+        ? t("courses.module.unavailableShort")
+        : passed ? t("courses.module.passed")
+        : inProgress ? t("courses.module.inProgress")
+        : t("courses.module.notStarted");
+      const badgeClass = !available ? "unavailable" : passed ? "completed" : inProgress ? "retake" : "";
+      // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
+      const actionText = selected ? t("courses.module.selectedShort") : t("courses.module.go");
+      row = document.createElement("button");
+      row.type = "button";
+      row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
+      if (entry === nextEntry) row.classList.add("course-module-row--next");
+      row.setAttribute("aria-pressed", selected ? "true" : "false");
+      if (!available) {
         row.disabled = true;
-        try {
-          await openCourseModule(courseId, m.moduleId);
-        } catch (error) {
-          showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
-        } finally {
-          row.disabled = false;
-        }
-      });
+      } else {
+        row.addEventListener("click", () => openCourseItemEntry(courseId, entry));
+      }
+      row.innerHTML = `
+        <span class="course-module-row-copy">
+          <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
+          <span class="course-module-row-action">${escapeHtmlP(actionText)}</span>
+        </span>
+        <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
+      `;
     }
-    row.innerHTML = `
-      <span class="course-module-row-copy">
-        <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
-        <span class="course-module-row-action">${escapeHtmlP(actionText)}</span>
-      </span>
-      <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
-    `;
-    container.appendChild(row);
+
+    const panel = document.createElement("div");
+    panel.className = "course-inline-panel";
+    panel.id = `inlinePanel_${courseId}_${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    panel.hidden = true;
+    row.setAttribute("aria-expanded", "false");
+    row.setAttribute("aria-controls", panel.id);
+
+    itemWrap.appendChild(row);
+    itemWrap.appendChild(panel);
+    container.appendChild(itemWrap);
   }
 
   // #495/T-QA-3: kurs-nivå diskusjonsboard under sekvensen (kun når påskrudd for kurset).
@@ -3070,71 +3088,224 @@ function renderCourseDetailModules(courseId, course) {
       showToast,
     });
   }
+
+  // #865: re-open the inline item that was expanded before this re-render (esp. the live module
+  // workspace, which was moved home during the wipe above).
+  reopenInlineAfterRender(courseId, container);
 }
 
-// #491/P1 — open a learning section in a mobile-friendly reader overlay with
-// server-rendered, sanitised HTML in the participant's locale.
-async function openSectionReader(courseId, sectionId, courseItemId, discussionsEnabled) {
-  const existing = document.getElementById("sectionReaderOverlay");
-  if (existing) existing.remove();
+// ───────────────────────────────────────────────────────────────────────────────
+// #865: consistent in-place open for BOTH sections and modules.
+// A section renders its reader inline under its row; a module relocates the singleton workspace
+// (#moduleWorkspace) inline under its row. One item is open at a time; the panel takes the
+// content's own (natural) height with a sticky title/close header and a "next element" nav.
+// ───────────────────────────────────────────────────────────────────────────────
 
-  const overlay = document.createElement("div");
-  overlay.id = "sectionReaderOverlay";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;z-index:1000;padding:0;";
-  overlay.innerHTML = `
-    <style>
-      #sectionReaderBody img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
-      #sectionReaderBody iframe { max-width: 100%; }
-      #sectionReaderPanel.section-reader-fullscreen { max-width: 100% !important; }
-    </style>
-    <div id="sectionReaderPanel" style="background:var(--color-surface,#fff);width:100%;max-width:760px;min-height:100%;margin:0 auto;padding:var(--space-3,16px);box-sizing:border-box;display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 var(--space-2,12px) 0;">
-        <h2 id="sectionReaderTitle" style="margin:0;font-size:20px">…</h2>
-        <button type="button" id="sectionReaderFullscreen" class="btn-secondary" style="width:auto;min-height:0;padding:4px 10px;font-size:14px;flex-shrink:0;" aria-pressed="false" title="${escapeHtmlP(t("courses.section.fullscreen"))}">⛶</button>
-      </div>
+// Which item is currently expanded inline (or null). Tracked so we enforce one-open-at-a-time and
+// can re-open it after a course-detail re-render (the accordion rebuilds via innerHTML="").
+let inlineOpen = null; // { courseId, key, type, moduleId?, sectionId?, courseItemId?, discussionsEnabled?, title? }
+const courseSequences = {}; // courseId -> ordered items, for "next element" navigation
+
+function courseItemKey(entry) {
+  return entry.courseItemId || (entry.type === "SECTION" ? `s:${entry.sectionId}` : `m:${entry.moduleId}`);
+}
+
+function nextEntryAfter(courseId, key) {
+  const seq = courseSequences[courseId] || [];
+  const i = seq.findIndex((e) => courseItemKey(e) === key);
+  return i >= 0 && i + 1 < seq.length ? seq[i + 1] : null;
+}
+
+function restoreModuleWorkspaceHome() {
+  const ws = document.getElementById("moduleWorkspace");
+  const home = document.getElementById("moduleWorkspaceHome");
+  if (ws && home && ws.parentElement !== home) home.appendChild(ws);
+}
+
+function restoreModuleWorkspaceHomeIfInside(containerEl) {
+  const ws = document.getElementById("moduleWorkspace");
+  if (ws && containerEl && containerEl.contains(ws)) restoreModuleWorkspaceHome();
+}
+
+function mountModuleWorkspaceInto(panelBodyEl) {
+  const ws = document.getElementById("moduleWorkspace");
+  if (ws && panelBodyEl && ws.parentElement !== panelBodyEl) panelBodyEl.appendChild(ws);
+}
+
+function focusInlinePanel(panel) {
+  const heading = panel?.querySelector(".course-inline-panel-title");
+  if (!heading) return;
+  heading.setAttribute("tabindex", "-1");
+  try { heading.focus({ preventScroll: true }); } catch { heading.focus(); }
+}
+
+function scrollItemIntoView(itemWrap) {
+  try { itemWrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch { /* ignore */ }
+}
+
+function collapseInlineOpen() {
+  if (!inlineOpen) return;
+  const prev = inlineOpen;
+  inlineOpen = null; // clear first so any refresh triggered below doesn't re-open
+  // Move the workspace out of the panel BEFORE we clear the panel markup, so it isn't destroyed.
+  if (prev.type === "MODULE") restoreModuleWorkspaceHome();
+  const container = document.getElementById(`courseDetail_${prev.courseId}`);
+  const itemWrap = container?.querySelector(`.course-item[data-key="${prev.key}"]`);
+  if (itemWrap) {
+    const panel = itemWrap.querySelector(".course-inline-panel");
+    const row = itemWrap.querySelector(".course-module-row");
+    if (panel) { panel.innerHTML = ""; panel.hidden = true; }
+    itemWrap.classList.remove("open");
+    if (row) { row.setAttribute("aria-expanded", "false"); row.disabled = false; }
+  }
+}
+
+async function openInlineItemByEntry(courseId, entry) {
+  if (!entry) return;
+  const container = document.getElementById(`courseDetail_${courseId}`);
+  if (!container) return;
+  const key = courseItemKey(entry);
+  const itemWrap = container.querySelector(`.course-item[data-key="${key}"]`);
+  if (!itemWrap) return;
+
+  // Clicking the already-open item collapses it (toggle).
+  if (inlineOpen && inlineOpen.courseId === courseId && inlineOpen.key === key) {
+    collapseInlineOpen();
+    return;
+  }
+  collapseInlineOpen();
+
+  const panel = itemWrap.querySelector(".course-inline-panel");
+  const row = itemWrap.querySelector(".course-module-row");
+
+  if (entry.type === "SECTION") {
+    inlineOpen = {
+      courseId, key, type: "SECTION",
+      sectionId: entry.sectionId, courseItemId: entry.courseItemId,
+      discussionsEnabled: entry.discussionsEnabled, title: entry.title,
+    };
+    itemWrap.classList.add("open");
+    panel.hidden = false;
+    row?.setAttribute("aria-expanded", "true");
+    scrollItemIntoView(itemWrap);
+    await renderSectionReaderInto(panel, courseId, entry);
+    focusInlinePanel(panel);
+    return;
+  }
+
+  // MODULE: relocate the singleton workspace inline under this row.
+  if (row) row.disabled = true;
+  inlineOpen = { courseId, key, type: "MODULE", moduleId: entry.moduleId, title: entry.title };
+  try {
+    // openCourseModule activates the module AND re-renders the course detail; the re-render's
+    // reopenInlineAfterRender mounts the workspace into this row's panel.
+    await openCourseModule(courseId, entry.moduleId);
+  } catch (error) {
+    inlineOpen = null;
+    if (row) row.disabled = false;
+    showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+    return;
+  }
+  const fresh = document.getElementById(`courseDetail_${courseId}`)?.querySelector(`.course-item[data-key="${key}"]`);
+  if (fresh) {
+    scrollItemIntoView(fresh);
+    focusInlinePanel(fresh.querySelector(".course-inline-panel"));
+  }
+}
+
+// Re-apply the open state after renderCourseDetailModules rebuilt the rows.
+function reopenInlineAfterRender(courseId, container) {
+  if (!inlineOpen || inlineOpen.courseId !== courseId) return;
+  const itemWrap = container.querySelector(`.course-item[data-key="${inlineOpen.key}"]`);
+  if (!itemWrap) {
+    // The item disappeared (e.g. module became unavailable) — release the workspace safely.
+    if (inlineOpen.type === "MODULE") restoreModuleWorkspaceHome();
+    inlineOpen = null;
+    return;
+  }
+  const panel = itemWrap.querySelector(".course-inline-panel");
+  const row = itemWrap.querySelector(".course-module-row");
+  itemWrap.classList.add("open");
+  panel.hidden = false;
+  row?.setAttribute("aria-expanded", "true");
+  if (row) row.disabled = false;
+  if (inlineOpen.type === "MODULE") {
+    buildModuleInlinePanel(panel, courseId, inlineOpen);
+  } else {
+    renderSectionReaderInto(panel, courseId, inlineOpen);
+  }
+}
+
+function buildInlineNextButton(courseId, key) {
+  const next = nextEntryAfter(courseId, key);
+  if (!next) return null;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-secondary";
+  btn.dataset.role = "next";
+  btn.textContent = t("courses.item.next").replace("{title}", localizePreviewText(next.title) || "");
+  btn.addEventListener("click", () => openCourseItemEntry(courseId, next));
+  return btn;
+}
+
+function buildModuleInlinePanel(panel, courseId, ctx) {
+  panel.innerHTML = `
+    <div class="course-inline-panel-sticky">
+      <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.module.workspaceTag"))}</span>
+      <span class="course-inline-panel-title">${escapeHtmlP(localizePreviewText(ctx.title) || "")}</span>
+      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.module.close"))}</button>
+    </div>
+    <div class="course-inline-panel-body"></div>`;
+  panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  const body = panel.querySelector(".course-inline-panel-body");
+  mountModuleWorkspaceInto(body);
+  const nextBtn = buildInlineNextButton(courseId, ctx.key);
+  if (nextBtn) {
+    const nav = document.createElement("div");
+    nav.className = "course-inline-actions";
+    nav.appendChild(nextBtn);
+    body.appendChild(nav);
+  }
+}
+
+// #491/P1 — render a learning section's server-rendered, sanitised HTML inline in the participant's
+// locale (previously a fixed-position modal; #865 made it an in-place disclosure).
+async function renderSectionReaderInto(panel, courseId, entry) {
+  const nextBtnMarkup = nextEntryAfter(courseId, courseItemKey(entry))
+    ? `<button type="button" class="btn-secondary" data-role="next">${escapeHtmlP(t("courses.item.next").replace("{title}", localizePreviewText(nextEntryAfter(courseId, courseItemKey(entry)).title) || ""))}</button>`
+    : "";
+  panel.innerHTML = `
+    <div class="course-inline-panel-sticky">
+      <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.section.readerTag"))}</span>
+      <span class="course-inline-panel-title" id="sectionReaderTitle">${escapeHtmlP(localizePreviewText(entry.title) || "")}</span>
+      <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
+    </div>
+    <div class="course-inline-panel-body">
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
-      <div style="margin-top:var(--space-3,16px);padding-top:var(--space-2,12px);border-top:1px solid var(--color-border-soft,#e5e7eb);display:flex;justify-content:center;gap:var(--space-2,12px);flex-wrap:wrap;">
-        <button type="button" id="sectionReaderMarkRead" class="btn-primary">${escapeHtmlP(t("courses.section.markRead"))}</button>
-        <button type="button" id="sectionReaderClose" class="btn-secondary">${escapeHtmlP(t("courses.section.close"))}</button>
+      <div class="course-inline-actions">
+        <button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markRead">${escapeHtmlP(t("courses.section.markRead"))}</button>
+        ${nextBtnMarkup}
+        <span class="course-inline-hint">${escapeHtmlP(t("courses.section.progressHint"))}</span>
       </div>
       <div id="sectionReaderDiscussion" style="margin-top:16px;"></div>
     </div>`;
-  document.body.appendChild(overlay);
 
-  let markedRead = false;
-  const close = () => {
-    overlay.remove();
-    // Refresh both the course detail (read badge) AND the course list (course-level progress +
-    // completion), so status updates and the #550 course-completion confetti can fire (#549/#550).
-    if (markedRead) {
-      loadCourseDetail(courseId);
-      loadParticipantCourses().catch(() => {});
-    }
-  };
-  overlay.querySelector("#sectionReaderClose")?.addEventListener("click", close);
-  // #656: fullskjerm-veksling i seksjonsleseren.
-  overlay.querySelector("#sectionReaderFullscreen")?.addEventListener("click", (e) => {
-    const panel = overlay.querySelector("#sectionReaderPanel");
-    const on = panel?.classList.toggle("section-reader-fullscreen");
-    e.currentTarget.setAttribute("aria-pressed", on ? "true" : "false");
-    e.currentTarget.textContent = on ? "🗗" : "⛶";
-  });
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  document.addEventListener("keydown", function onKey(e) {
-    if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
+  panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  panel.querySelector('[data-role="next"]')?.addEventListener("click", () => {
+    const next = nextEntryAfter(courseId, courseItemKey(entry));
+    if (next) openCourseItemEntry(courseId, next);
   });
 
-  // Explicit "mark as read" (#492 feedback). #550 feedback: marking read should also close the
-  // reader (the participant expected it to close) and refresh course status.
-  const markReadBtn = overlay.querySelector("#sectionReaderMarkRead");
+  // Explicit "mark as read" (#492/#550): mark, collapse the panel, and refresh course detail + list
+  // so the read badge, course-level progress, and #550 completion confetti update.
+  const markReadBtn = panel.querySelector("#sectionReaderMarkRead");
   markReadBtn?.addEventListener("click", async () => {
     markReadBtn.disabled = true;
     try {
-      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}/read`, headers, { method: "POST" });
-      markedRead = true;
-      close();
+      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
+      collapseInlineOpen();
+      loadCourseDetail(courseId);
+      loadParticipantCourses().catch(() => {});
     } catch (error) {
       markReadBtn.disabled = false;
       showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
@@ -3142,10 +3313,10 @@ async function openSectionReader(courseId, sectionId, courseItemId, discussionsE
   });
 
   try {
-    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}`, headers);
-    const titleEl = overlay.querySelector("#sectionReaderTitle");
-    const bodyEl = overlay.querySelector("#sectionReaderBody");
-    if (titleEl) titleEl.textContent = body.title ?? "";
+    const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}`, headers);
+    const titleEl = panel.querySelector("#sectionReaderTitle");
+    const bodyEl = panel.querySelector("#sectionReaderBody");
+    if (titleEl && body.title) titleEl.textContent = body.title;
     // body.html is already sanitised server-side with the F3/X1 policy.
     if (bodyEl) {
       bodyEl.innerHTML = body.html ?? "";
@@ -3153,24 +3324,23 @@ async function openSectionReader(courseId, sectionId, courseItemId, discussionsE
       await hydrateContentAssetImages(bodyEl, headers);
     }
   } catch (error) {
-    const bodyEl = overlay.querySelector("#sectionReaderBody");
+    const bodyEl = panel.querySelector("#sectionReaderBody");
     if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
   }
 
   // #495/T-QA-3: per-seksjon diskusjonsboard i leseren (kun når påskrudd for elementet).
-  if (discussionsEnabled && courseItemId) {
-    const discEl = overlay.querySelector("#sectionReaderDiscussion");
+  if (entry.discussionsEnabled && entry.courseItemId) {
+    const discEl = panel.querySelector("#sectionReaderDiscussion");
     if (discEl) {
       mountDiscussionPanel({
-        container: discEl,
-        courseId,
-        courseItemId,
-        apiFetch,
-        headers,
-        t,
-        escapeHtml: escapeHtmlP,
-        showToast,
+        container: discEl, courseId, courseItemId: entry.courseItemId,
+        apiFetch, headers, t, escapeHtml: escapeHtmlP, showToast,
       });
     }
   }
 }
+
+// Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && inlineOpen) collapseInlineOpen();
+});
