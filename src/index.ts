@@ -10,6 +10,7 @@ import { EntraUserSyncMonitor } from "./modules/orgSync/EntraUserSyncMonitor.js"
 import { CourseReminderMonitor } from "./modules/course/CourseReminderMonitor.js";
 import { OutboxDeliveryWorker } from "./modules/outbox/OutboxDeliveryWorker.js";
 import { evaluateWorkerHealth, drainInFlightTicks, type MonitorHealthSnapshot } from "./observability/workerHealth.js";
+import { prisma } from "./db/prisma.js";
 
 export function resolveProcessRoleFlags(role: string) {
   return {
@@ -45,6 +46,24 @@ const backgroundMonitors = [
 // mid-flight (e.g. an assessment job being processed). Bounded so a wedged loop (#809) can't block the
 // exit — Azure allows ~30 s before SIGKILL, so 10 s of drain is safe headroom.
 const SHUTDOWN_DRAIN_TIMEOUT_MS = 10_000;
+// #866: disconnecting Prisma rolls back any open transaction and releases its row locks. Bounded so a
+// hung disconnect can never block the exit past Azure's SIGKILL deadline (best-effort defense).
+const SHUTDOWN_DISCONNECT_TIMEOUT_MS = 3_000;
+
+// #866: release the DB connections cleanly before exit. An abruptly-killed worker that skips this can
+// leave a zombie `idle in transaction` connection holding a lock, wedging the NEXT container's first
+// tick until Postgres reaps it (~10–20 min). This is the pre-swap release; part 1 (statement/lock
+// timeout) is the fallback if the process is SIGKILLed before this runs.
+const disconnectDb = async () => {
+  try {
+    await Promise.race([
+      prisma.$disconnect(),
+      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DISCONNECT_TIMEOUT_MS)),
+    ]);
+  } catch {
+    // never block shutdown on a disconnect failure
+  }
+};
 
 const gracefulShutdown = async (exitCode = 0) => {
   if (shuttingDown) {
@@ -61,11 +80,17 @@ const gracefulShutdown = async (exitCode = 0) => {
   }
 
   if (!server) {
+    // Worker (or startup-failure) path: no HTTP server to drain — release DB locks then exit.
+    await disconnectDb();
     process.exit(exitCode);
     return;
   }
 
-  server.close(() => process.exit(exitCode));
+  // Web path: close the server first so in-flight requests finish using the DB, THEN disconnect.
+  server.close(async () => {
+    await disconnectDb();
+    process.exit(exitCode);
+  });
 };
 
 registerProcessErrorHandlers(gracefulShutdown);
