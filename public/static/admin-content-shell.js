@@ -30,6 +30,7 @@ import {
 import { buildAdminContentAdvancedUrl } from "/static/admin-content-handoff-routes.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
+import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
 import {
   buildExternalLlmAuthoringPrompt,
   parseExternalLlmJson,
@@ -1130,10 +1131,6 @@ function scrollPreviewToBottom() {
 // ---------------------------------------------------------------------------
 // State rail
 // ---------------------------------------------------------------------------
-
-function makeSrBadge(modifier, text) {
-  return `<span class="sr-badge sr-badge--${modifier}">${escapeHtml(text)}</span>`;
-}
 
 function updateStateRail() {
   if (!stateRail) return;
@@ -4656,17 +4653,6 @@ function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generatio
 // Nav / version / locale
 // ---------------------------------------------------------------------------
 
-async function loadVersion() {
-  try {
-    const body = await apiFetch("/version", { headers: {} });
-    const version = body.version ?? "unknown";
-    document.title = `A2 Content Workspace v${version}`;
-    if (appVersionLabel) appVersionLabel.textContent = `v${version}`;
-  } catch {
-    if (appVersionLabel) appVersionLabel.textContent = "unknown";
-  }
-}
-
 function renderWorkspaceNavigation() {
   if (!workspaceNav) return;
   const roles = activeUserRoles.join(",") || participantRuntimeConfig.identityDefaults?.roles?.join(",") || "SUBJECT_MATTER_OWNER";
@@ -4767,7 +4753,7 @@ async function initShell() {
   bindModeSwitchButtons();
   renderPreviewLocaleBar();
   renderPreview();
-  loadVersion();
+  loadVersion(appVersionLabel, "A2 Content Workspace");
   await loadConsoleConfig();
 
   // Path-based moduleId: /admin-content/module/:moduleId/conversation

@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.7.2 - 2026-07-25
+
+#818 (Phase 1) — de-duplicate the two authoring shells (`public/admin-content.js` advanced +
+`public/static/admin-content-shell.js` conversation). **Behavior-preserving; no user-facing change.**
+
+- New `public/static/admin-content-shared.js` holds the genuinely-identical helpers: `makeSrBadge`
+  (was byte-identical in both) and `loadVersion(appVersionLabel, titlePrefix)` (was near-identical —
+  the two shells differed only in the document-title prefix + a null-guard, both preserved by
+  parameterizing). Both shells now import them; local copies removed.
+- **Scope correction:** the issue's "~5k duplicated lines" is a large overcount — the two files are
+  architecturally divergent (chat state-machine vs form/dialog CRUD); the genuinely-safe extractable
+  surface is ~a few hundred lines. A tempting further swap (advanced's `localizeContentValue` →
+  the shared `localizeValueForLocale`) was **rejected**: their locale-fallback order differs (advanced
+  lacks the `nb` middle step), so it would NOT be behavior-preserving. State-rail / console-bootstrap
+  sharing needs a view-model refactor (Phase 2) with real risk — deferred. #818 stays open for that.
+
+Frontend only, no migration. Verified: `admin-content-workspaces` e2e 39/39 (both shells) + DOM
+accessibility contracts 3/3; node syntax-check on all three files.
+
 ## 2.7.1 - 2026-07-25
 
 #811 — **worker no longer starts new code against an un-migrated schema.** The worker ran with
