@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.5.5 - 2026-07-25
+
+#495 consistency — a content producer (`SUBJECT_MATTER_OWNER`) can read course sections and open a module,
+but taking a module 403'd ("Krever en av rollene: PARTICIPANT, ADMINISTRATOR, REVIEWER") because the
+`submissions` + `assessments` capabilities excluded SMO, inconsistent with `courses`/`modules`/
+`content_assets` (which include SMO) and with `submissions.ts` (already exempts content roles from the
+course-required gate). Added `SUBJECT_MATTER_OWNER` to those two role sets so a content producer can test
+their own module end-to-end. tsc 0; unit 846/846; integration 424/424.
+
 ## 2.5.4 - 2026-07-25
 
 Participant-console UX fixes (frontend only, no migration).
