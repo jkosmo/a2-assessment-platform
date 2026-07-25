@@ -26,6 +26,7 @@ import {
   resolveConversationModuleId,
 } from "/static/admin-content-handoff-routes.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
+import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
 
 const translations = Object.fromEntries(
   supportedLocales.map((locale) => [
@@ -1115,10 +1116,6 @@ function deriveModuleStatusView(moduleExport) {
 // State rail
 // ---------------------------------------------------------------------------
 
-function makeSrBadge(modifier, text) {
-  return `<span class="sr-badge sr-badge--${modifier}">${escapeHtml(text)}</span>`;
-}
-
 function updateStateRail() {
   if (!stateRail) return;
   const hasModule = !!selectedModuleId && !!selectedModuleStatus;
@@ -1779,17 +1776,6 @@ function resolveModuleIdOrThrow() {
   renderModuleDropdown();
   renderModuleMeta();
   return moduleId;
-}
-
-async function loadVersion() {
-  try {
-    const body = await apiFetch("/version", { headers: {} });
-    const version = body.version ?? "unknown";
-    document.title = `A2 Content Setup Workspace v${version}`;
-    appVersionLabel.textContent = `v${version}`;
-  } catch {
-    appVersionLabel.textContent = "unknown";
-  }
 }
 
 async function loadParticipantConsoleConfig() {
@@ -4248,7 +4234,7 @@ document.getElementById("previewCardsBtn")?.addEventListener("click", async () =
 populateLocaleSelect();
 setLocale(currentLocale);
 setDefaultFormValues();
-loadVersion();
+loadVersion(appVersionLabel, "A2 Content Setup Workspace");
 loadParticipantConsoleConfig().then(async () => {
   const pathModuleId = window.location.pathname.match(/\/admin-content\/module\/([^/]+)\//)?.[1] ?? null;
   const autoModuleId = pathModuleId ?? new URLSearchParams(location.search).get("moduleId");
