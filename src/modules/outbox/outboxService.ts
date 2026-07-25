@@ -1,8 +1,23 @@
 import { prisma } from "../../db/prisma.js";
+import { env } from "../../config/env.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { notifyAssessmentResult } from "../certification/index.js";
 import { checkAndIssueCourseCompletions } from "../course/index.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+
+// #795-followup: race a delivery against a wall-clock deadline so a hung handler (e.g. an ACS email call
+// with no timeout) can't wedge the worker's tick. On timeout we reject; the caller retries the row. The
+// abandoned handler keeps running but its effect is idempotent, so a later completion is harmless.
+function withDeadline<T>(work: Promise<T>, deadlineMs: number, message: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), deadlineMs);
+    timer.unref?.();
+  });
+  return Promise.race([work, deadline]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 // #795: a durable outbox for the post-decision side effects that used to be fire-and-forget. The decision
 // path enqueues these rows (ideally in the same transaction as the decision), and the delivery worker
@@ -159,7 +174,12 @@ export async function processNextOutboxEvent(workerId: string, leaseMs: number):
   if (!claimed) return false;
 
   try {
-    await deliverOutboxEvent(claimed);
+    // #795-followup: bound each delivery so a hung handler can't wedge the worker tick.
+    await withDeadline(
+      deliverOutboxEvent(claimed),
+      env.OUTBOX_DELIVERY_TIMEOUT_MS,
+      `Outbox delivery for ${claimed.id} (${claimed.type}) exceeded ${env.OUTBOX_DELIVERY_TIMEOUT_MS}ms.`,
+    );
     await markOutboxDelivered(claimed.id, claimed.lockedBy, claimed.lockedAt, new Date());
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown outbox delivery error";

@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.5.1 - 2026-07-25
+
+#795 follow-up — bound each outbox delivery so a hung handler can't wedge the delivery worker. The 2.5.0
+stage deploy surfaced the new `outboxDeliveryWorker` as `wedged`: a pending event's delivery (a handler
+with no internal timeout — same class as #856 for the assessment worker) never returned, so the tick ran
+unbounded. Fix: `processNextOutboxEvent` now races each delivery against `OUTBOX_DELIVERY_TIMEOUT_MS`
+(default 20s); on timeout the delivery is abandoned and the row is retried (idempotent handlers make a
+later completion of the abandoned call safe). `MAX_PER_TICK` lowered to 5 and the worker's wedge window
+(`maxTickMs`) is now derived from `MAX_PER_TICK × OUTBOX_DELIVERY_TIMEOUT_MS + buffer`, so the per-delivery
+deadline guarantees the tick returns before wedge — making wedge a pure backstop. Code-only; no migration.
+Proof: `test/unit/outbox-service` — a hung delivery times out and retries instead of hanging.
+
 ## 2.5.0 - 2026-07-25
 
 EPIC #779 durability batch, part 2 — retry-safe idempotency + a transactional outbox. Two additive
