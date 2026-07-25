@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.5.2 - 2026-07-25
+
+#798 (parent #780) — bound the scheduled reminder scans to the reminder horizon instead of loading whole
+tables. The recert + course reminder schedules previously loaded every certification with an expiry / every
+non-revoked enrolment + class-assignment with a due date, then discarded >99% via an in-memory day-match.
+They now range-filter the scan to rows whose expiry/due date is `<= asOf + (largest offset + 1 day)`:
+recert reminders fire before expiry so far-future active certs (the bulk) are pruned at the DB; course
+reminders keep every overdue row (`dueAt < asOf < upperBound`) so no overdue reminder is missed. New
+indexes on `CertificationStatus.expiryDate`, `CourseEnrollment.dueAt`, `CourseGroupAssignment.dueAt` back
+the range filter (additive migration). Behaviour-preserving — no row that could match a reminder is
+excluded; reminder + recert integration flows stay green. (The retention batched-delete half of #798
+already shipped in #807.) tsc 0; unit 848/848; full integration 424/424.
+
 ## 2.5.1 - 2026-07-25
 
 #795 follow-up — bound each outbox delivery so a hung handler can't wedge the delivery worker. The 2.5.0
