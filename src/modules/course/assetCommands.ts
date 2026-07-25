@@ -408,3 +408,87 @@ export async function importSectionAssets(
 
   return idMap;
 }
+
+// #796: a section asset prepared for a transactional import — its blob(s) are already written to storage
+// (staged), and `rowData` is everything needed to create the SectionAsset row inside the import's single
+// transaction. `blobPaths` lists every blob written for this asset so a rolled-back import can reclaim them.
+export type StagedSectionAsset = {
+  sourceId: string;
+  rowData: {
+    filename: string;
+    mimeType: string;
+    blobPath: string;
+    sizeBytes: number;
+    sourceLocale: string | null;
+    localizedBlobPaths?: Record<string, string>;
+  };
+  blobPaths: string[];
+};
+
+// #796: the I/O half of an asset import — validate + write blobs to storage, WITHOUT touching the DB. The
+// caller persists the SectionAsset rows (from `rowData`) inside its own transaction, keeping blob uploads
+// out of the DB transaction (a B1 pool must not hold a connection open across uploads). `sectionId` is the
+// pre-generated id the caller will create the section with, so blob paths are already final. On a failed
+// import the caller reclaims every returned `blobPaths` entry.
+export async function stageSectionAssets(
+  sectionId: string,
+  assets: ReadonlyArray<{
+    sourceId: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+    contentBase64: string;
+    sourceLocale?: string | null;
+    localizedVariants?: Array<{ locale: string; contentBase64: string }>;
+  }>,
+): Promise<StagedSectionAsset[]> {
+  const staged: StagedSectionAsset[] = [];
+
+  for (const asset of assets) {
+    const label = asset.filename || asset.sourceId;
+    if (!ALLOWED_ASSET_MIME_TYPES.includes(asset.mimeType)) {
+      throw new ValidationError(
+        `Asset "${label}" has unsupported type (${asset.mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP, SVG.`,
+      );
+    }
+
+    const storedBuffer = decodeAndValidateAssetBytes({
+      label,
+      mimeType: asset.mimeType,
+      contentBase64: asset.contentBase64,
+    });
+
+    const safeName = (asset.filename || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100) || "file";
+    const blobPath = `sections/${sectionId}/${randomUUID()}-${safeName}`;
+    await putAsset(blobPath, storedBuffer, asset.mimeType);
+    const blobPaths = [blobPath];
+
+    const localizedBlobPaths: Record<string, string> = {};
+    for (const variant of asset.localizedVariants ?? []) {
+      const variantBuffer = decodeAndValidateAssetBytes({
+        label: `${label} (${variant.locale})`,
+        mimeType: asset.mimeType,
+        contentBase64: variant.contentBase64,
+      });
+      const variantPath = `sections/${sectionId}/${randomUUID()}-${variant.locale}-${safeName}`;
+      await putAsset(variantPath, variantBuffer, asset.mimeType);
+      localizedBlobPaths[variant.locale] = variantPath;
+      blobPaths.push(variantPath);
+    }
+
+    staged.push({
+      sourceId: asset.sourceId,
+      rowData: {
+        filename: safeName,
+        mimeType: asset.mimeType,
+        blobPath,
+        sizeBytes: storedBuffer.byteLength,
+        sourceLocale: asset.sourceLocale ?? null,
+        localizedBlobPaths: Object.keys(localizedBlobPaths).length > 0 ? localizedBlobPaths : undefined,
+      },
+      blobPaths,
+    });
+  }
+
+  return staged;
+}

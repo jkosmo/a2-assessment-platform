@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
@@ -15,10 +15,10 @@ export async function createCourse(input: {
   actorId?: string;
   // AA-5 (#653): agent-orchestrated creates carry a trace in the audit metadata.
   agent?: AgentAuthoringContext;
-}) {
+}, tx?: DbTransactionClient) {
   // #803: create + its audit commit atomically.
-  const course = await runInTransaction(async (tx) => {
-    const created = await tx.course.create({
+  const run = async (client: DbTransactionClient) => {
+    const created = await client.course.create({
       data: {
         title: input.title,
         description: input.description ?? null,
@@ -35,19 +35,18 @@ export async function createCourse(input: {
         actorId: input.actorId,
         metadata: { courseId: created.id, ...agentAuthoringAuditMetadata(input.agent) },
       },
-      tx,
+      client,
     );
+    // #787 slice 4a: the creator becomes the sole initial owner (Q3 decision). Inert until enforcement
+    // (slice 4b) — this only populates ContentOwner so creators aren't locked out once guards land.
+    // Idempotent + audited. Skipped when there's no actor (system/seed creation stays admin-managed).
+    if (input.actorId) {
+      await addContentOwner({ contentType: "COURSE", contentId: created.id, ownerUserId: input.actorId, actorUserId: input.actorId }, client);
+    }
     return created;
-  });
+  };
 
-  // #787 slice 4a: the creator becomes the sole initial owner (Q3 decision). Inert until enforcement
-  // (slice 4b) — this only populates ContentOwner so creators aren't locked out once guards land.
-  // Idempotent + audited. Skipped when there's no actor (system/seed creation stays admin-managed).
-  if (input.actorId) {
-    await addContentOwner({ contentType: "COURSE", contentId: course.id, ownerUserId: input.actorId, actorUserId: input.actorId });
-  }
-
-  return course;
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 export async function updateCourse(
@@ -237,6 +236,7 @@ export async function setCourseItems(
   items: CourseItemInput[],
   // AA-5 (#653): audited write; agent runs stamp source/agentRunId into the metadata.
   options?: { actorId?: string; agent?: AgentAuthoringContext },
+  tx?: DbTransactionClient,
 ) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
@@ -259,10 +259,10 @@ export async function setCourseItems(
   }
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.
-  const result = await runInTransaction(async (tx) => {
-    await tx.courseItem.deleteMany({ where: { courseId } });
+  const run = async (client: DbTransactionClient) => {
+    await client.courseItem.deleteMany({ where: { courseId } });
     if (items.length > 0) {
-      await tx.courseItem.createMany({
+      await client.courseItem.createMany({
         data: items.map((item, index) => ({
           courseId,
           sortOrder: index,
@@ -275,7 +275,7 @@ export async function setCourseItems(
         })),
       });
     }
-    await tx.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
+    await client.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
     // #803: itemsUpdated audit commits atomically with the item rewrite.
     await recordAuditEvent(
       {
@@ -285,9 +285,10 @@ export async function setCourseItems(
         actorId: options?.actorId,
         metadata: { courseId, itemCount: items.length, ...agentAuthoringAuditMetadata(options?.agent) },
       },
-      tx,
+      client,
     );
-  });
+  };
+  const result = await (tx ? run(tx) : runInTransaction(run));
   return result;
 }
 
@@ -297,14 +298,15 @@ export async function setCourseItems(
 export async function setCourseModules(
   courseId: string,
   modules: Array<{ moduleId: string; sortOrder: number }>,
+  tx?: DbTransactionClient,
 ) {
-  return runInTransaction(async (tx) => {
-    const sections = await tx.courseItem.findMany({
+  const run = async (client: DbTransactionClient) => {
+    const sections = await client.courseItem.findMany({
       where: { courseId, itemType: "SECTION" },
       orderBy: { sortOrder: "asc" },
       select: { sectionId: true, discussionsEnabled: true },
     });
-    await tx.courseItem.deleteMany({ where: { courseId } });
+    await client.courseItem.deleteMany({ where: { courseId } });
     // Bevar den passerte sortOrder for moduler (uendret kontrakt fra før #502); seksjoner legges
     // etter høyeste modul-sortOrder så de overlever en modul-re-set.
     const moduleRows = modules.map((m) => ({
@@ -322,11 +324,12 @@ export async function setCourseModules(
       discussionsEnabled: s.discussionsEnabled,
     }));
     if (moduleRows.length + sectionRows.length > 0) {
-      await tx.courseItem.createMany({ data: [...moduleRows, ...sectionRows] });
+      await client.courseItem.createMany({ data: [...moduleRows, ...sectionRows] });
     }
-    await tx.course.update({
+    await client.course.update({
       where: { id: courseId },
       data: { updatedAt: new Date() },
     });
-  });
+  };
+  return tx ? run(tx) : runInTransaction(run);
 }

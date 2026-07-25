@@ -1,5 +1,5 @@
 import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
@@ -89,13 +89,13 @@ async function ensureModuleExists(moduleId: string) {
   return module;
 }
 
-export async function createModule(input: CreateModuleInput) {
+export async function createModule(input: CreateModuleInput, tx?: DbTransactionClient) {
   if (input.validFrom && input.validTo && input.validTo < input.validFrom) {
     throw new Error("validTo must be on or after validFrom.");
   }
 
-  const module = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+  const run = async (client: DbTransactionClient) => {
+    const repo = createAdminContentRepository(client);
     const created = await repo.createModule({
       title: input.title,
       description: input.description,
@@ -119,20 +119,24 @@ export async function createModule(input: CreateModuleInput) {
           validTo: created.validTo?.toISOString() ?? null,
         },
       },
-      tx,
+      client,
     );
 
+    // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
+    // populated ContentOwner from it, but new modules need an explicit row so 4b enforcement (which reads
+    // ContentOwner, not createdById) recognises the creator. Inert until 4b. Idempotent + audited.
+    // #796: created in the same transaction as the module so createModule is fully atomic.
+    if (input.actorId) {
+      await addContentOwner(
+        { contentType: "MODULE", contentId: created.id, ownerUserId: input.actorId, actorUserId: input.actorId },
+        client,
+      );
+    }
+
     return created;
-  });
+  };
 
-  // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
-  // populated ContentOwner from it, but new modules need an explicit row so 4b enforcement (which reads
-  // ContentOwner, not createdById) recognises the creator. Inert until 4b. Idempotent + audited.
-  if (input.actorId) {
-    await addContentOwner({ contentType: "MODULE", contentId: module.id, ownerUserId: input.actorId, actorUserId: input.actorId });
-  }
-
-  return module;
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 function normalizeLocalizedTitleSeed(title: string | null | undefined): LocalizedTextObject {
@@ -349,17 +353,19 @@ async function getNextVersionNo(model: "rubric" | "prompt" | "mcq" | "module", m
   return (latest?.versionNo ?? 0) + 1;
 }
 
-export async function createRubricVersion(input: CreateRubricVersionInput) {
+export async function createRubricVersion(input: CreateRubricVersionInput, tx?: DbTransactionClient) {
   await ensureModuleExists(input.moduleId);
   const versionNo = await getNextVersionNo("rubric", input.moduleId);
 
-  return adminContentRepository.createRubricVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    criteriaJson: JSON.stringify(input.criteria),
-    scalingRuleJson: JSON.stringify(input.scalingRule),
-    active: input.active,
-  });
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createRubricVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      criteriaJson: JSON.stringify(input.criteria),
+      scalingRuleJson: JSON.stringify(input.scalingRule),
+      active: input.active,
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 // Generic default rubric used as fallback when LLM-based generation fails or is not yet
@@ -554,41 +560,45 @@ export async function syncActiveRubricBlueprintHash(
   };
 }
 
-export async function createPromptTemplateVersion(input: CreatePromptTemplateVersionInput) {
+export async function createPromptTemplateVersion(input: CreatePromptTemplateVersionInput, tx?: DbTransactionClient) {
   await ensureModuleExists(input.moduleId);
   const versionNo = await getNextVersionNo("prompt", input.moduleId);
 
-  return adminContentRepository.createPromptTemplateVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    systemPrompt: input.systemPrompt,
-    userPromptTemplate: input.userPromptTemplate,
-    examplesJson: JSON.stringify(input.examples),
-    active: input.active ?? true,
-  });
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createPromptTemplateVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      systemPrompt: input.systemPrompt,
+      userPromptTemplate: input.userPromptTemplate,
+      examplesJson: JSON.stringify(input.examples),
+      active: input.active ?? true,
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
-export async function createMcqSetVersion(input: CreateMcqSetVersionInput) {
+export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: DbTransactionClient) {
   await ensureModuleExists(input.moduleId);
   const versionNo = await getNextVersionNo("mcq", input.moduleId);
 
-  return adminContentRepository.createMcqSetVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    title: input.title,
-    active: input.active ?? true,
-    questions: input.questions.map((question) => ({
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createMcqSetVersion({
       moduleId: input.moduleId,
-      stem: question.stem,
-      optionsJson: JSON.stringify(question.options),
-      correctAnswer: question.correctAnswer,
-      rationale: question.rationale,
-      active: true,
-    })),
-  });
+      versionNo,
+      title: input.title,
+      active: input.active ?? true,
+      questions: input.questions.map((question) => ({
+        moduleId: input.moduleId,
+        stem: question.stem,
+        optionsJson: JSON.stringify(question.options),
+        correctAnswer: question.correctAnswer,
+        rationale: question.rationale,
+        active: true,
+      })),
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
-export async function createModuleVersion(input: CreateModuleVersionInput) {
+export async function createModuleVersion(input: CreateModuleVersionInput, tx?: DbTransactionClient) {
   await ensureModuleExists(input.moduleId);
   const versionNo = await getNextVersionNo("module", input.moduleId);
 
@@ -626,20 +636,22 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     }
   }
 
-  return adminContentRepository.createModuleVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    assessmentMode: input.assessmentMode,
-    taskText: isMcqOnly ? null : input.taskText,
-    assessorExpectedContent: input.assessorExpectedContent,
-    candidateTaskConstraints: input.candidateTaskConstraints,
-    assessmentBlueprint: input.assessmentBlueprint,
-    rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
-    promptTemplateVersionId: isMcqOnly ? null : input.promptTemplateVersionId,
-    mcqSetVersionId: isFreetextOnly ? null : input.mcqSetVersionId,
-    submissionSchemaJson: input.submissionSchemaJson,
-    assessmentPolicyJson: input.assessmentPolicyJson,
-  });
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createModuleVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      assessmentMode: input.assessmentMode,
+      taskText: isMcqOnly ? null : input.taskText,
+      assessorExpectedContent: input.assessorExpectedContent,
+      candidateTaskConstraints: input.candidateTaskConstraints,
+      assessmentBlueprint: input.assessmentBlueprint,
+      rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
+      promptTemplateVersionId: isMcqOnly ? null : input.promptTemplateVersionId,
+      mcqSetVersionId: isFreetextOnly ? null : input.mcqSetVersionId,
+      submissionSchemaJson: input.submissionSchemaJson,
+      assessmentPolicyJson: input.assessmentPolicyJson,
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampleVersionInput) {
@@ -827,12 +839,17 @@ export async function unpublishModule(moduleId: string, actorId: string) {
   return result;
 }
 
-export async function publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string) {
+export async function publishModuleVersion(
+  moduleId: string,
+  moduleVersionId: string,
+  actorId: string,
+  tx?: DbTransactionClient,
+) {
   const module = await ensureModuleExists(moduleId);
   const now = new Date();
 
-  const published = await runInTransaction(async (tx) => {
-    const result = await createAdminContentRepository(tx).publishModuleVersion(
+  const run = async (client: DbTransactionClient) => {
+    const result = await createAdminContentRepository(client).publishModuleVersion(
       moduleId,
       moduleVersionId,
       actorId,
@@ -853,13 +870,13 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
           publishedAt: result.publishedAt?.toISOString() ?? null,
         },
       },
-      tx,
+      client,
     );
 
     return result;
-  });
+  };
 
-  return published;
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 type PublishThresholdsInput = {

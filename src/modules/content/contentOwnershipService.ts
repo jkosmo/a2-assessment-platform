@@ -5,7 +5,7 @@
 
 import type { AppRole as AppRoleType, ContentOwnerType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { ForbiddenError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -107,17 +107,23 @@ export async function listContentOwners(
 }
 
 // Idempotent: adding an existing owner is a no-op (unique constraint). Audited.
-export async function addContentOwner(input: {
-  contentType: ContentOwnerType;
-  contentId: string;
-  ownerUserId: string;
-  actorUserId: string;
-}): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { id: input.ownerUserId }, select: { id: true } });
+// #796: accepts an optional external transaction client so a content import can create the owner row as
+// part of the same atomic graph build. When omitted it opens its own transaction (unchanged behaviour).
+export async function addContentOwner(
+  input: {
+    contentType: ContentOwnerType;
+    contentId: string;
+    ownerUserId: string;
+    actorUserId: string;
+  },
+  tx?: DbTransactionClient,
+): Promise<void> {
+  const reader = tx ?? prisma;
+  const user = await reader.user.findUnique({ where: { id: input.ownerUserId }, select: { id: true } });
   if (!user) {
     throw new NotFoundError("User", "user_not_found", "That user does not exist.");
   }
-  const existing = await prisma.contentOwner.findUnique({
+  const existing = await reader.contentOwner.findUnique({
     where: {
       contentType_contentId_userId: {
         contentType: input.contentType,
@@ -128,8 +134,8 @@ export async function addContentOwner(input: {
     select: { id: true },
   });
   if (existing) return; // already an owner
-  await runInTransaction(async (tx) => {
-    const owner = await tx.contentOwner.create({
+  const run = async (client: DbTransactionClient) => {
+    const owner = await client.contentOwner.create({
       data: {
         contentType: input.contentType,
         contentId: input.contentId,
@@ -145,9 +151,10 @@ export async function addContentOwner(input: {
         actorId: input.actorUserId,
         metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
       },
-      tx,
+      client,
     );
-  });
+  };
+  await (tx ? run(tx) : runInTransaction(run));
 }
 
 // Last-owner protection: a non-admin cannot remove the final owner (would orphan the content). An
