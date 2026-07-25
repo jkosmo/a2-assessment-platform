@@ -60,14 +60,20 @@ export const API_ROUTE_CAPABILITIES = [
     ],
   },
   {
+    // #495 consistency: a content producer (SUBJECT_MATTER_OWNER) can read course sections and open a
+    // module, so they must also be able to TAKE/test a module (create a submission) — the same authoring/
+    // testing access. submissions.ts already exempts content roles from the course-required gate; without
+    // SMO here the route 403'd before that ("Krever en av rollene: PARTICIPANT, ADMINISTRATOR, REVIEWER").
     id: "submissions",
     prefix: "/api/submissions",
-    roles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
+    roles: [AppRole.PARTICIPANT, AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
   },
   {
+    // #495 consistency: SMO tests their own module end-to-end, so the assessment endpoints must admit them
+    // too (matches `submissions` above and `modules`/`courses`, which already include SMO).
     id: "assessments",
     prefix: "/api/assessments",
-    roles: [AppRole.PARTICIPANT, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
+    roles: [AppRole.PARTICIPANT, AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR, AppRole.REVIEWER],
   },
   {
     id: "audit",
