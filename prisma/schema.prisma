@@ -140,6 +140,27 @@ model UserConsent {
   @@index([userId])
 }
 
+// #726: retry-safe idempotency for create/import POST endpoints. A request may carry an `Idempotency-Key`
+// header; the first request for (userId, endpoint, key) reserves a row (status "pending"), runs the
+// handler, and stores its response. A replay with the SAME key + SAME payloadHash returns the stored
+// response (no second write); a SAME key + DIFFERENT payloadHash is rejected (409). Rows expire after a
+// TTL (no relation to User on purpose — the record is ephemeral and must survive user changes for its TTL).
+model IdempotencyKey {
+  id           String   @id @default(cuid())
+  userId       String
+  endpoint     String
+  key          String
+  payloadHash  String
+  status       String   @default("pending") // "pending" while the handler runs, "completed" once stored
+  statusCode   Int?
+  responseJson String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@unique([userId, endpoint, key])
+  @@index([expiresAt])
+}
+
 model DeletionRequest {
   id           String                @id @default(cuid())
   userId       String

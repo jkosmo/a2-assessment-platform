@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
+import { idempotency } from "../middleware/idempotency.js";
 import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
@@ -81,7 +82,7 @@ const courseCreateBodySchema = courseBodySchema.extend({
   agentRunId: agentRunIdSchema.optional(),
 });
 
-adminCoursesRouter.post("/", async (request, response, next) => {
+adminCoursesRouter.post("/", idempotency("courses.create"), async (request, response, next) => {
   const parsed = courseCreateBodySchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });

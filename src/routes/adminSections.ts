@@ -29,6 +29,7 @@ import { NotFoundError } from "../errors/AppError.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeSectionContent } from "../modules/adminContent/llmContentGenerationService.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
+import { idempotency } from "../middleware/idempotency.js";
 
 const adminSectionsRouter = Router();
 
@@ -91,7 +92,7 @@ function toDetail(section: SectionWithActiveVersion) {
   };
 }
 
-adminSectionsRouter.post("/", async (request, response, next) => {
+adminSectionsRouter.post("/", idempotency("sections.create"), async (request, response, next) => {
   const parsed = createSectionSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });

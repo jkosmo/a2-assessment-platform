@@ -82,6 +82,7 @@ import {
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
+import { idempotency } from "../middleware/idempotency.js";
 import { adminClassesRouter } from "./adminClasses.js";
 import { adminUsersRouter } from "./adminUsers.js";
 import { adminSectionsRouter } from "./adminSections.js";
@@ -423,7 +424,7 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
 // /modules/:id/export-package. mode=createNew creates a fresh module; mode=
 // replaceExisting appends a new active version to the existing targetId
 // (history preserved; never silently overwrites).
-adminContentRouter.post("/modules/import", async (request, response) => {
+adminContentRouter.post("/modules/import", idempotency("modules.import"), async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
     response.status(401).json({ error: "unauthorized" });
