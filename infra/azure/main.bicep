@@ -700,12 +700,11 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         }
         {
           name: 'SKIP_MIGRATE'
-          // Web always runs prisma migrate deploy on startup. Worker keeps SKIP_MIGRATE=true
-          // (see worker app definition below) — worker shouldn't run migrations because web
-          // already does. This was per-env conditional before, but stage having
-          // SKIP_MIGRATE=true meant migrations were only ever tested in prod, which contributed
-          // to the 2026-05-21 incident where the #446 drop-column migration silently never ran
-          // on stage. Migrations on stage should behave like prod. See v1.1.74 release notes.
+          // Web runs prisma migrate deploy on startup. #811: the worker now does too (SKIP_MIGRATE=false
+          // below) so new worker code never starts against an un-migrated schema. This was per-env
+          // conditional before, but stage having SKIP_MIGRATE=true meant migrations were only ever tested
+          // in prod, which contributed to the 2026-05-21 incident where the #446 drop-column migration
+          // silently never ran on stage. Migrations on stage should behave like prod. See v1.1.74 notes.
           value: 'false'
         }
         {
@@ -935,7 +934,14 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         }
         {
           name: 'SKIP_MIGRATE'
-          value: 'true'
+          // #811: run `prisma migrate deploy` on the worker too (was 'true' = skip). Prisma serializes
+          // concurrent migrate deploys with an advisory lock, so web + worker migrating on the same deploy
+          // is safe (one applies, the other sees "up to date"), and the worker's runtime only starts AFTER
+          // its own migrate completes — so new worker code can never run against an un-migrated schema (the
+          // pre-#811 race that could fail/partial-process assessment jobs on the first tick). Migration
+          // authors must keep changes expand/contract-safe (additive within a deploy; drop columns in a
+          // FOLLOW-UP deploy) so OLD containers stay compatible with the NEW schema during rollout.
+          value: 'false'
         }
         {
           name: 'NODE_ENV'

@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.7.1 - 2026-07-25
+
+#811 — **worker no longer starts new code against an un-migrated schema.** The worker ran with
+`SKIP_MIGRATE=true` (only web ran `prisma migrate deploy`), so on a deploy the new worker container could
+start + process a job before the still-starting web applied the migration — a missing column then
+failed/partial-processed the job (invisible because worker health is unconditional). This exact window
+briefly affected the #804 (v2.7.0) deploy. Parent #782.
+
+- **Fix:** worker `SKIP_MIGRATE` `true → false` (`infra/azure/main.bicep`) — the worker now runs
+  `migrate deploy` on startup too. Prisma serializes concurrent migrate deploys with an advisory lock, so
+  web + worker migrating on the same deploy is safe (one applies, the other sees "up to date"), and the
+  worker's runtime only starts AFTER its own migrate completes → new worker code can never run against an
+  un-migrated schema.
+- **Discipline (documented in the bicep comment):** migrations must stay **expand/contract-safe** —
+  additive within a deploy; drop/rename columns in a FOLLOW-UP deploy — so OLD containers remain
+  compatible with the NEW schema during the rollout overlap.
+
+Infra-only (single env-var value on the worker App Service; no migration, no code). Deployed via
+`deploy-azure.yml`. Verified: worker `/healthz` healthy after deploy (runs migrate → up-to-date → starts).
+
 ## 2.7.0 - 2026-07-25
 
 #804 — **tamper-evident audit log** (hash chain). Previously `payloadHash` covered only
