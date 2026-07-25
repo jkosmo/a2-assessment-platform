@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.7.0 - 2026-07-25
+
+#804 — **tamper-evident audit log** (hash chain). Previously `payloadHash` covered only
+`entityType:entityId:action:metadataJson` — it excluded the actor and timestamp and was neither chained
+nor verified, so an edited/removed/reordered audit row was undetectable. Parent #781.
+
+- **Chained hash:** `computeAuditHash` now covers `prevHash | actor | timestamp | content`, so tampering
+  with any of those — or reordering/removing a row — breaks the chain. New `AuditEvent.chainSeq`
+  (BIGSERIAL, deterministic total order) + `prevHash` columns (migration `20260725030000_audit_hash_chain`,
+  additive).
+- **Serialized appends:** `recordAuditEvent` takes a transaction-scoped `pg_advisory_xact_lock` so
+  concurrent writers can't branch the chain, while staying inside the caller's transaction (keeps #803
+  audit-atomicity). Timestamp is app-set so the exact value is hashed.
+- **Verification path:** `verifyAuditChain()` recomputes + checks every row's hash and prevHash linkage;
+  `npm run maint:verify-audit-chain` exits non-zero on a broken chain.
+- **Backfill:** `backfillAuditChain()` + `npm run maint:backfill-audit-chain` re-seal existing rows into
+  the chain (**run once per environment after deploy** — until then `verifyAuditChain` fails on pre-#804
+  rows; the live chain still functions for new rows). The #806 PII scrub now re-seals via the backfill
+  (mutating a row re-links the chain).
+
+Deploy: additive migration applied on web startup (`startup.mjs`); during the brief pre-migration window
+a worker audit write would fail and the job retries (self-heals) — the #811 deploy-ordering class. tsc 0;
+unit 858/858 (+ `audit-hash` 7) + `m2-audit-chain` integration (chain link, tamper + removal detection,
+concurrency stays linear under the advisory lock, backfill re-seal + idempotency) — run serially via
+`npm test` / `npm run test:integration:audit` (excluded from the parallel `test:integration:native` since
+they need exclusive DB access).
+
 ## 2.6.2 - 2026-07-25
 
 #814 — **client-side sanitization for raw-HTML sinks + escape error strings into markup**

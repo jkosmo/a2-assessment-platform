@@ -535,6 +535,13 @@ model CertificationStatus {
 
 model AuditEvent {
   id           String   @id @default(cuid())
+  // #804: tamper-evidence. chainSeq gives a deterministic total order for the hash chain (timestamps can
+  // collide at ms granularity); prevHash links each event to the prior one so altering/removing any row
+  // breaks the chain from that point. payloadHash now covers actor + timestamp + prevHash (see
+  // auditService.recordAuditEvent). Writes are serialized with a pg advisory lock so the chain stays
+  // linear under concurrency. Nullable prevHash tolerates the pre-#804 genesis row after backfill.
+  chainSeq     BigInt   @unique @default(autoincrement())
+  prevHash     String?
   entityType   String
   entityId     String
   action       String

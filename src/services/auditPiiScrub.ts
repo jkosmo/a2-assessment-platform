@@ -1,6 +1,5 @@
 import { prisma } from "../db/prisma.js";
-import { sha256 } from "../utils/hash.js";
-import { recordAuditEvent } from "./auditService.js";
+import { recordAuditEvent, backfillAuditChain } from "./auditService.js";
 import { auditActions, auditEntityTypes } from "../observability/auditEvents.js";
 
 // #843 (#806 follow-up): historical scrub of person-PII (email) from indefinitely-retained audit
@@ -42,19 +41,21 @@ export async function scrubHistoricalAuditPii(actorId?: string): Promise<{ scrub
       if (!(field in metadata)) continue; // substring match false-positive (field inside a value)
 
       delete metadata[field];
-      // Re-stringify preserves the remaining keys' original insertion order, so the recomputed hash
-      // matches what a fresh recordAuditEvent would produce for the scrubbed metadata.
-      const newMetadataJson = JSON.stringify(metadata);
-      const payloadHash = sha256(`${row.entityType}:${row.entityId}:${row.action}:${newMetadataJson}`);
+      // #804: only rewrite metadata here; the hash chain is re-sealed in one pass below. (Mutating any
+      // row's content invalidates every subsequent row's chain link, so a per-row hash recompute is not
+      // enough once the audit log is chained.)
       await prisma.auditEvent.update({
         where: { id: row.id },
-        data: { metadataJson: newMetadataJson, payloadHash },
+        data: { metadataJson: JSON.stringify(metadata) },
       });
       scrubbed += 1;
     }
   }
 
   if (scrubbed > 0) {
+    // #804: re-seal the whole chain so every row's payloadHash + prevHash are consistent with the
+    // scrubbed content again (verifyAuditChain then passes). Idempotent + deterministic.
+    await backfillAuditChain();
     await recordAuditEvent({
       entityType: auditEntityTypes.audit,
       entityId: "audit-pii-scrub",

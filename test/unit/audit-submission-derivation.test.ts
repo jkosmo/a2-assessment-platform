@@ -6,7 +6,12 @@ import { auditActions } from "../../src/observability/auditEvents.js";
 // the participant trail read is an indexed equality lookup. Verify the derivation for each case.
 function mockTx() {
   const create = vi.fn().mockResolvedValue({ id: "audit" });
-  return { tx: { auditEvent: { create }, submission: {} } as never, create };
+  // #804: recordAuditEvent now takes an advisory lock ($executeRaw) and reads the chain head (findFirst)
+  // before creating. Genesis → findFirst returns null (prevHash null). The submissionId derivation under
+  // test is unchanged; only the surrounding chain plumbing needs stubbing.
+  const findFirst = vi.fn().mockResolvedValue(null);
+  const $executeRaw = vi.fn().mockResolvedValue(0);
+  return { tx: { auditEvent: { create, findFirst }, $executeRaw } as never, create };
 }
 
 describe("recordAuditEvent denormalizes submissionId (#797)", () => {
