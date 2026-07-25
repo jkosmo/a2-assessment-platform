@@ -205,12 +205,12 @@ function localizeTitle(title: string): string {
 
 // Samler individuelle + klasse-tildelte frister til ÉN effektiv kandidat per (bruker, kurs).
 // Presedens: individuell frist vinner over klasse; ved flere klasse-frister vinner den tidligste.
-async function gatherCandidates(summary: CourseReminderScheduleSummary): Promise<ReminderCandidate[]> {
+async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBound: Date): Promise<ReminderCandidate[]> {
   const map = new Map<string, ReminderCandidate>();
   const keyOf = (userId: string, courseId: string) => `${userId}::${courseId}`;
 
   // 1. Individuelle (eksplisitt tildelte) enrollments med frist.
-  const enrollments = await enrollmentRepository.findIndividualEnrollmentsWithDueDate();
+  const enrollments = await enrollmentRepository.findIndividualEnrollmentsWithDueDate(upperBound);
   for (const enrollment of enrollments) {
     if (!enrollment.dueAt) continue;
     map.set(keyOf(enrollment.userId, enrollment.courseId), {
@@ -228,7 +228,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary): Promise
 
   // 2. Klasse-tildelte frister → ekspander til medlemmer. MANUAL = ClassMember-rader;
   //    system-klassen «Alle deltakere» = alle aktive deltakere (ingen rader). ENTRA hoppes over.
-  const assignments = await classRepository.findCourseGroupAssignmentsWithDueDate();
+  const assignments = await classRepository.findCourseGroupAssignmentsWithDueDate(upperBound);
   let allParticipants: Array<{ id: string; name: string; email: string }> | null = null;
 
   for (const assignment of assignments) {
@@ -304,7 +304,11 @@ export async function runCourseReminderSchedule(input?: {
     skippedEntraClass: 0,
   };
 
-  const candidates = await gatherCandidates(summary);
+  // #798: bound both due-date scans to the reminder horizon (largest due-soon offset + 1 day). This still
+  // includes every OVERDUE row (dueAt < asOf < upperBound), so overdue reminders are never missed; only
+  // far-future-dated enrolments/assignments are pruned at the DB.
+  const upperBound = addDays(asOf, (reminderDaysBefore[0] ?? 0) + 1);
+  const candidates = await gatherCandidates(summary, upperBound);
 
   for (const candidate of candidates) {
     if (!candidate.activeStatus || candidate.isAnonymized) {
