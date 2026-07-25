@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.5.3 - 2026-07-25
+
+#799 (parent #780) — kill the N+1 query fan-out on the participant course listing. `GET /api/courses` did
+~4 queries PER visible course (course items, passed-module count, read sections, latest submissions) —
+O(courses) round-trips that could exhaust the 10-connection pool. It now batch-fetches each of those across
+ALL visible courses (a fixed number of queries) and derives per-course progress in memory. New batch repo
+reads: `findCourseItemSectionIdsForCourses`, `findPassedModuleIds`, `findReadSectionIdsForCourses`;
+latest submissions fetched once for all modules. Behaviour-preserving — identical per-course counts
+(`m2-courses-participant-flow` asserts two distinct courses' progress from the batched listing and stays
+green). Scope: the participant listing (the worst, most user-facing fan-out); the admin-list + reporting
+fan-outs from the #799 evidence remain as follow-up. No migration. tsc 0; unit 848/848; integration 424/424.
+
 ## 2.5.2 - 2026-07-25
 
 #798 (parent #780) — bound the scheduled reminder scans to the reminder horizon instead of loading whole
