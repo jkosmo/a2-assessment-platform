@@ -10,6 +10,7 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
+import { sanitizeSectionHtml } from "/static/sanitize.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -552,7 +553,8 @@ async function refreshPreview() {
       method: "POST",
       body: JSON.stringify({ markdown: editing.body[editing.editLocale] ?? "", locale: editing.editLocale }),
     });
-    pane.innerHTML = data.html ?? "";
+    // #814: server-sanitised (F3/X1) preview HTML re-sanitised client-side (defense-in-depth) before sink.
+    pane.innerHTML = sanitizeSectionHtml(data.html);
     await hydrateContentAssetImages(pane, getHeaders);
   } catch {
     /* leave previous preview on transient error */
