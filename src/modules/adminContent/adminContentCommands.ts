@@ -1,5 +1,5 @@
 import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
@@ -79,8 +79,12 @@ type CreateBenchmarkExampleVersionInput = {
   actorId?: string;
 };
 
-async function ensureModuleExists(moduleId: string) {
-  const module = await adminContentRepository.findModuleSummary(moduleId);
+// #796: `repo` lets the precondition read run on the caller's transaction client, so during an import it
+// sees the module created earlier in the SAME transaction (a read on the base client would not).
+type AdminContentReader = ReturnType<typeof createAdminContentRepository>;
+
+async function ensureModuleExists(moduleId: string, repo: AdminContentReader = adminContentRepository) {
+  const module = await repo.findModuleSummary(moduleId);
 
   if (!module) {
     throw new Error("Module not found.");
@@ -89,13 +93,13 @@ async function ensureModuleExists(moduleId: string) {
   return module;
 }
 
-export async function createModule(input: CreateModuleInput) {
+export async function createModule(input: CreateModuleInput, tx?: DbTransactionClient) {
   if (input.validFrom && input.validTo && input.validTo < input.validFrom) {
     throw new Error("validTo must be on or after validFrom.");
   }
 
-  const module = await runInTransaction(async (tx) => {
-    const repo = createAdminContentRepository(tx);
+  const run = async (client: DbTransactionClient) => {
+    const repo = createAdminContentRepository(client);
     const created = await repo.createModule({
       title: input.title,
       description: input.description,
@@ -119,20 +123,24 @@ export async function createModule(input: CreateModuleInput) {
           validTo: created.validTo?.toISOString() ?? null,
         },
       },
-      tx,
+      client,
     );
 
+    // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
+    // populated ContentOwner from it, but new modules need an explicit row so 4b enforcement (which reads
+    // ContentOwner, not createdById) recognises the creator. Inert until 4b. Idempotent + audited.
+    // #796: created in the same transaction as the module so createModule is fully atomic.
+    if (input.actorId) {
+      await addContentOwner(
+        { contentType: "MODULE", contentId: created.id, ownerUserId: input.actorId, actorUserId: input.actorId },
+        client,
+      );
+    }
+
     return created;
-  });
+  };
 
-  // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
-  // populated ContentOwner from it, but new modules need an explicit row so 4b enforcement (which reads
-  // ContentOwner, not createdById) recognises the creator. Inert until 4b. Idempotent + audited.
-  if (input.actorId) {
-    await addContentOwner({ contentType: "MODULE", contentId: module.id, ownerUserId: input.actorId, actorUserId: input.actorId });
-  }
-
-  return module;
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 function normalizeLocalizedTitleSeed(title: string | null | undefined): LocalizedTextObject {
@@ -329,37 +337,45 @@ export async function deleteModule(moduleId: string, actorId: string) {
   return deletedModule;
 }
 
-async function getNextVersionNo(model: "rubric" | "prompt" | "mcq" | "module", moduleId: string) {
+async function getNextVersionNo(
+  model: "rubric" | "prompt" | "mcq" | "module",
+  moduleId: string,
+  repo: AdminContentReader = adminContentRepository,
+) {
   if (model === "rubric") {
-    const latest = await adminContentRepository.findLatestRubricVersion(moduleId);
+    const latest = await repo.findLatestRubricVersion(moduleId);
     return (latest?.versionNo ?? 0) + 1;
   }
 
   if (model === "prompt") {
-    const latest = await adminContentRepository.findLatestPromptTemplateVersion(moduleId);
+    const latest = await repo.findLatestPromptTemplateVersion(moduleId);
     return (latest?.versionNo ?? 0) + 1;
   }
 
   if (model === "mcq") {
-    const latest = await adminContentRepository.findLatestMcqSetVersion(moduleId);
+    const latest = await repo.findLatestMcqSetVersion(moduleId);
     return (latest?.versionNo ?? 0) + 1;
   }
 
-  const latest = await adminContentRepository.findLatestModuleVersion(moduleId);
+  const latest = await repo.findLatestModuleVersion(moduleId);
   return (latest?.versionNo ?? 0) + 1;
 }
 
-export async function createRubricVersion(input: CreateRubricVersionInput) {
-  await ensureModuleExists(input.moduleId);
-  const versionNo = await getNextVersionNo("rubric", input.moduleId);
+export async function createRubricVersion(input: CreateRubricVersionInput, tx?: DbTransactionClient) {
+  // #796: reads run on the tx client when composing an import, so they see the just-created module.
+  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
+  await ensureModuleExists(input.moduleId, reader);
+  const versionNo = await getNextVersionNo("rubric", input.moduleId, reader);
 
-  return adminContentRepository.createRubricVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    criteriaJson: JSON.stringify(input.criteria),
-    scalingRuleJson: JSON.stringify(input.scalingRule),
-    active: input.active,
-  });
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createRubricVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      criteriaJson: JSON.stringify(input.criteria),
+      scalingRuleJson: JSON.stringify(input.scalingRule),
+      active: input.active,
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 // Generic default rubric used as fallback when LLM-based generation fails or is not yet
@@ -554,43 +570,52 @@ export async function syncActiveRubricBlueprintHash(
   };
 }
 
-export async function createPromptTemplateVersion(input: CreatePromptTemplateVersionInput) {
-  await ensureModuleExists(input.moduleId);
-  const versionNo = await getNextVersionNo("prompt", input.moduleId);
+export async function createPromptTemplateVersion(input: CreatePromptTemplateVersionInput, tx?: DbTransactionClient) {
+  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
+  await ensureModuleExists(input.moduleId, reader);
+  const versionNo = await getNextVersionNo("prompt", input.moduleId, reader);
 
-  return adminContentRepository.createPromptTemplateVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    systemPrompt: input.systemPrompt,
-    userPromptTemplate: input.userPromptTemplate,
-    examplesJson: JSON.stringify(input.examples),
-    active: input.active ?? true,
-  });
-}
-
-export async function createMcqSetVersion(input: CreateMcqSetVersionInput) {
-  await ensureModuleExists(input.moduleId);
-  const versionNo = await getNextVersionNo("mcq", input.moduleId);
-
-  return adminContentRepository.createMcqSetVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    title: input.title,
-    active: input.active ?? true,
-    questions: input.questions.map((question) => ({
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createPromptTemplateVersion({
       moduleId: input.moduleId,
-      stem: question.stem,
-      optionsJson: JSON.stringify(question.options),
-      correctAnswer: question.correctAnswer,
-      rationale: question.rationale,
-      active: true,
-    })),
-  });
+      versionNo,
+      systemPrompt: input.systemPrompt,
+      userPromptTemplate: input.userPromptTemplate,
+      examplesJson: JSON.stringify(input.examples),
+      active: input.active ?? true,
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
-export async function createModuleVersion(input: CreateModuleVersionInput) {
-  await ensureModuleExists(input.moduleId);
-  const versionNo = await getNextVersionNo("module", input.moduleId);
+export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: DbTransactionClient) {
+  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
+  await ensureModuleExists(input.moduleId, reader);
+  const versionNo = await getNextVersionNo("mcq", input.moduleId, reader);
+
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createMcqSetVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      title: input.title,
+      active: input.active ?? true,
+      questions: input.questions.map((question) => ({
+        moduleId: input.moduleId,
+        stem: question.stem,
+        optionsJson: JSON.stringify(question.options),
+        correctAnswer: question.correctAnswer,
+        rationale: question.rationale,
+        active: true,
+      })),
+    });
+  return tx ? run(tx) : runInTransaction(run);
+}
+
+export async function createModuleVersion(input: CreateModuleVersionInput, tx?: DbTransactionClient) {
+  // #796: reads run on the tx client when composing an import, so they see the module + rubric/prompt/mcq
+  // versions created earlier in the SAME transaction.
+  const reader = tx ? createAdminContentRepository(tx) : adminContentRepository;
+  await ensureModuleExists(input.moduleId, reader);
+  const versionNo = await getNextVersionNo("module", input.moduleId, reader);
 
   const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
   const isFreetextOnly = input.assessmentMode === "FREETEXT_ONLY";
@@ -600,7 +625,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     if (!input.mcqSetVersionId) {
       throw new Error("MCQ set version is required for this module type.");
     }
-    const mcqSet = await adminContentRepository.findMcqSetSummary(input.mcqSetVersionId);
+    const mcqSet = await reader.findMcqSetSummary(input.mcqSetVersionId);
     if (!mcqSet || mcqSet.moduleId !== input.moduleId) {
       throw new Error("MCQ set version is missing or belongs to another module.");
     }
@@ -612,7 +637,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     if (!input.rubricVersionId || !input.promptTemplateVersionId) {
       throw new Error("Rubric and prompt template are required for free-text modules.");
     }
-    const [rubric, promptTemplate] = await adminContentRepository.findVersionDependencies({
+    const [rubric, promptTemplate] = await reader.findVersionDependencies({
       rubricVersionId: input.rubricVersionId,
       promptTemplateVersionId: input.promptTemplateVersionId,
       // mcqSet is validated above; "" yields a null 3rd result which we ignore here.
@@ -626,20 +651,22 @@ export async function createModuleVersion(input: CreateModuleVersionInput) {
     }
   }
 
-  return adminContentRepository.createModuleVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    assessmentMode: input.assessmentMode,
-    taskText: isMcqOnly ? null : input.taskText,
-    assessorExpectedContent: input.assessorExpectedContent,
-    candidateTaskConstraints: input.candidateTaskConstraints,
-    assessmentBlueprint: input.assessmentBlueprint,
-    rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
-    promptTemplateVersionId: isMcqOnly ? null : input.promptTemplateVersionId,
-    mcqSetVersionId: isFreetextOnly ? null : input.mcqSetVersionId,
-    submissionSchemaJson: input.submissionSchemaJson,
-    assessmentPolicyJson: input.assessmentPolicyJson,
-  });
+  const run = async (client: DbTransactionClient) =>
+    createAdminContentRepository(client).createModuleVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      assessmentMode: input.assessmentMode,
+      taskText: isMcqOnly ? null : input.taskText,
+      assessorExpectedContent: input.assessorExpectedContent,
+      candidateTaskConstraints: input.candidateTaskConstraints,
+      assessmentBlueprint: input.assessmentBlueprint,
+      rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
+      promptTemplateVersionId: isMcqOnly ? null : input.promptTemplateVersionId,
+      mcqSetVersionId: isFreetextOnly ? null : input.mcqSetVersionId,
+      submissionSchemaJson: input.submissionSchemaJson,
+      assessmentPolicyJson: input.assessmentPolicyJson,
+    });
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampleVersionInput) {
@@ -827,12 +854,18 @@ export async function unpublishModule(moduleId: string, actorId: string) {
   return result;
 }
 
-export async function publishModuleVersion(moduleId: string, moduleVersionId: string, actorId: string) {
-  const module = await ensureModuleExists(moduleId);
+export async function publishModuleVersion(
+  moduleId: string,
+  moduleVersionId: string,
+  actorId: string,
+  tx?: DbTransactionClient,
+) {
+  // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
+  const module = await ensureModuleExists(moduleId, tx ? createAdminContentRepository(tx) : adminContentRepository);
   const now = new Date();
 
-  const published = await runInTransaction(async (tx) => {
-    const result = await createAdminContentRepository(tx).publishModuleVersion(
+  const run = async (client: DbTransactionClient) => {
+    const result = await createAdminContentRepository(client).publishModuleVersion(
       moduleId,
       moduleVersionId,
       actorId,
@@ -853,13 +886,13 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
           publishedAt: result.publishedAt?.toISOString() ?? null,
         },
       },
-      tx,
+      client,
     );
 
     return result;
-  });
+  };
 
-  return published;
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 type PublishThresholdsInput = {

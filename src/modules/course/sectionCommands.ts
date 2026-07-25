@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma.js";
-import { runInTransaction } from "../../db/transaction.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
@@ -53,10 +53,15 @@ export async function createSection(input: {
   actorId?: string;
   draft?: boolean;
   agent?: AgentAuthoringContext;
-}) {
-  const created = await runInTransaction(async (tx) => {
-    const section = await tx.courseSection.create({ data: { title: input.title } });
-    const version = await tx.courseSectionVersion.create({
+  // #796: a transactional import pre-generates the section id so its asset blobs can be staged under the
+  // final `sections/<id>/…` path before the graph transaction opens. Omitted → the DB generates the id.
+  id?: string;
+}, tx?: DbTransactionClient) {
+  const run = async (client: DbTransactionClient) => {
+    const section = await client.courseSection.create({
+      data: { ...(input.id ? { id: input.id } : {}), title: input.title },
+    });
+    const version = await client.courseSectionVersion.create({
       data: {
         sectionId: section.id,
         versionNo: 1,
@@ -66,11 +71,11 @@ export async function createSection(input: {
       },
     });
     const result = input.draft
-      ? await tx.courseSection.findUniqueOrThrow({
+      ? await client.courseSection.findUniqueOrThrow({
           where: { id: section.id },
           include: { activeVersion: true },
         })
-      : await tx.courseSection.update({
+      : await client.courseSection.update({
           where: { id: section.id },
           data: { activeVersionId: version.id },
           include: { activeVersion: true },
@@ -87,15 +92,15 @@ export async function createSection(input: {
           ...agentAuthoringAuditMetadata(input.agent),
         },
       },
-      tx,
+      client,
     );
+    // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
+    if (input.actorId) {
+      await addContentOwner({ contentType: "SECTION", contentId: result.id, ownerUserId: input.actorId, actorUserId: input.actorId }, client);
+    }
     return result;
-  });
-  // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
-  if (input.actorId) {
-    await addContentOwner({ contentType: "SECTION", contentId: created.id, ownerUserId: input.actorId, actorUserId: input.actorId });
-  }
-  return created;
+  };
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 // #763 (Layer B): create a section AND its inline figures/images in one call. Ordering matches the
@@ -154,15 +159,15 @@ export async function updateSectionTitle(sectionId: string, title: string) {
   });
 }
 
-export async function updateSectionContent(sectionId: string, bodyMarkdown: string, actorId?: string) {
+export async function updateSectionContent(sectionId: string, bodyMarkdown: string, actorId?: string, tx?: DbTransactionClient) {
   await assertSectionExists(sectionId);
-  return runInTransaction(async (tx) => {
-    const last = await tx.courseSectionVersion.findFirst({
+  const run = async (client: DbTransactionClient) => {
+    const last = await client.courseSectionVersion.findFirst({
       where: { sectionId },
       orderBy: { versionNo: "desc" },
       select: { versionNo: true },
     });
-    const version = await tx.courseSectionVersion.create({
+    const version = await client.courseSectionVersion.create({
       data: {
         sectionId,
         versionNo: (last?.versionNo ?? 0) + 1,
@@ -171,12 +176,13 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
         publishedAt: new Date(),
       },
     });
-    return tx.courseSection.update({
+    return client.courseSection.update({
       where: { id: sectionId },
       data: { activeVersionId: version.id, updatedAt: new Date() },
       include: { activeVersion: true },
     });
-  });
+  };
+  return tx ? run(tx) : runInTransaction(run);
 }
 
 export function getSection(sectionId: string) {

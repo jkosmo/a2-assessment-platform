@@ -36,12 +36,20 @@ vi.mock("../../src/modules/adminContent/adminContentCommands.js", () => ({
   publishModuleVersion,
 }));
 
-vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
-  adminContentRepository: { findModuleTitle },
-}));
+vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => {
+  const repo = { findModuleTitle };
+  // #796: the importer builds its graph on a tx client via createAdminContentRepository(tx).
+  return { adminContentRepository: repo, createAdminContentRepository: () => repo };
+});
 
 vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
+}));
+
+// #796: importModuleFromEnvelope now wraps the import in runInTransaction. Run the callback inline with a
+// throwaway tx client so the unit test needs no database (the module commands are all mocked).
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 // Default stub return values so the SUT can chain .id off the results.
@@ -284,6 +292,7 @@ describe("contentImportService.importModuleFromEnvelope", () => {
       "new-module-id",
       "module-version-id",
       "actor-1",
+      expect.anything(), // #796: the import tx client
     );
   });
 
@@ -341,6 +350,6 @@ describe("contentImportService.importModuleFromEnvelope", () => {
         sourcePublishedBy: "source-admin",
         sourceVersionNo: 7,
       },
-    });
+    }, expect.anything()); // #796: the import tx client
   });
 });

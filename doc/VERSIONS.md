@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.4.0 - 2026-07-25
+
+#796 — content import is now atomic (EPIC #779). A module/course import previously wrote its components
+independently, so a failure partway through left half-imported state behind: standalone modules/sections,
+partial version chains, orphaned asset blobs, and no final course or import audit. Now the whole graph is
+built in ONE transaction:
+
+- `importModuleFromEnvelope` / `importCourseFromEnvelope` run the entire graph build (module(s) + rubric/
+  prompt/mcq versions + module versions + publish flips, and for courses the course + sections + their
+  asset rows + ordered items + publish flip) inside one `runInTransaction` (30s timeout). Any failure
+  rolls the whole import back; the import audit commits in the same transaction.
+- The import-called commands (createModule, create{Rubric,PromptTemplate,McqSet,Module}Version,
+  publishModuleVersion, createCourse, createSection, setCourseItems/Modules, publishCourse, addContentOwner)
+  gained an optional external tx client, and their precondition READS run on that tx client during an
+  import so they see rows created earlier in the same transaction.
+- Section-asset blobs are STAGED before the transaction (validate + upload, no DB), keyed by the section's
+  pre-generated id, so no blob I/O happens inside the tx; the `SectionAsset` rows are created in-tx from
+  the staged data, and a rolled-back import reclaims every staged blob (no orphaned storage).
+
+No schema change (pure code) and no behaviour change outside the import path — the optional tx args are
+omitted everywhere else. Proof: `test/m2-import-atomicity` (real Postgres) — mid-graph failures persist
+nothing, successes persist the full graph + audit; the existing export/import round-trips (incl. SVG asset
+remapping) stay green. #726 + #795 (the rest of the #779 durability batch) follow separately.
+
 ## 2.3.1 - 2026-07-25
 
 #856 — assessment-job heartbeat wedge hardening (follow-up to #792). The 2.3.0 stage deploy's smoke test
