@@ -161,6 +161,28 @@ model IdempotencyKey {
   @@index([expiresAt])
 }
 
+// #795: transactional outbox for the post-decision side effects (participant notification + course-
+// completion check) that were previously fire-and-forget — a SIGTERM/crash after the job was marked
+// SUCCEEDED but before those promises settled lost the email/completion with no retry. Now the decision
+// path enqueues a durable OutboxEvent, and a delivery worker leases pending rows and delivers them with
+// bounded retries (the handlers are idempotent, so re-delivery is safe).
+model OutboxEvent {
+  id          String    @id @default(cuid())
+  type        String // "assessment_notification" | "course_completion_check"
+  payloadJson String
+  status      String    @default("pending") // "pending" | "delivered" | "failed"
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  availableAt DateTime  @default(now())
+  lockedBy    String?
+  lockedAt    DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  deliveredAt DateTime?
+
+  @@index([status, availableAt])
+}
+
 model DeletionRequest {
   id           String                @id @default(cuid())
   userId       String

@@ -135,6 +135,9 @@ const envSchema = z.object({
   // the deadline the runner fails/retries the job (fenced) so the tick returns instead of wedging.
   ASSESSMENT_JOB_MAX_RUNTIME_MS: z.coerce.number().int().positive().default(300000),
   ASSESSMENT_JOB_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(600000),
+  // #795: outbox delivery worker cadence + lease.
+  OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  OUTBOX_LEASE_DURATION_MS: z.coerce.number().int().positive().default(60000),
   PARSER_WORKER_URL: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().url().optional(),
