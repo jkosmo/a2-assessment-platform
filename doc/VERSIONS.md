@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.3.1 - 2026-07-25
+
+#856 — assessment-job heartbeat wedge hardening (follow-up to #792). The 2.3.0 stage deploy's smoke test
+failed on a wedged worker: a single leftover assessment job sat RUNNING for ~14 min with the #792 lease
+heartbeat renewing its lease forever, so the stale-lock scanner could never reclaim it (before #792 the
+lease would have expired → reset → retry). The `assessmentWorker` monitor tick ran past its 60 s wedge
+window → `/healthz` 503. A manual worker restart cleared it (not systemic — a leftover job, most likely a
+DB lock-wait against a zombie connection from the killed prior container, NOT the LLM, which self-aborts
+at `AZURE_OPENAI_TIMEOUT_MS`). Hardening so this self-recovers instead of failing deploys:
+
+- **Per-job runtime deadline** (`ASSESSMENT_JOB_MAX_RUNTIME_MS`, default 300 s). The runner races
+  `runAssessment` against the deadline; on timeout it abandons the run and takes the fenced failure path
+  (retry/fail), so the poll tick returns instead of wedging. Set above the worst-case legit assessment
+  (primary + secondary LLM ≈ 2 × `AZURE_OPENAI_TIMEOUT_MS`). Residual: the abandoned run cannot be
+  cancelled, so if it later completes it may write a duplicate decision — narrow (job must exceed 300 s
+  AND then succeed); tracked in #856.
+- **Wedge window decoupled from poll interval.** `MonitorHealthSnapshot.maxTickMs` lets the assessment
+  worker declare its true max tick (job-runtime cap + grace) instead of deriving a 60 s window from its
+  4 s poll interval — so a legitimately slow assessment (up to ~240 s) is no longer falsely wedged.
+- **A running tick is never "stalled".** `evaluateWorkerHealth` now treats an in-flight tick within its
+  budget as healthy (was falling through to the stale check and mis-flagging a minutes-long job as
+  stalled once its last completed cycle aged past the stale window).
+
 ## 2.3.0 - 2026-07-25
 
 M5 concurrency & atomicity cluster (option 2) — eliminate lost-update races and audit/state divergence

@@ -141,6 +141,41 @@ describe("evaluateWorkerHealth (#809)", () => {
     expect(report.healthy).toBe(false);
     expect(report.monitors.find((m) => m.name === "stuck")?.healthy).toBe(false);
   });
+
+  // #856: the assessment worker's tick spans a full job execution, so `maxTickMs` overrides the tiny
+  // interval-derived wedge window (a 4 s poller would otherwise be "wedged" at 60 s).
+  it("maxTickMs: a long-but-legitimate tick within the job runtime cap is OK, not wedged", () => {
+    const report = evaluateWorkerHealth(
+      [snap({ intervalMs: 4_000, running: true, tickStartedAt: iso(200_000), maxTickMs: 360_000 })],
+      NOW,
+      START,
+    );
+    expect(report.healthy).toBe(true);
+    expect(report.monitors[0].reason).toBe("ok");
+    expect(report.monitors[0].runningMs).toBe(200_000);
+  });
+
+  it("maxTickMs: a tick running past the cap is wedged (backstop for a broken runtime deadline)", () => {
+    const report = evaluateWorkerHealth(
+      [snap({ intervalMs: 4_000, running: true, tickStartedAt: iso(400_000), maxTickMs: 360_000 })],
+      NOW,
+      START,
+    );
+    expect(report.healthy).toBe(false);
+    expect(report.monitors[0].reason).toBe("wedged");
+  });
+
+  // #856: an actively-running tick is never "stalled" — the loop is plainly alive. Before this, a job
+  // running for minutes (so lastCycleAt is old) fell through to the stale check and was mis-flagged.
+  it("an in-flight tick within budget is OK even when its last completed cycle is old (not stalled)", () => {
+    const report = evaluateWorkerHealth(
+      [snap({ intervalMs: 4_000, running: true, tickStartedAt: iso(120_000), lastCycleAt: iso(120_000), maxTickMs: 360_000 })],
+      NOW,
+      START,
+    );
+    expect(report.healthy).toBe(true);
+    expect(report.monitors[0].reason).toBe("ok");
+  });
 });
 
 // #809: the monitor's health() snapshot must expose the in-flight tick so a wedge is detectable.
