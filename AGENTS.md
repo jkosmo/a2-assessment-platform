@@ -62,6 +62,7 @@ These rules exist because their violation caused or worsened the May 2026 produc
 10. **Always** confirm staging `/healthz` is healthy before a production deploy.
 11. **Always** propose `az deployment group what-if` output for staging (and prod) before implementing non-trivial Bicep changes. ARM what-if is the only check that catches schema drift before deploy.
 12. **Always** apply credential changes atomically: a KV secret and the underlying resource (PostgreSQL server, Storage account, etc.) must be updated in the same deploy, or one must explicitly re-read the existing value. Drift between KV and the underlying resource is silent until the next app restart.
+13. **Always** keep DB migrations expand/contract-safe (#811). Both web and worker run `prisma migrate deploy` on startup (`SKIP_MIGRATE=false`), so during a rollout old containers run against the new schema and new code runs briefly against the old schema. **Expand within a deploy** (additive only); **contract in a follow-up deploy** (drop/rename only after all code using the object is gone). Never combine an additive and a destructive change to the same object in one deploy. See `doc/OPERATIONS_RUNBOOK.md` → "Migrations and Schema Changes".
 
 ---
 

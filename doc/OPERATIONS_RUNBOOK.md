@@ -202,11 +202,14 @@ Use:
 - `GET /healthz`
 - `GET /version`
 
-`/healthz` confirms the HTTP app is up.
-It does not prove:
-- database connectivity
-- worker health
+`/healthz` is a **readiness probe (#809, 2026-07-25):** it returns `200 {status:"ok"}` only when the DB is
+reachable (a `SELECT 1` probe, cached 5s, bounded by a 2s timeout), and `503 {status:"degraded"}` when the
+DB is unreachable. It was previously a static `200` stub that returned as soon as Express bound the port —
+which masked a bound-but-broken web and made the health check / deploy smoke test meaningless. It still
+does NOT prove:
+- worker health (use the worker `/healthz`)
 - queue drain behavior
+- that migrations finished (they run before the app starts, so a ready `/healthz` implies they did)
 
 ### Worker app
 
@@ -240,15 +243,27 @@ Use logs and queue signals for deeper worker health assessment.
 
 ### Production and staging
 
-Current expectation:
-- the web role owns runtime schema application
-- worker role skips migrations
+Current expectation (updated by #811, 2026-07-25):
+- **both the web AND worker roles run `prisma migrate deploy` on startup** (`SKIP_MIGRATE=false` on
+  both). Prisma serializes concurrent migrate deploys with an advisory lock, so web + worker migrating on
+  the same deploy is safe (one applies, the other sees "up to date").
+- **Why the worker migrates too (#811):** previously the worker had `SKIP_MIGRATE=true` and relied on web
+  to migrate first. On a deploy the new worker container could start and process a job *before* web
+  applied the migration → a missing column failed/partial-processed the job. Now each role's runtime only
+  starts after its own migrate completes, so new code never runs against an un-migrated schema.
 
-Normal deploy path:
-- deploy artifact
-- web role starts
-- `prisma migrate deploy` runs
-- app starts
+Normal deploy path (per role):
+- deploy artifact → container starts → `scripts/runtime/startup.mjs` runs `prisma migrate deploy` → app starts.
+
+**Migrations MUST be expand/contract-safe (deploy invariant):**
+- **Expand within a deploy** — additive only (add columns/tables/indexes). Old (still-running) containers
+  must keep working against the NEW schema during the rollout overlap, and the new code must tolerate the
+  OLD schema for the brief window before its own migrate completes.
+- **Contract in a FOLLOW-UP deploy** — drop/rename a column or table only after every container running
+  code that used it is gone. Never combine an additive change and a destructive change to the same object
+  in one deploy.
+- A destructive migration bundled with code that still reads the dropped object will error on the old
+  containers mid-rollout (this class caused the 2026-05-21 incident).
 
 Compatibility fallback:
 - `PRISMA_RUNTIME_ALLOW_DB_PUSH_FALLBACK=true` allows a non-production fallback to `prisma db push`
@@ -275,6 +290,38 @@ npm run prisma:generate
 ```
 
 Never edit an already-applied migration in place.
+
+## Audit Hash Chain Maintenance (#804)
+
+The audit log is a tamper-evident hash chain (`AuditEvent.payloadHash` covers `prevHash | actor |
+timestamp | content`; `chainSeq` gives the order). Appends are serialized by a Postgres advisory lock in
+`recordAuditEvent`, so the chain stays linear under concurrency.
+
+**One-time backfill after deploying #804 to an environment.** The additive migration adds `chainSeq` +
+`prevHash` but leaves pre-#804 rows unsealed; `verifyAuditChain` fails on them until they're re-sealed. New
+rows chain forward regardless, but run the backfill once per env so the whole table verifies:
+
+```bash
+# against whatever DATABASE_URL is set — target the env explicitly
+dotenv -e .env.<env> -- npm run maint:backfill-audit-chain   # re-seals existing rows
+dotenv -e .env.<env> -- npm run maint:verify-audit-chain     # exits non-zero if the chain is broken
+```
+
+**Historical PII scrub (#806)** — one-time, removes email/name left in old audit metadata (idempotent;
+0 = nothing to clean). It re-seals the chain internally:
+
+```bash
+dotenv -e .env.<env> -- npm run maint:scrub-audit-pii
+```
+
+**Running these against PRODUCTION** needs a temporary Postgres firewall rule for your IP, and the prod RG
+has a `CanNotDelete` lock that blocks *deleting* the temp rule. See the operator memory
+`prod-db-firewall-lock-gotcha` for the exact create → run → remove-lock → delete-rule → **re-create-lock**
+→ verify recipe (and switch subscription: prod sub `5b3f760b-…`, KV `a2-prd-kv-hea5kl`). Always re-verify
+the RG lock is restored afterward. As of 2026-07-25 the prod backfill re-sealed 90 rows; scrub = 0.
+
+**Verification is also a maintenance script** — schedule or run `maint:verify-audit-chain` ad hoc to detect
+tampering (a non-zero exit means a row was edited/removed/reordered).
 
 ## Seed Behavior
 
