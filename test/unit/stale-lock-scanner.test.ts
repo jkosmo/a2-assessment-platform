@@ -7,12 +7,15 @@ const logOperationalEvent = vi.fn();
 
 const findLongRunningJobs = vi.fn();
 
-vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: {
-    findExpiredRunningJobs,
-    resetExpiredJob,
-    findLongRunningJobs,
-  },
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
+  const repo = { findExpiredRunningJobs, resetExpiredJob, findLongRunningJobs };
+  // #803: resetExpiredJob + its audit now run inside runInTransaction via createAssessmentJobRepository(tx).
+  return { assessmentJobRepository: repo, createAssessmentJobRepository: () => repo };
+});
+
+// #803: run the transaction callback inline with a throwaway tx client.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 vi.mock("../../src/config/env.js", () => ({
@@ -73,6 +76,7 @@ describe("stale-lock scanner", () => {
         action: "assessment_job_stale_lock_reset",
         metadata: expect.objectContaining({ outcome: "PENDING" }),
       }),
+      expect.anything(),
     );
     expect(logOperationalEvent).toHaveBeenCalledWith(
       "assessment_job_stale_lock_detected",
@@ -100,6 +104,7 @@ describe("stale-lock scanner", () => {
         action: "assessment_job_stale_lock_failed",
         metadata: expect.objectContaining({ outcome: "FAILED" }),
       }),
+      expect.anything(),
     );
   });
 

@@ -65,28 +65,31 @@ export async function createSection(input: {
         publishedAt: input.draft ? null : new Date(),
       },
     });
-    if (input.draft) {
-      return tx.courseSection.findUniqueOrThrow({
-        where: { id: section.id },
-        include: { activeVersion: true },
-      });
-    }
-    return tx.courseSection.update({
-      where: { id: section.id },
-      data: { activeVersionId: version.id },
-      include: { activeVersion: true },
-    });
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.courseSection,
-    entityId: created.id,
-    action: auditActions.section.created,
-    actorId: input.actorId,
-    metadata: {
-      sectionId: created.id,
-      draft: Boolean(input.draft),
-      ...agentAuthoringAuditMetadata(input.agent),
-    },
+    const result = input.draft
+      ? await tx.courseSection.findUniqueOrThrow({
+          where: { id: section.id },
+          include: { activeVersion: true },
+        })
+      : await tx.courseSection.update({
+          where: { id: section.id },
+          data: { activeVersionId: version.id },
+          include: { activeVersion: true },
+        });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.courseSection,
+        entityId: result.id,
+        action: auditActions.section.created,
+        actorId: input.actorId,
+        metadata: {
+          sectionId: result.id,
+          draft: Boolean(input.draft),
+          ...agentAuthoringAuditMetadata(input.agent),
+        },
+      },
+      tx,
+    );
+    return result;
   });
   // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
   if (input.actorId) {
@@ -213,17 +216,23 @@ export async function publishSection(sectionId: string, actorId?: string) {
   if (!latest) {
     throw new ValidationError("Seksjonen har ikke noe innhold å publisere.");
   }
-  const updated = await prisma.courseSection.update({
-    where: { id: sectionId },
-    data: { activeVersionId: latest.id },
-    include: { activeVersion: true },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.courseSection,
-    entityId: sectionId,
-    action: auditActions.section.published,
-    actorId,
-    metadata: { sectionId },
+  const updated = await runInTransaction(async (tx) => {
+    const section = await tx.courseSection.update({
+      where: { id: sectionId },
+      data: { activeVersionId: latest.id },
+      include: { activeVersion: true },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.courseSection,
+        entityId: sectionId,
+        action: auditActions.section.published,
+        actorId,
+        metadata: { sectionId },
+      },
+      tx,
+    );
+    return section;
   });
   return updated;
 }
@@ -232,17 +241,23 @@ export async function publishSection(sectionId: string, actorId?: string) {
 export async function unpublishSection(sectionId: string, actorId?: string) {
   await assertSectionExists(sectionId);
   await assertSectionNotInAnyCourse(sectionId, "avpubliseres");
-  const updated = await prisma.courseSection.update({
-    where: { id: sectionId },
-    data: { activeVersionId: null },
-    include: { activeVersion: true },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.courseSection,
-    entityId: sectionId,
-    action: auditActions.section.unpublished,
-    actorId,
-    metadata: { sectionId },
+  const updated = await runInTransaction(async (tx) => {
+    const section = await tx.courseSection.update({
+      where: { id: sectionId },
+      data: { activeVersionId: null },
+      include: { activeVersion: true },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.courseSection,
+        entityId: sectionId,
+        action: auditActions.section.unpublished,
+        actorId,
+        metadata: { sectionId },
+      },
+      tx,
+    );
+    return section;
   });
   return updated;
 }
@@ -260,17 +275,23 @@ export async function archiveSection(sectionId: string, actorId?: string) {
     throw new ValidationError("Seksjonen er allerede arkivert.");
   }
   await assertSectionNotInAnyCourse(sectionId, "arkiveres");
-  const updated = await prisma.courseSection.update({
-    where: { id: sectionId },
-    data: { archivedAt: new Date(), activeVersionId: null },
-    include: { activeVersion: true },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.courseSection,
-    entityId: sectionId,
-    action: auditActions.section.archived,
-    actorId,
-    metadata: { sectionId },
+  const updated = await runInTransaction(async (tx) => {
+    const section = await tx.courseSection.update({
+      where: { id: sectionId },
+      data: { archivedAt: new Date(), activeVersionId: null },
+      include: { activeVersion: true },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.courseSection,
+        entityId: sectionId,
+        action: auditActions.section.archived,
+        actorId,
+        metadata: { sectionId },
+      },
+      tx,
+    );
+    return section;
   });
   return updated;
 }
@@ -287,17 +308,23 @@ export async function restoreSection(sectionId: string, actorId?: string) {
   if (!section.archivedAt) {
     throw new ValidationError("Seksjonen er ikke arkivert.");
   }
-  const updated = await prisma.courseSection.update({
-    where: { id: sectionId },
-    data: { archivedAt: null },
-    include: { activeVersion: true },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.courseSection,
-    entityId: sectionId,
-    action: auditActions.section.restored,
-    actorId,
-    metadata: { sectionId },
+  const updated = await runInTransaction(async (tx) => {
+    const section = await tx.courseSection.update({
+      where: { id: sectionId },
+      data: { archivedAt: null },
+      include: { activeVersion: true },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.courseSection,
+        entityId: sectionId,
+        action: auditActions.section.restored,
+        actorId,
+        metadata: { sectionId },
+      },
+      tx,
+    );
+    return section;
   });
   return updated;
 }

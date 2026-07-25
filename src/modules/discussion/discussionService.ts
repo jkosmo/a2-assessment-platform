@@ -1,6 +1,7 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../../db/prismaRuntime.js";
 import { prisma } from "../../db/prisma.js";
+import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { ForbiddenError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -207,26 +208,33 @@ export async function createThread(params: {
   const course = await loadAccessibleCourse(params.courseId, params.access);
   await assertScopeWritable(course, params.courseItemId);
 
-  const thread = await prisma.discussionThread.create({
-    data: {
-      courseId: course.id,
-      courseItemId: params.courseItemId,
-      authorId: params.access.userId,
-      kind: params.kind,
-      title: params.title,
-      bodyMarkdown: params.bodyMarkdown,
-      // Forfatter abonnerer automatisk på egen tråd (#495 §4).
-      subscriptions: { create: { userId: params.access.userId } },
-    },
-    select: threadDetailSelect,
-  });
+  const thread = await runInTransaction(async (tx) => {
+    const created = await tx.discussionThread.create({
+      data: {
+        courseId: course.id,
+        courseItemId: params.courseItemId,
+        authorId: params.access.userId,
+        kind: params.kind,
+        title: params.title,
+        bodyMarkdown: params.bodyMarkdown,
+        // Forfatter abonnerer automatisk på egen tråd (#495 §4).
+        subscriptions: { create: { userId: params.access.userId } },
+      },
+      select: threadDetailSelect,
+    });
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.discussionThread,
-    entityId: thread.id,
-    action: auditActions.discussion.threadCreated,
-    actorId: params.access.userId,
-    metadata: { courseId: course.id, courseItemId: params.courseItemId, kind: params.kind },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.discussionThread,
+        entityId: created.id,
+        action: auditActions.discussion.threadCreated,
+        actorId: params.access.userId,
+        metadata: { courseId: course.id, courseItemId: params.courseItemId, kind: params.kind },
+      },
+      tx,
+    );
+
+    return created;
   });
 
   // #495/T-QA-5: nytt spørsmål varsler kursets SMO-er. Svelg feil — varsling skal aldri velte
@@ -292,7 +300,7 @@ export async function updateThread(params: {
   }
 
   const data: Record<string, unknown> = {};
-  const auditCalls: Array<() => Promise<void>> = [];
+  const auditCalls: Array<(tx: DbTransactionClient) => Promise<void>> = [];
 
   // 1) Innholdsredigering — kun forfatter.
   if (params.patch.title !== undefined || params.patch.bodyMarkdown !== undefined) {
@@ -301,14 +309,17 @@ export async function updateThread(params: {
     }
     if (params.patch.title !== undefined) data.title = params.patch.title;
     if (params.patch.bodyMarkdown !== undefined) data.bodyMarkdown = params.patch.bodyMarkdown;
-    auditCalls.push(() =>
-      recordAuditEvent({
-        entityType: auditEntityTypes.discussionThread,
-        entityId: thread.id,
-        action: auditActions.discussion.threadEdited,
-        actorId: params.access.userId,
-        metadata: { courseId: course.id, threadId: thread.id },
-      }),
+    auditCalls.push((tx) =>
+      recordAuditEvent(
+        {
+          entityType: auditEntityTypes.discussionThread,
+          entityId: thread.id,
+          action: auditActions.discussion.threadEdited,
+          actorId: params.access.userId,
+          metadata: { courseId: course.id, threadId: thread.id },
+        },
+        tx,
+      ),
     );
   }
 
@@ -318,14 +329,17 @@ export async function updateThread(params: {
       throw new ForbiddenError("Only a moderator can pin threads.", "forbidden");
     }
     data.pinnedAt = params.patch.pinned ? new Date() : null;
-    auditCalls.push(() =>
-      recordAuditEvent({
-        entityType: auditEntityTypes.discussionThread,
-        entityId: thread.id,
-        action: auditActions.discussion.threadModerated,
-        actorId: params.access.userId,
-        metadata: { courseId: course.id, threadId: thread.id, change: params.patch.pinned ? "pinned" : "unpinned" },
-      }),
+    auditCalls.push((tx) =>
+      recordAuditEvent(
+        {
+          entityType: auditEntityTypes.discussionThread,
+          entityId: thread.id,
+          action: auditActions.discussion.threadModerated,
+          actorId: params.access.userId,
+          metadata: { courseId: course.id, threadId: thread.id, change: params.patch.pinned ? "pinned" : "unpinned" },
+        },
+        tx,
+      ),
     );
   }
 
@@ -335,14 +349,17 @@ export async function updateThread(params: {
       throw new ForbiddenError("Only a moderator can lock threads.", "forbidden");
     }
     data.status = params.patch.lock ? "LOCKED" : "OPEN";
-    auditCalls.push(() =>
-      recordAuditEvent({
-        entityType: auditEntityTypes.discussionThread,
-        entityId: thread.id,
-        action: auditActions.discussion.threadModerated,
-        actorId: params.access.userId,
-        metadata: { courseId: course.id, threadId: thread.id, change: params.patch.lock ? "locked" : "unlocked" },
-      }),
+    auditCalls.push((tx) =>
+      recordAuditEvent(
+        {
+          entityType: auditEntityTypes.discussionThread,
+          entityId: thread.id,
+          action: auditActions.discussion.threadModerated,
+          actorId: params.access.userId,
+          metadata: { courseId: course.id, threadId: thread.id, change: params.patch.lock ? "locked" : "unlocked" },
+        },
+        tx,
+      ),
     );
   }
 
@@ -357,14 +374,17 @@ export async function updateThread(params: {
     if (params.patch.acceptedReplyId === null) {
       data.acceptedReplyId = null;
       data.status = "OPEN";
-      auditCalls.push(() =>
-        recordAuditEvent({
-          entityType: auditEntityTypes.discussionThread,
-          entityId: thread.id,
-          action: auditActions.discussion.threadModerated,
-          actorId: params.access.userId,
-          metadata: { courseId: course.id, threadId: thread.id, change: "answer_unaccepted" },
-        }),
+      auditCalls.push((tx) =>
+        recordAuditEvent(
+          {
+            entityType: auditEntityTypes.discussionThread,
+            entityId: thread.id,
+            action: auditActions.discussion.threadModerated,
+            actorId: params.access.userId,
+            metadata: { courseId: course.id, threadId: thread.id, change: "answer_unaccepted" },
+          },
+          tx,
+        ),
       );
     } else {
       const reply = await prisma.discussionReply.findFirst({
@@ -377,14 +397,17 @@ export async function updateThread(params: {
       data.acceptedReplyId = reply.id;
       data.status = "RESOLVED";
       const replyId = reply.id;
-      auditCalls.push(() =>
-        recordAuditEvent({
-          entityType: auditEntityTypes.discussionThread,
-          entityId: thread.id,
-          action: auditActions.discussion.answerAccepted,
-          actorId: params.access.userId,
-          metadata: { courseId: course.id, threadId: thread.id, replyId },
-        }),
+      auditCalls.push((tx) =>
+        recordAuditEvent(
+          {
+            entityType: auditEntityTypes.discussionThread,
+            entityId: thread.id,
+            action: auditActions.discussion.answerAccepted,
+            actorId: params.access.userId,
+            metadata: { courseId: course.id, threadId: thread.id, replyId },
+          },
+          tx,
+        ),
       );
     }
   }
@@ -394,8 +417,10 @@ export async function updateThread(params: {
     return await detailDtoWithSubscription(thread, viewer);
   }
 
-  await prisma.discussionThread.update({ where: { id: thread.id }, data });
-  for (const call of auditCalls) await call();
+  await runInTransaction(async (tx) => {
+    await tx.discussionThread.update({ where: { id: thread.id }, data });
+    for (const call of auditCalls) await call(tx);
+  });
 
   const updated = await loadThreadInCourse(course.id, thread.id);
   return await detailDtoWithSubscription(updated, viewer);
@@ -413,16 +438,21 @@ export async function deleteThread(params: {
     throw new ForbiddenError("You cannot delete this thread.", "forbidden");
   }
   if (thread.deletedAt) return; // idempotent
-  await prisma.discussionThread.update({
-    where: { id: thread.id },
-    data: { deletedAt: new Date(), deletedById: params.access.userId },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.discussionThread,
-    entityId: thread.id,
-    action: auditActions.discussion.threadDeleted,
-    actorId: params.access.userId,
-    metadata: { courseId: course.id, threadId: thread.id },
+  await runInTransaction(async (tx) => {
+    await tx.discussionThread.update({
+      where: { id: thread.id },
+      data: { deletedAt: new Date(), deletedById: params.access.userId },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.discussionThread,
+        entityId: thread.id,
+        action: auditActions.discussion.threadDeleted,
+        actorId: params.access.userId,
+        metadata: { courseId: course.id, threadId: thread.id },
+      },
+      tx,
+    );
   });
 }
 
@@ -454,14 +484,16 @@ export async function createReply(params: {
       create: { threadId: thread.id, userId: params.access.userId },
       update: {},
     });
-  });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.discussionReply,
-    entityId: thread.id,
-    action: auditActions.discussion.replyCreated,
-    actorId: params.access.userId,
-    metadata: { courseId: course.id, threadId: thread.id },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.discussionReply,
+        entityId: thread.id,
+        action: auditActions.discussion.replyCreated,
+        actorId: params.access.userId,
+        metadata: { courseId: course.id, threadId: thread.id },
+      },
+      tx,
+    );
   });
 
   // #495/T-QA-5: nytt svar varsler trådens abonnenter (ekskl. svarets forfatter). Best-effort.
@@ -505,16 +537,21 @@ export async function updateReply(params: {
   if (reply.authorId !== params.access.userId) {
     throw new ForbiddenError("Only the author can edit this reply.", "forbidden");
   }
-  await prisma.discussionReply.update({
-    where: { id: reply.id },
-    data: { bodyMarkdown: params.bodyMarkdown },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.discussionReply,
-    entityId: reply.id,
-    action: auditActions.discussion.replyEdited,
-    actorId: params.access.userId,
-    metadata: { courseId: course.id, threadId: params.threadId },
+  await runInTransaction(async (tx) => {
+    await tx.discussionReply.update({
+      where: { id: reply.id },
+      data: { bodyMarkdown: params.bodyMarkdown },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.discussionReply,
+        entityId: reply.id,
+        action: auditActions.discussion.replyEdited,
+        actorId: params.access.userId,
+        metadata: { courseId: course.id, threadId: params.threadId },
+      },
+      tx,
+    );
   });
   const updated = await loadThreadInCourse(course.id, params.threadId);
   return await detailDtoWithSubscription(updated, viewerOf(params.access));
@@ -533,16 +570,21 @@ export async function deleteReply(params: {
     throw new ForbiddenError("You cannot delete this reply.", "forbidden");
   }
   if (reply.deletedAt) return; // idempotent
-  await prisma.discussionReply.update({
-    where: { id: reply.id },
-    data: { deletedAt: new Date(), deletedById: params.access.userId },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.discussionReply,
-    entityId: reply.id,
-    action: auditActions.discussion.replyDeleted,
-    actorId: params.access.userId,
-    metadata: { courseId: course.id, threadId: params.threadId },
+  await runInTransaction(async (tx) => {
+    await tx.discussionReply.update({
+      where: { id: reply.id },
+      data: { deletedAt: new Date(), deletedById: params.access.userId },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.discussionReply,
+        entityId: reply.id,
+        action: auditActions.discussion.replyDeleted,
+        actorId: params.access.userId,
+        metadata: { courseId: course.id, threadId: params.threadId },
+      },
+      tx,
+    );
   });
 }
 

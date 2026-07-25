@@ -229,30 +229,37 @@ export async function cascadeDeleteCourse(
     //    assignments, discussion threads) are removed by the DB; CourseCompletion is Restrict but
     //    guaranteed empty by the blocker check above.
     await tx.course.delete({ where: { id: courseId } });
+
+    // #803: the cascade-delete audit (one summary event for the course + a per-module deleted event,
+    // consistent with the bulk purge) commits atomically with the deletes. Audit rows have no FK to the
+    // deleted entities, so referencing removed ids is safe.
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.cascadeDeleted,
+        actorId,
+        metadata: { courseId, deletedModuleIds, deletedSectionIds, sparedModuleIds, sparedSectionIds },
+      },
+      tx,
+    );
+    for (const moduleId of deletedModuleIds) {
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.module,
+          entityId: moduleId,
+          action: auditActions.adminContent.moduleDeleted,
+          actorId,
+          metadata: { moduleId, source: "course_cascade_delete" },
+        },
+        tx,
+      );
+    }
   });
 
   // #758: after commit, reclaim the deleted sections' asset blobs (best-effort — a failed blob
   // delete never fails the cascade; the section rows are already gone).
   await reclaimAssetBlobs(sectionBlobPaths);
-
-  // Audit: one summary event for the course, plus a per-module deleted event (consistent with the
-  // bulk purge). Audit rows have no FK to the deleted entities, so referencing removed ids is safe.
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.cascadeDeleted,
-    actorId,
-    metadata: { courseId, deletedModuleIds, deletedSectionIds, sparedModuleIds, sparedSectionIds },
-  });
-  for (const moduleId of deletedModuleIds) {
-    await recordAuditEvent({
-      entityType: auditEntityTypes.module,
-      entityId: moduleId,
-      action: auditActions.adminContent.moduleDeleted,
-      actorId,
-      metadata: { moduleId, source: "course_cascade_delete" },
-    });
-  }
 
   return { deletedCourseId: courseId, deletedModuleIds, deletedSectionIds, sparedModuleIds, sparedSectionIds };
 }

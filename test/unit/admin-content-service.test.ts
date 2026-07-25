@@ -136,7 +136,7 @@ describe("admin content service", () => {
         validFrom: "2026-03-01T00:00:00.000Z",
         validTo: "2027-03-01T00:00:00.000Z",
       },
-    });
+    }, expect.anything());
     expect(result).toEqual({
       id: "module-1",
       title: "Module One",
@@ -346,7 +346,7 @@ describe("admin content service", () => {
         moduleId: "module-1",
         title: "Module One",
       },
-    });
+    }, expect.anything());
     expect(result).toEqual({
       id: "module-1",
       title: "Module One",
@@ -471,7 +471,7 @@ describe("admin content service", () => {
         benchmarkExampleCount: 1,
         versionNo: 5,
       },
-    });
+    }, expect.anything());
     expect(result).toEqual({
       id: "prompt-5",
       moduleId: "module-1",
@@ -519,7 +519,7 @@ describe("admin content service", () => {
         previousActiveVersionId: "module-version-2",
         publishedAt: "2026-03-11T12:30:00.000Z",
       },
-    });
+    }, expect.anything());
     expect(result).toEqual({
       id: "module-version-3",
       moduleId: "module-1",

@@ -20,8 +20,8 @@ const findLongRunningJobs = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: {
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
+  const repo = {
     findNextRunnableJob,
     tryLockPendingJob,
     markJobSucceeded,
@@ -34,7 +34,15 @@ vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
     findPendingOrRunningJobForSubmission: vi.fn(),
     findPendingOrRunningJobIdForSubmission: vi.fn(),
     createAssessmentJob: vi.fn(),
-  },
+  };
+  // #803: stale-lock reset + retry/failure terminal writes now run inside runInTransaction via
+  // createAssessmentJobRepository(tx); the factory returns the same mock spies.
+  return { assessmentJobRepository: repo, createAssessmentJobRepository: () => repo };
+});
+
+// #803: run the transaction callback inline with a throwaway tx client.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
@@ -93,6 +101,7 @@ describe("stale-lock recovery path", () => {
         entityId: "job-1",
         action: "assessment_job_stale_lock_reset",
       }),
+      expect.anything(),
     );
 
     // Runner then picked up and completed the (now-PENDING) job
@@ -120,6 +129,7 @@ describe("stale-lock recovery path", () => {
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: "assessment_job_stale_lock_failed" }),
+      expect.anything(),
     );
     expect(runAssessment).not.toHaveBeenCalled();
   });

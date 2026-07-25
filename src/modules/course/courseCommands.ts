@@ -16,22 +16,28 @@ export async function createCourse(input: {
   // AA-5 (#653): agent-orchestrated creates carry a trace in the audit metadata.
   agent?: AgentAuthoringContext;
 }) {
-  const course = await prisma.course.create({
-    data: {
-      title: input.title,
-      description: input.description ?? null,
-      certificationLevel: input.certificationLevel ?? null,
-      ...(input.enrollmentPolicy ? { enrollmentPolicy: input.enrollmentPolicy } : {}),
-      ...(input.discussionsEnabled !== undefined ? { discussionsEnabled: input.discussionsEnabled } : {}),
-    },
-  });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: course.id,
-    action: auditActions.course.created,
-    actorId: input.actorId,
-    metadata: { courseId: course.id, ...agentAuthoringAuditMetadata(input.agent) },
+  // #803: create + its audit commit atomically.
+  const course = await runInTransaction(async (tx) => {
+    const created = await tx.course.create({
+      data: {
+        title: input.title,
+        description: input.description ?? null,
+        certificationLevel: input.certificationLevel ?? null,
+        ...(input.enrollmentPolicy ? { enrollmentPolicy: input.enrollmentPolicy } : {}),
+        ...(input.discussionsEnabled !== undefined ? { discussionsEnabled: input.discussionsEnabled } : {}),
+      },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: created.id,
+        action: auditActions.course.created,
+        actorId: input.actorId,
+        metadata: { courseId: created.id, ...agentAuthoringAuditMetadata(input.agent) },
+      },
+      tx,
+    );
+    return created;
   });
 
   // #787 slice 4a: the creator becomes the sole initial owner (Q3 decision). Inert until enforcement
@@ -55,19 +61,25 @@ export async function updateCourse(
   },
   actorId?: string,
 ) {
-  const course = await prisma.course.update({ where: { id: courseId }, data: input });
   // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.updated,
-    actorId,
-    metadata: {
-      courseId,
-      changedFields: Object.keys(input).filter((key) => input[key as keyof typeof input] !== undefined),
-    },
+  // #803: update + audit commit atomically.
+  return runInTransaction(async (tx) => {
+    const course = await tx.course.update({ where: { id: courseId }, data: input });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.updated,
+        actorId,
+        metadata: {
+          courseId,
+          changedFields: Object.keys(input).filter((key) => input[key as keyof typeof input] !== undefined),
+        },
+      },
+      tx,
+    );
+    return course;
   });
-  return course;
 }
 
 export async function publishCourse(courseId: string, actorId?: string) {
@@ -80,20 +92,24 @@ export async function publishCourse(courseId: string, actorId?: string) {
     throw new ValidationError("Cannot publish a course with no modules.");
   }
 
-  const updated = await prisma.course.update({
-    where: { id: courseId },
-    data: { publishedAt: new Date() },
+  // #803: publish + audit commit atomically.
+  return runInTransaction(async (tx) => {
+    const updated = await tx.course.update({
+      where: { id: courseId },
+      data: { publishedAt: new Date() },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.published,
+        actorId,
+        metadata: { courseId },
+      },
+      tx,
+    );
+    return updated;
   });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.published,
-    actorId,
-    metadata: { courseId },
-  });
-
-  return updated;
 }
 
 // #705: avpubliser et kurs (motstykke til publishCourse). Symmetri med modul/seksjon.
@@ -104,20 +120,24 @@ export async function unpublishCourse(courseId: string, actorId?: string) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
-  const updated = await prisma.course.update({
-    where: { id: courseId },
-    data: { publishedAt: null },
+  // #803: unpublish + audit commit atomically.
+  return runInTransaction(async (tx) => {
+    const updated = await tx.course.update({
+      where: { id: courseId },
+      data: { publishedAt: null },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.unpublished,
+        actorId,
+        metadata: { courseId },
+      },
+      tx,
+    );
+    return updated;
   });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.unpublished,
-    actorId,
-    metadata: { courseId },
-  });
-
-  return updated;
 }
 
 export async function archiveCourse(courseId: string, actorId?: string) {
@@ -129,36 +149,46 @@ export async function archiveCourse(courseId: string, actorId?: string) {
 
   // I3: arkivering auto-avpubliserer (publishedAt nullstilles) så «arkivert men publisert» aldri
   // oppstår. Gjenopprett (restoreCourse) lander dermed i Utkast.
-  const updated = await prisma.course.update({
-    where: { id: courseId },
-    data: { archivedAt: new Date(), publishedAt: null },
+  // #803: archive + audit commit atomically.
+  return runInTransaction(async (tx) => {
+    const updated = await tx.course.update({
+      where: { id: courseId },
+      data: { archivedAt: new Date(), publishedAt: null },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.archived,
+        actorId,
+        metadata: { courseId },
+      },
+      tx,
+    );
+    return updated;
   });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.archived,
-    actorId,
-    metadata: { courseId },
-  });
-
-  return updated;
 }
 
 // #673: gjenopprett et arkivert kurs (nullstill archivedAt). Motstykke til archiveCourse.
 export async function restoreCourse(courseId: string, actorId?: string) {
-  const updated = await prisma.course.update({
-    where: { id: courseId },
-    data: { archivedAt: null },
+  // #803: restore + audit commit atomically.
+  return runInTransaction(async (tx) => {
+    const updated = await tx.course.update({
+      where: { id: courseId },
+      data: { archivedAt: null },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.restored,
+        actorId,
+        metadata: { courseId },
+      },
+      tx,
+    );
+    return updated;
   });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.restored,
-    actorId,
-    metadata: { courseId },
-  });
-  return updated;
 }
 
 export async function deleteCourse(courseId: string, actorId?: string) {
@@ -177,17 +207,20 @@ export async function deleteCourse(courseId: string, actorId?: string) {
     );
   }
 
+  // #803: delete + audit commit atomically.
   await runInTransaction(async (tx) => {
     await tx.course.delete({ where: { id: courseId } });
-  });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    // #705: a delete is a delete — was previously mislogged as `archived`.
-    action: auditActions.course.deleted,
-    actorId,
-    metadata: { courseId },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        // #705: a delete is a delete — was previously mislogged as `archived`.
+        action: auditActions.course.deleted,
+        actorId,
+        metadata: { courseId },
+      },
+      tx,
+    );
   });
 }
 
@@ -243,13 +276,17 @@ export async function setCourseItems(
       });
     }
     await tx.course.update({ where: { id: courseId }, data: { updatedAt: new Date() } });
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.course.itemsUpdated,
-    actorId: options?.actorId,
-    metadata: { courseId, itemCount: items.length, ...agentAuthoringAuditMetadata(options?.agent) },
+    // #803: itemsUpdated audit commits atomically with the item rewrite.
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.course.itemsUpdated,
+        actorId: options?.actorId,
+        metadata: { courseId, itemCount: items.length, ...agentAuthoringAuditMetadata(options?.agent) },
+      },
+      tx,
+    );
   });
   return result;
 }

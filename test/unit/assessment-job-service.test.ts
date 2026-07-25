@@ -14,8 +14,8 @@ const evaluatePracticalWithLlm = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: {
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
+  const repo = {
     findNextRunnableJob,
     tryLockPendingJob,
     findAssessmentJobWithSubmissionOrThrow,
@@ -28,7 +28,14 @@ vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
     findExpiredRunningJobs: vi.fn().mockResolvedValue([]),
     resetExpiredJob: vi.fn().mockResolvedValue(undefined),
     findLongRunningJobs: vi.fn().mockResolvedValue([]),
-  },
+  };
+  // #803: createLlmEvaluation now runs inside runInTransaction via createAssessmentJobRepository(tx).
+  return { assessmentJobRepository: repo, createAssessmentJobRepository: () => repo };
+});
+
+// #803: run the transaction callback inline with a throwaway tx client.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 vi.mock("../../src/modules/assessment/decisionService.js", () => ({

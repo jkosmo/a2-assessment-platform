@@ -76,29 +76,36 @@ export async function claimManualReview(reviewId: string, reviewerId: string, is
   }
 
   // #791: atomic guarded claim. count===0 → a concurrent reviewer claimed first → we lost the race.
-  const claimResult = await manualReviewRepository.markManualReviewClaimedGuarded(
-    reviewId,
-    reviewerId,
-    ReviewStatus.IN_REVIEW,
-    isAdmin,
-  );
-  if (claimResult.count === 0) {
-    throw new ConflictError("review_already_assigned", "This manual review was just claimed by another reviewer.");
-  }
-  const claimed = await manualReviewRepository.findManualReviewById(reviewId);
+  // #803: the guarded claim + its audit commit atomically.
+  return runInTransaction(async (tx) => {
+    const repo = createManualReviewRepository(tx);
+    const claimResult = await repo.markManualReviewClaimedGuarded(
+      reviewId,
+      reviewerId,
+      ReviewStatus.IN_REVIEW,
+      isAdmin,
+    );
+    if (claimResult.count === 0) {
+      throw new ConflictError("review_already_assigned", "This manual review was just claimed by another reviewer.");
+    }
+    const claimed = await repo.findManualReviewById(reviewId);
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.manualReview,
-    entityId: claimed.id,
-    action: auditActions.manualReview.claimed,
-    actorId: reviewerId,
-    metadata: {
-      submissionId: review.submissionId,
-      reviewStatus: claimed.reviewStatus,
-    },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.manualReview,
+        entityId: claimed.id,
+        action: auditActions.manualReview.claimed,
+        actorId: reviewerId,
+        metadata: {
+          submissionId: review.submissionId,
+          reviewStatus: claimed.reviewStatus,
+        },
+      },
+      tx,
+    );
+
+    return claimed;
   });
-
-  return claimed;
 }
 
 export async function finalizeManualReviewOverride(input: {

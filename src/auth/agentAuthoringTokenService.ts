@@ -9,6 +9,7 @@
 
 import { randomBytes } from "node:crypto";
 import { prisma } from "../db/prisma.js";
+import { runInTransaction } from "../db/transaction.js";
 import { sha256 } from "../utils/hash.js";
 import { recordAuditEvent } from "../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../observability/auditEvents.js";
@@ -31,22 +32,29 @@ export async function issueAgentAuthoringToken(input: {
     Math.max(AGENT_TOKEN_MIN_TTL_MINUTES, input.ttlMinutes ?? AGENT_TOKEN_DEFAULT_TTL_MINUTES),
   );
   const secret = `${AGENT_TOKEN_PREFIX}${randomBytes(24).toString("hex")}`;
-  const record = await prisma.agentAuthoringToken.create({
-    data: {
-      tokenHash: sha256(secret),
-      label: input.label ?? null,
-      userId: input.userId,
-      rolesJson: JSON.stringify(input.roles ?? []),
-      expiresAt: new Date(Date.now() + ttl * 60_000),
-    },
-  });
+  const record = await runInTransaction(async (tx) => {
+    const created = await tx.agentAuthoringToken.create({
+      data: {
+        tokenHash: sha256(secret),
+        label: input.label ?? null,
+        userId: input.userId,
+        rolesJson: JSON.stringify(input.roles ?? []),
+        expiresAt: new Date(Date.now() + ttl * 60_000),
+      },
+    });
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.agentAuthoringToken,
-    entityId: record.id,
-    action: auditActions.agentAuthoring.tokenIssued,
-    actorId: input.userId,
-    metadata: { tokenId: record.id, expiresAt: record.expiresAt.toISOString() },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.agentAuthoringToken,
+        entityId: created.id,
+        action: auditActions.agentAuthoring.tokenIssued,
+        actorId: input.userId,
+        metadata: { tokenId: created.id, expiresAt: created.expiresAt.toISOString() },
+      },
+      tx,
+    );
+
+    return created;
   });
 
   // The secret exists only in this return value — it is never persisted or logged.
@@ -96,16 +104,22 @@ export async function revokeAgentAuthoringToken(input: {
   if (token.userId !== input.actorUserId && !input.roles.includes("ADMINISTRATOR")) return null;
   if (token.revokedAt) return token;
 
-  const revoked = await prisma.agentAuthoringToken.update({
-    where: { id: token.id },
-    data: { revokedAt: new Date() },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.agentAuthoringToken,
-    entityId: token.id,
-    action: auditActions.agentAuthoring.tokenRevoked,
-    actorId: input.actorUserId,
-    metadata: { tokenId: token.id },
+  const revoked = await runInTransaction(async (tx) => {
+    const updated = await tx.agentAuthoringToken.update({
+      where: { id: token.id },
+      data: { revokedAt: new Date() },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.agentAuthoringToken,
+        entityId: token.id,
+        action: auditActions.agentAuthoring.tokenRevoked,
+        actorId: input.actorUserId,
+        metadata: { tokenId: token.id },
+      },
+      tx,
+    );
+    return updated;
   });
   return revoked;
 }
@@ -125,17 +139,22 @@ export async function revokeAllAgentTokensForUser(
   });
   if (active.length === 0) return 0;
 
-  await prisma.agentAuthoringToken.updateMany({
-    where: { userId, revokedAt: null },
-    data: { revokedAt: at },
-  });
-  for (const token of active) {
-    await recordAuditEvent({
-      entityType: auditEntityTypes.agentAuthoringToken,
-      entityId: token.id,
-      action: auditActions.agentAuthoring.tokenRevoked,
-      metadata: { tokenId: token.id, reason },
+  await runInTransaction(async (tx) => {
+    await tx.agentAuthoringToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: at },
     });
-  }
+    for (const token of active) {
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.agentAuthoringToken,
+          entityId: token.id,
+          action: auditActions.agentAuthoring.tokenRevoked,
+          metadata: { tokenId: token.id, reason },
+        },
+        tx,
+      );
+    }
+  });
   return active.length;
 }

@@ -16,8 +16,8 @@ const findLongRunningJobs = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: {
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
+  const repo = {
     findNextRunnableJob,
     tryLockPendingJob,
     markJobSucceeded,
@@ -31,7 +31,15 @@ vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
     findExpiredRunningJobs,
     resetExpiredJob,
     findLongRunningJobs,
-  },
+  };
+  // #803: audit writes now run inside runInTransaction via createAssessmentJobRepository(tx). The
+  // factory returns the same mock methods so tx-scoped calls hit the same spies.
+  return { assessmentJobRepository: repo, createAssessmentJobRepository: () => repo };
+});
+
+// #803: run the transaction callback inline with a throwaway tx client.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -134,6 +142,7 @@ describe("AssessmentJobRunner", () => {
       );
       expect(recordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: "assessment_job_retry_scheduled" }),
+        expect.anything(),
       );
     });
 
@@ -160,6 +169,7 @@ describe("AssessmentJobRunner", () => {
       );
       expect(recordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: "assessment_job_failed" }),
+        expect.anything(),
       );
     });
   });
@@ -190,6 +200,7 @@ describe("AssessmentJobRunner", () => {
       );
       expect(recordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: "assessment_job_enqueued" }),
+        expect.anything(),
       );
     });
   });

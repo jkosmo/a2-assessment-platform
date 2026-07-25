@@ -5,6 +5,7 @@
 
 import type { AppRole as AppRoleType, ContentOwnerType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { ForbiddenError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -127,20 +128,25 @@ export async function addContentOwner(input: {
     select: { id: true },
   });
   if (existing) return; // already an owner
-  const owner = await prisma.contentOwner.create({
-    data: {
-      contentType: input.contentType,
-      contentId: input.contentId,
-      userId: input.ownerUserId,
-      addedById: input.actorUserId,
-    },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.contentOwner,
-    entityId: owner.id,
-    action: auditActions.contentOwner.added,
-    actorId: input.actorUserId,
-    metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
+  await runInTransaction(async (tx) => {
+    const owner = await tx.contentOwner.create({
+      data: {
+        contentType: input.contentType,
+        contentId: input.contentId,
+        userId: input.ownerUserId,
+        addedById: input.actorUserId,
+      },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.contentOwner,
+        entityId: owner.id,
+        action: auditActions.contentOwner.added,
+        actorId: input.actorUserId,
+        metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
+      },
+      tx,
+    );
   });
 }
 
@@ -163,14 +169,19 @@ export async function removeContentOwner(input: {
       "last_owner",
     );
   }
-  await prisma.contentOwner.deleteMany({
-    where: { contentType: input.contentType, contentId: input.contentId, userId: input.ownerUserId },
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.contentOwner,
-    entityId: `${input.contentType}:${input.contentId}:${input.ownerUserId}`,
-    action: auditActions.contentOwner.removed,
-    actorId: input.actorUserId,
-    metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
+  await runInTransaction(async (tx) => {
+    await tx.contentOwner.deleteMany({
+      where: { contentType: input.contentType, contentId: input.contentId, userId: input.ownerUserId },
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.contentOwner,
+        entityId: `${input.contentType}:${input.contentId}:${input.ownerUserId}`,
+        action: auditActions.contentOwner.removed,
+        actorId: input.actorUserId,
+        metadata: { contentType: input.contentType, contentId: input.contentId, ownerUserId: input.ownerUserId },
+      },
+      tx,
+    );
   });
 }

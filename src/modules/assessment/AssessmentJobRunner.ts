@@ -8,7 +8,8 @@ import { env } from "../../config/env.js";
  * per container restart, which makes it safe in a multi-instance deployment.
  */
 const WORKER_INSTANCE_ID = randomUUID();
-import { assessmentJobRepository } from "./assessmentJobRepository.js";
+import { assessmentJobRepository, createAssessmentJobRepository } from "./assessmentJobRepository.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -31,10 +32,24 @@ export async function enqueueAssessmentJob(submissionId: string) {
 
   let job;
   try {
-    job = await assessmentJobRepository.createAssessmentJob({
-      submissionId,
-      status: AssessmentJobStatus.PENDING,
-      maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
+    // #803: the enqueue create + its audit commit atomically. A P2002 from the partial unique index still
+    // surfaces from the transaction and is handled below.
+    job = await runInTransaction(async (tx) => {
+      const created = await createAssessmentJobRepository(tx).createAssessmentJob({
+        submissionId,
+        status: AssessmentJobStatus.PENDING,
+        maxAttempts: env.ASSESSMENT_JOB_MAX_ATTEMPTS,
+      });
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.assessmentJob,
+          entityId: created.id,
+          action: auditActions.assessment.assessmentJobEnqueued,
+          metadata: { submissionId },
+        },
+        tx,
+      );
+      return created;
     });
   } catch (error) {
     // #793: the partial unique index (one active job per submission) rejected this create — a concurrent
@@ -49,12 +64,6 @@ export async function enqueueAssessmentJob(submissionId: string) {
     throw error;
   }
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.assessmentJob,
-    entityId: job.id,
-    action: auditActions.assessment.assessmentJobEnqueued,
-    metadata: { submissionId },
-  });
   await logQueueBacklog("enqueue", submissionId);
 
   return job;
@@ -153,29 +162,44 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
   } catch (error) {
     const job = await assessmentJobRepository.findAssessmentJobOrThrow(candidate.id);
     const willRetry = job.attempts < job.maxAttempts;
-    const finalised = await assessmentJobRepository.markJobForRetryOrFailure(candidate.id, WORKER_INSTANCE_ID, now, {
-      status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
-      availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
-      errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
+    // #803: the fenced terminal write + its retry/failure audit commit atomically. The audit is written
+    // only when the fence still holds (count>0) — a lost lease (count===0) writes neither.
+    const finalised = await runInTransaction(async (tx) => {
+      const res = await createAssessmentJobRepository(tx).markJobForRetryOrFailure(
+        candidate.id,
+        WORKER_INSTANCE_ID,
+        now,
+        {
+          status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
+          availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
+          errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
+        },
+      );
+      if (res.count === 0) {
+        return res;
+      }
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.assessmentJob,
+          entityId: candidate.id,
+          action: willRetry
+            ? auditActions.assessment.assessmentJobRetryScheduled
+            : auditActions.assessment.assessmentJobFailed,
+          metadata: {
+            submissionId: candidate.submissionId,
+            attempts: job.attempts,
+            maxAttempts: job.maxAttempts,
+            errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
+          },
+        },
+        tx,
+      );
+      return res;
     });
     if (finalised.count === 0) {
       logLeaseLost(candidate.id, candidate.submissionId, "failure");
       return true;
     }
-
-    await recordAuditEvent({
-      entityType: auditEntityTypes.assessmentJob,
-      entityId: candidate.id,
-      action: willRetry
-        ? auditActions.assessment.assessmentJobRetryScheduled
-        : auditActions.assessment.assessmentJobFailed,
-      metadata: {
-        submissionId: candidate.submissionId,
-        attempts: job.attempts,
-        maxAttempts: job.maxAttempts,
-        errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
-      },
-    });
   } finally {
     clearInterval(heartbeat);
     await logQueueBacklog("worker_cycle", candidate.submissionId);

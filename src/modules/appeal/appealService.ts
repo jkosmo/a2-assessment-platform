@@ -164,33 +164,41 @@ export async function claimAppeal(appealId: string, handlerId: string, isAdmin =
   }
 
   // #790: atomic guarded claim. If a concurrent handler claimed first, count===0 → we lost the race.
-  const claimResult = await appealRepository.markAppealInReviewGuarded(
-    appealId,
-    handlerId,
-    isAdmin,
-    appeal.claimedAt != null,
-  );
-  if (claimResult.count === 0) {
-    throw new ConflictError(
-      "appeal_already_assigned",
-      "This appeal was just claimed by another handler. Refresh the queue and open another case.",
+  // #803: the guarded claim + its audit commit atomically.
+  const claimed = await runInTransaction(async (tx) => {
+    const repo = createAppealRepository(tx);
+    const claimResult = await repo.markAppealInReviewGuarded(
+      appealId,
+      handlerId,
+      isAdmin,
+      appeal.claimedAt != null,
     );
-  }
-  const claimed = await appealRepository.findAppealForClaim(appealId);
-  if (!claimed) {
-    throw new NotFoundError("Appeal");
-  }
+    if (claimResult.count === 0) {
+      throw new ConflictError(
+        "appeal_already_assigned",
+        "This appeal was just claimed by another handler. Refresh the queue and open another case.",
+      );
+    }
+    const claimedAppeal = await repo.findAppealForClaim(appealId);
+    if (!claimedAppeal) {
+      throw new NotFoundError("Appeal");
+    }
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.appeal,
-    entityId: claimed.id,
-    action: auditActions.appeal.claimed,
-    actorId: handlerId,
-    metadata: {
-      submissionId: appeal.submissionId,
-      appealStatus: claimed.appealStatus,
-      claimedAt: claimed.claimedAt?.toISOString() ?? null,
-    },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.appeal,
+        entityId: claimedAppeal.id,
+        action: auditActions.appeal.claimed,
+        actorId: handlerId,
+        metadata: {
+          submissionId: appeal.submissionId,
+          appealStatus: claimedAppeal.appealStatus,
+          claimedAt: claimedAppeal.claimedAt?.toISOString() ?? null,
+        },
+      },
+      tx,
+    );
+    return claimedAppeal;
   });
 
   const claimLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;

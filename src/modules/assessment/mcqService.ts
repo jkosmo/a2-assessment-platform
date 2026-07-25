@@ -150,6 +150,23 @@ export async function submitMcqAttempt(input: {
       where: { id: submission.id },
       data: { submissionStatus: SubmissionStatus.PROCESSING },
     });
+    // #803: the submission audit commits atomically with the finalization. Recorded here (inside the
+    // tx), before the post-commit enqueue/synchronous-assessment I/O below.
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.mcqAttempt,
+        entityId: attempt.id,
+        action: auditActions.assessment.mcqSubmitted,
+        actorId: input.userId,
+        metadata: {
+          submissionId: submission.id,
+          rawScore,
+          percentScore,
+          scaledScore,
+        },
+      },
+      tx,
+    );
     return repo.findAttemptById(attempt.id);
   });
 

@@ -94,27 +94,35 @@ export async function createModule(input: CreateModuleInput) {
     throw new Error("validTo must be on or after validFrom.");
   }
 
-  const module = await adminContentRepository.createModule({
-    title: input.title,
-    description: input.description,
-    certificationLevel: input.certificationLevel,
-    validFrom: input.validFrom,
-    validTo: input.validTo,
-    createdById: input.actorId,
-  });
+  const module = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const created = await repo.createModule({
+      title: input.title,
+      description: input.description,
+      certificationLevel: input.certificationLevel,
+      validFrom: input.validFrom,
+      validTo: input.validTo,
+      createdById: input.actorId,
+    });
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: module.id,
-    action: auditActions.adminContent.moduleCreated,
-    actorId: input.actorId,
-    metadata: {
-      moduleId: module.id,
-      title: module.title,
-      certificationLevel: module.certificationLevel ?? null,
-      validFrom: module.validFrom?.toISOString() ?? null,
-      validTo: module.validTo?.toISOString() ?? null,
-    },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.module,
+        entityId: created.id,
+        action: auditActions.adminContent.moduleCreated,
+        actorId: input.actorId,
+        metadata: {
+          moduleId: created.id,
+          title: created.title,
+          certificationLevel: created.certificationLevel ?? null,
+          validFrom: created.validFrom?.toISOString() ?? null,
+          validTo: created.validTo?.toISOString() ?? null,
+        },
+      },
+      tx,
+    );
+
+    return created;
   });
 
   // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
@@ -174,13 +182,20 @@ export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedT
     ...normalizeLocalizedTitleSeed(existingModule.title),
     ...normalizeLocalizedTitlePatch(titlePatch),
   });
-  const module = await adminContentRepository.updateModuleTitle(moduleId, title);
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: moduleId,
-    action: auditActions.adminContent.moduleTitleUpdated,
-    actorId,
-    metadata: { moduleId, title },
+  const module = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const updated = await repo.updateModuleTitle(moduleId, title);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.module,
+        entityId: moduleId,
+        action: auditActions.adminContent.moduleTitleUpdated,
+        actorId,
+        metadata: { moduleId, title },
+      },
+      tx,
+    );
+    return updated;
   });
   return module;
 }
@@ -245,15 +260,18 @@ export async function purgeUnpublishedModules(actorId: string): Promise<PurgeRes
         await tx.rubricVersion.deleteMany({ where: { moduleId: candidate.id } });
         await tx.promptTemplateVersion.deleteMany({ where: { moduleId: candidate.id } });
         await tx.module.delete({ where: { id: candidate.id } });
+        await recordAuditEvent(
+          {
+            entityType: auditEntityTypes.module,
+            entityId: candidate.id,
+            action: auditActions.adminContent.moduleDeleted,
+            actorId,
+            metadata: { moduleId: candidate.id, title: candidate.title, purged: true, source: "bulk_purge_unpublished" },
+          },
+          tx,
+        );
       });
       result.deleted.push({ id: candidate.id, title: candidate.title });
-      await recordAuditEvent({
-        entityType: auditEntityTypes.module,
-        entityId: candidate.id,
-        action: auditActions.adminContent.moduleDeleted,
-        actorId,
-        metadata: { moduleId: candidate.id, title: candidate.title, purged: true, source: "bulk_purge_unpublished" },
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown_error";
       result.failed.push({ id: candidate.id, title: candidate.title, message });
@@ -289,17 +307,23 @@ export async function deleteModule(moduleId: string, actorId: string) {
     throw new Error(`Module cannot be deleted because it still has dependencies: ${dependencySummary}.`);
   }
 
-  const deletedModule = await adminContentRepository.deleteModule(moduleId);
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: moduleId,
-    action: auditActions.adminContent.moduleDeleted,
-    actorId,
-    metadata: {
-      moduleId,
-      title: deletedModule.title,
-    },
+  const deletedModule = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const deleted = await repo.deleteModule(moduleId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.module,
+        entityId: moduleId,
+        action: auditActions.adminContent.moduleDeleted,
+        actorId,
+        metadata: {
+          moduleId,
+          title: deleted.title,
+        },
+      },
+      tx,
+    );
+    return deleted;
   });
 
   return deletedModule;
@@ -669,28 +693,36 @@ export async function createBenchmarkExampleVersion(input: CreateBenchmarkExampl
     benchmarkVersionNo: versionNo,
   }));
 
-  const promptTemplateVersion = await adminContentRepository.createPromptTemplateVersion({
-    moduleId: input.moduleId,
-    versionNo,
-    systemPrompt: basePromptTemplate.systemPrompt,
-    userPromptTemplate: basePromptTemplate.userPromptTemplate,
-    examplesJson: JSON.stringify(enrichedExamples),
-    active: input.active,
-  });
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.promptTemplateVersion,
-    entityId: promptTemplateVersion.id,
-    action: auditActions.adminContent.benchmarkExampleVersionCreated,
-    actorId: input.actorId,
-    metadata: {
+  const promptTemplateVersion = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const created = await repo.createPromptTemplateVersion({
       moduleId: input.moduleId,
-      promptTemplateVersionId: promptTemplateVersion.id,
-      sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
-      sourceModuleVersionId: input.linkedModuleVersionId ?? null,
-      benchmarkExampleCount: input.examples.length,
-      versionNo: promptTemplateVersion.versionNo,
-    },
+      versionNo,
+      systemPrompt: basePromptTemplate.systemPrompt,
+      userPromptTemplate: basePromptTemplate.userPromptTemplate,
+      examplesJson: JSON.stringify(enrichedExamples),
+      active: input.active,
+    });
+
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.promptTemplateVersion,
+        entityId: created.id,
+        action: auditActions.adminContent.benchmarkExampleVersionCreated,
+        actorId: input.actorId,
+        metadata: {
+          moduleId: input.moduleId,
+          promptTemplateVersionId: created.id,
+          sourcePromptTemplateVersionId: input.basePromptTemplateVersionId,
+          sourceModuleVersionId: input.linkedModuleVersionId ?? null,
+          benchmarkExampleCount: input.examples.length,
+          versionNo: created.versionNo,
+        },
+      },
+      tx,
+    );
+
+    return created;
   });
 
   return {
@@ -719,14 +751,20 @@ export async function archiveModule(moduleId: string, actorId: string) {
 
   // I3: arkivering auto-avpubliserer (rydder activeVersionId samtidig som archivedAt settes),
   // så tilstanden «arkivert men fortsatt publisert» aldri oppstår. Gjenopprett lander i Utkast.
-  const result = await adminContentRepository.archiveModule(moduleId, new Date());
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: moduleId,
-    action: auditActions.adminContent.moduleArchived,
-    actorId,
-    metadata: { moduleId },
+  const result = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const archived = await repo.archiveModule(moduleId, new Date());
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.module,
+        entityId: moduleId,
+        action: auditActions.adminContent.moduleArchived,
+        actorId,
+        metadata: { moduleId },
+      },
+      tx,
+    );
+    return archived;
   });
 
   return result;
@@ -743,14 +781,20 @@ export async function restoreModule(moduleId: string, actorId: string) {
     throw new Error("Module is not archived.");
   }
 
-  const result = await adminContentRepository.restoreModule(moduleId);
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: moduleId,
-    action: auditActions.adminContent.moduleRestored,
-    actorId,
-    metadata: { moduleId },
+  const result = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const restored = await repo.restoreModule(moduleId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.module,
+        entityId: moduleId,
+        action: auditActions.adminContent.moduleRestored,
+        actorId,
+        metadata: { moduleId },
+      },
+      tx,
+    );
+    return restored;
   });
 
   return result;
@@ -761,17 +805,23 @@ export async function unpublishModule(moduleId: string, actorId: string) {
   // G2 (bruk-lås): kan ikke avpublisere en modul som ligger i et kurs — det ville gi en
   // blindvei i kurset. Fjern den fra kursene først.
   await assertModuleNotInAnyCourse(moduleId, "avpubliseres");
-  const result = await adminContentRepository.unpublishModule(moduleId);
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.module,
-    entityId: moduleId,
-    action: auditActions.adminContent.moduleUnpublished,
-    actorId,
-    metadata: {
-      moduleId,
-      previousActiveVersionId: result.previousActiveVersionId,
-    },
+  const result = await runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const unpublished = await repo.unpublishModule(moduleId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.module,
+        entityId: moduleId,
+        action: auditActions.adminContent.moduleUnpublished,
+        actorId,
+        metadata: {
+          moduleId,
+          previousActiveVersionId: unpublished.previousActiveVersionId,
+        },
+      },
+      tx,
+    );
+    return unpublished;
   });
 
   return result;
@@ -781,22 +831,32 @@ export async function publishModuleVersion(moduleId: string, moduleVersionId: st
   const module = await ensureModuleExists(moduleId);
   const now = new Date();
 
-  const published = await runInTransaction((tx) =>
-    createAdminContentRepository(tx).publishModuleVersion(moduleId, moduleVersionId, actorId, now),
-  );
-
-  await recordAuditEvent({
-    entityType: auditEntityTypes.moduleVersion,
-    entityId: moduleVersionId,
-    action: auditActions.adminContent.moduleVersionPublished,
-    actorId,
-    metadata: {
+  const published = await runInTransaction(async (tx) => {
+    const result = await createAdminContentRepository(tx).publishModuleVersion(
       moduleId,
       moduleVersionId,
-      versionNo: published.versionNo,
-      previousActiveVersionId: module.activeVersionId,
-      publishedAt: published.publishedAt?.toISOString() ?? null,
-    },
+      actorId,
+      now,
+    );
+
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.moduleVersion,
+        entityId: moduleVersionId,
+        action: auditActions.adminContent.moduleVersionPublished,
+        actorId,
+        metadata: {
+          moduleId,
+          moduleVersionId,
+          versionNo: result.versionNo,
+          previousActiveVersionId: module.activeVersionId,
+          publishedAt: result.publishedAt?.toISOString() ?? null,
+        },
+      },
+      tx,
+    );
+
+    return result;
   });
 
   return published;
@@ -844,7 +904,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
   const versionNo = await getNextVersionNo("module", input.moduleId);
   const now = new Date();
 
-  const { newVersion, published } = await runInTransaction(async (tx) => {
+  const { published } = await runInTransaction(async (tx) => {
     const repo = createAdminContentRepository(tx);
     const newVersion = await repo.createModuleVersion({
       moduleId: input.moduleId,
@@ -860,24 +920,28 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       assessmentPolicyJson: assessmentPolicyCodec.serialize(newPolicy),
     });
     const published = await repo.publishModuleVersion(input.moduleId, newVersion.id, input.actorId, now);
-    return { newVersion, published };
-  });
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.moduleVersion,
-    entityId: newVersion.id,
-    action: auditActions.adminContent.calibrationThresholdsPublished,
-    actorId: input.actorId,
-    metadata: {
-      moduleId: input.moduleId,
-      moduleVersionId: newVersion.id,
-      versionNo: newVersion.versionNo,
-      sourceVersionId: sourceVersion.id,
-      totalMin: input.totalMin,
-      mcqMinPercent: input.mcqMinPercent ?? null,
-      practicalMinPercent: input.practicalMinPercent ?? null,
-      publishedAt: published.publishedAt?.toISOString() ?? null,
-    },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.moduleVersion,
+        entityId: newVersion.id,
+        action: auditActions.adminContent.calibrationThresholdsPublished,
+        actorId: input.actorId,
+        metadata: {
+          moduleId: input.moduleId,
+          moduleVersionId: newVersion.id,
+          versionNo: newVersion.versionNo,
+          sourceVersionId: sourceVersion.id,
+          totalMin: input.totalMin,
+          mcqMinPercent: input.mcqMinPercent ?? null,
+          practicalMinPercent: input.practicalMinPercent ?? null,
+          publishedAt: published.publishedAt?.toISOString() ?? null,
+        },
+      },
+      tx,
+    );
+
+    return { newVersion, published };
   });
 
   return published;
