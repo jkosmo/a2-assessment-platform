@@ -1,3 +1,11 @@
+// ACCEPTED TECHNICAL DEBT (#817, closed as won't-fix-proactively 2026-07-25): this barrel is over-wide
+// and `course` ↔ `adminContent` import each other (cascade delete, assets, publish, import, agent
+// authoring); appeal/review also duplicate assessment's orchestration. No runtime ES cycle — it's a
+// maintainability/coupling smell (severity: low · plausible). The clean fix (extract a one-directional
+// shared kernel, shrink this barrel to a deliberate surface, lift duplicated orchestration into a shared
+// ApplicationService) is a large, risky refactor not worth a dedicated pass for a p4 concern. **Address
+// opportunistically:** when you next touch these modules, prefer a narrow import over the wide barrel and
+// nudge toward a shared kernel. See doc/design/ARCHITECTURE_REVIEW_2026-07-19.md.
 export { checkAndIssueCourseCompletions, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "./courseCompletionService.js";
 export { getCourseReport, getCourseLearnerReport } from "./courseReport.js";
 export { createCourse, updateCourse, publishCourse, unpublishCourse, archiveCourse, restoreCourse, setCourseModules, setCourseItems, deleteCourse } from "./courseCommands.js";
