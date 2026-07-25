@@ -1572,8 +1572,12 @@ async function loadParticipantConsoleConfig() {
 // frittstående modul-seksjonen. Modul åpnet via course player bruker submission-/MCQ-seksjonene
 // (ikke denne lista), så den flyten er upåvirket.
 function applyCourseOnlyMode() {
-  if (participantRuntimeConfig?.courseOnly) {
-    setHidden(document.getElementById("moduleListSection"), true);
+  // #495: the standalone module section is hidden by DEFAULT (inline style in participant.html) so it no
+  // longer flashes-then-hides (FOUC) while the runtime config loads. Reveal it only when course-only mode
+  // is OFF — i.e. the legacy standalone flow is explicitly enabled (dev/test). In prod (courseOnly) it
+  // simply stays hidden from first paint.
+  if (!participantRuntimeConfig?.courseOnly) {
+    setHidden(document.getElementById("moduleListSection"), false);
   }
 }
 
@@ -2822,9 +2826,26 @@ function renderParticipantCourseAccordion() {
     container.innerHTML = `<p class="small" style="color:var(--color-meta);margin-top:4px">${escapeHtmlP(t("courses.empty"))}</p>`;
     return;
   }
+  // Preserve which courses the user had expanded across this re-render (e.g. after marking a section read),
+  // so returning to the list doesn't collapse the course they're working in.
+  const previouslyOpen = new Set(
+    Array.from(container.querySelectorAll(".course-accordion-item.open")).map((el) => el.dataset.courseId),
+  );
+  const isFirstRender = !courseAccordionInitialized;
+
   container.innerHTML = "";
   for (const course of participantCourses) {
     container.appendChild(buildCourseAccordionItem(course));
+  }
+
+  // Re-expand the previously-open courses (their detail is re-fetched since the cache was invalidated).
+  for (const courseId of previouslyOpen) {
+    if (!courseId) continue;
+    const item = container.querySelector(`.course-accordion-item[data-course-id="${courseId}"]`);
+    if (!item) continue;
+    item.classList.add("open");
+    item.querySelector(".course-accordion-header")?.setAttribute("aria-expanded", "true");
+    loadCourseDetail(courseId);
   }
 
   // #550: confetti when a course becomes completed during this session.
@@ -2843,9 +2864,10 @@ function renderParticipantCourseAccordion() {
   }
   courseAccordionInitialized = true;
 
-  // Deep link: ?courseId=xxx opens that course
+  // Deep link: ?courseId=xxx opens that course — only on the FIRST render, so a later re-render (e.g. after
+  // marking a section read) doesn't re-toggle it and fight the open-state preservation above.
   const linkedCourseId = new URLSearchParams(window.location.search).get("courseId");
-  if (linkedCourseId) {
+  if (isFirstRender && linkedCourseId) {
     const header = container.querySelector(`[data-course-id="${linkedCourseId}"] .course-accordion-header`);
     if (header) {
       header.click();
