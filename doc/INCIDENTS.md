@@ -13,6 +13,43 @@ This document records notable staging/production incidents so symptoms, root cau
 - Follow-up:
 - References:
 
+## 2026-07-25 - Staging worker wedged after 2.5.4 deploy (zombie-connection lock)
+- Date: `2026-07-25`
+- Environment: `staging`
+- Symptom:
+  - the 2.5.4 stage deploy's post-deploy smoke test failed on the worker `/healthz` returning 503
+  - BOTH `assessmentWorker` AND `outboxDeliveryWorker` reported `wedged`, with `runningMs` climbing 1:1
+    with wall-clock from process boot for ~15 min — i.e. each worker's very FIRST tick hung and never
+    returned. Did not self-clear (Azure does not liveness-restart the worker on /healthz 503).
+- Impact:
+  - worker role unhealthy → background assessment-job processing + outbox delivery stalled on staging.
+  - web role unaffected: `/version` = 2.5.4, `/healthz` ok throughout. No production impact.
+- Root cause:
+  - NOT the 2.5.4 change — 2.5.4 was frontend-only (participant.js/html accordion + module-section FOUC
+    fix); the worker code was byte-identical to the healthy 2.5.3.
+  - Both workers hung on their FIRST DB query from boot (assessmentWorker: the stale-lock scan on
+    `AssessmentJob`; outbox: the `claimNextOutboxEvent` `findFirst` on `OutboxEvent`). `runningMs` climbing
+    1:1 with no Prisma pool timeout means the query got a connection but blocked at the DB — consistent
+    with a zombie `idle in transaction` connection left by the abruptly-killed pre-deploy worker container
+    holding a row lock, not yet reaped by Postgres (TCP keepalive). Same class as the 2.5.0 outbox wedge
+    and #856. NB: #795/2.5.1's per-DELIVERY timeout does not help — the hang is in the CLAIM query, before
+    delivery.
+- Mitigation:
+  - `az webapp restart` on the stg worker (staging sub `df46af7a-…`, RG `rg-a2-assessment-stg`, host
+    `a2-assessment-platform-stg-worker-x6eyx4`). The restart took ~2–3 min to cycle the process; the fresh
+    worker acquired clean DB connections and the blocked queries cleared.
+- Recovery verification:
+  - worker `/healthz` 200, all 7 monitors `ok` (`assessmentWorker` + `outboxDeliveryWorker` reason=ok,
+    runningMs=null), new `startedAt` 13:21:23Z; web `/version`=2.5.4 + `/healthz` ok.
+- Follow-up:
+  - RECURRING class (2.5.0, #856, this). A wedged-worker smoke-test failure on deploy does NOT mean the
+    deploy failed — the app deploys fine; the worker needs a restart. Real root-cause defense (tracked in
+    #856): give the worker DB connection a `statement_timeout`/`lock_timeout` so a blocked query aborts
+    (tick fails+retries instead of wedging forever) rather than relying on a manual restart; and ensure the
+    deploy's pre-swap graceful shutdown commits/rolls back the old worker's transactions before the new
+    worker starts so no lock is orphaned.
+- References: `#856`, `#795`, the `batch-prod-releases` operator memory (recovery recipe + host names).
+
 ## 2026-07-19 - DR Restore Drill (planned exercise, not an incident)
 - Date: `2026-07-19`
 - Environment: `production` (isolated throwaway restore; live runtime never touched)
