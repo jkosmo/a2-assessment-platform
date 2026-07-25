@@ -3,9 +3,10 @@ import { DecisionType, ReviewStatus } from "../../src/db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../src/errors/AppError.js";
 
 const findManualReviewForClaim = vi.fn();
-const markManualReviewClaimed = vi.fn();
+const markManualReviewClaimedGuarded = vi.fn();
 const findManualReviewForOverride = vi.fn();
-const resolveManualReview = vi.fn();
+const resolveManualReviewGuarded = vi.fn();
+const findManualReviewById = vi.fn();
 const findOpenByUserAndModule = vi.fn();
 const supersedeMany = vi.fn();
 const updateSubmissionStatus = vi.fn();
@@ -21,15 +22,17 @@ vi.mock("../../src/db/prisma.js", () => ({
 vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForClaim,
-    markManualReviewClaimed,
+    markManualReviewClaimedGuarded,
+    findManualReviewById,
     findManualReviewForOverride,
-    resolveManualReview,
+    resolveManualReviewGuarded,
     findOpenByUserAndModule,
     supersedeMany,
     updateSubmissionStatus,
   },
   createManualReviewRepository: () => ({
-    resolveManualReview,
+    resolveManualReviewGuarded,
+    findManualReviewById,
     findOpenByUserAndModule,
     supersedeMany,
     updateSubmissionStatus,
@@ -55,9 +58,12 @@ vi.mock("../../src/observability/operationalLog.js", () => ({
 describe("manual review service", () => {
   beforeEach(() => {
     findManualReviewForClaim.mockReset();
-    markManualReviewClaimed.mockReset();
+    markManualReviewClaimedGuarded.mockReset();
+    markManualReviewClaimedGuarded.mockResolvedValue({ count: 1 });
+    findManualReviewById.mockReset();
     findManualReviewForOverride.mockReset();
-    resolveManualReview.mockReset();
+    resolveManualReviewGuarded.mockReset();
+    resolveManualReviewGuarded.mockResolvedValue({ count: 1 });
     findOpenByUserAndModule.mockReset();
     supersedeMany.mockReset();
     updateSubmissionStatus.mockReset();
@@ -73,7 +79,7 @@ describe("manual review service", () => {
     const { claimManualReview } = await import("../../src/modules/review/manualReviewService.js");
 
     await expect(claimManualReview("review-1", "reviewer-1")).rejects.toBeInstanceOf(NotFoundError);
-    expect(markManualReviewClaimed).not.toHaveBeenCalled();
+    expect(markManualReviewClaimedGuarded).not.toHaveBeenCalled();
   });
 
   it("rejects claim when the manual review is already assigned to another reviewer", async () => {
@@ -89,7 +95,7 @@ describe("manual review service", () => {
     await expect(claimManualReview("review-1", "reviewer-1")).rejects.toMatchObject({
       code: "review_already_assigned",
     });
-    expect(markManualReviewClaimed).not.toHaveBeenCalled();
+    expect(markManualReviewClaimedGuarded).not.toHaveBeenCalled();
   });
 
   it("rejects override when the submission has no decision yet", async () => {
@@ -132,7 +138,7 @@ describe("manual review service", () => {
     await expect(claimManualReview("review-1", "reviewer-1")).rejects.toMatchObject({
       code: "review_already_resolved",
     });
-    expect(markManualReviewClaimed).not.toHaveBeenCalled();
+    expect(markManualReviewClaimedGuarded).not.toHaveBeenCalled();
   });
 
   it("creates an override decision and resolves the review", async () => {
@@ -167,7 +173,8 @@ describe("manual review service", () => {
       passFailTotal: false,
       decisionType: DecisionType.MANUAL_OVERRIDE,
     });
-    resolveManualReview.mockResolvedValue({
+    resolveManualReviewGuarded.mockResolvedValue({ count: 1 });
+    findManualReviewById.mockResolvedValue({
       id: "review-1",
       reviewStatus: ReviewStatus.RESOLVED,
       overrideDecision: "FAIL",
@@ -195,13 +202,14 @@ describe("manual review service", () => {
       }),
       expect.anything(),
     );
-    expect(resolveManualReview).toHaveBeenCalledWith({
+    expect(resolveManualReviewGuarded).toHaveBeenCalledWith({
       reviewId: "review-1",
       reviewerId: "reviewer-1",
       reviewStatus: ReviewStatus.RESOLVED,
       reviewedAt: expect.any(Date),
       overrideDecision: "FAIL",
       overrideReason: "Human reviewer found the response insufficient.",
+      allowTakeover: false,
     });
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({

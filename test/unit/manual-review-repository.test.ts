@@ -27,22 +27,28 @@ describe("manual review repository", () => {
     const update = vi.fn().mockResolvedValue({ id: "review-1" });
     const repository = createManualReviewRepository({
       manualReview: {
-        update,
+        updateMany: update,
       },
     } as never);
     const reviewedAt = new Date("2026-03-11T09:00:00.000Z");
 
-    await repository.resolveManualReview({
+    await repository.resolveManualReviewGuarded({
       reviewId: "review-1",
       reviewerId: "reviewer-1",
       reviewStatus: "RESOLVED",
       reviewedAt,
       overrideDecision: "PASS",
       overrideReason: "Validated against rubric.",
+      allowTakeover: false,
     });
 
+    // #791: guarded updateMany with the precondition WHERE.
     expect(update).toHaveBeenCalledWith({
-      where: { id: "review-1" },
+      where: {
+        id: "review-1",
+        reviewStatus: { notIn: ["RESOLVED", "SUPERSEDED"] },
+        OR: [{ reviewerId: null }, { reviewerId: "reviewer-1" }],
+      },
       data: {
         reviewerId: "reviewer-1",
         reviewStatus: "RESOLVED",

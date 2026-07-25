@@ -1,10 +1,11 @@
 import { prisma } from "../../db/prisma.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
-import { classRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
+import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 
@@ -21,13 +22,20 @@ async function requireClass(classId: string) {
 export async function createClass(input: { name: string; description?: string | null }, actorId: string | null) {
   const name = input.name?.trim();
   if (!name) throw new ValidationError("Class name is required.");
-  const created = await classRepository.createClass({ name, description: input.description ?? null, createdById: actorId });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.class,
-    entityId: created.id,
-    action: auditActions.class.created,
-    actorId: actorId ?? undefined,
-    metadata: { classId: created.id, name },
+  const created = await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    const klass = await repo.createClass({ name, description: input.description ?? null, createdById: actorId });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: klass.id,
+        action: auditActions.class.created,
+        actorId: actorId ?? undefined,
+        metadata: { classId: klass.id, name },
+      },
+      tx,
+    );
+    return klass;
   });
   // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
   if (actorId) {
@@ -39,13 +47,19 @@ export async function createClass(input: { name: string; description?: string | 
 export async function archiveClass(classId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem) throw new ValidationError("System classes cannot be archived.");
-  await classRepository.archiveClass(classId);
-  await recordAuditEvent({
-    entityType: auditEntityTypes.class,
-    entityId: classId,
-    action: auditActions.class.archived,
-    actorId: actorId ?? undefined,
-    metadata: { classId },
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    await repo.archiveClass(classId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.archived,
+        actorId: actorId ?? undefined,
+        metadata: { classId },
+      },
+      tx,
+    );
   });
 }
 
@@ -53,13 +67,19 @@ export async function restoreClass(classId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem) throw new ValidationError("System classes are never archived.");
   if (!klass.archivedAt) return; // already active — idempotent no-op
-  await classRepository.restoreClass(classId);
-  await recordAuditEvent({
-    entityType: auditEntityTypes.class,
-    entityId: classId,
-    action: auditActions.class.restored,
-    actorId: actorId ?? undefined,
-    metadata: { classId },
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    await repo.restoreClass(classId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.restored,
+        actorId: actorId ?? undefined,
+        metadata: { classId },
+      },
+      tx,
+    );
   });
 }
 
@@ -70,28 +90,40 @@ export async function addMember(classId: string, userId: string, actorId: string
   }
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
   if (!user) throw new ValidationError(`Unknown user id: ${userId}.`);
-  await classRepository.addMember(classId, userId, actorId);
-  await recordAuditEvent({
-    entityType: auditEntityTypes.class,
-    entityId: classId,
-    action: auditActions.class.memberAdded,
-    actorId: actorId ?? undefined,
-    metadata: { classId, userId },
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    await repo.addMember(classId, userId, actorId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.memberAdded,
+        actorId: actorId ?? undefined,
+        metadata: { classId, userId },
+      },
+      tx,
+    );
   });
 }
 
 export async function removeMember(classId: string, userId: string, actorId: string | null) {
   await requireClass(classId);
-  const result = await classRepository.removeMember(classId, userId);
-  if (result.count > 0) {
-    await recordAuditEvent({
-      entityType: auditEntityTypes.class,
-      entityId: classId,
-      action: auditActions.class.memberRemoved,
-      actorId: actorId ?? undefined,
-      metadata: { classId, userId },
-    });
-  }
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    const result = await repo.removeMember(classId, userId);
+    if (result.count > 0) {
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.class,
+          entityId: classId,
+          action: auditActions.class.memberRemoved,
+          actorId: actorId ?? undefined,
+          metadata: { classId, userId },
+        },
+        tx,
+      );
+    }
+  });
 }
 
 export async function listClasses() {
@@ -116,13 +148,19 @@ export async function assignCourseToClass(courseId: string, classId: string, due
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   // #688: archived courses are retired and must not be assignable to a class.
   if (course.archivedAt) throw new ValidationError("Cannot assign an archived course.");
-  await classRepository.assignCourseToClass(courseId, classId, dueAt, actorId);
-  await recordAuditEvent({
-    entityType: auditEntityTypes.class,
-    entityId: classId,
-    action: auditActions.class.courseAssigned,
-    actorId: actorId ?? undefined,
-    metadata: { classId, courseId },
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.courseAssigned,
+        actorId: actorId ?? undefined,
+        metadata: { classId, courseId },
+      },
+      tx,
+    );
   });
 
   // #684: email the members that their class was assigned a course. Skipped for the "Alle deltakere"
@@ -161,16 +199,22 @@ async function notifyClassMembersOfCourseAssignment(
 }
 
 export async function unassignCourseFromClass(courseId: string, classId: string, actorId: string | null) {
-  const result = await classRepository.unassignCourseFromClass(courseId, classId);
-  if (result.count > 0) {
-    await recordAuditEvent({
-      entityType: auditEntityTypes.class,
-      entityId: classId,
-      action: auditActions.class.courseUnassigned,
-      actorId: actorId ?? undefined,
-      metadata: { classId, courseId },
-    });
-  }
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    const result = await repo.unassignCourseFromClass(courseId, classId);
+    if (result.count > 0) {
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.class,
+          entityId: classId,
+          action: auditActions.class.courseUnassigned,
+          actorId: actorId ?? undefined,
+          metadata: { classId, courseId },
+        },
+        tx,
+      );
+    }
+  });
 }
 
 export interface UserMembershipContext {

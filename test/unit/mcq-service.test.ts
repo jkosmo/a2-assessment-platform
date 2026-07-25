@@ -11,28 +11,37 @@ const findActiveQuestionsForSet = vi.fn();
 const findAttemptForSubmission = vi.fn();
 const deleteResponsesForAttempt = vi.fn();
 const createResponses = vi.fn();
-const completeAttempt = vi.fn();
-const updateSubmissionStatus = vi.fn();
+const completeAttemptGuarded = vi.fn();
+const findAttemptById = vi.fn();
+const submissionUpdate = vi.fn();
 const enqueueAssessmentJobMock = vi.fn();
 const recordAuditEvent = vi.fn();
 
+const mcqRepoWrites = {
+  findSubmissionForModuleMcq,
+  findOpenAttemptForSubmission,
+  createAttempt,
+  findActiveQuestionsForSet,
+  findAttemptForSubmission,
+  deleteResponsesForAttempt,
+  createResponses,
+  completeAttemptGuarded,
+  findAttemptById,
+};
+
 vi.mock("../../src/modules/assessment/mcqRepository.js", () => ({
-  mcqRepository: {
-    findSubmissionForModuleMcq,
-    findOpenAttemptForSubmission,
-    createAttempt,
-    findActiveQuestionsForSet,
-    findAttemptForSubmission,
-    deleteResponsesForAttempt,
-    createResponses,
-    completeAttempt,
-  },
+  mcqRepository: mcqRepoWrites,
+  // #794: the finalization now runs through createMcqRepository(tx); return the same mocked writes.
+  createMcqRepository: () => mcqRepoWrites,
+}));
+
+// #794: the transaction wrapper — run the callback with a tx exposing submission.update.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ submission: { update: submissionUpdate } }),
 }));
 
 vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: {
-    updateSubmissionStatus,
-  },
+  assessmentJobRepository: {},
 }));
 
 vi.mock("../../src/modules/assessment/assessmentJobService.js", () => ({
@@ -77,8 +86,9 @@ describe("mcq service — submitMcqAttempt", () => {
     findActiveQuestionsForSet.mockReset();
     deleteResponsesForAttempt.mockReset();
     createResponses.mockReset();
-    completeAttempt.mockReset();
-    updateSubmissionStatus.mockReset();
+    completeAttemptGuarded.mockReset();
+    findAttemptById.mockReset();
+    submissionUpdate.mockReset();
     enqueueAssessmentJobMock.mockReset();
     recordAuditEvent.mockReset();
 
@@ -87,10 +97,9 @@ describe("mcq service — submitMcqAttempt", () => {
     findActiveQuestionsForSet.mockResolvedValue(baseQuestions);
     deleteResponsesForAttempt.mockResolvedValue(undefined);
     createResponses.mockResolvedValue(undefined);
-    completeAttempt.mockImplementation(({ attemptId }) =>
-      Promise.resolve({ id: attemptId }),
-    );
-    updateSubmissionStatus.mockResolvedValue(undefined);
+    completeAttemptGuarded.mockResolvedValue({ count: 1 });
+    findAttemptById.mockImplementation((attemptId: string) => Promise.resolve({ id: attemptId }));
+    submissionUpdate.mockResolvedValue(undefined);
     enqueueAssessmentJobMock.mockResolvedValue(undefined);
     recordAuditEvent.mockResolvedValue(undefined);
   });

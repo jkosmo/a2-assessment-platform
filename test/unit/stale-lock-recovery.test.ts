@@ -20,8 +20,8 @@ const findLongRunningJobs = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
-vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: {
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
+  const repo = {
     findNextRunnableJob,
     tryLockPendingJob,
     markJobSucceeded,
@@ -34,7 +34,15 @@ vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
     findPendingOrRunningJobForSubmission: vi.fn(),
     findPendingOrRunningJobIdForSubmission: vi.fn(),
     createAssessmentJob: vi.fn(),
-  },
+  };
+  // #803: stale-lock reset + retry/failure terminal writes now run inside runInTransaction via
+  // createAssessmentJobRepository(tx); the factory returns the same mock spies.
+  return { assessmentJobRepository: repo, createAssessmentJobRepository: () => repo };
+});
+
+// #803: run the transaction callback inline with a throwaway tx client.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
@@ -51,8 +59,8 @@ describe("stale-lock recovery path", () => {
     vi.resetModules();
     findNextRunnableJob.mockReset();
     tryLockPendingJob.mockReset();
-    markJobSucceeded.mockReset().mockResolvedValue(undefined);
-    markJobForRetryOrFailure.mockReset().mockResolvedValue(undefined);
+    markJobSucceeded.mockReset().mockResolvedValue({ count: 1 });
+    markJobForRetryOrFailure.mockReset().mockResolvedValue({ count: 1 });
     findAssessmentJobOrThrow.mockReset();
     countJobsByStatus.mockResolvedValue(0);
     findExpiredRunningJobs.mockReset();
@@ -93,11 +101,12 @@ describe("stale-lock recovery path", () => {
         entityId: "job-1",
         action: "assessment_job_stale_lock_reset",
       }),
+      expect.anything(),
     );
 
     // Runner then picked up and completed the (now-PENDING) job
     expect(runAssessment).toHaveBeenCalledWith("job-1");
-    expect(markJobSucceeded).toHaveBeenCalledWith("job-1");
+    expect(markJobSucceeded).toHaveBeenCalledWith("job-1", expect.any(String), expect.any(Date));
   });
 
   it("fails a stale job permanently when at max attempts and does not process it", async () => {
@@ -120,6 +129,7 @@ describe("stale-lock recovery path", () => {
     );
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: "assessment_job_stale_lock_failed" }),
+      expect.anything(),
     );
     expect(runAssessment).not.toHaveBeenCalled();
   });
@@ -139,7 +149,7 @@ describe("stale-lock recovery path", () => {
 
     expect(resetExpiredJob).toHaveBeenCalledTimes(2);
     expect(runAssessment).toHaveBeenCalledWith("job-1");
-    expect(markJobSucceeded).toHaveBeenCalledWith("job-1");
+    expect(markJobSucceeded).toHaveBeenCalledWith("job-1", expect.any(String), expect.any(Date));
   });
 
   it("still processes a normal job when there are no stale jobs", async () => {
@@ -155,7 +165,7 @@ describe("stale-lock recovery path", () => {
     expect(result).toBe(true);
     expect(resetExpiredJob).not.toHaveBeenCalled();
     expect(runAssessment).toHaveBeenCalledWith("job-3");
-    expect(markJobSucceeded).toHaveBeenCalledWith("job-3");
+    expect(markJobSucceeded).toHaveBeenCalledWith("job-3", expect.any(String), expect.any(Date));
   });
 
   it("proceeds to run normal jobs even if the stale scanner itself throws", async () => {

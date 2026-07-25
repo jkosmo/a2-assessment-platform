@@ -1,5 +1,6 @@
 import { env } from "../../config/env.js";
-import { assessmentJobRepository } from "./assessmentJobRepository.js";
+import { assessmentJobRepository, createAssessmentJobRepository } from "./assessmentJobRepository.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -22,24 +23,31 @@ export async function scanAndResetStaleJobs(): Promise<StaleLockScanResult> {
     const willFail = job.attempts >= job.maxAttempts;
     const status = willFail ? "FAILED" : "PENDING";
 
-    await assessmentJobRepository.resetExpiredJob(job.id, {
-      status,
-      availableAt: now,
-      errorMessage: "Stale lock: job exceeded lease duration without completing.",
-    });
+    // #803: each stale-job reset + its audit commit atomically (per job). The operational log below is
+    // non-DB I/O and stays outside the transaction.
+    await runInTransaction(async (tx) => {
+      await createAssessmentJobRepository(tx).resetExpiredJob(job.id, {
+        status,
+        availableAt: now,
+        errorMessage: "Stale lock: job exceeded lease duration without completing.",
+      });
 
-    await recordAuditEvent({
-      entityType: auditEntityTypes.assessmentJob,
-      entityId: job.id,
-      action: willFail
-        ? auditActions.assessment.assessmentJobStaleLockFailed
-        : auditActions.assessment.assessmentJobStaleLockReset,
-      metadata: {
-        submissionId: job.submissionId,
-        attempts: job.attempts,
-        maxAttempts: job.maxAttempts,
-        outcome: status,
-      },
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.assessmentJob,
+          entityId: job.id,
+          action: willFail
+            ? auditActions.assessment.assessmentJobStaleLockFailed
+            : auditActions.assessment.assessmentJobStaleLockReset,
+          metadata: {
+            submissionId: job.submissionId,
+            attempts: job.attempts,
+            maxAttempts: job.maxAttempts,
+            outcome: status,
+          },
+        },
+        tx,
+      );
     });
 
     logOperationalEvent(operationalEvents.assessment.jobStaleLockDetected, {

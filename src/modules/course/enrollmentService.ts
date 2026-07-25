@@ -3,7 +3,8 @@ import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { enrollmentRepository } from "./enrollmentRepository.js";
+import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { deriveEnrollmentStatus, type EnrollmentStatus } from "./enrollmentStatus.js";
 import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.js";
 
@@ -74,19 +75,27 @@ export async function assignEnrollments(
   const assignedUserIds: string[] = [];
   try {
     for (const userId of userIds) {
-      await enrollmentRepository.assignEnrollment({
-        userId,
-        courseId,
-        assignedById: actorId,
-        source,
-        dueAt: input.dueAt ?? null,
-      });
-      await recordAuditEvent({
-        entityType: auditEntityTypes.course,
-        entityId: courseId,
-        action: auditActions.enrollment.assigned,
-        actorId: actorId ?? undefined,
-        metadata: { userId, courseId, source },
+      // #803: per-iteration tx — each user's enrollment upsert + its audit row commit atomically,
+      // but NEVER one giant tx over the whole loop (a later failure must not roll back earlier users).
+      await runInTransaction(async (tx) => {
+        const repo = createEnrollmentRepository(tx);
+        await repo.assignEnrollment({
+          userId,
+          courseId,
+          assignedById: actorId,
+          source,
+          dueAt: input.dueAt ?? null,
+        });
+        await recordAuditEvent(
+          {
+            entityType: auditEntityTypes.course,
+            entityId: courseId,
+            action: auditActions.enrollment.assigned,
+            actorId: actorId ?? undefined,
+            metadata: { userId, courseId, source },
+          },
+          tx,
+        );
       });
       assignedUserIds.push(userId);
     }
@@ -113,16 +122,22 @@ export async function assignEnrollments(
 /** Soft-revoke a participant's enrollment. No-op (still 200) if there was no active enrollment. */
 export async function revokeEnrollment(courseId: string, userId: string, actorId: string | null): Promise<void> {
   await requireCourse(courseId);
-  const result = await enrollmentRepository.revokeEnrollment(userId, courseId);
-  if (result.count > 0) {
-    await recordAuditEvent({
-      entityType: auditEntityTypes.course,
-      entityId: courseId,
-      action: auditActions.enrollment.revoked,
-      actorId: actorId ?? undefined,
-      metadata: { userId, courseId },
-    });
-  }
+  await runInTransaction(async (tx) => {
+    const repo = createEnrollmentRepository(tx);
+    const result = await repo.revokeEnrollment(userId, courseId);
+    if (result.count > 0) {
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.course,
+          entityId: courseId,
+          action: auditActions.enrollment.revoked,
+          actorId: actorId ?? undefined,
+          metadata: { userId, courseId },
+        },
+        tx,
+      );
+    }
+  });
 }
 
 /**
@@ -134,19 +149,25 @@ export async function selfEnroll(courseId: string, userId: string): Promise<void
   if (course.enrollmentPolicy !== "OPEN") {
     throw new ValidationError("This course is restricted — self-enrolment is not allowed.");
   }
-  await enrollmentRepository.assignEnrollment({
-    userId,
-    courseId,
-    assignedById: null,
-    source: "SELF",
-    dueAt: null,
-  });
-  await recordAuditEvent({
-    entityType: auditEntityTypes.course,
-    entityId: courseId,
-    action: auditActions.enrollment.selfEnrolled,
-    actorId: userId,
-    metadata: { userId, courseId },
+  await runInTransaction(async (tx) => {
+    const repo = createEnrollmentRepository(tx);
+    await repo.assignEnrollment({
+      userId,
+      courseId,
+      assignedById: null,
+      source: "SELF",
+      dueAt: null,
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.course,
+        entityId: courseId,
+        action: auditActions.enrollment.selfEnrolled,
+        actorId: userId,
+        metadata: { userId, courseId },
+      },
+      tx,
+    );
   });
 }
 

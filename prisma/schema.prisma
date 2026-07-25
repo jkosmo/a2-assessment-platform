@@ -331,7 +331,9 @@ model MCQResponse {
   mcqAttempt     MCQAttempt  @relation(fields: [mcqAttemptId], references: [id], onDelete: Restrict)
   question       MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
-  @@index([mcqAttemptId])
+  // #794: one response per (attempt, question) as a DB invariant — the delete+recreate finalization
+  // can't leave duplicate answers even under a retry/race.
+  @@unique([mcqAttemptId, questionId])
 }
 
 model RubricVersion {

@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.3.0 - 2026-07-25
+
+M5 concurrency & atomicity cluster (option 2) — eliminate lost-update races and audit/state divergence
+across the claim, assessment-job, MCQ, and mutation paths. Seven issues, each with a real-Postgres
+concurrency/atomicity proof test.
+
+- **#790 — appeal claim/resolve races.** Replaced `markAppealInReview`/`markAppealResolved` with guarded
+  `updateMany` transitions whose WHERE encodes the preconditions (status not terminal; owner match unless
+  admin takeover). Two racing claims/resolves can no longer both win — the loser gets `count 0` →
+  `ConflictError`, so duplicate resolution decisions are impossible. The guarded transition runs FIRST
+  inside the resolve transaction, before the decision is appended.
+- **#791 — manual-review claim/override races.** Same guarded-`updateMany` pattern for
+  `markManualReviewClaimedGuarded`/`resolveManualReviewGuarded`; the override finalization does the
+  guarded resolve first inside its transaction.
+- **#793 — one active assessment job per submission.** Partial unique index
+  (`WHERE status IN ('PENDING','RUNNING')`) as a DB invariant; enqueue catches the P2002 and returns the
+  concurrent winner instead of creating a duplicate (no extra LLM run/decision). Migration dedups any
+  pre-existing active duplicates before creating the index.
+- **#792 — assessment-job lease fencing + renewal.** Terminal writes (`markJobSucceeded`,
+  `markJobForRetryOrFailure`, `renewLease`) are fenced `updateMany`s keyed on `(id, status:RUNNING,
+  lockedBy, lockedAt)` returning `{count}`; a heartbeat renews the lease during processing. A worker that
+  lost its lease (`count 0`) skips the terminal write instead of clobbering the new owner's result.
+- **#794 — atomic, guarded MCQ finalization.** Response replacement + guard-complete (only while the
+  attempt is still open) + submission-status move happen in ONE transaction; a partial-unique
+  `@@unique([mcqAttemptId, questionId])` backs the response rewrite. Two concurrent submits can no longer
+  both finalize (`count 0` → `mcq_already_submitted`).
+- **#803 — audit writes atomic with the domain mutation.** `recordAuditEvent` now commits in the SAME
+  `runInTransaction` as the state change it records, threaded through ~53 call sites (course/section/
+  class/enrollment/content-owner/adminContent/assessment/appeal/manual-review/discussion/agent-token).
+  Under partial failure the audit log and actual state can no longer diverge. Non-DB I/O (email, enqueue,
+  blob reclaim, logging) stays outside the transaction; audit-only events (login/notification-sent/run-
+  summary) are intentionally left unwrapped. `test/m2-audit-transactional.ts` proves a forced audit
+  failure rolls the domain mutation back.
+
+Deferred to their own arcs: #796 (content-import atomicity — needs an idempotent ImportRun, blob
+staging, and the full graph built in one transaction); the import audit sites (moduleImported/
+courseImported) and the fire-and-forget completion-path tx forwarding go with it.
+
 ## 2.2.8 - 2026-07-24
 
 M5 stabilization — #809 cold-start grace + #789 token revocation + #802 discussion pagination

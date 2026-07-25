@@ -26,7 +26,8 @@ const decisionSubmissionUpdate = vi.fn();
 
 const findManualReviewForOverride = vi.fn();
 const createOverrideDecision = vi.fn();
-const resolveManualReview = vi.fn();
+const resolveManualReviewGuarded = vi.fn();
+const findManualReviewById = vi.fn();
 const manualReviewSubmissionUpdate = vi.fn();
 const notifyAssessmentResult = vi.fn();
 
@@ -34,7 +35,8 @@ const notifyAssessmentResult = vi.fn();
 
 const findAppealForResolution = vi.fn();
 const createResolutionDecision = vi.fn();
-const markAppealResolved = vi.fn();
+const markAppealResolvedGuarded = vi.fn();
+const findAppealById = vi.fn();
 const appealSubmissionUpdate = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 
@@ -70,12 +72,14 @@ vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
   manualReviewRepository: {
     findManualReviewForOverride,
     createOverrideDecision,
-    resolveManualReview,
+    resolveManualReviewGuarded,
+    findManualReviewById,
     updateSubmissionStatus: manualReviewSubmissionUpdate,
   },
   createManualReviewRepository: () => ({
     createOverrideDecision,
-    resolveManualReview,
+    resolveManualReviewGuarded,
+    findManualReviewById,
     updateSubmissionStatus: manualReviewSubmissionUpdate,
   }),
 }));
@@ -84,12 +88,14 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
   appealRepository: {
     findAppealForResolution,
     createResolutionDecision,
-    markAppealResolved,
+    markAppealResolvedGuarded,
+    findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
   },
   createAppealRepository: () => ({
     createResolutionDecision,
-    markAppealResolved,
+    markAppealResolvedGuarded,
+    findAppealById,
     updateSubmissionStatus: appealSubmissionUpdate,
   }),
 }));
@@ -238,12 +244,18 @@ describe("transactional failure injection", () => {
     decisionSubmissionUpdate.mockReset();
     findManualReviewForOverride.mockReset();
     createOverrideDecision.mockReset();
-    resolveManualReview.mockReset();
+    resolveManualReviewGuarded.mockReset();
+    resolveManualReviewGuarded.mockResolvedValue({ count: 1 });
+    findManualReviewById.mockReset();
+    findManualReviewById.mockResolvedValue({ id: "review-1", reviewStatus: ReviewStatus.RESOLVED, overrideDecision: "PASS" });
     manualReviewSubmissionUpdate.mockReset();
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
     findAppealForResolution.mockReset();
     createResolutionDecision.mockReset();
-    markAppealResolved.mockReset();
+    markAppealResolvedGuarded.mockReset();
+    markAppealResolvedGuarded.mockResolvedValue({ count: 1 });
+    findAppealById.mockReset();
+    findAppealById.mockResolvedValue({ id: "appeal-1", appealStatus: AppealStatus.RESOLVED });
     appealSubmissionUpdate.mockReset();
     notifyAppealStatusTransition.mockReset().mockResolvedValue(undefined);
   });
@@ -321,7 +333,8 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("DB write failed");
 
-      expect(resolveManualReview).not.toHaveBeenCalled();
+      // #791: the guarded transition runs FIRST; the later failure rolls the whole transaction back.
+      expect(resolveManualReviewGuarded).toHaveBeenCalled();
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
@@ -336,7 +349,7 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.MANUAL_OVERRIDE,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      resolveManualReview.mockRejectedValue(new Error("Row locked by concurrent request"));
+      resolveManualReviewGuarded.mockRejectedValue(new Error("Row locked by concurrent request"));
 
       const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
@@ -374,7 +387,8 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("FK constraint violation");
 
-      expect(resolveManualReview).not.toHaveBeenCalled();
+      // #791: the guarded transition runs FIRST; the later failure rolls the whole transaction back.
+      expect(resolveManualReviewGuarded).toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAssessmentResult).not.toHaveBeenCalled();
@@ -388,11 +402,6 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.MANUAL_OVERRIDE,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      resolveManualReview.mockResolvedValue({
-        id: "review-1",
-        reviewStatus: ReviewStatus.RESOLVED,
-        overrideDecision: "PASS",
-      });
       notifyAssessmentResult.mockRejectedValue(new Error("webhook unreachable"));
 
       const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
@@ -436,7 +445,9 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("DB write failed");
 
-      expect(markAppealResolved).not.toHaveBeenCalled();
+      // #790: the guarded transition runs FIRST now; the later failure rolls the whole transaction back
+      // (nothing persists), but the guard call itself was made before the failure.
+      expect(markAppealResolvedGuarded).toHaveBeenCalled();
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
@@ -451,7 +462,7 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      markAppealResolved.mockRejectedValue(new Error("Optimistic lock conflict"));
+      markAppealResolvedGuarded.mockRejectedValue(new Error("Optimistic lock conflict"));
 
       const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
@@ -489,7 +500,9 @@ describe("transactional failure injection", () => {
         }),
       ).rejects.toThrow("Deadlock detected");
 
-      expect(markAppealResolved).not.toHaveBeenCalled();
+      // #790: the guarded transition runs FIRST now; the later failure rolls the whole transaction back
+      // (nothing persists), but the guard call itself was made before the failure.
+      expect(markAppealResolvedGuarded).toHaveBeenCalled();
       expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
@@ -503,10 +516,6 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      markAppealResolved.mockResolvedValue({
-        id: "appeal-1",
-        appealStatus: AppealStatus.RESOLVED,
-      });
       notifyAppealStatusTransition.mockRejectedValue(new Error("webhook timeout"));
 
       const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");

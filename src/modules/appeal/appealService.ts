@@ -163,18 +163,42 @@ export async function claimAppeal(appealId: string, handlerId: string, isAdmin =
     });
   }
 
-  const claimed = await appealRepository.markAppealInReview(appealId, handlerId, appeal.claimedAt);
+  // #790: atomic guarded claim. If a concurrent handler claimed first, count===0 → we lost the race.
+  // #803: the guarded claim + its audit commit atomically.
+  const claimed = await runInTransaction(async (tx) => {
+    const repo = createAppealRepository(tx);
+    const claimResult = await repo.markAppealInReviewGuarded(
+      appealId,
+      handlerId,
+      isAdmin,
+      appeal.claimedAt != null,
+    );
+    if (claimResult.count === 0) {
+      throw new ConflictError(
+        "appeal_already_assigned",
+        "This appeal was just claimed by another handler. Refresh the queue and open another case.",
+      );
+    }
+    const claimedAppeal = await repo.findAppealForClaim(appealId);
+    if (!claimedAppeal) {
+      throw new NotFoundError("Appeal");
+    }
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.appeal,
-    entityId: claimed.id,
-    action: auditActions.appeal.claimed,
-    actorId: handlerId,
-    metadata: {
-      submissionId: appeal.submissionId,
-      appealStatus: claimed.appealStatus,
-      claimedAt: claimed.claimedAt?.toISOString() ?? null,
-    },
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.appeal,
+        entityId: claimedAppeal.id,
+        action: auditActions.appeal.claimed,
+        actorId: handlerId,
+        metadata: {
+          submissionId: appeal.submissionId,
+          appealStatus: claimedAppeal.appealStatus,
+          claimedAt: claimedAppeal.claimedAt?.toISOString() ?? null,
+        },
+      },
+      tx,
+    );
+    return claimedAppeal;
   });
 
   const claimLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
@@ -284,12 +308,29 @@ type ResolutionDecision = NonNullable<ResolutionAppeal["submission"]["decisions"
 
 async function resolveAppealCommand(
   appeal: ResolutionAppeal,
-  input: { handlerId: string; passFailTotal: boolean; decisionReason: string; resolutionNote: string },
+  input: { handlerId: string; passFailTotal: boolean; decisionReason: string; resolutionNote: string; isAdmin?: boolean },
   latestDecision: ResolutionDecision,
   finalisedAt: Date,
 ) {
   return runInTransaction(async (tx) => {
     const repo = createAppealRepository(tx);
+
+    // #790: perform the guarded state transition FIRST. If a concurrent resolve already moved the appeal
+    // to a terminal state, count===0 → ConflictError rolls the transaction back before we append a second
+    // APPEAL_RESOLUTION decision (which would corrupt the immutable lineage with duplicate resolutions).
+    const transition = await repo.markAppealResolvedGuarded(
+      appeal.id,
+      input.handlerId,
+      finalisedAt,
+      input.resolutionNote,
+      input.isAdmin ?? false,
+    );
+    if (transition.count === 0) {
+      throw new ConflictError(
+        "appeal_already_resolved",
+        "This appeal was just resolved by another handler. Refresh the queue to view the latest status.",
+      );
+    }
 
     const resolutionDecision = await appendDecisionWithLineage(
       {
@@ -311,12 +352,9 @@ async function resolveAppealCommand(
       tx,
     );
 
-    const resolvedAppeal = await repo.markAppealResolved(
-      appeal.id,
-      input.handlerId,
-      finalisedAt,
-      input.resolutionNote,
-    );
+    // Re-read the plain appeal row (same shape the old update-by-id returned) now that the guard has
+    // committed the transition, for the audit + the caller's response.
+    const resolvedAppeal = await repo.findAppealById(appeal.id);
 
     await recordAuditEvent({
       entityType: auditEntityTypes.appeal,

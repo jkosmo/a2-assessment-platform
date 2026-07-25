@@ -76,9 +76,12 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       });
     },
 
-    markJobSucceeded(jobId: string) {
-      return client.assessmentJob.update({
-        where: { id: jobId },
+    // #792: fenced terminal write. Only succeeds if THIS worker still holds the lease it acquired (status
+    // RUNNING + same lockedBy + same lockedAt). If the lease was reset and re-claimed by another worker
+    // mid-run, count===0 and the caller must NOT overwrite the new owner's state.
+    markJobSucceeded(jobId: string, lockedBy: string, lockedAt: Date) {
+      return client.assessmentJob.updateMany({
+        where: { id: jobId, status: "RUNNING", lockedBy, lockedAt },
         data: { status: "SUCCEEDED", errorMessage: null, leaseExpiresAt: null },
       });
     },
@@ -87,14 +90,24 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       return client.assessmentJob.findUniqueOrThrow({ where: { id: jobId } });
     },
 
-    markJobForRetryOrFailure(jobId: string, data: {
+    // #792: fenced terminal write (see markJobSucceeded). count===0 → lease lost, don't overwrite.
+    markJobForRetryOrFailure(jobId: string, lockedBy: string, lockedAt: Date, data: {
       status: AssessmentJobStatusType;
       availableAt: Date;
       errorMessage: string;
     }) {
-      return client.assessmentJob.update({
-        where: { id: jobId },
+      return client.assessmentJob.updateMany({
+        where: { id: jobId, status: "RUNNING", lockedBy, lockedAt },
         data: { ...data, leaseExpiresAt: null },
+      });
+    },
+
+    // #792: extend the lease while the assessment is still running, fenced on the current holder, so a long
+    // run (two sequential LLM calls) is not reset + re-claimed mid-flight. count===0 → we no longer hold it.
+    renewLease(jobId: string, lockedBy: string, lockedAt: Date, leaseExpiresAt: Date) {
+      return client.assessmentJob.updateMany({
+        where: { id: jobId, status: "RUNNING", lockedBy, lockedAt },
+        data: { leaseExpiresAt },
       });
     },
 

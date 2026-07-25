@@ -29,19 +29,21 @@ describe("appeal repository", () => {
     });
   });
 
-  it("updates an appeal to resolved state with the expected payload", async () => {
-    const update = vi.fn().mockResolvedValue({ id: "appeal-1" });
+  it("#790: resolves via a guarded updateMany that encodes the preconditions (non-admin)", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const repository = createAppealRepository({
-      appeal: {
-        update,
-      },
+      appeal: { updateMany },
     } as never);
     const resolvedAt = new Date("2026-03-11T07:00:00.000Z");
 
-    await repository.markAppealResolved("appeal-1", "handler-1", resolvedAt, "Resolved after review.");
+    await repository.markAppealResolvedGuarded("appeal-1", "handler-1", resolvedAt, "Resolved after review.", false);
 
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "appeal-1" },
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "appeal-1",
+        appealStatus: { notIn: ["RESOLVED", "REJECTED", "SUPERSEDED"] },
+        OR: [{ resolvedById: null }, { resolvedById: "handler-1" }],
+      },
       data: {
         appealStatus: "RESOLVED",
         resolvedAt,
@@ -49,5 +51,18 @@ describe("appeal repository", () => {
         resolutionNote: "Resolved after review.",
       },
     });
+  });
+
+  it("#790: admin takeover drops the ownership precondition from the guard", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repository = createAppealRepository({ appeal: { updateMany } } as never);
+
+    await repository.markAppealResolvedGuarded("appeal-1", "admin-1", new Date(), "note", true);
+
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "appeal-1", appealStatus: { notIn: ["RESOLVED", "REJECTED", "SUPERSEDED"] } },
+      }),
+    );
   });
 });

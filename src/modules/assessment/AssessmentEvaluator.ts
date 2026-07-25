@@ -1,5 +1,6 @@
 import { env } from "../../config/env.js";
-import { assessmentJobRepository } from "./assessmentJobRepository.js";
+import { createAssessmentJobRepository } from "./assessmentJobRepository.js";
+import { runInTransaction } from "../../db/transaction.js";
 import { evaluatePracticalWithLlm, type LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { sha256 } from "../../utils/hash.js";
@@ -63,36 +64,45 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
       },
     };
 
-    const llmEvaluation = await assessmentJobRepository.createLlmEvaluation({
-      submissionId,
-      moduleVersionId,
-      modelName:
-        env.LLM_MODE === "stub"
-          ? `${env.LLM_STUB_MODEL_NAME}:${assessmentPass}`
-          : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
-      promptTemplateVersionId,
-      requestPayloadHash: sha256(JSON.stringify(requestPayload)),
-      responseJson: llmResponseCodec.serialize(llmResult),
-      rubricTotal: llmResult.rubric_total,
-      practicalScoreScaled: llmResult.practical_score_scaled,
-      passFailPractical: llmResult.pass_fail_practical,
-      manualReviewRecommended: llmResult.manual_review_recommended,
-      confidenceNote: llmResult.confidence_note,
-    });
-
-    await recordAuditEvent({
-      entityType: auditEntityTypes.llmEvaluation,
-      entityId: llmEvaluation.id,
-      action: auditActions.assessment.llmEvaluationCreated,
-      actorId: userId,
-      metadata: {
+    // #803: persisting the LLM evaluation record + its audit commit atomically. The LLM call itself
+    // (evaluatePracticalWithLlm) already ran before this and is not inside the transaction.
+    const llmEvaluation = await runInTransaction(async (tx) => {
+      const created = await createAssessmentJobRepository(tx).createLlmEvaluation({
         submissionId,
-        assessmentPass,
-        modelName: llmEvaluation.modelName,
-        practicalScoreScaled: llmEvaluation.practicalScoreScaled,
-        passFailPractical: llmEvaluation.passFailPractical,
-        manualReviewRecommended: llmEvaluation.manualReviewRecommended,
-      },
+        moduleVersionId,
+        modelName:
+          env.LLM_MODE === "stub"
+            ? `${env.LLM_STUB_MODEL_NAME}:${assessmentPass}`
+            : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
+        promptTemplateVersionId,
+        requestPayloadHash: sha256(JSON.stringify(requestPayload)),
+        responseJson: llmResponseCodec.serialize(llmResult),
+        rubricTotal: llmResult.rubric_total,
+        practicalScoreScaled: llmResult.practical_score_scaled,
+        passFailPractical: llmResult.pass_fail_practical,
+        manualReviewRecommended: llmResult.manual_review_recommended,
+        confidenceNote: llmResult.confidence_note,
+      });
+
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.llmEvaluation,
+          entityId: created.id,
+          action: auditActions.assessment.llmEvaluationCreated,
+          actorId: userId,
+          metadata: {
+            submissionId,
+            assessmentPass,
+            modelName: created.modelName,
+            practicalScoreScaled: created.practicalScoreScaled,
+            passFailPractical: created.passFailPractical,
+            manualReviewRecommended: created.manualReviewRecommended,
+          },
+        },
+        tx,
+      );
+
+      return created;
     });
 
     return llmEvaluation;

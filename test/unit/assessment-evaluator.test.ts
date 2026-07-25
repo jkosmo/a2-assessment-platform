@@ -28,8 +28,15 @@ const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const sha256 = vi.fn(() => "hash");
 
-vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
-  assessmentJobRepository: { createLlmEvaluation },
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
+  const repo = { createLlmEvaluation };
+  // #803: createLlmEvaluation + its audit now run inside runInTransaction via createAssessmentJobRepository(tx).
+  return { assessmentJobRepository: repo, createAssessmentJobRepository: () => repo };
+});
+
+// #803: run the transaction callback inline with a throwaway tx client.
+vi.mock("../../src/db/transaction.js", () => ({
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
 vi.mock("../../src/modules/assessment/llmAssessmentService.js", () => ({
