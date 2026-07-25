@@ -159,9 +159,10 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
     // the service can expand membership (MANUAL rows are included; the system "Alle deltakere" class
     // has no rows and is resolved separately; ENTRA classes are not resolvable in a background job
     // and are skipped by the service).
-    findCourseGroupAssignmentsWithDueDate() {
+    // #798: bound to the reminder horizon (dueAt <= upperBound); includes overdue, prunes far-future.
+    findCourseGroupAssignmentsWithDueDate(upperBound: Date) {
       return client.courseGroupAssignment.findMany({
-        where: { dueAt: { not: null }, class: { archivedAt: null } },
+        where: { dueAt: { not: null, lte: upperBound }, class: { archivedAt: null } },
         include: {
           course: { select: { id: true, title: true } },
           class: {

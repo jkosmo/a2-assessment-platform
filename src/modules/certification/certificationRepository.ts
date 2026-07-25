@@ -54,10 +54,15 @@ export function createCertificationRepository(client: CertificationRepositoryCli
       });
     },
 
-    findCertificationsForReminderSchedule() {
+    // #798: only load certifications whose expiry is within the reminder horizon (`expiryDate <=
+    // upperBound`, where upperBound = asOf + the largest offset + a day). Recert reminders fire BEFORE
+    // expiry, so every candidate expiry is at or after asOf; far-future active certs (the bulk of the
+    // table) are pruned by the DB instead of loaded and discarded in memory. Backed by an index on
+    // expiryDate. Behaviour-preserving: no row that could match a reminder day is excluded.
+    findCertificationsForReminderSchedule(upperBound: Date) {
       return client.certificationStatus.findMany({
         where: {
-          expiryDate: { not: null },
+          expiryDate: { not: null, lte: upperBound },
         },
         include: {
           user: {

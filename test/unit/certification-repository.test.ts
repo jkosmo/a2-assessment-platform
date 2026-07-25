@@ -49,12 +49,13 @@ describe("certification repository", () => {
       },
     } as never);
 
-    await repository.findCertificationsForReminderSchedule();
+    const upperBound = new Date("2026-08-01T00:00:00.000Z");
+    await repository.findCertificationsForReminderSchedule(upperBound);
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          expiryDate: { not: null },
+          expiryDate: { not: null, lte: upperBound },
         },
         include: expect.objectContaining({
           user: expect.any(Object),

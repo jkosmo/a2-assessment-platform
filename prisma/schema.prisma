@@ -529,6 +529,8 @@ model CertificationStatus {
 
   @@unique([userId, moduleId])
   @@index([moduleId, status])
+  // #798: recert reminder scan range-filters expiryDate (<= horizon); index the range column.
+  @@index([expiryDate])
 }
 
 model AuditEvent {
@@ -642,6 +644,8 @@ model CourseEnrollment {
   @@unique([userId, courseId])
   @@index([courseId])
   @@index([userId, revokedAt])
+  // #798: course reminder scan range-filters dueAt (<= horizon); index the range column.
+  @@index([dueAt])
 }
 
 // #645/CL-1: a "class" (klasse) — a platform-owned, many-to-many cohort used to assign courses to a
@@ -699,6 +703,8 @@ model CourseGroupAssignment {
 
   @@unique([courseId, classId])
   @@index([classId])
+  // #798: course reminder scan range-filters dueAt (<= horizon); index the range column.
+  @@index([dueAt])
 }
 
 // Læringsseksjon i et kurs (#476/#481). Speiler Module/ModuleVersion: innholdet

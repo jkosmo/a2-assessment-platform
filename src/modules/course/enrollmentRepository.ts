@@ -68,9 +68,11 @@ export function createEnrollmentRepository(client: EnrollmentRepositoryClient = 
     // schedule. Skips revoked enrollments and enrollments without a dueAt at the query level; the
     // service layer further filters completed courses and inactive/anonymized users. Includes the
     // participant + the (localized) course title so no extra per-row lookups are needed.
-    findIndividualEnrollmentsWithDueDate() {
+    // #798: bound to the reminder horizon (dueAt <= upperBound). Includes all overdue rows (dueAt < asOf),
+    // so no reminder is missed; prunes far-future-dated enrolments at the DB. Backed by an index on dueAt.
+    findIndividualEnrollmentsWithDueDate(upperBound: Date) {
       return client.courseEnrollment.findMany({
-        where: { revokedAt: null, dueAt: { not: null } },
+        where: { revokedAt: null, dueAt: { not: null, lte: upperBound } },
         include: {
           user: { select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true } },
           course: { select: { id: true, title: true } },

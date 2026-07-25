@@ -141,7 +141,11 @@ export async function runRecertificationReminderSchedule(input?: { asOf?: Date }
     };
   }
 
-  const certifications = await certificationRepository.findCertificationsForReminderSchedule();
+  // #798: bound the scan to the reminder horizon. reminderDaysBefore is sorted descending, so [0] is the
+  // largest offset; +1 day of headroom covers the day-boundary match. Anything expiring beyond this can
+  // never match a "days before expiry" reminder on this run.
+  const upperBound = addDays(asOf, reminderDaysBefore[0] + 1);
+  const certifications = await certificationRepository.findCertificationsForReminderSchedule(upperBound);
 
   let processed = 0;
   let sent = 0;
