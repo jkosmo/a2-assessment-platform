@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.9.1 - 2026-07-26
+
+#475 — **Content-similarity: parallelized + per-environment enable; Phase 3 split out (#886).**
+
+- **Parallelized (latency):** the model-answer LLM call now runs concurrently with the main assessment
+  (`Promise.all`) instead of serially before it — when the signal is enabled, the added wall-clock is the
+  slower of the two calls, not their sum, instead of ~doubling assessment time.
+- **Per-environment enable:** new tri-state env override `AI_CONTENT_SIMILARITY_ENABLED` /
+  `AI_CONTENT_SIMILARITY_SHADOW` (unset = use the shared rules file). Lets us pilot content-similarity on
+  **staging only** without touching the committed rules file — so prod stays dormant and the test suite is
+  unaffected. Applied in `getAssessmentRules()`.
+- **Phase 3 deferred:** student stylometric baseline split to #886 (weakest value/risk: cold-start, high
+  false positives, heavier GDPR profiling). #475 now covers Phase 1 (live) + Phase 2 (shippable).
+
+Config file stays content-similarity OFF. tsc 0; unit 897; policy integration 11 (incl. content-similarity
+live/shadow). Client-invisible; no migration.
+
 ## 2.9.0 - 2026-07-26
 
 #475 **Phase 2 — AI-influence content-similarity signal.** Post-submission, generate an independent
