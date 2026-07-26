@@ -181,6 +181,17 @@ export function getAssessmentRules(): AssessmentRules {
   const rulesPath = path.resolve(process.cwd(), env.ASSESSMENT_RULES_FILE);
   const raw = fs.readFileSync(rulesPath, "utf8");
   const parsedJson = JSON.parse(raw);
-  cached = rulesSchema.parse(parsedJson);
+  const rules = rulesSchema.parse(parsedJson);
+
+  // #475 Phase 2: per-environment override of the content-similarity signal (enable on staging only
+  // without touching the shared file). Unset env vars leave the file value untouched.
+  if (env.AI_CONTENT_SIMILARITY_ENABLED !== undefined) {
+    rules.aiInfluence.contentSimilarity.enabled = env.AI_CONTENT_SIMILARITY_ENABLED === "true";
+  }
+  if (env.AI_CONTENT_SIMILARITY_SHADOW !== undefined) {
+    rules.aiInfluence.contentSimilarity.shadowMode = env.AI_CONTENT_SIMILARITY_SHADOW === "true";
+  }
+
+  cached = rules;
   return cached;
 }

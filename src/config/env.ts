@@ -125,6 +125,11 @@ const envSchema = z.object({
   PARTICIPANT_CONSOLE_CONFIG_FILE: z.string().default("config/participant-console.json"),
   PARTICIPANT_CONSOLE_DEBUG_MODE: z.enum(["auto", "true", "false"]).default("auto"),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),
+  // #475 Phase 2: per-environment override of the content-similarity signal, so it can be enabled on a
+  // single environment (e.g. staging) without touching the shared rules file (which would also affect
+  // prod + the test suite). Tri-state: unset = use the rules file; "true"/"false" = override.
+  AI_CONTENT_SIMILARITY_ENABLED: z.enum(["true", "false"]).optional(),
+  AI_CONTENT_SIMILARITY_SHADOW: z.enum(["true", "false"]).optional(),
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
   ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   ASSESSMENT_JOB_LEASE_DURATION_MS: z.coerce.number().int().positive().default(300000),

@@ -27,7 +27,8 @@ turn it into one more review signal (never a verdict) and persist `{similarity, 
 forcesReview}` alongside the declaration on the new additive `AssessmentDecision.aiInfluenceJson`. Gated by
 `aiInfluence.contentSimilarity {enabled, shadowMode, similarityThreshold}` (global + per-module), OFF +
 shadow by default. Coarse by design (lexical) — the §9 false-positive-budget gate still applies before it
-routes anyone. Phase 3 (student stylometric baseline) remains future.
+routes anyone. **Phase 3 (student stylometric baseline) is split out and deferred → #886** (weakest
+value/risk of the three: cold-start, high false positives, heavier GDPR profiling).
 
 **Phase 1 as built:** `Submission.processSignalsJson` (additive nullable) stores `{ declaration, declarationText?,
 insistedAfterPrompt }`. `src/modules/assessment/aiInfluence.ts` evaluates it against the global

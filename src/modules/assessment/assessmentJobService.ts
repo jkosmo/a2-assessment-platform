@@ -101,7 +101,10 @@ async function runAssessment(jobId: string) {
     policy: inputContext.assessmentPolicy,
     rules: aiRules,
   });
-  const contentSignal = await evaluateContentSimilarity({
+  // Content-similarity needs its own LLM call (the model answer) but does NOT depend on the assessment
+  // pipeline, so kick it off here and await it alongside the pipeline below — the extra call overlaps
+  // the assessment instead of adding to it. Returns null (no extra call) when the feature is disabled.
+  const contentSignalPromise = evaluateContentSimilarity({
     taskText: inputContext.moduleTaskText,
     studentAnswer: extractAnswerText(JSON.parse(submission.responseJson) as Record<string, unknown>),
     generateDraft: generateModelAnswer,
@@ -109,13 +112,6 @@ async function runAssessment(jobId: string) {
     responseLocale: submissionLocale,
     rules: resolveContentSimilarityRules(inputContext.assessmentPolicy, aiRules.contentSimilarity),
   });
-  const aiOutcome = buildAiInfluenceOutcome({
-    declaration: declarationSignals?.declaration,
-    declarationResult,
-    contentSignal,
-  });
-  const aiInfluence = aiOutcome.decision;
-  const aiInfluenceJson = aiOutcome.signalsJson;
 
   await recordAuditEvent({
     entityType: auditEntityTypes.submission,
@@ -132,15 +128,28 @@ async function runAssessment(jobId: string) {
     },
   });
 
-  const { finalLlmResult, forceManualReviewReason } = await runLlmEvaluationPipeline({
-    jobId,
-    submissionId: submission.id,
-    userId: submission.userId,
-    moduleId: submission.moduleId,
-    moduleVersionId: submission.moduleVersionId,
-    promptTemplateVersionId,
-    inputContext,
+  // Run the (independent) content-similarity and the main assessment concurrently; total added latency
+  // is the slower of the two, not the sum.
+  const [{ finalLlmResult, forceManualReviewReason }, contentSignal] = await Promise.all([
+    runLlmEvaluationPipeline({
+      jobId,
+      submissionId: submission.id,
+      userId: submission.userId,
+      moduleId: submission.moduleId,
+      moduleVersionId: submission.moduleVersionId,
+      promptTemplateVersionId,
+      inputContext,
+    }),
+    contentSignalPromise,
+  ]);
+
+  const aiOutcome = buildAiInfluenceOutcome({
+    declaration: declarationSignals?.declaration,
+    declarationResult,
+    contentSignal,
   });
+  const aiInfluence = aiOutcome.decision;
+  const aiInfluenceJson = aiOutcome.signalsJson;
 
   await applyAssessmentDecision({
     jobId,
