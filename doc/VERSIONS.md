@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.8.0 - 2026-07-26
+
+#475 — **AI-influence flagging (Phase 1): a participant AI-use declaration that can route a submission
+to manual review — never to a fail.** Ships **feature-flagged OFF** (`aiInfluence.enabled=false`) and
+**shadow-mode-first** (`shadowMode=true`), so it is completely dormant for participants until a product
+owner enables it. Grounded in `doc/design/AI_INFLUENCE_FLAGGING_475.md`.
+
+- **Declaration, not detection.** At submit, an enabled free-text module shows a required "Did you use AI
+  tools?" question (none / ideas / improve / **autonomous**) with an explicit "does not affect your
+  grade" note. No keystroke/paste/time telemetry is captured or stored — only the aggregate declaration
+  (`Submission.processSignalsJson`, new **additive nullable** column). DPIA-light by construction.
+- **Reflective nudge before any flag.** Declaring "AI generated most of it" and pressing submit shows a
+  calm nudge ("Want to make the material your own first?") with *Go back* / *Submit anyway*. Only if the
+  participant **insists** does the submission carry `insistedAfterPrompt`.
+- **Review trigger, never a verdict.** In the decision engine (`resolveAssessmentDecision`) ai-influence
+  feeds the `needsManualReview` OR-gate **only** (mirroring `borderlineWindow` #464) and withholds
+  `passFailTotal` — it can never turn a pass into a fail, only into a review a human resolves. The
+  reviewer sees the declaration + a transparent trigger reason.
+- **Config:** global `aiInfluence {enabled, shadowMode}` in `config/assessment-rules.json`; per-module
+  override in `ModuleAssessmentPolicy.aiInfluence`. Client UI gated on `participant/config.aiInfluence`.
+- Tests: `test/unit/ai-influence.test.ts` (parse/evaluate + never-fail), `test/e2e/participant-ai-
+  declaration.spec.ts` (dormant-when-off, nudge, POST shape), `TC-POL-AIINFLUENCE-001` integration
+  (declaration → UNDER_REVIEW, GREEN unaffected). tsc 0; unit 877/877; policy+review+core integration
+  green. Expand-only migration `20260726000000_submission_process_signals`.
+
 ## 2.7.3 - 2026-07-25
 
 #809 — **web `/healthz` is now a readiness probe, not a static liveness stub.** It returned `200` as soon

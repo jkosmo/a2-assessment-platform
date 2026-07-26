@@ -62,6 +62,11 @@ const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
 const submissionFieldsContainer = document.getElementById("submissionFields");
 const ackCheckbox = document.getElementById("ack");
+// #475: AI-use declaration block (hidden unless participant/config.aiInfluence.enabled).
+const aiDeclarationBlock = document.getElementById("aiDeclaration");
+const aiDeclarationHowtoWrap = document.getElementById("aiDeclarationHowtoWrap");
+const aiDeclarationText = document.getElementById("aiDeclarationText");
+const aiDeclarationHint = document.getElementById("aiDeclarationHint");
 const appealReasonInput = document.getElementById("appealReason");
 const assessmentSection = document.getElementById("assessmentSection");
 const appealSection = document.getElementById("appealSection");
@@ -121,6 +126,8 @@ let participantRuntimeConfig = {
     pollIntervalSeconds: 2,
     maxWaitSeconds: 90,
   },
+  // #475: default OFF so the declaration UI stays dormant until the server enables it.
+  aiInfluence: { enabled: false, shadowMode: true },
   identityDefaults: {
     participant: {
       userId: "participant-1",
@@ -733,6 +740,16 @@ function validateSubmissionInputState() {
     };
   }
 
+  // #475: when the AI-use declaration is enabled it is required for free-text submissions. Keeps the
+  // submit button disabled until the participant chooses an option (mirrors the ack gate).
+  if (aiDeclarationApplies() && !getSelectedAiDeclaration()) {
+    return {
+      valid: false,
+      hintKey: "ai.declaration.required",
+      invalidFieldElement: aiDeclarationBlock,
+    };
+  }
+
   return { valid: true, hintKey: "submission.validation.ready" };
 }
 
@@ -795,6 +812,92 @@ function updateCreateSubmissionAvailability() {
   createSubmissionButton.disabled = isBusy || flowState.hasSubmission || !validation.valid;
   applySubmissionValidationFeedback(validation);
   applySubmissionReadMode();
+  applyAiDeclarationVisibility();
+}
+
+// #475: AI-use declaration helpers ------------------------------------------------------------
+function aiDeclarationEnabled() {
+  return participantRuntimeConfig?.aiInfluence?.enabled === true;
+}
+
+// Live routing/nudge only when enabled AND not in shadow mode. In shadow mode we still collect the
+// declaration (the pilot dataset) but show no nudge and route no one.
+function aiDeclarationNudgeLive() {
+  return aiDeclarationEnabled() && participantRuntimeConfig?.aiInfluence?.shadowMode !== true;
+}
+
+// The declaration applies to free-text submissions only (MCQ-only modules have no deliverable).
+function aiDeclarationApplies() {
+  return aiDeclarationEnabled() && !selectedModuleIsMcqOnly();
+}
+
+function getSelectedAiDeclaration() {
+  const checked = aiDeclarationBlock?.querySelector('input[name="aiDeclaration"]:checked');
+  return checked ? checked.value : null;
+}
+
+// The "how did you use it" label is display:block when shown; managed via inline style so the
+// initial `display:none` (set in the HTML) is what we toggle — no `.hidden`-class cascade trap.
+function setAiHowtoVisible(visible) {
+  if (aiDeclarationHowtoWrap) aiDeclarationHowtoWrap.style.display = visible ? "block" : "none";
+}
+
+function clearAiDeclarationSelection() {
+  for (const input of aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? []) {
+    input.checked = false;
+  }
+  if (aiDeclarationText) aiDeclarationText.value = "";
+  setAiHowtoVisible(false);
+  aiDeclarationHint?.classList.add("hidden");
+}
+
+// Show/hide the declaration block for the current module. Called whenever the selected module or the
+// submission read-mode changes.
+function applyAiDeclarationVisibility() {
+  if (!aiDeclarationBlock) return;
+  const applies = aiDeclarationApplies();
+  setHidden(aiDeclarationBlock, !applies);
+  if (!applies) clearAiDeclarationSelection();
+}
+
+async function confirmAiNudge() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "ai-nudge-overlay";
+    const titleId = "aiNudgeTitle";
+    overlay.innerHTML = `
+      <div class="ai-nudge" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+        <div class="ai-nudge-top">
+          <h3 id="${titleId}">${escapeHtmlP(t("ai.nudge.title"))}</h3>
+          <p>${escapeHtmlP(t("ai.nudge.subtitle"))}</p>
+        </div>
+        <div class="ai-nudge-body">
+          <p>${escapeHtmlP(t("ai.nudge.body"))}</p>
+          <div class="why">${escapeHtmlP(t("ai.nudge.why"))}</div>
+        </div>
+        <div class="ai-nudge-foot">
+          <button type="button" class="btn-primary" data-nudge="back">${escapeHtmlP(t("ai.nudge.back"))}</button>
+          <button type="button" class="ai-nudge-insist" data-nudge="insist">${escapeHtmlP(t("ai.nudge.insist"))}</button>
+        </div>
+      </div>`;
+    function close(result) {
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+      resolve(result);
+    }
+    function onKey(event) {
+      if (event.key === "Escape") close(false);
+    }
+    overlay.addEventListener("click", (event) => {
+      const action = event.target?.dataset?.nudge;
+      if (action === "back") close(false);
+      else if (action === "insist") close(true);
+      else if (event.target === overlay) close(false);
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlay);
+    overlay.querySelector('[data-nudge="back"]')?.focus();
+  });
 }
 
 function hasMeaningfulStoredDraft(draft) {
@@ -2434,6 +2537,29 @@ createSubmissionButton.addEventListener("click", async () => {
         const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
         responseJson[field.id] = element?.value ?? "";
       }
+
+      // #475: AI-use declaration + reflective nudge (free-text modules only, when enabled). When the
+      // participant declares autonomous AI use and the nudge is live, offer them a chance to go back
+      // and engage further; only if they insist do we mark the submission for review downstream.
+      let processSignals;
+      if (aiDeclarationApplies()) {
+        const declaration = getSelectedAiDeclaration();
+        let insistedAfterPrompt = false;
+        if (declaration === "autonomous" && aiDeclarationNudgeLive()) {
+          const proceed = await confirmAiNudge();
+          if (!proceed) {
+            return; // participant chose to go back and revise — nothing submitted
+          }
+          insistedAfterPrompt = true;
+        }
+        const declarationText = aiDeclarationText?.value.trim();
+        processSignals = {
+          declaration,
+          ...(declarationText ? { declarationText } : {}),
+          insistedAfterPrompt,
+        };
+      }
+
       // MCQ-only modules send an empty submission (no free-text); acknowledgement is implicit
       // since there is no deliverable to take responsibility for (#525).
       const body = await apiFetch("/api/submissions", headers, {
@@ -2443,6 +2569,7 @@ createSubmissionButton.addEventListener("click", async () => {
           deliveryType: "text",
           responseJson,
           responsibilityAcknowledged: selectedModuleIsMcqOnly() ? true : ackCheckbox.checked,
+          ...(processSignals ? { processSignals } : {}),
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
@@ -2717,6 +2844,16 @@ rolesInput.addEventListener("input", () => {
 
 
 ackCheckbox.addEventListener("change", () => {
+  updateCreateSubmissionAvailability();
+});
+
+// #475: AI-use declaration — reveal the optional "how" field for any "used AI" answer, and re-run
+// availability so the submit button ungates once an option is chosen.
+aiDeclarationBlock?.addEventListener("change", (event) => {
+  if (event.target?.name !== "aiDeclaration") return;
+  const declaration = getSelectedAiDeclaration();
+  setAiHowtoVisible(Boolean(declaration) && declaration !== "none");
+  aiDeclarationHint?.classList.add("hidden");
   updateCreateSubmissionAvailability();
 });
 

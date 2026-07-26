@@ -7,6 +7,8 @@ import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
 import { runLlmEvaluationPipeline } from "./AssessmentEvaluator.js";
 import { applyAssessmentDecision, applyMcqOnlyDecision } from "./AssessmentDecisionApplicationService.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
+import { evaluateAiInfluence, parseAiInfluenceSignals } from "./aiInfluence.js";
 import {
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
@@ -79,6 +81,16 @@ async function runAssessment(jobId: string) {
 
   const inputContext = buildAssessmentInputContext(submission, submissionLocale);
 
+  // #475: evaluate the AI-use declaration into a review trigger (never a fail). Returns undefined
+  // unless the feature is enabled, live (not shadow), and the participant declared autonomous AI use
+  // and submitted after the nudge. The raw declaration is persisted regardless — it is the pilot data.
+  const aiInfluence =
+    evaluateAiInfluence({
+      signals: parseAiInfluenceSignals(submission.processSignalsJson),
+      policy: inputContext.assessmentPolicy,
+      rules: getAssessmentRules().aiInfluence,
+    }) ?? undefined;
+
   await recordAuditEvent({
     entityType: auditEntityTypes.submission,
     entityId: submission.id,
@@ -117,6 +129,7 @@ async function runAssessment(jobId: string) {
     mcqScaledScore,
     mcqPercentScore,
     freetextOnly: assessmentMode === "FREETEXT_ONLY",
+    aiInfluence,
     llmResult: finalLlmResult,
     forceManualReviewReason,
     assessmentPolicy: inputContext.assessmentPolicy,

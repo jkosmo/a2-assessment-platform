@@ -12,6 +12,14 @@ export type ModuleAssessmentPolicy = {
     // ses gjennom av en assessor før endelig pass/fail.
     borderlineWindow?: { min: number; max: number };
   };
+  // #475: per-module override of the global aiInfluence rules (config/assessmentRules.ts). A
+  // writing-practice module can enable flagging while an application/case module leaves it off —
+  // this encodes a *pedagogical policy*, so it belongs with the author. Undefined fields fall back
+  // to the global default.
+  aiInfluence?: {
+    enabled?: boolean;
+    shadowMode?: boolean;
+  };
 };
 
 export const assessmentPolicyCodec = {

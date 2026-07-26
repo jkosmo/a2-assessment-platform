@@ -119,6 +119,7 @@ describe("submission service", () => {
       locale: "nn",
       deliveryType: "document",
       responseJson: JSON.stringify({ response: "parsed document text" }),
+      processSignalsJson: null,
       attachmentUri: "https://storage.example/submission.pdf",
       submissionStatus: SubmissionStatus.SUBMITTED,
     });

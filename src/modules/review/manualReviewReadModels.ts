@@ -17,6 +17,8 @@ export type ManualReviewWorkspaceRecord = {
     submittedAt: Date;
     deliveryType: string;
     responseJson: string;
+    // #475: aggregate-only AI-use declaration (nullable). Surfaced to the reviewer, never scored.
+    processSignalsJson: string | null;
     user: { id: string; name: string; email: string; department: string | null };
     module: { id: string; title: string; description: string | null };
     moduleVersion: { id: string };
@@ -35,10 +37,24 @@ function parseSubmissionResponse(responseJson: string) {
   }
 }
 
+function parseAiDeclaration(processSignalsJson: string | null) {
+  if (!processSignalsJson) return { declaration: null as string | null, declarationText: null as string | null };
+  try {
+    const parsed = JSON.parse(processSignalsJson) as Record<string, unknown>;
+    return {
+      declaration: typeof parsed.declaration === "string" ? parsed.declaration : null,
+      declarationText: typeof parsed.declarationText === "string" ? parsed.declarationText : null,
+    };
+  } catch {
+    return { declaration: null, declarationText: null };
+  }
+}
+
 export function toManualReviewWorkspaceView(workspace: ManualReviewWorkspaceRecord, locale: string) {
   const normalizedLocale = normalizeLocale(locale) ?? "en-GB";
   const sub = workspace.submission;
   const parsedResponse = parseSubmissionResponse(sub.responseJson);
+  const aiDeclaration = parseAiDeclaration(sub.processSignalsJson);
 
   return {
     review: {
@@ -71,6 +87,9 @@ export function toManualReviewWorkspaceView(workspace: ManualReviewWorkspaceReco
           typeof parsedResponse.reflection === "string" ? parsedResponse.reflection : null,
         promptExcerpt:
           typeof parsedResponse.promptExcerpt === "string" ? parsedResponse.promptExcerpt : null,
+        // #475: the participant's AI-use declaration, for the reviewer to weigh integrity.
+        aiDeclaration: aiDeclaration.declaration,
+        aiDeclarationText: aiDeclaration.declarationText,
         mcqAttempts: sub.mcqAttempts,
         llmEvaluations: sub.llmEvaluations,
         decisions: sub.decisions,

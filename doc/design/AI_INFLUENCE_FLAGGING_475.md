@@ -1,7 +1,37 @@
 # AI-influence flagging → UNDER_REVIEW + annotation — Technical Design (#475)
 
-Status: **design / discovery**. No code until the non-technical gates (§9) are cleared. Builds on the
-discovery write-up in #475; grounded in the actual assessment pipeline (file refs throughout).
+Status: **Phase 1 implemented (v2.8.0), shipped feature-flagged OFF + shadow-mode.** The non-technical
+gates (§9) still gate *enabling* it in production. Builds on the discovery write-up in #475; grounded in
+the actual assessment pipeline (file refs throughout).
+
+## 0. Phase 1 as built (product-owner refinement, 2026-07-26)
+
+Two product-owner decisions reshaped the signal model from the original draft below, and made Phase 1
+both simpler and lower-risk:
+
+1. **The frame is disengagement, not AI use.** AI use is *encouraged* (including declaring it); the
+   problem is AI use where the participant is not actively involved, because that reduces learning. So we
+   flag the *autonomous* case, and the first response is a **reflective nudge**, not a flag: on submit we
+   invite the participant to go back and engage; only if they **insist** (and the signal is strong
+   enough) does it route to review, with the reason "assumed too-autonomous AI use".
+2. **Process telemetry is out.** Paste ratio is not a usable signal (a 500-word essay is naturally
+   written in Word and pasted); by the same logic time-on-task and typing speed collapse too. So Phase 1
+   captures **no** keystroke/paste/time telemetry. The real signals are **the declaration** and **the
+   choice to submit after the nudge**. This removes most of the DPIA burden (§9) — we store only the
+   aggregate declaration the participant volunteers.
+
+**As built:** `Submission.processSignalsJson` (additive nullable) stores `{ declaration, declarationText?,
+insistedAfterPrompt }`. `src/modules/assessment/aiInfluence.ts` evaluates it against the global
+`aiInfluence` rules (`config/assessment-rules.json`) + per-module `ModuleAssessmentPolicy.aiInfluence`
+override: it forces review only when **enabled && !shadowMode && declaration==="autonomous" &&
+insistedAfterPrompt**. That flows into `resolveAssessmentDecision`'s `needsManualReview` OR-gate and
+withholds `passFailTotal` (never touches the fail path). The client (`public/participant.js` +
+`participant.html`) shows the declaration only when `participant/config.aiInfluence.enabled`, and the
+reflective nudge only when live (not shadow). Reviewer sees the declaration via `manualReviewReadModels`.
+Communication is kept off the main surface per the owner: info lives in profile/privacy + the reactive
+nudge. The sections below are the original design; where they describe paste/keystroke signals (§2 Phase
+1 "Process", §3 `pasteRatio`/`largestInsertionChars`/`secondsPerChar`, §7 telemetry listeners) they are
+**superseded** by this section — those were not built.
 
 ## 1. Principle & guardrails (non-negotiable)
 

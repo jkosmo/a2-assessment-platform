@@ -12,6 +12,14 @@ import { env } from "../config/env.js";
 import { AppRole } from "../db/prismaRuntime.js";
 import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
 
+// #475: AI-use process signals — aggregate-only declaration + reflective-nudge choice. No keystroke
+// or paste telemetry. Optional so submissions from clients without the feature enabled are unaffected.
+const processSignalsSchema = z.object({
+  declaration: z.enum(["none", "ideas", "improve", "autonomous"]).optional(),
+  declarationText: z.string().trim().max(2000).optional(),
+  insistedAfterPrompt: z.boolean().optional(),
+});
+
 const createSubmissionSchema = z.object({
   moduleId: z.string().min(1),
   deliveryType: z.enum(["text", "file", "hybrid"]).default("text"),
@@ -20,6 +28,7 @@ const createSubmissionSchema = z.object({
   attachmentBase64: z.string().trim().optional(),
   attachmentFilename: z.string().trim().optional(),
   attachmentMimeType: z.string().trim().optional(),
+  processSignals: processSignalsSchema.optional(),
 });
 
 const createAppealSchema = z.object({

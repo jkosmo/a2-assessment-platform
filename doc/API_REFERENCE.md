@@ -47,6 +47,13 @@ See [DOMAIN_LIFECYCLE.md](DOMAIN_LIFECYCLE.md) for the full ownership model.
 | `POST` | `/api/assessments/:submissionId/run` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
 | `GET` | `/api/audit/submissions/:submissionId` | PARTICIPANT, SUBJECT_MATTER_OWNER, ADMINISTRATOR, APPEAL_HANDLER, REPORT_READER, REVIEWER |
 
+> **#475 (v2.8.0):** `POST /api/submissions` accepts an optional `processSignals` object —
+> `{ declaration?: "none"|"ideas"|"improve"|"autonomous", declarationText?: string, insistedAfterPrompt?: boolean }`
+> — the participant's AI-use declaration. Stored on `Submission.processSignalsJson` (aggregate-only; no
+> keystroke/paste telemetry). Only routes to review (never fails), and only when `aiInfluence` is enabled
+> + live for the module. `GET /participant/config` returns `aiInfluence: { enabled, shadowMode }` that
+> gates the client declaration UI (dormant by default).
+
 ---
 
 ## Courses (participant)

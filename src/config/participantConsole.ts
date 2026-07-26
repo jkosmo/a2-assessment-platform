@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { env, isMockAuthRuntimeAllowed } from "./env.js";
 import { buildWorkspaceNavigationItems, type WorkspaceNavigationItem } from "./capabilities.js";
+import { getAssessmentRules } from "./assessmentRules.js";
 
 const mockRoleSchema = z.enum([
   "PARTICIPANT",
@@ -94,6 +95,10 @@ export type ParticipantConsoleRuntimeConfig = {
   manualReviewWorkspace: ParticipantConsoleConfig["manualReviewWorkspace"];
   flow: ParticipantConsoleConfig["flow"];
   calibrationWorkspace: ParticipantConsoleConfig["calibrationWorkspace"];
+  // #475: drives the participant AI-use declaration UI. `enabled` shows the declaration field;
+  // `shadowMode` (when enabled) suppresses the reflective nudge and server routing — the client
+  // still collects the declaration for the pilot dataset. Default OFF, so the UI stays dormant.
+  aiInfluence: { enabled: boolean; shadowMode: boolean };
   identityDefaults?: ParticipantConsoleConfig["identityDefaults"];
   entra?: {
     clientId: string;
@@ -143,6 +148,10 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
     manualReviewWorkspace: config.manualReviewWorkspace,
     flow: config.flow,
     calibrationWorkspace: config.calibrationWorkspace,
+    aiInfluence: {
+      enabled: getAssessmentRules().aiInfluence.enabled,
+      shadowMode: getAssessmentRules().aiInfluence.shadowMode,
+    },
     identityDefaults: mockRoleSwitchEnabled ? config.identityDefaults : undefined,
     entra:
       env.AUTH_MODE === "entra" && env.ENTRA_CLIENT_ID && env.ENTRA_TENANT_ID && env.ENTRA_AUDIENCE

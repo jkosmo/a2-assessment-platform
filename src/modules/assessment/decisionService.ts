@@ -32,6 +32,10 @@ type BuildDecisionInput = {
   // #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. The rubric score spans the
   // full 0–100 and there is no MCQ gate.
   freetextOnly?: boolean;
+  // #475: AI-influence review trigger. When present with forcesReview, routes to UNDER_REVIEW —
+  // NEVER contributes to a FAIL (feeds `needsManualReview` only). Computed upstream from the
+  // participant's AI-use declaration; see aiInfluence.ts.
+  aiInfluence?: { forcesReview: boolean; reason: string };
 };
 
 export type ResolvedAssessmentDecision = {
@@ -47,7 +51,7 @@ export type ResolvedAssessmentDecision = {
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly" | "aiInfluence"
 >;
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
@@ -125,12 +129,19 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     totalScore >= borderlineWindow.min &&
     totalScore <= borderlineWindow.max;
 
+  // #475: AI-influence is a review TRIGGER only. It feeds `needsManualReview` (below) and forces
+  // `passFailTotal` to false so a would-pass submission is not auto-passed — mirroring borderlineWindow.
+  // It NEVER touches `passesThresholds` or `autoFailForInsufficientEvidence`, so it can never turn a
+  // pass into a fail; at most it turns an outcome into a review a human resolves.
+  const aiInfluenceForcesReview = Boolean(input.aiInfluence?.forcesReview);
+
   const needsManualReview =
     Boolean(input.forceManualReviewReason) ||
     totalsInconsistent ||
     hasOpenRedFlag ||
     (llmRecommendsManualReview && !autoFailForInsufficientEvidence) ||
-    isInBorderlineWindow;
+    isInBorderlineWindow ||
+    aiInfluenceForcesReview;
 
   const componentFailReason = !mcqGatePasses
     ? "Automatic fail: MCQ score below required minimum."
@@ -144,7 +155,11 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
         ? "LLM score inconsistency detected — routed to manual review."
         : isInBorderlineWindow
           ? `Routed to manual review: total score ${totalScore} is in the borderline window [${borderlineWindow!.min}, ${borderlineWindow!.max}].`
-          : "Automatically routed to manual review due to red flag / confidence rule.")
+          : hasOpenRedFlag || llmRecommendsManualReview
+            ? "Automatically routed to manual review due to red flag / confidence rule."
+            : aiInfluenceForcesReview
+              ? input.aiInfluence!.reason
+              : "Automatically routed to manual review due to red flag / confidence rule.")
     : autoFailForInsufficientEvidence
       ? "Automatic fail due to insufficient submission evidence."
       : passesThresholds
@@ -160,8 +175,9 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     needsManualReview,
     // v1.2.20 (#464): passFailTotal er false når i borderline-window — kandidaten har
     // ikke automatisk bestått selv om threshold-rules ellers passerte. Assessor må
-    // bekrefte.
-    passFailTotal: passesThresholds && !isInBorderlineWindow,
+    // bekrefte. #475: samme for AI-influence review — en besvarelse rutet til review er
+    // ikke automatisk bestått.
+    passFailTotal: passesThresholds && !isInBorderlineWindow && !aiInfluenceForcesReview,
     decisionReason,
   };
 }

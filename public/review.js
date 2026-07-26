@@ -501,6 +501,13 @@ function localizeReviewStatus(value) {
   return t(`manualReview.statusValue.${normalized || "UNKNOWN"}`);
 }
 
+// #475: localize the participant's AI-use declaration code to a human label (falls back to the code).
+function localizeAiDeclaration(value) {
+  if (typeof value !== "string" || !value) return "-";
+  const label = t(`manualReview.details.aiDeclarationValue.${value}`);
+  return label === `manualReview.details.aiDeclarationValue.${value}` ? value : label;
+}
+
 function populateMrStatusFilters() {
   if (!mrStatusFilter) return;
   const settings = getMrWorkspaceSettings();
@@ -700,6 +707,13 @@ function renderManualReviewDetails(details) {
     `${t("manualReview.details.submissionId")}: ${submission.id ?? "-"}`,
     `${t("manualReview.details.submittedAt")}: ${formatDateTime(submission.submittedAt)}`,
     `${t("manualReview.details.deliveryType")}: ${submission.deliveryType ?? "-"}`,
+    ...(submission.aiDeclaration
+      ? [
+          `${t("manualReview.details.aiDeclaration")}: ${localizeAiDeclaration(submission.aiDeclaration)}${
+            submission.aiDeclarationText ? ` — ${normalizeMultilineText(submission.aiDeclarationText)}` : ""
+          }`,
+        ]
+      : []),
     `${t("manualReview.details.rawText")}:`,
     normalizeMultilineText(submission.rawText),
     "",

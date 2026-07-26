@@ -11,6 +11,30 @@
       .assessment-progress { margin-top: calc(var(--space-1) * 1.25); font-size: 16px; font-weight: 600; color: var(--color-progress-text); }
       .assessment-progress-seconds { margin-top: calc(var(--space-1) * 0.75); font-size: 28px; font-weight: 800; color: var(--color-blue); letter-spacing: 0.3px; }
       .inline { display: inline-block; width: auto; }
+      /* #475: AI-use declaration */
+      .ai-declaration { margin: var(--space-2) 0; border: 1.5px solid var(--color-blue); border-radius: var(--radius-card); padding: var(--space-2); background: var(--color-blue-light, #f2f7ff); }
+      .ai-declaration-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      .ai-declaration-head h3 { margin: 0; font-size: 15px; }
+      .ai-declaration-nograde { font-size: 12px; font-weight: 600; color: #1f7a4d; white-space: nowrap; }
+      .ai-declaration-intro { margin: 4px 0 8px; color: var(--color-meta, #555); }
+      .ai-declaration-options { display: flex; flex-direction: column; gap: 6px; }
+      .ai-declaration-opt { display: flex; gap: 9px; align-items: center; border: 1px solid var(--color-module-border, #d5dbe4); border-radius: 8px; padding: 8px 11px; background: var(--color-module-surface, #fff); cursor: pointer; font-size: 14px; }
+      .ai-declaration-opt:hover { border-color: var(--color-link-hover-border, #9db4d6); }
+      .ai-declaration-opt input { margin: 0; }
+      .ai-declaration-howto { margin-top: 10px; }
+      .ai-declaration-howto textarea { width: 100%; margin-top: 5px; border: 1px solid var(--color-module-border, #d5dbe4); border-radius: 8px; padding: 8px 10px; font: inherit; resize: vertical; }
+      /* reflective nudge overlay */
+      .ai-nudge-overlay { position: fixed; inset: 0; background: rgba(16,21,28,.55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 60; }
+      .ai-nudge { background: #fff; border-radius: 14px; max-width: 460px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.3); overflow: hidden; }
+      .ai-nudge-top { background: #fdf4e5; border-bottom: 1px solid #e6cf9f; padding: 18px 20px; }
+      .ai-nudge-top h3 { margin: 0 0 6px; font-size: 17px; }
+      .ai-nudge-top p { margin: 0; font-size: 14px; color: #555; }
+      .ai-nudge-body { padding: 16px 20px; font-size: 14.5px; }
+      .ai-nudge-body .why { margin-top: 10px; font-size: 13.5px; color: #555; background: #f5f7fa; border: 1px solid #e3e8ef; border-radius: 8px; padding: 10px 12px; }
+      .ai-nudge-foot { padding: 12px 20px 18px; display: flex; flex-direction: column; gap: 9px; }
+      .ai-nudge-foot .btn-primary { width: 100%; }
+      .ai-nudge-insist { width: 100%; background: transparent; border: 1px solid #c6cfd9; border-radius: 8px; padding: 10px; font: inherit; color: #5b6675; cursor: pointer; }
+      .ai-nudge-insist:hover { background: #f5f7fa; }
       .module-list { display: grid; gap: var(--space-2); margin-top: calc(var(--space-1) * 1.5); }
       .module-card { text-align: left; border: 1px solid var(--color-module-border); border-radius: var(--radius-card); padding: var(--space-2); background: var(--color-module-surface); color: var(--color-text); }
       .module-card:hover { border-color: var(--color-link-hover-border); }
@@ -228,6 +252,25 @@
       <div class="small" id="draftStatus" aria-live="polite" aria-atomic="true"></div>
       <div class="small" id="draftBrowserNote" data-i18n="draft.browserNote">Your work is saved automatically in this browser while you switch between modules.</div>
       <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack">I acknowledge responsibility for submitted content</span></label>
+      <!-- #475: AI-use declaration. Hidden unless the feature is enabled (participant/config.aiInfluence.enabled). -->
+      <div id="aiDeclaration" class="ai-declaration" style="display:none" role="group" aria-labelledby="aiDeclarationTitle">
+        <div class="ai-declaration-head">
+          <h3 id="aiDeclarationTitle" data-i18n="ai.declaration.title">Did you use AI tools in this submission?</h3>
+          <span class="ai-declaration-nograde" data-i18n="ai.declaration.noGrade">✓ Does not affect your grade</span>
+        </div>
+        <p class="small ai-declaration-intro" data-i18n="ai.declaration.intro">AI is welcome — being open about how you used it helps us support your learning.</p>
+        <div class="ai-declaration-options" id="aiDeclarationOptions">
+          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="none" /> <span data-i18n="ai.declaration.opt.none">No, I did not use AI</span></label>
+          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="ideas" /> <span data-i18n="ai.declaration.opt.ideas">For ideas or look-ups — I wrote the answer myself</span></label>
+          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="improve" /> <span data-i18n="ai.declaration.opt.improve">To improve my own text — wording, structure, proofreading</span></label>
+          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="autonomous" /> <span data-i18n="ai.declaration.opt.autonomous">AI generated most of it — I did little of the work myself</span></label>
+        </div>
+        <label class="ai-declaration-howto" id="aiDeclarationHowtoWrap" style="display:none">
+          <span class="small" data-i18n="ai.declaration.howto">Optional: briefly, how did you use AI?</span>
+          <textarea id="aiDeclarationText" rows="2" maxlength="2000"></textarea>
+        </label>
+        <div class="hint hidden" id="aiDeclarationHint" role="alert" data-i18n="ai.declaration.required">Please choose one option to submit.</div>
+      </div>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create">Create submission</button>
       <div class="hint" id="submissionValidationHint" data-hint-key="submission.validation.ready"></div>
       <div class="small"><span data-i18n="submission.submissionId">Submission ID:</span> <span id="submissionId">-</span></div>

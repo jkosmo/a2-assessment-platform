@@ -140,5 +140,9 @@
       7,
       1
     ]
+  },
+  "aiInfluence": {
+    "enabled": false,
+    "shadowMode": true
   }
 }
