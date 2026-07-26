@@ -20,7 +20,16 @@ both simpler and lower-risk:
    choice to submit after the nudge**. This removes most of the DPIA burden (§9) — we store only the
    aggregate declaration the participant volunteers.
 
-**As built:** `Submission.processSignalsJson` (additive nullable) stores `{ declaration, declarationText?,
+**Phase 2 as built (v2.9.0):** content-similarity signal — `generateModelAnswer` (llmAssessmentService)
+produces an independent model answer to the task; `contentSimilarity.ts` computes a local lexical cosine
+between it and the student's answer; `evaluateContentSimilarity` + `buildAiInfluenceOutcome` (aiInfluence.ts)
+turn it into one more review signal (never a verdict) and persist `{similarity, threshold, exceeded,
+forcesReview}` alongside the declaration on the new additive `AssessmentDecision.aiInfluenceJson`. Gated by
+`aiInfluence.contentSimilarity {enabled, shadowMode, similarityThreshold}` (global + per-module), OFF +
+shadow by default. Coarse by design (lexical) — the §9 false-positive-budget gate still applies before it
+routes anyone. Phase 3 (student stylometric baseline) remains future.
+
+**Phase 1 as built:** `Submission.processSignalsJson` (additive nullable) stores `{ declaration, declarationText?,
 insistedAfterPrompt }`. `src/modules/assessment/aiInfluence.ts` evaluates it against the global
 `aiInfluence` rules (`config/assessment-rules.json`) + per-module `ModuleAssessmentPolicy.aiInfluence`
 override: it forces review only when **enabled && !shadowMode && declaration==="autonomous" &&

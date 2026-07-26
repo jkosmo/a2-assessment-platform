@@ -15,6 +15,9 @@ export type CreateAssessmentDecisionInput = {
   practicalScaledScore: number;
   totalScore: number;
   redFlagsJson: string;
+  // #475 Phase 2: computed AI-influence signals JSON (declaration + content-similarity). Nullable;
+  // review-signal-only, never affects pass/fail.
+  aiInfluenceJson?: string | null;
   passFailTotal: boolean;
   decisionType: DecisionTypeType;
   decisionReason: string;

@@ -143,10 +143,29 @@ export const rulesSchema = z.object({
     .object({
       enabled: z.boolean().default(false),
       shadowMode: z.boolean().default(true),
+      // #475 Phase 2: content-similarity signal — post-submission, generate a model answer to the task
+      // and measure similarity to the student's answer. ONE additional review signal, never a verdict.
+      // Coarse (lexical) by design; ships OFF + shadow so it collects pilot data before it can route.
+      contentSimilarity: z
+        .object({
+          enabled: z.boolean().default(false),
+          shadowMode: z.boolean().default(true),
+          similarityThreshold: z.number().min(0).max(1).default(0.82),
+        })
+        .default({
+          enabled: false,
+          shadowMode: true,
+          similarityThreshold: 0.82,
+        }),
     })
     .default({
       enabled: false,
       shadowMode: true,
+      contentSimilarity: {
+        enabled: false,
+        shadowMode: true,
+        similarityThreshold: 0.82,
+      },
     }),
 });
 
