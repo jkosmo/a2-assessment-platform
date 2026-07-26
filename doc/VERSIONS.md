@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.8.2 - 2026-07-26
+
+#475 — **Declaration UX fixes from stage testing.** Three fixes after live review on stage:
+
+- **Understated, compact declaration.** The options rendered as tall, right-aligned full-width rows (a
+  global `input{width:100%}` stretched the radio and pushed the text right). Rebuilt as quiet, compact,
+  left-aligned muted rows under a thin divider — no heavy blue box. Design principle: the answer field
+  and task content earn the space; the AI declaration is a quick end-step to click through.
+- **Trigger reason in Norwegian.** `AUTONOMOUS_REVIEW_REASON` was English; the reviewer audience is
+  Norwegian, so the ai-influence reason is now bokmål. (Other decisionReason strings remain English —
+  broader localisation is out of scope.)
+- **Participant's description reaches the reviewer.** The optional free-text ("how did you use AI?") is
+  now embedded in the trigger/decision reason (capped 600 chars), so it travels wherever the reason is
+  shown — not only the review-detail declaration line.
+
+Tests updated: unit `ai-influence` 15 (+description-in-reason), `TC-POL-AIINFLUENCE-001` asserts the
+Norwegian reason + carried description; e2e 3 green. Config-only + client + reason string. tsc 0.
+
 ## 2.8.1 - 2026-07-26
 
 #475 — **Enable AI-influence flagging (live).** Flips `config/assessment-rules.json` `aiInfluence` to

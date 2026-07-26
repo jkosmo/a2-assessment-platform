@@ -451,10 +451,13 @@ describe("Local integration assessment policy suite", () => {
         decision: { decisionReason: string; passFailTotal: boolean };
       };
 
-      // Routed to review, NOT failed and NOT auto-passed.
+      // Routed to review, NOT failed and NOT auto-passed. The reason is Norwegian and carries the
+      // participant's own free-text description through to the reviewer.
       expect(result.status).toBe("UNDER_REVIEW");
       expect(result.decision.passFailTotal).toBe(false);
-      expect(result.decision.decisionReason).toContain("autonomous");
+      expect(result.decision.decisionReason).toContain("autonom");
+      expect(result.decision.decisionReason).toContain("Deltakerens beskrivelse");
+      expect(result.decision.decisionReason).toContain("write the whole answer");
     } finally {
       await prisma.moduleVersion.update({
         where: { id: versionId },

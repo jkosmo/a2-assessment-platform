@@ -78,6 +78,18 @@ describe("evaluateAiInfluence", () => {
     expect(result).toEqual({ forcesReview: true, reason: AUTONOMOUS_REVIEW_REASON });
   });
 
+  it("carries the participant's free-text description into the reason for the reviewer", () => {
+    const result = evaluateAiInfluence({
+      signals: { declaration: "autonomous", insistedAfterPrompt: true, declarationText: "ChatGPT wrote it all" },
+      policy: null,
+      rules: RULES_LIVE,
+    });
+    expect(result?.forcesReview).toBe(true);
+    expect(result?.reason).toContain(AUTONOMOUS_REVIEW_REASON);
+    expect(result?.reason).toContain("Deltakerens beskrivelse");
+    expect(result?.reason).toContain("ChatGPT wrote it all");
+  });
+
   it("lets a per-module policy enable flagging when the global default is off", () => {
     const policy: ModuleAssessmentPolicy = { aiInfluence: { enabled: true, shadowMode: false } };
     const result = evaluateAiInfluence({ signals: autonomousInsisted, policy, rules: RULES_OFF });
