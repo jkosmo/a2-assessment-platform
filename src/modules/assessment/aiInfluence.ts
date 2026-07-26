@@ -206,6 +206,18 @@ export type AiInfluencePersisted = {
   forcesReview: boolean;
 };
 
+/** Parse the JSON persisted on AssessmentDecision.aiInfluenceJson (null/malformed → null). */
+export function parseAiInfluencePersisted(raw: string | null | undefined): AiInfluencePersisted | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as AiInfluencePersisted;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export type AiInfluenceOutcome = {
   /** Serialized AiInfluencePersisted for AssessmentDecision.aiInfluenceJson (null when no signals). */
   signalsJson: string | null;

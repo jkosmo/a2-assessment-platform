@@ -222,7 +222,7 @@ async function loadQuality() {
 }
 
 function hideResults() {
-  for (const id of ["qSignalsCard", "qThresholdCard", "qAnchorCard", "qOutcomesCard"]) el[id].hidden = true;
+  for (const id of ["qSignalsCard", "qThresholdCard", "qContentSimCard", "qAnchorCard", "qOutcomesCard"]) el[id].hidden = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,8 +237,79 @@ function renderWorkspace() {
   // Threshold card first so qTotalMin holds THIS module's value before the signal note reads it.
   renderThresholdCard(body);
   renderSignals(body.signals ?? {});
+  renderContentSimilarity(body.contentSimilarity ?? null);
   renderAnchors(body);
   renderOutcomes(body.outcomes ?? []);
+}
+
+// #475: content-similarity distribution (shadow) — histogram segmented by KI-declaration + per-
+// declaration stats, so the owner can eyeball whether AI answers separate from honest ones.
+function CS_GROUP(declaration) {
+  // Map the 4 declarations (+ undeclared) to the 3 colour groups shown in the histogram.
+  if (declaration === "improve") return "improve";
+  if (declaration === "autonomous") return "autonomous";
+  return "none"; // none / ideas / undeclared
+}
+function renderContentSimilarity(cs) {
+  if (!cs || !cs.enabled) { el.qContentSimCard.hidden = true; return; }
+  el.qContentSimCard.hidden = false;
+
+  const num = (v) => (v == null ? "—" : Number(v).toFixed(2));
+  const modeLabel = cs.shadowMode ? t("quality.cs.mode.shadow") : t("quality.cs.mode.live");
+  el.qCsSub.textContent = tf("quality.cs.sub", { mode: modeLabel, threshold: num(cs.threshold), count: cs.count });
+
+  if (!cs.count || cs.count === 0) {
+    el.qCsStats.innerHTML = `<div class="q-sig neutral"><div class="note">${escapeHtml(t("quality.cs.noData"))}</div></div>`;
+    el.qCsHistogram.innerHTML = "";
+    el.qCsLegend.innerHTML = "";
+    el.qCsTable.innerHTML = "";
+    return;
+  }
+
+  const overPct = cs.count > 0 ? Math.round((cs.overThresholdCount / cs.count) * 100) : 0;
+  const stats = [
+    { k: t("quality.cs.stat.count"), v: String(cs.count) },
+    { k: t("quality.cs.stat.median"), v: num(cs.median) },
+    { k: t("quality.cs.stat.p90"), v: num(cs.p90) },
+    { k: tf("quality.cs.stat.over", { threshold: num(cs.threshold) }), v: `${cs.overThresholdCount} · ${overPct}%` },
+  ];
+  el.qCsStats.innerHTML = stats
+    .map((s) => `<div class="q-sig neutral"><div class="k">${escapeHtml(s.k)}</div><div class="v">${escapeHtml(s.v)}</div></div>`)
+    .join("");
+
+  // Histogram: per bin, stack the 3 colour groups; bar total height = binTotal / maxBinTotal.
+  const bins = cs.bins ?? [];
+  const binTotals = bins.map((b) => Object.values(b.byDeclaration ?? {}).reduce((a, n) => a + n, 0));
+  const maxTotal = Math.max(1, ...binTotals);
+  const bars = bins
+    .map((b, i) => {
+      const total = binTotals[i];
+      if (total === 0) return `<div class="csbar"></div>`;
+      const barH = (total / maxTotal) * 100;
+      const groups = { none: 0, improve: 0, autonomous: 0 };
+      for (const [decl, n] of Object.entries(b.byDeclaration ?? {})) groups[CS_GROUP(decl)] += n;
+      const segs = ["none", "improve", "autonomous"]
+        .filter((g) => groups[g] > 0)
+        .map((g) => `<div class="q-cs-seg d-${g}" style="height:${(groups[g] / total) * barH}%"></div>`)
+        .join("");
+      return `<div class="csbar" title="${b.from.toFixed(2)}–${b.to.toFixed(2)}: ${total}">${segs}</div>`;
+    })
+    .join("");
+  const thrLeft = Math.min(100, Math.max(0, (cs.threshold ?? 0.82) * 100));
+  el.qCsHistogram.innerHTML = bars + `<div class="q-cs-thr" data-label="${escapeAttr(t("quality.cs.thresholdMarker"))} ${num(cs.threshold)}" style="left:${thrLeft}%"></div>`;
+
+  el.qCsLegend.innerHTML =
+    `<span><i style="background:#9aa3af"></i> ${escapeHtml(t("quality.cs.legend.none"))}</span>` +
+    `<span><i style="background:var(--color-blue)"></i> ${escapeHtml(t("quality.cs.legend.improve"))}</span>` +
+    `<span><i style="background:#e08a1e"></i> ${escapeHtml(t("quality.cs.legend.autonomous"))}</span>`;
+
+  const declLabel = (d) => t(`quality.cs.decl.${d}`) || d;
+  const declColour = (d) => ({ none: "#9aa3af", ideas: "#9aa3af", improve: "var(--color-blue)", autonomous: "#e08a1e", undeclared: "#9aa3af" }[d] ?? "#9aa3af");
+  const head = `<thead><tr><th>${escapeHtml(t("quality.cs.col.decl"))}</th><th class="num">${escapeHtml(t("quality.cs.col.count"))}</th><th class="num">${escapeHtml(t("quality.cs.col.median"))}</th><th class="num">${escapeHtml(t("quality.cs.col.p90"))}</th><th class="num">${escapeHtml(t("quality.cs.col.max"))}</th><th class="num">${escapeHtml(t("quality.cs.col.over"))}</th></tr></thead>`;
+  const rows = (cs.byDeclaration ?? [])
+    .map((r) => `<tr><td><span class="q-cs-sw" style="background:${declColour(r.declaration)}"></span>${escapeHtml(declLabel(r.declaration))}</td><td class="num">${r.count}</td><td class="num">${num(r.median)}</td><td class="num">${num(r.p90)}</td><td class="num">${num(r.max)}</td><td class="num">${r.overThresholdCount}</td></tr>`)
+    .join("");
+  el.qCsTable.innerHTML = head + `<tbody>${rows}</tbody>`;
 }
 
 function sigClass(ok, warn) {
@@ -487,6 +558,7 @@ function mountWorkspace() {
     "qSignalsCard", "qSignals", "qThresholdCard", "qDistBlock", "qModeNote", "qHistogram", "qTotalMin", "qMcqField", "qMcqMin",
     "qPracticalField", "qPracticalMin", "qPreview", "qThresholdSource", "qPublish",
     "qAnchorCard", "qAnchorSummary", "qAnchorLink", "qOutcomesCard", "qOutcomesBody",
+    "qContentSimCard", "qCsSub", "qCsStats", "qCsHistogram", "qCsLegend", "qCsTable",
   ]) el[id] = document.getElementById(id);
 
   // i18n static text
