@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.8.1 - 2026-07-26
+
+#475 — **Enable AI-influence flagging (live).** Flips `config/assessment-rules.json` `aiInfluence` to
+`{ enabled: true, shadowMode: false }` — the participant AI-use declaration + reflective nudge + review
+routing are now active. Product-owner decision (jkosmo). Config-only change on top of v2.8.0.
+
+- **Scope:** the flag lives in the shared rules file, so `main` now carries `enabled:true`. **Staging is
+  enabled immediately; production is unaffected until the next manual prod promotion** carries this flag.
+  Before promoting to prod, clear the §9 gates in `doc/design/AI_INFLUENCE_FLAGGING_475.md` (DPIA,
+  pedagogical policy, false-positive budget).
+- Behaviour unchanged from v2.8.0 — this only turns it on. Still a review trigger, never a fail.
+
 ## 2.8.0 - 2026-07-26
 
 #475 — **AI-influence flagging (Phase 1): a participant AI-use declaration that can route a submission

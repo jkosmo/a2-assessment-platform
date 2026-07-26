@@ -142,7 +142,7 @@
     ]
   },
   "aiInfluence": {
-    "enabled": false,
-    "shadowMode": true
+    "enabled": true,
+    "shadowMode": false
   }
 }
