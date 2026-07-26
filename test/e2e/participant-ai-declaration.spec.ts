@@ -89,7 +89,7 @@ test("participant: AI declaration is dormant when the feature is off (no block, 
   for (const ta of await page.locator("#submissionFields textarea").all()) {
     await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
   }
-  await page.locator("#ack").check();
+  // responsibility is confirmed by default (a hidden input inside its tile)
   await page.locator("#createSubmission").click();
 
   await expect.poll(() => postedBody !== null).toBe(true);
@@ -118,11 +118,11 @@ test("participant: declaring autonomous shows the nudge; 'go back' cancels, 'sub
   for (const ta of await page.locator("#submissionFields textarea").all()) {
     await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
   }
-  await page.locator("#ack").check();
+  // responsibility is confirmed by default (a hidden input inside its tile)
   await expect(page.locator("#createSubmission")).toBeDisabled();
 
-  // Choose "AI generated most of it" → button enables.
-  await page.locator('#aiDeclaration input[value="autonomous"]').check();
+  // Choose "AI wrote most of it" tile → button enables.
+  await page.locator('.ai-declaration-opt[data-v="autonomous"]').click();
   await expect(page.locator("#createSubmission")).toBeEnabled();
 
   // Submitting shows the reflective nudge; choosing "go back" cancels — nothing is submitted.
@@ -160,8 +160,8 @@ test("participant: a non-autonomous declaration submits directly with no nudge",
   for (const ta of await page.locator("#submissionFields textarea").all()) {
     await ta.fill("Et tilstrekkelig langt fritekstsvar for vurdering.");
   }
-  await page.locator("#ack").check();
-  await page.locator('#aiDeclaration input[value="ideas"]').check();
+  // responsibility is confirmed by default (a hidden input inside its tile)
+  await page.locator('.ai-declaration-opt[data-v="ideas"]').click();
   await page.locator("#createSubmission").click();
 
   // No nudge for non-autonomous declarations; it submits straight through.
