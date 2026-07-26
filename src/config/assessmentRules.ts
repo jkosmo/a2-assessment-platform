@@ -134,6 +134,20 @@ export const rulesSchema = z.object({
     .default({
       reminderDaysBefore: [7, 1],
     }),
+  // #475: AI-influence flagging. A REVIEW TRIGGER, never a verdict/penalty — a strong AI-use
+  // declaration routes to UNDER_REVIEW, never to FAIL. `enabled` gates the whole feature (client
+  // declaration UI + server routing); default OFF so it ships dormant. `shadowMode` collects the
+  // declaration without routing anyone (Phase 1a) — default true so even when enabled it measures
+  // first. Per-module override lives in ModuleAssessmentPolicy.aiInfluence.
+  aiInfluence: z
+    .object({
+      enabled: z.boolean().default(false),
+      shadowMode: z.boolean().default(true),
+    })
+    .default({
+      enabled: false,
+      shadowMode: true,
+    }),
 });
 
 export type AssessmentRules = z.infer<typeof rulesSchema>;

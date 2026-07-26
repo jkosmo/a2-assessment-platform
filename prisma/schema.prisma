@@ -293,6 +293,9 @@ model Submission {
   locale           String               @default("en-GB")
   deliveryType     String
   responseJson     String               @default("{}")
+  // #475: AI-use process signals — the participant's AI-use declaration + nudge choice. Additive,
+  // nullable, aggregate-only (no keystroke/paste telemetry). Shape: aiInfluenceSignalsCodec.
+  processSignalsJson String?
   attachmentUri    String?
   submittedAt      DateTime             @default(now())
   submissionStatus SubmissionStatus     @default(SUBMITTED)

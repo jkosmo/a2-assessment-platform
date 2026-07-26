@@ -143,6 +143,7 @@ describe("module-owned read models", () => {
           reflection: "Reflection text",
           promptExcerpt: "Prompt excerpt",
         }),
+        processSignalsJson: null,
         user: {
           id: "user-1",
           name: "User",

@@ -22,6 +22,14 @@ export type CreateSubmissionInput = {
   attachmentBase64?: string;
   attachmentFilename?: string;
   attachmentMimeType?: string;
+  // #475: aggregate-only AI-use declaration + reflective-nudge choice. Persisted verbatim on
+  // Submission.processSignalsJson; never influences scoring here — only the assessment decision
+  // engine reads it, and only as a review trigger.
+  processSignals?: {
+    declaration?: "none" | "ideas" | "improve" | "autonomous";
+    declarationText?: string;
+    insistedAfterPrompt?: boolean;
+  };
 };
 
 type ParseOutcome = Awaited<ReturnType<typeof resolveSubmissionResponseJson>>;
@@ -40,6 +48,10 @@ async function createSubmissionCommand(
       locale: input.locale,
       deliveryType: input.deliveryType,
       responseJson: JSON.stringify(parseOutcome.resolvedResponseJson),
+      // #475: store the declaration only when one was actually made; otherwise leave the column null.
+      processSignalsJson: input.processSignals?.declaration
+        ? JSON.stringify(input.processSignals)
+        : null,
       attachmentUri: input.attachmentUri,
       submissionStatus: SubmissionStatus.SUBMITTED,
     });

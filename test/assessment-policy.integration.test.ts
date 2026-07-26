@@ -371,4 +371,95 @@ describe("Local integration assessment policy suite", () => {
     );
     expect(mockEvaluatePracticalWithLlm).toHaveBeenCalledTimes(1);
   });
+
+  // #475: the SAME strong submission that passes in TC-POL-GREEN-001 must instead route to
+  // UNDER_REVIEW (never fail) when the participant declares autonomous AI use, submits after the
+  // nudge, and the module has ai-influence enabled + live. Proves the full server glue:
+  // processSignalsJson → evaluateAiInfluence → decision engine → ManualReview.
+  it("TC-POL-AIINFLUENCE-001 routes an autonomous AI declaration to review, never to fail", async () => {
+    const app = await loadFreshApp();
+    const moduleId = await findModuleIdByTitle(app, participantHeaders, "Generative AI Foundations");
+    const moduleRow = await prisma.module.findUniqueOrThrow({
+      where: { id: moduleId },
+      select: { activeVersionId: true },
+    });
+    const versionId = moduleRow.activeVersionId!;
+    const original = await prisma.moduleVersion.findUniqueOrThrow({
+      where: { id: versionId },
+      select: { assessmentPolicyJson: true },
+    });
+    const basePolicy = original.assessmentPolicyJson ? JSON.parse(original.assessmentPolicyJson) : {};
+    // Enable ai-influence live on this module version only, for the duration of the test.
+    await prisma.moduleVersion.update({
+      where: { id: versionId },
+      data: {
+        assessmentPolicyJson: JSON.stringify({
+          ...basePolicy,
+          aiInfluence: { enabled: true, shadowMode: false },
+        }),
+      },
+    });
+
+    try {
+      mockEvaluatePracticalWithLlm.mockReset();
+      mockEvaluatePracticalWithLlm.mockResolvedValueOnce(buildAssessment());
+
+      const submissionResponse = await request(app)
+        .post("/api/submissions")
+        .set(participantHeaders)
+        .send({
+          moduleId,
+          deliveryType: "text",
+          responseJson: {
+            response:
+              "I used generative AI to improve a workshop agenda, refined the prompt twice, and validated the final output against the original notes before sending it.",
+            reflection:
+              "The second iteration was better because I constrained the output to actual decisions and removed invented assumptions during manual QA.",
+            promptExcerpt: "Rewrite this workshop brief with clear outcomes, action items, and no invented facts.",
+          },
+          // The declaration + reflective-nudge choice the client attaches.
+          processSignals: {
+            declaration: "autonomous",
+            declarationText: "I asked the AI to write the whole answer and submitted it with minor edits.",
+            insistedAfterPrompt: true,
+          },
+        });
+      expect(submissionResponse.status).toBe(201);
+      const submissionId = submissionResponse.body.submission.id as string;
+
+      const mcqStart = await startMcq(app, participantHeaders, moduleId, submissionId);
+      await submitMcqWithAnswerSelector(
+        app,
+        participantHeaders,
+        moduleId,
+        submissionId,
+        mcqStart.attemptId,
+        mcqStart.questions,
+        (question) =>
+          question.stem === "What is the recommended model ownership boundary?"
+            ? "Backend owns final decision"
+            : "Prompt versions and thresholds",
+      );
+      await runAssessmentSync(app, participantHeaders, submissionId);
+
+      const resultResponse = await request(app)
+        .get(`/api/submissions/${submissionId}/result`)
+        .set(participantHeaders);
+      expect(resultResponse.status).toBe(200);
+      const result = resultResponse.body as {
+        status: string;
+        decision: { decisionReason: string; passFailTotal: boolean };
+      };
+
+      // Routed to review, NOT failed and NOT auto-passed.
+      expect(result.status).toBe("UNDER_REVIEW");
+      expect(result.decision.passFailTotal).toBe(false);
+      expect(result.decision.decisionReason).toContain("autonomous");
+    } finally {
+      await prisma.moduleVersion.update({
+        where: { id: versionId },
+        data: { assessmentPolicyJson: original.assessmentPolicyJson },
+      });
+    }
+  });
 });

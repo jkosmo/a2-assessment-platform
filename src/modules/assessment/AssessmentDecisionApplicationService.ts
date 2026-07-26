@@ -23,6 +23,8 @@ type ApplyDecisionInput = {
   rubricCriteriaIds: string[];
   /** #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. */
   freetextOnly?: boolean;
+  /** #475: AI-influence review trigger (undefined = no trigger). Routes to review, never fails. */
+  aiInfluence?: { forcesReview: boolean; reason: string };
   /** Localized module title text (may be a raw localization JSON string). */
   moduleTitle: string;
   submissionLocale: SupportedLocale;
@@ -55,6 +57,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     rubricMaxTotal: input.rubricMaxTotal,
     rubricCriteriaIds: input.rubricCriteriaIds,
     freetextOnly: input.freetextOnly,
+    aiInfluence: input.aiInfluence,
   });
 
   if (!decisionResult.needsManualReview) {

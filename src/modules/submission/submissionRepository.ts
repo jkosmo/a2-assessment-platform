@@ -8,6 +8,8 @@ type CreateSubmissionInput = {
   locale: string;
   deliveryType: string;
   responseJson: string;
+  // #475: aggregate-only AI-use declaration JSON (nullable). Never affects scoring.
+  processSignalsJson?: string | null;
   attachmentUri?: string;
   submissionStatus: SubmissionStatusType;
 };
