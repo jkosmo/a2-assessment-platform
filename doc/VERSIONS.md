@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.10.0 - 2026-07-26
+
+#475 — **Content-similarity: shadow everywhere + calibration report.** After a stage test showed a
+KI-generated answer scored 0.71 vs the 0.82 threshold (missed) — and that separating honest vs AI answers
+needs pilot data — content-similarity is now set to **shadow mode everywhere** (computes + persists the
+similarity, routes no one) and a **calibration report** was added so the distribution can be watched
+without DB access. Routing (a data-driven threshold) is deferred until enough data accumulates.
+
+- **Shadow everywhere:** `config/assessment-rules.json` `aiInfluence.contentSimilarity` →
+  `{enabled:true, shadowMode:true}`. Gathers the pilot dataset from real submissions passively.
+- **Calibration report** on the "Vurderingskvalitet" page (`admin-content-calibration`): a similarity
+  **histogram segmented by KI-declaration** (grey = declared no-AI/ideas, blue = improved-own-text,
+  orange = AI-wrote-most) with the threshold marker, stat cards (count/median/P90/over-threshold), and a
+  per-declaration table (median/P90/max/over) — so a product owner can eyeball whether AI answers
+  separate from the honest bulk and later pick a defensible threshold. Reads `AssessmentDecision.
+  aiInfluenceJson` via `calibrationWorkspaceService.buildContentSimilarityReport`.
+- **Phase 3** stays deferred (#886).
+
+Tests: unit `content-similarity-report` (bucketing/percentiles/grouping); calibration render verified
+headless against real client code. tsc 0; unit 901; calibration + policy integration green. Client +
+config + report; no migration.
+
 ## 2.9.1 - 2026-07-26
 
 #475 — **Content-similarity: parallelized + per-environment enable; Phase 3 split out (#886).**

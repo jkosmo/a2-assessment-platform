@@ -145,7 +145,7 @@
     "enabled": true,
     "shadowMode": false,
     "contentSimilarity": {
-      "enabled": false,
+      "enabled": true,
       "shadowMode": true,
       "similarityThreshold": 0.82
     }

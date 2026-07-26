@@ -8,6 +8,85 @@ import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
+import {
+  parseAiInfluencePersisted,
+  resolveContentSimilarityRules,
+  type AiInfluenceContentRules,
+} from "../assessment/aiInfluence.js";
+import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+
+// #475: declaration groups shown in the content-similarity calibration report, in display order.
+const DECLARATION_ORDER = ["none", "ideas", "improve", "autonomous", "undeclared"] as const;
+
+function percentile(sortedAsc: number[], p: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  const idx = Math.min(sortedAsc.length - 1, Math.floor(p * sortedAsc.length));
+  return round2(sortedAsc[idx]);
+}
+
+/**
+ * #475: build the content-similarity distribution for the calibration report from the persisted
+ * aiInfluenceJson of each submission's latest decision. Histogram (20 bins over 0–1) with per-
+ * declaration counts, plus per-declaration stats — so a product owner can see whether AI-declared and
+ * suspicious "declared none but high-similarity" answers separate from the honest bulk.
+ */
+export function buildContentSimilarityReport(
+  aiInfluenceJsons: Array<string | null | undefined>,
+  rules: AiInfluenceContentRules,
+) {
+  const BIN_COUNT = 20;
+  const bins = Array.from({ length: BIN_COUNT }, (_, i) => ({
+    from: round2(i / BIN_COUNT),
+    to: round2((i + 1) / BIN_COUNT),
+    byDeclaration: {} as Record<string, number>,
+  }));
+  const simsByDeclaration = new Map<string, number[]>();
+  const allSims: number[] = [];
+
+  for (const raw of aiInfluenceJsons) {
+    const parsed = parseAiInfluencePersisted(raw);
+    const sim = parsed?.contentSimilarity?.similarity;
+    if (typeof sim !== "number") continue;
+    const declaration = parsed?.declaration ?? "undeclared";
+    allSims.push(sim);
+    const idx = Math.min(BIN_COUNT - 1, Math.max(0, Math.floor(sim * BIN_COUNT)));
+    bins[idx].byDeclaration[declaration] = (bins[idx].byDeclaration[declaration] ?? 0) + 1;
+    if (!simsByDeclaration.has(declaration)) simsByDeclaration.set(declaration, []);
+    simsByDeclaration.get(declaration)!.push(sim);
+  }
+
+  const threshold = rules.similarityThreshold;
+  const sortedAll = [...allSims].sort((a, b) => a - b);
+  const byDeclaration = Array.from(simsByDeclaration.entries())
+    .map(([declaration, sims]) => {
+      const sorted = [...sims].sort((a, b) => a - b);
+      return {
+        declaration,
+        count: sorted.length,
+        median: percentile(sorted, 0.5),
+        p90: percentile(sorted, 0.9),
+        max: sorted.length > 0 ? round2(sorted[sorted.length - 1]) : null,
+        overThresholdCount: sorted.filter((x) => x >= threshold).length,
+      };
+    })
+    .sort(
+      (a, b) =>
+        DECLARATION_ORDER.indexOf(a.declaration as (typeof DECLARATION_ORDER)[number]) -
+        DECLARATION_ORDER.indexOf(b.declaration as (typeof DECLARATION_ORDER)[number]),
+    );
+
+  return {
+    enabled: rules.enabled,
+    shadowMode: rules.shadowMode,
+    threshold,
+    count: allSims.length,
+    median: percentile(sortedAll, 0.5),
+    p90: percentile(sortedAll, 0.9),
+    overThresholdCount: allSims.filter((x) => x >= threshold).length,
+    bins,
+    byDeclaration,
+  };
+}
 
 export type CalibrationWorkspaceFilters = {
   moduleId: string;
@@ -252,6 +331,12 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
     source: hasModuleOverrides ? ("module_policy" as const) : ("global_defaults" as const),
   };
 
+  // #475: content-similarity distribution for this module (from persisted aiInfluenceJson).
+  const contentSimilarity = buildContentSimilarityReport(
+    submissions.map((s) => s.decisions[0]?.aiInfluenceJson ?? null),
+    resolveContentSimilarityRules(modulePolicy as ModuleAssessmentPolicy | null, rules.aiInfluence.contentSimilarity),
+  );
+
   await recordAuditEvent({
     entityType: auditEntityTypes.calibrationWorkspace,
     entityId: module.id,
@@ -301,5 +386,6 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
       benchmarkCoverageRate,
       flags,
     },
+    contentSimilarity,
   };
 }

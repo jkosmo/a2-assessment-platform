@@ -57,6 +57,24 @@
       .q-hist-thr { position: absolute; top: -2px; bottom: -20px; width: 2px; background: #c0392b; z-index: 3; }
       .q-hist-thr::after { content: attr(data-label); position: absolute; top: -19px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; color: #fff; background: #c0392b; padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
       .q-hist-x { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-meta); margin-top: 24px; font-variant-numeric: tabular-nums; }
+      /* #475: content-similarity segmented histogram + table */
+      .q-cs-histwrap { position: relative; }
+      .q-cs-bars { display: flex; align-items: flex-end; gap: 2px; height: 150px; position: relative; }
+      .q-cs-bars .csbar { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; min-width: 0; }
+      .q-cs-seg { width: 100%; }
+      .q-cs-seg.d-none { background: #9aa3af; }
+      .q-cs-seg.d-improve { background: var(--color-blue); }
+      .q-cs-seg.d-autonomous { background: #e08a1e; }
+      .q-cs-thr { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed #c0392b; z-index: 3; }
+      .q-cs-thr::after { content: attr(data-label); position: absolute; top: -2px; left: 6px; font-size: 11px; font-weight: 700; color: #c0392b; white-space: nowrap; }
+      .q-cs-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--color-meta); }
+      .q-cs-legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .q-cs-legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+      .q-cs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .q-cs-table th, .q-cs-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--color-border-soft); }
+      .q-cs-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-meta); font-weight: 700; }
+      .q-cs-table td.num, .q-cs-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .q-cs-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: middle; }
 
       /* ── Threshold editor ────────────────────────────────────────────────── */
       .q-thr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-2); }
@@ -178,6 +196,21 @@
           <div class="q-publish-row">
             <button id="qPublish" class="btn-secondary" data-i18n="quality.threshold.publish" disabled>Publiser ny terskel</button>
             <span class="q-consequence" data-i18n="quality.threshold.consequence">Lager og publiserer en ny modul-versjon. Påvirker bare framtidige vurderinger — ingen tidligere svar re-scores.</span>
+          </div>
+        </section>
+
+        <!-- #475: content-similarity calibration (shadow — routes no one) -->
+        <section class="card" id="qContentSimCard" hidden>
+          <h2 data-i18n="quality.cs.title">KI-innflytelse — content-similarity</h2>
+          <p class="small" id="qCsSub"></p>
+          <div class="q-signals" id="qCsStats" style="margin-top:var(--space-1)"></div>
+          <div class="q-cs-histwrap" style="margin-top:var(--space-2)">
+            <div class="q-cs-bars" id="qCsHistogram"></div>
+            <div class="q-hist-x"><span>0.0</span><span>0.2</span><span>0.4</span><span>0.6</span><span>0.8</span><span>1.0</span></div>
+          </div>
+          <div class="q-cs-legend" id="qCsLegend"></div>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Fordeling per KI-erklæring" style="margin-top:var(--space-2)">
+            <table class="q-cs-table" id="qCsTable"></table>
           </div>
         </section>
 

@@ -80,6 +80,9 @@ export function createCalibrationRepository(client: CalibrationRepositoryClient 
               mcqScaledScore: true,
               finalisedAt: true,
               redFlagsJson: true,
+              // #475: computed AI-influence signals (declaration + content-similarity) for the
+              // calibration report's similarity distribution.
+              aiInfluenceJson: true,
             },
           },
           llmEvaluations: {
