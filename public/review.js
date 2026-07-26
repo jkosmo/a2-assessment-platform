@@ -769,10 +769,20 @@ function renderManualReviewDetails(details) {
   if (submission.user?.name) headerChips.push({ label: submission.user.name });
   paintCaseChips(reviewCaseHeaderChips, headerChips);
 
+  // #475: surface the participant's AI-use declaration + their free-text description as a distinct,
+  // prominent field in the structured case view — where the reviewer reads the answer — so it never
+  // hides at the tail of the (long) trigger reason.
+  const aiDeclarationValue = submission.aiDeclaration
+    ? `${localizeAiDeclaration(submission.aiDeclaration)}${
+        submission.aiDeclarationText ? ` — ${normalizeMultilineText(submission.aiDeclarationText)}` : ""
+      }`
+    : null;
+
   paintCaseSubmission(reviewSubmissionView, [
     { label: t("case.field.task"), value: submission.module?.title },
     { label: t("case.field.answer"), value: normalizeMultilineText(submission.rawText) },
     { label: t("case.field.reflection"), value: normalizeMultilineText(submission.reflectionText) },
+    { label: t("case.field.aiDeclaration"), value: aiDeclarationValue },
     { label: t("case.field.submittedAt"), value: formatDateTime(submission.submittedAt) },
   ]);
 

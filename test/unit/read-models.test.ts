@@ -143,7 +143,11 @@ describe("module-owned read models", () => {
           reflection: "Reflection text",
           promptExcerpt: "Prompt excerpt",
         }),
-        processSignalsJson: null,
+        processSignalsJson: JSON.stringify({
+          declaration: "autonomous",
+          declarationText: "I asked the AI to write the whole answer.",
+          insistedAfterPrompt: true,
+        }),
         user: {
           id: "user-1",
           name: "User",
@@ -168,6 +172,9 @@ describe("module-owned read models", () => {
     expect(review.review.submission.rawText).toBe("Raw text");
     expect(review.review.submission.reflectionText).toBe("Reflection text");
     expect(review.review.submission.promptExcerpt).toBe("Prompt excerpt");
+    // #475: the AI-use declaration + the participant's free-text description are exposed to the reviewer.
+    expect(review.review.submission.aiDeclaration).toBe("autonomous");
+    expect(review.review.submission.aiDeclarationText).toBe("I asked the AI to write the whole answer.");
   });
 
   it("builds an appeal workspace view with localized module text and SLA", () => {
