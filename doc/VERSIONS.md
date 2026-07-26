@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.8.4 - 2026-07-26
+
+#475 — **Participant's AI-use description now surfaced prominently to the reviewer** + a stronger
+content/submission divider. Two bundled changes:
+
+- **Description visible to the sensor.** The participant's free-text "how did you use AI?" was only
+  embedded at the tail of the (long) trigger reason — easy to miss in the decision-history card. Now the
+  reviewer's **structured case view** shows a distinct **"KI-erklæring"** field (declaration + the
+  free-text description) right after the answer, where the reviewer reads. The read model already
+  exposed `aiDeclaration`/`aiDeclarationText`; this renders it via `paintCaseSubmission` + new
+  `case.field.aiDeclaration` i18n (nb/nn/en-GB). Root cause was surfacing, not data — the client sends it
+  (verified headless) and the server embeds it (TC-POL-AIINFLUENCE-001).
+- **Divider.** The rule above "Før du leverer" is now a 2px separator so content vs. submission reads
+  more clearly (small UI request, bundled).
+
+Tests: read-model unit asserts `aiDeclaration`/`aiDeclarationText` exposure; unit 877, e2e 3,
+translation-parity green. tsc 0. Client + i18n only.
+
 ## 2.8.3 - 2026-07-26
 
 #475 — **Declaration UI redesign (design locked in an Artifact first).** Reworked the pre-submit UI after
