@@ -38,12 +38,14 @@ export type AiInfluenceDecision = {
   reason: string;
 };
 
-// English to match the other decisionReason strings in decisionService.ts; this becomes the
-// ManualReview.triggerReason verbatim.
+// Norwegian (bokmål): this becomes the ManualReview.triggerReason shown to the (Norwegian-speaking)
+// reviewer verbatim. The other decisionReason strings in decisionService.ts are still English — a
+// broader localisation of all reasons is out of scope; #475 surfaces this one to reviewers so it is
+// written in their language.
 export const AUTONOMOUS_REVIEW_REASON =
-  "Routed to manual review: the participant declared substantial autonomous AI use and chose to " +
-  "submit after being prompted to engage further with the material. Assumed too-autonomous AI use — " +
-  "a reviewer decides; this is not an automatic fail.";
+  "Rutet til manuell vurdering: deltakeren erklærte omfattende autonom KI-bruk og valgte å levere " +
+  "etter å ha blitt oppfordret til å bearbeide stoffet videre. Antatt for autonom KI-bruk — en " +
+  "sensor vurderer; dette er ikke en automatisk stryk.";
 
 function isAiDeclaration(value: unknown): value is AiDeclaration {
   return typeof value === "string" && (AI_DECLARATION_VALUES as readonly string[]).includes(value);
@@ -94,5 +96,12 @@ export function evaluateAiInfluence(args: {
   const forcesReview = signals.declaration === "autonomous" && signals.insistedAfterPrompt === true;
   if (!forcesReview) return null;
 
-  return { forcesReview: true, reason: AUTONOMOUS_REVIEW_REASON };
+  // Carry the participant's own free-text description INTO the reason so it reaches the reviewer
+  // wherever the trigger/decision reason is shown (not only the review-detail declaration line).
+  const description = signals.declarationText?.trim();
+  const reason = description
+    ? `${AUTONOMOUS_REVIEW_REASON} Deltakerens beskrivelse: «${description.slice(0, 600)}»`
+    : AUTONOMOUS_REVIEW_REASON;
+
+  return { forcesReview: true, reason };
 }
