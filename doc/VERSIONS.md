@@ -4,14 +4,17 @@ This document tracks release versions and what each version includes.
 
 ## 2.10.0 - 2026-07-26
 
-#475 — **Content-similarity: shadow everywhere + calibration report.** After a stage test showed a
-KI-generated answer scored 0.71 vs the 0.82 threshold (missed) — and that separating honest vs AI answers
-needs pilot data — content-similarity is now set to **shadow mode everywhere** (computes + persists the
+#475 — **Content-similarity: per-environment shadow enable + calibration report.** After a stage test
+showed a KI-generated answer scored 0.71 vs the 0.82 threshold (missed) — and that separating honest vs AI
+answers needs pilot data — content-similarity can now be run in **shadow mode** (computes + persists the
 similarity, routes no one) and a **calibration report** was added so the distribution can be watched
 without DB access. Routing (a data-driven threshold) is deferred until enough data accumulates.
 
-- **Shadow everywhere:** `config/assessment-rules.json` `aiInfluence.contentSimilarity` →
-  `{enabled:true, shadowMode:true}`. Gathers the pilot dataset from real submissions passively.
+- **Enabled per-environment, NOT via the shared file.** The committed `config/assessment-rules.json`
+  keeps `contentSimilarity.enabled=false` (so the test suite + local stay dormant — enabling it in the
+  file made `generateModelAnswer` fire in tests). Prod-shadow is turned on via the env override
+  (`AI_CONTENT_SIMILARITY_ENABLED=true`, `AI_CONTENT_SIMILARITY_SHADOW=true`) as a prod worker app
+  setting, so it gathers the pilot dataset from real submissions without touching prod routing.
 - **Calibration report** on the "Vurderingskvalitet" page (`admin-content-calibration`): a similarity
   **histogram segmented by KI-declaration** (grey = declared no-AI/ideas, blue = improved-own-text,
   orange = AI-wrote-most) with the threshold marker, stat cards (count/median/P90/over-threshold), and a
