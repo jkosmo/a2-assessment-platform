@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.8.3 - 2026-07-26
+
+#475 — **Declaration UI redesign (design locked in an Artifact first).** Reworked the pre-submit UI after
+stage testing feedback ("ikke spesielt pent"), designed and approved as an Artifact before implementing:
+
+- **One "Før du leverer" group.** The responsibility acknowledgement and the KI declaration now share a
+  single quiet group and the **same tile visual language** — the two thematically-similar attestations
+  read as one. Responsibility is a full-width checkable tile; KI-use is four compact segmented tiles.
+- **No red box.** The old required-state put a red `.is-invalid` border around the whole block. Removed —
+  the disabled submit button + the standard hint communicate "choose one" gently.
+- **Understated + compact.** No heavy blue box; a thin divider over the group. The answer field earns the
+  space; the attestations are a quick end-step. Short tile labels (title + sub) replace long sentences.
+- Verified by rendering the real client headless (Playwright screenshot) before deploy.
+
+i18n: `submission.beforeSubmit` + `ai.declaration.opt.<v>.title/.sub` (nb/nn/en-GB); dropped the unused
+intro + long-sentence option keys. e2e updated to click tiles (radios are now visually hidden). tsc 0;
+e2e 3, translation-parity 3, DOM 5 green.
+
 ## 2.8.2 - 2026-07-26
 
 #475 — **Declaration UX fixes from stage testing.** Three fixes after live review on stage:

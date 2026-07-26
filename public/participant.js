@@ -62,8 +62,11 @@ const submitMcqButton = document.getElementById("submitMcq");
 const loadHistoryButton = document.getElementById("loadHistory");
 const submissionFieldsContainer = document.getElementById("submissionFields");
 const ackCheckbox = document.getElementById("ack");
-// #475: AI-use declaration block (hidden unless participant/config.aiInfluence.enabled).
+// #475: pre-submit attestation group — responsibility tile + KI declaration (config-gated).
+const attestGroup = document.getElementById("attestGroup");
+const ackTile = document.getElementById("ackTile");
 const aiDeclarationBlock = document.getElementById("aiDeclaration");
+const aiDeclarationOptions = document.getElementById("aiDeclarationOptions");
 const aiDeclarationHowtoWrap = document.getElementById("aiDeclarationHowtoWrap");
 const aiDeclarationText = document.getElementById("aiDeclarationText");
 const aiDeclarationHint = document.getElementById("aiDeclarationHint");
@@ -570,6 +573,8 @@ function applySubmissionReadMode() {
   // The ack <input> carries the `.inline` class whose CSS display overrides the [hidden]
   // attribute, so hide the wrapping <label> via style.display (beats the class rule) — #525.
   if (submissionAckLabel) submissionAckLabel.style.display = hideAck ? "none" : "";
+  // #475: the whole "Før du leverer" group (label + ack tile + KI) follows the ack's visibility.
+  if (attestGroup) attestGroup.style.display = hideAck ? "none" : "";
   if (submissionIdRow) submissionIdRow.hidden = readOnly;
 }
 
@@ -741,12 +746,13 @@ function validateSubmissionInputState() {
   }
 
   // #475: when the AI-use declaration is enabled it is required for free-text submissions. Keeps the
-  // submit button disabled until the participant chooses an option (mirrors the ack gate).
+  // submit button disabled until the participant chooses an option (mirrors the ack gate). No
+  // `invalidFieldElement` — we don't want the red `.is-invalid` box around the tiles; the disabled
+  // button + the standard hint communicate it gently.
   if (aiDeclarationApplies() && !getSelectedAiDeclaration()) {
     return {
       valid: false,
       hintKey: "ai.declaration.required",
-      invalidFieldElement: aiDeclarationBlock,
     };
   }
 
@@ -842,12 +848,20 @@ function setAiHowtoVisible(visible) {
   if (aiDeclarationHowtoWrap) aiDeclarationHowtoWrap.style.display = visible ? "block" : "none";
 }
 
+// Reflect the checked radio onto the tile labels (blue "selected" state) — mirrors the tile styling.
+function syncAiTileSelection() {
+  for (const tile of aiDeclarationOptions?.querySelectorAll(".ai-declaration-opt") ?? []) {
+    tile.classList.toggle("sel", tile.querySelector('input[name="aiDeclaration"]')?.checked === true);
+  }
+}
+
 function clearAiDeclarationSelection() {
   for (const input of aiDeclarationBlock?.querySelectorAll('input[name="aiDeclaration"]') ?? []) {
     input.checked = false;
   }
   if (aiDeclarationText) aiDeclarationText.value = "";
   setAiHowtoVisible(false);
+  syncAiTileSelection();
   aiDeclarationHint?.classList.add("hidden");
 }
 
@@ -2844,14 +2858,17 @@ rolesInput.addEventListener("input", () => {
 
 
 ackCheckbox.addEventListener("change", () => {
+  // #475: reflect the checkbox onto its tile (blue "confirmed" state).
+  ackTile?.classList.toggle("sel", ackCheckbox.checked);
   updateCreateSubmissionAvailability();
 });
 
-// #475: AI-use declaration — reveal the optional "how" field for any "used AI" answer, and re-run
-// availability so the submit button ungates once an option is chosen.
+// #475: AI-use declaration — reveal the optional "how" field for any "used AI" answer, mark the chosen
+// tile, and re-run availability so the submit button ungates once an option is chosen.
 aiDeclarationBlock?.addEventListener("change", (event) => {
   if (event.target?.name !== "aiDeclaration") return;
   const declaration = getSelectedAiDeclaration();
+  syncAiTileSelection();
   setAiHowtoVisible(Boolean(declaration) && declaration !== "none");
   aiDeclarationHint?.classList.add("hidden");
   updateCreateSubmissionAvailability();

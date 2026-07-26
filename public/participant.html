@@ -11,20 +11,38 @@
       .assessment-progress { margin-top: calc(var(--space-1) * 1.25); font-size: 16px; font-weight: 600; color: var(--color-progress-text); }
       .assessment-progress-seconds { margin-top: calc(var(--space-1) * 0.75); font-size: 28px; font-weight: 800; color: var(--color-blue); letter-spacing: 0.3px; }
       .inline { display: inline-block; width: auto; }
-      /* #475: AI-use declaration — deliberately understated. The answer field + task content earn the
-         space; this is a quiet, quick step at the end. No heavy box; compact muted rows. */
-      .ai-declaration { margin: calc(var(--space-1) * 1.25) 0 0; padding-top: 10px; border-top: 1px solid var(--color-module-border, #e2e6ec); }
-      .ai-declaration-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+      /* #475: pre-submit attestation group — responsibility + KI declaration share ONE tile language,
+         under a quiet "Før du leverer" group. Understated: the answer field earns the space; this is a
+         quick end-step to click through. */
+      .attest { margin: calc(var(--space-1) * 1.5) 0 0; padding-top: 14px; border-top: 1px solid var(--color-module-border, #e2e6ec); }
+      .attest-label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--color-meta, #777); font-weight: 700; margin: 0 0 10px; }
+      /* shared tile look */
+      .decl-tile { position: relative; border: 1px solid var(--color-module-border, #d5dbe4); border-radius: 9px; background: var(--color-module-surface, #fff); cursor: pointer; transition: border-color .12s, background .12s; }
+      .decl-tile:hover { border-color: var(--color-blue, #3b6fd4); background: var(--color-blue-light, #eef3fe); }
+      .decl-tile.sel { border-color: var(--color-blue, #3b6fd4); background: var(--color-blue-light, #eef3fe); box-shadow: inset 0 0 0 1px var(--color-blue, #3b6fd4); }
+      .decl-tile input { position: absolute; opacity: 0; pointer-events: none; }
+      /* attestation 1 — responsibility, a full-width checkable tile */
+      .ack-tile { display: flex; align-items: center; gap: 11px; padding: 11px 13px; font-size: 13.5px; color: var(--color-text); width: auto; }
+      .ack-tile .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--color-module-border, #c6cfd9); flex: 0 0 auto; display: flex; align-items: center; justify-content: center; color: #fff; transition: background .12s, border-color .12s; }
+      .ack-tile.sel .box { background: var(--color-blue, #3b6fd4); border-color: var(--color-blue, #3b6fd4); }
+      .ack-tile .box svg { width: 12px; height: 12px; opacity: 0; }
+      .ack-tile.sel .box svg { opacity: 1; }
+      /* KI sub-heading */
+      .ai-declaration-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 14px 0 9px; }
       .ai-declaration-head h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--color-text); }
-      .ai-declaration-nograde { font-size: 11px; font-weight: 500; color: var(--color-meta, #777); }
-      .ai-declaration-intro { margin: 2px 0 6px; font-size: 11.5px; color: var(--color-meta, #777); }
-      .ai-declaration-options { display: flex; flex-direction: column; gap: 2px; }
-      .ai-declaration-opt { display: flex; gap: 8px; align-items: center; text-align: left; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 400; color: var(--color-text); }
-      .ai-declaration-opt:hover { background: var(--color-blue-light, #f2f7ff); }
-      .ai-declaration-opt input[type="radio"] { width: 14px; height: 14px; flex: 0 0 auto; margin: 0; }
-      .ai-declaration-opt span { flex: 1; text-align: left; }
-      .ai-declaration-howto { margin-top: 6px; }
-      .ai-declaration-howto textarea { width: 100%; margin-top: 3px; border: 1px solid var(--color-module-border, #d5dbe4); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12.5px; resize: vertical; }
+      .ai-declaration-nograde { font-size: 11px; font-weight: 600; color: #1f7a4d; background: #e9f5ee; padding: 2px 8px; border-radius: 20px; }
+      .ai-declaration-hint { margin-left: auto; font-size: 11.5px; color: var(--color-meta, #999); }
+      /* attestation 2 — KI, four segmented tiles */
+      .ai-declaration-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+      @media (max-width: 560px) { .ai-declaration-options { grid-template-columns: repeat(2, 1fr); } }
+      .ai-declaration-opt { padding: 9px 10px; min-height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 1px; text-align: left; }
+      .ai-declaration-opt .t { font-size: 12.5px; font-weight: 600; color: var(--color-text); line-height: 1.2; }
+      .ai-declaration-opt .s { font-size: 10.5px; color: var(--color-meta, #999); line-height: 1.2; }
+      .ai-declaration-opt.sel .t { color: var(--color-blue, #2b56ab); }
+      .ai-declaration-opt .tick { position: absolute; top: 6px; right: 7px; width: 13px; height: 13px; opacity: 0; color: var(--color-blue, #3b6fd4); }
+      .ai-declaration-opt.sel .tick { opacity: 1; }
+      .ai-declaration-howto { margin-top: 9px; }
+      .ai-declaration-howto textarea { width: 100%; margin-top: 3px; border: 1px solid var(--color-module-border, #d5dbe4); border-radius: 8px; padding: 8px 11px; font: inherit; font-size: 13px; resize: vertical; min-height: 44px; }
       /* reflective nudge overlay */
       .ai-nudge-overlay { position: fixed; inset: 0; background: rgba(16,21,28,.55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 60; }
       .ai-nudge { background: #fff; border-radius: 14px; max-width: 460px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.3); overflow: hidden; }
@@ -253,25 +271,32 @@
       <div id="submissionFields"></div>
       <div class="small" id="draftStatus" aria-live="polite" aria-atomic="true"></div>
       <div class="small" id="draftBrowserNote" data-i18n="draft.browserNote">Your work is saved automatically in this browser while you switch between modules.</div>
-      <label><input class="inline" type="checkbox" id="ack" checked /> <span data-i18n="submission.ack">I acknowledge responsibility for submitted content</span></label>
-      <!-- #475: AI-use declaration. Hidden unless the feature is enabled (participant/config.aiInfluence.enabled). -->
-      <div id="aiDeclaration" class="ai-declaration" style="display:none" role="group" aria-labelledby="aiDeclarationTitle">
-        <div class="ai-declaration-head">
-          <h3 id="aiDeclarationTitle" data-i18n="ai.declaration.title">Did you use AI tools in this submission?</h3>
-          <span class="ai-declaration-nograde" data-i18n="ai.declaration.noGrade">✓ Does not affect your grade</span>
-        </div>
-        <p class="small ai-declaration-intro" data-i18n="ai.declaration.intro">AI is welcome — being open about how you used it helps us support your learning.</p>
-        <div class="ai-declaration-options" id="aiDeclarationOptions">
-          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="none" /> <span data-i18n="ai.declaration.opt.none">No, I did not use AI</span></label>
-          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="ideas" /> <span data-i18n="ai.declaration.opt.ideas">For ideas or look-ups — I wrote the answer myself</span></label>
-          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="improve" /> <span data-i18n="ai.declaration.opt.improve">To improve my own text — wording, structure, proofreading</span></label>
-          <label class="ai-declaration-opt"><input type="radio" name="aiDeclaration" value="autonomous" /> <span data-i18n="ai.declaration.opt.autonomous">AI generated most of it — I did little of the work myself</span></label>
-        </div>
-        <label class="ai-declaration-howto" id="aiDeclarationHowtoWrap" style="display:none">
-          <span class="small" data-i18n="ai.declaration.howto">Optional: briefly, how did you use AI?</span>
-          <textarea id="aiDeclarationText" rows="2" maxlength="2000"></textarea>
+      <!-- #475: one pre-submit attestation group — responsibility + KI declaration as matching tiles. -->
+      <div id="attestGroup" class="attest">
+        <div class="attest-label" data-i18n="submission.beforeSubmit">Before you submit</div>
+        <label id="ackTile" class="decl-tile ack-tile sel">
+          <input class="inline" type="checkbox" id="ack" checked />
+          <span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <span class="ack-text" data-i18n="submission.ack">I acknowledge responsibility for submitted content</span>
         </label>
-        <div class="hint hidden" id="aiDeclarationHint" role="alert" data-i18n="ai.declaration.required">Please choose one option to submit.</div>
+        <!-- KI-use declaration. Hidden unless the feature is enabled (participant/config.aiInfluence.enabled). -->
+        <div id="aiDeclaration" class="ai-declaration" style="display:none" role="group" aria-labelledby="aiDeclarationTitle">
+          <div class="ai-declaration-head">
+            <h3 id="aiDeclarationTitle" data-i18n="ai.declaration.title">Did you use AI in this submission?</h3>
+            <span class="ai-declaration-nograde" data-i18n="ai.declaration.noGrade">Does not affect your grade</span>
+          </div>
+          <div class="ai-declaration-options" id="aiDeclarationOptions">
+            <label class="decl-tile ai-declaration-opt" data-v="none"><input type="radio" name="aiDeclaration" value="none" /><span class="t" data-i18n="ai.declaration.opt.none.title">No</span><span class="s" data-i18n="ai.declaration.opt.none.sub">did not use AI</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
+            <label class="decl-tile ai-declaration-opt" data-v="ideas"><input type="radio" name="aiDeclaration" value="ideas" /><span class="t" data-i18n="ai.declaration.opt.ideas.title">Ideas / look-ups</span><span class="s" data-i18n="ai.declaration.opt.ideas.sub">wrote the answer myself</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
+            <label class="decl-tile ai-declaration-opt" data-v="improve"><input type="radio" name="aiDeclaration" value="improve" /><span class="t" data-i18n="ai.declaration.opt.improve.title">Improved my text</span><span class="s" data-i18n="ai.declaration.opt.improve.sub">wording, structure</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
+            <label class="decl-tile ai-declaration-opt" data-v="autonomous"><input type="radio" name="aiDeclaration" value="autonomous" /><span class="t" data-i18n="ai.declaration.opt.autonomous.title">AI wrote most of it</span><span class="s" data-i18n="ai.declaration.opt.autonomous.sub">did little myself</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></label>
+          </div>
+          <label class="ai-declaration-howto" id="aiDeclarationHowtoWrap" style="display:none">
+            <span class="small" data-i18n="ai.declaration.howto">Optional: briefly, how did you use AI?</span>
+            <textarea id="aiDeclarationText" rows="2" maxlength="2000"></textarea>
+          </label>
+          <div class="hint hidden" id="aiDeclarationHint" role="alert" data-i18n="ai.declaration.required">Please choose one option to submit.</div>
+        </div>
       </div>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create">Create submission</button>
       <div class="hint" id="submissionValidationHint" data-hint-key="submission.validation.ready"></div>
