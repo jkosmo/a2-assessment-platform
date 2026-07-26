@@ -141,6 +141,99 @@ export async function evaluatePracticalWithAzureOpenAi(
   }
 }
 
+// #475 Phase 2: generate a "model answer" to the task. Used ONLY to measure content-similarity against
+// the student's submission (a review signal, never a verdict). Mirrors evaluatePracticalWithLlm's dual
+// stub/azure_openai shape so tests mock it via the same module seam, and the stub path is hermetic.
+export type ModelAnswerContext = {
+  moduleTaskText: string;
+  moduleGuidanceText?: string;
+  responseLocale?: SupportedLocale;
+};
+
+export async function generateModelAnswer(input: ModelAnswerContext): Promise<string> {
+  if (env.LLM_MODE === "stub") {
+    return buildStubModelAnswer(input);
+  }
+  if (env.LLM_MODE === "azure_openai") {
+    return generateModelAnswerWithAzureOpenAi(input, {
+      endpoint: env.AZURE_OPENAI_ENDPOINT ?? "",
+      apiKey: env.AZURE_OPENAI_API_KEY ?? "",
+      deployment: env.AZURE_OPENAI_ASSESSMENT_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT ?? "",
+      apiVersion: env.AZURE_OPENAI_API_VERSION,
+      timeoutMs: env.AZURE_OPENAI_TIMEOUT_MS,
+      temperature: env.AZURE_OPENAI_ASSESSMENT_TEMPERATURE ?? env.AZURE_OPENAI_TEMPERATURE,
+      maxTokens: env.AZURE_OPENAI_MAX_TOKENS,
+      tokenLimitParameter: env.AZURE_OPENAI_TOKEN_LIMIT_PARAMETER,
+    });
+  }
+  throw new Error(`Unsupported LLM mode: ${env.LLM_MODE}`);
+}
+
+function buildStubModelAnswer(input: ModelAnswerContext): string {
+  const task = (input.moduleTaskText ?? "").trim();
+  // Deterministic pseudo-answer for local/dev runs; integration tests mock generateModelAnswer directly.
+  return task ? `Model answer addressing: ${task}` : "Model answer.";
+}
+
+async function generateModelAnswerWithAzureOpenAi(
+  input: ModelAnswerContext,
+  config: AzureOpenAiRuntimeConfig,
+): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const locale = input.responseLocale ?? "en-GB";
+    const messages = [
+      {
+        role: "system",
+        content:
+          "You are a strong student writing a concise model answer to an assignment. Return only the answer text, with no preamble or commentary.",
+      },
+      {
+        role: "user",
+        content:
+          `Write a model answer in ${locale} to the following assignment.\n\nAssignment:\n${input.moduleTaskText ?? ""}` +
+          (input.moduleGuidanceText ? `\n\nGuidance:\n${input.moduleGuidanceText}` : ""),
+      },
+    ];
+    const tokenParameter = config.tokenLimitParameter === "auto" ? "max_tokens" : config.tokenLimitParameter;
+    const body: Record<string, unknown> = { messages, [tokenParameter]: config.maxTokens };
+    if (Number.isFinite(config.temperature)) body.temperature = config.temperature;
+
+    const response = await fetchAzureOpenAiWithRetry(
+      buildAzureOpenAiCompletionsUrl(config),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "api-key": config.apiKey },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      },
+      {
+        onRetry: ({ status, waitMs, attempt, maxAttempts }) =>
+          console.warn(
+            `[#475] Azure OpenAI model-answer ${status} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts}).`,
+          ),
+      },
+    );
+    const rawBody = await response.text();
+    const responseBody = parseJsonBody(rawBody);
+    if (!response.ok) {
+      const providerMessage = extractProviderErrorMessage(responseBody);
+      throw new Error(
+        `Azure OpenAI model-answer request failed (${response.status}${providerMessage ? `: ${providerMessage}` : ""}).`,
+      );
+    }
+    return extractAssistantContent(responseBody) ?? "";
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Azure OpenAI model-answer request timed out after ${config.timeoutMs}ms.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const DEFAULT_CRITERIA_IDS = [
   "task_comprehension",
   "quality_and_depth",

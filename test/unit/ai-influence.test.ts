@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   parseAiInfluenceSignals,
   evaluateAiInfluence,
+  evaluateContentSimilarity,
+  buildAiInfluenceOutcome,
   AUTONOMOUS_REVIEW_REASON,
+  CONTENT_SIMILARITY_REVIEW_REASON_PREFIX,
   type AiInfluenceRules,
+  type AiInfluenceContentRules,
 } from "../../src/modules/assessment/aiInfluence.js";
 import { resolveAssessmentDecision } from "../../src/modules/assessment/decisionService.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
@@ -176,5 +180,92 @@ describe("resolveAssessmentDecision + aiInfluence (review trigger, never fail)",
     });
     expect(resolved.needsManualReview).toBe(true);
     expect(resolved.decisionReason).toContain("red flag");
+  });
+});
+
+// ── #475 Phase 2: content-similarity signal ─────────────────────────────────────────────────────
+
+const CONTENT_LIVE: AiInfluenceContentRules = { enabled: true, shadowMode: false, similarityThreshold: 0.8 };
+const CONTENT_SHADOW: AiInfluenceContentRules = { enabled: true, shadowMode: true, similarityThreshold: 0.8 };
+const CONTENT_OFF: AiInfluenceContentRules = { enabled: false, shadowMode: true, similarityThreshold: 0.8 };
+
+const draftEqualTo = (text: string) => async () => text;
+const draftDisjoint = async () => "completely unrelated vocabulary here";
+
+describe("evaluateContentSimilarity", () => {
+  const answer = "kvalitetssikring av konsept og styringsunderlag i statens prosjektmodell";
+
+  it("returns null when disabled", async () => {
+    const r = await evaluateContentSimilarity({ taskText: "task", studentAnswer: answer, generateDraft: draftEqualTo(answer), rules: CONTENT_OFF });
+    expect(r).toBeNull();
+  });
+
+  it("returns null when there is no task text or an empty answer", async () => {
+    expect(await evaluateContentSimilarity({ taskText: undefined, studentAnswer: answer, generateDraft: draftEqualTo(answer), rules: CONTENT_LIVE })).toBeNull();
+    expect(await evaluateContentSimilarity({ taskText: "task", studentAnswer: "   ", generateDraft: draftEqualTo(answer), rules: CONTENT_LIVE })).toBeNull();
+  });
+
+  it("skips the signal (null) when draft generation throws — never breaks assessment", async () => {
+    const r = await evaluateContentSimilarity({ taskText: "task", studentAnswer: answer, generateDraft: async () => { throw new Error("llm down"); }, rules: CONTENT_LIVE });
+    expect(r).toBeNull();
+  });
+
+  it("in shadow mode computes similarity but never forces review", async () => {
+    const r = await evaluateContentSimilarity({ taskText: "task", studentAnswer: answer, generateDraft: draftEqualTo(answer), rules: CONTENT_SHADOW });
+    expect(r).not.toBeNull();
+    expect(r!.similarity).toBe(1);
+    expect(r!.exceeded).toBe(true);
+    expect(r!.forcesReview).toBe(false);
+  });
+
+  it("live + high similarity → forcesReview true", async () => {
+    const r = await evaluateContentSimilarity({ taskText: "task", studentAnswer: answer, generateDraft: draftEqualTo(answer), rules: CONTENT_LIVE });
+    expect(r!.exceeded).toBe(true);
+    expect(r!.forcesReview).toBe(true);
+  });
+
+  it("live + low similarity → not exceeded, does not force review", async () => {
+    const r = await evaluateContentSimilarity({ taskText: "task", studentAnswer: answer, generateDraft: draftDisjoint, rules: CONTENT_LIVE });
+    expect(r!.similarity).toBe(0);
+    expect(r!.exceeded).toBe(false);
+    expect(r!.forcesReview).toBe(false);
+  });
+});
+
+describe("buildAiInfluenceOutcome", () => {
+  const contentForcing = { similarity: 0.95, threshold: 0.8, exceeded: true, forcesReview: true };
+  const contentShadow = { similarity: 0.95, threshold: 0.8, exceeded: true, forcesReview: false };
+
+  it("no signals → nothing to persist, no decision", () => {
+    expect(buildAiInfluenceOutcome({ declaration: undefined, declarationResult: null, contentSignal: null })).toEqual({
+      signalsJson: null,
+      decision: undefined,
+    });
+  });
+
+  it("declaration forces review → decision is the declaration result; persisted forcesReview true", () => {
+    const declarationResult = { forcesReview: true as const, reason: AUTONOMOUS_REVIEW_REASON };
+    const out = buildAiInfluenceOutcome({ declaration: "autonomous", declarationResult, contentSignal: contentShadow });
+    expect(out.decision).toBe(declarationResult);
+    const persisted = JSON.parse(out.signalsJson!);
+    expect(persisted.declaration).toBe("autonomous");
+    expect(persisted.declarationForcesReview).toBe(true);
+    expect(persisted.forcesReview).toBe(true);
+    expect(persisted.contentSimilarity.similarity).toBe(0.95);
+  });
+
+  it("only content forces review → decision uses the content-similarity reason", () => {
+    const out = buildAiInfluenceOutcome({ declaration: undefined, declarationResult: null, contentSignal: contentForcing });
+    expect(out.decision?.forcesReview).toBe(true);
+    expect(out.decision?.reason).toContain(CONTENT_SIMILARITY_REVIEW_REASON_PREFIX);
+    expect(JSON.parse(out.signalsJson!).forcesReview).toBe(true);
+  });
+
+  it("shadow content signal alone → persisted but no decision (routes no one)", () => {
+    const out = buildAiInfluenceOutcome({ declaration: undefined, declarationResult: null, contentSignal: contentShadow });
+    expect(out.decision).toBeUndefined();
+    const persisted = JSON.parse(out.signalsJson!);
+    expect(persisted.forcesReview).toBe(false);
+    expect(persisted.contentSimilarity.exceeded).toBe(true);
   });
 });

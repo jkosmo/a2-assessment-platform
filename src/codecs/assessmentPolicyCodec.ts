@@ -19,6 +19,12 @@ export type ModuleAssessmentPolicy = {
   aiInfluence?: {
     enabled?: boolean;
     shadowMode?: boolean;
+    // #475 Phase 2: per-module override of the content-similarity signal.
+    contentSimilarity?: {
+      enabled?: boolean;
+      shadowMode?: boolean;
+      similarityThreshold?: number;
+    };
   };
 };
 

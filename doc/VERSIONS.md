@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.9.0 - 2026-07-26
+
+#475 **Phase 2 — AI-influence content-similarity signal.** Post-submission, generate an independent
+"model answer" to the task and measure its similarity to the student's answer, as ONE additional review
+signal — never a verdict. Ships **feature-flagged OFF + shadow-mode** so it collects pilot data before
+it can route anyone. Same invariants as Phase 1 (review trigger only; never touches pass/fail).
+
+- **Local lexical cosine** (`src/modules/assessment/contentSimilarity.ts`) — deterministic, no embeddings
+  infra. Honest limitation (documented): two correct answers to the same task share vocabulary, so this
+  is a coarse signal on its own — hence shadow-first + a configurable threshold for the owner to
+  calibrate a false-positive rate.
+- **Model-answer generator** `generateModelAnswer` in `llmAssessmentService.ts` (stub + azure_openai,
+  mockable via the existing test seam). Only called when the signal is enabled — dormant = no extra LLM
+  call/cost.
+- **Persisted transparently:** new additive nullable `AssessmentDecision.aiInfluenceJson` stores the
+  computed signals (declaration outcome + `{similarity, threshold, exceeded, forcesReview}`) at decision
+  time — the pilot dataset. Combined with Phase 1 in `buildAiInfluenceOutcome`; either signal alone can
+  route (declaration reason wins when both fire).
+- **Config:** `aiInfluence.contentSimilarity {enabled, shadowMode, similarityThreshold:0.82}` global +
+  per-module override (`ModuleAssessmentPolicy.aiInfluence.contentSimilarity`). Both OFF by default.
+
+Tests: unit `content-similarity` (cosine/tokenize/extract) + `ai-influence` (evaluate/combine, shadow vs
+live); integration `TC-POL-AIINFLUENCE-002` (live → UNDER_REVIEW, never fail) + `-003` (shadow → persists
+the signal, routes no one, stays COMPLETED). tsc 0; unit 897; policy integration 11. Expand-only
+migration `20260726120000_decision_ai_influence`.
+
 ## 2.8.4 - 2026-07-26
 
 #475 — **Participant's AI-use description now surfaced prominently to the reviewer** + a stronger

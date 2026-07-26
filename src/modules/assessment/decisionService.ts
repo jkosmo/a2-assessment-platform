@@ -34,8 +34,11 @@ type BuildDecisionInput = {
   freetextOnly?: boolean;
   // #475: AI-influence review trigger. When present with forcesReview, routes to UNDER_REVIEW —
   // NEVER contributes to a FAIL (feeds `needsManualReview` only). Computed upstream from the
-  // participant's AI-use declaration; see aiInfluence.ts.
+  // participant's AI-use declaration + content-similarity; see aiInfluence.ts.
   aiInfluence?: { forcesReview: boolean; reason: string };
+  // #475 Phase 2: the computed AI-influence signals JSON, persisted on the decision for transparency
+  // and pilot analysis. Purely informational at the decision layer.
+  aiInfluenceJson?: string | null;
 };
 
 export type ResolvedAssessmentDecision = {
@@ -278,6 +281,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       practicalScaledScore: practicalScoreScaled,
       totalScore: resolved.totalScore,
       redFlagsJson: redFlagsCodec.serialize(input.llmResult.red_flags),
+      aiInfluenceJson: input.aiInfluenceJson ?? null,
       passFailTotal: resolved.passFailTotal,
       decisionType: DecisionType.AUTOMATIC,
       decisionReason: resolved.decisionReason,

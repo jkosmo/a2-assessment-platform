@@ -12,6 +12,9 @@ import {
 } from "./support/participantFlow.js";
 
 const mockEvaluatePracticalWithLlm = vi.hoisted(() => vi.fn());
+// #475 Phase 2: the content-similarity "model answer" generator lives in the same module, so it is
+// mockable via this seam. Only called when content-similarity is enabled (off by default).
+const mockGenerateModelAnswer = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/modules/assessment/llmAssessmentService.js", async () => {
   const actual = await vi.importActual<typeof import("../src/modules/assessment/llmAssessmentService.js")>(
@@ -21,6 +24,7 @@ vi.mock("../src/modules/assessment/llmAssessmentService.js", async () => {
   return {
     ...actual,
     evaluatePracticalWithLlm: mockEvaluatePracticalWithLlm,
+    generateModelAnswer: mockGenerateModelAnswer,
   };
 });
 
@@ -464,5 +468,112 @@ describe("Local integration assessment policy suite", () => {
         data: { assessmentPolicyJson: original.assessmentPolicyJson },
       });
     }
+  });
+
+  // #475 Phase 2: run a strong (would-pass) submission with content-similarity enabled per-module and a
+  // mocked model answer identical to the student's answer → high similarity. `shadowMode` toggles
+  // whether it routes. No declaration is sent, so ONLY the content-similarity signal is in play.
+  async function runContentSimilaritySubmission(app: Express, opts: { shadowMode: boolean }) {
+    const moduleId = await findModuleIdByTitle(app, participantHeaders, "Generative AI Foundations");
+    const moduleRow = await prisma.module.findUniqueOrThrow({
+      where: { id: moduleId },
+      select: { activeVersionId: true },
+    });
+    const versionId = moduleRow.activeVersionId!;
+    const original = await prisma.moduleVersion.findUniqueOrThrow({
+      where: { id: versionId },
+      select: { assessmentPolicyJson: true },
+    });
+    const basePolicy = original.assessmentPolicyJson ? JSON.parse(original.assessmentPolicyJson) : {};
+    await prisma.moduleVersion.update({
+      where: { id: versionId },
+      data: {
+        assessmentPolicyJson: JSON.stringify({
+          ...basePolicy,
+          aiInfluence: { contentSimilarity: { enabled: true, shadowMode: opts.shadowMode, similarityThreshold: 0.1 } },
+        }),
+      },
+    });
+
+    try {
+      mockEvaluatePracticalWithLlm.mockReset();
+      mockEvaluatePracticalWithLlm.mockResolvedValueOnce(buildAssessment());
+      const answerText =
+        "I used generative AI to improve a workshop agenda, refined the prompt twice, and validated the final output against the original notes before sending it.";
+      mockGenerateModelAnswer.mockReset();
+      mockGenerateModelAnswer.mockResolvedValue(answerText); // model answer == student answer → similar
+
+      const submissionResponse = await request(app)
+        .post("/api/submissions")
+        .set(participantHeaders)
+        .send({
+          moduleId,
+          deliveryType: "text",
+          responseJson: {
+            response: answerText,
+            reflection: "The second iteration was better because I constrained the output to actual decisions.",
+            promptExcerpt: "Rewrite this workshop brief with clear outcomes.",
+          },
+          // No processSignals — only content-similarity is in play.
+        });
+      expect(submissionResponse.status).toBe(201);
+      const submissionId = submissionResponse.body.submission.id as string;
+
+      const mcqStart = await startMcq(app, participantHeaders, moduleId, submissionId);
+      await submitMcqWithAnswerSelector(
+        app,
+        participantHeaders,
+        moduleId,
+        submissionId,
+        mcqStart.attemptId,
+        mcqStart.questions,
+        (question) =>
+          question.stem === "What is the recommended model ownership boundary?"
+            ? "Backend owns final decision"
+            : "Prompt versions and thresholds",
+      );
+      await runAssessmentSync(app, participantHeaders, submissionId);
+
+      const resultResponse = await request(app)
+        .get(`/api/submissions/${submissionId}/result`)
+        .set(participantHeaders);
+      expect(resultResponse.status).toBe(200);
+      const decision = await prisma.assessmentDecision.findFirstOrThrow({
+        where: { submissionId },
+        orderBy: { finalisedAt: "desc" },
+        select: { aiInfluenceJson: true },
+      });
+      return {
+        result: resultResponse.body as { status: string; decision: { decisionReason: string; passFailTotal: boolean } },
+        aiInfluence: decision.aiInfluenceJson ? JSON.parse(decision.aiInfluenceJson) : null,
+      };
+    } finally {
+      await prisma.moduleVersion.update({
+        where: { id: versionId },
+        data: { assessmentPolicyJson: original.assessmentPolicyJson },
+      });
+    }
+  }
+
+  it("TC-POL-AIINFLUENCE-002 live content-similarity routes a would-pass submission to review, never to fail", async () => {
+    const app = await loadFreshApp();
+    const { result, aiInfluence } = await runContentSimilaritySubmission(app, { shadowMode: false });
+    expect(result.status).toBe("UNDER_REVIEW");
+    expect(result.decision.passFailTotal).toBe(false);
+    expect(result.decision.decisionReason).toContain("modellsvar");
+    expect(aiInfluence.contentSimilarity.exceeded).toBe(true);
+    expect(aiInfluence.contentSimilarity.forcesReview).toBe(true);
+    expect(aiInfluence.declaration).toBeNull();
+    expect(mockGenerateModelAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it("TC-POL-AIINFLUENCE-003 shadow content-similarity persists the signal but routes no one", async () => {
+    const app = await loadFreshApp();
+    const { result, aiInfluence } = await runContentSimilaritySubmission(app, { shadowMode: true });
+    expect(result.status).toBe("COMPLETED");
+    expect(result.decision.passFailTotal).toBe(true);
+    expect(aiInfluence.contentSimilarity.exceeded).toBe(true);
+    expect(aiInfluence.contentSimilarity.forcesReview).toBe(false);
+    expect(aiInfluence.forcesReview).toBe(false);
   });
 });

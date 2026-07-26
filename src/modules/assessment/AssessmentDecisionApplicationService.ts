@@ -25,6 +25,8 @@ type ApplyDecisionInput = {
   freetextOnly?: boolean;
   /** #475: AI-influence review trigger (undefined = no trigger). Routes to review, never fails. */
   aiInfluence?: { forcesReview: boolean; reason: string };
+  /** #475 Phase 2: computed AI-influence signals JSON persisted on the decision (null when none). */
+  aiInfluenceJson?: string | null;
   /** Localized module title text (may be a raw localization JSON string). */
   moduleTitle: string;
   submissionLocale: SupportedLocale;
@@ -58,6 +60,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     rubricCriteriaIds: input.rubricCriteriaIds,
     freetextOnly: input.freetextOnly,
     aiInfluence: input.aiInfluence,
+    aiInfluenceJson: input.aiInfluenceJson,
   });
 
   if (!decisionResult.needsManualReview) {

@@ -143,6 +143,11 @@
   },
   "aiInfluence": {
     "enabled": true,
-    "shadowMode": false
+    "shadowMode": false,
+    "contentSimilarity": {
+      "enabled": false,
+      "shadowMode": true,
+      "similarityThreshold": 0.82
+    }
   }
 }

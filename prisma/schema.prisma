@@ -449,6 +449,10 @@ model AssessmentDecision {
   practicalScaledScore    Float
   totalScore              Float
   redFlagsJson            String
+  // #475 Phase 2: computed AI-influence signals at decision time (declaration outcome +
+  // content-similarity). Additive, nullable, transparent (not a black box). A REVIEW signal only —
+  // never contributes to pass/fail. Shape: aiInfluenceDecisionCodec.
+  aiInfluenceJson         String?
   passFailTotal           Boolean
   decisionType            DecisionType
   decisionReason          String

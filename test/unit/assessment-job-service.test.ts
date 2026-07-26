@@ -11,6 +11,7 @@ const markJobForRetryOrFailure = vi.fn();
 const findAssessmentJobOrThrow = vi.fn();
 const createAssessmentDecision = vi.fn();
 const evaluatePracticalWithLlm = vi.fn();
+const generateModelAnswer = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const enqueueOutboxEvents = vi.fn();
@@ -54,6 +55,7 @@ vi.mock("../../src/modules/outbox/outboxService.js", () => ({
 
 vi.mock("../../src/modules/assessment/llmAssessmentService.js", () => ({
   evaluatePracticalWithLlm,
+  generateModelAnswer,
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({

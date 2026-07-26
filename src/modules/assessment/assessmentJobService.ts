@@ -8,7 +8,15 @@ import { runLlmEvaluationPipeline } from "./AssessmentEvaluator.js";
 import { applyAssessmentDecision, applyMcqOnlyDecision } from "./AssessmentDecisionApplicationService.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
-import { evaluateAiInfluence, parseAiInfluenceSignals } from "./aiInfluence.js";
+import {
+  evaluateAiInfluence,
+  evaluateContentSimilarity,
+  buildAiInfluenceOutcome,
+  parseAiInfluenceSignals,
+  resolveContentSimilarityRules,
+} from "./aiInfluence.js";
+import { generateModelAnswer } from "./llmAssessmentService.js";
+import { extractAnswerText } from "./contentSimilarity.js";
 import {
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
@@ -81,15 +89,33 @@ async function runAssessment(jobId: string) {
 
   const inputContext = buildAssessmentInputContext(submission, submissionLocale);
 
-  // #475: evaluate the AI-use declaration into a review trigger (never a fail). Returns undefined
-  // unless the feature is enabled, live (not shadow), and the participant declared autonomous AI use
-  // and submitted after the nudge. The raw declaration is persisted regardless — it is the pilot data.
-  const aiInfluence =
-    evaluateAiInfluence({
-      signals: parseAiInfluenceSignals(submission.processSignalsJson),
-      policy: inputContext.assessmentPolicy,
-      rules: getAssessmentRules().aiInfluence,
-    }) ?? undefined;
+  // #475: evaluate the AI-influence signals into a review trigger (never a fail).
+  //  • Phase 1 — the participant's AI-use declaration (+ their choice to submit after the nudge).
+  //  • Phase 2 — content-similarity between the answer and an independently generated model answer.
+  // Each only routes when enabled + live; in shadow mode the signals are still computed and persisted
+  // (the pilot dataset). A content-similarity draft failure never breaks assessment (skipped).
+  const aiRules = getAssessmentRules().aiInfluence;
+  const declarationSignals = parseAiInfluenceSignals(submission.processSignalsJson);
+  const declarationResult = evaluateAiInfluence({
+    signals: declarationSignals,
+    policy: inputContext.assessmentPolicy,
+    rules: aiRules,
+  });
+  const contentSignal = await evaluateContentSimilarity({
+    taskText: inputContext.moduleTaskText,
+    studentAnswer: extractAnswerText(JSON.parse(submission.responseJson) as Record<string, unknown>),
+    generateDraft: generateModelAnswer,
+    moduleGuidanceText: inputContext.moduleGuidanceText,
+    responseLocale: submissionLocale,
+    rules: resolveContentSimilarityRules(inputContext.assessmentPolicy, aiRules.contentSimilarity),
+  });
+  const aiOutcome = buildAiInfluenceOutcome({
+    declaration: declarationSignals?.declaration,
+    declarationResult,
+    contentSignal,
+  });
+  const aiInfluence = aiOutcome.decision;
+  const aiInfluenceJson = aiOutcome.signalsJson;
 
   await recordAuditEvent({
     entityType: auditEntityTypes.submission,
@@ -130,6 +156,7 @@ async function runAssessment(jobId: string) {
     mcqPercentScore,
     freetextOnly: assessmentMode === "FREETEXT_ONLY",
     aiInfluence,
+    aiInfluenceJson,
     llmResult: finalLlmResult,
     forceManualReviewReason,
     assessmentPolicy: inputContext.assessmentPolicy,

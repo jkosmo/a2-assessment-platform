@@ -12,6 +12,8 @@
 // No keystroke/paste telemetry is captured or stored — only the aggregate declaration (DPIA-light).
 
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { lexicalCosineSimilarity } from "./contentSimilarity.js";
 
 export const AI_DECLARATION_VALUES = ["none", "ideas", "improve", "autonomous"] as const;
 export type AiDeclaration = (typeof AI_DECLARATION_VALUES)[number];
@@ -104,4 +106,152 @@ export function evaluateAiInfluence(args: {
     : AUTONOMOUS_REVIEW_REASON;
 
   return { forcesReview: true, reason };
+}
+
+// ── #475 Phase 2: content-similarity signal ─────────────────────────────────────────────────────
+
+/** Global defaults from config/assessmentRules.ts `aiInfluence.contentSimilarity`. */
+export type AiInfluenceContentRules = {
+  enabled: boolean;
+  shadowMode: boolean;
+  similarityThreshold: number;
+};
+
+/** The computed content-similarity signal, persisted for pilot analysis + (when live) routing. */
+export type ContentSimilaritySignal = {
+  /** Lexical cosine similarity between the student answer and an independent model answer, 0–1. */
+  similarity: number;
+  threshold: number;
+  /** similarity >= threshold. */
+  exceeded: boolean;
+  /** exceeded AND live (not shadow) — the only case where this contributes to review routing. */
+  forcesReview: boolean;
+};
+
+export const CONTENT_SIMILARITY_REVIEW_REASON_PREFIX =
+  "Rutet til manuell vurdering: besvarelsen ligner sterkt på et uavhengig generert modellsvar";
+
+/**
+ * Resolve the effective content-similarity rules: a per-module override (ModuleAssessmentPolicy) wins
+ * field-by-field over the global default, mirroring how the declaration signal merges policy over rules.
+ */
+export function resolveContentSimilarityRules(
+  policy: ModuleAssessmentPolicy | null | undefined,
+  globalRules: AiInfluenceContentRules,
+): AiInfluenceContentRules {
+  const override = policy?.aiInfluence?.contentSimilarity;
+  return {
+    enabled: override?.enabled ?? globalRules.enabled,
+    shadowMode: override?.shadowMode ?? globalRules.shadowMode,
+    similarityThreshold: override?.similarityThreshold ?? globalRules.similarityThreshold,
+  };
+}
+
+function roundSimilarity(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+/**
+ * Generate a model answer to the task and measure its lexical similarity to the student's answer.
+ * Returns null when the feature is off or there is nothing to compare. In shadow mode it still returns
+ * the computed similarity (for the pilot dataset) but with `forcesReview: false`. A draft-generation
+ * failure NEVER breaks assessment — the signal is simply skipped.
+ */
+export async function evaluateContentSimilarity(args: {
+  taskText: string | undefined;
+  studentAnswer: string;
+  generateDraft: (ctx: {
+    moduleTaskText: string;
+    moduleGuidanceText?: string;
+    responseLocale?: SupportedLocale;
+  }) => Promise<string>;
+  moduleGuidanceText?: string;
+  responseLocale?: SupportedLocale;
+  rules: AiInfluenceContentRules;
+}): Promise<ContentSimilaritySignal | null> {
+  const { taskText, studentAnswer, generateDraft, rules } = args;
+  if (!rules.enabled) return null;
+  if (!taskText || studentAnswer.trim().length === 0) return null;
+
+  let draft: string;
+  try {
+    draft = await generateDraft({
+      moduleTaskText: taskText,
+      moduleGuidanceText: args.moduleGuidanceText,
+      responseLocale: args.responseLocale,
+    });
+  } catch (error) {
+    console.warn("[#475] content-similarity draft generation failed; skipping the signal.", error);
+    return null;
+  }
+  if (!draft || draft.trim().length === 0) return null;
+
+  const similarity = lexicalCosineSimilarity(studentAnswer, draft);
+  const exceeded = similarity >= rules.similarityThreshold;
+  return {
+    similarity: roundSimilarity(similarity),
+    threshold: rules.similarityThreshold,
+    exceeded,
+    forcesReview: exceeded && !rules.shadowMode,
+  };
+}
+
+// ── Combine the Phase-1 (declaration) + Phase-2 (content-similarity) signals ─────────────────────
+
+/** The persisted shape on AssessmentDecision.aiInfluenceJson. */
+export type AiInfluencePersisted = {
+  declaration: AiDeclaration | null;
+  declarationForcesReview: boolean;
+  contentSimilarity: ContentSimilaritySignal | null;
+  forcesReview: boolean;
+};
+
+export type AiInfluenceOutcome = {
+  /** Serialized AiInfluencePersisted for AssessmentDecision.aiInfluenceJson (null when no signals). */
+  signalsJson: string | null;
+  /** What the decision engine consumes — present only when something actually forces review. */
+  decision: AiInfluenceDecision | undefined;
+};
+
+function contentSimilarityReason(signal: ContentSimilaritySignal): string {
+  const pct = (n: number) => `${Math.round(n * 100)} %`;
+  return (
+    `${CONTENT_SIMILARITY_REVIEW_REASON_PREFIX} (${pct(signal.similarity)} ≥ terskel ${pct(signal.threshold)}). ` +
+    "Dette er ett signal, ikke bevis — en sensor vurderer; dette er ikke en automatisk stryk."
+  );
+}
+
+/**
+ * Combine the declaration (Phase 1) and content-similarity (Phase 2) signals into (a) the JSON persisted
+ * on the decision for transparency/pilot analysis, and (b) the review-trigger the decision engine reads.
+ * The declaration reason takes precedence when both fire; either alone is sufficient to route.
+ */
+export function buildAiInfluenceOutcome(args: {
+  declaration: AiDeclaration | undefined;
+  declarationResult: AiInfluenceDecision | null;
+  contentSignal: ContentSimilaritySignal | null;
+}): AiInfluenceOutcome {
+  const { declaration, declarationResult, contentSignal } = args;
+  if (!declaration && !contentSignal) {
+    return { signalsJson: null, decision: undefined };
+  }
+
+  const declarationForcesReview = Boolean(declarationResult?.forcesReview);
+  const forcesReview = declarationForcesReview || Boolean(contentSignal?.forcesReview);
+
+  const persisted: AiInfluencePersisted = {
+    declaration: declaration ?? null,
+    declarationForcesReview,
+    contentSimilarity: contentSignal,
+    forcesReview,
+  };
+
+  let decision: AiInfluenceDecision | undefined;
+  if (declarationForcesReview && declarationResult) {
+    decision = declarationResult;
+  } else if (contentSignal?.forcesReview) {
+    decision = { forcesReview: true, reason: contentSimilarityReason(contentSignal) };
+  }
+
+  return { signalsJson: JSON.stringify(persisted), decision };
 }
