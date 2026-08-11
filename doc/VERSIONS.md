@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.2 - 2026-08-11
+
+**Kursporet leses roligere.** To observasjoner fra deltakertesting med et ekte 18-stegs kurs.
+
+- **Titlene sto ikke på linje.** Typeetiketten hadde variabel bredde («Lesestoff» mot «Test»), så
+  hver rad startet tittelen på ulik x. Den flisete venstrekanten fikk lista til å se rotete ut selv
+  når innholdet var ryddig. Etiketten har nå fast bredde, og titlene danner én kolonne.
+- **Versalene er droppet.** `LESESTOFF`/`TEST` i store bokstaver gjentatt over 18 rader roper, og
+  etiketten er metadata — ikke en overskrift. Nå gemen tekst i småtekst-fargen, 12px. Samme for
+  tegnforklaringen og posisjonsteksten på det aktuelle steget.
+
+Merk at **teksten** i etiketten var uendret hele veien (`Lesestoff`/`Test`) — versalene var ren CSS,
+så e2e-assertions og skjermlesere er upåvirket.
+
+Denne endringen fjerner én av to årsaker til at lista så uryddig ut. Den andre er at modultitler
+lagres identisk på tvers av språk i stedet for å oversettes, slik at en nynorsk kursliste viser
+bokmål på annenhver rad — sporet i #892.
+
+Tests: uendret; `participant-course-sequence` og `participant-discussions` grønne. CSS only; ingen
+i18n-, API- eller modellendring.
+
 ## 2.11.1 - 2026-08-11
 
 **To funn fra deltakertesting av 2.11.0 på stage.**
