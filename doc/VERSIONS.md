@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.1 - 2026-08-11
+
+**To funn fra deltakertesting av 2.11.0 på stage.**
+
+**1 · Lesbarhet — dempet er ikke det samme som svakt.** Kommende steg i kursporet ble dempet med
+`opacity: .72` oppå en allerede dempet `--color-meta`. Målt kontrast: **2,91:1 mot WCAG AA-kravet
+4,5:1** — altså en reell tilgjengelighetsregresjon, ikke bare en smakssak. Opacity var feil verktøy:
+den rammer tittel, typemerke og statuspille likt, og kan ikke måles i tokenene.
+
+- Opacity fjernet helt fra sporet. Hierarkiet bæres nå av **størrelse, vekt og ramme**: aktuelt steg
+  16px/700 i kort, øvrige 14px/500 på bar linje.
+- Steg-titler bruker `--color-text` (12,81:1). Demping ligger i de sekundære delene — typemerke og
+  statuspille — som nå måler 6,2–6,4:1.
+- Radene er hevet fra 13px til 14px, tilbake til størrelsen den gamle lista hadde.
+- Utilgjengelig innhold er fortsatt ikke-interaktivt, men leselig (`--color-meta` i stedet for
+  `opacity: .45`).
+- `--color-meta` mørknet globalt `#726e64` → `#63604f` (5,0:1 → 6,2:1). Den bærer hint, metadata og
+  statuslinjer over hele flaten, og lå unødvendig nær grensen etter paletteskiftet.
+
+**2 · Balanse mellom kursinnhold og diskusjon.** Da sekvensen ble rolig, ble diskusjonsboardet på
+kursnivå det tyngste elementet på siden — kort, ramme, overskrift, modereringsverktøy og svarfelt
+konkurrerte ut selve kursinnholdet. Diskusjon er en sidesamtale, ikke det man kom for.
+
+- Kurs-nivå diskusjon er nå **kollapset som standard**, til én rolig linje med tittel og
+  undertekst, i samme visuelle språk som sporet.
+- Panelet **monteres først ved åpning** — en kursrender henter ikke lenger tråder ingen har bedt om
+  å se.
+- Duplikatoverskriften fjernet: utfoldingslinjen navnga panelet, og panelet gjentok «Diskusjon»
+  rett under.
+- **Diskusjon inne i en åpnet seksjon er urørt** — der er den kontekstuelt relevant.
+
+Tests: to nye e2e-vakter i `participant-course-sequence` — én som måler faktisk kontrast i
+nettleseren (folder inn arvet opacity, som var nettopp det første forsøk bommet på) og krever ≥ 4,5:1
+på hver etikett i sporet, og én som holder kurs-diskusjonen kollapset og umontert til den åpnes.
+`participant-discussions` oppdatert til å folde ut først. tsc 0, unit 904, kontrakter 32, e2e 117.
+Klient + i18n + CSS; ingen migrasjon, ingen API-endring.
+
 ## 2.11.0 - 2026-08-11
 
 **Serielt kursspor i deltakerkonsollen.** Tilbakemelding fra deltaker: navigasjonen mellom modulene

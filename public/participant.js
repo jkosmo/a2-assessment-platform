@@ -3254,22 +3254,54 @@ function renderCourseDetailModules(courseId, course) {
   container.appendChild(sequenceWrap);
 
   // #495/T-QA-3: kurs-nivå diskusjonsboard under sekvensen (kun når påskrudd for kurset).
+  //
+  // Kollapset som standard. Da sekvensen ble rolig, ble diskusjonsboardet det tyngste elementet
+  // på siden — kort, ramme, overskrift, moderering og svarfelt konkurrerte ut selve kursinnholdet
+  // (deltakertest 2026-08-11). Diskusjon er en sidesamtale, ikke det man kom for. Panelet monteres
+  // først ved åpning, så en kurs-render heller ikke henter tråder ingen har bedt om å se.
   if (course?.discussionsEnabled) {
-    const discWrap = document.createElement("div");
-    discWrap.className = "card";
-    discWrap.style.cssText = "margin-top:12px;padding:12px;";
-    discWrap.setAttribute("data-course-discussion", courseId);
-    container.appendChild(discWrap);
-    mountDiscussionPanel({
-      container: discWrap,
-      courseId,
-      courseItemId: null,
-      apiFetch,
-      headers,
-      t,
-      escapeHtml: escapeHtmlP,
-      showToast,
+    const disc = document.createElement("div");
+    disc.className = "course-discussion";
+    disc.setAttribute("data-course-discussion", courseId);
+
+    const body = document.createElement("div");
+    body.className = "course-discussion-body";
+    body.hidden = true;
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "course-discussion-toggle";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.innerHTML = `
+      <span class="course-discussion-chevron" aria-hidden="true">&#9656;</span>
+      <span class="course-discussion-label">${escapeHtmlP(t("discussion.title"))}</span>
+      <span class="course-discussion-hint">${escapeHtmlP(t("discussion.courseHint"))}</span>
+    `;
+
+    let mounted = false;
+    toggle.addEventListener("click", () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      disc.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", String(open));
+      if (open && !mounted) {
+        mounted = true;
+        mountDiscussionPanel({
+          container: body,
+          courseId,
+          courseItemId: null,
+          apiFetch,
+          headers,
+          t,
+          escapeHtml: escapeHtmlP,
+          showToast,
+        });
+      }
     });
+
+    disc.appendChild(toggle);
+    disc.appendChild(body);
+    container.appendChild(disc);
   }
 
   // #865: re-open the inline item that was expanded before this re-render (esp. the live module
