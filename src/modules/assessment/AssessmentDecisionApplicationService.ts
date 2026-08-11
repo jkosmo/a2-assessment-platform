@@ -84,6 +84,12 @@ type ApplyMcqOnlyDecisionInput = {
   submittedAt: Date;
   recipientEmail: string;
   recipientName: string;
+  /**
+   * True when this decision is being applied on the participant's own submit request
+   * (`processSubmissionJobNow`), so the result is rendered in the UI as they wait. Suppresses the
+   * result e-mail — see `enqueuePostDecisionSideEffects`.
+   */
+  gradedSynchronously?: boolean;
 };
 
 /**
@@ -101,7 +107,9 @@ export async function applyMcqOnlyDecision(input: ApplyMcqOnlyDecisionInput): Pr
     assessmentPolicy: input.assessmentPolicy,
   });
 
-  await enqueuePostDecisionSideEffects(input, decisionResult.decision.passFailTotal);
+  await enqueuePostDecisionSideEffects(input, decisionResult.decision.passFailTotal, {
+    skipResultNotification: input.gradedSynchronously === true,
+  });
 
   await recordJobCompletedAudit(input.jobId, input.submissionId, input.userId);
 }
@@ -120,11 +128,22 @@ type NotifyInput = {
 // #795: durably enqueue the participant notification + course-completion check instead of firing them
 // and forgetting. Awaited before the job is marked SUCCEEDED, so a crash after SUCCEEDED can no longer
 // lose them — the outbox delivery worker delivers them (with retries) from the persisted rows.
-async function enqueuePostDecisionSideEffects(input: NotifyInput, passFailTotal: boolean): Promise<void> {
+//
+// skipResultNotification: an MCQ_ONLY module graded synchronously has already shown the participant
+// its pass/fail verdict in the UI, so the result e-mail is pure noise. Only the notification is
+// dropped — the course-completion check still runs, since a completed course issues its own
+// certificate and notification.
+async function enqueuePostDecisionSideEffects(
+  input: NotifyInput,
+  passFailTotal: boolean,
+  options: { skipResultNotification?: boolean } = {},
+): Promise<void> {
   const moduleTitle = localizeContentText(input.submissionLocale, input.moduleTitle) ?? input.moduleId;
 
-  await enqueueOutboxEvents([
-    {
+  const events: Parameters<typeof enqueueOutboxEvents>[0] = [];
+
+  if (!options.skipResultNotification) {
+    events.push({
       type: OUTBOX_EVENT_TYPES.assessmentNotification,
       payload: {
         submissionId: input.submissionId,
@@ -136,12 +155,15 @@ async function enqueuePostDecisionSideEffects(input: NotifyInput, passFailTotal:
         passFailTotal,
         locale: input.submissionLocale,
       },
-    },
-    {
-      type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
-      payload: { userId: input.userId, moduleId: input.moduleId },
-    },
-  ]);
+    });
+  }
+
+  events.push({
+    type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+    payload: { userId: input.userId, moduleId: input.moduleId },
+  });
+
+  await enqueueOutboxEvents(events);
 }
 
 async function recordJobCompletedAudit(jobId: string, submissionId: string, userId: string): Promise<void> {

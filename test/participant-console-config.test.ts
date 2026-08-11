@@ -303,7 +303,10 @@ describe("participant console runtime config", () => {
     expect(cssResponse.text).toContain("@media (max-width: 900px)");
     expect(cssResponse.text).toContain(":root");
     expect(cssResponse.text).toContain("--space-1: 8px;");
-    expect(cssResponse.text).toContain("--color-blue: #134ec9;");
+    // The point here is that the token block is served, not what the brand hue happens to be —
+    // assert the token's presence rather than pinning a colour that any re-theme must come back
+    // and edit. (It pinned #134ec9 until the accent moved to brass.)
+    expect(cssResponse.text).toContain("--color-primary:");
     expect(cssResponse.text).toContain("--shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);");
     expect(cssResponse.text).toContain(".layout-container");
     expect(cssResponse.text).toContain("max-width: 1100px;");
@@ -353,7 +356,11 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('adminContent.participantPreview.v1');
     expect(participantJsResponse.text).toContain('draft.savedSwitchToast');
     expect(participantJsResponse.text).toContain('async function openCourseModule(courseId, moduleId)');
-    expect(participantJsResponse.text).toContain('course-module-button');
+    // The serial course spine replaced the flat list of identical `course-module-button` rows;
+    // `course-module-row` is still the stable hook the inline-open machinery (#865) and the e2e
+    // guards select on. Behaviour is covered by test/e2e/participant-course-sequence.spec.ts.
+    expect(participantJsResponse.text).toContain('course-module-row');
+    expect(participantJsResponse.text).toContain('course-sequence');
     expect(participantJsResponse.text).toContain("rows: 24");
     expect(participantJsResponse.text).toContain("function applySubmissionReadMode()");
     expect(participantJsResponse.text).toContain("function syncSubmissionFieldReadHeight(textarea)");
