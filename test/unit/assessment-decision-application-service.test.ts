@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const createAssessmentDecision = vi.fn();
+const createMcqOnlyDecision = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 const notifyAssessmentResult = vi.fn();
@@ -19,6 +20,7 @@ vi.mock("../../src/modules/outbox/outboxService.js", () => ({
 
 vi.mock("../../src/modules/assessment/decisionService.js", () => ({
   createAssessmentDecision,
+  createMcqOnlyDecision,
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -185,6 +187,78 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
       expect.objectContaining({
         forceManualReviewReason: "Disagreement between primary and secondary assessments.",
       }),
+    );
+  });
+});
+
+// An MCQ_ONLY module is scored deterministically and — when the participant submits — synchronously
+// (#546), so the verdict is already on screen when the request returns. The result e-mail is then
+// only noise, so it is suppressed. The async worker path keeps sending it: that participant never
+// saw a UI verdict.
+describe("AssessmentDecisionApplicationService — applyMcqOnlyDecision", () => {
+  const MCQ_INPUT = {
+    jobId: "job-mcq-1",
+    submissionId: "sub-mcq-1",
+    userId: "user-1",
+    moduleId: "module-mcq",
+    moduleVersionId: "mv-mcq",
+    mcqScaledScore: 45,
+    mcqPercentScore: 90,
+    assessmentPolicy: null,
+    moduleTitle: "MCQ Module",
+    submissionLocale: "en-GB" as const,
+    submittedAt: new Date("2026-08-10T10:00:00Z"),
+    recipientEmail: "participant@example.com",
+    recipientName: "Test User",
+  };
+
+  beforeEach(() => {
+    vi.resetModules();
+    createMcqOnlyDecision.mockReset();
+    recordAuditEvent.mockReset().mockResolvedValue(undefined);
+    logOperationalEvent.mockReset();
+    notifyAssessmentResult.mockReset();
+    localizeContentText.mockReset().mockImplementation((_locale, text) => text ?? null);
+    enqueueOutboxEvents.mockReset().mockResolvedValue({ count: 1 });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function enqueuedTypes() {
+    const enqueued = enqueueOutboxEvents.mock.calls[0][0] as Array<{ type: string }>;
+    return enqueued.map((e) => e.type);
+  }
+
+  it.each([
+    ["passed", true],
+    ["failed", false],
+  ])("skips the result e-mail for a synchronously graded MCQ_ONLY module that %s", async (_label, passFailTotal) => {
+    createMcqOnlyDecision.mockResolvedValue({ decision: { id: "decision-mcq", passFailTotal } });
+
+    const { applyMcqOnlyDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
+    await applyMcqOnlyDecision({ ...MCQ_INPUT, gradedSynchronously: true });
+
+    expect(enqueueOutboxEvents).toHaveBeenCalledTimes(1);
+    expect(enqueuedTypes()).toEqual(["course_completion_check"]);
+    // The course-completion check must survive — a completed course still issues its own certificate.
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ entityId: "job-mcq-1", action: "assessment_job_completed" }),
+    );
+  });
+
+  it("still sends the result e-mail when the async worker grades the MCQ_ONLY submission", async () => {
+    createMcqOnlyDecision.mockResolvedValue({ decision: { id: "decision-mcq", passFailTotal: true } });
+
+    const { applyMcqOnlyDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
+    // No gradedSynchronously flag — this is the fallback after synchronous grading threw.
+    await applyMcqOnlyDecision(MCQ_INPUT);
+
+    expect(enqueuedTypes()).toEqual(["assessment_notification", "course_completion_check"]);
+    const enqueued = enqueueOutboxEvents.mock.calls[0][0] as Array<{ type: string; payload: Record<string, unknown> }>;
+    expect(enqueued.find((e) => e.type === "assessment_notification")?.payload).toEqual(
+      expect.objectContaining({ submissionId: "sub-mcq-1", recipientEmail: "participant@example.com", passFailTotal: true }),
     );
   });
 });

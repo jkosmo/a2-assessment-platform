@@ -2,6 +2,75 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.0 - 2026-08-11
+
+**Serielt kursspor i deltakerkonsollen.** Tilbakemelding fra deltaker: navigasjonen mellom modulene
+var «uoversiktlig og tidvis for omstendelig og med for høy frihetsgrad», og «kurset er serielt og det
+bør reflekteres bedre». Kursoversikten viste hvert steg som en likeverdig knapp, så ingenting fortalte
+hvor du var. Tre selvstendige endringer, dokumentert i `doc/FEATURE_SURFACE_MAP.md` § 6b-2:
+
+**1 · Vokabular.** Deltakerflaten sier nå **«Lesestoff»** og **«Test»** (`courses.kind.*`, alle tre
+locales). Ordet «modul» var tidligere fjernet fra deltaker-UI-et uten at noe kom i stedet — seksjoner
+hadde et navn, tester bare et verb. «Seksjon»/«modul» beholdes som forfatter- og systemspråk.
+
+**2 · Ryggrad med merker.** `renderCourseDetailModules` rendrer sekvensen som én ryggrad med ett
+tyngdepunkt: neste uferdige steg som kort med handling, fullførte som én linje med «Se igjen»,
+kommende som dempet tittel. Type skilles i **form** (sirkel = lesestoff, rombe = test) slik at farge
+kan fortsette å bety status alene; tegnforklaring er obligatorisk, og typen står også i tekst for
+skjermlesere.
+
+- **Ingen låsing.** Kommende steg er fortsatt klikkbare. `available` betyr «publisert», ikke «låst
+  opp», og det finnes ingen sekvensregel i backend. Dette er en ren presentasjonsendring —
+  invitasjonen er fjernet, muligheten ikke. Reell låsing er bevisst utsatt: den må først svare på hva
+  som skjer ved stryk, om selvrapportert «lest» er sterkt nok å låse på, og om bestått innhold skal
+  kunne åpnes igjen.
+- **«Fortsett der du slapp»-knappen (#492) er fjernet** — den var en duplikat inngang til nøyaktig det
+  steget kortet nå ER, og duplikate innganger var halve klagen.
+- `.course-item[data-key][data-type]`, `.course-module-row` og `.course-inline-panel` er beholdt
+  uendret som hooks for inline-åpning (#865) og e2e.
+
+**3 · Palett.** Aksenten flyttet fra blå `#134ec9` til messing `#8a5f10`, med varme nøytraler
+(`--color-bg` `#f7f8fb` → `#f2f1ec`, tekst `#3d4e60` → `#33312b`). Nye tokens `--color-primary` /
+`--color-primary-hover` / `--color-primary-tint`; `--color-blue`/`--color-blue-light` beholdes som
+aliaser så ingen call-site brekker.
+
+- **Formregel, dokumentert i `shared.css`:** messing brukes til streker, rammer, noder, etiketter og
+  knappeflater — **aldri som tonet bakgrunn over større områder**. Varselfargen `#7a4b00`/`#fff3db`
+  ligger i samme fargefamilie, og uten regelen smelter «knapp» og «advarsel» sammen. Derfor er
+  `--color-primary-tint` en nøytral greige, ikke en gyllen krem — og varselfargen står **uendret**.
+- **Fokusfargen forblir blå** (`--color-focus: #0050b3`) med vilje: tastaturfokus må skille seg fra
+  alt annet, og blå er nå ledig. «Påbegynt»-merket beholder samme informasjons-blå.
+- Ryddet opp i `var(--color-blue, #3b6fd4)`-fallbacks i fire HTML-filer — reserveverdien var en annen
+  blå enn tokenet, et tegn på at paletten hadde drevet fra hverandre.
+
+Tests: ny e2e `participant-course-sequence` (ett aktuelt steg og det er første uferdige; type lesbar i
+tekst + form; utilgjengelig modul inert; kortet åpner inline). Alle 12 deltaker-e2e grønne, tsc 0,
+unit 904, kontrakter 32. To kontraktassertions oppdatert: `--color-blue: #134ec9` pinnet en merkevare-
+farge (nå `--color-primary:`), og `course-module-button` var erstattet av spor-klassene.
+Klient + i18n + CSS; ingen migrasjon, ingen API-endring, ingen infra.
+
+## 2.10.1 - 2026-08-10
+
+**Ingen resultat-e-post for rene MCQ-moduler.** En `MCQ_ONLY`-modul rettes deterministisk og synkront
+i det deltakeren leverer (#546), så utfallet står allerede på skjermen når svaret kommer tilbake.
+Resultat-e-posten var da bare støy, og sendes ikke lenger. Moduler med fritekst
+(`FREETEXT_PLUS_MCQ`, `FREETEXT_ONLY`) er uendret — de vurderes i bakgrunnen, og der er e-posten
+fortsatt den eneste beskjeden deltakeren får.
+
+- Gjelder **både bestått og ikke bestått** — begrunnelsen (sanntidsresultat i UI) er den samme.
+- **Fallback-stien beholder e-posten.** Feiler den synkrone rettingen, plukker den asynkrone worker-en
+  opp jobben senere; deltakeren har da forlatt siden og så aldri noe resultat. Flagget
+  `gradedSynchronously` settes kun av `processSubmissionJobNow`, så worker-stien varsler som før.
+- **Kursfullføring er urørt** — bare `assessment_notification` droppes; `course_completion_check`
+  legges fortsatt på outboxen, så et fullført kurs utsteder kursbevis og varsel som før.
+
+Endret: `AssessmentDecisionApplicationService.applyMcqOnlyDecision` (nytt `gradedSynchronously`-felt +
+`skipResultNotification` i `enqueuePostDecisionSideEffects`), `assessmentJobService.runAssessment`.
+
+Tests: 3 nye unit-caser i `assessment-decision-application-service` (bestått/ikke bestått synkront →
+kun `course_completion_check`; worker-sti → begge hendelser). tsc 0; unit 904 grønne. Ingen migrasjon,
+ingen infra, ingen API-endring.
+
 ## 2.10.0 - 2026-07-26
 
 #475 — **Content-similarity: per-environment shadow enable + calibration report.** After a stage test

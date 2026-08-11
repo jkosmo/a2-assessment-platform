@@ -5,36 +5,48 @@
   --space-4: 32px;
   --space-5: 48px;
   --space-6: 64px;
-  --color-navy: #1c2d4f;
-  --color-blue: #134ec9;
-  --color-blue-light: #eaf1ff;
-  --color-success: #1a6b1a;
+  /* Palett: messing aksent på varme, lavmettede nøytraler.
+     ⚠ FORMREGEL — messing brukes til streker, rammer, noder, etiketter og knappeflater,
+     ALDRI som tonet bakgrunn over større områder. Tonet gul bakgrunn (#fff3db) er reservert
+     varsler, og beholder i tillegg venstrestrek + ikon (jf. .field-warning). Uten denne
+     regelen kolliderer primærfargen med varselfargen, som ligger i samme fargefamilie.
+     Derfor er --color-primary-tint en NØYTRAL greige, ikke en gyllen krem. */
+  --color-primary: #8a5f10;
+  --color-primary-hover: #6e4b0c;
+  --color-primary-tint: #efebe2;
+  /* Historiske navn — beholdt så ingen call-site brekker. Peker nå på messing. */
+  --color-blue: var(--color-primary);
+  --color-blue-light: var(--color-primary-tint);
+  --color-navy: #221f19;
+  --color-success: #1f6b45;
   --color-warning: #7a4b00;
-  --color-error: #c0392b;
-  --color-text: #3d4e60;
-  --color-meta: #5c6a7a;
-  --color-bg: #f7f8fb;
+  --color-error: #b23a2b;
+  --color-text: #33312b;
+  --color-meta: #726e64;
+  --color-bg: #f2f1ec;
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
   --radius-card: 12px;
   --radius-button: 6px;
   --button-min-height: 40px;
-  --color-surface: #ffffff;
-  --color-border-soft: #c7d0de;
-  --color-link-hover-border: #4361ee;
-  --color-link-active: #0f3d9c;
+  --color-surface: #fffdfa;
+  --color-border-soft: #cfcabe;
+  --color-link-hover-border: #a87a22;
+  --color-link-active: #6e4b0c;
+  /* Fokus forblir BLÅ med vilje: tastaturfokus må skille seg fra alt annet på siden, og en blå
+     ring på messing er det tydeligste signalet vi kan gi. Den ene blåfargen som skal overleve. */
   --color-focus: #0050b3;
   --color-pre-bg: #111111;
   --color-pre-text: #d9ffd9;
-  --color-module-border: #b9c2d0;
-  --color-module-surface: #fdfefe;
-  --color-module-summary-border: #cfd7e6;
-  --color-module-summary-bg: #f8fbff;
-  --color-progress-text: #1b2a4a;
-  --color-row-selected: #eef4ff;
-  --color-row-hover: #f8fbff;
-  --color-table-border: #ebeff5;
-  --color-table-wrap-border: #d8dfeb;
-  --color-selected-badge: #0d3f9e;
+  --color-module-border: #cfc9bb;
+  --color-module-surface: #fffdfa;
+  --color-module-summary-border: #dfdacc;
+  --color-module-summary-bg: #f7f5ee;
+  --color-progress-text: #2a271f;
+  --color-row-selected: #efebe2;
+  --color-row-hover: #f5f2ea;
+  --color-table-border: #e9e5da;
+  --color-table-wrap-border: #dbd6c8;
+  --color-selected-badge: #6e4b0c;
 }
 
 body {
@@ -281,7 +293,7 @@ button:focus-visible {
   min-width: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(19, 78, 201, 0.12);
+  background: rgba(138, 95, 16, 0.14);
   color: var(--color-link-active);
   font-size: 11px;
   font-weight: 700;
@@ -598,7 +610,7 @@ body.auth-resolving .mock-identity-card {
   padding: var(--space-2);
   border: 1px solid var(--color-module-summary-border);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, #fbfdff 0%, #f5f8fe 100%);
+  background: linear-gradient(180deg, #fffdf8 0%, #f7f4ec 100%);
 }
 
 .summary-card-title {
@@ -665,7 +677,7 @@ body.auth-resolving .mock-identity-card {
   padding: var(--space-2);
   border: 1px solid var(--color-module-summary-border);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, #fbfdff 0%, #f5f8fe 100%);
+  background: linear-gradient(180deg, #fffdf8 0%, #f7f4ec 100%);
 }
 
 .mcq-question-header {
@@ -883,7 +895,7 @@ dialog::backdrop {
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 700;
-  background: #eef1f5;
+  background: #ebe8df;
   color: var(--color-text);
   white-space: nowrap;
 }
@@ -915,7 +927,7 @@ dialog::backdrop {
 
 .sr-badge--published   { background: #e6f4ea; color: #12613a; }
 .sr-badge--saved-draft { background: #e8f0fe; color: #1a5276; }
-.sr-badge--working     { background: #edf1f7; color: #42526b; }
+.sr-badge--working     { background: #ebe8df; color: #55524a; }
 .sr-badge--unsaved     { background: #fff3db; color: #7a4b00; }
 
 @media (max-width: 700px) {
@@ -1018,7 +1030,7 @@ dialog::backdrop {
 .disc-mod-toolbar {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   margin-top: var(--space-1); padding: 6px 8px; border-radius: 8px;
-  background: rgba(19, 78, 201, 0.05); border: 1px dashed var(--color-border-soft);
+  background: rgba(51, 49, 43, 0.04); border: 1px dashed var(--color-border-soft);
 }
 .disc-mod-label {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
@@ -1046,7 +1058,7 @@ dialog::backdrop {
 .disc-badge--resolved  { background: #e6f4ea; color: #12613a; }   /* grønn — løst */
 .disc-badge--locked    { background: #fbe9e7; color: #b3261e; }   /* rød  — låst */
 .disc-badge--question  { background: #e8f0fe; color: #1a5276; }   /* blå  — spørsmål */
-.disc-badge--discussion{ background: #edf1f7; color: #42526b; }   /* grå  — diskusjon */
+.disc-badge--discussion{ background: #ebe8df; color: #55524a; }   /* grå  — diskusjon */
 .disc-badge--accepted  { background: #e6f4ea; color: #12613a; }   /* grønn — akseptert svar */
 .disc-badge--pinned    { background: var(--color-surface); color: #7a4b00; border-color: #e0c068; } /* festet */
 .disc-meta { color: var(--color-meta); font-size: 13px; }
@@ -1070,7 +1082,7 @@ dialog::backdrop {
   vertical-align: middle;
   white-space: nowrap;
 }
-.status-badge--draft     { background: #edf1f7; color: #42526b; }  /* grå  — utkast (ikke synlig) */
+.status-badge--draft     { background: #ebe8df; color: #55524a; }  /* grå  — utkast (ikke synlig) */
 .status-badge--published { background: #e6f4ea; color: #12613a; }  /* grønn — live */
 .status-badge--archived  { background: #f0f0f0; color: #666; }     /* dempet — pensjonert */
 /* #705: sekundær-markør ved siden av status-badgen (f.eks. «nyere utkast» på en publisert modul). */

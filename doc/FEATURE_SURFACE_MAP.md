@@ -113,7 +113,36 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 | Home visibility | CSS `body.participant-course-only #moduleWorkspaceHome { display:none }`; set in `applyCourseOnlyMode` | Course-only shows the workspace ONLY inline; standalone keeps the home location. |
 | Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time + «Gå til neste element» nav. |
 
-**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts` (~5s, no Docker/Postgres). The last spec is the consistency guard (section + module both inline, one open, workspace relocated).
+**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts` (~5s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation.
+
+## 6b-2. Participant course view — the serial sequence (spine)
+
+`renderCourseDetailModules` renders the course as **one spine with a single focal point**, not a flat
+list of equal buttons. Three mutually exclusive row states, driven by `findNextIncompleteEntry`:
+
+| State | Class on the row | Rendered as |
+| --- | --- | --- |
+| Completed | `.course-step--done` | One quiet line: kind label, title, status pill, «Se igjen» |
+| Current (first incomplete) | `.course-step--now` | The only card — position, title, primary CTA |
+| Later | `.course-step--ahead` | Dimmed title line. **Still clickable** |
+
+**Invariants to preserve when touching this:**
+
+- `.course-item[data-key][data-type]`, the `.course-module-row` class on the row button, and the
+  `.course-inline-panel` sibling are the **stable hooks** for the inline-open machinery (6b) and for
+  every participant e2e. Restyle freely; do not rename these.
+- Rows live inside `.course-sequence` (which draws the spine), not directly in `#courseDetail_<id>`.
+  `restoreModuleWorkspaceHomeIfInside` / `reopenInlineAfterRender` still take the outer container.
+- **Type is carried by shape, status by colour** — circle = reading material, rotated square = test
+  (`.course-step-mark`, keyed off `[data-type]`). Never encode type in colour: green already means
+  "completed" for both kinds. The `.course-sequence-legend` is required, not decoration — a diamond
+  means nothing unexplained. Kind is ALSO in text (`.course-step-kind`) for screen readers.
+- **Later steps are deliberately not locked.** `available` means "published", not "unlocked"; there is
+  no backend sequence gating. This is presentation only — the invitation is removed, the ability is
+  not. If real locking is ever added, it belongs in the API, not here.
+- Participant vocabulary is **«Lesestoff» / «Test»** (`courses.kind.*`); «seksjon»/«modul» remain
+  author/system words. Adding a locale? All three (`en-GB`, `nb`, `nn`) are parity-checked by
+  `test/participant-translations.test.js`.
 
 ## 6c. Section HTML sinks + client/server sanitizer parity (#814)
 

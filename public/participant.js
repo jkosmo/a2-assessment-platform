@@ -3144,73 +3144,99 @@ function renderCourseDetailModules(courseId, course) {
     // diskusjonsboardet fortsatt monteres (#495/T-QA-3).
     container.innerHTML = `<p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.noModules"))}</p>`;
   }
-  // #492: «Fortsett der du slapp» / «Start kurset» — hopp rett til neste uferdige element.
+  // Kurset er serielt, så sekvensen tegnes som én ryggrad med ett tyngdepunkt: neste uferdige steg
+  // står som kort med handling, fullførte krymper til én linje, kommende til dempet tittel.
+  // #492s «Fortsett der du slapp»-knapp er borte — den var en duplikat inngang til nøyaktig det
+  // steget kortet nå ER, og duplikate innganger var halve klagen.
   const nextEntry = findNextIncompleteEntry(sequence);
-  if (sequence.length > 0 && nextEntry) {
-    const anyComplete = sequence.some((e) => (e.type === "SECTION" ? e.read : e.moduleStatus === "PASSED"));
-    const resumeBtn = document.createElement("button");
-    resumeBtn.type = "button";
-    resumeBtn.className = "btn btn-primary course-resume-btn";
-    resumeBtn.textContent = anyComplete ? t("courses.resume") : t("courses.start");
-    resumeBtn.addEventListener("click", () => openCourseItemEntry(courseId, nextEntry));
-    container.appendChild(resumeBtn);
+
+  const sequenceWrap = document.createElement("div");
+  sequenceWrap.className = "course-sequence";
+
+  if (sequence.length > 0) {
+    // Rombe/sirkel betyr ingenting uten forklaring — den er en del av designet, ikke pynt.
+    const legend = document.createElement("div");
+    legend.className = "course-sequence-legend";
+    legend.innerHTML = `
+      <span><i class="is-reading"></i>${escapeHtmlP(t("courses.step.legendReading"))}</span>
+      <span><i class="is-test"></i>${escapeHtmlP(t("courses.step.legendTest"))}</span>
+    `;
+    sequenceWrap.appendChild(legend);
   }
-  for (const entry of sequence) {
+
+  sequence.forEach((entry, index) => {
     // #865: wrap each row in a .course-item so its inline disclosure panel can live directly under it.
     const key = courseItemKey(entry);
+    const isSection = entry.type === "SECTION";
+    const done = isSection ? Boolean(entry.read) : entry.moduleStatus === "PASSED";
+    const isNow = entry === nextEntry;
+    // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
+    const available = isSection || entry.available !== false;
+    const title = localizePreviewText(entry.title);
+    const kindText = isSection ? t("courses.kind.reading") : t("courses.kind.test");
+
     const itemWrap = document.createElement("div");
-    itemWrap.className = "course-item";
+    itemWrap.className = `course-item${done ? " is-done" : ""}${isNow ? " is-now" : ""}`;
     itemWrap.dataset.key = key;
     itemWrap.dataset.type = entry.type;
 
-    let row;
-    if (entry.type === "SECTION") {
-      row = document.createElement("button");
-      row.type = "button";
-      row.className = "btn-secondary course-module-row course-module-button";
-      if (entry === nextEntry) row.classList.add("course-module-row--next");
-      row.addEventListener("click", () => openCourseItemEntry(courseId, entry));
-      const readBadge = entry.read ? t("courses.section.doneBadge") : t("courses.section.todoBadge");
-      row.innerHTML = `
-        <span class="course-module-row-copy">
-          <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(entry.title))}</span>
-          <span class="course-module-row-action">${escapeHtmlP(t("courses.section.read"))}</span>
-        </span>
-        <span class="module-status-badge ${entry.read ? "completed" : ""}">${escapeHtmlP(readBadge)}</span>
-      `;
-    } else {
-      const m = entry;
-      const passed = m.moduleStatus === "PASSED";
-      const inProgress = m.moduleStatus === "IN_PROGRESS";
-      const selected = selectedModuleId === m.moduleId;
-      // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
-      const available = m.available !== false;
-      // #714-followup: status ligger i pillen (som admin-oversiktene) — også «ikke tilgjengelig».
+    const mark = document.createElement("span");
+    mark.className = "course-step-mark";
+    mark.setAttribute("aria-hidden", "true");
+    itemWrap.appendChild(mark);
+
+    const row = document.createElement("button");
+    row.type = "button";
+    // .course-module-row beholdes som stabil selektor for e2e + inline-maskineriet (#865).
+    row.className = "course-module-row";
+
+    if (isNow) {
+      row.classList.add("course-step--now");
       const badgeText = !available
         ? t("courses.module.unavailableShort")
-        : passed ? t("courses.module.passed")
-        : inProgress ? t("courses.module.inProgress")
+        : isSection ? t("courses.section.todoBadge")
+        : entry.moduleStatus === "IN_PROGRESS" ? t("courses.module.inProgress")
         : t("courses.module.notStarted");
-      const badgeClass = !available ? "unavailable" : passed ? "completed" : inProgress ? "retake" : "";
-      // #495-follow-up UX: handlingsverb i stedet for «Velg modul» (begrepet «modul» fjernet i deltaker-UI).
-      const actionText = selected ? t("courses.module.selectedShort") : t("courses.module.go");
-      row = document.createElement("button");
-      row.type = "button";
-      row.className = selected ? "btn-secondary course-module-row course-module-button selected" : "btn-secondary course-module-row course-module-button";
-      if (entry === nextEntry) row.classList.add("course-module-row--next");
-      row.setAttribute("aria-pressed", selected ? "true" : "false");
-      if (!available) {
-        row.disabled = true;
-      } else {
-        row.addEventListener("click", () => openCourseItemEntry(courseId, entry));
-      }
+      const badgeClass = !available ? "unavailable" : entry.moduleStatus === "IN_PROGRESS" ? "retake" : "";
+      const position = t("courses.step.position")
+        .replace("{n}", String(index + 1))
+        .replace("{total}", String(sequence.length));
       row.innerHTML = `
-        <span class="course-module-row-copy">
-          <span class="course-module-row-title">${escapeHtmlP(localizePreviewText(m.title))}</span>
-          <span class="course-module-row-action">${escapeHtmlP(actionText)}</span>
+        <span class="course-step-meta">
+          <span class="course-step-position">${escapeHtmlP(`${position} · ${kindText}`)}</span>
+          <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
         </span>
+        <span class="course-step-title">${escapeHtmlP(title)}</span>
+        <span class="course-step-cta">${escapeHtmlP(isSection ? t("courses.section.read") : t("courses.module.go"))}</span>
+      `;
+    } else if (done) {
+      row.classList.add("course-step--done");
+      const badgeText = isSection ? t("courses.section.doneBadge") : t("courses.module.passed");
+      row.innerHTML = `
+        <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
+        <span class="course-step-title">${escapeHtmlP(title)}</span>
+        <span class="module-status-badge completed">${escapeHtmlP(badgeText)}</span>
+        <span class="course-step-review">${escapeHtmlP(t("courses.step.review"))}</span>
+      `;
+    } else {
+      row.classList.add("course-step--ahead");
+      const badgeText = !available
+        ? t("courses.module.unavailableShort")
+        : isSection ? t("courses.section.todoBadge")
+        : entry.moduleStatus === "IN_PROGRESS" ? t("courses.module.inProgress")
+        : t("courses.module.notStarted");
+      const badgeClass = !available ? "unavailable" : entry.moduleStatus === "IN_PROGRESS" ? "retake" : "";
+      row.innerHTML = `
+        <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
+        <span class="course-step-title">${escapeHtmlP(title)}</span>
         <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
       `;
+    }
+
+    if (!available) {
+      row.disabled = true;
+    } else {
+      row.addEventListener("click", () => openCourseItemEntry(courseId, entry));
     }
 
     const panel = document.createElement("div");
@@ -3222,8 +3248,10 @@ function renderCourseDetailModules(courseId, course) {
 
     itemWrap.appendChild(row);
     itemWrap.appendChild(panel);
-    container.appendChild(itemWrap);
-  }
+    sequenceWrap.appendChild(itemWrap);
+  });
+
+  container.appendChild(sequenceWrap);
 
   // #495/T-QA-3: kurs-nivå diskusjonsboard under sekvensen (kun når påskrudd for kurset).
   if (course?.discussionsEnabled) {

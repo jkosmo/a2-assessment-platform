@@ -29,15 +29,23 @@ export async function processAssessmentJobsNow(maxJobs = 1) {
   return runnerProcessAssessmentJobsNow(runAssessment, maxJobs);
 }
 
+// The caller awaits the verdict and renders it, so an MCQ_ONLY result reaches the participant in the
+// UI — `gradedSynchronously` tells the decision layer to suppress the redundant result e-mail. Every
+// other entry point (the async worker, incl. the fallback when synchronous grading throws) leaves it
+// false, so a participant who never saw the UI verdict is still notified by e-mail.
 export async function processSubmissionJobNow(submissionId: string, maxCycles = 25) {
-  return runnerProcessSubmissionJobNow(runAssessment, submissionId, maxCycles);
+  return runnerProcessSubmissionJobNow(
+    (jobId) => runAssessment(jobId, { gradedSynchronously: true }),
+    submissionId,
+    maxCycles,
+  );
 }
 
 export async function processNextJob(submissionId?: string): Promise<boolean> {
   return runnerProcessNextJob(runAssessment, submissionId);
 }
 
-async function runAssessment(jobId: string) {
+async function runAssessment(jobId: string, options: { gradedSynchronously?: boolean } = {}) {
   const job = await assessmentJobRepository.findAssessmentJobWithSubmissionOrThrow(jobId);
 
   const submission = job.submission;
@@ -77,6 +85,7 @@ async function runAssessment(jobId: string) {
       submittedAt: submission.submittedAt,
       recipientEmail: submission.user.email,
       recipientName: submission.user.name,
+      gradedSynchronously: options.gradedSynchronously === true,
     });
     return;
   }

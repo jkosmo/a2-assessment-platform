@@ -33,6 +33,25 @@ Deltakere er de ansatte som leverer besvarelser og tar vurderinger på plattform
 - **Ikke bestått** — du kan levere på nytt inntil antall forsøk er oppbrukt
 - **Under manuell vurdering** — en vurderer behandler besvarelsen manuelt
 
+### 1b. Slik beveger du deg gjennom et kurs
+
+Et kurs er serielt, og oversikten viser det: du ser **ett steg av gangen** som det aktuelle.
+
+- **Det aktuelle steget** står som et kort med tittel og én knapp — «Les» eller «Gjennomfør».
+- **Fullførte steg** krymper til én linje med status. Trykk «Se igjen» for å åpne dem på nytt;
+  innholdet forblir tilgjengelig så lenge du har kurset.
+- **Kommende steg** vises som dempede titler, så du ser hva som gjenstår. De kan fortsatt åpnes hvis
+  du vil hoppe fram, men rekkefølgen er den anbefalte veien gjennom kurset.
+
+Kursets to typer innhold skilles med både ord og form:
+
+| Merke | Type | Hva det betyr |
+|---|---|---|
+| ● Sirkel | **Lesestoff** | Innhold du leser og markerer som lest. Kan ikke gå galt. |
+| ◆ Rombe | **Test** | Oppgave som vurderes. Kan gi «Bestått» eller «Ikke bestått», og teller mot kursbeviset. |
+
+Fargen på merket viser status, ikke type: grønt betyr fullført for begge.
+
 ### 2. Forstå resultater
 
 Etter at vurderingen er fullført, vises resultatet i `/participant/completed`.
@@ -45,6 +64,12 @@ Etter at vurderingen er fullført, vises resultatet i `/participant/completed`.
 | **Under anke** | Klagen din er mottatt og behandles |
 
 Totalpoeng og detaljert vurdering vises for fullførte besvarelser.
+
+**Når får du e-post om resultatet?** Moduler med fritekstoppgave vurderes i bakgrunnen, og du får en
+e-post når resultatet er klart. **Rene flervalgsmoduler (MCQ) sender ingen resultat-e-post** — de rettes
+automatisk i det du leverer, og du ser Bestått/Ikke bestått med én gang på skjermen. Skulle den
+umiddelbare rettingen svikte, tar bakgrunnsjobben over og du får e-post som vanlig, slik at du aldri
+står uten beskjed.
 
 ### 3. Klage på en beslutning
 
