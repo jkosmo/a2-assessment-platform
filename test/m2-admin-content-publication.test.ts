@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app.js";
 import { localizedTextCodec } from "../src/codecs/localizedTextCodec.js";
+import { localizeContentText } from "../src/i18n/content.js";
 import { prisma } from "../src/db/prisma.js";
 
 const adminHeaders = {
@@ -376,7 +377,15 @@ describe("MVP admin content management and publication", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
-  it("accepts a plain-string title patch and applies it to all locales", async () => {
+  // #892: this test used to assert that a plain-string patch was copied into en-GB, nb AND nn.
+  // That behaviour was a bug, not a requirement — it made every renamed module look translated,
+  // served participants the author's language under every locale with no signal, and erased the
+  // "still needs translating" state (a filled nn became indistinguishable from a deliberate one).
+  //
+  // The contract now matches updateSectionTitle: a plain string is stored as a plain string.
+  // Display is unchanged, because localizeContentText falls back to it for every locale — which is
+  // asserted below so the change stays provably invisible to participants.
+  it("stores a plain-string title patch as a plain string, without fabricating per-locale copies", async () => {
     const createModuleResponse = await request(app)
       .post("/api/admin/content/modules")
       .set(adminHeaders)
@@ -406,12 +415,53 @@ describe("MVP admin content management and publication", () => {
     });
     const parsedTitle = localizedTextCodec.parse(storedModule?.title ?? null);
 
-    expect(typeof parsedTitle).toBe("object");
-    expect(parsedTitle).toMatchObject({
-      "en-GB": "Unified module title",
-      nb: "Unified module title",
-      nn: "Unified module title",
+    // The stored value carries no locale claim — that is what makes "not translated yet"
+    // detectable again (#894).
+    expect(typeof parsedTitle).toBe("string");
+    expect(parsedTitle).toBe("Unified module title");
+    expect(storedModule?.title.startsWith("{")).toBe(false);
+
+    // …and the participant sees the new title in every locale regardless, so dropping the
+    // fabricated copies changed nothing observable.
+    for (const locale of ["en-GB", "nb", "nn"] as const) {
+      expect(localizeContentText(locale, storedModule?.title ?? "")).toBe("Unified module title");
+    }
+
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
+  });
+
+  // The other half of the contract: a localized OBJECT patch still merges, so translating one
+  // language never disturbs the others.
+  it("merges a localized object patch instead of replacing the whole title", async () => {
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": `Merge Patch Module ${Date.now()}`,
+          nb: "Fletteoppdatering modul",
+        },
+      });
+
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
+
+    const patchResponse = await request(app)
+      .patch(`/api/admin/content/modules/${moduleId}/title`)
+      .set(adminHeaders)
+      .send({ title: { nn: "Fletteoppdatering modul nynorsk" } });
+
+    expect(patchResponse.status).toBe(200);
+
+    const storedModule = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { title: true },
     });
+    const parsedTitle = localizedTextCodec.parse(storedModule?.title ?? null) as Record<string, string>;
+
+    expect(typeof parsedTitle).toBe("object");
+    expect(parsedTitle.nn).toBe("Fletteoppdatering modul nynorsk");
+    expect(parsedTitle.nb).toBe("Fletteoppdatering modul");
 
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
