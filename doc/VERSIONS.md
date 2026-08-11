@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.4 - 2026-08-11
+
+**Opprydningsskript for #892-dataene.** v2.11.3 stoppet ny duplisering, men rader skrevet før den
+ser fortsatt oversatt ut. `npm run maint:collapse-duplicated-titles` kollapser lokaliserte verdier
+der alle språk holder samme streng, tilbake til ren streng — så «ikke oversatt ennå» blir synlig
+igjen på eksisterende innhold, og #894 får noe å måle på.
+
+- **Tørrkjøring som standard.** `--apply` kreves for å skrive. Tørrkjøringen skriver ut id-listene,
+  så du ser nøyaktig hvilke rader som ville endret seg før du gjør noe.
+- **Endringen er visningsnøytral.** `localizeContentText` slår opp `map[locale] ?? map["en-GB"] ??
+  første verdi`, og en ren streng returneres uendret for alle språk. Når alle oppføringer holder
+  samme streng, gir begge kodingene identisk resultat i alle språk — ingen deltaker, forfatter
+  eller eksport kan se forskjell. Kun påstanden «dette har en oversettelse per språk» forsvinner,
+  og den var usann.
+- **Rører bevisst ikke:** ekte oversettelser, delvise oversettelser (to like og én ulik er fortsatt
+  reelt arbeid), enkeltspråk-kart (`{"nb":"…"}` sier *hvilket* språk teksten er på — mer
+  informasjon enn en ren streng), og verdier som allerede er rene strenger.
+- Dekker `Module.title`, `CourseSection.title`, `Course.title` og `Course.description`.
+- Idempotent: en ny kjøring finner ingenting å kollapse.
+
+Tests: `localized-title-cleanup` (10 caser, hovedvekt på hva skriptet **ikke** skal røre, pluss en
+som beviser visningsnøytraliteten ved å sammenligne `localizeContentText` før og etter).
+
+⚠️ **Ikke kjørt mot en ekte database ennå.** Docker var utilgjengelig lokalt, så skriptet er kun
+røykt til Prisma-kallet (modulgraf + spørringsform validert). Kjør tørrkjøringen på stage og les
+id-listene før `--apply`.
+
 ## 2.11.3 - 2026-08-11
 
 **#892 — modultitler skrives ikke lenger identisk til alle språk.** En omdøping skrev forfatterens
