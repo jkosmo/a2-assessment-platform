@@ -431,15 +431,18 @@ describe("MVP admin content management and publication", () => {
   });
 
   // The other half of the contract: a localized OBJECT patch still merges, so translating one
-  // language never disturbs the others.
+  // language never disturbs the others. (Create requires all three locales — localizedTextSchema —
+  // while the patch is partial, so the module starts fully translated and only nn is revised.)
   it("merges a localized object patch instead of replacing the whole title", async () => {
+    const englishTitle = `Merge Patch Module ${Date.now()}`;
     const createModuleResponse = await request(app)
       .post("/api/admin/content/modules")
       .set(adminHeaders)
       .send({
         title: {
-          "en-GB": `Merge Patch Module ${Date.now()}`,
+          "en-GB": englishTitle,
           nb: "Fletteoppdatering modul",
+          nn: "Fletteoppdatering modul (gammel nynorsk)",
         },
       });
 
@@ -461,7 +464,9 @@ describe("MVP admin content management and publication", () => {
 
     expect(typeof parsedTitle).toBe("object");
     expect(parsedTitle.nn).toBe("Fletteoppdatering modul nynorsk");
+    // The untouched locales must survive — that is the whole point of merging.
     expect(parsedTitle.nb).toBe("Fletteoppdatering modul");
+    expect(parsedTitle["en-GB"]).toBe(englishTitle);
 
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
