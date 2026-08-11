@@ -104,6 +104,10 @@ const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale(supportedLocales);
+// Declared with the rest of the boot state, not next to the accordion code: setLocale runs during
+// startup and clears this cache (#893), which would hit the temporal dead zone if the `let` sat
+// further down the file.
+let courseDetailCache = {};        // courseId -> CourseDetail (resolved under the fetching locale)
 let latestResult = null;
 // #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
 // result poll. Reset when the module context changes / a new submission starts.
@@ -304,6 +308,11 @@ function setLocale(locale) {
       })
       .catch(() => {/* silent — stale titles are preferable to an error on locale switch */});
   }
+  // #893: course titles are resolved SERVER-side per request (`localizeContentText` in
+  // routes/courses.ts), so a cached CourseDetail belongs to the locale it was fetched under.
+  // The cache is keyed by courseId alone, so without this the course list kept the previous
+  // language until the participant happened to press "Last kurs" — which they have no reason to.
+  refreshOpenCourseDetailsForLocale();
   setDefaultFieldValues(previousLocale, currentLocale);
   renderSubmissionFields(getSubmissionFields(resolveSelectedModule(loadedModules, selectedModuleId)));
   renderResultSummary(latestResult);
@@ -2949,7 +2958,6 @@ let participantCompletions = {};   // courseId -> completion
 // courses on first load.
 const celebratedCompletedCourses = new Set();
 let courseAccordionInitialized = false;
-let courseDetailCache = {};        // courseId -> CourseDetail
 
 
 document.getElementById("loadCoursesBtn")?.addEventListener("click", async () => {
@@ -2980,6 +2988,27 @@ async function loadParticipantCourses() {
   // of skipping the fetch and leaving the placeholder stuck (#550 follow-up).
   courseDetailCache = {};
   renderParticipantCourseAccordion();
+}
+
+// #893: drop every cached CourseDetail (it was resolved under the old locale) and re-fetch the
+// ones the participant currently has open, so the sequence switches language in place. Courses
+// that are collapsed re-fetch on their next expand, as they already do.
+//
+// The workspace dance matters here: loadCourseDetail → renderCourseDetailModules wipes the
+// container with innerHTML="", so an inline-open module would lose the singleton #moduleWorkspace.
+// renderCourseDetailModules already calls restoreModuleWorkspaceHomeIfInside + reopenInlineAfterRender
+// around that wipe (see doc/FEATURE_SURFACE_MAP.md § 6b), so going through it keeps an open item open.
+function refreshOpenCourseDetailsForLocale() {
+  const container = document.getElementById("courseAccordion");
+  if (!container) return;
+  const openCourseIds = Array.from(container.querySelectorAll(".course-accordion-item.open"))
+    .map((el) => el.dataset.courseId)
+    .filter(Boolean);
+
+  courseDetailCache = {};
+  for (const courseId of openCourseIds) {
+    loadCourseDetail(courseId).catch(() => {/* silent — a failed refresh leaves the old render */});
+  }
 }
 
 function renderParticipantCourseAccordion() {

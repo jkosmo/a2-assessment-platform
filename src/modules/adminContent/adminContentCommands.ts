@@ -161,35 +161,41 @@ function normalizeLocalizedTitleSeed(title: string | null | undefined): Localize
   };
 }
 
-function normalizeLocalizedTitlePatch(titlePatch: LocalizedText): LocalizedTextObject {
-  if (typeof titlePatch === "string") {
-    const normalized = titlePatch.trim();
-    if (!normalized) {
-      return {};
-    }
-    return {
-      "en-GB": normalized,
-      nb: normalized,
-      nn: normalized,
-    };
-  }
-
+function normalizeLocalizedTitlePatch(titlePatch: LocalizedTextObject): LocalizedTextObject {
   const normalizedEntries = Object.entries(titlePatch).filter(
     ([, value]) => typeof value === "string" && value.trim().length > 0,
   );
   return Object.fromEntries(normalizedEntries) as LocalizedTextObject;
 }
 
+/**
+ * #892: a plain-string patch means the author typed ONE title in ONE language. It is stored as a
+ * plain string — exactly what `updateSectionTitle` does — and never fanned out into a copy per
+ * locale.
+ *
+ * The old behaviour wrote the same text into `en-GB`, `nb` AND `nn`. Three things went wrong:
+ * every title then looked translated, the participant was served the author's language under
+ * every locale with no signal, and the "this still needs translating" state became undetectable —
+ * a filled `nn` could no longer be distinguished from a deliberate one.
+ *
+ * Stored as a plain string the display is unchanged (`localizeContentText` falls back to it for
+ * every locale), but the data is honest and a translation-status check becomes possible (#894).
+ * A localized OBJECT patch still merges onto the existing map, so translating one language never
+ * disturbs the others.
+ */
 export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedText, actorId: string) {
   const existingModule = await adminContentRepository.findModuleTitle(moduleId);
   if (!existingModule) {
     throw new NotFoundError("Module", "module_not_found", "Module not found.");
   }
 
-  const title = localizedTextCodec.serialize({
-    ...normalizeLocalizedTitleSeed(existingModule.title),
-    ...normalizeLocalizedTitlePatch(titlePatch),
-  });
+  const title =
+    typeof titlePatch === "string"
+      ? localizedTextCodec.serialize(titlePatch)
+      : localizedTextCodec.serialize({
+          ...normalizeLocalizedTitleSeed(existingModule.title),
+          ...normalizeLocalizedTitlePatch(titlePatch),
+        });
   const module = await runInTransaction(async (tx) => {
     const repo = createAdminContentRepository(tx);
     const updated = await repo.updateModuleTitle(moduleId, title);

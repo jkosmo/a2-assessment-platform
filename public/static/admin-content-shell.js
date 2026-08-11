@@ -1280,7 +1280,10 @@ function normalizeModuleTitlePatch(title) {
   if (typeof title === "string") {
     const normalized = title.trim();
     if (!normalized) return null;
-    return buildLocalizedTextMap("en-GB", normalized);
+    // #892: en uoversatt tittel sendes som streng. Tidligere fylte buildLocalizedTextMap alle tre
+    // språk med samme tekst, som fikk tittelen til å se oversatt ut og skjulte at den ikke var det.
+    // Utkast som FAKTISK er oversatt kommer hit som objekt (localizeDraftAcrossLocales) og merges.
+    return normalized;
   }
   if (typeof title !== "object") {
     return null;

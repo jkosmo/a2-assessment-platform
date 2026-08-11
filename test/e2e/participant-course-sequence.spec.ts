@@ -222,6 +222,46 @@ test("an unavailable module is not a dead end, and the current step still opens 
   await expect(page.locator("#sectionReaderBody")).toContainText("Seksjonstekst");
 });
 
+// #893: course titles are resolved server-side per request, so a cached CourseDetail belongs to
+// the locale it was fetched under. The cache is keyed by courseId alone — without an explicit
+// refresh the list kept the previous language until the participant pressed "Last kurs", which
+// they have no reason to do. Found while a tester switched language back and forth.
+test("switching language re-fetches the open course so titles follow the new locale", async ({ page }) => {
+  await mockBase(page);
+
+  // Serve a different title per locale so a stale render is unmistakable.
+  await page.unroute("**/api/courses/c1");
+  await page.route("**/api/courses/c1", (route: Route) => {
+    const locale = route.request().headers()["x-locale"] ?? "nb";
+    const nn = locale === "nn";
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        course: {
+          id: "c1",
+          title: "Kurs",
+          items: [
+            { type: "SECTION", sectionId: "s1", courseItemId: "ci1", title: nn ? "Lesen seksjon" : "Lest seksjon", read: true },
+            { type: "MODULE", moduleId: "m1", courseItemId: "ci2", title: nn ? "Greidd test" : "Bestått test", moduleStatus: "PASSED", available: true },
+            { type: "SECTION", sectionId: "s2", courseItemId: "ci3", title: nn ? "Neste seksjon (nn)" : "Neste seksjon", read: false },
+          ],
+        },
+      }),
+    });
+  });
+
+  await openCourse(page);
+  await expect(page.locator('.course-item[data-key="ci1"] .course-step-title')).toHaveText("Lest seksjon");
+
+  await page.locator("#localeSelect").selectOption("nn");
+
+  // The open course re-fetches and re-renders in the new locale — no "Last kurs" required.
+  await expect(page.locator('.course-item[data-key="ci1"] .course-step-title')).toHaveText("Lesen seksjon");
+  await expect(page.locator('.course-item[data-key="ci2"] .course-step-title')).toHaveText("Greidd test");
+  await expect(page.locator(".course-step--now .course-step-title")).toHaveText("Neste seksjon (nn)");
+});
+
 // Deltakertest 2026-08-11: «i balanse mellom kursinnhold og diskusjon blir diskusjon altfor
 // dominerende». Once the sequence went quiet, the always-expanded discussion board became the
 // heaviest thing on the page. It is a side conversation, not what the participant came for.

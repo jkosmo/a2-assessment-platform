@@ -2,6 +2,89 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.4 - 2026-08-11
+
+**Opprydningsskript for #892-dataene.** v2.11.3 stoppet ny duplisering, men rader skrevet før den
+ser fortsatt oversatt ut. `npm run maint:collapse-duplicated-titles` kollapser lokaliserte verdier
+der alle språk holder samme streng, tilbake til ren streng — så «ikke oversatt ennå» blir synlig
+igjen på eksisterende innhold, og #894 får noe å måle på.
+
+- **Tørrkjøring som standard.** `--apply` kreves for å skrive. Tørrkjøringen skriver ut id-listene,
+  så du ser nøyaktig hvilke rader som ville endret seg før du gjør noe.
+- **Endringen er visningsnøytral.** `localizeContentText` slår opp `map[locale] ?? map["en-GB"] ??
+  første verdi`, og en ren streng returneres uendret for alle språk. Når alle oppføringer holder
+  samme streng, gir begge kodingene identisk resultat i alle språk — ingen deltaker, forfatter
+  eller eksport kan se forskjell. Kun påstanden «dette har en oversettelse per språk» forsvinner,
+  og den var usann.
+- **Rører bevisst ikke:** ekte oversettelser, delvise oversettelser (to like og én ulik er fortsatt
+  reelt arbeid), enkeltspråk-kart (`{"nb":"…"}` sier *hvilket* språk teksten er på — mer
+  informasjon enn en ren streng), og verdier som allerede er rene strenger.
+- Dekker `Module.title`, `CourseSection.title`, `Course.title` og `Course.description`.
+- Idempotent: en ny kjøring finner ingenting å kollapse.
+
+Tests: `localized-title-cleanup` (10 caser, hovedvekt på hva skriptet **ikke** skal røre, pluss en
+som beviser visningsnøytraliteten ved å sammenligne `localizeContentText` før og etter).
+
+⚠️ **Ikke kjørt mot en ekte database ennå.** Docker var utilgjengelig lokalt, så skriptet er kun
+røykt til Prisma-kallet (modulgraf + spørringsform validert). Kjør tørrkjøringen på stage og les
+id-listene før `--apply`.
+
+## 2.11.3 - 2026-08-11
+
+**#892 — modultitler skrives ikke lenger identisk til alle språk.** En omdøping skrev forfatterens
+ene tittel inn i `en-GB`, `nb` **og** `nn`. Tre ting gikk galt: hver tittel så oversatt ut,
+deltakeren fikk forfatterens språk under alle locales uten noe signal, og «denne mangler
+oversettelse» ble umulig å oppdage — et utfylt `nn` kunne ikke skilles fra et bevisst.
+
+- En **ren streng** lagres nå som ren streng, akkurat som `updateSectionTitle` allerede gjorde.
+  Visningen er uendret (`localizeContentText` faller tilbake til den for alle språk), men dataene
+  er ærlige — og det er nettopp det som gjør en oversettelsesstatus mulig (#894).
+- Et **lokalisert objekt** merges fortsatt mot eksisterende verdier, så å oversette ett språk lar
+  de andre stå.
+- Dupliseringen lå **fire steder**: `normalizeLocalizedTitlePatch` i backend, pluss tre i klienten
+  (`admin-content.js` × 2 og `normalizeModuleTitlePatch` → `buildLocalizedTextMap` i
+  `admin-content-shell.js`). Alle fire er rettet; backend er backstop for agent-API-et.
+- ⚠️ **Eksisterende data er ikke migrert.** Moduler der alle tre språk er identiske ser fortsatt
+  «oversatt» ut. Et opprydningsskript gjenstår — se #892.
+
+**#893 — kurslista følger språkbytte.** Kurstitler løses opp server-side per forespørsel, så en
+cachet `CourseDetail` tilhører språket den ble hentet under. Cachen var nøklet på `courseId` alene,
+og `setLocale` rørte den ikke — lista beholdt forrige språk til deltakeren tilfeldigvis trykket
+«Last kurs». Nå tømmes cachen og åpne kurs hentes på nytt ved språkbytte.
+
+- `courseDetailCache` er flyttet opp til øvrig oppstartstilstand. `setLocale` kjører under boot, og
+  en `let` lenger nede i fila ga en temporal-dead-zone-feil som stoppet hele skriptet.
+- Re-henting går gjennom `renderCourseDetailModules`, som allerede gjør
+  `restoreModuleWorkspaceHomeIfInside` + `reopenInlineAfterRender` rundt sin `innerHTML=""` — så en
+  åpen inline-modul overlever språkbyttet.
+
+Tests: ny unit-suite `module-title-localization` (5 caser: ren streng lagres som streng, ingen
+fabrikert oversettelse over en eksisterende lokalisert tittel, objekt-patch merger fortsatt, blanke
+felt ignoreres, og at et lagret objekt vs. streng er nettopp skillet #894 trenger). Ny e2e-vakt som
+serverer ulik tittel per språk og krever at åpent kurs bytter språk uten «Last kurs».
+tsc 0, unit 909, kontrakter 32, e2e 118.
+
+## 2.11.2 - 2026-08-11
+
+**Kursporet leses roligere.** To observasjoner fra deltakertesting med et ekte 18-stegs kurs.
+
+- **Titlene sto ikke på linje.** Typeetiketten hadde variabel bredde («Lesestoff» mot «Test»), så
+  hver rad startet tittelen på ulik x. Den flisete venstrekanten fikk lista til å se rotete ut selv
+  når innholdet var ryddig. Etiketten har nå fast bredde, og titlene danner én kolonne.
+- **Versalene er droppet.** `LESESTOFF`/`TEST` i store bokstaver gjentatt over 18 rader roper, og
+  etiketten er metadata — ikke en overskrift. Nå gemen tekst i småtekst-fargen, 12px. Samme for
+  tegnforklaringen og posisjonsteksten på det aktuelle steget.
+
+Merk at **teksten** i etiketten var uendret hele veien (`Lesestoff`/`Test`) — versalene var ren CSS,
+så e2e-assertions og skjermlesere er upåvirket.
+
+Denne endringen fjerner én av to årsaker til at lista så uryddig ut. Den andre er at modultitler
+lagres identisk på tvers av språk i stedet for å oversettes, slik at en nynorsk kursliste viser
+bokmål på annenhver rad — sporet i #892.
+
+Tests: uendret; `participant-course-sequence` og `participant-discussions` grønne. CSS only; ingen
+i18n-, API- eller modellendring.
+
 ## 2.11.1 - 2026-08-11
 
 **To funn fra deltakertesting av 2.11.0 på stage.**

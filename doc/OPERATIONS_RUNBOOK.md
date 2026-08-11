@@ -323,6 +323,46 @@ the RG lock is restored afterward. As of 2026-07-25 the prod backfill re-sealed 
 **Verification is also a maintenance script** — schedule or run `maint:verify-audit-chain` ad hoc to detect
 tampering (a non-zero exit means a row was edited/removed/reordered).
 
+### Collapse duplicated localized titles (#892)
+
+Renaming a module used to copy the author's one title into `en-GB`, `nb` **and** `nn`. The rename path is
+fixed (v2.11.3), but rows written before it still look translated — which is exactly the signal a
+translation-status view needs. This collapses such values back to a plain string.
+
+**Dry run by default.** `--apply` is required to write, and the dry run prints the ids it would touch:
+
+```bash
+dotenv -e .env.<env> -- npm run maint:collapse-duplicated-titles             # dry run — read the ids
+dotenv -e .env.<env> -- npm run maint:collapse-duplicated-titles -- --apply  # write
+```
+
+Safe because the change is **display-neutral**: `localizeContentText` resolves
+`map[locale] ?? map["en-GB"] ?? first value`, and a plain string is returned verbatim for every locale — so
+when every entry holds the same string, both encodings render identically everywhere. Only the false claim
+"this has a per-locale translation" goes away. Idempotent; a second run reports 0.
+
+Deliberately does **not** touch genuine translations, partial translations (two equal + one different),
+single-locale maps (`{"nb":"…"}` records *which* language the text is in), or values that are already plain
+strings. Covers `Module.title`, `CourseSection.title`, `Course.title`, `Course.description`.
+
+**Against staging** the resource group has no lock, so the firewall step is straightforward:
+
+```powershell
+az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261
+az postgres flexible-server firewall-rule create -g rg-a2-assessment-stg `
+  --server-name a2-assessment-platform-stg-pg-x6eyx4 --name tmp-<you> `
+  --start-ip-address <your-ip> --end-ip-address <your-ip>
+$env:DATABASE_URL = az keyvault secret show --vault-name a2-stg-kv-x6eyx4 --name DATABASE-URL --query value -o tsv
+npx tsx scripts/maintenance/collapse-duplicated-titles.ts            # dry run
+npx tsx scripts/maintenance/collapse-duplicated-titles.ts --apply    # write
+az postgres flexible-server firewall-rule delete -g rg-a2-assessment-stg `
+  --server-name a2-assessment-platform-stg-pg-x6eyx4 --name tmp-<you> --yes
+```
+
+**Against production** the RG carries a `CanNotDelete` lock that blocks *deleting* the temp rule — follow the
+create → run → remove-lock → delete-rule → **re-create-lock** → verify recipe in the operator memory
+`prod-db-firewall-lock-gotcha`, in small separate steps, and re-verify the lock is restored afterwards.
+
 ## Seed Behavior
 
 ### Bootstrap seed

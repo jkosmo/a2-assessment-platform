@@ -800,13 +800,8 @@ function normalizeLocalizedTitlePatchValue(value, fieldLabelKey) {
   if (!parsed) {
     return null;
   }
-  if (typeof parsed === "string") {
-    return {
-      "en-GB": parsed,
-      nb: parsed,
-      nn: parsed,
-    };
-  }
+  // #892: en ren streng betyr «forfatteren skrev én tittel på ett språk». Den sendes som streng,
+  // ikke kopiert til alle språk — se updateModuleTitle for hvorfor kopiering var skadelig.
   return parsed;
 }
 
@@ -2284,9 +2279,10 @@ async function handleSaveContentBundle() {
   try {
     const localized = readLocalizedFieldValue(moduleTitleInput, "adminContent.module.name", { required: false });
     if (localized) {
-      titlePatch = typeof localized === "string"
-        ? { "en-GB": localized, nb: localized, nn: localized }
-        : localized;
+      // #892: send strengen som den er. readLocalizedFieldValue gir allerede et lokalisert objekt
+      // når feltet har et sporet original (da merges kun gjeldende språk); en ren streng betyr at
+      // tittelen er uoversatt, og skal lagres slik — ikke kopieres til alle tre språk.
+      titlePatch = localized;
     }
   } catch {
     titlePatch = normalizeLocalizedTitlePatchValue(moduleTitleInput.value, "adminContent.module.name");

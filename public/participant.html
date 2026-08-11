@@ -166,7 +166,7 @@
       .course-sequence-legend {
         display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 8px -26px;
         padding-bottom: 8px; border-bottom: 1px solid var(--color-border-soft);
-        font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-meta);
+        font-size: 12px; color: var(--color-meta);
       }
       .course-sequence-legend span { display: inline-flex; align-items: center; gap: 6px; }
       .course-sequence-legend i {
@@ -217,9 +217,13 @@
       .course-step--ahead[disabled] { cursor: default; color: var(--color-meta); }
       .course-step--ahead[disabled]:hover { background: transparent; }
 
+      /* Fast bredde: titlene skal starte på samme x uansett om etiketten er «Lesestoff» eller
+         «Test». Variabel bredde ga en flisete venstrekant som fikk lista til å se rotete ut, selv
+         når innholdet var ryddig. Versaler er droppet — 18 rader med STORE BOKSTAVER roper, og
+         etiketten er metadata, ikke en overskrift. */
       .course-step-kind {
-        font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase;
-        color: var(--color-meta); flex-shrink: 0;
+        font-size: 12px; color: var(--color-meta); flex-shrink: 0;
+        width: 5.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .course-item[data-type="MODULE"] .course-step-kind { color: var(--color-primary); }
 
@@ -233,7 +237,7 @@
       .course-step--now:hover { background: var(--color-primary-tint); }
       .course-step--now:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       .course-step-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-      .course-step-position { font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-primary); }
+      .course-step-position { font-size: 12px; color: var(--color-primary); }
       .course-step--now .course-step-title { display: block; font-size: 16px; font-weight: 700; color: var(--color-text); line-height: 1.3; margin-bottom: 8px; }
       .course-step-cta {
         display: inline-flex; align-items: center; width: auto; min-height: 0;
