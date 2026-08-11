@@ -22,7 +22,10 @@
   --color-warning: #7a4b00;
   --color-error: #b23a2b;
   --color-text: #33312b;
-  --color-meta: #726e64;
+  /* Småtekst-fargen bærer hint, metadata og statuslinjer over hele flaten. #726e64 lå på 5.0:1
+     mot papir — innafor AA, men merkbart svakere enn den kjølige forgjengeren. Mørknet slik at
+     småtekst tåler 13-14px uten å bli anstrengende (deltakertest 2026-08-11). */
+  --color-meta: #63604f;
   --color-bg: #f2f1ec;
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
   --radius-card: 12px;

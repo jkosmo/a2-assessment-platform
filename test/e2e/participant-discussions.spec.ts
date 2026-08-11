@@ -134,8 +134,13 @@ test("participant: oppretter en kurs-nivå tråd, ser den i lista, åpner og sva
   await page.goto("/participant");
   await page.locator("#loadCoursesBtn").click();
 
-  // Åpne kurs-accordion → laster detalj → monterer diskusjonspanel.
+  // Åpne kurs-accordion → laster detalj.
   await page.locator(".course-accordion-header").first().click();
+
+  // Kurs-nivå diskusjon er kollapset som standard, og panelet monteres først ved åpning — ellers
+  // konkurrerte den ut selve kursinnholdet (deltakertest 2026-08-11). Fold den ut.
+  await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(0);
+  await page.locator(".course-discussion-toggle").click();
 
   const panel = page.locator("[data-course-discussion='c1']");
   await expect(panel).toBeVisible();

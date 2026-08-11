@@ -143,6 +143,16 @@ list of equal buttons. Three mutually exclusive row states, driven by `findNextI
 - Participant vocabulary is **«Lesestoff» / «Test»** (`courses.kind.*`); «seksjon»/«modul» remain
   author/system words. Adding a locale? All three (`en-GB`, `nb`, `nn`) are parity-checked by
   `test/participant-translations.test.js`.
+- **Never mute a step with `opacity`.** v2.11.0 shipped `opacity: .72` on later steps and measured
+  **2.91:1** — below WCAG AA. Opacity hits title, kind label and status pill alike and is invisible
+  to the tokens. Quiet comes from size, weight and chrome; contrast stays ≥ 4.5:1. Guarded by
+  `participant-course-sequence.spec.ts` → "every step label meets WCAG AA contrast", which folds in
+  inherited opacity when it measures.
+- **The course-level discussion is collapsed by default and mounted on first open**
+  (`.course-discussion-toggle` / `.course-discussion-body`). Once the sequence went quiet, an
+  always-expanded board outweighed the course content. The **item-level** board inside an opened
+  section reader is untouched — it is contextual there. Guarded by "the course-level discussion
+  stays collapsed until asked for"; `participant-discussions.spec.ts` expands it first.
 
 ## 6c. Section HTML sinks + client/server sanitizer parity (#814)
 

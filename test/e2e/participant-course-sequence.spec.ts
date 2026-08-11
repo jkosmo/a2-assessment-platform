@@ -67,6 +67,7 @@ async function mockBase(page: Page) {
         course: {
           id: "c1",
           title: "Kurs",
+          discussionsEnabled: true,
           items: [
             { type: "SECTION", sectionId: "s1", courseItemId: "ci1", title: "Lest seksjon", read: true },
             { type: "MODULE", moduleId: "m1", courseItemId: "ci2", title: "Bestått test", moduleStatus: "PASSED", available: true },
@@ -150,6 +151,60 @@ test("reading material and tests are distinguishable at a glance", async ({ page
   await expect(page.locator('.course-item[data-key="ci2"] .module-status-badge')).toHaveClass(/completed/);
 });
 
+// Deltakertest 2026-08-11: «font ser noe svak ut og vanskelig å lese». Første forsøk dempet
+// kommende steg med `opacity: .72` oppå en allerede dempet farge — målt til 2.91:1, under
+// WCAG AA-kravet på 4.5:1. Quiet must come from weight and chrome, never from contrast.
+test("every step label meets WCAG AA contrast — quiet is not the same as faint", async ({ page }) => {
+  await mockBase(page);
+  await openCourse(page);
+
+  const measured = await page.evaluate(() => {
+    function srgb(c: number) { const s = c / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); }
+    function parse(s: string) { const m = s.match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : [0, 0, 0]; }
+    function lum(c: number[]) { return 0.2126 * srgb(c[0]) + 0.7152 * srgb(c[1]) + 0.0722 * srgb(c[2]); }
+
+    // Fold in every ancestor opacity — that is exactly what the first attempt got wrong.
+    function ratioFor(el: Element) {
+      let opacity = 1;
+      let node: Element | null = el;
+      while (node) {
+        const o = parseFloat(getComputedStyle(node).opacity || "1");
+        if (!Number.isNaN(o)) opacity *= o;
+        node = node.parentElement;
+      }
+      let bgStr = "rgb(255, 255, 255)";
+      node = el;
+      while (node) {
+        const b = getComputedStyle(node).backgroundColor;
+        if (b && b !== "rgba(0, 0, 0, 0)" && b !== "transparent") { bgStr = b; break; }
+        node = node.parentElement;
+      }
+      const fg = parse(getComputedStyle(el).color);
+      const bg = parse(bgStr);
+      const blended = fg.map((v, i) => v * opacity + bg[i] * (1 - opacity));
+      const l1 = lum(blended); const l2 = lum(bg);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+
+    const selectors = [
+      '.course-item[data-key="ci4"] .course-step-title',   // kommende
+      '.course-item[data-key="ci4"] .course-step-kind',
+      '.course-item[data-key="ci4"] .module-status-badge',
+      '.course-item[data-key="ci1"] .course-step-title',   // fullført
+      '.course-item[data-key="ci3"] .course-step-title',   // aktuelt
+      '.course-sequence-legend',
+    ];
+    return selectors.map((sel) => {
+      const el = document.querySelector(sel);
+      return { sel, ratio: el ? ratioFor(el) : 0 };
+    });
+  });
+
+  for (const { sel, ratio } of measured) {
+    expect(ratio, `${sel} har kontrast ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test("an unavailable module is not a dead end, and the current step still opens inline", async ({ page }) => {
   await mockBase(page);
   await page.route("**/api/courses/c1/sections/s2", (route: Route) =>
@@ -165,4 +220,31 @@ test("an unavailable module is not a dead end, and the current step still opens 
   await page.locator('.course-item[data-key="ci3"] .course-module-row').click();
   await expect(page.locator('.course-item[data-key="ci3"] .course-inline-panel')).toBeVisible();
   await expect(page.locator("#sectionReaderBody")).toContainText("Seksjonstekst");
+});
+
+// Deltakertest 2026-08-11: «i balanse mellom kursinnhold og diskusjon blir diskusjon altfor
+// dominerende». Once the sequence went quiet, the always-expanded discussion board became the
+// heaviest thing on the page. It is a side conversation, not what the participant came for.
+test("the course-level discussion stays collapsed until asked for", async ({ page }) => {
+  await mockBase(page);
+  await page.route("**/api/courses/c1/discussions**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ threads: [] }) }),
+  );
+  await openCourse(page);
+
+  // Collapsed by default — one quiet line, and the panel is not even mounted yet.
+  const toggle = page.locator(".course-discussion-toggle");
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(0);
+
+  // The collapsed row must not outweigh the current step: the step card is the taller element.
+  const rowBox = await toggle.boundingBox();
+  const cardBox = await page.locator(".course-step--now").boundingBox();
+  expect(rowBox && cardBox && cardBox.height > rowBox.height * 2).toBe(true);
+
+  // Opening mounts it on demand.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(1);
 });
