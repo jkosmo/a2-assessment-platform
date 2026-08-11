@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.3 - 2026-08-11
+
+**#892 — modultitler skrives ikke lenger identisk til alle språk.** En omdøping skrev forfatterens
+ene tittel inn i `en-GB`, `nb` **og** `nn`. Tre ting gikk galt: hver tittel så oversatt ut,
+deltakeren fikk forfatterens språk under alle locales uten noe signal, og «denne mangler
+oversettelse» ble umulig å oppdage — et utfylt `nn` kunne ikke skilles fra et bevisst.
+
+- En **ren streng** lagres nå som ren streng, akkurat som `updateSectionTitle` allerede gjorde.
+  Visningen er uendret (`localizeContentText` faller tilbake til den for alle språk), men dataene
+  er ærlige — og det er nettopp det som gjør en oversettelsesstatus mulig (#894).
+- Et **lokalisert objekt** merges fortsatt mot eksisterende verdier, så å oversette ett språk lar
+  de andre stå.
+- Dupliseringen lå **fire steder**: `normalizeLocalizedTitlePatch` i backend, pluss tre i klienten
+  (`admin-content.js` × 2 og `normalizeModuleTitlePatch` → `buildLocalizedTextMap` i
+  `admin-content-shell.js`). Alle fire er rettet; backend er backstop for agent-API-et.
+- ⚠️ **Eksisterende data er ikke migrert.** Moduler der alle tre språk er identiske ser fortsatt
+  «oversatt» ut. Et opprydningsskript gjenstår — se #892.
+
+**#893 — kurslista følger språkbytte.** Kurstitler løses opp server-side per forespørsel, så en
+cachet `CourseDetail` tilhører språket den ble hentet under. Cachen var nøklet på `courseId` alene,
+og `setLocale` rørte den ikke — lista beholdt forrige språk til deltakeren tilfeldigvis trykket
+«Last kurs». Nå tømmes cachen og åpne kurs hentes på nytt ved språkbytte.
+
+- `courseDetailCache` er flyttet opp til øvrig oppstartstilstand. `setLocale` kjører under boot, og
+  en `let` lenger nede i fila ga en temporal-dead-zone-feil som stoppet hele skriptet.
+- Re-henting går gjennom `renderCourseDetailModules`, som allerede gjør
+  `restoreModuleWorkspaceHomeIfInside` + `reopenInlineAfterRender` rundt sin `innerHTML=""` — så en
+  åpen inline-modul overlever språkbyttet.
+
+Tests: ny unit-suite `module-title-localization` (5 caser: ren streng lagres som streng, ingen
+fabrikert oversettelse over en eksisterende lokalisert tittel, objekt-patch merger fortsatt, blanke
+felt ignoreres, og at et lagret objekt vs. streng er nettopp skillet #894 trenger). Ny e2e-vakt som
+serverer ulik tittel per språk og krever at åpent kurs bytter språk uten «Last kurs».
+tsc 0, unit 909, kontrakter 32, e2e 118.
+
 ## 2.11.2 - 2026-08-11
 
 **Kursporet leses roligere.** To observasjoner fra deltakertesting med et ekte 18-stegs kurs.
