@@ -229,7 +229,23 @@ test("an unavailable module is not a dead end, and the current step still opens 
 test("switching language re-fetches the open course so titles follow the new locale", async ({ page }) => {
   await mockBase(page);
 
-  // Serve a different title per locale so a stale render is unmistakable.
+  // Serve a different title per locale so a stale render is unmistakable — for BOTH the course
+  // list (which feeds the accordion header) and the course detail (which feeds the rows).
+  await page.unroute("**/api/courses");
+  await page.route("**/api/courses", (route: Route) => {
+    const nn = (route.request().headers()["x-locale"] ?? "nb") === "nn";
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [{
+          id: "c1", title: nn ? "Kurs (nn)" : "Kurs (nb)", description: null, moduleCount: 2,
+          progress: { completed: 2, total: 3, moduleCompleted: 1, moduleTotal: 1, sectionCompleted: 1, sectionTotal: 2, courseStatus: "IN_PROGRESS" },
+        }],
+      }),
+    });
+  });
+
   await page.unroute("**/api/courses/c1");
   await page.route("**/api/courses/c1", (route: Route) => {
     const locale = route.request().headers()["x-locale"] ?? "nb";
@@ -260,6 +276,11 @@ test("switching language re-fetches the open course so titles follow the new loc
   await expect(page.locator('.course-item[data-key="ci1"] .course-step-title')).toHaveText("Lesen seksjon");
   await expect(page.locator('.course-item[data-key="ci2"] .course-step-title')).toHaveText("Greidd test");
   await expect(page.locator(".course-step--now .course-step-title")).toHaveText("Neste seksjon (nn)");
+
+  // The ACCORDION HEADER is server-localized too — the course title comes from /api/courses. The
+  // first fix refreshed only the rows, which left an English page showing a Norwegian course title
+  // and a Norwegian status badge (prod, 2026-08-12).
+  await expect(page.locator(".course-accordion-title")).toHaveText("Kurs (nn)");
 });
 
 // Deltakertest 2026-08-11: «i balanse mellom kursinnhold og diskusjon blir diskusjon altfor

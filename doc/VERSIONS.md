@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.5 - 2026-08-12
+
+**#893-fiksen var ufullstendig.** Observert på prod: en engelsk side viste norsk kurstittel,
+«Moduler 0/9 · Seksjoner 0/9» og «Påbegynt». 2.11.3 oppdaterte sekvensradene ved språkbytte, men
+ikke **trekkspill-hodet** — og det er der kurstittelen (server-lokalisert via `/api/courses`) og
+`t()`-strengene fra `buildCourseAccordionItem` bor.
+
+- `refreshOpenCourseDetailsForLocale` henter nå kurslista på nytt og bygger trekkspillet om.
+  `renderParticipantCourseAccordion` bevarer allerede hvilke kurs som var åpne og kaller
+  `loadCourseDetail` for dem, så det å tømme cachen først er det som gjør at radene også følger med.
+- ⚠️ **Temporal dead zone, andre gang.** `courseAccordionInitialized` lå deklarert lenger nede i
+  fila, og `setLocale` kjører under oppstart — hele skriptet døde. Samtlige ti deltaker-e2e falt
+  samtidig, som er signalet å se etter. Deklarasjonen er flyttet opp til boot-tilstanden med en
+  advarsel: **alt `setLocale` rører må deklareres der.**
+- E2e-vakten er utvidet til å servere ulik kurstittel per språk i **både** lista og detaljen, og
+  krever nå at `.course-accordion-title` også bytter. Den forrige versjonen sjekket kun radene og
+  ville ikke fanget dette.
+
+**Duplisert overskrift i deltakerflaten.** Siden hadde `h1` «Mine kurs» med undertekst, og rett
+under et kort med `h2` «Mine kurs» og nesten samme undertekst — tittelen møtte deltakeren to ganger
+før noe innhold. Kortets overskrift og hint er fjernet; i18n-nøklene beholdes for andre flater.
+
+Tests: tsc 0, e2e 118, kontrakter 32. Klient + HTML; ingen API- eller modellendring.
+
 ## 2.11.4 - 2026-08-11
 
 **Opprydningsskript for #892-dataene.** v2.11.3 stoppet ny duplisering, men rader skrevet før den

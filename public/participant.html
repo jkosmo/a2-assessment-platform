@@ -354,10 +354,12 @@
       </details>
     </section>
 
+    <!-- Overskrift og undertekst er bevisst utelatt her: siden har allerede h1 «Mine kurs» med
+         samme undertekst rett over. Kortet gjentok begge, så deltakeren møtte tittelen to ganger
+         før noe innhold (prod, 2026-08-12). i18n-nøklene courses.title/courses.hint beholdes for
+         andre flater. -->
     <section class="card" id="courseSection">
-      <h2 data-i18n="courses.title">Mine kurs</h2>
-      <div class="small" data-i18n="courses.hint">Følg fremdriften din på tvers av kurs.</div>
-      <button id="loadCoursesBtn" class="btn-secondary" style="margin-top:var(--space-1)" data-i18n="courses.load">Last kurs</button>
+      <button id="loadCoursesBtn" class="btn-secondary" data-i18n="courses.load">Last kurs</button>
       <div id="courseAccordion" class="course-accordion"></div>
     </section>
 

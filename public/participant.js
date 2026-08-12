@@ -104,10 +104,11 @@ const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale(supportedLocales);
-// Declared with the rest of the boot state, not next to the accordion code: setLocale runs during
-// startup and clears this cache (#893), which would hit the temporal dead zone if the `let` sat
-// further down the file.
+// ⚠️ Anything `setLocale` touches MUST be declared here, with the boot state — not next to the code
+// that uses it. setLocale runs during startup, so a `let` further down the file is still in its
+// temporal dead zone and throws, which kills the whole script. This has now bitten twice (#893).
 let courseDetailCache = {};        // courseId -> CourseDetail (resolved under the fetching locale)
+let courseAccordionInitialized = false;
 let latestResult = null;
 // #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
 // result poll. Reset when the module context changes / a new submission starts.
@@ -2957,7 +2958,6 @@ let participantCompletions = {};   // courseId -> completion
 // participant just passed the last module / read the last section), not for already-completed
 // courses on first load.
 const celebratedCompletedCourses = new Set();
-let courseAccordionInitialized = false;
 
 
 document.getElementById("loadCoursesBtn")?.addEventListener("click", async () => {
@@ -2999,16 +2999,20 @@ async function loadParticipantCourses() {
 // renderCourseDetailModules already calls restoreModuleWorkspaceHomeIfInside + reopenInlineAfterRender
 // around that wipe (see doc/FEATURE_SURFACE_MAP.md § 6b), so going through it keeps an open item open.
 function refreshOpenCourseDetailsForLocale() {
-  const container = document.getElementById("courseAccordion");
-  if (!container) return;
-  const openCourseIds = Array.from(container.querySelectorAll(".course-accordion-item.open"))
-    .map((el) => el.dataset.courseId)
-    .filter(Boolean);
+  if (!courseAccordionInitialized) return;
 
+  // The accordion HEADER is server-localized too — the course title comes from /api/courses, and
+  // «Moduler x/y · Seksjoner x/y» + the status badge are t() calls baked in at build time by
+  // buildCourseAccordionItem. Refreshing only the sequence rows left an English page showing a
+  // Norwegian course title and «Påbegynt» (prod, 2026-08-12). Re-fetch the list and rebuild.
+  //
+  // renderParticipantCourseAccordion preserves which courses were open and calls loadCourseDetail
+  // for them, so clearing the cache first is what makes the rows re-fetch in the new locale. The
+  // workspace dance around innerHTML="" is handled inside renderCourseDetailModules (§ 6b).
   courseDetailCache = {};
-  for (const courseId of openCourseIds) {
-    loadCourseDetail(courseId).catch(() => {/* silent — a failed refresh leaves the old render */});
-  }
+  loadParticipantCourses()
+    .then(() => renderParticipantCourseAccordion())
+    .catch(() => {/* silent — a failed refresh leaves the previous render rather than an error */});
 }
 
 function renderParticipantCourseAccordion() {
