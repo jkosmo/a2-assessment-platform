@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.9 - 2026-08-12
+
+**Lagring feilet med 400 på en modul uten «rammer for kandidaten».** Rapportert fra stage etter
+omdøping av en modul:
+
+```
+400 validation_error · path ["candidateTaskConstraints","nb"]
+String must contain at least 1 character(s)
+```
+
+Oversettelsen fyller alltid alle tre språk, også når kilden er tom — resultatet er
+`{"en-GB":"", nb:"", nn:""}`. Lagringen prøvde å utelate feltet med `verdi || undefined`, men et
+objekt er alltid truthy, så det tomme kartet gikk rett gjennom til et skjema som krever minst ett
+tegn per språk. Feltet utelates nå når **alle** språk er tomme. Delvis utfylte kart sendes uendret:
+da er det et ekte problem serveren skal si fra om, ikke noe klienten skal dikte seg ut av (#892).
+
+Feilen er ikke ny — den har ligget der for enhver modul uten rammer, uavhengig av 2.11.7.
+
+**Rubrikk-genereringen fikk «[object Object]» i stedet for scenarioet.** Funnet i samme kodelinje.
+`ensure-rubric` tar ren tekst i ett språk, men klienten sendte `String(språkkart)`. Endepunktet
+gjenbruker en eksisterende rubrikk når den finnes, så utslaget var begrenset til moduler som
+genererte rubrikk for første gang — der ble den generert fra strengen «[object Object]». Bruker nå
+lokale-oppslaget, som var det `locale`-feltet ved siden av allerede forutsatte.
+
+E2e-vakten dekker begge i én test og er verifisert rød uten fiksen.
+
+Tests: tsc 0, e2e 122, dom 5, kontrakter 32. Kun klient.
+
 ## 2.11.8 - 2026-08-12
 
 Tre feil funnet av en gjennomgang av 2.11.5–2.11.7 før prod. To av dem ville rammet produksjon.

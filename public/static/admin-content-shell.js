@@ -1263,6 +1263,26 @@ function translateLocalizedText(text) {
   };
 }
 
+/**
+ * Utelat en lokalisert verdi der ALLE språk er tomme, i stedet for å sende den.
+ *
+ * `localizedTextObjectSchema` krever minst ett tegn i hvert av de tre språkene, og et objekt er
+ * alltid truthy — så `verdi || undefined` fanget aldri `{"en-GB":"", nb:"", nn:""}`. Å lagre en
+ * modul uten «rammer for kandidaten» ga derfor:
+ *
+ *   400 validation_error · path ["candidateTaskConstraints","nb"] · String must contain at least 1
+ *
+ * Delvis utfylte kart sendes uendret: da er det et ekte problem serveren skal si fra om, ikke noe
+ * klienten skal dikte seg ut av ved å kopiere ett språk inn i de andre (#892).
+ */
+function omitWhenEveryLocaleBlank(value) {
+  if (value == null) return undefined;
+  if (typeof value === "string") return value.trim() ? value : undefined;
+  if (typeof value !== "object") return undefined;
+  const hasText = Object.values(value).some((text) => typeof text === "string" && text.trim());
+  return hasText ? value : undefined;
+}
+
 function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
   const result = {};
   for (const locale of supportedLocales) {
@@ -2068,10 +2088,14 @@ async function saveDraftBundleInBackground(options = {}) {
           blueprintObject = assessmentBlueprint;
         }
       }
+      // ⚠️ translateLocalizedText returnerer et SPRÅKKART, ikke en streng. `String(kart)` gir
+      // "[object Object]" — og dette endepunktet genererer rubrikken fra teksten, så den fikk
+      // servert nettopp den strengen i stedet for scenarioet. Bruk lokale-oppslaget: dette
+      // endepunktet tar ren tekst i ETT språk, og sender allerede `locale` ved siden av.
       const ensureRubricBody = {
-        taskText: String(translateLocalizedText(taskText) ?? "").trim(),
-        assessorExpectedContent: String(translateLocalizedText(assessorExpectedContent) ?? "").trim(),
-        candidateTaskConstraints: String(translateLocalizedText(candidateTaskConstraints) ?? "").trim() || undefined,
+        taskText: String(localizeValueForLocale(taskText, currentLocale) ?? "").trim(),
+        assessorExpectedContent: String(localizeValueForLocale(assessorExpectedContent, currentLocale) ?? "").trim(),
+        candidateTaskConstraints: String(localizeValueForLocale(candidateTaskConstraints, currentLocale) ?? "").trim() || undefined,
         certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
         locale: currentLocale,
         ...(blueprintObject ? { blueprint: blueprintObject } : {}),
@@ -2104,7 +2128,7 @@ async function saveDraftBundleInBackground(options = {}) {
         assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : undefined,
         taskText: translateLocalizedText(taskText),
         assessorExpectedContent: translateLocalizedText(assessorExpectedContent),
-        candidateTaskConstraints: translateLocalizedText(candidateTaskConstraints) || undefined,
+        candidateTaskConstraints: omitWhenEveryLocaleBlank(translateLocalizedText(candidateTaskConstraints)),
         assessmentBlueprint: assessmentBlueprint || undefined,
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
