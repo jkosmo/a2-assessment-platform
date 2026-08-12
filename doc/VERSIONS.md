@@ -2,6 +2,114 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.8 - 2026-08-12
+
+Tre feil funnet av en gjennomgang av 2.11.5–2.11.7 før prod. To av dem ville rammet produksjon.
+
+**BLOKKER · språkbytte med en åpen modul slettet arbeidsflaten.** `#moduleWorkspace` er en
+singleton som *flyttes* inn i det åpne kurselementet, ikke klones. Enhver `innerHTML=""` på et
+forfedreelement sletter den derfor for godt — bare en sidelasting henter den tilbake.
+`renderCourseDetailModules` har alltid gjort flytt-hjem-dansen; `renderParticipantCourseAccordion`
+har aldri gjort det, og 2.11.5 rutet språkbyttet rett gjennom den. Det som før bare var nåbart fra
+bestått-feiringen ble dermed én knapp unna.
+
+Invarianten sto allerede skrevet i `FEATURE_SURFACE_MAP` § 6b — den var dokumentert, men ikke
+håndhevet. Nå er den det: e2e-vakten åpner en modul, bytter språk og krever at arbeidsflaten
+fortsatt finnes. Verifisert at den faller uten fiksen.
+
+**BLOKKER · 2.11.7 traff en sti som ikke finnes.** `adminSectionsRouter` er montert *inne i*
+`adminContentRouter`, som ligger på `/api/admin/content`. Riktig sti er altså
+`/api/admin/content/sections/localize`. Klienten kalte `/api/admin/sections/localize` → 404 →
+`failedLocales` → kildeteksten ble stående i alle lokaler. Altså nøyaktig den oppførselen 2.11.7
+skulle fjerne, bare med en feilmelding på toppen.
+
+E2e-en var grønn fordi den mocket den *samme* gale stien. Testen pinnet feilen. Begge er rettet, og
+globen er kommentert med hvorfor stien er som den er.
+
+**Dobbeltrendering ved hvert språkbytte.** `loadParticipantCourses` avslutter selv med
+`renderParticipantCourseAccordion`; 2.11.5 kjedet på en til. Resultatet var to fulle
+riv-og-bygg-runder og to `GET /api/courses/:id` per åpne kurs per bytte. Kjedingen er fjernet.
+
+**Vedlikeholdsskriptet:** `--to` valideres nå mot de tre støttede lokalene (`--to en` ville skrevet
+en ubrukelig `en`-nøkkel), og en tørrkjøring i stubmodus advarer om at forslagene er plassholdere.
+
+Tests: tsc 0, e2e 121, dom 5, kontrakter 32.
+
+## 2.11.7 - 2026-08-12
+
+**Å døpe om en MCQ-only modul skrev engelsk inn i bokmål og nynorsk.** Rapportert fra prod: en
+tittel endret under Direkte redigering fikk kildespråket kopiert inn i alle tre lokaler i stedet
+for en oversettelse. Det er #892-signaturen på nytt — tittelen SER oversatt ut, deltakeren møter
+feil språk, og «trenger oversettelse»-signalet er borte.
+
+Årsak: `localizeDraftAcrossLocalesWithTitle` gikk mot
+`/api/admin/content/generate/module-draft/localize`, som krever `taskText` **og**
+`assessorExpectedContent` med minst ett tegn. En MCQ-only modul har ingen av delene, så kallet ga
+400 — og klientens `catch { continue }` slukte feilen og lot kildeteksten bli stående i hver
+mål-lokale. Ingen feilmelding; forfatteren fikk «ferdig».
+
+- Uten oppgavetekst går tittelen nå til `/api/admin/sections/localize` (#514), som godtar tittel
+  alene. Det er samme tjeneste vedlikeholdsskriptet bruker.
+- Feiler en lokale likevel, blir den registrert i `failedLocales` og **navngitt i meldingen** til
+  forfatteren, med henvisning til Avanserte egenskaper. Kildeteksten blir fortsatt stående — et
+  utkast uten verdi i en lokale kan ikke lagres — men stillheten er borte. Stillheten var halve
+  #892.
+- E2e-vakt: mocken svarer 400 på modul-endepunktet, akkurat som serveren gjør, og testen krever at
+  tittelen i stedet går til tittel-endepunktet én gang per mål-lokale.
+
+Tests: tsc 0, e2e 120, dom 5, kontrakter 32. Kun klient + i18n; ingen API- eller modellendring.
+
+## 2.11.6 - 2026-08-12
+
+**En modul som bare gjentar seksjonstittelen over seg sier den ikke lenger to ganger.** I kurssporet
+sto par som «Lesestoff Klassisk LLM» rett over «Test Klassisk LLM». Typeetiketten bærer allerede
+forskjellen, så tittelen på modulraden var ren gjentakelse — og det var gjentakelsen som fikk lista
+til å se rotete ut.
+
+- Regelen er bevisst smal: **bare det umiddelbart foregående elementet teller.** To like titler
+  lenger fra hverandre i sekvensen er ikke et par, og da må begge stå.
+- Tittelen skjules visuelt, men blir stående i DOM som `.sr-only` — raden er en `<button>` og må
+  fortsatt ha et navn for skjermleser (og for DOM-oppslag i testene).
+- **Det aktuelle steget er unntatt.** Der er tittelen kortets overskrift, og et kort med bare
+  «Steg 4 av 18 · Test» + knapp leser som ødelagt. Én linje å endre hvis vi vil ha det motsatt:
+  `!isNow &&` i `renderCourseDetailModules`.
+- `.sr-only` er `position: absolute`, så tittelen faller ut av flex-flyten og tar med seg
+  `flex: 1`-elementet som skjøv statuspillen mot høyre. `.course-step--title-repeat
+  .module-status-badge { margin-left: auto }` holder pillen i samme kolonne som på alle andre rader
+  — e2e-vakten måler dette, for det var akkurat der den første versjonen røk.
+
+**Vedlikeholdsskript: `scripts/maintenance/translate-course-titles.ts`** (#892-oppfølging). Fyller
+manglende lokaltekster for seksjons- og modul**titler** i ett kurs, oversatt fra en kildelokale via
+plattformens egen lokaliseringstjeneste. Tørrkjøring som standard, `--apply` for å skrive, og den
+nekter å kjøre hvis `LLM_MODE !== "azure_openai"` (stubben returnerer `[nn] Tittel`, og å skrive
+det ville vært verre enn problemet). Kjørt mot stage (11 fylt) og prod (9 fylt) 12.08.
+
+Tests: tsc 0, e2e 119, kontrakter 32. Klient + HTML + skript; ingen API- eller modellendring.
+
+## 2.11.5 - 2026-08-12
+
+**#893-fiksen var ufullstendig.** Observert på prod: en engelsk side viste norsk kurstittel,
+«Moduler 0/9 · Seksjoner 0/9» og «Påbegynt». 2.11.3 oppdaterte sekvensradene ved språkbytte, men
+ikke **trekkspill-hodet** — og det er der kurstittelen (server-lokalisert via `/api/courses`) og
+`t()`-strengene fra `buildCourseAccordionItem` bor.
+
+- `refreshOpenCourseDetailsForLocale` henter nå kurslista på nytt og bygger trekkspillet om.
+  `renderParticipantCourseAccordion` bevarer allerede hvilke kurs som var åpne og kaller
+  `loadCourseDetail` for dem, så det å tømme cachen først er det som gjør at radene også følger med.
+- ⚠️ **Temporal dead zone, andre gang.** `courseAccordionInitialized` lå deklarert lenger nede i
+  fila, og `setLocale` kjører under oppstart — hele skriptet døde. Samtlige ti deltaker-e2e falt
+  samtidig, som er signalet å se etter. Deklarasjonen er flyttet opp til boot-tilstanden med en
+  advarsel: **alt `setLocale` rører må deklareres der.**
+- E2e-vakten er utvidet til å servere ulik kurstittel per språk i **både** lista og detaljen, og
+  krever nå at `.course-accordion-title` også bytter. Den forrige versjonen sjekket kun radene og
+  ville ikke fanget dette.
+
+**Duplisert overskrift i deltakerflaten.** Siden hadde `h1` «Mine kurs» med undertekst, og rett
+under et kort med `h2` «Mine kurs» og nesten samme undertekst — tittelen møtte deltakeren to ganger
+før noe innhold. Kortets overskrift og hint er fjernet; i18n-nøklene beholdes for andre flater.
+
+Tests: tsc 0, e2e 118, kontrakter 32. Klient + HTML; ingen API- eller modellendring.
+
 ## 2.11.4 - 2026-08-11
 
 **Opprydningsskript for #892-dataene.** v2.11.3 stoppet ny duplisering, men rader skrevet før den

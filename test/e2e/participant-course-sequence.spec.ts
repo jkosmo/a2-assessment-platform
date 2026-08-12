@@ -229,7 +229,23 @@ test("an unavailable module is not a dead end, and the current step still opens 
 test("switching language re-fetches the open course so titles follow the new locale", async ({ page }) => {
   await mockBase(page);
 
-  // Serve a different title per locale so a stale render is unmistakable.
+  // Serve a different title per locale so a stale render is unmistakable — for BOTH the course
+  // list (which feeds the accordion header) and the course detail (which feeds the rows).
+  await page.unroute("**/api/courses");
+  await page.route("**/api/courses", (route: Route) => {
+    const nn = (route.request().headers()["x-locale"] ?? "nb") === "nn";
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [{
+          id: "c1", title: nn ? "Kurs (nn)" : "Kurs (nb)", description: null, moduleCount: 2,
+          progress: { completed: 2, total: 3, moduleCompleted: 1, moduleTotal: 1, sectionCompleted: 1, sectionTotal: 2, courseStatus: "IN_PROGRESS" },
+        }],
+      }),
+    });
+  });
+
   await page.unroute("**/api/courses/c1");
   await page.route("**/api/courses/c1", (route: Route) => {
     const locale = route.request().headers()["x-locale"] ?? "nb";
@@ -260,6 +276,11 @@ test("switching language re-fetches the open course so titles follow the new loc
   await expect(page.locator('.course-item[data-key="ci1"] .course-step-title')).toHaveText("Lesen seksjon");
   await expect(page.locator('.course-item[data-key="ci2"] .course-step-title')).toHaveText("Greidd test");
   await expect(page.locator(".course-step--now .course-step-title")).toHaveText("Neste seksjon (nn)");
+
+  // The ACCORDION HEADER is server-localized too — the course title comes from /api/courses. The
+  // first fix refreshed only the rows, which left an English page showing a Norwegian course title
+  // and a Norwegian status badge (prod, 2026-08-12).
+  await expect(page.locator(".course-accordion-title")).toHaveText("Kurs (nn)");
 });
 
 // Deltakertest 2026-08-11: «i balanse mellom kursinnhold og diskusjon blir diskusjon altfor
@@ -287,4 +308,86 @@ test("the course-level discussion stays collapsed until asked for", async ({ pag
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(1);
+});
+
+test("a module that only repeats the section title above it does not say it twice", async ({ page }) => {
+  await mockBase(page);
+  // Registered after mockBase, so this route wins: a sequence where two module rows repeat the
+  // title of the section immediately above them, and one does not.
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        course: {
+          id: "c1",
+          title: "Kurs",
+          discussionsEnabled: false,
+          items: [
+            { type: "SECTION", sectionId: "s1", courseItemId: "ci1", title: "Klassisk LLM", read: true },
+            { type: "MODULE", moduleId: "m1", courseItemId: "ci2", title: "Klassisk LLM", moduleStatus: "PASSED", available: true },
+            { type: "SECTION", sectionId: "s2", courseItemId: "ci3", title: "Kodekjøring", read: false },
+            { type: "MODULE", moduleId: "m2", courseItemId: "ci4", title: "Kodekjøring", moduleStatus: "NOT_STARTED", available: true },
+            { type: "MODULE", moduleId: "m3", courseItemId: "ci5", title: "Avsluttende test", moduleStatus: "NOT_STARTED", available: true },
+          ],
+        },
+      }),
+    }),
+  );
+  await openCourse(page);
+
+  const titleOf = (n: number) => page.locator(".course-item").nth(n).locator(".course-step-title");
+  const widthOf = async (n: number) => (await titleOf(n).boundingBox())?.width ?? -1;
+
+  // The section keeps its title — it is the one saying it.
+  expect(await widthOf(0)).toBeGreaterThan(20);
+
+  // The repeated module titles are out of sight but NOT out of the DOM: the row is a button and
+  // still needs an accessible name.
+  for (const n of [1, 3]) {
+    await expect(titleOf(n)).toHaveClass(/sr-only/);
+    expect(await widthOf(n)).toBeLessThanOrEqual(2);
+  }
+  await expect(titleOf(1)).toHaveText("Klassisk LLM");
+  await expect(titleOf(3)).toHaveText("Kodekjøring");
+
+  // A module whose title differs — and one that follows a module rather than a section — keeps it.
+  expect(await widthOf(4)).toBeGreaterThan(20);
+
+  // Pulling the title out of the flex flow must not drag the status pill left with it: it stays
+  // right-aligned, in the same column as every other row's pill.
+  const badgeX = async (n: number) =>
+    (await page.locator(".course-item").nth(n).locator(".module-status-badge").boundingBox())?.x ?? -1;
+  expect(Math.abs((await badgeX(3)) - (await badgeX(4)))).toBeLessThan(2);
+});
+
+// The singleton #moduleWorkspace is MOVED into the open course item, not cloned. Any innerHTML=""
+// on an ancestor therefore deletes it from the document for good — only a reload brings it back.
+// renderCourseDetailModules has always done the restore dance; renderParticipantCourseAccordion
+// had not, and the #893 language-switch fix routed the switch straight through it, turning a
+// hard-to-reach path into a one-click one.
+test("switching language while a module is open does not destroy the module workspace", async ({ page }) => {
+  await mockBase(page);
+  // openCourseModule checks availability against the module list before it relocates the workspace.
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ modules: [{ id: "m2", title: "Senere test", taskText: "Oppgave", assessmentMode: "FREETEXT_ONLY" }] }),
+    }),
+  );
+  await page.route("**/api/submissions**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ submissions: [] }) }),
+  );
+  await openCourse(page);
+
+  // Open an available module inline; the workspace moves out of its home and into the panel.
+  await page.locator('.course-item[data-key="ci4"] .course-module-row').click();
+  await expect(page.locator('.course-item[data-key="ci4"] .course-inline-panel #moduleWorkspace')).toHaveCount(1);
+
+  await page.locator("#localeSelect").selectOption("nn");
+
+  // The accordion is wiped and rebuilt — the workspace must have been carried home first.
+  await expect(page.locator(".course-sequence")).toBeVisible();
+  await expect(page.locator("#moduleWorkspace")).toHaveCount(1);
 });

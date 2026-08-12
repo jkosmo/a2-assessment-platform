@@ -104,10 +104,11 @@ const COMPLETED_MODULE_STATUSES = new Set(["COMPLETED"]);
 
 let currentQuestions = [];
 let currentLocale = resolveInitialLocale(supportedLocales);
-// Declared with the rest of the boot state, not next to the accordion code: setLocale runs during
-// startup and clears this cache (#893), which would hit the temporal dead zone if the `let` sat
-// further down the file.
+// ⚠️ Anything `setLocale` touches MUST be declared here, with the boot state — not next to the code
+// that uses it. setLocale runs during startup, so a `let` further down the file is still in its
+// temporal dead zone and throws, which kills the whole script. This has now bitten twice (#893).
 let courseDetailCache = {};        // courseId -> CourseDetail (resolved under the fetching locale)
+let courseAccordionInitialized = false;
 let latestResult = null;
 // #549: ensures the pass celebration (confetti + banner) fires once per submission, not on every
 // result poll. Reset when the module context changes / a new submission starts.
@@ -2957,7 +2958,6 @@ let participantCompletions = {};   // courseId -> completion
 // participant just passed the last module / read the last section), not for already-completed
 // courses on first load.
 const celebratedCompletedCourses = new Set();
-let courseAccordionInitialized = false;
 
 
 document.getElementById("loadCoursesBtn")?.addEventListener("click", async () => {
@@ -2999,21 +2999,32 @@ async function loadParticipantCourses() {
 // renderCourseDetailModules already calls restoreModuleWorkspaceHomeIfInside + reopenInlineAfterRender
 // around that wipe (see doc/FEATURE_SURFACE_MAP.md § 6b), so going through it keeps an open item open.
 function refreshOpenCourseDetailsForLocale() {
-  const container = document.getElementById("courseAccordion");
-  if (!container) return;
-  const openCourseIds = Array.from(container.querySelectorAll(".course-accordion-item.open"))
-    .map((el) => el.dataset.courseId)
-    .filter(Boolean);
+  if (!courseAccordionInitialized) return;
 
+  // The accordion HEADER is server-localized too — the course title comes from /api/courses, and
+  // «Moduler x/y · Seksjoner x/y» + the status badge are t() calls baked in at build time by
+  // buildCourseAccordionItem. Refreshing only the sequence rows left an English page showing a
+  // Norwegian course title and «Påbegynt» (prod, 2026-08-12). Re-fetch the list and rebuild.
+  //
+  // renderParticipantCourseAccordion preserves which courses were open and calls loadCourseDetail
+  // for them, so clearing the cache first is what makes the rows re-fetch in the new locale. The
+  // workspace dance around innerHTML="" is handled inside renderCourseDetailModules (§ 6b).
+  // loadParticipantCourses ends with renderParticipantCourseAccordion, so do NOT chain another one
+  // here: it wiped and rebuilt the whole accordion a second time and re-fetched every open course.
   courseDetailCache = {};
-  for (const courseId of openCourseIds) {
-    loadCourseDetail(courseId).catch(() => {/* silent — a failed refresh leaves the old render */});
-  }
+  loadParticipantCourses()
+    .catch(() => {/* silent — a failed refresh leaves the previous render rather than an error */});
 }
 
 function renderParticipantCourseAccordion() {
   const container = document.getElementById("courseAccordion");
   if (!container) return;
+  // ⚠️ Både grenene under tømmer containeren med innerHTML="". Er en modul åpen inline, bor
+  // singleton-#moduleWorkspace i det treet og blir SLETTET for godt — bare en sidelasting henter
+  // den tilbake. Invarianten står i FEATURE_SURFACE_MAP § 6b: flytt arbeidsflaten hjem FØR hver
+  // innerHTML="" i BÅDE renderCourseDetailModules og her. Språkbytte (#893) går nå gjennom denne
+  // funksjonen, så det som før bare var nåbart fra bestått-feiringen er nå én knapp unna.
+  restoreModuleWorkspaceHomeIfInside(container);
   if (participantCourses.length === 0) {
     container.innerHTML = `<p class="small" style="color:var(--color-meta);margin-top:4px">${escapeHtmlP(t("courses.empty"))}</p>`;
     return;
@@ -3155,6 +3166,25 @@ async function loadCourseDetail(courseId) {
   }
 }
 
+/**
+ * En modul rett etter en seksjon med SAMME tittel gjentar seg selv i kurssporet — «Lesestoff
+ * Klassisk LLM» rett over «Test Klassisk LLM». Paret er allerede tydelig av typeetiketten, så
+ * tittelen bærer ingen ny informasjon på modulraden, og gjentakelsen er det som får lista til å
+ * se rotete ut.
+ *
+ * Bare det umiddelbart foregående elementet teller: to like titler lenger fra hverandre i
+ * sekvensen er ikke et par, og da må begge stå.
+ */
+function moduleTitleRepeatsPrecedingSection(sequence, index) {
+  const entry = sequence[index];
+  const previous = index > 0 ? sequence[index - 1] : null;
+  if (!entry || !previous) return false;
+  if (entry.type === "SECTION" || previous.type !== "SECTION") return false;
+  const own = (localizePreviewText(entry.title) || "").trim().toLowerCase();
+  const before = (localizePreviewText(previous.title) || "").trim().toLowerCase();
+  return own.length > 0 && own === before;
+}
+
 function renderCourseDetailModules(courseId, course) {
   const container = document.getElementById(`courseDetail_${courseId}`);
   if (!container) return;
@@ -3203,6 +3233,11 @@ function renderCourseDetailModules(courseId, course) {
     const available = isSection || entry.available !== false;
     const title = localizePreviewText(entry.title);
     const kindText = isSection ? t("courses.kind.reading") : t("courses.kind.test");
+    // Tittelen skjules visuelt, men blir stående i DOM som sr-only: raden er en knapp og må ha et
+    // navn for skjermleser. Gjelder bare de sammenklappede radene — det aktuelle steget er et kort
+    // med tittelen som overskrift, og et kort uten overskrift leser som ødelagt.
+    const titleRepeats = !isNow && moduleTitleRepeatsPrecedingSection(sequence, index);
+    const titleClass = titleRepeats ? "course-step-title sr-only" : "course-step-title";
 
     const itemWrap = document.createElement("div");
     itemWrap.className = `course-item${done ? " is-done" : ""}${isNow ? " is-now" : ""}`;
@@ -3240,15 +3275,17 @@ function renderCourseDetailModules(courseId, course) {
       `;
     } else if (done) {
       row.classList.add("course-step--done");
+      if (titleRepeats) row.classList.add("course-step--title-repeat");
       const badgeText = isSection ? t("courses.section.doneBadge") : t("courses.module.passed");
       row.innerHTML = `
         <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
-        <span class="course-step-title">${escapeHtmlP(title)}</span>
+        <span class="${titleClass}">${escapeHtmlP(title)}</span>
         <span class="module-status-badge completed">${escapeHtmlP(badgeText)}</span>
         <span class="course-step-review">${escapeHtmlP(t("courses.step.review"))}</span>
       `;
     } else {
       row.classList.add("course-step--ahead");
+      if (titleRepeats) row.classList.add("course-step--title-repeat");
       const badgeText = !available
         ? t("courses.module.unavailableShort")
         : isSection ? t("courses.section.todoBadge")
@@ -3257,7 +3294,7 @@ function renderCourseDetailModules(courseId, course) {
       const badgeClass = !available ? "unavailable" : entry.moduleStatus === "IN_PROGRESS" ? "retake" : "";
       row.innerHTML = `
         <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
-        <span class="course-step-title">${escapeHtmlP(title)}</span>
+        <span class="${titleClass}">${escapeHtmlP(title)}</span>
         <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
       `;
     }

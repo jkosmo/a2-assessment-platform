@@ -363,6 +363,47 @@ az postgres flexible-server firewall-rule delete -g rg-a2-assessment-stg `
 create → run → remove-lock → delete-rule → **re-create-lock** → verify recipe in the operator memory
 `prod-db-firewall-lock-gotcha`, in small separate steps, and re-verify the lock is restored afterwards.
 
+### Translating section and module titles in one course
+
+`scripts/maintenance/translate-course-titles.ts` fills **missing** locale values for the titles of
+every section and module in a single course, translating from a source locale (default `nb`) with
+`localizeSectionContent` — the same service the section editor's "Translate" action calls.
+
+Run it when a course reads as a mix of languages because it was authored before renaming had a
+translation step (#892 / v2.11.3). Note the ordering dependency: run
+`maint:collapse-duplicated-titles` **first**. Until the fabricated per-locale copies are collapsed,
+every title looks translated and this script skips all of them.
+
+```powershell
+# Requires real LLM config — with LLM_MODE != azure_openai the script refuses to --apply, because the
+# stub localiser returns placeholders like "[nn] Tittel" and writing those is worse than the problem.
+$env:LLM_MODE = "azure_openai"
+$env:AZURE_OPENAI_ENDPOINT = "<endpoint from the environment's app settings>"
+$env:AZURE_OPENAI_DEPLOYMENT = "<deployment>"
+$env:AZURE_OPENAI_API_VERSION = "2024-10-21"
+$env:AZURE_OPENAI_API_KEY = az keyvault secret show --vault-name <kv> --name AZURE-OPENAI-API-KEY --query value -o tsv
+$env:DATABASE_URL = az keyvault secret show --vault-name <kv> --name DATABASE-URL --query value -o tsv
+
+npx tsx scripts/maintenance/translate-course-titles.ts --course "<title fragment>"            # dry run
+npx tsx scripts/maintenance/translate-course-titles.ts --course "<fragment>" --apply          # write
+```
+
+Flags: `--from <locale>` (source, default `nb`), `--to en-GB,nn` (targets), `--redo-duplicates`
+(also refill locales whose value merely repeats the source — the #892 signature).
+
+Two caveats worth knowing before reading the output:
+
+- **`--redo-duplicates` is not idempotent.** A title that is legitimately identical across languages
+  (a proper noun such as "Klassisk LLM") comes back from the translator unchanged, so the flag
+  re-flags it on every subsequent run. Harmless — it rewrites the same value — but a rerun reporting
+  "2 to fill" does not mean the previous run failed.
+- **It never overwrites an existing value.** A locale holding a *wrong* translation (e.g. an English
+  slot containing Norwegian text) is left alone by design, and the participant still sees the wrong
+  language. Those must be fixed by renaming the module in the authoring UI.
+
+Firewall access follows the same recipe as the cleanup script above — including the production
+lock dance.
+
 ## Seed Behavior
 
 ### Bootstrap seed

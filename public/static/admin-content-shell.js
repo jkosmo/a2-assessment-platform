@@ -1325,16 +1325,53 @@ async function localizeDraftAcrossLocales(taskText, assessorExpectedContent, sou
   return localized;
 }
 
+/**
+ * Oversett BARE tittelen, via seksjons-endepunktet (#514), som godtar tittel alene.
+ *
+ * Modul-endepunktet krever `taskText` OG `assessorExpectedContent` med minst ett tegn. En MCQ-only
+ * modul har ingen av delene, så et tittelbytte der ga 400 — feilen ble slukt av `catch { continue }`
+ * under, og tittelen ble stående på kildespråket i ALLE tre lokaler. Det er #892-signaturen på nytt:
+ * tittelen SER oversatt ut, mens deltakeren møter feil språk.
+ */
+async function localizeTitleOnly(title, sourceLocale, targetLocale) {
+  // adminSectionsRouter er montert INNE i adminContentRouter (`use("/sections", …)`), som selv er
+  // montert på /api/admin/content. Full sti er derfor /api/admin/content/sections/localize — samme
+  // som admin-content-sections.js bruker. /api/admin/sections finnes ikke og gir 404.
+  const result = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
+    method: "POST",
+    body: JSON.stringify({ title, sourceLocale, targetLocale }),
+  });
+  return typeof result?.title === "string" && result.title.trim() ? result.title.trim() : null;
+}
+
 async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpectedContent, sourceLocale, candidateTaskConstraints) {
   const localized = {
     title: buildLocalizedTextMap(sourceLocale, title),
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
     assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
+    // Lokaler som IKKE ble oversatt. De står nå med kildeteksten, som er nødvendig for at lagring
+    // skal gå gjennom — men kalleren MÅ si fra, ellers ser forfatteren «ferdig» på en tittel som i
+    // praksis er kopiert. Stillhet her var halve #892.
+    failedLocales: [],
   };
+  const hasDraftBody = Boolean(taskText?.trim() && assessorExpectedContent?.trim());
 
   for (const targetLocale of supportedLocales) {
     if (targetLocale === sourceLocale) continue;
+
+    if (!hasDraftBody) {
+      // Ingen oppgavetekst å oversette (MCQ-only) — bare tittelen skal flyttes over.
+      try {
+        const translatedTitle = await localizeTitleOnly(title, sourceLocale, targetLocale);
+        if (translatedTitle) localized.title[targetLocale] = translatedTitle;
+        else localized.failedLocales.push(targetLocale);
+      } catch {
+        localized.failedLocales.push(targetLocale);
+      }
+      continue;
+    }
+
     let result;
     try {
       result = await apiFetch(
@@ -1346,10 +1383,13 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
         },
       );
     } catch {
-      // Graceful degradation: keep source text for failed locale
+      // Kildeteksten blir stående, ellers blir utkastet ulagbart — men lokalen registreres som
+      // ikke-oversatt så kalleren kan si fra i stedet for å melde suksess.
+      localized.failedLocales.push(targetLocale);
       continue;
     }
     const draft = result?.draft ?? result;
+    if (!draft?.title) localized.failedLocales.push(targetLocale);
     localized.title[targetLocale] = draft?.title ?? title;
     localized.taskText[targetLocale] = draft?.taskText ?? taskText;
     localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
@@ -1847,7 +1887,19 @@ async function applyStructuredTitleEditInBackground(newTitle) {
       assessorExpectedContent: localizedDraft.assessorExpectedContent,
       candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
     });
-    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`);
+    // En delvis oversettelse er ikke en suksess. Sier vi «ferdig» her, står forfatteren igjen med en
+    // tittel som ser oversatt ut, men som er kildeteksten kopiert inn — og oppdager det først når en
+    // deltaker møter feil språk.
+    const warning = localizedDraft.failedLocales?.length
+      ? ` ${tf("shell.revision.titleNotTranslated", {
+          locales: localizedDraft.failedLocales.join(", "),
+          source: snapshot.sourceLocale,
+        })}`
+      : "";
+    logResolveSlot(
+      slot,
+      () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
+    );
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.titleErrorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -3797,7 +3849,13 @@ function enterPreviewEditMode() {
         });
         sessionState = "draft-pending";
         clearPreviewCandidate();
-        logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.done"))}</strong>`);
+        const warning = localizedDraft.failedLocales?.length
+          ? ` ${tf("shell.revision.titleNotTranslated", {
+              locales: localizedDraft.failedLocales.join(", "),
+              source: editingLocale,
+            })}`
+          : "";
+        logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.done"))}</strong>${escapeHtml(warning)}`);
         showDraftReadyActions();
       })
       .catch(() => {
