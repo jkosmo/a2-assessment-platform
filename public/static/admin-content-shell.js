@@ -1334,7 +1334,10 @@ async function localizeDraftAcrossLocales(taskText, assessorExpectedContent, sou
  * tittelen SER oversatt ut, mens deltakeren møter feil språk.
  */
 async function localizeTitleOnly(title, sourceLocale, targetLocale) {
-  const result = await apiFetch("/api/admin/sections/localize", getHeaders, {
+  // adminSectionsRouter er montert INNE i adminContentRouter (`use("/sections", …)`), som selv er
+  // montert på /api/admin/content. Full sti er derfor /api/admin/content/sections/localize — samme
+  // som admin-content-sections.js bruker. /api/admin/sections finnes ikke og gir 404.
+  const result = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
     method: "POST",
     body: JSON.stringify({ title, sourceLocale, targetLocale }),
   });

@@ -360,3 +360,34 @@ test("a module that only repeats the section title above it does not say it twic
     (await page.locator(".course-item").nth(n).locator(".module-status-badge").boundingBox())?.x ?? -1;
   expect(Math.abs((await badgeX(3)) - (await badgeX(4)))).toBeLessThan(2);
 });
+
+// The singleton #moduleWorkspace is MOVED into the open course item, not cloned. Any innerHTML=""
+// on an ancestor therefore deletes it from the document for good — only a reload brings it back.
+// renderCourseDetailModules has always done the restore dance; renderParticipantCourseAccordion
+// had not, and the #893 language-switch fix routed the switch straight through it, turning a
+// hard-to-reach path into a one-click one.
+test("switching language while a module is open does not destroy the module workspace", async ({ page }) => {
+  await mockBase(page);
+  // openCourseModule checks availability against the module list before it relocates the workspace.
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ modules: [{ id: "m2", title: "Senere test", taskText: "Oppgave", assessmentMode: "FREETEXT_ONLY" }] }),
+    }),
+  );
+  await page.route("**/api/submissions**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ submissions: [] }) }),
+  );
+  await openCourse(page);
+
+  // Open an available module inline; the workspace moves out of its home and into the panel.
+  await page.locator('.course-item[data-key="ci4"] .course-module-row').click();
+  await expect(page.locator('.course-item[data-key="ci4"] .course-inline-panel #moduleWorkspace')).toHaveCount(1);
+
+  await page.locator("#localeSelect").selectOption("nn");
+
+  // The accordion is wiped and rebuilt — the workspace must have been carried home first.
+  await expect(page.locator(".course-sequence")).toBeVisible();
+  await expect(page.locator("#moduleWorkspace")).toHaveCount(1);
+});

@@ -3009,15 +3009,22 @@ function refreshOpenCourseDetailsForLocale() {
   // renderParticipantCourseAccordion preserves which courses were open and calls loadCourseDetail
   // for them, so clearing the cache first is what makes the rows re-fetch in the new locale. The
   // workspace dance around innerHTML="" is handled inside renderCourseDetailModules (§ 6b).
+  // loadParticipantCourses ends with renderParticipantCourseAccordion, so do NOT chain another one
+  // here: it wiped and rebuilt the whole accordion a second time and re-fetched every open course.
   courseDetailCache = {};
   loadParticipantCourses()
-    .then(() => renderParticipantCourseAccordion())
     .catch(() => {/* silent — a failed refresh leaves the previous render rather than an error */});
 }
 
 function renderParticipantCourseAccordion() {
   const container = document.getElementById("courseAccordion");
   if (!container) return;
+  // ⚠️ Både grenene under tømmer containeren med innerHTML="". Er en modul åpen inline, bor
+  // singleton-#moduleWorkspace i det treet og blir SLETTET for godt — bare en sidelasting henter
+  // den tilbake. Invarianten står i FEATURE_SURFACE_MAP § 6b: flytt arbeidsflaten hjem FØR hver
+  // innerHTML="" i BÅDE renderCourseDetailModules og her. Språkbytte (#893) går nå gjennom denne
+  // funksjonen, så det som før bare var nåbart fra bestått-feiringen er nå én knapp unna.
+  restoreModuleWorkspaceHomeIfInside(container);
   if (participantCourses.length === 0) {
     container.innerHTML = `<p class="small" style="color:var(--color-meta);margin-top:4px">${escapeHtmlP(t("courses.empty"))}</p>`;
     return;

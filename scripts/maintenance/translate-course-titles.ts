@@ -59,12 +59,29 @@ async function main() {
   const redoDuplicates = process.argv.includes("--redo-duplicates");
   const courseNeedle = arg("course");
   const from = (arg("from") ?? "nb") as Locale;
-  const targets = (arg("to")?.split(",") ?? ALL.filter((l) => l !== from)) as Locale[];
+  // Validate against the supported set: an unvalidated `--to en` would write a bogus "en" key into
+  // the title map, which nothing reads and nothing cleans up.
+  const requested = arg("to")?.split(",").map((l) => l.trim()).filter(Boolean);
+  const unknown = (requested ?? []).filter((l) => !ALL.includes(l as Locale));
+  if (unknown.length > 0) {
+    console.error(`Ukjent(e) lokale(r) i --to: ${unknown.join(", ")}. Gyldige: ${ALL.join(", ")}.`);
+    process.exitCode = 1;
+    return;
+  }
+  const targets = (requested ?? ALL.filter((l) => l !== from)) as Locale[];
 
   if (!courseNeedle) {
     console.error("Mangler --course \"<del av kurstittelen>\".");
     process.exitCode = 1;
     return;
+  }
+
+  // En tørrkjøring i stubmodus skriver ingenting, men skriver ut «[nn] Tittel» som om det var
+  // forslag. Uten denne linjen leser man plassholdere som oversettelser og godkjenner --apply.
+  if (!apply && env.LLM_MODE !== "azure_openai") {
+    console.warn(
+      `ADVARSEL: LLM_MODE=${env.LLM_MODE}. Forslagene under er stubbede plassholdere ([nn] Tittel), ikke oversettelser.`,
+    );
   }
 
   // Hard guard: the stub localiser returns "[nn] Tittel" and would poison the data.

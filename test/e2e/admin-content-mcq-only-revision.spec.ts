@@ -189,7 +189,10 @@ test.describe("admin content — module-type bugs (#655)", () => {
     });
 
     const titleLocalizeCalls: Array<{ title?: string; targetLocale?: string }> = [];
-    await page.route("**/api/admin/sections/localize", async (route: Route) => {
+    // Full sti — adminSectionsRouter er montert under /api/admin/content. En glob på
+    // **/api/admin/sections/localize ville matchet en sti som ikke finnes, og testen ville pinnet
+    // en 404-sti som «riktig».
+    await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
       const body = route.request().postDataJSON() as { title?: string; targetLocale?: string };
       titleLocalizeCalls.push(body);
       await route.fulfill({

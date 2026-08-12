@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.8 - 2026-08-12
+
+Tre feil funnet av en gjennomgang av 2.11.5–2.11.7 før prod. To av dem ville rammet produksjon.
+
+**BLOKKER · språkbytte med en åpen modul slettet arbeidsflaten.** `#moduleWorkspace` er en
+singleton som *flyttes* inn i det åpne kurselementet, ikke klones. Enhver `innerHTML=""` på et
+forfedreelement sletter den derfor for godt — bare en sidelasting henter den tilbake.
+`renderCourseDetailModules` har alltid gjort flytt-hjem-dansen; `renderParticipantCourseAccordion`
+har aldri gjort det, og 2.11.5 rutet språkbyttet rett gjennom den. Det som før bare var nåbart fra
+bestått-feiringen ble dermed én knapp unna.
+
+Invarianten sto allerede skrevet i `FEATURE_SURFACE_MAP` § 6b — den var dokumentert, men ikke
+håndhevet. Nå er den det: e2e-vakten åpner en modul, bytter språk og krever at arbeidsflaten
+fortsatt finnes. Verifisert at den faller uten fiksen.
+
+**BLOKKER · 2.11.7 traff en sti som ikke finnes.** `adminSectionsRouter` er montert *inne i*
+`adminContentRouter`, som ligger på `/api/admin/content`. Riktig sti er altså
+`/api/admin/content/sections/localize`. Klienten kalte `/api/admin/sections/localize` → 404 →
+`failedLocales` → kildeteksten ble stående i alle lokaler. Altså nøyaktig den oppførselen 2.11.7
+skulle fjerne, bare med en feilmelding på toppen.
+
+E2e-en var grønn fordi den mocket den *samme* gale stien. Testen pinnet feilen. Begge er rettet, og
+globen er kommentert med hvorfor stien er som den er.
+
+**Dobbeltrendering ved hvert språkbytte.** `loadParticipantCourses` avslutter selv med
+`renderParticipantCourseAccordion`; 2.11.5 kjedet på en til. Resultatet var to fulle
+riv-og-bygg-runder og to `GET /api/courses/:id` per åpne kurs per bytte. Kjedingen er fjernet.
+
+**Vedlikeholdsskriptet:** `--to` valideres nå mot de tre støttede lokalene (`--to en` ville skrevet
+en ubrukelig `en`-nøkkel), og en tørrkjøring i stubmodus advarer om at forslagene er plassholdere.
+
+Tests: tsc 0, e2e 121, dom 5, kontrakter 32.
+
 ## 2.11.7 - 2026-08-12
 
 **Å døpe om en MCQ-only modul skrev engelsk inn i bokmål og nynorsk.** Rapportert fra prod: en
