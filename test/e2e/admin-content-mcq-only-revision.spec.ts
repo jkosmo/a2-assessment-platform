@@ -172,4 +172,49 @@ test.describe("admin content — module-type bugs (#655)", () => {
     expect(savedVersionPayload?.assessmentMode).toBe("MCQ_ONLY");
     expect(savedVersionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(60);
   });
+
+  test("renaming an MCQ-only module translates the title instead of copying it into every locale", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: { "module-1": buildMcqOnlyExport() },
+    });
+
+    // The module-draft localiser requires taskText AND assessorExpectedContent (min 1 char). An
+    // MCQ-only module has neither, so the real server answers 400 — mirror that here, because the
+    // client used to swallow it and keep the source title in all three locales (#892 signature).
+    const draftLocalizeCalls: string[] = [];
+    await page.route("**/api/admin/content/generate/module-draft/localize", async (route: Route) => {
+      draftLocalizeCalls.push(String((route.request().postDataJSON() as { targetLocale?: string })?.targetLocale));
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "validation_error" }) });
+    });
+
+    const titleLocalizeCalls: Array<{ title?: string; targetLocale?: string }> = [];
+    await page.route("**/api/admin/sections/localize", async (route: Route) => {
+      const body = route.request().postDataJSON() as { title?: string; targetLocale?: string };
+      titleLocalizeCalls.push(body);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ title: `${body.title} [${body.targetLocale}]` }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").fill("Union basics");
+    await page.locator("#previewEditConfirm").click();
+
+    // Translation runs in the background; wait for the flow to settle back into draft-ready actions.
+    await expect(page.locator("#previewEditTitle")).toHaveCount(0);
+    await expect.poll(() => titleLocalizeCalls.length).toBe(2);
+
+    // The title went to the title-only endpoint, once per target locale, carrying the NEW title.
+    // The workspace is in en-GB here, so the two targets are the Norwegian pair.
+    expect(titleLocalizeCalls.map((c) => c.targetLocale).sort()).toEqual(["nb", "nn"]);
+    for (const call of titleLocalizeCalls) expect(call.title).toBe("Union basics");
+
+    // And the draft localiser — the one that 400s for MCQ-only — was not used for this at all.
+    expect(draftLocalizeCalls).toEqual([]);
+  });
+
 });

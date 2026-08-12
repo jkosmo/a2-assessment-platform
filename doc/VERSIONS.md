@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.7 - 2026-08-12
+
+**Å døpe om en MCQ-only modul skrev engelsk inn i bokmål og nynorsk.** Rapportert fra prod: en
+tittel endret under Direkte redigering fikk kildespråket kopiert inn i alle tre lokaler i stedet
+for en oversettelse. Det er #892-signaturen på nytt — tittelen SER oversatt ut, deltakeren møter
+feil språk, og «trenger oversettelse»-signalet er borte.
+
+Årsak: `localizeDraftAcrossLocalesWithTitle` gikk mot
+`/api/admin/content/generate/module-draft/localize`, som krever `taskText` **og**
+`assessorExpectedContent` med minst ett tegn. En MCQ-only modul har ingen av delene, så kallet ga
+400 — og klientens `catch { continue }` slukte feilen og lot kildeteksten bli stående i hver
+mål-lokale. Ingen feilmelding; forfatteren fikk «ferdig».
+
+- Uten oppgavetekst går tittelen nå til `/api/admin/sections/localize` (#514), som godtar tittel
+  alene. Det er samme tjeneste vedlikeholdsskriptet bruker.
+- Feiler en lokale likevel, blir den registrert i `failedLocales` og **navngitt i meldingen** til
+  forfatteren, med henvisning til Avanserte egenskaper. Kildeteksten blir fortsatt stående — et
+  utkast uten verdi i en lokale kan ikke lagres — men stillheten er borte. Stillheten var halve
+  #892.
+- E2e-vakt: mocken svarer 400 på modul-endepunktet, akkurat som serveren gjør, og testen krever at
+  tittelen i stedet går til tittel-endepunktet én gang per mål-lokale.
+
+Tests: tsc 0, e2e 120, dom 5, kontrakter 32. Kun klient + i18n; ingen API- eller modellendring.
+
 ## 2.11.6 - 2026-08-12
 
 **En modul som bare gjentar seksjonstittelen over seg sier den ikke lenger to ganger.** I kurssporet
