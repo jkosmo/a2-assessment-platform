@@ -3159,6 +3159,25 @@ async function loadCourseDetail(courseId) {
   }
 }
 
+/**
+ * En modul rett etter en seksjon med SAMME tittel gjentar seg selv i kurssporet — «Lesestoff
+ * Klassisk LLM» rett over «Test Klassisk LLM». Paret er allerede tydelig av typeetiketten, så
+ * tittelen bærer ingen ny informasjon på modulraden, og gjentakelsen er det som får lista til å
+ * se rotete ut.
+ *
+ * Bare det umiddelbart foregående elementet teller: to like titler lenger fra hverandre i
+ * sekvensen er ikke et par, og da må begge stå.
+ */
+function moduleTitleRepeatsPrecedingSection(sequence, index) {
+  const entry = sequence[index];
+  const previous = index > 0 ? sequence[index - 1] : null;
+  if (!entry || !previous) return false;
+  if (entry.type === "SECTION" || previous.type !== "SECTION") return false;
+  const own = (localizePreviewText(entry.title) || "").trim().toLowerCase();
+  const before = (localizePreviewText(previous.title) || "").trim().toLowerCase();
+  return own.length > 0 && own === before;
+}
+
 function renderCourseDetailModules(courseId, course) {
   const container = document.getElementById(`courseDetail_${courseId}`);
   if (!container) return;
@@ -3207,6 +3226,11 @@ function renderCourseDetailModules(courseId, course) {
     const available = isSection || entry.available !== false;
     const title = localizePreviewText(entry.title);
     const kindText = isSection ? t("courses.kind.reading") : t("courses.kind.test");
+    // Tittelen skjules visuelt, men blir stående i DOM som sr-only: raden er en knapp og må ha et
+    // navn for skjermleser. Gjelder bare de sammenklappede radene — det aktuelle steget er et kort
+    // med tittelen som overskrift, og et kort uten overskrift leser som ødelagt.
+    const titleRepeats = !isNow && moduleTitleRepeatsPrecedingSection(sequence, index);
+    const titleClass = titleRepeats ? "course-step-title sr-only" : "course-step-title";
 
     const itemWrap = document.createElement("div");
     itemWrap.className = `course-item${done ? " is-done" : ""}${isNow ? " is-now" : ""}`;
@@ -3244,15 +3268,17 @@ function renderCourseDetailModules(courseId, course) {
       `;
     } else if (done) {
       row.classList.add("course-step--done");
+      if (titleRepeats) row.classList.add("course-step--title-repeat");
       const badgeText = isSection ? t("courses.section.doneBadge") : t("courses.module.passed");
       row.innerHTML = `
         <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
-        <span class="course-step-title">${escapeHtmlP(title)}</span>
+        <span class="${titleClass}">${escapeHtmlP(title)}</span>
         <span class="module-status-badge completed">${escapeHtmlP(badgeText)}</span>
         <span class="course-step-review">${escapeHtmlP(t("courses.step.review"))}</span>
       `;
     } else {
       row.classList.add("course-step--ahead");
+      if (titleRepeats) row.classList.add("course-step--title-repeat");
       const badgeText = !available
         ? t("courses.module.unavailableShort")
         : isSection ? t("courses.section.todoBadge")
@@ -3261,7 +3287,7 @@ function renderCourseDetailModules(courseId, course) {
       const badgeClass = !available ? "unavailable" : entry.moduleStatus === "IN_PROGRESS" ? "retake" : "";
       row.innerHTML = `
         <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
-        <span class="course-step-title">${escapeHtmlP(title)}</span>
+        <span class="${titleClass}">${escapeHtmlP(title)}</span>
         <span class="module-status-badge ${badgeClass}">${escapeHtmlP(badgeText)}</span>
       `;
     }

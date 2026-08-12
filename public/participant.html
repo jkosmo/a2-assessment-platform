@@ -211,6 +211,10 @@
         flex: 1; min-width: 0; font-weight: 500;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
+      /* Modul rett etter en seksjon med samme tittel: tittelen får .sr-only, altså position:absolute,
+         og forsvinner ut av flex-flyten. Da mister raden elementet med flex:1 som skjøv statuspillen
+         mot høyre — uten dette klistrer pillen seg inntil typeetiketten. */
+      .course-step--title-repeat .module-status-badge { margin-left: auto; }
       .course-step-review { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--color-meta); flex-shrink: 0; }
       .course-step--done:hover .course-step-review { color: var(--color-primary); text-decoration: underline; }
       /* Utilgjengelig innhold er ikke-interaktivt, men skal fortsatt kunne leses. */

@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.6 - 2026-08-12
+
+**En modul som bare gjentar seksjonstittelen over seg sier den ikke lenger to ganger.** I kurssporet
+sto par som «Lesestoff Klassisk LLM» rett over «Test Klassisk LLM». Typeetiketten bærer allerede
+forskjellen, så tittelen på modulraden var ren gjentakelse — og det var gjentakelsen som fikk lista
+til å se rotete ut.
+
+- Regelen er bevisst smal: **bare det umiddelbart foregående elementet teller.** To like titler
+  lenger fra hverandre i sekvensen er ikke et par, og da må begge stå.
+- Tittelen skjules visuelt, men blir stående i DOM som `.sr-only` — raden er en `<button>` og må
+  fortsatt ha et navn for skjermleser (og for DOM-oppslag i testene).
+- **Det aktuelle steget er unntatt.** Der er tittelen kortets overskrift, og et kort med bare
+  «Steg 4 av 18 · Test» + knapp leser som ødelagt. Én linje å endre hvis vi vil ha det motsatt:
+  `!isNow &&` i `renderCourseDetailModules`.
+- `.sr-only` er `position: absolute`, så tittelen faller ut av flex-flyten og tar med seg
+  `flex: 1`-elementet som skjøv statuspillen mot høyre. `.course-step--title-repeat
+  .module-status-badge { margin-left: auto }` holder pillen i samme kolonne som på alle andre rader
+  — e2e-vakten måler dette, for det var akkurat der den første versjonen røk.
+
+**Vedlikeholdsskript: `scripts/maintenance/translate-course-titles.ts`** (#892-oppfølging). Fyller
+manglende lokaltekster for seksjons- og modul**titler** i ett kurs, oversatt fra en kildelokale via
+plattformens egen lokaliseringstjeneste. Tørrkjøring som standard, `--apply` for å skrive, og den
+nekter å kjøre hvis `LLM_MODE !== "azure_openai"` (stubben returnerer `[nn] Tittel`, og å skrive
+det ville vært verre enn problemet). Kjørt mot stage (11 fylt) og prod (9 fylt) 12.08.
+
+Tests: tsc 0, e2e 119, kontrakter 32. Klient + HTML + skript; ingen API- eller modellendring.
+
 ## 2.11.5 - 2026-08-12
 
 **#893-fiksen var ufullstendig.** Observert på prod: en engelsk side viste norsk kurstittel,

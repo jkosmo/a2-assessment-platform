@@ -309,3 +309,54 @@ test("the course-level discussion stays collapsed until asked for", async ({ pag
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(1);
 });
+
+test("a module that only repeats the section title above it does not say it twice", async ({ page }) => {
+  await mockBase(page);
+  // Registered after mockBase, so this route wins: a sequence where two module rows repeat the
+  // title of the section immediately above them, and one does not.
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        course: {
+          id: "c1",
+          title: "Kurs",
+          discussionsEnabled: false,
+          items: [
+            { type: "SECTION", sectionId: "s1", courseItemId: "ci1", title: "Klassisk LLM", read: true },
+            { type: "MODULE", moduleId: "m1", courseItemId: "ci2", title: "Klassisk LLM", moduleStatus: "PASSED", available: true },
+            { type: "SECTION", sectionId: "s2", courseItemId: "ci3", title: "Kodekjøring", read: false },
+            { type: "MODULE", moduleId: "m2", courseItemId: "ci4", title: "Kodekjøring", moduleStatus: "NOT_STARTED", available: true },
+            { type: "MODULE", moduleId: "m3", courseItemId: "ci5", title: "Avsluttende test", moduleStatus: "NOT_STARTED", available: true },
+          ],
+        },
+      }),
+    }),
+  );
+  await openCourse(page);
+
+  const titleOf = (n: number) => page.locator(".course-item").nth(n).locator(".course-step-title");
+  const widthOf = async (n: number) => (await titleOf(n).boundingBox())?.width ?? -1;
+
+  // The section keeps its title — it is the one saying it.
+  expect(await widthOf(0)).toBeGreaterThan(20);
+
+  // The repeated module titles are out of sight but NOT out of the DOM: the row is a button and
+  // still needs an accessible name.
+  for (const n of [1, 3]) {
+    await expect(titleOf(n)).toHaveClass(/sr-only/);
+    expect(await widthOf(n)).toBeLessThanOrEqual(2);
+  }
+  await expect(titleOf(1)).toHaveText("Klassisk LLM");
+  await expect(titleOf(3)).toHaveText("Kodekjøring");
+
+  // A module whose title differs — and one that follows a module rather than a section — keeps it.
+  expect(await widthOf(4)).toBeGreaterThan(20);
+
+  // Pulling the title out of the flex flow must not drag the status pill left with it: it stays
+  // right-aligned, in the same column as every other row's pill.
+  const badgeX = async (n: number) =>
+    (await page.locator(".course-item").nth(n).locator(".module-status-badge").boundingBox())?.x ?? -1;
+  expect(Math.abs((await badgeX(3)) - (await badgeX(4)))).toBeLessThan(2);
+});
