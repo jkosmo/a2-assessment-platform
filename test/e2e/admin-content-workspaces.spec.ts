@@ -1408,4 +1408,70 @@ test.describe("admin content browser coverage", () => {
     );
     expect(courseViolations).toEqual([]);
   });
+
+  // Rapportert fra stage: omdøping av en modul uten «rammer for kandidaten» ga
+  //   400 validation_error · path ["candidateTaskConstraints","nb"]
+  // Oversettelsen fyller alle tre språk med tom streng, og et objekt er alltid truthy — så
+  // `verdi || undefined` slapp {"en-GB":"", nb:"", nn:""} rett gjennom til et skjema som krever
+  // minst ett tegn per språk. Samme test dekker "[object Object]" til rubrikk-generereren.
+  test("saving a module without candidate constraints omits the field instead of sending blanks", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "English scenario", nb: "Norsk scenario", nn: "Nynorsk scenario" },
+          assessorExpectedContent: { "en-GB": "English guidance", nb: "Norsk veiledning", nn: "Nynorsk rettleiing" },
+          mcqQuestions: [
+            {
+              stem: { "en-GB": "Q", nb: "Q", nn: "Q" },
+              options: [
+                { "en-GB": "A", nb: "A", nn: "A" },
+                { "en-GB": "B", nb: "B", nn: "B" },
+              ],
+              correctAnswer: { "en-GB": "B", nb: "B", nn: "B" },
+              rationale: { "en-GB": "R", nb: "R", nn: "R" },
+            },
+          ],
+        }),
+      },
+    });
+
+    let versionBody: any = null;
+    let ensureBody: any = null;
+    await page.route("**/api/admin/content/modules/*/rubric-versions/ensure", async (route: Route) => {
+      ensureBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ rubricVersion: { id: "rubric-1", versionNo: 1 } }),
+      });
+    });
+    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+      versionBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").fill("Fagforeninger");
+    await page.locator("#previewEditConfirm").click();
+    await clickEnabledButton(page, /Save draft|Lagre utkast/);
+
+    await expect.poll(() => versionBody !== null).toBe(true);
+
+    // The save must not be blocked, and the empty field must simply not be there.
+    await expect(page.getByText(/candidateTaskConstraints/)).toHaveCount(0);
+    expect(versionBody.candidateTaskConstraints).toBeUndefined();
+
+    // The rubric generator is fed the scenario, not a stringified object.
+    expect(ensureBody?.taskText).not.toContain("[object Object]");
+    expect(ensureBody?.taskText).toContain("scenario");
+  });
 });
