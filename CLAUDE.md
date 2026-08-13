@@ -118,6 +118,38 @@ is built**, and must be runnable **without a staging deploy**:
    first (or at least alongside) forces you to run the real path early, which is where these
    integration bugs surface.
 
+### Cross-model QA gate before every stage deploy (standing order, 2026-08-13)
+
+A stage deploy costs 16–22 min plus a manual test round. The automated suites catch what they were
+written for; the recurring loss is the class they were *not* written for — "correct fix, incomplete
+surface" and client-layer integration. So: **once the automated suites are green and before the
+stage deploy, run a cross-model review.**
+
+```powershell
+.\scripts\ai-qa.ps1 -Issue 896                    # branch vs main
+.\scripts\ai-qa.ps1 -Uncommitted -SkipTests       # working tree, suites already green this session
+.\scripts\ai-qa.ps1 -IncludeE2E                   # also run the admin-content e2e first
+```
+
+The script runs `lint` + `test:unit` + `test:dom` first and **refuses to call Codex if any is red**
+(reviewing broken code is wasted tokens). It then runs `codex exec review` (default `gpt-5.6-sol`,
+reasoning effort `high`) with this file's standing orders as the checklist, and writes the findings
+to `.ai-qa/qa-<timestamp>.md` (gitignored).
+
+1. **NO-GO means fix before deploying.** The whole point is to spend the round here rather than on
+   stage.
+2. **A GO is a review verdict, not a test result.** The e2e for the primary flow must still pass
+   locally — the standing order above is unchanged, not replaced.
+3. **The "Ikke verifiserbart statisk" list at the end of the review is the manual test plan** for
+   that stage round. Test that list, not the whole app.
+4. A finding that exposes a *systematic* gap belongs in `doc/FEATURE_SURFACE_MAP.md`, not only in
+   the fix.
+
+Gotchas: codex writes its banner to stderr, so PowerShell 5.1 may report a non-zero exit code even
+on success — **the output file is the source of truth**, not `$LASTEXITCODE`. The prompt is piped on
+stdin, which both avoids PS 5.1 quote mangling and closes stdin (`codex exec` hangs on an open TTY
+stdin). Requires `npm install -g @openai/codex`; auth comes from the existing ChatGPT login.
+
 ### Map the full UI surface before building/fixing (standing order)
 
 Established 2026-06-21 after a retrospective: a wave of authoring/MCQ-only work produced **6 bugs

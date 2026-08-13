@@ -82,6 +82,14 @@ These rules exist because their violation caused or worsened the May 2026 produc
   where the costly bugs hide. Exercise the real client→server flow locally (`npm run dev`, local
   Postgres + `AUTH_MODE=mock`) before deploying; staging is an acceptance gate, not a debugger.
   Not "done" until the e2e passes locally + in CI.
+- **Cross-model QA gate before every stage deploy (standing order, 2026-08-13):** a stage deploy
+  costs 16–22 min plus a manual test round, and the bugs that survive the automated suites are the
+  ones they were not written for. After the suites are green and **before** the stage deploy, run
+  `.\scripts\ai-qa.ps1 [-Issue <n>] [-Uncommitted] [-SkipTests]`. It runs `lint` + `test:unit` +
+  `test:dom`, refuses to review red code, then runs `codex exec review` with the repo's standing
+  orders as the checklist and writes findings to `.ai-qa/qa-<timestamp>.md` (gitignored). NO-GO
+  means fix before deploying; a GO is a review verdict, **not** a substitute for the e2e. The
+  review's closing "Ikke verifiserbart statisk" list is the manual test plan for that stage round.
 - **Map the full UI surface before building/fixing (standing order):** most of our deploy→bug→deploy
   churn is *"correct fix, incomplete surface"* — fixing the one path in the screenshot while sibling
   paths break next. Before coding a UI feature/fix: (1) **check `doc/FEATURE_SURFACE_MAP.md`** (a
