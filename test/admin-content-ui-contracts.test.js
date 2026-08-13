@@ -48,8 +48,14 @@ describe("admin content workspace UI contracts", () => {
     const advancedHtml = readFile("public/admin-content-advanced.html");
     const advancedJs = readFile("public/admin-content.js");
 
-    expect(shellHtml).toContain('id="modeSwitchAdvanced"');
-    expect(shellHtml).toContain('id="modeSwitchConversation"');
+    // #896 S1: the shell's Samtale/Avansert switch became three view tabs. The hand-off to
+    // the advanced page now hangs off the Innstillinger tab and disappears in S3, when the
+    // fields move into it.
+    expect(shellHtml).toContain('id="tabPreview"');
+    expect(shellHtml).toContain('id="tabPanelModule"');
+    expect(shellHtml).toContain('id="tabEdit"');
+    expect(shellHtml).toContain('id="tabSettings"');
+    expect(shellHtml).toContain('id="settingsOpenAdvanced"');
     expect(shellHtml).toContain('id="chatMessages"');
     expect(shellHtml).toContain('id="previewContent"');
 

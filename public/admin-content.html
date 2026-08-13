@@ -339,6 +339,33 @@
         background: var(--color-blue-light);
         color: var(--color-link-active);
       }
+
+      /* #896 S1: view tabs. Same pill shape as the mode switch they replace, so the header
+         keeps its proportions; three items instead of two. */
+      .module-tabs {
+        display: inline-flex;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-soft);
+        border-radius: 999px;
+        padding: 2px;
+      }
+      .module-tab {
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        border: none;
+        border-radius: 999px;
+        background: none;
+        color: var(--color-meta);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .module-tab.active { background: var(--color-blue); color: #fff; cursor: default; }
+      .module-tab:hover:not(.active) { background: var(--color-blue-light); color: var(--color-link-active); }
+      .module-tab:focus-visible { outline: 2px solid var(--color-link-active); outline-offset: 2px; }
+      /* Forhåndsvisning: the chat pane is hidden, so the preview takes the full width
+         instead of leaving a 380px gap where the chat used to be. */
+      .workspace-shell--preview-only { grid-template-columns: 1fr; }
     </style>
   </head>
   <body class="auth-resolving">
@@ -368,9 +395,16 @@
       </div>
       <div class="module-workspace-header">
         <h1 id="moduleWorkspaceTitle" style="margin:0; font-size:22px" data-i18n="shell.page.title">Modul</h1>
-        <div class="module-mode-switch" role="group" aria-label="Redigeringsmodus">
-          <button class="module-mode-btn active" id="modeSwitchConversation" data-i18n="workspace.mode.conversation" aria-pressed="true">Samtale</button>
-          <button class="module-mode-btn" id="modeSwitchAdvanced" data-i18n="workspace.mode.advanced" aria-pressed="false">Avansert</button>
+        <!-- #896 S1: three views on the same module, replacing the Samtale/Avansert mode
+             switch. Rediger is the default: opening a module lands where the work happens.
+             Innstillinger is a frame in S1 and receives the Avansert fields in S3. -->
+        <div class="module-tabs" role="tablist" aria-label="Modulvisning">
+          <button type="button" class="module-tab" id="tabPreview" role="tab" aria-selected="false"
+                  aria-controls="tabPanelModule" data-i18n="shell.tab.preview">Forhåndsvisning</button>
+          <button type="button" class="module-tab active" id="tabEdit" role="tab" aria-selected="true"
+                  aria-controls="tabPanelModule" data-i18n="shell.tab.edit">Rediger</button>
+          <button type="button" class="module-tab" id="tabSettings" role="tab" aria-selected="false"
+                  aria-controls="tabPanelSettings" data-i18n="shell.tab.settings">Innstillinger</button>
         </div>
       </div>
 
@@ -406,7 +440,10 @@
         <span><strong style="color:var(--color-text);font-weight:600" data-i18n="adminContent.privacy.warning.title">Special category data risk</strong> — <span data-i18n="adminContent.privacy.warning.body">Participants may include health information, political views, or other special category data in free-text submissions.</span></span>
       </div>
 
-      <div class="workspace-shell">
+      <!-- #896 S1: Forhåndsvisning and Rediger share one grid. The tabs do not move the
+           preview pane in the DOM — they only widen it and hide the chat — so the pane keeps
+           its scroll position and its rendered content across a tab switch. -->
+      <div class="workspace-shell" id="tabPanelModule" role="tabpanel" aria-labelledby="tabEdit">
 
         <!-- Preview pane -->
         <section class="card preview-pane" aria-label="Modulforhåndsvisning">
@@ -423,6 +460,26 @@
         </section>
 
       </div>
+
+      <!-- #896 S1: Innstillinger is a frame for now. The fields listed in the issue (modultype
+           first, then terskler, kriterier, vurderingsinstruks, gyldighet) move here in S3, at
+           which point the separate Avansert page and this hand-off button both disappear. -->
+      <!-- style="display:none", not [hidden]: setHidden() governs this panel by inline display,
+           and the hidden ATTRIBUTE would survive setHidden(el, false) and keep it invisible. -->
+      <section class="card" id="tabPanelSettings" role="tabpanel" aria-labelledby="tabSettings" style="display:none">
+        <h2 style="margin-top:0;font-size:16px" data-i18n="shell.settings.title">Innstillinger</h2>
+        <p class="small" data-i18n="shell.settings.placeholder">Modultype, terskler, vurderingskriterier og vurderingsinstruks flyttes hit. Foreløpig ligger de i den avanserte editoren.</p>
+        <button type="button" id="settingsOpenAdvanced" class="btn-secondary" data-i18n="shell.settings.openAdvanced">Åpne avansert redigering</button>
+      </section>
+
+      <dialog id="dialogUnsavedTabSwitch">
+        <h2 style="margin-top:0;font-size:16px" data-i18n="shell.tab.unsaved.title">Ulagrede endringer</h2>
+        <p data-i18n="shell.tab.unsaved.body">Du har endringer i redigeringsfeltene som ikke er lagret. Bytter du visning, går de tapt.</p>
+        <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
+          <button type="button" id="tabSwitchStay" class="btn-secondary" data-i18n="shell.tab.unsaved.stay">Bli værende</button>
+          <button type="button" id="tabSwitchDiscard" class="btn-danger" data-i18n="shell.tab.unsaved.discard">Forkast og bytt</button>
+        </div>
+      </dialog>
     </main>
     <script type="module" src="/static/admin-content-shell.js"></script>
     <script type="module" src="/static/workspace-help.js"></script>

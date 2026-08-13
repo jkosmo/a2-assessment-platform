@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.12.0 - 2026-08-13
+
+**Modulredigering i tre visninger (#896, S1 av 7).** Bryteren mellom «Samtale» og «Avansert» er
+erstattet av tre faner på samme modul: **Forhåndsvisning**, **Rediger** (standard) og
+**Innstillinger**.
+
+Bakgrunnen er at forhåndsvisning og redigering i dag er *det samme feltet* — `enterEditMode`
+skriver om innholdet i forhåndsvisningsruten med input-felt, så man ikke kan se det rendrede
+resultatet mens man redigerer. Fanene gjør en skjult modus til en synlig visning.
+
+Denne leveransen er strukturen alene; ingen felt har flyttet ennå:
+
+- **Rediger** er som før — samtalen og feltene side om side — og er der man lander når en modul
+  åpnes. Samtalen er menystrukturen for redigering og er derfor permanent synlig her.
+- **Forhåndsvisning** skjuler samtalen og gir forhåndsvisningen full bredde.
+- **Innstillinger** er foreløpig en ramme med en knapp til den avanserte editoren. Feltene
+  (modultype først, så terskler, kriterier, vurderingsinstruks, gyldighet) flyttes hit i S3, og
+  da forsvinner både den separate Avansert-siden og denne knappen.
+
+Et fanebytte rører ikke sesjonstilstanden: et generert utkast overlever, og forhåndsvisningen
+beholder innholdet sitt. Det ene som *kan* gå tapt er et åpent direkte-redigeringsskjema, siden
+feltverdiene der bare finnes i DOM-en — det er derfor det er den eneste tilstanden som utløser en
+bekreftelsesdialog.
+
+Gjenstår i epicen: samlet lagring (S2), oppløsning av Avansert (S3), publiseringsgate for
+oversettelse (S4), utkastversjonering (S5), eksport/import (S6) og opprydding (S7).
+
 ## 2.11.10 - 2026-08-13
 
 **Språkbytte under Direkte redigering ga en blindvei.** Rapportert fra stage: bytt arbeidsflatens

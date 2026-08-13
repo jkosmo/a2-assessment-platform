@@ -566,6 +566,83 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator('.locale-picker #profileNavLink[href="/profile"]')).toBeVisible();
   });
 
+  // #896 S1: the module workspace is three views on one module. These two guard the
+  // structure itself - the default landing view, what each tab shows, and the one thing a
+  // tab switch can destroy (an open direct-edit form).
+  test("module workspace opens on Rediger and the tabs switch between the three views", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
+
+    // Rediger is the default: both panes visible.
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".preview-pane")).toBeVisible();
+    await expect(page.locator(".chat-pane")).toBeVisible();
+    await expect(page.locator("#tabPanelSettings")).toBeHidden();
+
+    // Forhaandsvisning: preview only, chat gone.
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".preview-pane")).toBeVisible();
+    await expect(page.locator(".chat-pane")).toBeHidden();
+
+    // Innstillinger: the edit grid goes away entirely. Asserting hidden here is the point -
+    // .workspace-shell sets display:grid, so a class-based toggle would silently do nothing.
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+    await expect(page.locator("#tabPanelModule")).toBeHidden();
+    await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+
+    // ...and back, with the preview content still rendered.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#tabPanelModule")).toBeVisible();
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+  });
+
+  test("leaving Rediger with an open edit form warns, and staying keeps the typed values", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+
+    // Stay: same tab, same unsaved text.
+    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+
+    // Discard: the form is gone and the switch goes through.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.locator(".chat-pane")).toBeHidden();
+  });
+
   test("direct edit localizes from the active preview locale and save sends a title patch", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -944,7 +1021,9 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
-    await clickEnabledButton(page, "Advanced");
+    // #896 S1: the route to advanced editing now goes through the Innstillinger tab.
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsOpenAdvanced").click();
 
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/advanced$/);
     await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");

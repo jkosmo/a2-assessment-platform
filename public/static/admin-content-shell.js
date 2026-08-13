@@ -19,6 +19,7 @@ import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import { setHidden } from "/static/dom-visibility.js";
 import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";
 import {
   classifyShellEditInstruction,
@@ -158,7 +159,16 @@ const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
-const modeSwitchAdvancedBtn = document.getElementById("modeSwitchAdvanced");
+// #896 S1: the Samtale/Avansert mode switch is replaced by three views on one module.
+const tabButtons = {
+  preview: document.getElementById("tabPreview"),
+  edit: document.getElementById("tabEdit"),
+  settings: document.getElementById("tabSettings"),
+};
+const tabPanelModule = document.getElementById("tabPanelModule");
+const tabPanelSettings = document.getElementById("tabPanelSettings");
+const settingsOpenAdvancedBtn = document.getElementById("settingsOpenAdvanced");
+const unsavedTabSwitchDialog = document.getElementById("dialogUnsavedTabSwitch");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 const stateRail = document.getElementById("stateRail");
 const srModuleName = document.getElementById("srModuleName");
@@ -4016,10 +4026,85 @@ function openAdvancedEditor(moduleId) {
   ]);
 }
 
-function bindModeSwitchButtons() {
-  if (modeSwitchAdvancedBtn) {
-    modeSwitchAdvancedBtn.addEventListener("click", () => openAdvancedEditor(selectedModuleId));
+// ---------------------------------------------------------------------------
+// #896 S1: view tabs (Forhaandsvisning / Rediger / Innstillinger)
+//
+// Rediger is the default and is where the shell has always lived: chat plus the
+// preview pane, which doubles as the edit surface. The tabs do not re-render the
+// preview or touch session state - they only change which panes are visible - so
+// switching back and forth cannot lose a generated draft.
+//
+// The one thing a switch CAN destroy is an open direct-edit form, whose field
+// values live only in the DOM (enterPreviewEditMode rewrites previewContent).
+// That case, and only that case, is guarded by a confirm dialog. A saved-but-
+// unpublished sessionDraft needs no warning: it survives in memory and is what
+// Forhaandsvisning renders.
+// ---------------------------------------------------------------------------
+
+let activeTab = "edit";
+let pendingTabSwitch = null;
+
+function hasOpenEditForm() {
+  return !!document.getElementById("previewEditConfirm");
+}
+
+function applyTabState(tab) {
+  activeTab = tab;
+  for (const [name, button] of Object.entries(tabButtons)) {
+    if (!button) continue;
+    const selected = name === tab;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
   }
+  // setHidden, not the .hidden class: workspace-shell sets display:grid and the panels
+  // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
+  setHidden(tabPanelModule, tab === "settings");
+  setHidden(tabPanelSettings, tab !== "settings");
+  const chatPane = document.querySelector(".chat-pane");
+  setHidden(chatPane, tab === "preview");
+  tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
+  // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
+  if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
+}
+
+function switchToTab(tab) {
+  if (tab === activeTab) return;
+  if (tab !== "edit" && hasOpenEditForm()) {
+    if (!unsavedTabSwitchDialog) return;
+    pendingTabSwitch = tab;
+    unsavedTabSwitchDialog.showModal();
+    return;
+  }
+  applyTabState(tab);
+  if (tab === "settings") scrollPreviewToTop();
+}
+
+function bindViewTabs() {
+  for (const [name, button] of Object.entries(tabButtons)) {
+    button?.addEventListener("click", () => switchToTab(name));
+  }
+
+  document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
+    pendingTabSwitch = null;
+    unsavedTabSwitchDialog?.close();
+  });
+
+  document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
+    const target = pendingTabSwitch;
+    pendingTabSwitch = null;
+    unsavedTabSwitchDialog?.close();
+    if (!target) return;
+    // Switch first: the tab the author asked for must not depend on the teardown below.
+    applyTabState(target);
+    // Then discard the form by pressing its own Cancel. exitEditMode() is scoped inside
+    // enterPreviewEditMode and unreachable from here, and Cancel already does exactly the
+    // right thing - tear down the fields, restore the preview, put the chat actions back.
+    document.getElementById("previewEditCancel")?.click();
+  });
+
+  // Until S3 moves the fields in, Innstillinger hands off to the Avansert page and
+  // reuses its unsaved-draft handling.
+  settingsOpenAdvancedBtn?.addEventListener("click", () => openAdvancedEditor(selectedModuleId));
 }
 
 // ---------------------------------------------------------------------------
@@ -4855,7 +4940,7 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
-  bindModeSwitchButtons();
+  bindViewTabs();
   renderPreviewLocaleBar();
   renderPreview();
   loadVersion(appVersionLabel, "A2 Content Workspace");
