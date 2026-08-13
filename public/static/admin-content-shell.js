@@ -969,9 +969,16 @@ function renderPreviewLocaleBar() {
     btn.textContent = localeLabels[loc] ?? loc;
     btn.setAttribute("aria-pressed", String(loc === previewLocale));
     btn.addEventListener("click", () => {
+      // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
+      // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
+      const wasEditing = !!document.getElementById("previewEditConfirm");
       previewLocale = loc;
       renderPreviewLocaleBar();
       renderPreview();
+      if (wasEditing) {
+        enterPreviewEditMode();
+        logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+      }
     });
     previewLocaleBar.appendChild(btn);
   }
@@ -4793,12 +4800,25 @@ function populateUiLocaleSelect() {
     currentLocale = chosen;
     // Keep preview locale in sync if it wasn't manually overridden
     if (previewLocale === prev) previewLocale = chosen;
+    // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den.
+    // Forhåndsvisningens EGEN språkvelger er deaktivert under redigering
+    // (.preview-pane--editing .preview-locale-btn { pointer-events: none }) — men denne, i
+    // topplinja, var det ikke. Man havnet i lesemodus med en samtale som fortsatt sa «rediger
+    // feltene og trykk Bekreft», og handlingsknappene var allerede brukt opp og deaktiverte.
+    // Ingen vei videre uten å laste siden på nytt (rapportert fra stage 13.08).
+    const wasEditing = !!document.getElementById("previewEditConfirm");
     // Replay the full chat log in the new locale
     retranslateChat();
     translatePageStaticText();
     renderPreviewLocaleBar();
     renderPreview();
     renderWorkspaceNavigation();
+    if (wasEditing) {
+      enterPreviewEditMode();
+      // Feltene fylles fra det nye språket. Det som var skrevet i det forrige — og ikke bekreftet
+      // — er borte, og det skal man få vite, ikke oppdage.
+      logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+    }
   });
 }
 
