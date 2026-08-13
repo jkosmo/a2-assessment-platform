@@ -66,14 +66,15 @@ try {
     # 1 - Where the findings go
     # -----------------------------------------------------------------------
     $outDir = Join-Path $repoRoot '.ai-qa'
-    if (-not (Test-Path $outDir)) {
-        New-Item -ItemType Directory -Path $outDir | Out-Null
-    }
     if (-not $OutFile) {
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
         $OutFile = Join-Path $outDir "qa-$stamp.md"
     }
-    $logFile = [System.IO.Path]::ChangeExtension($OutFile, '.log')
+    # Append rather than swap the extension: -OutFile "run.log" would otherwise make the
+    # codex session log and the findings file the same path, and the log could then pass
+    # the freshness check and be reported as the review.
+    $logFile = "$OutFile.log"
+    $verdictFile = "$OutFile.verdict"
 
     # -----------------------------------------------------------------------
     # 2 - Review instructions - the repo's standing orders, as a checklist
@@ -88,14 +89,6 @@ try {
     }
 
     $prompt = @"
-SVAR PAA NORSK. Svaret MAA slutte med disse to seksjonene, i denne rekkefoelgen, uansett hvor
-mange funn du har:
-
-  VERDIKT: GO      (eller VERDIKT: NO-GO) - med en setnings begrunnelse.
-  IKKE VERIFISERBART STATISK: - kort punktliste over det som fortsatt maa sjekkes manuelt paa
-  stage. Denne lista blir den faktiske testplanen for den manuelle runden, saa vaer aerlig og
-  konkret. Skriv "ingenting" hvis alt er dekket av tester.
-
 Rollen din: du er QA-gaten foran en staging-deploy i repoet a2-assessment-platform (Express +
 Prisma + PostgreSQL, statisk frontend under public/, Azure App Service). De automatiserte testene
 er allerede groenne. Jobben din er aa finne det som ellers foerst ville blitt oppdaget ved manuell
@@ -173,6 +166,9 @@ usikre. Ikke gjenfortell diffen. Ikke stilkommentarer.
         Write-Host "codex CLI not found on PATH. Install with: npm install -g @openai/codex" -ForegroundColor Red
         exit 1
     }
+    if (-not (Test-Path $outDir)) {
+        New-Item -ItemType Directory -Path $outDir | Out-Null
+    }
 
     # -----------------------------------------------------------------------
     # 5 - Automated tests must be green before we spend a review on this
@@ -244,7 +240,9 @@ usikre. Ikke gjenfortell diffen. Ikke stilkommentarer.
         Write-Host "Findings file at $OutFile predates this run - refusing to report a stale review." -ForegroundColor Red
         exit 1
     }
-    $findings = Get-Content $OutFile -Raw
+    # UTF8 explicitly: PS 5.1 decodes a BOM-less UTF-8 file with the legacy code page,
+    # which turns every Norwegian character in the report into mojibake.
+    $findings = Get-Content $OutFile -Raw -Encoding UTF8
     if (-not $findings -or $findings.Trim().Length -eq 0) {
         Write-Host ""
         Write-Host "Findings file is empty - the review did not complete (codex exit $codexExit)." -ForegroundColor Red
@@ -252,13 +250,72 @@ usikre. Ikke gjenfortell diffen. Ikke stilkommentarer.
         exit 1
     }
 
+    # -----------------------------------------------------------------------
+    # 7 - Verdict + manual test plan (second pass)
+    #
+    # `codex exec review` imposes its own output shape and ignores format demands in
+    # the prompt, so the two sections this gate exists for - the GO/NO-GO call and the
+    # list of what a human still has to check on stage - are asked for separately,
+    # where the prompt is actually in charge.
+    # -----------------------------------------------------------------------
+    $scope = "endringene mot $Base"
+    if ($Uncommitted) { $scope = 'de ucommittede endringene i arbeidskopien' }
+    elseif ($Commit) { $scope = "endringene i commit $Commit" }
+
+    $verdictPrompt = @"
+Du avslutter en QA-gate foran en staging-deploy i repoet a2-assessment-platform. En kodegjennomgang
+av $scope er allerede gjort, og funnene staar nederst. Les selv diffen (git diff) for aa vurdere dem.
+
+Svar PAA NORSK, kort, og med noeyaktig disse to seksjonene - ingen andre:
+
+VERDIKT: GO
+eller
+VERDIKT: NO-GO
+Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy.
+
+IKKE VERIFISERBART STATISK:
+- punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
+Dette blir den reelle testplanen for den manuelle runden, saa vaer konkret (hvilken side, hvilken
+handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske tester. Skriv
+"- ingenting" hvis testene faktisk dekker alt.
+
+FUNN FRA GJENNOMGANGEN:
+$findings
+"@
+
+    Write-Host ""
+    Write-Host "Asking for the verdict and the manual test plan..." -ForegroundColor Cyan
+    if (Test-Path $verdictFile) {
+        Remove-Item $verdictFile -Force
+    }
+    $ErrorActionPreference = 'Continue'
+    $verdictPrompt | & codex exec --sandbox read-only -m $Model -c "model_reasoning_effort=medium" -o $verdictFile 2>&1 |
+        Out-File -FilePath $logFile -Encoding utf8 -Append
+    $ErrorActionPreference = $prevEap
+
+    $verdict = ''
+    if ((Test-Path $verdictFile) -and ((Get-Item $verdictFile).LastWriteTime -ge $startedAt)) {
+        $verdict = Get-Content $verdictFile -Raw -Encoding UTF8
+    }
+
     Write-Host ""
     Write-Host "---------------- QA findings ----------------" -ForegroundColor Green
     Write-Host $findings
+    if ($verdict -and $verdict.Trim().Length -gt 0) {
+        Write-Host $verdict
+        Add-Content -Path $OutFile -Value "`r`n$verdict" -Encoding UTF8
+    }
     Write-Host "---------------------------------------------" -ForegroundColor Green
     Write-Host "Saved to $OutFile"
-    if ($findings -notmatch 'VERDIKT') {
-        Write-Host "NOTE: no VERDIKT line in the review - read the findings yourself before deploying." -ForegroundColor Yellow
+
+    # Both closing sections are mandatory: a verdict without the manual test plan drops
+    # the very thing that replaces a stage round. Match at line start, so the words
+    # merely being quoted inside a finding does not satisfy the check.
+    if ($verdict -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') {
+        Write-Host "NOTE: no VERDIKT line - judge the findings yourself before deploying." -ForegroundColor Yellow
+    }
+    if ($verdict -notmatch '(?im)^\s*IKKE VERIFISERBART STATISK') {
+        Write-Host "NOTE: no manual-test list - plan the stage round yourself." -ForegroundColor Yellow
     }
     Write-Host ""
     Write-Host "Reminder: a GO here is a review verdict, not a test result. The e2e for the" -ForegroundColor DarkGray
