@@ -83,7 +83,13 @@ try {
     $verdictFile = "$OutFile.verdict"
 
     # -----------------------------------------------------------------------
-    # 2 - Review instructions - the repo's standing orders, as a checklist
+    # 2 - The repo's standing orders, as a checklist for pass two
+    #
+    # This canNOT be handed to `codex exec review`: that subcommand rejects a PROMPT
+    # together with --base/--uncommitted outright ("the argument '[PROMPT]' cannot be
+    # used with '--base <BRANCH>'"), and silently ignores a piped one. Pass one is
+    # therefore the built-in, project-blind reviewer; everything this repo knows about
+    # its own failure modes goes into pass two, which also produces the verdict.
     # -----------------------------------------------------------------------
     $issueLine = ''
     if ($Issue) {
@@ -94,7 +100,7 @@ try {
         $focusLine = "Ekstra fokus fra forfatteren: $Focus"
     }
 
-    $prompt = @"
+    $checklist = @"
 Rollen din: du er QA-gaten foran en staging-deploy i repoet a2-assessment-platform (Express +
 Prisma + PostgreSQL, statisk frontend under public/, Azure App Service). De automatiserte testene
 er allerede groenne. Jobben din er aa finne det som ellers foerst ville blitt oppdaget ved manuell
@@ -141,11 +147,9 @@ Svar paa norsk.
     # -----------------------------------------------------------------------
     # 3 - Build the invocation
     # -----------------------------------------------------------------------
-    # The literal '-' is load-bearing: `codex exec review` takes its custom instructions as a
-    # POSITIONAL argument and only reads stdin when '-' is passed. Without it the piped prompt
-    # is silently discarded and the whole checklist below never reaches the reviewer - which is
-    # exactly what happened for the first three runs of this script.
-    $codexArgs = @('exec', 'review', '-')
+    # No PROMPT here, by force: codex rejects one alongside a scope flag. Pass one gets
+    # the diff and nothing else; the checklist rides along in pass two.
+    $codexArgs = @('exec', 'review')
     if ($Uncommitted) {
         $codexArgs += '--uncommitted'
     }
@@ -155,18 +159,16 @@ Svar paa norsk.
     else {
         $codexArgs += @('--base', $Base)
     }
-    if ($Issue) {
-        $codexArgs += @('--title', "QA #$Issue")
-    }
     $codexArgs += @('-m', $Model, '-c', "model_reasoning_effort=$Effort", '-o', $OutFile)
 
     # -DryRun is a diagnostic: it must not run the suites, and must not require codex
     # to be installed. Keep it ahead of every precondition and side effect.
     if ($DryRun) {
         Write-Host ""
-        Write-Host "codex $($codexArgs -join ' ')" -ForegroundColor Yellow
-        Write-Host "--- prompt on stdin ---"
-        Write-Host $prompt
+        Write-Host "PASS 1: codex $($codexArgs -join ' ')" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "PASS 2 prompt (checklist + verdict, on stdin):" -ForegroundColor Yellow
+        Write-Host $checklist
         exit 0
     }
 
@@ -225,18 +227,20 @@ Svar paa norsk.
     $startedAt = Get-Date
 
     Write-Host ""
-    Write-Host "Running: codex $($codexArgs -join ' ')" -ForegroundColor Cyan
+    Write-Host "Pass 1/2 - built-in review: codex $($codexArgs -join ' ')" -ForegroundColor Cyan
     Write-Host "This takes a few minutes at effort=$Effort. Codex log: $logFile" -ForegroundColor DarkGray
 
     # Codex is chatty on both streams; keep the console for the findings. EAP is relaxed
     # so PS 5.1 does not turn banner-on-stderr into a terminating NativeCommandError.
+    # Empty stdin is deliberate: codex exec hangs on an open TTY stdin, and this
+    # subcommand will not accept a prompt anyway.
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     if ($ShowLog) {
-        $prompt | & codex @codexArgs 2>&1 | Tee-Object -FilePath $logFile
+        '' | & codex @codexArgs 2>&1 | Tee-Object -FilePath $logFile
     }
     else {
-        $prompt | & codex @codexArgs 2>&1 | Out-File -FilePath $logFile -Encoding utf8
+        '' | & codex @codexArgs 2>&1 | Out-File -FilePath $logFile -Encoding utf8
     }
     $codexExit = $LASTEXITCODE
     $ErrorActionPreference = $prevEap
@@ -263,27 +267,37 @@ Svar paa norsk.
     }
 
     # -----------------------------------------------------------------------
-    # 7 - Verdict + manual test plan (second pass)
+    # 7 - Pass two: the repo's own checklist, plus the verdict and test plan
     #
-    # `codex exec review` imposes its own output shape and ignores format demands in
-    # the prompt, so the two sections this gate exists for - the GO/NO-GO call and the
-    # list of what a human still has to check on stage - are asked for separately,
-    # where the prompt is actually in charge.
+    # Pass one is project-blind (it takes no instructions). This pass carries what
+    # this repo knows about its own failure modes, sees pass one's findings so it
+    # does not repeat them, and owns the output contract.
     # -----------------------------------------------------------------------
+    $scopeCmd = "git diff $Base...HEAD"
     $scope = "endringene mot $Base"
-    if ($Uncommitted) { $scope = 'de ucommittede endringene i arbeidskopien' }
-    elseif ($Commit) { $scope = "endringene i commit $Commit" }
+    if ($Uncommitted) {
+        $scopeCmd = 'git status --short; git diff HEAD'
+        $scope = 'de ucommittede endringene i arbeidskopien'
+    }
+    elseif ($Commit) {
+        $scopeCmd = "git show $Commit"
+        $scope = "endringene i commit $Commit"
+    }
 
     $verdictPrompt = @"
-Du avslutter en QA-gate foran en staging-deploy i repoet a2-assessment-platform. En kodegjennomgang
-av $scope er allerede gjort, og funnene staar nederst. Les selv diffen (git diff) for aa vurdere dem.
+$checklist
 
-Svar PAA NORSK, kort, og med noeyaktig disse to seksjonene - ingen andre:
+ARBEIDSMAATE: se paa $scope selv - start med "$scopeCmd" - og les de beroerte filene og deres
+soesterfiler. En foerste, prosjektblind gjennomgang er allerede kjoert, og funnene staar nederst.
+Ikke gjenta dem; let etter det den ikke kunne vite, altsaa punktene i sjekklista over.
+
+Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene:
 
 VERDIKT: GO
 eller
 VERDIKT: NO-GO
-Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy.
+Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy -
+vurder bade dine egne funn og de fra foerste gjennomgang.
 
 IKKE VERIFISERBART STATISK:
 - punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
@@ -291,17 +305,17 @@ Dette blir den reelle testplanen for den manuelle runden, saa vaer konkret (hvil
 handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske tester. Skriv
 "- ingenting" hvis testene faktisk dekker alt.
 
-FUNN FRA GJENNOMGANGEN:
+FUNN FRA FOERSTE, PROSJEKTBLINDE GJENNOMGANG:
 $findings
 "@
 
     Write-Host ""
-    Write-Host "Asking for the verdict and the manual test plan..." -ForegroundColor Cyan
+    Write-Host "Pass 2/2 - repo checklist, verdict and manual test plan..." -ForegroundColor Cyan
     if (Test-Path $verdictFile) {
         Remove-Item $verdictFile -Force
     }
     $ErrorActionPreference = 'Continue'
-    $verdictPrompt | & codex exec --sandbox read-only -m $Model -c "model_reasoning_effort=medium" -o $verdictFile 2>&1 |
+    $verdictPrompt | & codex exec --sandbox read-only -m $Model -c "model_reasoning_effort=$Effort" -o $verdictFile 2>&1 |
         Out-File -FilePath $logFile -Encoding utf8 -Append
     $ErrorActionPreference = $prevEap
 
