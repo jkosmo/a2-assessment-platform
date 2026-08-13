@@ -50,9 +50,10 @@ Canonical routes from [route-map.md](../route-map.md):
 
 - [ ] Open `/admin-content`
 - [ ] Confirm module library loads
-- [ ] Open an existing module into conversation mode
-- [ ] Switch to advanced mode
-- [ ] Switch back to conversation mode
+- [ ] Open an existing module — it lands on the **Rediger** tab (#896 S1)
+- [ ] Switch to **Forhåndsvisning** and back to **Rediger**; the module content is still shown
+- [ ] Open **Innstillinger → «Åpne avansert redigering»** to reach the advanced editor
+- [ ] Switch back to conversation mode from the advanced editor's mode rail
 - [ ] From the library, confirm one basic list action is usable without error:
   - open module
   - duplicate module

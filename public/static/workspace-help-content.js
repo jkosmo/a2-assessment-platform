@@ -572,7 +572,9 @@ const workspaceContent = {
         {
           title: "What to do here",
           items: [
+            "A module opens on the Edit tab: the conversation and the content fields side by side.",
             "Choose a module, ask for concrete content changes, and inspect the preview as you work.",
+            "Preview shows the same module full width, without the conversation, the way a learner meets it.",
             "Use the preview language buttons to check the learner-facing text in each locale.",
             "Save or publish from the action flow when the draft looks right.",
           ],
@@ -581,7 +583,7 @@ const workspaceContent = {
           title: "Good to know",
           items: [
             "Conversation editing is best for title, assignment text, guidance, MCQ, and translation refresh.",
-            "Move to advanced editing when you need deeper changes to rubric, prompt, policy, or schema.",
+            "Settings is where module type, thresholds, criteria and assessment instructions will live. For now it opens the advanced editor.",
           ],
         },
       ],
@@ -589,7 +591,9 @@ const workspaceContent = {
         {
           title: "Dette gjør du her",
           items: [
+            "En modul åpner på fanen Rediger: samtalen og innholdsfeltene side om side.",
             "Velg en modul, be om konkrete innholdsendringer og se på forhåndsvisningen mens du jobber.",
+            "Forhåndsvisning viser den samme modulen i full bredde, uten samtalen, slik deltakeren møter den.",
             "Bruk språkknappene i forhåndsvisningen for å kontrollere deltakerteksten i hvert språk.",
             "Lagre eller publiser fra handlingsflyten når utkastet ser riktig ut.",
           ],
@@ -598,7 +602,7 @@ const workspaceContent = {
           title: "Greit å vite",
           items: [
             "Samtaledelen passer best for tittel, oppgavetekst, veiledning, flervalg og oppfrisking av oversettelser.",
-            "Gå til avansert redigering når du trenger dypere endringer i vurderingsmatrise, instruksjon, regler eller skjema.",
+            "Innstillinger er der modultype, terskler, kriterier og vurderingsinstruks skal ligge. Foreløpig åpner den den avanserte editoren.",
           ],
         },
       ],
@@ -606,7 +610,9 @@ const workspaceContent = {
         {
           title: "Dette gjer du her",
           items: [
+            "Ein modul opnar på fana Rediger: samtalen og innhaldsfelta side om side.",
             "Vel ein modul, be om konkrete innhaldsendringar og sjå på førehandsvisinga medan du jobbar.",
+            "Førehandsvising viser den same modulen i full breidd, utan samtalen, slik deltakaren møter han.",
             "Bruk språkknappane i førehandsvisinga for å kontrollere deltakarteksten i kvart språk.",
             "Lagre eller publiser frå handlingsflyten når utkastet ser riktig ut.",
           ],
@@ -615,7 +621,7 @@ const workspaceContent = {
           title: "Greitt å vite",
           items: [
             "Samtaledelen passar best for tittel, oppgåvetekst, rettleiing, flerval og oppfrisking av omsetjingar.",
-            "Gå til avansert redigering når du treng djupare endringar i vurderingsmatrise, instruksjon, reglar eller skjema.",
+            "Innstillingar er der modultype, tersklar, kriterium og vurderingsinstruks skal liggje. Førebels opnar den den avanserte editoren.",
           ],
         },
       ],

@@ -610,6 +610,29 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
+  test("help on the module route explains the tabs, not the module library", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator(".workspace-help-trigger").click();
+
+    // The canonical module route carries the module in the PATH; help used to require it in
+    // the query string and fell through to module-library help on this very page.
+    await expect(page.locator("#workspaceHelpTitle")).toHaveText(/Conversation editing|Innholdsforvaltning: samtale/);
+    await expect(page.locator("#workspaceHelpBody")).toContainText(/Edit tab|fanen Rediger/);
+    await expect(page.locator("#workspaceHelpBody")).toContainText(/Settings is where|Innstillinger er der/);
+  });
+
   test("leaving Rediger with an open edit form warns, and staying keeps the typed values", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

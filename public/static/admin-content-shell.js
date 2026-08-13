@@ -4048,6 +4048,8 @@ function hasOpenEditForm() {
   return !!document.getElementById("previewEditConfirm");
 }
 
+const TAB_ORDER = ["preview", "edit", "settings"];
+
 function applyTabState(tab) {
   activeTab = tab;
   for (const [name, button] of Object.entries(tabButtons)) {
@@ -4055,6 +4057,8 @@ function applyTabState(tab) {
     const selected = name === tab;
     button.classList.toggle("active", selected);
     button.setAttribute("aria-selected", selected ? "true" : "false");
+    // Roving tabindex: a tablist is ONE tab stop, and the arrow keys move within it.
+    button.tabIndex = selected ? 0 : -1;
   }
   // setHidden, not the .hidden class: workspace-shell sets display:grid and the panels
   // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
@@ -4082,7 +4086,23 @@ function switchToTab(tab) {
 function bindViewTabs() {
   for (const [name, button] of Object.entries(tabButtons)) {
     button?.addEventListener("click", () => switchToTab(name));
+    // Standard tablist keyboard model. Focus follows the arrow keys and the view
+    // switches with it, which is the expected behaviour for tabs whose panels are
+    // already loaded.
+    button?.addEventListener("keydown", (event) => {
+      const index = TAB_ORDER.indexOf(name);
+      let target = null;
+      if (event.key === "ArrowRight") target = TAB_ORDER[(index + 1) % TAB_ORDER.length];
+      else if (event.key === "ArrowLeft") target = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+      else if (event.key === "Home") target = TAB_ORDER[0];
+      else if (event.key === "End") target = TAB_ORDER[TAB_ORDER.length - 1];
+      if (!target) return;
+      event.preventDefault();
+      tabButtons[target]?.focus();
+      switchToTab(target);
+    });
   }
+
 
   document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
     pendingTabSwitch = null;
@@ -4103,8 +4123,13 @@ function bindViewTabs() {
   });
 
   // Until S3 moves the fields in, Innstillinger hands off to the Avansert page and
-  // reuses its unsaved-draft handling.
-  settingsOpenAdvancedBtn?.addEventListener("click", () => openAdvancedEditor(selectedModuleId));
+  // reuses its unsaved-draft handling. That handling asks the author to choose (save
+  // first / take the draft along / cancel) in the CHAT, which Innstillinger hides - so
+  // return to Rediger first, or the button looks dead whenever a draft exists.
+  settingsOpenAdvancedBtn?.addEventListener("click", () => {
+    applyTabState("edit");
+    openAdvancedEditor(selectedModuleId);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -4863,6 +4888,13 @@ function translatePageStaticText() {
   for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
     const key = el.getAttribute("data-i18n-placeholder");
     if (key) el.placeholder = t(key);
+  }
+  // #896 S1: accessible names need translating too. Without this an aria-label stays in
+  // whatever language it was authored in, so a screen reader announces a Norwegian group
+  // name around English tabs.
+  for (const el of document.querySelectorAll("[data-i18n-aria-label]")) {
+    const key = el.getAttribute("data-i18n-aria-label");
+    if (key) el.setAttribute("aria-label", t(key));
   }
 }
 

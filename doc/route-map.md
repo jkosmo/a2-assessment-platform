@@ -27,7 +27,9 @@ This map covers all admin-content entry points and their status for pilot. Use i
 
 ### Mode relationship
 
-The conversational and advanced editors are two modes of the same module workspace, not independent surfaces. Switching between them via the mode rail preserves working draft state. `/admin-content/advanced` as a standalone top-level route has no module context and is a legacy artifact.
+The conversational and advanced editors are two modes of the same module workspace, not independent surfaces. Switching between them preserves working draft state. `/admin-content/advanced` as a standalone top-level route has no module context and is a legacy artifact.
+
+**#896 S1:** the conversational route no longer has a Samtale/Avansert mode rail. It presents three views of one module — **Forhåndsvisning**, **Rediger** (default) and **Innstillinger** — as tabs within the same page; no route changes, and the active tab is not reflected in the URL. Advanced editing is reached from **Innstillinger → «Åpne avansert redigering»**, which keeps the existing draft hand-off. The advanced page keeps its own mode rail for now. Both the tab route to advanced and the `/advanced` page itself disappear in S3, when the settings fields move into the tab.
 
 ## Participant, «Deltakere» and review workspaces
 
