@@ -87,7 +87,9 @@ These rules exist because their violation caused or worsened the May 2026 produc
   ones they were not written for. After the suites are green and **before** the stage deploy, run
   `.\scripts\ai-qa.ps1 [-Issue <n>] [-Uncommitted] [-SkipTests]`. It runs `lint` + `test:unit` +
   `test:dom`, refuses to review red code, then runs `codex exec review` with the repo's standing
-  orders as the checklist and writes findings to `.ai-qa/qa-<timestamp>.md` (gitignored). NO-GO
+  orders as the checklist, adds a second pass for the verdict + manual-test list, and writes both
+  to `.ai-qa/qa-<timestamp>.md` (gitignored). Exit codes: `0` GO, `1` could not review, `2` review
+  incomplete (not a pass), `3` NO-GO. NO-GO
   means fix before deploying; a GO is a review verdict, **not** a substitute for the e2e. The
   review's closing "Ikke verifiserbart statisk" list is the manual test plan for that stage round.
 - **Map the full UI surface before building/fixing (standing order):** most of our deploy→bug→deploy

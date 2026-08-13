@@ -21,6 +21,12 @@
 # Findings land in .ai-qa/qa-<timestamp>.md, codex's own chatter in the matching .log
 # (both gitignored). Only the findings are printed.
 #
+# Exit codes, so a wrapper can gate on this:
+#   0  review completed, verdict GO
+#   1  could not review (suites red, codex missing, no usable output)
+#   2  review completed but is missing the verdict or the manual-test list - not a pass
+#   3  review completed, verdict NO-GO
+#
 # Notes:
 # - Codex prints its banner to stderr, so PowerShell 5.1 may report a non-zero exit code
 #   even on success. The output FILE is the source of truth, not $LASTEXITCODE - but it
@@ -128,12 +134,18 @@ Prioriter disse feilklassene, i denne rekkefoelgen:
 For hvert funn: fil:linje, hva som er galt, og et KONKRET scenario der det feiler (input eller
 klikkrekkefoelge -> feil resultat). Ingen funn uten et scenario. Faa og sikre funn slaar mange
 usikre. Ikke gjenfortell diffen. Ikke stilkommentarer.
+
+Svar paa norsk.
 "@
 
     # -----------------------------------------------------------------------
     # 3 - Build the invocation
     # -----------------------------------------------------------------------
-    $codexArgs = @('exec', 'review')
+    # The literal '-' is load-bearing: `codex exec review` takes its custom instructions as a
+    # POSITIONAL argument and only reads stdin when '-' is passed. Without it the piped prompt
+    # is silently discarded and the whole checklist below never reaches the reviewer - which is
+    # exactly what happened for the first three runs of this script.
+    $codexArgs = @('exec', 'review', '-')
     if ($Uncommitted) {
         $codexArgs += '--uncommitted'
     }
@@ -311,15 +323,22 @@ $findings
     # Both closing sections are mandatory: a verdict without the manual test plan drops
     # the very thing that replaces a stage round. Match at line start, so the words
     # merely being quoted inside a finding does not satisfy the check.
-    if ($verdict -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') {
-        Write-Host "NOTE: no VERDIKT line - judge the findings yourself before deploying." -ForegroundColor Yellow
-    }
-    if ($verdict -notmatch '(?im)^\s*IKKE VERIFISERBART STATISK') {
-        Write-Host "NOTE: no manual-test list - plan the stage round yourself." -ForegroundColor Yellow
+    $missing = @()
+    if ($verdict -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') { $missing += 'VERDIKT' }
+    if ($verdict -notmatch '(?im)^\s*IKKE VERIFISERBART STATISK') { $missing += 'IKKE VERIFISERBART STATISK' }
+    if ($missing.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Incomplete review - missing: $($missing -join ', ')." -ForegroundColor Red
+        Write-Host "Judge the findings and plan the stage round yourself; do not treat this as a pass." -ForegroundColor Red
+        exit 2
     }
     Write-Host ""
     Write-Host "Reminder: a GO here is a review verdict, not a test result. The e2e for the" -ForegroundColor DarkGray
     Write-Host "primary flow still has to pass locally before the stage deploy." -ForegroundColor DarkGray
+
+    if ($verdict -match '(?m)^\s*VERDIKT:\s*NO-GO') {
+        exit 3
+    }
 }
 finally {
     Pop-Location

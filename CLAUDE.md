@@ -133,8 +133,10 @@ stage deploy, run a cross-model review.**
 
 The script runs `lint` + `test:unit` + `test:dom` first and **refuses to call Codex if any is red**
 (reviewing broken code is wasted tokens). It then runs `codex exec review` (default `gpt-5.6-sol`,
-reasoning effort `high`) with this file's standing orders as the checklist, and writes the findings
-to `.ai-qa/qa-<timestamp>.md` (gitignored).
+reasoning effort `high`) with this file's standing orders as the checklist, then a short second
+pass for the verdict and the manual-test list, and writes both to `.ai-qa/qa-<timestamp>.md`
+(gitignored). Exit codes so a wrapper can gate on it: `0` GO · `1` could not review · `2` review
+incomplete (missing verdict or manual-test list — not a pass) · `3` NO-GO.
 
 1. **NO-GO means fix before deploying.** The whole point is to spend the round here rather than on
    stage.
