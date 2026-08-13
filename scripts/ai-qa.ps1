@@ -337,9 +337,14 @@ $findings
     # Both closing sections are mandatory: a verdict without the manual test plan drops
     # the very thing that replaces a stage round. Match at line start, so the words
     # merely being quoted inside a finding does not satisfy the check.
+    # The manual-test section must have a BODY, not just its heading: a pass-two run cut
+    # short right after printing the heading would otherwise read as a complete review
+    # with an empty test plan - the exact outcome exit code 2 exists to prevent.
     $missing = @()
     if ($verdict -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') { $missing += 'VERDIKT' }
-    if ($verdict -notmatch '(?im)^\s*IKKE VERIFISERBART STATISK') { $missing += 'IKKE VERIFISERBART STATISK' }
+    # The colon is required, not optional: with ':?' the trailing '\S' happily matched the
+    # colon itself, so a bare heading passed - verified against both cases before landing.
+    if ($verdict -notmatch '(?im)^[ \t]*IKKE VERIFISERBART STATISK[ \t]*:[ \t]*(\S|\r?\n[ \t]*\S)') { $missing += 'IKKE VERIFISERBART STATISK' }
     if ($missing.Count -gt 0) {
         Write-Host ""
         Write-Host "Incomplete review - missing: $($missing -join ', ')." -ForegroundColor Red
@@ -353,6 +358,9 @@ $findings
     if ($verdict -match '(?m)^\s*VERDIKT:\s*NO-GO') {
         exit 3
     }
+    # Explicit: falling off the end would leave codex's own $LASTEXITCODE - which this
+    # script deliberately tolerates as non-zero - visible to a caller as the gate's status.
+    exit 0
 }
 finally {
     Pop-Location
