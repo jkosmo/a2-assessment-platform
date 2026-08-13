@@ -1474,4 +1474,41 @@ test.describe("admin content browser coverage", () => {
     expect(ensureBody?.taskText).not.toContain("[object Object]");
     expect(ensureBody?.taskText).toContain("scenario");
   });
+
+  // Rapportert fra stage: bytt språk mens du står i Direkte redigering, og du havner i lesemodus
+  // med en samtale som fortsatt sier «rediger feltene og trykk Bekreft» — mens handlingsknappene
+  // er brukt opp og deaktiverte. Ingen vei videre uten å laste siden på nytt. Årsaken er at
+  // redigeringen bygges INN i forhåndsvisningsruten, som språkbyttet river.
+  test("switching preview language while editing directly keeps the editor open", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "English scenario", nb: "Norsk scenario", nn: "Nynorsk scenario" },
+          assessorExpectedContent: { "en-GB": "English guidance", nb: "Norsk veiledning", nn: "Nynorsk rettleiing" },
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("English scenario");
+
+    // The pane's own locale buttons are disabled while editing (.preview-pane--editing), so the
+    // reachable control is the workspace language selector in the top bar — which is exactly the
+    // one that had no guard.
+    await page.locator("#localeSelect").selectOption("nb");
+
+    // The editor must still be there — and now showing the language that was switched to.
+    await expect(page.locator("#previewEditConfirm")).toBeVisible();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
+
+    // And confirming from there must still work — the way forward is intact.
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.locator("#previewEditConfirm")).toHaveCount(0);
+    await expect.poll(() => true).toBe(true);
+  });
 });

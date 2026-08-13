@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.10 - 2026-08-13
+
+**Språkbytte under Direkte redigering ga en blindvei.** Rapportert fra stage: bytt arbeidsflatens
+språk mens du står i direkte redigering, og du havner i lesemodus — med en samtale som fortsatt
+sier «rediger feltene og trykk Bekreft», og handlingsknapper som allerede er brukt opp og
+deaktiverte. Eneste vei ut var å laste siden på nytt.
+
+Årsaken er at redigeringen bygges **inn i** forhåndsvisningsruten, som `renderPreview()` river.
+Forhåndsvisningens egen språkvelger er deaktivert under redigering
+(`.preview-pane--editing .preview-locale-btn { pointer-events: none }`), men språkvelgeren i
+topplinja hadde ingen slik beskyttelse — og det er den man faktisk når.
+
+Redigeringsmodus bygges nå opp igjen etter språkbyttet, med feltene fylt fra det nye språket.
+Samtalen sier fra om at det som var skrevet i det forrige språket uten å bli bekreftet, er borte —
+det skal man få vite, ikke oppdage. Samme guard er lagt på forhåndsvisningens egne knapper, så
+flaten ikke får blindveien tilbake den dagen noen fjerner CSS-regelen.
+
+E2e-vakten bytter språk midt i redigeringen og krever at editoren fortsatt står, at feltene viser
+det nye språket, og at Bekreft fortsatt virker. Verifisert rød uten fiksen.
+
+Tests: tsc 0, e2e 123, dom 5, kontrakter 32. Kun klient + i18n.
+
 ## 2.11.9 - 2026-08-12
 
 **Lagring feilet med 400 på en modul uten «rammer for kandidaten».** Rapportert fra stage etter
