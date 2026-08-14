@@ -360,9 +360,12 @@ export const moduleExportPayloadSchema = z.object({
   activeVersion: z.object({
     // #525/#547: MCQ_ONLY exports omit taskText/rubric/promptTemplate (no free-text assessment).
     assessmentMode: assessmentModeSchema.optional(),
-    taskText: localizedTextSchema.nullable().optional(),
-    assessorExpectedContent: localizedTextSchema.nullable().optional(),
-    candidateTaskConstraints: localizedTextSchema.nullable().optional(),
+    // #905: must accept the same partial shape the module-version body now stores, or a
+    // partially translated module can be saved but never exported, duplicated or re-imported
+    // - the envelope emits what is stored, and import would reject its own export.
+    taskText: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+    assessorExpectedContent: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+    candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     assessmentBlueprint: z.string().nullable().optional(),
     submissionSchema: submissionSchemaBodySchema.nullable().optional(),
     assessmentPolicy: assessmentPolicyBodySchema.nullable().optional(),

@@ -258,6 +258,8 @@ export async function mockCommonApis(page: Page, {
     lastMcqLocalizationBody: null as any,
     lastCourseLocalizationBodies: [] as any[],
     lastTitlePatchBody: null as any,
+    // #905: tests need to see exactly which locales a save actually sent.
+    lastModuleVersionBody: null as any,
     lastSourceMaterialExtraction: null as any,
   };
   const extractionJobs = new Map<string, { fileName: string; extractedText: string }>();
@@ -654,6 +656,7 @@ export async function mockCommonApis(page: Page, {
       promptTemplateVersionId?: string;
       mcqSetVersionId?: string;
     };
+    state.lastModuleVersionBody = body;
     const moduleVersion = {
       id: `${moduleId}-version-1`,
       versionNo: 1,

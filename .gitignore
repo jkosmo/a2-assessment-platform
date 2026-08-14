@@ -33,3 +33,4 @@ doc/pentest/PENTEST-*.md
 
 # Cross-model QA gate output (scripts/ai-qa.ps1)
 .ai-qa/
+scripts/ai-qa.ps1

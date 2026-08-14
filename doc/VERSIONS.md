@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.14 - 2026-08-15
+
+QA-runde på #905. Å åpne skjemaet var ikke nok — søsterflatene gikk fortsatt i veggen:
+
+- **Eksport og import avviste sin egen datatype.** En delvis oversatt modul kunne lagres, men
+  ikke eksporteres, dupliseres eller importeres — envelopen sender det som er lagret, og import
+  validerte med det strenge skjemaet.
+- **Agent-forfatting avviste enspråklige utkast.** En agent som skriver på ett språk er
+  normaltilfellet, ikke en feil.
+- **Samtaleflyten lagret fortsatt kildeteksten som oversettelse.** Språkkartet fylles med
+  kildeteksten *før* oversettingen, og et språk som feilet ble registrert — men kopien ble
+  aldri fjernet. Det gjorde hele #905 virkningsløs i den flyten folk faktisk bruker. Feilede
+  språk tas nå ut av kartet.
+- **Kriteriegeneratoren fikk `[object Object]`** i stedet for oppgaveteksten, fordi et språkkart
+  ble sendt gjennom `String()`. Kriteriene ble altså generert uten å ha sett oppgaven.
+
 ## 2.11.13 - 2026-08-14
 
 **Innhold kan nå si at det ikke er oversatt ennå (#905).** Oppgavetekst, forventning og rammer

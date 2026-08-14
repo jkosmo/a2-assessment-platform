@@ -12,6 +12,7 @@
 import { z } from "zod";
 import {
   localizedTextSchema,
+  localizedTextMaybeUntranslatedSchema,
   localizedTextPatchSchema,
   certificationLevelInputSchema,
   assessmentModeSchema,
@@ -73,9 +74,12 @@ export const authoringModulePayloadSchema = z
     activeVersion: z
       .object({
         assessmentMode: assessmentModeSchema.optional(),
-        taskText: localizedTextSchema.nullable().optional(),
-        assessorExpectedContent: localizedTextSchema.nullable().optional(),
-        candidateTaskConstraints: localizedTextSchema.nullable().optional(),
+        // #905: an agent authoring in one language is the normal case, not an error - the same
+        // partial shape the module-version body accepts must validate here too, or a valid
+        // single-language draft comes back `valid:false` with an empty plan.
+        taskText: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+        assessorExpectedContent: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+        candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.nullable().optional(),
         assessmentBlueprint: z.string().nullable().optional(),
         submissionSchema: submissionSchemaBodySchema.nullable().optional(),
         assessmentPolicy: assessmentPolicyBodySchema.nullable().optional(),
