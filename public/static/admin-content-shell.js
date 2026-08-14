@@ -3607,8 +3607,12 @@ function enterPreviewEditMode() {
       // v1.2.10: c.label/c.description kan være string ELLER locale-objekt. Bruk
       // localizeValueForLocale så direkte-edit-view-en plukker riktig locale i input-feltet.
       // humaniseCriterionId-fallback brukes kun når både string og locale-objekt mangler.
-      const rawLabel = localizeValueForLocale(c.label, currentLocale);
-      const rawDesc = localizeValueForLocale(c.description, currentLocale);
+      // editingLocale, not currentLocale: every other field in this form is read in the
+      // language being edited. Reading criteria in the UI language put English criteria
+      // beside Norwegian scenario text - and whatever was typed there was written back as
+      // the edited language (#902).
+      const rawLabel = localizeValueForLocale(c.label, editingLocale);
+      const rawDesc = localizeValueForLocale(c.description, editingLocale);
       return {
         id: String(id),
         label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
@@ -3972,12 +3976,12 @@ function enterPreviewEditMode() {
     slot.abortBtn.addEventListener("click", () => abort.abort());
 
     const commit = (localized, localizedMcqQuestions, failedLocales) => {
-      // The author has the discard dialog open and has not answered yet. Committing now would
-      // save values they may be about to discard - and would clear generationAbort, leaving
-      // the discard handler nothing to abort. Stand down; the discard path aborts, and the
-      // stay path lets the next resolution through.
+      // The author has the discard dialog open and has not answered yet. Do not commit - the
+      // values may be about to be discarded - but do not abort either: aborting would throw
+      // away a translation that already succeeded, so "Bli vaerende" would leave them with
+      // nothing saved. Hold it until the dialog is answered.
       if (pendingTabSwitchKind === "form") {
-        abort.abort();
+        pendingSaveCommit = () => commit(localized, localizedMcqQuestions, failedLocales);
         return;
       }
       generationAbort = null;
@@ -4199,6 +4203,10 @@ function syncTabToUrl(tab) {
 let activeTab = tabFromUrl();
 let pendingTabSwitch = null;
 let pendingTabSwitchKind = null;
+// A save whose translation resolved while the discard dialog was open. Held rather than
+// committed OR thrown away, because the author has not answered yet: "Bli vaerende" must
+// finish the save they asked for, "Forkast" must drop it.
+let pendingSaveCommit = null;
 
 function hasOpenEditForm() {
   return !!document.getElementById("previewEditConfirm");
@@ -4291,6 +4299,11 @@ function bindViewTabs() {
   const stayOnCurrentTab = () => {
     pendingTabSwitch = null;
     pendingTabSwitchKind = null;
+    // Staying means "keep what I was doing" - including a save that finished while the
+    // dialog was up.
+    const resume = pendingSaveCommit;
+    pendingSaveCommit = null;
+    resume?.();
     // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
     // leave focus on a tab that is not the selected one - or nowhere, in the closed
     // dialog. Put focus back where the selection actually is.
@@ -4330,6 +4343,7 @@ function bindViewTabs() {
       // A save in flight has disabled that Cancel button, so clicking it would do NOTHING and
       // the running translation would go on to save the values just discarded. Abort first:
       // the signal handler re-enables the form, and commit() refuses to run once aborted.
+      pendingSaveCommit = null;
       generationAbort?.abort();
       document.getElementById("previewEditCancel")?.click();
     }
