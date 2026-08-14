@@ -4107,6 +4107,10 @@ function bindViewTabs() {
   document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
     pendingTabSwitch = null;
     unsavedTabSwitchDialog?.close();
+    // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
+    // leave focus on a tab that is not the selected one - or nowhere, in the closed
+    // dialog. Put focus back where the selection actually is.
+    tabButtons[activeTab]?.focus();
   });
 
   document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
@@ -4116,6 +4120,7 @@ function bindViewTabs() {
     if (!target) return;
     // Switch first: the tab the author asked for must not depend on the teardown below.
     applyTabState(target);
+    tabButtons[target]?.focus();
     // Then discard the form by pressing its own Cancel. exitEditMode() is scoped inside
     // enterPreviewEditMode and unreachable from here, and Cancel already does exactly the
     // right thing - tear down the fields, restore the preview, put the chat actions back.
@@ -4130,6 +4135,11 @@ function bindViewTabs() {
     applyTabState("edit");
     openAdvancedEditor(selectedModuleId);
   });
+
+  // Establish the roving tabindex now. Without this the assignment in applyTabState first
+  // runs on the initial tab switch, so until then all three tabs sit in the tab order -
+  // the exact behaviour the roving model exists to remove.
+  applyTabState(activeTab);
 }
 
 // ---------------------------------------------------------------------------

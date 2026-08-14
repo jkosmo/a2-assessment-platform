@@ -610,6 +610,69 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
+  test("the tablist is one tab stop and the arrow keys move both focus and view", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // One tab stop, established on load - not only after the first switch.
+    await expect(page.locator("#tabEdit")).toHaveAttribute("tabindex", "0");
+    await expect(page.locator("#tabPreview")).toHaveAttribute("tabindex", "-1");
+    await expect(page.locator("#tabSettings")).toHaveAttribute("tabindex", "-1");
+
+    await page.locator("#tabEdit").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator("#tabPreview")).toBeFocused();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tabPreview")).toHaveAttribute("tabindex", "0");
+
+    await page.keyboard.press("End");
+    await expect(page.locator("#tabSettings")).toBeFocused();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+
+    await page.keyboard.press("Home");
+    await expect(page.locator("#tabPreview")).toBeFocused();
+  });
+
+  test("staying after an arrow-key switch returns focus to the selected tab", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    // Arrowing focuses the target tab before the dialog appears, so "stay" must hand focus
+    // back - otherwise it sits on a tab that is not the selected one.
+    await page.locator("#tabEdit").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    await page.locator("#tabSwitchStay").click();
+
+    await expect(page.locator("#tabEdit")).toBeFocused();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+  });
+
   test("help on the module route explains the tabs, not the module library", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
