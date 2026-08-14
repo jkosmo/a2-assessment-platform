@@ -41,7 +41,13 @@ Primær inngang for admin-content. Viser alle moduler i en tabell med filter og 
 ---
 
 ### Module workspace — Conversation og Advanced
-En delt workspace med to moduser. Valgt modul er alltid eksplisitt.
+En delt workspace. Valgt modul er alltid eksplisitt.
+
+**#896 S1:** conversation-ruten har ikke lenger en Samtale/Avansert-modusbryter. Den viser
+tre faner på samme modul — **Forhåndsvisning** (deltakerens lesevisning, uten
+vurdererforventning, fasit eller skjulte kriterier), **Rediger** (standard: samtale +
+innholdsfelt) og **Innstillinger**. Avansert nås fra Innstillinger inntil feltene flyttes
+inn der i S3, og da forsvinner både lenken og den separate siden.
 
 **Conversation (`/admin-content/module/:moduleId/conversation`):**
 - Chat-drevet authoring

@@ -610,6 +610,87 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
+  test("Forhaandsvisning withholds the answer key and assessor-only content", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessorExpectedContent: localizedText("Maa nevne risikoreduserende tiltak"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Fordi B er riktig"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Rediger is the author's view: everything is on the table.
+    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toBeVisible();
+    await expect(page.getByText("Fordi B er riktig")).toBeVisible();
+    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(1);
+
+    // Forhaandsvisning claims to show what the participant meets - so the assessor
+    // expectation, the rationale and the marked correct option must all be gone.
+    await page.locator("#tabPreview").click();
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toHaveCount(0);
+    await expect(page.getByText("Fordi B er riktig")).toHaveCount(0);
+    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(0);
+    // The answer is also spelled out in a meta line, which must go too - the options
+    // themselves stay, unmarked, exactly as a learner sees them.
+    await expect(page.locator(".preview-mcq-meta")).toHaveCount(0);
+    await expect(page.locator(".preview-mcq-option", { hasText: "Option B" })).toHaveCount(1);
+
+    // ...and back: the author sees the full picture again.
+    await page.locator("#tabEdit").click();
+    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toBeVisible();
+    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(1);
+  });
+
+  test("Escape on the unsaved-changes dialog behaves like staying", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    await page.locator("#tabEdit").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+
+    // Escape bypasses every button, so it must not leave focus and selection disagreeing.
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tabEdit")).toBeFocused();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+
+    // The stale pending switch must not fire on the next, unrelated switch either.
+    await page.locator("#previewEditCancel").click();
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+  });
+
   test("the tablist is one tab stop and the arrow keys move both focus and view", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

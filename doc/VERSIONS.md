@@ -2,6 +2,11 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.12.1 - 2026-08-14
+
+QA-runder på #896 S1: deltakervisning i Forhåndsvisning, tastatur og fokus i fanelista, og
+dokumentasjonsflatene rundt omleggingen. Se 2.12.0 for selve strukturen.
+
 ## 2.12.0 - 2026-08-13
 
 **Modulredigering i tre visninger (#896, S1 av 7).** Bryteren mellom «Samtale» og «Avansert» er
@@ -25,6 +30,11 @@ Et fanebytte rører ikke sesjonstilstanden: et generert utkast overlever, og for
 beholder innholdet sitt. Det ene som *kan* gå tapt er et åpent direkte-redigeringsskjema, siden
 feltverdiene der bare finnes i DOM-en — det er derfor det er den eneste tilstanden som utløser en
 bekreftelsesdialog.
+
+**Forhåndsvisning viser deltakerens lesevisning.** Fanen holder det den lover: vurdererforventning,
+MCQ-fasit med begrunnelse og kriterier merket `candidateVisible: false` utelates. Rediger viser
+fortsatt alt — det er forfatterens arbeidsvisning. Merk at dette er en gjengivelse av innholdet,
+ikke deltakerkomponenten selv, så den er tro mot *hva* som vises, ikke mot pikslene.
 
 Gjenstår i epicen: samlet lagring (S2), oppløsning av Avansert (S3), publiseringsgate for
 oversettelse (S4), utkastversjonering (S5), eksport/import (S6) og opprydding (S7).

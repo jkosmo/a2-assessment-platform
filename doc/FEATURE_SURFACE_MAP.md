@@ -367,3 +367,29 @@ one place. A change to any create/import path, or to the token scope, must keep 
 `…-token.test.ts` (scope, expiry/revoke, role snapshot), `…-skill-import.test.ts` (fixture through
 the skill script), `test/unit/agent-authoring-validation.test.ts` (rules), `test/e2e/profile-agent-tokens.spec.ts`
 (token UI). User docs: `doc/AGENT_ACCESS_GUIDE.md`; API: `doc/API_REFERENCE.md`; design: `doc/design/AGENT_AUTHORING_647.md`.
+
+## 16. Module workspace view tabs — audience, visibility and unsaved state (#896 S1)
+
+The module workspace is **three views of one module**, not three pages: Forhåndsvisning, Rediger
+(default) and Innstillinger. Forhåndsvisning and Rediger share **one** DOM panel — the tabs only
+change what is visible and *who the content is rendered for*. A change to any of the four
+behaviours below has to touch every row here, because they are wired in three different files.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Tab bar + panels | `#tabPreview`/`#tabEdit`/`#tabSettings`, `#tabPanelModule`, `#tabPanelSettings` in `public/admin-content.html` | `role="tablist"`; Forhåndsvisning and Rediger share `#tabPanelModule`, whose `aria-labelledby` follows the active tab |
+| Tab state machine | `applyTabState` / `switchToTab` / `bindViewTabs` in `public/static/admin-content-shell.js` | selection, roving `tabindex` (**initialised on mount**, not on first switch), arrow/Home/End, `setHidden` for every pane |
+| **Audience filtering** | `audience` option in `public/static/admin-content-preview.js` (`buildPreviewHtml`, `renderPreviewMcqQuestions`, `renderPreviewCriteria`), set from `activeTab` at the shell's call site | `"participant"` withholds assessor expectation, MCQ correct-answer marking **and** the answer meta line, rationale, and `candidateVisible:false` criteria. Any NEW author-only field added to the preview must be gated here too, or it leaks into the tab that promises the learner's view |
+| Unsaved-state guard | `hasOpenEditForm` + `#dialogUnsavedTabSwitch` in the shell | covers an **open direct-edit form only** (its values live solely in the DOM). A generated `sessionDraft` survives a tab switch and deliberately does not warn. Every dismissal path — button, Escape, backdrop — routes through the dialog's `close` event so focus and selection cannot disagree |
+| Hand-off to Advanced | `settingsOpenAdvanced` → `openAdvancedEditor` | switches back to Rediger **first**: the hand-off asks its question in the chat, which Innstillinger hides |
+| Conditional visibility | `setHidden` from `public/static/dom-visibility.js` | `.workspace-shell` is `display:grid` and the panels are `.card`; note the mirror trap — the `hidden` **attribute** survives `setHidden(el, false)`, so panels must start with inline `style="display:none"` |
+
+**Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "opens on Rediger and the tabs switch
+between the three views", "Forhaandsvisning withholds the answer key and assessor-only content",
+"leaving Rediger with an open edit form warns…", "Escape on the unsaved-changes dialog behaves like
+staying", "the tablist is one tab stop…", "staying after an arrow-key switch returns focus…", "help
+on the module route explains the tabs…". DOM contract: `test/dom/admin-content-workspaces.dom.test.js`
+("exposes the three module views as one tablist"). Docs: `doc/route-map.md`,
+`doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md`, `doc/design/SHELL_ADVANCED_PARITY.md`,
+`doc/pilot/VERIFICATION_CHECKLIST.md`. **S3 will move the settings fields into the tab and delete
+the Avansert page — update every row above in that PR.**

@@ -45,8 +45,9 @@
 
 | Feature | Conversational shell | Advanced editor |
 |---|:---:|:---:|
-| Mode switch link | ✅ "Avansert redigering ↗" | ✅ "Enkel redigering ↗" |
-| Unsaved-changes warning on switch | ❌ not implemented (#314) | ❌ not implemented (#314) |
+| Mode switch link | ✅ Innstillinger → "Åpne avansert redigering" (#896 S1) | ✅ "Enkel redigering ↗" |
+| View tabs on one module | ✅ Forhåndsvisning / Rediger / Innstillinger (#896 S1) | ❌ still a two-mode page |
+| Unsaved-changes warning on switch | ✅ open direct-edit form only (#896 S1); a generated draft survives in memory and does not warn | ✅ dialogUnsavedHandoff |
 | Confirmation before publish | ✅ conversational confirm | ✅ window.confirm dialog |
 | Confirmation before unpublish | n/a | ✅ window.confirm dialog |
 | Locale picker (UI language) | ✅ top bar | ✅ top bar |

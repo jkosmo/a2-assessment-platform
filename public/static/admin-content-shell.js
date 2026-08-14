@@ -1112,6 +1112,11 @@ function renderPreview() {
       criteriaLoadingText: criteriaGenerationInFlight ? t("shell.criteria.generating") : "",
       // B3 (#450): drift banner rendered above the criteria section.
       driftBanner,
+      // #896 S1: the Forhaandsvisning tab claims to show what the participant meets, so it
+      // must not leak the assessor expectation, the MCQ answer key and rationale, or criteria
+      // marked candidateVisible:false. Rediger keeps showing all of it - that is the author's
+      // working view.
+      audience: activeTab === "preview" ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
       badgeText: hasDraft
@@ -4051,6 +4056,10 @@ function hasOpenEditForm() {
 const TAB_ORDER = ["preview", "edit", "settings"];
 
 function applyTabState(tab) {
+  // Forhaandsvisning renders the same module for a different audience, so crossing that
+  // boundary needs a re-render. Edit <-> Innstillinger does not - both are the author view,
+  // and re-rendering there would be wasted work on every settings visit.
+  const audienceChanges = (activeTab === "preview") !== (tab === "preview");
   activeTab = tab;
   for (const [name, button] of Object.entries(tabButtons)) {
     if (!button) continue;
@@ -4069,6 +4078,9 @@ function applyTabState(tab) {
   tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
   if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
+  // Safe here: an open edit form is torn down before any switch away from Rediger, so this
+  // cannot discard typed values.
+  if (audienceChanges && bundle) renderPreview();
 }
 
 function switchToTab(tab) {
@@ -4104,13 +4116,24 @@ function bindViewTabs() {
   }
 
 
-  document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
+  const stayOnCurrentTab = () => {
     pendingTabSwitch = null;
-    unsavedTabSwitchDialog?.close();
     // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
     // leave focus on a tab that is not the selected one - or nowhere, in the closed
     // dialog. Put focus back where the selection actually is.
     tabButtons[activeTab]?.focus();
+  };
+
+  document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
+    unsavedTabSwitchDialog?.close();
+    stayOnCurrentTab();
+  });
+
+  // Escape closes a native <dialog> without going through any button, which would leave
+  // pendingTabSwitch stale and focus parked on an unselected tab. The dialog's close event
+  // covers every dismissal path, so treat anything that is not an explicit discard as Stay.
+  unsavedTabSwitchDialog?.addEventListener("close", () => {
+    if (pendingTabSwitch) stayOnCurrentTab();
   });
 
   document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
