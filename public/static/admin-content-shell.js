@@ -389,7 +389,7 @@ function _domUserBubble(text) {
 // The abortBtn return is now a detached stub so existing callers (~17 places using
 // addEventListener/remove/disabled) keep working without behavior — the click event
 // never fires since the button isn't attached to the DOM.
-function _domProgress(textKeyOrFn) {
+function _domProgress(textKeyOrFn, { abortable = false } = {}) {
   const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
   setChatBusy(true);
   announceStatus(text);
@@ -399,9 +399,19 @@ function _domProgress(textKeyOrFn) {
   bubble.className = "chat-bubble chat-bubble--progress";
   bubble.innerHTML = `<span class="chat-spinner"></span>${escapeHtml(text)}`;
   msg.appendChild(bubble);
-  // Detached stub — kept for API compatibility with existing slot.abortBtn references.
+  // v1.1.98 dropped the Avbryt button because it ended the chat with no way forward -
+  // "dead-end, low value, high complexity". Correct then. #896 S2 changes that for ONE
+  // caller: Lagre now commits to a write, and cancelling hands the form back with every
+  // typed value intact, which is a recovery rather than a dead end. So the button is
+  // opt-in: abortable callers get a real one, everyone else keeps the detached stub and
+  // its harmless no-op listeners.
   const abortBtn = document.createElement("button");
   abortBtn.type = "button";
+  if (abortable) {
+    abortBtn.className = "btn-secondary chat-progress-abort";
+    abortBtn.textContent = t("shell.action.cancel");
+    bubble.appendChild(abortBtn);
+  }
   chatMessages.appendChild(msg);
   _domScroll(msg);
   return { el: msg, abortBtn };
@@ -897,8 +907,8 @@ function logUser(text) {
 
 // Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
 // textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
-function logProgress(textKeyOrFn) {
-  const { el, abortBtn } = _domProgress(textKeyOrFn);
+function logProgress(textKeyOrFn, options = {}) {
+  const { el, abortBtn } = _domProgress(textKeyOrFn, options);
   const entry = { kind: "bot", html: null, choices: [], active: false };
   chatLog.push(entry);
   return { entry, el, abortBtn };
@@ -3590,6 +3600,11 @@ function enterPreviewEditMode() {
   };
   const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
   let criteriaEditorState = buildEditorStateFromCriteriaRecord(sourceCriteria);
+  // #896 S2 baseline: what the form opened with, so Lagre can tell "nothing changed" from
+  // an edit. Criteria can still arrive asynchronously (criteriaReadyCallback); if they land
+  // after this, the baseline is null and the save proceeds - erring toward saving is safe,
+  // erring toward skipping would lose work.
+  const existingCriteriaRecord = buildCriteriaRecordFromEditorState(criteriaEditorState);
   let nextNewCriterionId = 1;
 
   // Lock locale bar and signal edit mode visually
@@ -3876,58 +3891,104 @@ function enterPreviewEditMode() {
       };
     });
 
-    exitEditMode();
+    // #896 S2: one commitment. "Bekreft" used to stop here and hand the author a separate
+    // "Lagre utkast" step, which meant the translation round was paid on every confirm even
+    // when nothing was ever saved. Now Lagre translates AND writes the version.
+    //
+    // Order is load-bearing: translate first (abortable, nothing written), then persist
+    // (not abortable). Abort therefore means nothing was written - and because the form is
+    // left standing until the translation resolves, the author keeps every typed value.
+    const nothingChanged =
+      newTitle === currentTitle
+      && newTaskText === currentTaskText
+      && newGuidanceText === currentGuidanceText
+      && newCandidateTaskConstraints === currentCandidateTaskConstraints
+      && JSON.stringify(newMcqQuestions) === JSON.stringify(currentMcqQuestions)
+      && JSON.stringify(newCriteriaRecord) === JSON.stringify(existingCriteriaRecord);
+    if (nothingChanged) {
+      // No edit means no LLM round and no new version - saving an identical copy would
+      // spend a translation and leave a version nobody asked for.
+      exitEditMode();
+      logBot(() => escapeHtml(t("shell.directEdit.noChanges")));
+      if (sessionDraft) showDraftReadyActions(); else showModuleActions();
+      return;
+    }
+
+    const editActions = previewContent.querySelector(".preview-edit-actions");
+    const setFormBusy = (busy) => {
+      for (const button of editActions?.querySelectorAll("button") ?? []) button.disabled = busy;
+    };
+    setFormBusy(true);
 
     const abort = startGeneration();
-    const slot = logProgress(() => t("shell.directEdit.translating"));
-    slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
+    const slot = logProgress(() => t("shell.directEdit.translatingAndSaving"), { abortable: true });
+    slot.abortBtn.addEventListener("click", () => {
+      abort.abort();
+      slot.abortBtn.disabled = true;
+      // The AbortController is not wired through to the localize requests, so the in-flight
+      // call cannot be stopped - it is ORPHANED instead. Because nothing is written until the
+      // translation resolves, and `commit` refuses to run once aborted, the stray response
+      // simply lands nowhere. Give the author the form back immediately rather than making
+      // them wait for a call whose result is already discarded.
+      generationAbort = null;
+      setFormBusy(false);
+      logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.saveAborted")));
+    });
+
+    const commit = (localized, localizedMcqQuestions, failedLocales) => {
+      generationAbort = null;
+      // The form goes away only now, once there is something to save.
+      exitEditMode();
+      sessionDraft = buildPreviewCandidate({
+        title: localized.title,
+        taskText: localized.taskText,
+        assessorExpectedContent: localized.assessorExpectedContent,
+        candidateTaskConstraints: localized.candidateTaskConstraints,
+        mcqQuestions: localizedMcqQuestions,
+        criteria: editIsMcqOnly ? null : newCriteriaRecord,
+        // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
+        // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
+        ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
+        ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
+      });
+      sessionState = "draft-pending";
+      clearPreviewCandidate();
+      // A locale that failed to translate stays UNTRANSLATED rather than being filled with a
+      // copy of the source text (#892). The hole is named here and blocks publishing in S4.
+      const warning = failedLocales?.length
+        ? ` ${tf("shell.revision.titleNotTranslated", {
+            locales: failedLocales.join(", "),
+            source: editingLocale,
+          })}`
+        : "";
+      logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.saving"))}</strong>${escapeHtml(warning)}`);
+      saveDraftBundleInBackground();
+    };
 
     Promise.all([
       localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, editingLocale, newCandidateTaskConstraints),
       currentMcqQuestions.length ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale) : Promise.resolve([]),
     ])
       .then(([localizedDraft, localizedMcqQuestions]) => {
-        generationAbort = null;
-        sessionDraft = buildPreviewCandidate({
-          title: localizedDraft.title,
-          taskText: localizedDraft.taskText,
-          assessorExpectedContent: localizedDraft.assessorExpectedContent,
-          candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
-          mcqQuestions: localizedMcqQuestions,
-          criteria: editIsMcqOnly ? null : newCriteriaRecord,
-          // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
-          // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
-          ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
-          ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
-        });
-        sessionState = "draft-pending";
-        clearPreviewCandidate();
-        const warning = localizedDraft.failedLocales?.length
-          ? ` ${tf("shell.revision.titleNotTranslated", {
-              locales: localizedDraft.failedLocales.join(", "),
-              source: editingLocale,
-            })}`
-          : "";
-        logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.done"))}</strong>${escapeHtml(warning)}`);
-        showDraftReadyActions();
+        if (abort.signal.aborted) return;
+        commit(localizedDraft, localizedMcqQuestions, localizedDraft.failedLocales);
       })
       .catch(() => {
-        generationAbort = null;
-        sessionDraft = buildPreviewCandidate({
-          title: buildLocalizedTextMap(editingLocale, newTitle),
-          taskText: buildLocalizedTextMap(editingLocale, newTaskText),
-          assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
-          candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
-          mcqQuestions: buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
-          criteria: editIsMcqOnly ? null : newCriteriaRecord,
-          // #665: preserve module type (and MCQ threshold) on the fallback path too.
-          ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
-          ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
-        });
-        sessionState = "draft-pending";
-        clearPreviewCandidate();
-        logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.translateError")));
-        showDraftReadyActions();
+        // Already handled by the abort listener above - the form is back and the slot is
+        // resolved. Nothing was written, so there is nothing to undo here.
+        if (abort.signal.aborted) return;
+        // Translation failed outright. Saving the source-language text as plain strings is
+        // the honest outcome - the other locales are simply not translated yet.
+        commit(
+          {
+            title: buildLocalizedTextMap(editingLocale, newTitle),
+            taskText: buildLocalizedTextMap(editingLocale, newTaskText),
+            assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
+            candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
+          },
+          buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
+          null,
+        );
       });
   });
 
@@ -3986,9 +4047,10 @@ function showModuleActions() {
 
 function openAdvancedEditor(moduleId) {
   const url = buildAdminContentAdvancedUrl(moduleId);
-  const hasUnsavedDraft =
-    !!sessionDraft &&
-    !!(sessionDraft.taskText || sessionDraft.assessorExpectedContent || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
+  // Same predicate as the tab-switch warning and the status rail (#896 S1). It used to also
+  // require taskText/guidance/MCQ content, which meant the tab could warn "you have an unsaved
+  // draft" and then this hand-off would navigate away without offering to save it.
+  const hasUnsavedDraft = !!sessionDraft;
 
   if (!hasUnsavedDraft) {
     // No unsaved work — carry locale context only so the advanced editor can restore it

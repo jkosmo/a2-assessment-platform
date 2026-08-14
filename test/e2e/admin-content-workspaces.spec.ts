@@ -650,6 +650,84 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
   });
 
+  // #896 S2: Lagre is one commitment - translate, then write. These guard the three rules
+  // that make that safe: no edit costs nothing, an abort writes nothing, and a locale that
+  // fails to translate leaves a hole rather than a copy of the source text.
+  test("Lagre translates and saves in one step, and an untouched form does neither", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          // A FREETEXT_PLUS_MCQ module needs its MCQ set, or the save stops on its own guard.
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Opening and closing without editing must not spend a translation or write a version.
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.getByText(/Nothing changed|Ingenting er endret/)).toBeVisible();
+    expect(state.lastDraftLocalizationBody).toBeFalsy();
+
+    // A real edit translates and saves without a second click.
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBeTruthy();
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).first(),
+    ).toBeVisible();
+  });
+
+  test("cancelling the save writes nothing and hands the fields back", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    // Hold the translation open so the abort button can be pressed mid-flight.
+    await page.route("**/generate/module-draft/localize", async () => {
+      await new Promise(() => {});
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+    await page.locator("#previewEditConfirm").click();
+
+    await clickEnabledButton(page, /Cancel|Avbryt/);
+
+    // The form is still standing, still holding the typed text, and nothing was written.
+    await expect(page.getByText(/nothing was saved|ingenting ble lagret/)).toBeVisible();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+    // No version was written: the save never got past the (blocked) translation step.
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/),
+    ).toHaveCount(0);
+  });
+
   test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -994,8 +1072,8 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
 
+    // #896 S2: Lagre translates and writes in one commitment - no separate "Lagre utkast".
     await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBe("nb");
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
     await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Fagforeninger");
     await expect(state.lastTitlePatchBody?.title?.["en-GB"]).toContain("[en-GB]");
@@ -1117,8 +1195,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
 
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
-
+    // #896 S2: the save already happened as part of Lagre; the MCQ survives it.
     await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
   });
@@ -1835,7 +1912,6 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, /Edit directly|Rediger direkte/);
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
     await expect.poll(() => versionBody !== null).toBe(true);
 

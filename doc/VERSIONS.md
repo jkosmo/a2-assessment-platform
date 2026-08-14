@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.13.0 - 2026-08-14
+
+**Samlet lagring i redigeringsskjemaet (#896, S2 av 7).** «Bekreft» er borte. Knappen heter nå
+**Lagre**, og den oversetter *og* skriver modulversjonen i én handling.
+
+Tidligere kostet hver «Bekreft» en full oversettelsesrunde uten at noe ble lagret — forfatteren
+kunne betale for LLM-kallet flere ganger og likevel ende opp uten en versjon.
+
+Rekkefølgen er selve poenget: **oversett først, skriv etterpå.** Oversettelsen er den delen som
+tar tid og kan feile, og så lenge den pågår er ingenting skrevet. Tre regler følger av det:
+
+- **Ingen endring, ingen kostnad.** Åpner du skjemaet og lukker det uendret, brukes verken
+  LLM-runde eller ny versjon.
+- **Avbrutt lagring skriver ingenting.** Du får skjemaet tilbake med hver verdi intakt.
+- **Hull forblir hull.** Feiler ett språk, lagres det som uoversatt — ikke som en kopi av
+  kildeteksten (#892) — og du får vite hvilket språk det gjelder.
+
+**«Avbryt» er tilbake, men bare her.** Knappen ble fjernet i v1.1.98 fordi den endte samtalen i
+en blindvei uten vei videre. Det stemte da; nå fører avbrudd tilbake til skjemaet ditt, som er
+en gjenoppretting og ikke en blindvei. Øvrige framdriftsmeldinger beholder tilstanden fra
+v1.1.98. Merk at avbrudd **foreldreløser** kallet i stedet for å stoppe det — signalet er ikke
+trådd gjennom nettverkslaget — så LLM-kallet fullfører i bakgrunnen og resultatet forkastes.
+
+Publiseringsgaten kommer i S4; etter S2 kan en modul fortsatt lagres med hull i oversettelsen.
+
 ## 2.12.4 - 2026-08-14
 
 Sammenslåing av #896 S1 (faneomlegging) og fasit-fiksen på moduleksport, for felles testing
