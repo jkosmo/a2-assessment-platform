@@ -180,7 +180,15 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 **Certification invariant (#476/#525):** a course completion / certificate is issued only when a
 participant has **passed all modules** in the course **and read all learning sections**. This is
 re-checked both when a module is passed and when a section is marked read.
-| `GET` | `/api/admin/content/modules/:moduleId/export` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `GET` | `/api/admin/content/modules/:moduleId/export` | ADMINISTRATOR, or an **owner of this module** |
+
+`/modules/:moduleId/export` returns the full editing bundle for the module, **including MCQ
+`correctAnswer` and `rationale`**. Access is owner-or-administrator (`assertModuleOwnership`),
+not merely role-based. Until v2.11.11 the answer key was stripped for non-administrators; that
+redaction was removed because the route is already owner-guarded, the same owner receives the
+same answers from `/export-package`, and the admin UI loads the module through this endpoint —
+so the redaction left the owner editing their own module without its answer key.
+
 | `DELETE` | `/api/admin/content/modules/:moduleId` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/generate/module-draft` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/generate/mcq` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
