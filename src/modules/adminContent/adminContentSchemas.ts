@@ -14,6 +14,27 @@ export const localizedTextPatchObjectSchema = localizedTextObjectSchema.partial(
 );
 export const localizedTextPatchSchema = z.union([z.string().trim().min(1), localizedTextPatchObjectSchema]);
 
+/**
+ * #905: content written in one language and NOT YET translated into the others.
+ *
+ * `localizedTextSchema` accepts either a plain string or an object holding ALL three locales —
+ * there is no way to say "nb is translated, nn is not". That gap made the honesty rule from
+ * #892 unenforceable for anything but titles: a client whose translation partly failed had to
+ * choose between a 400 (partial object) and filling every locale with the source text, which
+ * stores content that looks translated and reads as the wrong language.
+ *
+ * This alias permits a partial map, requiring at least one locale. Reading is unaffected —
+ * `localizeContentText` already falls back across locales, which is how a plain string has
+ * always displayed. A missing locale becomes a fact the data can express, which is what the
+ * publish gate (#896 S4) and the translation-status list (#894) need in order to measure
+ * anything at all.
+ *
+ * Named separately from `localizedTextPatchSchema` even though the shape is identical: a patch
+ * is "change these locales, leave the rest", while this is "this is the whole value, and some
+ * locales are genuinely missing". Same validation, different meaning at the call site.
+ */
+export const localizedTextMaybeUntranslatedSchema = localizedTextPatchSchema;
+
 export function localizedTextIdentity(value: LocalizedText): string {
   if (typeof value === "string") {
     return `plain:${value.trim()}`;
@@ -157,9 +178,11 @@ export const assessmentModeSchema = z.enum(["FREETEXT_PLUS_MCQ", "MCQ_ONLY", "FR
 export const moduleVersionBodySchema = z
   .object({
     assessmentMode: assessmentModeSchema.optional(),
-    taskText: localizedTextSchema.optional(),
-    assessorExpectedContent: localizedTextSchema.optional(),
-    candidateTaskConstraints: localizedTextSchema.optional(),
+    // #905: these are the fields an author writes in one language and has translated
+    // afterwards, so they must be able to arrive partially translated.
+    taskText: localizedTextMaybeUntranslatedSchema.optional(),
+    assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
+    candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.optional(),
     assessmentBlueprint: z.string().trim().optional(),
     rubricVersionId: z.string().min(1).optional(),
     promptTemplateVersionId: z.string().min(1).optional(),

@@ -2133,9 +2133,14 @@ async function saveDraftBundleInBackground(options = {}) {
       method: "POST",
       body: JSON.stringify({
         assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : undefined,
-        taskText: translateLocalizedText(taskText),
-        assessorExpectedContent: translateLocalizedText(assessorExpectedContent),
-        candidateTaskConstraints: omitWhenEveryLocaleBlank(translateLocalizedText(candidateTaskConstraints)),
+        // #905: send the value as it is. translateLocalizedText used to blow a plain string up
+        // into three identical locales here - not because the API demanded it, but out of
+        // habit - which stored the source language under every locale and made an untranslated
+        // field indistinguishable from a translated one. The schema accepts a plain string
+        // ("one language, not translated yet") and now also a partial map.
+        taskText,
+        assessorExpectedContent,
+        candidateTaskConstraints: omitWhenEveryLocaleBlank(candidateTaskConstraints),
         assessmentBlueprint: assessmentBlueprint || undefined,
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,

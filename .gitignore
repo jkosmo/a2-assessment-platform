@@ -30,3 +30,6 @@ doc/pentest/PENTEST-*.md
 
 # Local course-asset storage fallback (dev/test)
 .course-assets-local/
+
+# Cross-model QA gate output (scripts/ai-qa.ps1)
+.ai-qa/
