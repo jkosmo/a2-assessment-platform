@@ -271,6 +271,11 @@ envelope inlines each module’s full payload including MCQ answer keys, and
 `GET .../enrollments`, which returns participant names, e-mail, department and progress. Both
 return `403 content_ownership` for a non-owner SMO.
 
+Course ownership is deliberately **not** module ownership: a course owner exporting their own
+course receives the inlined payload of every module in it, including modules authored by someone
+else and their MCQ answer keys. Accepted scope (#903) — the guard is about reading courses you
+have nothing to do with, not about partitioning content inside a course you assembled.
+
 ### Courses
 
 | Method | Route | Description |

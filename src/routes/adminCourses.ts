@@ -221,8 +221,11 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
 // SUBJECT_MATTER_OWNER could therefore download another owner's answer keys by exporting their
 // course. Guarded like the siblings.
 //
-// Still open in #903: course ownership is not module ownership. A course may contain modules
-// owned by someone else, so the owner of the course still receives their answer keys here.
+// Deliberate scope (product decision 2026-08-14, #903): course ownership is NOT module
+// ownership, and this route does not check the latter. A course owner who has assembled
+// another author's module into their course receives that module's answer key in the export.
+// Accepted: the course is theirs, the content is what they put in it, and an answer key is
+// not a state secret. What this guard stops is reading a course you have nothing to do with.
 adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const actorId = request.context?.userId;
   if (!actorId) {
