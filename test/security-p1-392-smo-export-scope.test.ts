@@ -27,7 +27,12 @@ const moduleBody = {
   title: { "en-GB": "Export Scope Test Module", nb: "Eksportomfangsmodul", nn: "Eksportomfangsmodul" },
 };
 
-describe("Security P1 #392: SMO content scope and MCQ answer key protection on export", () => {
+// #392 established two controls on module export. The SCOPE control stands: an SMO may only
+// export a module they own. The answer-key redaction was removed on 2026-08-14 - it hid the
+// key from the very person who wrote it, while /export-package handed the same owner the same
+// key anyway, and its only real effect was a lossy backup (export -> import lost the answers
+// with no warning).
+describe("Security P1 #392: SMO content scope on module export", () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
@@ -48,7 +53,7 @@ describe("Security P1 #392: SMO content scope and MCQ answer key protection on e
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
-  it("SMO export omits correctAnswer and rationale from MCQ questions; admin export includes them", async () => {
+  it("an owner's export includes correctAnswer and rationale, like an admin's", async () => {
     const createRes = await request(app)
       .post("/api/admin/content/modules")
       .set(smoAHeaders)
@@ -56,7 +61,6 @@ describe("Security P1 #392: SMO content scope and MCQ answer key protection on e
     expect(createRes.status).toBe(201);
     const moduleId = createRes.body.module.id as string;
 
-    // Create an MCQ set version with a question that has correctAnswer and rationale
     const mcqRes = await request(app)
       .post(`/api/admin/content/modules/${moduleId}/mcq-set-versions`)
       .set(smoAHeaders)
@@ -77,7 +81,7 @@ describe("Security P1 #392: SMO content scope and MCQ answer key protection on e
       });
     expect(mcqRes.status).toBe(201);
 
-    // SMO export: correctAnswer and rationale must be absent
+    // The owner gets a complete module back - anything less is a lossy backup.
     const smoExportRes = await request(app)
       .get(`/api/admin/content/modules/${moduleId}/export`)
       .set(smoAHeaders);
@@ -87,24 +91,17 @@ describe("Security P1 #392: SMO content scope and MCQ answer key protection on e
     const smoVersionQuestions = smoExport.versions.mcqSetVersions?.[0]?.questions ?? [];
     expect(smoVersionQuestions.length).toBeGreaterThan(0);
     for (const q of smoVersionQuestions) {
-      expect(q).not.toHaveProperty("correctAnswer");
-      expect(q).not.toHaveProperty("rationale");
-    }
-    if (smoExport.selectedConfiguration?.mcqSetVersion?.questions) {
-      for (const q of smoExport.selectedConfiguration.mcqSetVersion.questions) {
-        expect(q).not.toHaveProperty("correctAnswer");
-        expect(q).not.toHaveProperty("rationale");
-      }
+      expect(q).toHaveProperty("correctAnswer");
+      expect(q).toHaveProperty("rationale");
     }
 
-    // Admin export: correctAnswer and rationale must be present
+    // Admin sees exactly the same shape - the two exports no longer diverge.
     const adminExportRes = await request(app)
       .get(`/api/admin/content/modules/${moduleId}/export`)
       .set(adminHeaders);
     expect(adminExportRes.status).toBe(200);
 
-    const adminExport = adminExportRes.body.moduleExport;
-    const adminVersionQuestions = adminExport.versions.mcqSetVersions?.[0]?.questions ?? [];
+    const adminVersionQuestions = adminExportRes.body.moduleExport.versions.mcqSetVersions?.[0]?.questions ?? [];
     expect(adminVersionQuestions.length).toBeGreaterThan(0);
     for (const q of adminVersionQuestions) {
       expect(q).toHaveProperty("correctAnswer");
