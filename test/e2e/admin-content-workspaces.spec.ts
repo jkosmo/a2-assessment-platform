@@ -728,6 +728,77 @@ test.describe("admin content browser coverage", () => {
     ).toHaveCount(0);
   });
 
+  test("discarding while a save is running writes nothing", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    // Hold the translation open so the discard lands mid-save.
+    await page.route("**/generate/module-draft/localize", async () => {
+      await new Promise(() => {});
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Skal forkastes");
+    await page.locator("#previewEditConfirm").click();
+
+    // The form's own Cancel is disabled while saving, so the discard has to abort the save
+    // itself - otherwise the translation resolves later and saves what was just discarded.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/),
+    ).toHaveCount(0);
+  });
+
+  test("a failed translation saves one language honestly instead of three copies", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.route("**/generate/module-draft/localize", async (route: Route) => {
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").fill("Fagforeninger");
+    await page.locator("#previewEditConfirm").click();
+
+    // The save still goes through - but the untranslated locales must stay untranslated.
+    // Copying the source text into all three is precisely the #892 bug.
+    await expect.poll(() => state.lastTitlePatchBody?.title).toBeTruthy();
+    expect(typeof state.lastTitlePatchBody.title).toBe("string");
+    expect(state.lastTitlePatchBody.title).toBe("Fagforeninger");
+  });
+
   test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

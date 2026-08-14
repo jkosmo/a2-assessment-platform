@@ -1238,6 +1238,26 @@ function updateStateRail() {
   }
 }
 
+// #896 S2 / #892: localizeDraftAcrossLocalesWithTitle does NOT reject when a locale fails - it
+// falls back to the source text for that locale and names it in `failedLocales`. Saving that map
+// as-is stores the source language under every locale: content that looks translated and reads
+// as the wrong language, which is exactly what #892 fixed for titles.
+//
+// So strip the failed locales back out. What remains is the truth: the locales that really were
+// translated. If nothing survives but the source, send a plain string - the agreed encoding for
+// "written in one language, not translated yet".
+function dropFailedLocales(localizedValue, failedLocales, sourceLocale) {
+  if (!failedLocales?.length || !localizedValue || typeof localizedValue !== "object") return localizedValue;
+  const kept = {};
+  for (const [locale, value] of Object.entries(localizedValue)) {
+    if (!failedLocales.includes(locale)) kept[locale] = value;
+  }
+  const remaining = Object.keys(kept);
+  if (remaining.length === 0) return "";
+  if (remaining.length === 1 && remaining[0] === sourceLocale) return kept[sourceLocale];
+  return kept;
+}
+
 function buildPreviewCandidate(patch) {
   const baseDraft = previewDraft ?? sessionDraft ?? {};
   return {
@@ -3864,7 +3884,12 @@ function enterPreviewEditMode() {
     // #665: free-text inputs are absent for MCQ-only — guard the reads and keep the fields empty.
     const newTaskText = editIsMcqOnly ? "" : (document.getElementById("previewEditTaskText")?.value.trim() || currentTaskText);
     const newGuidanceText = editIsMcqOnly ? "" : (document.getElementById("previewEditGuidanceText")?.value.trim() || currentGuidanceText);
-    const newCandidateTaskConstraints = editIsMcqOnly ? "" : (document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() || currentCandidateTaskConstraints);
+    // ?? not ||: "Rammer for kandidaten" is optional, so an emptied field must stay empty.
+    // With || an author who deleted it got the old text silently restored - and if that was
+    // the only edit, the save reported "nothing changed".
+    const newCandidateTaskConstraints = editIsMcqOnly
+      ? ""
+      : (document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() ?? currentCandidateTaskConstraints);
     // B2 (#449 redesign): capture criteria-editor state into a normalized record before
     // exitEditMode tears down the DOM. transform to storage shape (id-keyed) with weight
     // derived from maxScore. Empty/blank labels are dropped (matching the validation in
@@ -3887,7 +3912,8 @@ function enterPreviewEditMode() {
         stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
         options,
         correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
-        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+        // ?? not ||: the rationale is optional and must be clearable (same trap as above).
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() ?? question.rationale,
       };
     });
 
@@ -3898,13 +3924,14 @@ function enterPreviewEditMode() {
     // Order is load-bearing: translate first (abortable, nothing written), then persist
     // (not abortable). Abort therefore means nothing was written - and because the form is
     // left standing until the translation resolves, the author keeps every typed value.
+    const criteriaUnchanged = JSON.stringify(newCriteriaRecord) === JSON.stringify(existingCriteriaRecord);
     const nothingChanged =
       newTitle === currentTitle
       && newTaskText === currentTaskText
       && newGuidanceText === currentGuidanceText
       && newCandidateTaskConstraints === currentCandidateTaskConstraints
       && JSON.stringify(newMcqQuestions) === JSON.stringify(currentMcqQuestions)
-      && JSON.stringify(newCriteriaRecord) === JSON.stringify(existingCriteriaRecord);
+      && criteriaUnchanged;
     if (nothingChanged) {
       // No edit means no LLM round and no new version - saving an identical copy would
       // spend a translation and leave a version nobody asked for.
@@ -3917,35 +3944,43 @@ function enterPreviewEditMode() {
     const editActions = previewContent.querySelector(".preview-edit-actions");
     const setFormBusy = (busy) => {
       for (const button of editActions?.querySelectorAll("button") ?? []) button.disabled = busy;
+      // The locale picker rebuilds the chat AND the edit form (retranslateChat), which would
+      // leave the in-flight save writing the OLD values over a freshly rebuilt form. One save
+      // owns the session until it resolves or is aborted.
+      if (uiLocaleSelect) uiLocaleSelect.disabled = busy;
+      for (const btn of previewLocaleBar?.querySelectorAll("button") ?? []) btn.disabled = busy;
     };
     setFormBusy(true);
 
     const abort = startGeneration();
     const slot = logProgress(() => t("shell.directEdit.translatingAndSaving"), { abortable: true });
-    slot.abortBtn.addEventListener("click", () => {
-      abort.abort();
+    // The AbortController is not wired through to the localize requests, so the in-flight call
+    // cannot be stopped - it is ORPHANED instead. Because nothing is written until the
+    // translation resolves, and `commit` refuses to run once aborted, the stray response lands
+    // nowhere. Hang the restore off the SIGNAL, not the button, so a programmatic abort (a tab
+    // switch discarding the form, a locale change) unwinds exactly the same way.
+    abort.signal.addEventListener("abort", () => {
       slot.abortBtn.disabled = true;
-      // The AbortController is not wired through to the localize requests, so the in-flight
-      // call cannot be stopped - it is ORPHANED instead. Because nothing is written until the
-      // translation resolves, and `commit` refuses to run once aborted, the stray response
-      // simply lands nowhere. Give the author the form back immediately rather than making
-      // them wait for a call whose result is already discarded.
       generationAbort = null;
       setFormBusy(false);
       logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.saveAborted")));
-    });
+    }, { once: true });
+    slot.abortBtn.addEventListener("click", () => abort.abort());
 
     const commit = (localized, localizedMcqQuestions, failedLocales) => {
       generationAbort = null;
       // The form goes away only now, once there is something to save.
       exitEditMode();
       sessionDraft = buildPreviewCandidate({
-        title: localized.title,
-        taskText: localized.taskText,
-        assessorExpectedContent: localized.assessorExpectedContent,
-        candidateTaskConstraints: localized.candidateTaskConstraints,
+        title: dropFailedLocales(localized.title, failedLocales, editingLocale),
+        taskText: dropFailedLocales(localized.taskText, failedLocales, editingLocale),
+        assessorExpectedContent: dropFailedLocales(localized.assessorExpectedContent, failedLocales, editingLocale),
+        candidateTaskConstraints: dropFailedLocales(localized.candidateTaskConstraints, failedLocales, editingLocale),
         mcqQuestions: localizedMcqQuestions,
-        criteria: editIsMcqOnly ? null : newCriteriaRecord,
+        // Only send criteria when they were actually edited. Rewriting an untouched rubric
+        // on every save would collapse its localized labels to one language every time (#902);
+        // leaving it alone keeps that bug confined to authors who really did edit criteria.
+        criteria: (editIsMcqOnly || criteriaUnchanged) ? null : newCriteriaRecord,
         // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
         // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
         ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
@@ -3977,17 +4012,20 @@ function enterPreviewEditMode() {
         // Already handled by the abort listener above - the form is back and the slot is
         // resolved. Nothing was written, so there is nothing to undo here.
         if (abort.signal.aborted) return;
-        // Translation failed outright. Saving the source-language text as plain strings is
-        // the honest outcome - the other locales are simply not translated yet.
+        // Translation failed outright. Send PLAIN STRINGS: under #892 a plain string means
+        // "written in one language, not translated yet", which is the truth here.
+        // buildLocalizedTextMap would instead copy the source text into all three locales -
+        // content that looks translated and reads as the wrong language, the exact bug #892
+        // fixed. Every target locale is reported as failed so the author is told.
         commit(
           {
-            title: buildLocalizedTextMap(editingLocale, newTitle),
-            taskText: buildLocalizedTextMap(editingLocale, newTaskText),
-            assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
-            candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
+            title: newTitle,
+            taskText: newTaskText,
+            assessorExpectedContent: newGuidanceText,
+            candidateTaskConstraints: newCandidateTaskConstraints,
           },
-          buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
-          null,
+          newMcqQuestions,
+          supportedLocales.filter((locale) => locale !== editingLocale),
         );
       });
   });
@@ -4264,7 +4302,13 @@ function bindViewTabs() {
     // changes, which removes #previewEditCancel - and then its handler never runs, leaving
     // preview-pane--editing, criteriaReadyCallback and the chat actions stranded until a
     // reload. Only an open form is discarded; a draft is carried along untouched.
-    if (kind === "form") document.getElementById("previewEditCancel")?.click();
+    if (kind === "form") {
+      // A save in flight has disabled that Cancel button, so clicking it would do NOTHING and
+      // the running translation would go on to save the values just discarded. Abort first:
+      // the signal handler re-enables the form, and commit() refuses to run once aborted.
+      generationAbort?.abort();
+      document.getElementById("previewEditCancel")?.click();
+    }
     applyTabState(target);
     syncTabToUrl(target);
     tabButtons[target]?.focus();

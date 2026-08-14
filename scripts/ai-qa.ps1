@@ -344,7 +344,11 @@ $findings
     if ($verdict -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') { $missing += 'VERDIKT' }
     # The colon is required, not optional: with ':?' the trailing '\S' happily matched the
     # colon itself, so a bare heading passed - verified against both cases before landing.
-    if ($verdict -notmatch '(?im)^[ \t]*IKKE VERIFISERBART STATISK[ \t]*:[ \t]*(\S|\r?\n[ \t]*\S)') { $missing += 'IKKE VERIFISERBART STATISK' }
+    # (\r?\n[ \t]*)+ rather than a single newline: the model usually leaves a BLANK line
+    # between the heading and its first bullet, and the stricter pattern reported a complete
+    # review as incomplete. Table-tested against heading-only, heading+blank, blank-then-item,
+    # item-directly-under, same-line and quoted-mention.
+    if ($verdict -notmatch '(?im)^[ \t]*IKKE VERIFISERBART STATISK[ \t]*:[ \t]*(\S|(\r?\n[ \t]*)+\S)') { $missing += 'IKKE VERIFISERBART STATISK' }
     if ($missing.Count -gt 0) {
         Write-Host ""
         Write-Host "Incomplete review - missing: $($missing -join ', ')." -ForegroundColor Red
