@@ -610,6 +610,72 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
+  test("an unsaved draft warns on tab switch and is carried along, not discarded", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Produce an unsaved draft without opening the edit form: confirm a direct edit, which
+    // leaves a sessionDraft behind and makes the status rail say "unsaved".
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
+
+    // A draft is an investment whoever made it, so the switch is not silent...
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    // ...but nothing is destroyed by switching, so the wording and the button say so.
+    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept when you switch|beholdes/);
+    await expect(page.locator("#tabSwitchDiscard")).toHaveText(/Switch anyway|Bytt likevel/);
+
+    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+
+    // Switching anyway keeps the draft - it is still what the preview renders.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
+  });
+
+  test("the active tab survives a reload through the URL", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await expect(page).toHaveURL(/[?&]tab=settings/);
+
+    await page.reload();
+    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+
+    // Rediger is the default, so it stays out of the URL rather than pinning the plain route.
+    await page.locator("#tabEdit").click();
+    await expect(page).not.toHaveURL(/[?&]tab=/);
+  });
+
   test("Forhaandsvisning withholds the answer key and assessor-only content", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

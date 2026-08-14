@@ -2,6 +2,20 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.12.2 - 2026-08-14
+
+**To avklaringer fra produkteier på #896 S1.**
+
+Advarselen ved fanebytte gjelder nå **også et generert arbeidsutkast**, ikke bare et åpent
+redigeringsskjema: et utkast er en investering enten et menneske eller en modell laget det, og
+skal ikke forlates stille. Signalet er det samme som statuslinjens «Ulagrede endringer».
+Kostnaden er ulik i de to tilfellene, så dialogen sier hvilken det er — feltverdier i et åpent
+skjema *går tapt* («Forkast og bytt»), mens et utkast *beholdes, men er ulagret* («Bytt likevel»).
+
+**Aktiv fane ligger nå i URL-en** (`?tab=preview` / `?tab=settings`), så den overlever refresh og
+kan deles. Rediger er standard og holdes utenfor query-strengen, slik at den rene ruta forblir
+kanonisk. `replaceState` brukes med vilje: Tilbake skal bety forrige side, ikke forrige fane.
+
 ## 2.12.1 - 2026-08-14
 
 QA-runder på #896 S1: deltakervisning i Forhåndsvisning, tastatur og fokus i fanelista, og

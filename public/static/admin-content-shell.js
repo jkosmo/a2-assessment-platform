@@ -4046,14 +4046,41 @@ function openAdvancedEditor(moduleId) {
 // Forhaandsvisning renders.
 // ---------------------------------------------------------------------------
 
-let activeTab = "edit";
+// Declared before tabFromUrl() runs at module scope - a const in the temporal dead zone
+// would throw on load and take the whole shell with it.
+const TAB_ORDER = ["preview", "edit", "settings"];
+const TAB_QUERY_PARAM = "tab";
+
+function tabFromUrl() {
+  const requested = new URLSearchParams(location.search).get(TAB_QUERY_PARAM);
+  return TAB_ORDER.includes(requested) ? requested : "edit";
+}
+
+function syncTabToUrl(tab) {
+  const url = new URL(location.href);
+  if (tab === "edit") url.searchParams.delete(TAB_QUERY_PARAM);
+  else url.searchParams.set(TAB_QUERY_PARAM, tab);
+  // replaceState, not pushState: tabs are a view of one module, and filling the back stack
+  // with them would make Back mean "previous tab" instead of "previous page".
+  history.replaceState(history.state, "", url);
+}
+
+let activeTab = tabFromUrl();
 let pendingTabSwitch = null;
+let pendingTabSwitchKind = null;
 
 function hasOpenEditForm() {
   return !!document.getElementById("previewEditConfirm");
 }
 
-const TAB_ORDER = ["preview", "edit", "settings"];
+// Same signal as the status rail's "Ulagrede endringer": if the rail calls it unsaved, a
+// tab switch says so too. The two cost different things, so the dialog says which:
+// an open form's field values are LOST, while a draft is kept but stays unsaved.
+function unsavedTabSwitchKind() {
+  if (hasOpenEditForm()) return "form";
+  if (sessionDraft) return "draft";
+  return null;
+}
 
 function applyTabState(tab) {
   // Forhaandsvisning renders the same module for a different audience, so crossing that
@@ -4085,13 +4112,25 @@ function applyTabState(tab) {
 
 function switchToTab(tab) {
   if (tab === activeTab) return;
-  if (tab !== "edit" && hasOpenEditForm()) {
-    if (!unsavedTabSwitchDialog) return;
+  // Leaving Rediger is the only direction that can strand unsaved work; going back TO it
+  // is returning to where the work is.
+  const kind = tab === "edit" ? null : unsavedTabSwitchKind();
+  if (kind && unsavedTabSwitchDialog) {
     pendingTabSwitch = tab;
+    pendingTabSwitchKind = kind;
+    const body = document.getElementById("unsavedTabSwitchBody");
+    const confirmBtn = document.getElementById("tabSwitchDiscard");
+    if (body) body.textContent = t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.draftBody");
+    if (confirmBtn) {
+      confirmBtn.textContent = t(kind === "form" ? "shell.tab.unsaved.discard" : "shell.tab.unsaved.switchAnyway");
+      // Nothing is destroyed when only a draft is unsaved, so the action is not destructive.
+      confirmBtn.className = kind === "form" ? "btn-danger" : "btn-primary";
+    }
     unsavedTabSwitchDialog.showModal();
     return;
   }
   applyTabState(tab);
+  syncTabToUrl(tab);
   if (tab === "settings") scrollPreviewToTop();
 }
 
@@ -4118,6 +4157,7 @@ function bindViewTabs() {
 
   const stayOnCurrentTab = () => {
     pendingTabSwitch = null;
+    pendingTabSwitchKind = null;
     // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
     // leave focus on a tab that is not the selected one - or nowhere, in the closed
     // dialog. Put focus back where the selection actually is.
@@ -4138,16 +4178,19 @@ function bindViewTabs() {
 
   document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
     const target = pendingTabSwitch;
+    const kind = pendingTabSwitchKind;
     pendingTabSwitch = null;
+    pendingTabSwitchKind = null;
     unsavedTabSwitchDialog?.close();
     if (!target) return;
     // Switch first: the tab the author asked for must not depend on the teardown below.
     applyTabState(target);
+    syncTabToUrl(target);
     tabButtons[target]?.focus();
-    // Then discard the form by pressing its own Cancel. exitEditMode() is scoped inside
-    // enterPreviewEditMode and unreachable from here, and Cancel already does exactly the
-    // right thing - tear down the fields, restore the preview, put the chat actions back.
-    document.getElementById("previewEditCancel")?.click();
+    // Only an open form is discarded - a draft is carried along untouched. The form is torn
+    // down by pressing its own Cancel: exitEditMode() is scoped inside enterPreviewEditMode
+    // and unreachable from here, and Cancel already restores the preview and chat actions.
+    if (kind === "form") document.getElementById("previewEditCancel")?.click();
   });
 
   // Until S3 moves the fields in, Innstillinger hands off to the Avansert page and
