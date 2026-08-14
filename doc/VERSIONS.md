@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.11.12 - 2026-08-14
+
+**Kurseksport krever nå eierskap (#903).** `GET /courses/:id/export-package` hadde ingen
+eierskapskontroll, mens alle søsterrutene på `:courseId` har det. Pakken er selvstendig og
+inlin-er hele modulinnholdet, inkludert MCQ-fasit og begrunnelse — så en SMO kunne laste ned
+fasiten til andres moduler ved å eksportere kurset de lå i.
+
+Modulens egen eksport var vaktet. Kursvarianten var veien rundt.
+
+Fortsatt åpent i #903: eierskap til et *kurs* er ikke eierskap til *modulene* i det. Et kurs
+kan inneholde andres moduler, og kurseieren får fortsatt deres fasit gjennom denne ruta.
+
 ## 2.11.10 - 2026-08-13
 
 **Språkbytte under Direkte redigering ga en blindvei.** Rapportert fra stage: bytt arbeidsflatens

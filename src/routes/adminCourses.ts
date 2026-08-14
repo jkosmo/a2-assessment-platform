@@ -216,7 +216,14 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
 // Self-contained: inlines each referenced module's full active-version payload
 // so the file can recreate the course in another environment without external
 // lookups. Counterpart to /api/admin/content/modules/:id/export-package.
-adminCoursesRouter.get("/:courseId/export-package", async (request, response, next) => {
+// #903: this route had no ownership guard while every sibling on :courseId has one, and the
+// envelope inlines each module's full payload - MCQ correctAnswer and rationale included. Any
+// SUBJECT_MATTER_OWNER could therefore download another owner's answer keys by exporting their
+// course. Guarded like the siblings.
+//
+// Still open in #903: course ownership is not module ownership. A course may contain modules
+// owned by someone else, so the owner of the course still receives their answer keys here.
+adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   const actorId = request.context?.userId;
   if (!actorId) {
     response.status(401).json({ error: "unauthorized" });

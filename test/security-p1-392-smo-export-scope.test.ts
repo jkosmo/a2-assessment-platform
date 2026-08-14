@@ -114,6 +114,31 @@ describe("Security P1 #392: SMO content scope and MCQ answer key protection on e
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
+  // #903: the module route was guarded, the COURSE route was not - and a course export
+  // inlines each module's full payload, answer keys included. Exporting someone else's course
+  // was therefore a way around the module guard above.
+  it("SMO-B is denied export of a course owned by SMO-A", async () => {
+    const courseRes = await request(app)
+      .post("/api/admin/content/courses")
+      .set(smoAHeaders)
+      .send({ title: { "en-GB": "Export Scope Course", nb: "Eksportomfangskurs", nn: "Eksportomfangskurs" } });
+    expect(courseRes.status).toBe(201);
+    const courseId = courseRes.body.course.id as string;
+
+    const exportBRes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/export-package`)
+      .set(smoBHeaders);
+    expect(exportBRes.status).toBe(403);
+
+    // The owner still reaches it - the guard is about who, not about disabling the feature.
+    const exportARes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/export-package`)
+      .set(smoAHeaders);
+    expect(exportARes.status).not.toBe(403);
+
+    await request(app).delete(`/api/admin/content/courses/${courseId}`).set(adminHeaders);
+  });
+
   it("admin can export any module regardless of ownership", async () => {
     const createRes = await request(app)
       .post("/api/admin/content/modules")
