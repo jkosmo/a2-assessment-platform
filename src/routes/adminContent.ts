@@ -376,28 +376,6 @@ adminContentRouter.post("/intent-log", intentLogLimiter, async (request, respons
   response.status(204).end();
 });
 
-type McqSetVersionBundle = Awaited<ReturnType<typeof getModuleContentBundle>>["versions"]["mcqSetVersions"][number];
-
-function redactMcqAnswerKeys(bundle: Awaited<ReturnType<typeof getModuleContentBundle>>) {
-  const stripAnswers = (v: McqSetVersionBundle) => ({
-    ...v,
-    questions: v.questions.map(({ correctAnswer: _c, rationale: _r, ...rest }) => rest),
-  });
-  return {
-    ...bundle,
-    selectedConfiguration: {
-      ...bundle.selectedConfiguration,
-      mcqSetVersion: bundle.selectedConfiguration.mcqSetVersion
-        ? stripAnswers(bundle.selectedConfiguration.mcqSetVersion)
-        : null,
-    },
-    versions: {
-      ...bundle.versions,
-      mcqSetVersions: bundle.versions.mcqSetVersions.map(stripAnswers),
-    },
-  };
-}
-
 adminContentRouter.get("/modules/:moduleId/export", async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
@@ -406,11 +384,16 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
   }
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    // The export carries the MCQ answer key and rationale for everyone who gets this far.
+    //
+    // #392 (v1.1.11) stripped them for non-ADMINISTRATOR callers. That control protected
+    // nothing: assertModuleOwnership above already limits this route to an owner of THIS
+    // module or an admin, the owner authored the answers and reads them in the editor, and
+    // /modules/:id/export-package hands the same owner the same answers untouched. All it
+    // achieved was a lossy backup - export then import silently returned a module with no
+    // answer key. Product decision 2026-08-14: the key belongs in the export.
     const bundle = await getModuleContentBundle(request.params.moduleId);
-    const moduleExport = request.context?.roles?.includes("ADMINISTRATOR")
-      ? bundle
-      : redactMcqAnswerKeys(bundle);
-    response.json({ moduleExport });
+    response.json({ moduleExport: bundle });
   } catch (error) {
     if (error instanceof AppError) {
       response.status(error.httpStatus).json({ error: error.code, message: error.message });

@@ -2,6 +2,12 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.12.4 - 2026-08-14
+
+Sammenslåing av #896 S1 (faneomlegging) og fasit-fiksen på moduleksport, for felles testing
+på stage. Se oppføringene under for hva hver av dem gjør — de er uavhengige endringer:
+S1 rører bare forfatterflaten, eksport-fiksen bare backend-ruta.
+
 ## 2.12.3 - 2026-08-14
 
 Fjerde QA-runde på #896 S1. Sju funn, to av dem alvorlige, og de fleste følgefeil av de to
@@ -68,6 +74,22 @@ ikke deltakerkomponenten selv, så den er tro mot *hva* som vises, ikke mot piks
 
 Gjenstår i epicen: samlet lagring (S2), oppløsning av Avansert (S3), publiseringsgate for
 oversettelse (S4), utkastversjonering (S5), eksport/import (S6) og opprydding (S7).
+## 2.11.11 - 2026-08-14
+
+**Fasiten følger med i moduleksporten igjen.** `GET /modules/:id/export` fjernet `correctAnswer`
+og `rationale` for alle uten ADMINISTRATOR-rolle. Det ble innført som sikkerhetsfiks #392 i
+v1.1.11, men kontrollen viste seg å være virkningsløs:
+
+- Ruta krever allerede at du **eier** modulen (`assertModuleOwnership`), så den som fikk en
+  redigert eksport var forfatteren selv — som leser fasiten i redigeringsflaten uansett.
+- `GET /modules/:id/export-package` gir den samme eieren de samme svarene uredigert. Fasiten
+  var altså allerede tilgjengelig for nøyaktig samme person.
+
+Den eneste reelle effekten var en **ufullstendig sikkerhetskopi**: eksport etterfulgt av import
+ga en modul uten fasit, uten at noe varslet om det.
+
+Omfangskontrollen fra #392 står urørt — en SMO kan fortsatt bare eksportere moduler hen eier,
+og det er fortsatt dekket av test.
 
 ## 2.11.10 - 2026-08-13
 
