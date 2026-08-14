@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.13.1 - 2026-08-14
+
+To QA-runder på S2, med til sammen femten funn. De som betyr mest:
+
+- **Forkast under pågående lagring lagret likevel.** S1 river skjemaet ved å klikke dets egen
+  Avbryt-knapp, S2 deaktiverer knappene mens lagringen går — hver for seg riktig, sammen en
+  datataps-vei. Forkast avbryter nå lagringen først, og en oversettelse som blir ferdig mens
+  dialogen står åpen lagrer ikke.
+- **Språkvelgeren ble stående deaktivert etter en vellykket lagring.** Bare avbrudds-stien
+  slapp den fri, så en normal lagring låste UI-språket for resten av økten.
+- **Urørte kriterier ble nullet ut.** Fiksen som skulle la dem være, sendte `criteria: null`,
+  som overskrev kriterier utkastet allerede bar på. Nøkkelen utelates nå i stedet.
+- **«Synlig for kandidat» vises ikke lenger i Forhåndsvisning** — det er et forfatterspørsmål,
+  ikke noe deltakeren skal se svaret på.
+
+Og to steder der en fiks måtte rulles tilbake fordi den ville brukket lagringen:
+
+- **Tømming av MCQ-begrunnelse** ble gjort mulig i skjemaet, men både lokaliserings- og
+  lagringsskjemaet avviser tom streng. Resultatet ville vært 400 *etter* at tittel og rubrikk
+  allerede var skrevet. Tilbakestilt; kontraktsfiksen hører hjemme i skjemaet.
+- **«Hull forblir hull» gjelder foreløpig bare tittelen.** Brødtekstfeltene kan ikke uttrykke
+  delvis oversettelse: skjemaet krever alle tre språk, og klienten utvider en ren streng til
+  tre kopier før den sendes. Se #905 — publiseringsgaten i S4 avhenger av at det løses.
+
 ## 2.13.0 - 2026-08-14
 
 **Samlet lagring i redigeringsskjemaet (#896, S2 av 7).** «Bekreft» er borte. Knappen heter nå

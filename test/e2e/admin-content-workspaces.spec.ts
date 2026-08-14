@@ -720,7 +720,9 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, /Cancel|Avbryt/);
 
     // The form is still standing, still holding the typed text, and nothing was written.
-    await expect(page.getByText(/nothing was saved|ingenting ble lagret/)).toBeVisible();
+    // Scoped to the chat: the same text also reaches #shellStatusAnnouncer for screen
+    // readers, which is intended - it just makes an unscoped locator ambiguous.
+    await expect(page.locator("#chatMessages").getByText(/nothing was saved|ingenting ble lagret/)).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
     // No version was written: the save never got past the (blocked) translation step.
     await expect(

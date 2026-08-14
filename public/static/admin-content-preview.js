@@ -255,7 +255,9 @@ function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === 
     const descHtml = description.trim()
       ? `<p class="preview-criterion-desc">${escapeHtml(description)}</p>`
       : "";
-    const visibleHtml = candidateVisible
+    // The marker answers an author's question ("does the learner see this?"), so showing it
+    // in the participant view is the answer contradicting itself.
+    const visibleHtml = candidateVisible && audience !== "participant"
       ? `<p class="preview-criterion-visible">✓ ${escapeHtml(t("shell.criteria.visibleToCandidate"))}</p>`
       : "";
     return `

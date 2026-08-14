@@ -3912,8 +3912,12 @@ function enterPreviewEditMode() {
         stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
         options,
         correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
-        // ?? not ||: the rationale is optional and must be clearable (same trap as above).
-        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() ?? question.rationale,
+        // Reverted to ||: an emptied rationale cannot be saved at all. Both the MCQ
+        // localization body and the MCQ-set body require a non-empty string, so clearing it
+        // produces a 400 AFTER the title and rubric may already have been written. Keeping
+        // the old text is wrong but harmless; a half-written save is not. The real fix is a
+        // schema that treats the rationale as genuinely optional - registered separately.
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
       };
     });
 
@@ -3968,19 +3972,39 @@ function enterPreviewEditMode() {
     slot.abortBtn.addEventListener("click", () => abort.abort());
 
     const commit = (localized, localizedMcqQuestions, failedLocales) => {
+      // The author has the discard dialog open and has not answered yet. Committing now would
+      // save values they may be about to discard - and would clear generationAbort, leaving
+      // the discard handler nothing to abort. Stand down; the discard path aborts, and the
+      // stay path lets the next resolution through.
+      if (pendingTabSwitchKind === "form") {
+        abort.abort();
+        return;
+      }
       generationAbort = null;
+      // Release the locale controls before the form is torn down. Only the abort path used to
+      // do this, so a SUCCESSFUL save left the UI language selector disabled for the rest of
+      // the session - with no failing test and no error to explain it.
+      setFormBusy(false);
       // The form goes away only now, once there is something to save.
       exitEditMode();
+      // Only the TITLE can carry the truth today. Its patch route keeps a plain string as
+      // "not translated yet" (#892). Body fields cannot: localizedTextSchema accepts either
+      // all three locales or a plain string, so a partial map is a 400 - and a plain string
+      // is expanded right back into three identical copies by translateLocalizedText before
+      // it is sent. Until that contract changes, a failed body translation is stored as the
+      // source text under every locale, and only the chat warning says otherwise. Registered
+      // rather than papered over; the publish gate in S4 is where it has to be resolved.
       sessionDraft = buildPreviewCandidate({
         title: dropFailedLocales(localized.title, failedLocales, editingLocale),
-        taskText: dropFailedLocales(localized.taskText, failedLocales, editingLocale),
-        assessorExpectedContent: dropFailedLocales(localized.assessorExpectedContent, failedLocales, editingLocale),
-        candidateTaskConstraints: dropFailedLocales(localized.candidateTaskConstraints, failedLocales, editingLocale),
+        taskText: localized.taskText,
+        assessorExpectedContent: localized.assessorExpectedContent,
+        candidateTaskConstraints: localized.candidateTaskConstraints,
         mcqQuestions: localizedMcqQuestions,
-        // Only send criteria when they were actually edited. Rewriting an untouched rubric
-        // on every save would collapse its localized labels to one language every time (#902);
-        // leaving it alone keeps that bug confined to authors who really did edit criteria.
-        criteria: (editIsMcqOnly || criteriaUnchanged) ? null : newCriteriaRecord,
+        // Only send criteria when they were actually edited: rewriting an untouched rubric on
+        // every save collapses its localized labels to one language (#902). OMIT the key -
+        // passing null would overwrite criteria the draft is already carrying (generated or
+        // handed off from Avansert) and the save would fall back to the old persisted rubric.
+        ...(editIsMcqOnly ? { criteria: null } : (criteriaUnchanged ? {} : { criteria: newCriteriaRecord })),
         // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
         // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
         ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
