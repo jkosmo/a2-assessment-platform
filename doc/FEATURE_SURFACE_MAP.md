@@ -394,3 +394,24 @@ on the module route explains the tabs…". DOM contract: `test/dom/admin-content
 `doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md`, `doc/design/SHELL_ADVANCED_PARITY.md`,
 `doc/pilot/VERIFICATION_CHECKLIST.md`. **S3 will move the settings fields into the tab and delete
 the Avansert page — update every row above in that PR.**
+
+## 17. Direct-edit save — one button, five transactions (#896 S2)
+
+`Lagre` in the direct-edit form translates **and** writes. The order is load-bearing: translate
+first (nothing written, abortable), persist second. Three flows now share one piece of state and
+must be changed together — three QA rounds found a defect in each pairing.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Capture + no-change check | `previewEditConfirm` handler in `public/static/admin-content-shell.js` | Baselines are captured when the form OPENS (`existingCriteriaRecord`). No edit ⇒ no LLM call and no version. Optional fields read with `??` where the schema tolerates empty (`candidateTaskConstraints`) and `||` where it does not (MCQ `rationale` — min(1), see below) |
+| Busy state | `setFormBusy` | Disables the form buttons **and** the UI/preview locale pickers: a locale switch runs `retranslateChat`, which rebuilds the form under a running save. Must be released on BOTH the success and abort paths — releasing only on abort left the language selector dead for the session |
+| Abort | `abort.signal` listener (not the button) | The AbortController is NOT wired to the localize requests, so the call is **orphaned**, not stopped: `commit()` refuses to run once aborted and the response lands nowhere. The LLM call still completes and still costs |
+| Interplay with the tab dialog | `pendingSaveCommit` + `unsavedTabSwitchKind` in the shell | A translation that resolves while the discard dialog is open is HELD: «Bli værende» finishes the save, «Forkast» drops it. Aborting on dialog-open threw away a completed translation; committing during it saved values the author was about to discard |
+| Persistence | `saveDraftBundleInBackground` | **Five independent calls** (title PATCH, rubric, prompt, MCQ, module-version), each its own transaction, none idempotent — see #906. Untouched criteria are OMITTED from the patch (not sent as `null`, which would wipe draft criteria) so #902 only affects authors who really edited criteria |
+| Localization honesty | `dropFailedLocales` | Applies to the **title only**. Body fields cannot express partial translation: the schema demands all three locales and `translateLocalizedText` re-expands a plain string into three copies — #905, which also blocks the S4 publish gate |
+
+**Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "Lagre translates and saves in one step,
+and an untouched form does neither", "cancelling the save writes nothing and hands the fields
+back", "discarding while a save is running writes nothing", "a failed translation saves one
+language honestly instead of three copies". Also `admin-content-mcq-only-revision.spec.ts` (an
+MCQ-only module must make a real edit before it saves).
