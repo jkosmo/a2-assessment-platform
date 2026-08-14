@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.12.3 - 2026-08-14
+
+Fjerde QA-runde på #896 S1. Sju funn, to av dem alvorlige, og de fleste følgefeil av de to
+foregående leveransene:
+
+- «Forkast og bytt» til Forhåndsvisning kunne låse arbeidsflaten. Fanebyttet rendrer
+  forhåndsvisningen på nytt for en annen mottaker, og det fjerner skjemaets egen Avbryt-knapp —
+  som da aldri fikk ryddet opp. Skjemaet rives nå først.
+- Deltakervisningen filtrerte ikke driftvarselet, statusen for kriteriegenerering, eller et
+  helt nytt utkast som ennå ikke er lagret. Alle tre lekket forfatterinnhold inn i fanen som
+  skal vise deltakerens visning.
+- Advarselen ble stilt på hvor man skulle, ikke hvor man kom fra, så den gjentok seg ved hvert
+  bytte mellom Forhåndsvisning og Innstillinger.
+- URL-en fulgte ikke med da Innstillinger sender deg tilbake til Rediger.
+- Dialogen lukket ikke på klikk utenfor, selv om flatekartet lovet det.
+
 ## 2.12.2 - 2026-08-14
 
 **To avklaringer fra produkteier på #896 S1.**

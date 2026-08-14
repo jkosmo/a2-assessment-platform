@@ -650,6 +650,67 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
   });
 
+  test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    // Switching to Forhaandsvisning re-renders the preview for a different audience, which
+    // removes the form's own Cancel button. If teardown runs after that render, the editing
+    // state is never cleaned up and the workspace is stuck until reload.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator(".preview-pane--editing")).toHaveCount(0);
+
+    // Back in Rediger the module is editable again, not frozen mid-edit.
+    await page.locator("#tabEdit").click();
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+  });
+
+  test("moving between the two non-Rediger tabs does not re-ask about the draft", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+
+    // Leaving Rediger asks once...
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    await page.locator("#tabSwitchDiscard").click();
+
+    // ...and moving on between two tabs that hold no editing surface must not ask again.
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+  });
+
   test("the active tab survives a reload through the URL", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

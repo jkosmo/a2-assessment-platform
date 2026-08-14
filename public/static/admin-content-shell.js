@@ -1075,7 +1075,10 @@ function renderPreview() {
   const activeDraft = previewDraft ?? sessionDraft;
   const hasDraft = !!activeDraft;
   const driftState = resolveDriftState();
-  const driftBanner = driftState === "drifted" ? renderDriftBannerHtml() : "";
+  // The drift banner offers author actions ("Regenerer", "Vis forskjell"), so it belongs to
+  // the author view only - a participant view must not hand out controls at all.
+  const forParticipant = activeTab === "preview";
+  const driftBanner = (driftState === "drifted" && !forParticipant) ? renderDriftBannerHtml() : "";
 
   if (bundle) {
     const mod = bundle?.module ?? null;
@@ -1109,14 +1112,15 @@ function renderPreview() {
       criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
       // v1.1.81: show "genereres…" placeholder when criteria-generation is in flight for
       // the current sessionDraft.
-      criteriaLoadingText: criteriaGenerationInFlight ? t("shell.criteria.generating") : "",
+      // Generation status is an authoring signal too - the learner has no business seeing it.
+      criteriaLoadingText: (criteriaGenerationInFlight && !forParticipant) ? t("shell.criteria.generating") : "",
       // B3 (#450): drift banner rendered above the criteria section.
       driftBanner,
       // #896 S1: the Forhaandsvisning tab claims to show what the participant meets, so it
       // must not leak the assessor expectation, the MCQ answer key and rationale, or criteria
       // marked candidateVisible:false. Rediger keeps showing all of it - that is the author's
       // working view.
-      audience: activeTab === "preview" ? "participant" : "author",
+      audience: forParticipant ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
       badgeText: hasDraft
@@ -1125,7 +1129,7 @@ function renderPreview() {
         : isDraft ? t("adminContent.status.badge.draft")
         : t("adminContent.status.badge.shellOnly"),
     }, opts);
-    attachDriftBannerHandlers();
+    if (!forParticipant) attachDriftBannerHandlers();
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({
       title: activeDraft.title || t("shell.newModule.defaultTitle"),
@@ -1133,6 +1137,9 @@ function renderPreview() {
       assessorExpectedContent: activeDraft.assessorExpectedContent ?? "",
       candidateTaskConstraints: activeDraft.candidateTaskConstraints ?? "",
       mcqQuestions: activeDraft.mcqQuestions ?? [],
+      // A brand-new module lives here until it is first saved, and its Forhaandsvisning has
+      // to withhold the same things as a loaded one.
+      audience: forParticipant ? "participant" : "author",
       badgeClass: "draft",
       badgeText: t("shell.draft.unsavedBadge"),
     }, opts);
@@ -4106,15 +4113,17 @@ function applyTabState(tab) {
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
   if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
   // Safe here: an open edit form is torn down before any switch away from Rediger, so this
-  // cannot discard typed values.
-  if (audienceChanges && bundle) renderPreview();
+  // cannot discard typed values. No bundle guard - a new module has a draft and no bundle,
+  // and its preview needs the audience swap just as much.
+  if (audienceChanges) renderPreview();
 }
 
 function switchToTab(tab) {
   if (tab === activeTab) return;
-  // Leaving Rediger is the only direction that can strand unsaved work; going back TO it
-  // is returning to where the work is.
-  const kind = tab === "edit" ? null : unsavedTabSwitchKind();
+  // Gate on the tab being LEFT: only Rediger holds an editing surface. Gating on the
+  // destination re-asked on every Forhaandsvisning <-> Innstillinger move, where nothing
+  // is at risk and the author has already answered.
+  const kind = activeTab === "edit" ? unsavedTabSwitchKind() : null;
   if (kind && unsavedTabSwitchDialog) {
     pendingTabSwitch = tab;
     pendingTabSwitchKind = kind;
@@ -4176,6 +4185,12 @@ function bindViewTabs() {
     if (pendingTabSwitch) stayOnCurrentTab();
   });
 
+  // A native <dialog> does not close on a backdrop click by itself. The click lands on the
+  // dialog element (the backdrop is its pseudo-element), so target identity is the test.
+  unsavedTabSwitchDialog?.addEventListener("click", (event) => {
+    if (event.target === unsavedTabSwitchDialog) unsavedTabSwitchDialog.close();
+  });
+
   document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
     const target = pendingTabSwitch;
     const kind = pendingTabSwitchKind;
@@ -4183,14 +4198,14 @@ function bindViewTabs() {
     pendingTabSwitchKind = null;
     unsavedTabSwitchDialog?.close();
     if (!target) return;
-    // Switch first: the tab the author asked for must not depend on the teardown below.
+    // Tear the form down FIRST. applyTabState re-renders the preview when the audience
+    // changes, which removes #previewEditCancel - and then its handler never runs, leaving
+    // preview-pane--editing, criteriaReadyCallback and the chat actions stranded until a
+    // reload. Only an open form is discarded; a draft is carried along untouched.
+    if (kind === "form") document.getElementById("previewEditCancel")?.click();
     applyTabState(target);
     syncTabToUrl(target);
     tabButtons[target]?.focus();
-    // Only an open form is discarded - a draft is carried along untouched. The form is torn
-    // down by pressing its own Cancel: exitEditMode() is scoped inside enterPreviewEditMode
-    // and unreachable from here, and Cancel already restores the preview and chat actions.
-    if (kind === "form") document.getElementById("previewEditCancel")?.click();
   });
 
   // Until S3 moves the fields in, Innstillinger hands off to the Avansert page and
@@ -4199,6 +4214,9 @@ function bindViewTabs() {
   // return to Rediger first, or the button looks dead whenever a draft exists.
   settingsOpenAdvancedBtn?.addEventListener("click", () => {
     applyTabState("edit");
+    // The hand-off can be cancelled, or fail, and leave us here - so the URL has to move too,
+    // or a reload would drop the author back into Innstillinger.
+    syncTabToUrl("edit");
     openAdvancedEditor(selectedModuleId);
   });
 
