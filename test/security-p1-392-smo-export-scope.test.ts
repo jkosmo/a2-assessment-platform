@@ -131,10 +131,35 @@ describe("Security P1 #392: SMO content scope and MCQ answer key protection on e
     expect(exportBRes.status).toBe(403);
 
     // The owner still reaches it - the guard is about who, not about disabling the feature.
+    // Assert the EXACT status, not "anything but 403": an empty course is not exportable, and
+    // a loose assertion here hid a 500 (the not-exportable branch missed "no items to export").
     const exportARes = await request(app)
       .get(`/api/admin/content/courses/${courseId}/export-package`)
       .set(smoAHeaders);
-    expect(exportARes.status).not.toBe(403);
+    expect(exportARes.status).toBe(422);
+    expect(exportARes.body.error).toBe("course_not_exportable");
+
+    await request(app).delete(`/api/admin/content/courses/${courseId}`).set(adminHeaders);
+  });
+
+  it("SMO-B is denied the participant list of SMO-A's course", async () => {
+    const courseRes = await request(app)
+      .post("/api/admin/content/courses")
+      .set(smoAHeaders)
+      .send({ title: { "en-GB": "Enrollment Scope Course", nb: "Deltakerkurs", nn: "Deltakarkurs" } });
+    expect(courseRes.status).toBe(201);
+    const courseId = courseRes.body.course.id as string;
+
+    // Names, e-mail, department and progress - guarded like the mutating enrollment routes.
+    const listBRes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/enrollments`)
+      .set(smoBHeaders);
+    expect(listBRes.status).toBe(403);
+
+    const listARes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/enrollments`)
+      .set(smoAHeaders);
+    expect(listARes.status).toBe(200);
 
     await request(app).delete(`/api/admin/content/courses/${courseId}`).set(adminHeaders);
   });

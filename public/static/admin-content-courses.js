@@ -579,7 +579,7 @@ async function renderListView() {
         <div class="row-actions">
           ${canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>` : ""}
           ${canManage ? publishToggle : ""}
-          <button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>
+          ${canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : ""}
           ${canManage ? archiveToggleBtn : ""}
           ${canManage ? cascadeDeleteBtn : ""}
           ${canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre dette kurset.">Skrivebeskyttet</span>`}

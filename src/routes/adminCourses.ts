@@ -246,7 +246,10 @@ adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COU
     // its modules has no rubric/prompt/MCQ/active-version content. 422 is
     // semantically correct (the resource is there but cannot be processed in
     // its current state) and gives the UI a clear actionable message.
-    if (/no (modules|versions|rubric|prompt|MCQ)/i.test(message)) {
+    // "items" included: an empty course threw "Course has no items to export", which the
+    // pattern missed - so clicking Eksporter on a fresh course gave a generic 500 instead of
+    // the actionable 422 this branch exists for.
+    if (/no (items|modules|versions|rubric|prompt|MCQ)/i.test(message)) {
       response.status(422).json({ error: "course_not_exportable", message });
       return;
     }
@@ -516,7 +519,10 @@ const assignEnrollmentsSchema = z
     message: "Provide userIds or a department.",
   });
 
-adminCoursesRouter.get("/:courseId/enrollments", async (request, response, next) => {
+// #903 follow-up: POST and DELETE on this path were guarded, GET was not - and it returns
+// participant names, e-mail, department, deadline and progress. Any SMO could read another
+// owner's participant list by taking the course ID from the shared course list.
+adminCoursesRouter.get("/:courseId/enrollments", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const enrollments = await listCourseEnrollments(request.params.courseId);
     response.json({ enrollments });

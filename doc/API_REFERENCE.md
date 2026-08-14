@@ -264,6 +264,13 @@ human and agent writes; the agent marker is only added for agent-orchestrated ca
 All routes use the `admin_content` capability: ADMINISTRATOR, SUBJECT_MATTER_OWNER. Localized
 fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` object.
 
+**The role is not the whole check.** Routes on `:courseId` additionally require that the caller
+**owns the course** (or is ADMINISTRATOR) — `requireContentOwnership("COURSE", "courseId")`.
+That now includes the two read routes it was missing on (#903): `GET .../export-package`, whose
+envelope inlines each module’s full payload including MCQ answer keys, and
+`GET .../enrollments`, which returns participant names, e-mail, department and progress. Both
+return `403 content_ownership` for a non-owner SMO.
+
 ### Courses
 
 | Method | Route | Description |
@@ -298,7 +305,7 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 
 Classes (cohorts) assign a course to a group of participants dynamically: a participant is assigned a course if they belong to a class it is assigned to (evaluated at read time, never materialised). The built-in **"Alle deltakere"** system class covers all PARTICIPANT users. `GET /api/courses` and `GET /api/courses/enrollments` reflect class assignments (the latter with `source: "CLASS"`). Entra-linked classes (`kind=ENTRA`) are gated by the `classEntraLinkingEnabled` platform config (default off, CL-5).
 | `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
-| `GET` | `/api/admin/content/courses/:courseId/export-package` | Export envelope (inlines modules **and** sections in order, #512). Section figures/images travel inline as base64 (#749, see below) |
+| `GET` | `/api/admin/content/courses/:courseId/export-package` | **Owner or admin only (#903).** Export envelope (inlines modules **and** sections in order, #512). An empty course returns `422 course_not_exportable`. Section figures/images travel inline as base64 (#749, see below) |
 | `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1). Recreates section assets + remaps `asset:` refs (#749). Larger 35 MB body limit to carry inlined assets |
 | `DELETE` | `/api/admin/content/courses/:courseId` | Delete course |
 
