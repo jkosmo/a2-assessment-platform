@@ -45,8 +45,9 @@
 
 | Feature | Conversational shell | Advanced editor |
 |---|:---:|:---:|
-| Mode switch link | ✅ "Avansert redigering ↗" | ✅ "Enkel redigering ↗" |
-| Unsaved-changes warning on switch | ❌ not implemented (#314) | ❌ not implemented (#314) |
+| Mode switch link | ✅ Innstillinger → "Åpne avansert redigering" (#896 S1) | ✅ "Enkel redigering ↗" |
+| View tabs on one module | ✅ Forhåndsvisning / Rediger / Innstillinger (#896 S1) | ❌ still a two-mode page |
+| Unsaved-changes warning on switch | ✅ on leaving Rediger with either an open direct-edit form (values are lost) or any unsaved draft (kept, but unsaved) — the dialog copy and confirm button differ per case (#896 S1) | ✅ dialogUnsavedHandoff |
 | Confirmation before publish | ✅ conversational confirm | ✅ window.confirm dialog |
 | Confirmation before unpublish | n/a | ✅ window.confirm dialog |
 | Locale picker (UI language) | ✅ top bar | ✅ top bar |

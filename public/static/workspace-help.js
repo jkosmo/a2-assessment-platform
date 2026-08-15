@@ -196,7 +196,11 @@ function resolveHelpContext(location) {
   if (path === "/admin-content/advanced" || /^\/admin-content\/module\/[^/]+\/advanced$/.test(path)) {
     return "admin-content-advanced";
   }
-  if (path === "/admin-content" || /^\/admin-content\/module\/[^/]+\/conversation$/.test(path)) {
+  // The canonical module route IS the shell - it carries the module in the path, not in a
+  // query string, so requiring moduleId/id here handed out module-library help on the very
+  // page the shell help was written for (#896 S1).
+  if (/^\/admin-content\/module\/[^/]+\/conversation$/.test(path)) return "admin-content-shell";
+  if (path === "/admin-content") {
     return query.has("moduleId") || query.has("id") ? "admin-content-shell" : "admin-content-library";
   }
 

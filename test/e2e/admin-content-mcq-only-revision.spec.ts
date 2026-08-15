@@ -158,9 +158,10 @@ test.describe("admin content — module-type bugs (#655)", () => {
     await expect(page.locator("#previewEditGuidanceText")).toHaveCount(0);
     await expect(page.locator("#previewEditMcqStem0")).toBeVisible();
 
-    // Confirm the direct edit, then save.
+    // #896 S2: Lagre translates and saves in one step - and an untouched form saves
+    // nothing at all, so make a real edit first.
+    await page.locator("#previewEditMcqStem0").fill("Oppdatert MCQ-only stamme");
     await page.locator("#previewEditConfirm").click();
-    await clickEnabledButton(page, /^Save draft$|^Lagre utkast$/);
 
     // Save must not hit the scenario-required guard, and must persist MCQ_ONLY.
     await expect(

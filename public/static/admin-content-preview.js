@@ -54,8 +54,13 @@ function localizeOptionList(options, locale) {
   return options.map((option) => localizeValueForLocale(option, locale)).filter(Boolean);
 }
 
-function renderPreviewMcqQuestions(questions, locale, t, tf) {
+// #896 S1: `audience` is "author" (default) or "participant". The participant view is what
+// the Forhaandsvisning tab promises - so the answer key, the rationale and the assessor
+// expectation must not appear there. It approximates the learner page; it is not the same
+// component, so it is a rehearsal of the content, not a pixel-faithful rendering.
+function renderPreviewMcqQuestions(questions, locale, t, tf, audience = "author") {
   if (!Array.isArray(questions) || questions.length === 0) return "";
+  const forParticipant = audience === "participant";
   const localize = (v) => localizeValueForLocale(v, locale);
 
   const questionItems = questions
@@ -66,12 +71,12 @@ function renderPreviewMcqQuestions(questions, locale, t, tf) {
       const options = localizeOptionList(question?.options, locale);
       const optionItems = options
         .map((option) => {
-          const isCorrect = correctAnswer && option === correctAnswer;
+          const isCorrect = !forParticipant && correctAnswer && option === correctAnswer;
           return `<li class="preview-mcq-option${isCorrect ? " correct" : ""}">${escapeHtml(option)}</li>`;
         })
         .join("");
 
-      const rationaleHtml = rationale
+      const rationaleHtml = rationale && !forParticipant
         ? `<div class="preview-mcq-meta">
             <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
             <span>${escapeHtml(rationale)}</span>
@@ -85,10 +90,10 @@ function renderPreviewMcqQuestions(questions, locale, t, tf) {
           <ol class="preview-mcq-options" type="A">
             ${optionItems}
           </ol>
-          <div class="preview-mcq-meta">
+          ${forParticipant ? "" : `<div class="preview-mcq-meta">
             <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.correctAnswer"))}</span>
             <span>${escapeHtml(correctAnswer)}</span>
-          </div>
+          </div>`}
           ${rationaleHtml}
         </article>`;
     })
@@ -137,7 +142,9 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     badgeClass = "shell",
     badgeText = "",
     emptyText = "",
+    audience = "author",
   } = data;
+  const forParticipant = audience === "participant";
 
   if (emptyText) {
     return `<p class="preview-empty">${escapeHtml(emptyText)}</p>`;
@@ -167,20 +174,20 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.candidateTaskConstraints"))}</div>
        <div class="preview-text-block preview-text-candidate-constraints">${escapeHtml(localizedCandidateConstraints)}</div>`
     : "";
-  const assessorExpectedContentHtml = localizedGuidance
+  const assessorExpectedContentHtml = localizedGuidance && !forParticipant
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.assessorExpectedContent"))}</div>
        <div class="preview-text-block preview-text-secondary">${escapeHtml(localizedGuidance)}</div>`
     : "";
   const mcqCountHtml = mcqCount > 0
     ? `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`
     : "";
-  const mcqHtml = renderPreviewMcqQuestions(mcqQuestions, locale, t, tf);
+  const mcqHtml = renderPreviewMcqQuestions(mcqQuestions, locale, t, tf, audience);
   // v1.1.81: when shell signals criteria-generation in flight AND no persisted/draft
   // criteria exist yet, show a placeholder section so users see something is coming.
   const criteriaLoadingText = data.criteriaLoadingText ?? "";
   const hasCriteria = criteria && typeof criteria === "object" && Object.keys(criteria).length > 0;
   const criteriaHtml = hasCriteria
-    ? renderPreviewCriteria(criteria, t, tf, localize)
+    ? renderPreviewCriteria(criteria, t, tf, localize, audience)
     : (criteriaLoadingText
       ? `<div class="preview-section-label">${escapeHtml(t("shell.criteria.title").replace(/\s*\(\{count\}\)\s*/, ""))}</div>
          <p class="preview-criteria-loading">${escapeHtml(criteriaLoadingText)}</p>`
@@ -208,9 +215,12 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
 // maxScore, weight, candidateVisible } }. Tolerates two historical shapes — rich (with label
 // + description) from #378 auto-gen, and sparse ({ weight }) from generic defaults. Returns
 // empty string when no criteria — section just doesn't render.
-function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === "string" ? v : "")) {
+function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === "string" ? v : ""), audience = "author") {
   if (!criteria || typeof criteria !== "object") return "";
-  const entries = Object.entries(criteria);
+  // A criterion with candidateVisible:false is deliberately withheld from the learner.
+  const entries = Object.entries(criteria).filter(
+    ([, raw]) => audience !== "participant" || Boolean(raw && typeof raw === "object" && raw.candidateVisible),
+  );
   if (entries.length === 0) return "";
 
   // Generic-default rubrics store only `{ weight: 0.2 }` per criterion — no maxScore.
@@ -245,7 +255,9 @@ function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === 
     const descHtml = description.trim()
       ? `<p class="preview-criterion-desc">${escapeHtml(description)}</p>`
       : "";
-    const visibleHtml = candidateVisible
+    // The marker answers an author's question ("does the learner see this?"), so showing it
+    // in the participant view is the answer contradicting itself.
+    const visibleHtml = candidateVisible && audience !== "participant"
       ? `<p class="preview-criterion-visible">✓ ${escapeHtml(t("shell.criteria.visibleToCandidate"))}</p>`
       : "";
     return `

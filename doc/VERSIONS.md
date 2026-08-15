@@ -2,6 +2,152 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.14.0 - 2026-08-15
+
+**Innstillinger viser modulens oppsett (#896, S3a av S3).** Fanen var en tom ramme med en knapp.
+Nå leser den oppsettet ut av modulen som allerede er lastet: **modultype først** — den avgjør
+hvilke felt Rediger i det hele tatt viser — deretter beståttgrense for flervalg,
+vurderingskriterier med vekt, vurderingsinstruks, innsendingsskjema, sertifiseringsnivå og
+gyldighet.
+
+Felt som ikke er satt står som «Ikke satt» i stedet for å mangle. En forfatter skal kunne se at
+noe ikke er bestemt, ikke lure på om det finnes.
+
+**S3 er delt i tre.** Kartleggingen viste sju innholdskort, tolv dialoger og 5154 linjer
+JavaScript i Avansert-editoren. Å flytte alt i én leveranse ville gjentatt feilen fra S2, der en
+liten endring trengte tre QA-runder fordi kontraktene rundt ikke var synlige.
+
+- **S3a** (denne): Innstillinger viser oppsettet. Leser, skriver ikke.
+- **S3b**: hver rad blir redigerbar her, med modultype først. Beskrivelse flyttes til Rediger, og
+  modulopprettelse, dupliser og slett flyttes til modul-lista.
+- **S3c**: Avansert-siden pensjoneres — rute-redirect, handoff-mekanikken fjernes, og
+  kalibrering-dubletten og identitetspanelet ut.
+
+Redigering går fortsatt via Avansert til S3b. Et lesepanel kan ikke ødelegge en modul, og det
+lar oss se om inndelingen er riktig før skrivestiene følger etter.
+
+## 2.13.1 - 2026-08-14
+
+To QA-runder på S2, med til sammen femten funn. De som betyr mest:
+
+- **Forkast under pågående lagring lagret likevel.** S1 river skjemaet ved å klikke dets egen
+  Avbryt-knapp, S2 deaktiverer knappene mens lagringen går — hver for seg riktig, sammen en
+  datataps-vei. Forkast avbryter nå lagringen først, og en oversettelse som blir ferdig mens
+  dialogen står åpen lagrer ikke.
+- **Språkvelgeren ble stående deaktivert etter en vellykket lagring.** Bare avbrudds-stien
+  slapp den fri, så en normal lagring låste UI-språket for resten av økten.
+- **Urørte kriterier ble nullet ut.** Fiksen som skulle la dem være, sendte `criteria: null`,
+  som overskrev kriterier utkastet allerede bar på. Nøkkelen utelates nå i stedet.
+- **«Synlig for kandidat» vises ikke lenger i Forhåndsvisning** — det er et forfatterspørsmål,
+  ikke noe deltakeren skal se svaret på.
+
+Og to steder der en fiks måtte rulles tilbake fordi den ville brukket lagringen:
+
+- **Tømming av MCQ-begrunnelse** ble gjort mulig i skjemaet, men både lokaliserings- og
+  lagringsskjemaet avviser tom streng. Resultatet ville vært 400 *etter* at tittel og rubrikk
+  allerede var skrevet. Tilbakestilt; kontraktsfiksen hører hjemme i skjemaet.
+- **«Hull forblir hull» gjelder foreløpig bare tittelen.** Brødtekstfeltene kan ikke uttrykke
+  delvis oversettelse: skjemaet krever alle tre språk, og klienten utvider en ren streng til
+  tre kopier før den sendes. Se #905 — publiseringsgaten i S4 avhenger av at det løses.
+
+## 2.13.0 - 2026-08-14
+
+**Samlet lagring i redigeringsskjemaet (#896, S2 av 7).** «Bekreft» er borte. Knappen heter nå
+**Lagre**, og den oversetter *og* skriver modulversjonen i én handling.
+
+Tidligere kostet hver «Bekreft» en full oversettelsesrunde uten at noe ble lagret — forfatteren
+kunne betale for LLM-kallet flere ganger og likevel ende opp uten en versjon.
+
+Rekkefølgen er selve poenget: **oversett først, skriv etterpå.** Oversettelsen er den delen som
+tar tid og kan feile, og så lenge den pågår er ingenting skrevet. Tre regler følger av det:
+
+- **Ingen endring, ingen kostnad.** Åpner du skjemaet og lukker det uendret, brukes verken
+  LLM-runde eller ny versjon.
+- **Avbrutt lagring skriver ingenting.** Du får skjemaet tilbake med hver verdi intakt.
+- **Hull forblir hull.** Feiler ett språk, lagres det som uoversatt — ikke som en kopi av
+  kildeteksten (#892) — og du får vite hvilket språk det gjelder.
+
+**«Avbryt» er tilbake, men bare her.** Knappen ble fjernet i v1.1.98 fordi den endte samtalen i
+en blindvei uten vei videre. Det stemte da; nå fører avbrudd tilbake til skjemaet ditt, som er
+en gjenoppretting og ikke en blindvei. Øvrige framdriftsmeldinger beholder tilstanden fra
+v1.1.98. Merk at avbrudd **foreldreløser** kallet i stedet for å stoppe det — signalet er ikke
+trådd gjennom nettverkslaget — så LLM-kallet fullfører i bakgrunnen og resultatet forkastes.
+
+Publiseringsgaten kommer i S4; etter S2 kan en modul fortsatt lagres med hull i oversettelsen.
+
+## 2.12.4 - 2026-08-14
+
+Sammenslåing av #896 S1 (faneomlegging) og fasit-fiksen på moduleksport, for felles testing
+på stage. Se oppføringene under for hva hver av dem gjør — de er uavhengige endringer:
+S1 rører bare forfatterflaten, eksport-fiksen bare backend-ruta.
+
+## 2.12.3 - 2026-08-14
+
+Fjerde QA-runde på #896 S1. Sju funn, to av dem alvorlige, og de fleste følgefeil av de to
+foregående leveransene:
+
+- «Forkast og bytt» til Forhåndsvisning kunne låse arbeidsflaten. Fanebyttet rendrer
+  forhåndsvisningen på nytt for en annen mottaker, og det fjerner skjemaets egen Avbryt-knapp —
+  som da aldri fikk ryddet opp. Skjemaet rives nå først.
+- Deltakervisningen filtrerte ikke driftvarselet, statusen for kriteriegenerering, eller et
+  helt nytt utkast som ennå ikke er lagret. Alle tre lekket forfatterinnhold inn i fanen som
+  skal vise deltakerens visning.
+- Advarselen ble stilt på hvor man skulle, ikke hvor man kom fra, så den gjentok seg ved hvert
+  bytte mellom Forhåndsvisning og Innstillinger.
+- URL-en fulgte ikke med da Innstillinger sender deg tilbake til Rediger.
+- Dialogen lukket ikke på klikk utenfor, selv om flatekartet lovet det.
+
+## 2.12.2 - 2026-08-14
+
+**To avklaringer fra produkteier på #896 S1.**
+
+Advarselen ved fanebytte gjelder nå **også et generert arbeidsutkast**, ikke bare et åpent
+redigeringsskjema: et utkast er en investering enten et menneske eller en modell laget det, og
+skal ikke forlates stille. Signalet er det samme som statuslinjens «Ulagrede endringer».
+Kostnaden er ulik i de to tilfellene, så dialogen sier hvilken det er — feltverdier i et åpent
+skjema *går tapt* («Forkast og bytt»), mens et utkast *beholdes, men er ulagret* («Bytt likevel»).
+
+**Aktiv fane ligger nå i URL-en** (`?tab=preview` / `?tab=settings`), så den overlever refresh og
+kan deles. Rediger er standard og holdes utenfor query-strengen, slik at den rene ruta forblir
+kanonisk. `replaceState` brukes med vilje: Tilbake skal bety forrige side, ikke forrige fane.
+
+## 2.12.1 - 2026-08-14
+
+QA-runder på #896 S1: deltakervisning i Forhåndsvisning, tastatur og fokus i fanelista, og
+dokumentasjonsflatene rundt omleggingen. Se 2.12.0 for selve strukturen.
+
+## 2.12.0 - 2026-08-13
+
+**Modulredigering i tre visninger (#896, S1 av 7).** Bryteren mellom «Samtale» og «Avansert» er
+erstattet av tre faner på samme modul: **Forhåndsvisning**, **Rediger** (standard) og
+**Innstillinger**.
+
+Bakgrunnen er at forhåndsvisning og redigering i dag er *det samme feltet* — `enterEditMode`
+skriver om innholdet i forhåndsvisningsruten med input-felt, så man ikke kan se det rendrede
+resultatet mens man redigerer. Fanene gjør en skjult modus til en synlig visning.
+
+Denne leveransen er strukturen alene; ingen felt har flyttet ennå:
+
+- **Rediger** er som før — samtalen og feltene side om side — og er der man lander når en modul
+  åpnes. Samtalen er menystrukturen for redigering og er derfor permanent synlig her.
+- **Forhåndsvisning** skjuler samtalen og gir forhåndsvisningen full bredde.
+- **Innstillinger** er foreløpig en ramme med en knapp til den avanserte editoren. Feltene
+  (modultype først, så terskler, kriterier, vurderingsinstruks, gyldighet) flyttes hit i S3, og
+  da forsvinner både den separate Avansert-siden og denne knappen.
+
+Et fanebytte rører ikke sesjonstilstanden: et generert utkast overlever, og forhåndsvisningen
+beholder innholdet sitt. Det ene som *kan* gå tapt er et åpent direkte-redigeringsskjema, siden
+feltverdiene der bare finnes i DOM-en — det er derfor det er den eneste tilstanden som utløser en
+bekreftelsesdialog.
+
+**Forhåndsvisning viser deltakerens lesevisning.** Fanen holder det den lover: vurdererforventning,
+MCQ-fasit med begrunnelse og kriterier merket `candidateVisible: false` utelates. Rediger viser
+fortsatt alt — det er forfatterens arbeidsvisning. Merk at dette er en gjengivelse av innholdet,
+ikke deltakerkomponenten selv, så den er tro mot *hva* som vises, ikke mot pikslene.
+
+Gjenstår i epicen: samlet lagring (S2), oppløsning av Avansert (S3), publiseringsgate for
+oversettelse (S4), utkastversjonering (S5), eksport/import (S6) og opprydding (S7).
+
 ## 2.11.12 - 2026-08-14
 
 **Kurseksport krever nå eierskap (#903).** `GET /courses/:id/export-package` hadde ingen

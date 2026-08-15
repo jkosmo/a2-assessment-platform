@@ -566,6 +566,563 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator('.locale-picker #profileNavLink[href="/profile"]')).toBeVisible();
   });
 
+  // #896 S1: the module workspace is three views on one module. These two guard the
+  // structure itself - the default landing view, what each tab shows, and the one thing a
+  // tab switch can destroy (an open direct-edit form).
+  test("module workspace opens on Rediger and the tabs switch between the three views", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
+
+    // Rediger is the default: both panes visible.
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".preview-pane")).toBeVisible();
+    await expect(page.locator(".chat-pane")).toBeVisible();
+    await expect(page.locator("#tabPanelSettings")).toBeHidden();
+
+    // Forhaandsvisning: preview only, chat gone.
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".preview-pane")).toBeVisible();
+    await expect(page.locator(".chat-pane")).toBeHidden();
+
+    // Innstillinger: the edit grid goes away entirely. Asserting hidden here is the point -
+    // .workspace-shell sets display:grid, so a class-based toggle would silently do nothing.
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+    await expect(page.locator("#tabPanelModule")).toBeHidden();
+    await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+
+    // ...and back, with the preview content still rendered.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#tabPanelModule")).toBeVisible();
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+  });
+
+  test("an unsaved draft warns on tab switch and is carried along, not discarded", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Produce an unsaved draft without opening the edit form: confirm a direct edit, which
+    // leaves a sessionDraft behind and makes the status rail say "unsaved".
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
+
+    // A draft is an investment whoever made it, so the switch is not silent...
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    // ...but nothing is destroyed by switching, so the wording and the button say so.
+    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept when you switch|beholdes/);
+    await expect(page.locator("#tabSwitchDiscard")).toHaveText(/Switch anyway|Bytt likevel/);
+
+    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+
+    // Switching anyway keeps the draft - it is still what the preview renders.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
+  });
+
+  // #896 S2: Lagre is one commitment - translate, then write. These guard the three rules
+  // that make that safe: no edit costs nothing, an abort writes nothing, and a locale that
+  // fails to translate leaves a hole rather than a copy of the source text.
+  test("Lagre translates and saves in one step, and an untouched form does neither", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          // A FREETEXT_PLUS_MCQ module needs its MCQ set, or the save stops on its own guard.
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Opening and closing without editing must not spend a translation or write a version.
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.getByText(/Nothing changed|Ingenting er endret/)).toBeVisible();
+    expect(state.lastDraftLocalizationBody).toBeFalsy();
+
+    // A real edit translates and saves without a second click.
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBeTruthy();
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).first(),
+    ).toBeVisible();
+  });
+
+  test("cancelling the save writes nothing and hands the fields back", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    // Hold the translation open so the abort button can be pressed mid-flight.
+    await page.route("**/generate/module-draft/localize", async () => {
+      await new Promise(() => {});
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+    await page.locator("#previewEditConfirm").click();
+
+    await clickEnabledButton(page, /Cancel|Avbryt/);
+
+    // The form is still standing, still holding the typed text, and nothing was written.
+    // Scoped to the chat: the same text also reaches #shellStatusAnnouncer for screen
+    // readers, which is intended - it just makes an unscoped locator ambiguous.
+    await expect(page.locator("#chatMessages").getByText(/nothing was saved|ingenting ble lagret/)).toBeVisible();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+    // No version was written: the save never got past the (blocked) translation step.
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/),
+    ).toHaveCount(0);
+  });
+
+  test("discarding while a save is running writes nothing", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    // Hold the translation open so the discard lands mid-save.
+    await page.route("**/generate/module-draft/localize", async () => {
+      await new Promise(() => {});
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Skal forkastes");
+    await page.locator("#previewEditConfirm").click();
+
+    // The form's own Cancel is disabled while saving, so the discard has to abort the save
+    // itself - otherwise the translation resolves later and saves what was just discarded.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/),
+    ).toHaveCount(0);
+  });
+
+  test("a failed translation saves one language honestly instead of three copies", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.route("**/generate/module-draft/localize", async (route: Route) => {
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").fill("Fagforeninger");
+    await page.locator("#previewEditConfirm").click();
+
+    // The save still goes through - but the untranslated locales must stay untranslated.
+    // Copying the source text into all three is precisely the #892 bug.
+    await expect.poll(() => state.lastTitlePatchBody?.title).toBeTruthy();
+    expect(typeof state.lastTitlePatchBody.title).toBe("string");
+    expect(state.lastTitlePatchBody.title).toBe("Fagforeninger");
+  });
+
+  test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    // Switching to Forhaandsvisning re-renders the preview for a different audience, which
+    // removes the form's own Cancel button. If teardown runs after that render, the editing
+    // state is never cleaned up and the workspace is stuck until reload.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator(".preview-pane--editing")).toHaveCount(0);
+
+    // Back in Rediger the module is editable again, not frozen mid-edit.
+    await page.locator("#tabEdit").click();
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+  });
+
+  test("moving between the two non-Rediger tabs does not re-ask about the draft", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+
+    // Leaving Rediger asks once...
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    await page.locator("#tabSwitchDiscard").click();
+
+    // ...and moving on between two tabs that hold no editing surface must not ask again.
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+  });
+
+  test("the active tab survives a reload through the URL", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await expect(page).toHaveURL(/[?&]tab=settings/);
+
+    await page.reload();
+    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+
+    // Rediger is the default, so it stays out of the URL rather than pinning the plain route.
+    await page.locator("#tabEdit").click();
+    await expect(page).not.toHaveURL(/[?&]tab=/);
+  });
+
+  // #896 S3a: Innstillinger reads the module's setup out of the loaded bundle. Module type
+  // comes first because it decides which fields Rediger even shows.
+  test("Innstillinger shows the module's setup, module type first", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const list = page.locator("#settingsSummary .settings-list");
+    await expect(list).toBeVisible();
+
+    // Module type is the first row, and reads as a phrase rather than an enum value.
+    const firstTerm = list.locator("dt").first();
+    await expect(firstTerm).toHaveText(/Module type|Modultype/);
+    await expect(list.locator("dd").first()).toHaveText(/Free text and multiple choice|Fritekst og flervalg/);
+    await expect(list.locator("dd").first()).not.toHaveText(/FREETEXT_PLUS_MCQ/);
+
+    // Rows the author needs even when unset say so, rather than being missing.
+    await expect(list).toContainText(/Assessment criteria|Vurderingskriterier/);
+    await expect(list).toContainText(/Certification level|Sertifiseringsniv/);
+
+    // The hand-off is still there until S3b wires the rows up.
+    await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+  });
+
+  test("Forhaandsvisning withholds the answer key and assessor-only content", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessorExpectedContent: localizedText("Maa nevne risikoreduserende tiltak"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Fordi B er riktig"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Rediger is the author's view: everything is on the table.
+    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toBeVisible();
+    await expect(page.getByText("Fordi B er riktig")).toBeVisible();
+    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(1);
+
+    // Forhaandsvisning claims to show what the participant meets - so the assessor
+    // expectation, the rationale and the marked correct option must all be gone.
+    await page.locator("#tabPreview").click();
+    await expect(page.getByText("Norsk scenario")).toBeVisible();
+    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toHaveCount(0);
+    await expect(page.getByText("Fordi B er riktig")).toHaveCount(0);
+    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(0);
+    // The answer is also spelled out in a meta line, which must go too - the options
+    // themselves stay, unmarked, exactly as a learner sees them.
+    await expect(page.locator(".preview-mcq-meta")).toHaveCount(0);
+    await expect(page.locator(".preview-mcq-option", { hasText: "Option B" })).toHaveCount(1);
+
+    // ...and back: the author sees the full picture again.
+    await page.locator("#tabEdit").click();
+    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toBeVisible();
+    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(1);
+  });
+
+  test("Escape on the unsaved-changes dialog behaves like staying", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    await page.locator("#tabEdit").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+
+    // Escape bypasses every button, so it must not leave focus and selection disagreeing.
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tabEdit")).toBeFocused();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+
+    // The stale pending switch must not fire on the next, unrelated switch either.
+    await page.locator("#previewEditCancel").click();
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+  });
+
+  test("the tablist is one tab stop and the arrow keys move both focus and view", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // One tab stop, established on load - not only after the first switch.
+    await expect(page.locator("#tabEdit")).toHaveAttribute("tabindex", "0");
+    await expect(page.locator("#tabPreview")).toHaveAttribute("tabindex", "-1");
+    await expect(page.locator("#tabSettings")).toHaveAttribute("tabindex", "-1");
+
+    await page.locator("#tabEdit").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator("#tabPreview")).toBeFocused();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tabPreview")).toHaveAttribute("tabindex", "0");
+
+    await page.keyboard.press("End");
+    await expect(page.locator("#tabSettings")).toBeFocused();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+
+    await page.keyboard.press("Home");
+    await expect(page.locator("#tabPreview")).toBeFocused();
+  });
+
+  test("staying after an arrow-key switch returns focus to the selected tab", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    // Arrowing focuses the target tab before the dialog appears, so "stay" must hand focus
+    // back - otherwise it sits on a tab that is not the selected one.
+    await page.locator("#tabEdit").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    await page.locator("#tabSwitchStay").click();
+
+    await expect(page.locator("#tabEdit")).toBeFocused();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+  });
+
+  test("help on the module route explains the tabs, not the module library", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator(".workspace-help-trigger").click();
+
+    // The canonical module route carries the module in the PATH; help used to require it in
+    // the query string and fell through to module-library help on this very page.
+    await expect(page.locator("#workspaceHelpTitle")).toHaveText(/Conversation editing|Innholdsforvaltning: samtale/);
+    await expect(page.locator("#workspaceHelpBody")).toContainText(/Edit tab|fanen Rediger/);
+    await expect(page.locator("#workspaceHelpBody")).toContainText(/Settings is where|Innstillinger er der/);
+  });
+
+  test("leaving Rediger with an open edit form warns, and staying keeps the typed values", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
+
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+
+    // Stay: same tab, same unsaved text.
+    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+
+    // Discard: the form is gone and the switch goes through.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.locator(".chat-pane")).toBeHidden();
+  });
+
   // #905: a locale whose translation failed must be ABSENT from what is saved. Leaving the
   // source copy behind is what made "not translated yet" invisible to the publish gate (#896 S4)
   // and to the translation-status list (#894).
@@ -681,8 +1238,8 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
 
+    // #896 S2: Lagre translates and writes in one commitment - no separate "Lagre utkast".
     await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBe("nb");
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
     await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Fagforeninger");
     await expect(state.lastTitlePatchBody?.title?.["en-GB"]).toContain("[en-GB]");
@@ -804,8 +1361,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
 
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
-
+    // #896 S2: the save already happened as part of Lagre; the MCQ survives it.
     await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
   });
@@ -1002,7 +1558,9 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
-    await clickEnabledButton(page, "Advanced");
+    // #896 S1: the route to advanced editing now goes through the Innstillinger tab.
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsOpenAdvanced").click();
 
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/advanced$/);
     await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");
@@ -1520,7 +2078,6 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, /Edit directly|Rediger direkte/);
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
     await expect.poll(() => versionBody !== null).toBe(true);
 

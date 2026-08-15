@@ -19,6 +19,7 @@ import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import { setHidden } from "/static/dom-visibility.js";
 import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";
 import {
   classifyShellEditInstruction,
@@ -158,7 +159,16 @@ const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
-const modeSwitchAdvancedBtn = document.getElementById("modeSwitchAdvanced");
+// #896 S1: the Samtale/Avansert mode switch is replaced by three views on one module.
+const tabButtons = {
+  preview: document.getElementById("tabPreview"),
+  edit: document.getElementById("tabEdit"),
+  settings: document.getElementById("tabSettings"),
+};
+const tabPanelModule = document.getElementById("tabPanelModule");
+const tabPanelSettings = document.getElementById("tabPanelSettings");
+const settingsOpenAdvancedBtn = document.getElementById("settingsOpenAdvanced");
+const unsavedTabSwitchDialog = document.getElementById("dialogUnsavedTabSwitch");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 const stateRail = document.getElementById("stateRail");
 const srModuleName = document.getElementById("srModuleName");
@@ -379,7 +389,7 @@ function _domUserBubble(text) {
 // The abortBtn return is now a detached stub so existing callers (~17 places using
 // addEventListener/remove/disabled) keep working without behavior — the click event
 // never fires since the button isn't attached to the DOM.
-function _domProgress(textKeyOrFn) {
+function _domProgress(textKeyOrFn, { abortable = false } = {}) {
   const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
   setChatBusy(true);
   announceStatus(text);
@@ -389,9 +399,19 @@ function _domProgress(textKeyOrFn) {
   bubble.className = "chat-bubble chat-bubble--progress";
   bubble.innerHTML = `<span class="chat-spinner"></span>${escapeHtml(text)}`;
   msg.appendChild(bubble);
-  // Detached stub — kept for API compatibility with existing slot.abortBtn references.
+  // v1.1.98 dropped the Avbryt button because it ended the chat with no way forward -
+  // "dead-end, low value, high complexity". Correct then. #896 S2 changes that for ONE
+  // caller: Lagre now commits to a write, and cancelling hands the form back with every
+  // typed value intact, which is a recovery rather than a dead end. So the button is
+  // opt-in: abortable callers get a real one, everyone else keeps the detached stub and
+  // its harmless no-op listeners.
   const abortBtn = document.createElement("button");
   abortBtn.type = "button";
+  if (abortable) {
+    abortBtn.className = "btn-secondary chat-progress-abort";
+    abortBtn.textContent = t("shell.action.cancel");
+    bubble.appendChild(abortBtn);
+  }
   chatMessages.appendChild(msg);
   _domScroll(msg);
   return { el: msg, abortBtn };
@@ -887,8 +907,8 @@ function logUser(text) {
 
 // Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
 // textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
-function logProgress(textKeyOrFn) {
-  const { el, abortBtn } = _domProgress(textKeyOrFn);
+function logProgress(textKeyOrFn, options = {}) {
+  const { el, abortBtn } = _domProgress(textKeyOrFn, options);
   const entry = { kind: "bot", html: null, choices: [], active: false };
   chatLog.push(entry);
   return { entry, el, abortBtn };
@@ -1065,7 +1085,10 @@ function renderPreview() {
   const activeDraft = previewDraft ?? sessionDraft;
   const hasDraft = !!activeDraft;
   const driftState = resolveDriftState();
-  const driftBanner = driftState === "drifted" ? renderDriftBannerHtml() : "";
+  // The drift banner offers author actions ("Regenerer", "Vis forskjell"), so it belongs to
+  // the author view only - a participant view must not hand out controls at all.
+  const forParticipant = activeTab === "preview";
+  const driftBanner = (driftState === "drifted" && !forParticipant) ? renderDriftBannerHtml() : "";
 
   if (bundle) {
     const mod = bundle?.module ?? null;
@@ -1099,9 +1122,15 @@ function renderPreview() {
       criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
       // v1.1.81: show "genereres…" placeholder when criteria-generation is in flight for
       // the current sessionDraft.
-      criteriaLoadingText: criteriaGenerationInFlight ? t("shell.criteria.generating") : "",
+      // Generation status is an authoring signal too - the learner has no business seeing it.
+      criteriaLoadingText: (criteriaGenerationInFlight && !forParticipant) ? t("shell.criteria.generating") : "",
       // B3 (#450): drift banner rendered above the criteria section.
       driftBanner,
+      // #896 S1: the Forhaandsvisning tab claims to show what the participant meets, so it
+      // must not leak the assessor expectation, the MCQ answer key and rationale, or criteria
+      // marked candidateVisible:false. Rediger keeps showing all of it - that is the author's
+      // working view.
+      audience: forParticipant ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",
       badgeText: hasDraft
@@ -1110,7 +1139,7 @@ function renderPreview() {
         : isDraft ? t("adminContent.status.badge.draft")
         : t("adminContent.status.badge.shellOnly"),
     }, opts);
-    attachDriftBannerHandlers();
+    if (!forParticipant) attachDriftBannerHandlers();
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({
       title: activeDraft.title || t("shell.newModule.defaultTitle"),
@@ -1118,6 +1147,9 @@ function renderPreview() {
       assessorExpectedContent: activeDraft.assessorExpectedContent ?? "",
       candidateTaskConstraints: activeDraft.candidateTaskConstraints ?? "",
       mcqQuestions: activeDraft.mcqQuestions ?? [],
+      // A brand-new module lives here until it is first saved, and its Forhaandsvisning has
+      // to withhold the same things as a loaded one.
+      audience: forParticipant ? "participant" : "author",
       badgeClass: "draft",
       badgeText: t("shell.draft.unsavedBadge"),
     }, opts);
@@ -1204,6 +1236,26 @@ function updateStateRail() {
   if (srLang) {
     srLang.textContent = localeLabels[previewLocale ?? currentLocale] ?? (previewLocale ?? currentLocale);
   }
+}
+
+// #896 S2 / #892: localizeDraftAcrossLocalesWithTitle does NOT reject when a locale fails - it
+// falls back to the source text for that locale and names it in `failedLocales`. Saving that map
+// as-is stores the source language under every locale: content that looks translated and reads
+// as the wrong language, which is exactly what #892 fixed for titles.
+//
+// So strip the failed locales back out. What remains is the truth: the locales that really were
+// translated. If nothing survives but the source, send a plain string - the agreed encoding for
+// "written in one language, not translated yet".
+function dropFailedLocales(localizedValue, failedLocales, sourceLocale) {
+  if (!failedLocales?.length || !localizedValue || typeof localizedValue !== "object") return localizedValue;
+  const kept = {};
+  for (const [locale, value] of Object.entries(localizedValue)) {
+    if (!failedLocales.includes(locale)) kept[locale] = value;
+  }
+  const remaining = Object.keys(kept);
+  if (remaining.length === 0) return "";
+  if (remaining.length === 1 && remaining[0] === sourceLocale) return kept[sourceLocale];
+  return kept;
 }
 
 function buildPreviewCandidate(patch) {
@@ -3581,8 +3633,12 @@ function enterPreviewEditMode() {
       // v1.2.10: c.label/c.description kan være string ELLER locale-objekt. Bruk
       // localizeValueForLocale så direkte-edit-view-en plukker riktig locale i input-feltet.
       // humaniseCriterionId-fallback brukes kun når både string og locale-objekt mangler.
-      const rawLabel = localizeValueForLocale(c.label, currentLocale);
-      const rawDesc = localizeValueForLocale(c.description, currentLocale);
+      // editingLocale, not currentLocale: every other field in this form is read in the
+      // language being edited. Reading criteria in the UI language put English criteria
+      // beside Norwegian scenario text - and whatever was typed there was written back as
+      // the edited language (#902).
+      const rawLabel = localizeValueForLocale(c.label, editingLocale);
+      const rawDesc = localizeValueForLocale(c.description, editingLocale);
       return {
         id: String(id),
         label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
@@ -3594,6 +3650,11 @@ function enterPreviewEditMode() {
   };
   const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
   let criteriaEditorState = buildEditorStateFromCriteriaRecord(sourceCriteria);
+  // #896 S2 baseline: what the form opened with, so Lagre can tell "nothing changed" from
+  // an edit. Criteria can still arrive asynchronously (criteriaReadyCallback); if they land
+  // after this, the baseline is null and the save proceeds - erring toward saving is safe,
+  // erring toward skipping would lose work.
+  const existingCriteriaRecord = buildCriteriaRecordFromEditorState(criteriaEditorState);
   let nextNewCriterionId = 1;
 
   // Lock locale bar and signal edit mode visually
@@ -3853,7 +3914,12 @@ function enterPreviewEditMode() {
     // #665: free-text inputs are absent for MCQ-only — guard the reads and keep the fields empty.
     const newTaskText = editIsMcqOnly ? "" : (document.getElementById("previewEditTaskText")?.value.trim() || currentTaskText);
     const newGuidanceText = editIsMcqOnly ? "" : (document.getElementById("previewEditGuidanceText")?.value.trim() || currentGuidanceText);
-    const newCandidateTaskConstraints = editIsMcqOnly ? "" : (document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() || currentCandidateTaskConstraints);
+    // ?? not ||: "Rammer for kandidaten" is optional, so an emptied field must stay empty.
+    // With || an author who deleted it got the old text silently restored - and if that was
+    // the only edit, the save reported "nothing changed".
+    const newCandidateTaskConstraints = editIsMcqOnly
+      ? ""
+      : (document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() ?? currentCandidateTaskConstraints);
     // B2 (#449 redesign): capture criteria-editor state into a normalized record before
     // exitEditMode tears down the DOM. transform to storage shape (id-keyed) with weight
     // derived from maxScore. Empty/blank labels are dropped (matching the validation in
@@ -3876,62 +3942,145 @@ function enterPreviewEditMode() {
         stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
         options,
         correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
+        // Reverted to ||: an emptied rationale cannot be saved at all. Both the MCQ
+        // localization body and the MCQ-set body require a non-empty string, so clearing it
+        // produces a 400 AFTER the title and rubric may already have been written. Keeping
+        // the old text is wrong but harmless; a half-written save is not. The real fix is a
+        // schema that treats the rationale as genuinely optional - registered separately.
         rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
       };
     });
 
-    exitEditMode();
+    // #896 S2: one commitment. "Bekreft" used to stop here and hand the author a separate
+    // "Lagre utkast" step, which meant the translation round was paid on every confirm even
+    // when nothing was ever saved. Now Lagre translates AND writes the version.
+    //
+    // Order is load-bearing: translate first (abortable, nothing written), then persist
+    // (not abortable). Abort therefore means nothing was written - and because the form is
+    // left standing until the translation resolves, the author keeps every typed value.
+    const criteriaUnchanged = JSON.stringify(newCriteriaRecord) === JSON.stringify(existingCriteriaRecord);
+    const nothingChanged =
+      newTitle === currentTitle
+      && newTaskText === currentTaskText
+      && newGuidanceText === currentGuidanceText
+      && newCandidateTaskConstraints === currentCandidateTaskConstraints
+      && JSON.stringify(newMcqQuestions) === JSON.stringify(currentMcqQuestions)
+      && criteriaUnchanged;
+    if (nothingChanged) {
+      // No edit means no LLM round and no new version - saving an identical copy would
+      // spend a translation and leave a version nobody asked for.
+      exitEditMode();
+      logBot(() => escapeHtml(t("shell.directEdit.noChanges")));
+      if (sessionDraft) showDraftReadyActions(); else showModuleActions();
+      return;
+    }
+
+    const editActions = previewContent.querySelector(".preview-edit-actions");
+    const setFormBusy = (busy) => {
+      for (const button of editActions?.querySelectorAll("button") ?? []) button.disabled = busy;
+      // The locale picker rebuilds the chat AND the edit form (retranslateChat), which would
+      // leave the in-flight save writing the OLD values over a freshly rebuilt form. One save
+      // owns the session until it resolves or is aborted.
+      if (uiLocaleSelect) uiLocaleSelect.disabled = busy;
+      for (const btn of previewLocaleBar?.querySelectorAll("button") ?? []) btn.disabled = busy;
+    };
+    setFormBusy(true);
 
     const abort = startGeneration();
-    const slot = logProgress(() => t("shell.directEdit.translating"));
-    slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
+    const slot = logProgress(() => t("shell.directEdit.translatingAndSaving"), { abortable: true });
+    // The AbortController is not wired through to the localize requests, so the in-flight call
+    // cannot be stopped - it is ORPHANED instead. Because nothing is written until the
+    // translation resolves, and `commit` refuses to run once aborted, the stray response lands
+    // nowhere. Hang the restore off the SIGNAL, not the button, so a programmatic abort (a tab
+    // switch discarding the form, a locale change) unwinds exactly the same way.
+    abort.signal.addEventListener("abort", () => {
+      slot.abortBtn.disabled = true;
+      generationAbort = null;
+      setFormBusy(false);
+      logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.saveAborted")));
+    }, { once: true });
+    slot.abortBtn.addEventListener("click", () => abort.abort());
+
+    const commit = (localized, localizedMcqQuestions, failedLocales) => {
+      // The author has the discard dialog open and has not answered yet. Do not commit - the
+      // values may be about to be discarded - but do not abort either: aborting would throw
+      // away a translation that already succeeded, so "Bli vaerende" would leave them with
+      // nothing saved. Hold it until the dialog is answered.
+      if (pendingTabSwitchKind === "form") {
+        pendingSaveCommit = () => commit(localized, localizedMcqQuestions, failedLocales);
+        return;
+      }
+      generationAbort = null;
+      // Release the locale controls before the form is torn down. Only the abort path used to
+      // do this, so a SUCCESSFUL save left the UI language selector disabled for the rest of
+      // the session - with no failing test and no error to explain it.
+      setFormBusy(false);
+      // The form goes away only now, once there is something to save.
+      exitEditMode();
+      // Only the TITLE can carry the truth today. Its patch route keeps a plain string as
+      // "not translated yet" (#892). Body fields cannot: localizedTextSchema accepts either
+      // all three locales or a plain string, so a partial map is a 400 - and a plain string
+      // is expanded right back into three identical copies by translateLocalizedText before
+      // it is sent. Until that contract changes, a failed body translation is stored as the
+      // source text under every locale, and only the chat warning says otherwise. Registered
+      // rather than papered over; the publish gate in S4 is where it has to be resolved.
+      sessionDraft = buildPreviewCandidate({
+        title: dropFailedLocales(localized.title, failedLocales, editingLocale),
+        taskText: localized.taskText,
+        assessorExpectedContent: localized.assessorExpectedContent,
+        candidateTaskConstraints: localized.candidateTaskConstraints,
+        mcqQuestions: localizedMcqQuestions,
+        // Only send criteria when they were actually edited: rewriting an untouched rubric on
+        // every save collapses its localized labels to one language (#902). OMIT the key -
+        // passing null would overwrite criteria the draft is already carrying (generated or
+        // handed off from Avansert) and the save would fall back to the old persisted rubric.
+        ...(editIsMcqOnly ? { criteria: null } : (criteriaUnchanged ? {} : { criteria: newCriteriaRecord })),
+        // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
+        // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
+        ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
+        ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
+      });
+      sessionState = "draft-pending";
+      clearPreviewCandidate();
+      // A locale that failed to translate stays UNTRANSLATED rather than being filled with a
+      // copy of the source text (#892). The hole is named here and blocks publishing in S4.
+      const warning = failedLocales?.length
+        ? ` ${tf("shell.revision.titleNotTranslated", {
+            locales: failedLocales.join(", "),
+            source: editingLocale,
+          })}`
+        : "";
+      logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.saving"))}</strong>${escapeHtml(warning)}`);
+      saveDraftBundleInBackground();
+    };
 
     Promise.all([
       localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, editingLocale, newCandidateTaskConstraints),
       currentMcqQuestions.length ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale) : Promise.resolve([]),
     ])
       .then(([localizedDraft, localizedMcqQuestions]) => {
-        generationAbort = null;
-        sessionDraft = buildPreviewCandidate({
-          title: localizedDraft.title,
-          taskText: localizedDraft.taskText,
-          assessorExpectedContent: localizedDraft.assessorExpectedContent,
-          candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
-          mcqQuestions: localizedMcqQuestions,
-          criteria: editIsMcqOnly ? null : newCriteriaRecord,
-          // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
-          // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
-          ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
-          ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
-        });
-        sessionState = "draft-pending";
-        clearPreviewCandidate();
-        const warning = localizedDraft.failedLocales?.length
-          ? ` ${tf("shell.revision.titleNotTranslated", {
-              locales: localizedDraft.failedLocales.join(", "),
-              source: editingLocale,
-            })}`
-          : "";
-        logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.directEdit.done"))}</strong>${escapeHtml(warning)}`);
-        showDraftReadyActions();
+        if (abort.signal.aborted) return;
+        commit(localizedDraft, localizedMcqQuestions, localizedDraft.failedLocales);
       })
       .catch(() => {
-        generationAbort = null;
-        sessionDraft = buildPreviewCandidate({
-          title: buildLocalizedTextMap(editingLocale, newTitle),
-          taskText: buildLocalizedTextMap(editingLocale, newTaskText),
-          assessorExpectedContent: buildLocalizedTextMap(editingLocale, newGuidanceText),
-          candidateTaskConstraints: buildLocalizedTextMap(editingLocale, newCandidateTaskConstraints),
-          mcqQuestions: buildLocalizedMcqDraft(newMcqQuestions, editingLocale),
-          criteria: editIsMcqOnly ? null : newCriteriaRecord,
-          // #665: preserve module type (and MCQ threshold) on the fallback path too.
-          ...(editAssessmentMode ? { assessmentMode: editAssessmentMode } : {}),
-          ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
-        });
-        sessionState = "draft-pending";
-        clearPreviewCandidate();
-        logResolveSlot(slot, () => escapeHtml(t("shell.directEdit.translateError")));
-        showDraftReadyActions();
+        // Already handled by the abort listener above - the form is back and the slot is
+        // resolved. Nothing was written, so there is nothing to undo here.
+        if (abort.signal.aborted) return;
+        // Translation failed outright. Send PLAIN STRINGS: under #892 a plain string means
+        // "written in one language, not translated yet", which is the truth here.
+        // buildLocalizedTextMap would instead copy the source text into all three locales -
+        // content that looks translated and reads as the wrong language, the exact bug #892
+        // fixed. Every target locale is reported as failed so the author is told.
+        commit(
+          {
+            title: newTitle,
+            taskText: newTaskText,
+            assessorExpectedContent: newGuidanceText,
+            candidateTaskConstraints: newCandidateTaskConstraints,
+          },
+          newMcqQuestions,
+          supportedLocales.filter((locale) => locale !== editingLocale),
+        );
       });
   });
 
@@ -3990,9 +4139,10 @@ function showModuleActions() {
 
 function openAdvancedEditor(moduleId) {
   const url = buildAdminContentAdvancedUrl(moduleId);
-  const hasUnsavedDraft =
-    !!sessionDraft &&
-    !!(sessionDraft.taskText || sessionDraft.assessorExpectedContent || (sessionDraft.mcqQuestions?.length ?? 0) > 0);
+  // Same predicate as the tab-switch warning and the status rail (#896 S1). It used to also
+  // require taskText/guidance/MCQ content, which meant the tab could warn "you have an unsaved
+  // draft" and then this hand-off would navigate away without offering to save it.
+  const hasUnsavedDraft = !!sessionDraft;
 
   if (!hasUnsavedDraft) {
     // No unsaved work — carry locale context only so the advanced editor can restore it
@@ -4042,10 +4192,300 @@ function openAdvancedEditor(moduleId) {
   ]);
 }
 
-function bindModeSwitchButtons() {
-  if (modeSwitchAdvancedBtn) {
-    modeSwitchAdvancedBtn.addEventListener("click", () => openAdvancedEditor(selectedModuleId));
+// ---------------------------------------------------------------------------
+// #896 S1: view tabs (Forhaandsvisning / Rediger / Innstillinger)
+//
+// Rediger is the default and is where the shell has always lived: chat plus the
+// preview pane, which doubles as the edit surface. The tabs do not re-render the
+// preview or touch session state - they only change which panes are visible - so
+// switching back and forth cannot lose a generated draft.
+//
+// The one thing a switch CAN destroy is an open direct-edit form, whose field
+// values live only in the DOM (enterPreviewEditMode rewrites previewContent).
+// That case, and only that case, is guarded by a confirm dialog. A saved-but-
+// unpublished sessionDraft needs no warning: it survives in memory and is what
+// Forhaandsvisning renders.
+// ---------------------------------------------------------------------------
+
+// Declared before tabFromUrl() runs at module scope - a const in the temporal dead zone
+// would throw on load and take the whole shell with it.
+const TAB_ORDER = ["preview", "edit", "settings"];
+const TAB_QUERY_PARAM = "tab";
+
+function tabFromUrl() {
+  const requested = new URLSearchParams(location.search).get(TAB_QUERY_PARAM);
+  return TAB_ORDER.includes(requested) ? requested : "edit";
+}
+
+function syncTabToUrl(tab) {
+  const url = new URL(location.href);
+  if (tab === "edit") url.searchParams.delete(TAB_QUERY_PARAM);
+  else url.searchParams.set(TAB_QUERY_PARAM, tab);
+  // replaceState, not pushState: tabs are a view of one module, and filling the back stack
+  // with them would make Back mean "previous tab" instead of "previous page".
+  history.replaceState(history.state, "", url);
+}
+
+let activeTab = tabFromUrl();
+let pendingTabSwitch = null;
+let pendingTabSwitchKind = null;
+// A save whose translation resolved while the discard dialog was open. Held rather than
+// committed OR thrown away, because the author has not answered yet: "Bli vaerende" must
+// finish the save they asked for, "Forkast" must drop it.
+let pendingSaveCommit = null;
+
+function hasOpenEditForm() {
+  return !!document.getElementById("previewEditConfirm");
+}
+
+// Same signal as the status rail's "Ulagrede endringer": if the rail calls it unsaved, a
+// tab switch says so too. The two cost different things, so the dialog says which:
+// an open form's field values are LOST, while a draft is kept but stays unsaved.
+function unsavedTabSwitchKind() {
+  if (hasOpenEditForm()) return "form";
+  if (sessionDraft) return "draft";
+  return null;
+}
+
+function applyTabState(tab) {
+  // Forhaandsvisning renders the same module for a different audience, so crossing that
+  // boundary needs a re-render. Edit <-> Innstillinger does not - both are the author view,
+  // and re-rendering there would be wasted work on every settings visit.
+  const audienceChanges = (activeTab === "preview") !== (tab === "preview");
+  activeTab = tab;
+  for (const [name, button] of Object.entries(tabButtons)) {
+    if (!button) continue;
+    const selected = name === tab;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    // Roving tabindex: a tablist is ONE tab stop, and the arrow keys move within it.
+    button.tabIndex = selected ? 0 : -1;
   }
+  // setHidden, not the .hidden class: workspace-shell sets display:grid and the panels
+  // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
+  setHidden(tabPanelModule, tab === "settings");
+  setHidden(tabPanelSettings, tab !== "settings");
+  const chatPane = document.querySelector(".chat-pane");
+  setHidden(chatPane, tab === "preview");
+  tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
+  // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
+  if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
+  // Safe here: an open edit form is torn down before any switch away from Rediger, so this
+  // cannot discard typed values. No bundle guard - a new module has a draft and no bundle,
+  // and its preview needs the audience swap just as much.
+  if (audienceChanges) renderPreview();
+  // Rendered on entry rather than kept in sync: the panel is a read-out of the loaded
+  // bundle, and the bundle cannot change while Innstillinger is the visible tab.
+  if (tab === "settings") renderSettingsPanel();
+}
+
+function switchToTab(tab) {
+  if (tab === activeTab) return;
+  // Gate on the tab being LEFT: only Rediger holds an editing surface. Gating on the
+  // destination re-asked on every Forhaandsvisning <-> Innstillinger move, where nothing
+  // is at risk and the author has already answered.
+  const kind = activeTab === "edit" ? unsavedTabSwitchKind() : null;
+  if (kind && unsavedTabSwitchDialog) {
+    pendingTabSwitch = tab;
+    pendingTabSwitchKind = kind;
+    const body = document.getElementById("unsavedTabSwitchBody");
+    const confirmBtn = document.getElementById("tabSwitchDiscard");
+    if (body) body.textContent = t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.draftBody");
+    if (confirmBtn) {
+      confirmBtn.textContent = t(kind === "form" ? "shell.tab.unsaved.discard" : "shell.tab.unsaved.switchAnyway");
+      // Nothing is destroyed when only a draft is unsaved, so the action is not destructive.
+      confirmBtn.className = kind === "form" ? "btn-danger" : "btn-primary";
+    }
+    unsavedTabSwitchDialog.showModal();
+    return;
+  }
+  applyTabState(tab);
+  syncTabToUrl(tab);
+  if (tab === "settings") scrollPreviewToTop();
+}
+
+// ---------------------------------------------------------------------------
+// #896 S3a: the Innstillinger read-out.
+//
+// Every value here already sits in the bundle the shell loaded — this reads, it never
+// writes. Editing still hands off to the Avansert page until S3b wires each row up, which
+// is a deliberate split: the settings surface is worth having in the new IA before the
+// write paths follow, and a read-only panel cannot corrupt a module.
+// ---------------------------------------------------------------------------
+
+function renderSettingsPanel() {
+  const host = document.getElementById("settingsSummary");
+  if (!host) return;
+
+  if (!bundle) {
+    host.innerHTML = `<p class="settings-empty">${escapeHtml(t("shell.settings.noModule"))}</p>`;
+    return;
+  }
+
+  const cfg = bundle.selectedConfiguration ?? {};
+  const version = cfg.moduleVersion ?? null;
+  const mod = bundle.module ?? {};
+  const policy = version?.assessmentPolicy ?? null;
+  const criteria = cfg.rubricVersion?.criteria ?? null;
+
+  const mode = version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+  const modeLabel = t(`shell.settings.mode.${mode}`);
+
+  const rows = [];
+  const row = (labelKey, valueHtml, isEmpty = false) => {
+    rows.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
+  };
+  const emptyText = escapeHtml(t("shell.settings.notSet"));
+
+  // Module type first, as the issue specifies: it decides which fields Rediger even shows.
+  row("shell.settings.moduleType", escapeHtml(modeLabel));
+
+  const mcqMinPercent = policy?.passRules?.mcqMinPercent;
+  if (mode !== "FREETEXT_ONLY") {
+    row(
+      "shell.settings.mcqThreshold",
+      Number.isFinite(mcqMinPercent) ? `${escapeHtml(String(mcqMinPercent))} %` : emptyText,
+      !Number.isFinite(mcqMinPercent),
+    );
+  }
+
+  const criteriaEntries = criteria && typeof criteria === "object" ? Object.entries(criteria) : [];
+  if (criteriaEntries.length > 0) {
+    const items = criteriaEntries
+      .map(([id, raw]) => {
+        const c = raw && typeof raw === "object" ? raw : {};
+        const label = localizeValue(c.label) || humaniseCriterionId(String(id));
+        const maxScore = Number(c.maxScore) > 0 ? ` (${Number(c.maxScore)})` : "";
+        return `<li>${escapeHtml(label)}${escapeHtml(maxScore)}</li>`;
+      })
+      .join("");
+    row("shell.settings.criteria", `<ul class="settings-criteria">${items}</ul>`);
+  } else {
+    row("shell.settings.criteria", emptyText, true);
+  }
+
+  const hasPrompt = !!cfg.promptTemplateVersion;
+  row(
+    "shell.settings.assessmentPrompt",
+    hasPrompt ? escapeHtml(tf("shell.settings.promptVersion", { version: cfg.promptTemplateVersion.versionNo })) : emptyText,
+    !hasPrompt,
+  );
+
+  const submissionFields = version?.submissionSchema?.fields;
+  row(
+    "shell.settings.submissionSchema",
+    Array.isArray(submissionFields) && submissionFields.length
+      ? escapeHtml(tf("shell.settings.fieldCount", { count: submissionFields.length }))
+      : emptyText,
+    !(Array.isArray(submissionFields) && submissionFields.length),
+  );
+
+  const certLevel = localizeValue(mod.certificationLevel);
+  row("shell.settings.certificationLevel", certLevel ? escapeHtml(certLevel) : emptyText, !certLevel);
+
+  const validity = [mod.validFrom, mod.validTo]
+    .map((d) => (d ? new Date(d).toLocaleDateString(currentLocale) : null));
+  const validityText = validity[0] || validity[1]
+    ? `${validity[0] ?? "—"} → ${validity[1] ?? "—"}`
+    : null;
+  row("shell.settings.validity", validityText ? escapeHtml(validityText) : emptyText, !validityText);
+
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>`;
+}
+
+function bindViewTabs() {
+  for (const [name, button] of Object.entries(tabButtons)) {
+    button?.addEventListener("click", () => switchToTab(name));
+    // Standard tablist keyboard model. Focus follows the arrow keys and the view
+    // switches with it, which is the expected behaviour for tabs whose panels are
+    // already loaded.
+    button?.addEventListener("keydown", (event) => {
+      const index = TAB_ORDER.indexOf(name);
+      let target = null;
+      if (event.key === "ArrowRight") target = TAB_ORDER[(index + 1) % TAB_ORDER.length];
+      else if (event.key === "ArrowLeft") target = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+      else if (event.key === "Home") target = TAB_ORDER[0];
+      else if (event.key === "End") target = TAB_ORDER[TAB_ORDER.length - 1];
+      if (!target) return;
+      event.preventDefault();
+      tabButtons[target]?.focus();
+      switchToTab(target);
+    });
+  }
+
+
+  const stayOnCurrentTab = () => {
+    pendingTabSwitch = null;
+    pendingTabSwitchKind = null;
+    // Staying means "keep what I was doing" - including a save that finished while the
+    // dialog was up.
+    const resume = pendingSaveCommit;
+    pendingSaveCommit = null;
+    resume?.();
+    // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
+    // leave focus on a tab that is not the selected one - or nowhere, in the closed
+    // dialog. Put focus back where the selection actually is.
+    tabButtons[activeTab]?.focus();
+  };
+
+  document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
+    unsavedTabSwitchDialog?.close();
+    stayOnCurrentTab();
+  });
+
+  // Escape closes a native <dialog> without going through any button, which would leave
+  // pendingTabSwitch stale and focus parked on an unselected tab. The dialog's close event
+  // covers every dismissal path, so treat anything that is not an explicit discard as Stay.
+  unsavedTabSwitchDialog?.addEventListener("close", () => {
+    if (pendingTabSwitch) stayOnCurrentTab();
+  });
+
+  // A native <dialog> does not close on a backdrop click by itself. The click lands on the
+  // dialog element (the backdrop is its pseudo-element), so target identity is the test.
+  unsavedTabSwitchDialog?.addEventListener("click", (event) => {
+    if (event.target === unsavedTabSwitchDialog) unsavedTabSwitchDialog.close();
+  });
+
+  document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
+    const target = pendingTabSwitch;
+    const kind = pendingTabSwitchKind;
+    pendingTabSwitch = null;
+    pendingTabSwitchKind = null;
+    unsavedTabSwitchDialog?.close();
+    if (!target) return;
+    // Tear the form down FIRST. applyTabState re-renders the preview when the audience
+    // changes, which removes #previewEditCancel - and then its handler never runs, leaving
+    // preview-pane--editing, criteriaReadyCallback and the chat actions stranded until a
+    // reload. Only an open form is discarded; a draft is carried along untouched.
+    if (kind === "form") {
+      // A save in flight has disabled that Cancel button, so clicking it would do NOTHING and
+      // the running translation would go on to save the values just discarded. Abort first:
+      // the signal handler re-enables the form, and commit() refuses to run once aborted.
+      pendingSaveCommit = null;
+      generationAbort?.abort();
+      document.getElementById("previewEditCancel")?.click();
+    }
+    applyTabState(target);
+    syncTabToUrl(target);
+    tabButtons[target]?.focus();
+  });
+
+  // Until S3 moves the fields in, Innstillinger hands off to the Avansert page and
+  // reuses its unsaved-draft handling. That handling asks the author to choose (save
+  // first / take the draft along / cancel) in the CHAT, which Innstillinger hides - so
+  // return to Rediger first, or the button looks dead whenever a draft exists.
+  settingsOpenAdvancedBtn?.addEventListener("click", () => {
+    applyTabState("edit");
+    // The hand-off can be cancelled, or fail, and leave us here - so the URL has to move too,
+    // or a reload would drop the author back into Innstillinger.
+    syncTabToUrl("edit");
+    openAdvancedEditor(selectedModuleId);
+  });
+
+  // Establish the roving tabindex now. Without this the assignment in applyTabState first
+  // runs on the initial tab switch, so until then all three tabs sit in the tab order -
+  // the exact behaviour the roving model exists to remove.
+  applyTabState(activeTab);
 }
 
 // ---------------------------------------------------------------------------
@@ -4808,6 +5248,13 @@ function translatePageStaticText() {
     const key = el.getAttribute("data-i18n-placeholder");
     if (key) el.placeholder = t(key);
   }
+  // #896 S1: accessible names need translating too. Without this an aria-label stays in
+  // whatever language it was authored in, so a screen reader announces a Norwegian group
+  // name around English tabs.
+  for (const el of document.querySelectorAll("[data-i18n-aria-label]")) {
+    const key = el.getAttribute("data-i18n-aria-label");
+    if (key) el.setAttribute("aria-label", t(key));
+  }
 }
 
 
@@ -4884,7 +5331,7 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
-  bindModeSwitchButtons();
+  bindViewTabs();
   renderPreviewLocaleBar();
   renderPreview();
   loadVersion(appVersionLabel, "A2 Content Workspace");

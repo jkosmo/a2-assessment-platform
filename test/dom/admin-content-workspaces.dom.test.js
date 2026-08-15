@@ -20,17 +20,31 @@ describe("admin content DOM accessibility contracts", () => {
     document.body.innerHTML = "";
   });
 
-  it("keeps one clear editing-mode switch and live region in the conversational shell", () => {
+  // #896 S1: the shell's mode switch became a tablist of three views. The advanced page
+  // keeps its own switch until S3 folds it into the Innstillinger tab.
+  it("exposes the three module views as one tablist with Rediger selected", () => {
     const body = mountPage("public/admin-content.html");
 
-    const modeGroup = getByRole(body, "group", { name: "Redigeringsmodus" });
-    expect(modeGroup).toBeTruthy();
+    const tablist = getByRole(body, "tablist", { name: "Modulvisning" });
+    expect(tablist).toBeTruthy();
+    expect(queryAllByRole(body, "tablist", { name: "Modulvisning" })).toHaveLength(1);
 
-    expect(getByRole(body, "button", { name: "Samtale" })).toBeTruthy();
-    expect(getByRole(body, "button", { name: "Avansert" })).toBeTruthy();
+    const tabs = queryAllByRole(body, "tab");
+    expect(tabs.map((tab) => tab.textContent.trim())).toEqual([
+      "Forhåndsvisning",
+      "Rediger",
+      "Innstillinger",
+    ]);
+    // Rediger is the default view, and each tab points at the panel it controls.
+    expect(tabs.filter((tab) => tab.getAttribute("aria-selected") === "true")).toHaveLength(1);
+    expect(getByRole(body, "tab", { name: "Rediger" }).getAttribute("aria-selected")).toBe("true");
+    for (const tab of tabs) {
+      const panelId = tab.getAttribute("aria-controls");
+      expect(body.querySelector(`#${panelId}`)).toBeTruthy();
+    }
+
     expect(getByRole(body, "log")).toBeTruthy();
     expect(getByRole(body, "status")).toBeTruthy();
-    expect(queryAllByRole(body, "group", { name: "Redigeringsmodus" })).toHaveLength(1);
   });
 
   it("keeps one clear editing-mode switch and preview region in the advanced editor", () => {

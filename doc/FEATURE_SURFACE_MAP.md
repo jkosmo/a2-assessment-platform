@@ -367,3 +367,51 @@ one place. A change to any create/import path, or to the token scope, must keep 
 `…-token.test.ts` (scope, expiry/revoke, role snapshot), `…-skill-import.test.ts` (fixture through
 the skill script), `test/unit/agent-authoring-validation.test.ts` (rules), `test/e2e/profile-agent-tokens.spec.ts`
 (token UI). User docs: `doc/AGENT_ACCESS_GUIDE.md`; API: `doc/API_REFERENCE.md`; design: `doc/design/AGENT_AUTHORING_647.md`.
+
+## 16. Module workspace view tabs — audience, visibility and unsaved state (#896 S1)
+
+The module workspace is **three views of one module**, not three pages: Forhåndsvisning, Rediger
+(default) and Innstillinger. Forhåndsvisning and Rediger share **one** DOM panel — the tabs only
+change what is visible and *who the content is rendered for*. A change to any of the four
+behaviours below has to touch every row here, because they are wired in three different files.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Tab bar + panels | `#tabPreview`/`#tabEdit`/`#tabSettings`, `#tabPanelModule`, `#tabPanelSettings` in `public/admin-content.html` | `role="tablist"`; Forhåndsvisning and Rediger share `#tabPanelModule`, whose `aria-labelledby` follows the active tab |
+| Tab state machine | `applyTabState` / `switchToTab` / `bindViewTabs` in `public/static/admin-content-shell.js` | selection, roving `tabindex` (**initialised on mount**, not on first switch), arrow/Home/End, `setHidden` for every pane |
+| Tab in the URL | `tabFromUrl` / `syncTabToUrl` (`?tab=preview\|settings`) | the tab survives reload and is shareable; Rediger is the default and stays OUT of the query so the plain route is canonical. `replaceState`, not `push` — Back must mean previous page, not previous tab. S3 can redirect `/advanced` to `?tab=settings` |
+| **Audience filtering** | `audience` option in `public/static/admin-content-preview.js` (`buildPreviewHtml`, `renderPreviewMcqQuestions`, `renderPreviewCriteria`), set from `activeTab` at the shell's call site | `"participant"` withholds assessor expectation, MCQ correct-answer marking **and** the answer meta line, rationale, and `candidateVisible:false` criteria. Any NEW author-only field added to the preview must be gated here too, or it leaks into the tab that promises the learner's view |
+| Unsaved-state guard | `unsavedTabSwitchKind` + `#dialogUnsavedTabSwitch` in the shell | Warns on the **same signal as the status rail**: an open direct-edit form (`"form"`) or any `sessionDraft` (`"draft"`). The two cost different things, so the dialog copy and the confirm button switch with the kind — form values are LOST (`Forkast og bytt`, danger), a draft is only unsaved (`Bytt likevel`, primary) and is carried along. Every dismissal path — button, Escape, backdrop — routes through the dialog's `close` event so focus and selection cannot disagree |
+| Hand-off to Advanced | `settingsOpenAdvanced` → `openAdvancedEditor` | switches back to Rediger **first**: the hand-off asks its question in the chat, which Innstillinger hides |
+| Conditional visibility | `setHidden` from `public/static/dom-visibility.js` | `.workspace-shell` is `display:grid` and the panels are `.card`; note the mirror trap — the `hidden` **attribute** survives `setHidden(el, false)`, so panels must start with inline `style="display:none"` |
+
+**Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "opens on Rediger and the tabs switch
+between the three views", "Forhaandsvisning withholds the answer key and assessor-only content",
+"leaving Rediger with an open edit form warns…", "Escape on the unsaved-changes dialog behaves like
+staying", "the tablist is one tab stop…", "staying after an arrow-key switch returns focus…", "help
+on the module route explains the tabs…". DOM contract: `test/dom/admin-content-workspaces.dom.test.js`
+("exposes the three module views as one tablist"). Docs: `doc/route-map.md`,
+`doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md`, `doc/design/SHELL_ADVANCED_PARITY.md`,
+`doc/pilot/VERIFICATION_CHECKLIST.md`. **S3 will move the settings fields into the tab and delete
+the Avansert page — update every row above in that PR.**
+
+## 17. Direct-edit save — one button, five transactions (#896 S2)
+
+`Lagre` in the direct-edit form translates **and** writes. The order is load-bearing: translate
+first (nothing written, abortable), persist second. Three flows now share one piece of state and
+must be changed together — three QA rounds found a defect in each pairing.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| Capture + no-change check | `previewEditConfirm` handler in `public/static/admin-content-shell.js` | Baselines are captured when the form OPENS (`existingCriteriaRecord`). No edit ⇒ no LLM call and no version. Optional fields read with `??` where the schema tolerates empty (`candidateTaskConstraints`) and `||` where it does not (MCQ `rationale` — min(1), see below) |
+| Busy state | `setFormBusy` | Disables the form buttons **and** the UI/preview locale pickers: a locale switch runs `retranslateChat`, which rebuilds the form under a running save. Must be released on BOTH the success and abort paths — releasing only on abort left the language selector dead for the session |
+| Abort | `abort.signal` listener (not the button) | The AbortController is NOT wired to the localize requests, so the call is **orphaned**, not stopped: `commit()` refuses to run once aborted and the response lands nowhere. The LLM call still completes and still costs |
+| Interplay with the tab dialog | `pendingSaveCommit` + `unsavedTabSwitchKind` in the shell | A translation that resolves while the discard dialog is open is HELD: «Bli værende» finishes the save, «Forkast» drops it. Aborting on dialog-open threw away a completed translation; committing during it saved values the author was about to discard |
+| Persistence | `saveDraftBundleInBackground` | **Five independent calls** (title PATCH, rubric, prompt, MCQ, module-version), each its own transaction, none idempotent — see #906. Untouched criteria are OMITTED from the patch (not sent as `null`, which would wipe draft criteria) so #902 only affects authors who really edited criteria |
+| Localization honesty | `dropFailedLocales` | Applies to the **title only**. Body fields cannot express partial translation: the schema demands all three locales and `translateLocalizedText` re-expands a plain string into three copies — #905, which also blocks the S4 publish gate |
+
+**Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "Lagre translates and saves in one step,
+and an untouched form does neither", "cancelling the save writes nothing and hands the fields
+back", "discarding while a save is running writes nothing", "a failed translation saves one
+language honestly instead of three copies". Also `admin-content-mcq-only-revision.spec.ts` (an
+MCQ-only module must make a real edit before it saves).
