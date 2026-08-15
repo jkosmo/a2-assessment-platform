@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.5 - 2026-08-15
+
+QA-runde 3 på publiseringsgaten (#896 S4). Fire funn — konvergensen er tydelig: 8, 7, 4.
+
+**Reservveien kunne lykkes og likevel bli meldt som feilet.** Om den samlede oversetteren feilet
+mens felt-for-felt-oversetteren fylte hvert eneste hull, ble språket likevel markert som mislykket.
+Oversettelsene ble lagret, men den automatiske republiseringen forfatteren hadde bedt om kjørte
+aldri, og meldingen sa at oversettelsen hadde feilet. Om et språk faktisk mangler, avgjøres nå av
+hullene som står igjen — ikke av om et kall kastet en feil.
+
+**Et MCQ-spørsmål uten begrunnelse kunne ikke oversettes.** `generatedMcqQuestionBodySchema` krevde
+en ikke-tom begrunnelse, mens lagringsskjemaet lar den være fraværende. En helt lovlig lagret modul
+kunne dermed ikke gjennom utbedringen: 400 før modellen kjørte. Skjemaet er nå på linje med
+lagringen, og klienten utelater feltet i stedet for å sende tom streng.
+
+**Arkitekturnotatet beskrev fortsatt fire felt.** Beskrivelse og MCQ manglet, selv om de blokkerer.
+
+**Avansert-siden** mangler fortsatt selve utbedringshandlingen, og det er et bevisst valg — siden
+skal bort i S3c, og to kopier av flyten er arbeid som kastes. Feilmeldingen der peker nå eksplisitt
+til samtale-arbeidsrommet, og begrensningen er dokumentert i arkitekturnotatet.
+
 ## 2.17.4 - 2026-08-15
 
 QA-runde 2 på publiseringsgaten (#896 S4). Sju funn. De fleste hadde samme form: utbedringen

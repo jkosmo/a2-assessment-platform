@@ -2442,7 +2442,6 @@ async function translateMissingLocalesThenPublish(issues) {
 
   const failedLocales = [];
   for (const targetLocale of missingLocales) {
-    let failedHere = false;
     const stillMissing = () =>
       [...gapFields].filter(
         (field) => !merged[field][targetLocale]?.trim() && merged[field][sourceLocale]?.trim(),
@@ -2462,7 +2461,10 @@ async function translateMissingLocalesThenPublish(issues) {
           if (gapFields.has(field)) fillLocaleGap(merged[field], targetLocale, draft[field]);
         }
       } catch {
-        failedHere = true;
+        // Swallowed on purpose: the per-field pass below is the retry, and whether this locale
+        // actually failed is decided at the END from the gaps that remain — not from whether a
+        // call threw. Treating the exception as failure meant a fallback that filled every gap
+        // still reported failure and skipped the automatic republish.
       }
     }
 
@@ -2477,10 +2479,9 @@ async function translateMissingLocalesThenPublish(issues) {
           body: JSON.stringify({ [key]: merged[field][sourceLocale], sourceLocale, targetLocale }),
         });
         const translated = result?.[key];
-        if (typeof translated !== "string" || !translated.trim()) throw new Error("empty translation");
-        merged[field][targetLocale] = translated.trim();
+        if (typeof translated === "string" && translated.trim()) merged[field][targetLocale] = translated.trim();
       } catch {
-        failedHere = true;
+        // Same reasoning: the gap either got filled or it did not, and that is what is checked.
       }
     }
 
@@ -2489,12 +2490,18 @@ async function translateMissingLocalesThenPublish(issues) {
         const mcqResult = await apiFetch("/api/admin/content/generate/mcq/localize", getHeaders, {
           method: "POST",
           body: JSON.stringify({
-            questions: currentMcq.map((question) => ({
-              stem: sourceTextForLocale(question?.stem ?? "", sourceLocale),
-              options: (question?.options ?? []).map((option) => sourceTextForLocale(option, sourceLocale)),
-              correctAnswer: sourceTextForLocale(question?.correctAnswer ?? "", sourceLocale),
-              rationale: sourceTextForLocale(question?.rationale ?? "", sourceLocale),
-            })),
+            questions: currentMcq.map((question) => {
+              // A question may legitimately have no rationale. Sending "" for it is not the same
+              // as leaving it out — the endpoint rejects an empty string, so the whole fill died
+              // before the model ran.
+              const rationale = sourceTextForLocale(question?.rationale ?? "", sourceLocale);
+              return {
+                stem: sourceTextForLocale(question?.stem ?? "", sourceLocale),
+                options: (question?.options ?? []).map((option) => sourceTextForLocale(option, sourceLocale)),
+                correctAnswer: sourceTextForLocale(question?.correctAnswer ?? "", sourceLocale),
+                ...(rationale.trim() ? { rationale } : {}),
+              };
+            }),
             sourceLocale,
             targetLocale,
           }),
@@ -2511,11 +2518,22 @@ async function translateMissingLocalesThenPublish(issues) {
           });
         });
       } catch {
-        failedHere = true;
+        // Checked below, not here.
       }
     }
 
-    if (failedHere) failedLocales.push(targetLocale);
+    // A locale counts as failed only if something is STILL missing after every attempt. Deciding
+    // from thrown exceptions instead meant a first-choice localizer that failed marked the locale
+    // as failed even when the fallback filled every gap — the author was told the translation had
+    // failed, and the automatic republish they had asked for never ran.
+    const mcqStillMissing =
+      needsMcqFill
+      && mergedMcq.some((question) =>
+        [question.stem, question.correctAnswer, question.rationale, ...question.options].some(
+          (map) => map[sourceLocale]?.trim() && !map[targetLocale]?.trim(),
+        ),
+      );
+    if (stillMissing().length > 0 || mcqStillMissing) failedLocales.push(targetLocale);
   }
 
   // #905: never store a source-language copy under a locale that failed. An empty field is

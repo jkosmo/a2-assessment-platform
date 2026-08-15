@@ -384,7 +384,11 @@ export const generatedMcqQuestionBodySchema = z.object({
   stem: z.string().trim().min(1),
   options: z.array(z.string().trim().min(1)).min(2).max(6),
   correctAnswer: z.string().trim().min(1),
-  rationale: z.string().trim().min(1),
+  // #896 S4: optional, matching the SAVE schema (`mcqSetVersionBodySchema`). It was required here
+  // only, so a question saved without a rationale — perfectly legal — could not be sent for
+  // localization: the request 400'd before the model ran, and "translate what is missing" could
+  // never finish for that module.
+  rationale: z.string().trim().min(1).optional(),
 });
 
 export const mcqLocalizationBodySchema = z.object({

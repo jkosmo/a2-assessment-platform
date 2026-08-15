@@ -1968,6 +1968,120 @@ test.describe("admin content browser coverage", () => {
     await expect.poll(() => publishAttempts).toBe(2);
   });
 
+  // MCQ gaps are reported per question, so their field name carries an index (`mcq.question3`)
+  // and cannot have one i18n key each. The label is built from the pattern — and if that ever
+  // breaks, the author reads a raw internal key.
+  test("shell publish names an MCQ gap by question number, not by its internal field key", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      await route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "publish_blocked_by_validation",
+          issues: [
+            {
+              severity: "blocking",
+              code: "translation_incomplete",
+              message: "mcq.question2: missing nn",
+              field: "mcq.question2",
+              missingLocales: ["nn"],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+
+    await expect(
+      page.getByText(/Multiple-choice question 2|Flervalgsspørsmål 2/).first(),
+    ).toBeVisible();
+    await expect(page.getByText("mcq.question2")).toHaveCount(0);
+  });
+
+  // #896 S4 QA round 3: the fallback is only a fallback if it can rescue the attempt. Deciding
+  // "did this locale fail" from a thrown exception rather than from the gaps that remain meant a
+  // fully successful fallback still reported failure and skipped the republish the author asked
+  // for.
+  test("gap-fill succeeds when the batch localizer fails but the per-field fallback fills every gap", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "Scenario text (EN)", nb: "Scenario text (NB)" },
+          mcqQuestions: [
+            {
+              stem: localizedText("Which body ratifies the agreement?"),
+              options: [localizedText("The board"), localizedText("The members")],
+              correctAnswer: localizedText("The members"),
+              rationale: localizedText("Members vote on ratification."),
+            },
+          ],
+        }),
+      },
+    });
+
+    // The batch localizer is down. The per-field one (mocked in the helpers) still works.
+    await page.route("**/api/admin/content/generate/module-draft/localize", async (route) => {
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+
+    let publishAttempts = 0;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      publishAttempts += 1;
+      await route.fulfill(
+        publishAttempts === 1
+          ? {
+              status: 422,
+              contentType: "application/json",
+              body: JSON.stringify({
+                error: "publish_blocked_by_validation",
+                issues: [
+                  {
+                    severity: "blocking",
+                    code: "translation_incomplete",
+                    message: "taskText: missing nn",
+                    field: "taskText",
+                    missingLocales: ["nn"],
+                  },
+                ],
+              }),
+            }
+          : {
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+            },
+      );
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    // The gap really was filled — by the fallback.
+    await expect.poll(() => state.lastModuleVersionBody?.taskText?.nn).toBeTruthy();
+    // And because it was filled, publishing was retried. The author is not told the translation
+    // failed when it plainly did not.
+    await expect.poll(() => publishAttempts).toBe(2);
+    await expect(page.getByText(/Fikk ikke oversatt alt|Could not translate every gap/)).toHaveCount(0);
+  });
+
   test("shell publish keeps the module loaded and shows module actions", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],

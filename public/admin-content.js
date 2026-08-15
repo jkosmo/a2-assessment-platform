@@ -645,6 +645,18 @@ function parseActionableErrorMessage(error) {
     const issueText = Array.isArray(payload.issues) && payload.issues.length > 0
       ? payload.issues.map((issue) => issue.message).join("; ")
       : "";
+    // #896 S4: the translation gate's remediation action ("Oversett det som mangler") lives in the
+    // conversational workspace, not here — this page is being retired in the same epic, so it is
+    // not getting a second copy of that flow. Say where the fix is instead of leaving the author
+    // with a correct diagnosis and no next step.
+    const hasTranslationGate = Array.isArray(payload.issues)
+      && payload.issues.some((issue) => issue?.code === "translation_incomplete");
+    if (hasTranslationGate) {
+      return `${issueText} — ${
+        t("adminContent.publish.translationGateHint")
+        || "Bruk «Oversett det som mangler» i samtale-arbeidsrommet for å fylle hullene."
+      }`;
+    }
     if (typeof payload.message === "string" && payload.message.trim().length > 0) {
       // The top-level message is usually a summary that ends in "see `issues` for details" —
       // and this page then showed only the summary, so the details it pointed at were the one

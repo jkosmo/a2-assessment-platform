@@ -106,7 +106,8 @@ export type McqLocalizationQuestion = {
   stem: string;
   options: string[];
   correctAnswer: string;
-  rationale: string;
+  // Optional: a saved question need not have one (#896 S4).
+  rationale?: string;
 };
 
 export type McqLocalizationInput = {

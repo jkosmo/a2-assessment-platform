@@ -14,6 +14,7 @@ import {
   validateModuleVersionForPublish,
   validateMcqDistractors,
   validateScenarioDraft,
+  validateMcqTranslationCompleteness,
 } from "../../src/modules/adminContent/contentValidationService.js";
 import type { GeneratedMcqQuestion } from "../../src/modules/adminContent/llmContentGenerationService.js";
 
@@ -308,5 +309,124 @@ describe("validateScenarioDraft", () => {
     expect(codes).toContain("TASK_TEXT_TOO_SHORT");
     expect(codes).toContain("MISSING_ASSESSOR_EXPECTED_CONTENT");
     expect(result.valid).toBe(false);
+  });
+});
+
+// #896 S4: MCQ translation completeness. Reported per QUESTION rather than per field, because a
+// question with eight untranslated parts is one thing for the author to fix, not eight.
+describe("validateMcqTranslationCompleteness (#896 S4)", () => {
+  const three = (base: string) => JSON.stringify({ "en-GB": base, nb: `${base} nb`, nn: `${base} nn` });
+
+  it("passes a question whose every part has all three locales", () => {
+    const issues = validateMcqTranslationCompleteness([
+      {
+        stem: three("Q"),
+        optionsJson: JSON.stringify([three("A"), three("B")]),
+        correctAnswer: three("A"),
+        rationale: three("because"),
+      },
+    ]);
+    expect(issues).toEqual([]);
+  });
+
+  it("collapses every missing part of one question into a single issue naming that question", () => {
+    const issues = validateMcqTranslationCompleteness([
+      {
+        stem: JSON.stringify({ "en-GB": "Q", nb: "Q nb" }),
+        optionsJson: JSON.stringify([JSON.stringify({ "en-GB": "A" }), three("B")]),
+        correctAnswer: three("A"),
+        rationale: three("because"),
+      },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.field).toBe("mcq.question1");
+    // The option is missing nb AND nn; the stem is missing nn. The union is reported once.
+    expect(issues[0]?.missingLocales).toEqual(["nb", "nn"]);
+    expect(issues[0]?.severity).toBe("blocking");
+  });
+
+  it("numbers questions from 1, the way an author counts them", () => {
+    const complete = {
+      stem: three("Q"),
+      optionsJson: JSON.stringify([three("A"), three("B")]),
+      correctAnswer: three("A"),
+      rationale: three("because"),
+    };
+    const issues = validateMcqTranslationCompleteness([
+      complete,
+      { ...complete, stem: JSON.stringify({ nb: "Bare norsk" }) },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.field).toBe("mcq.question2");
+  });
+
+  it("says nothing about an absent rationale", () => {
+    // Optional and simply not there is not the same as untranslated.
+    const issues = validateMcqTranslationCompleteness([
+      {
+        stem: three("Q"),
+        optionsJson: JSON.stringify([three("A"), three("B")]),
+        correctAnswer: three("A"),
+        rationale: null,
+      },
+    ]);
+    expect(issues).toEqual([]);
+  });
+
+  it("ignores unparseable options rather than reporting them as a translation gap", () => {
+    // Broken options JSON is a different defect. Reporting it here would send the author to
+    // "translate what is missing", which cannot fix it.
+    const issues = validateMcqTranslationCompleteness([
+      {
+        stem: three("Q"),
+        optionsJson: "{not json",
+        correctAnswer: three("A"),
+        rationale: three("because"),
+      },
+    ]);
+    expect(issues).toEqual([]);
+  });
+
+  it("treats a bare string as translated only into nb, matching the server-wide contract", () => {
+    const issues = validateMcqTranslationCompleteness([
+      {
+        stem: "Bare norsk",
+        optionsJson: JSON.stringify([three("A"), three("B")]),
+        correctAnswer: three("A"),
+        rationale: three("because"),
+      },
+    ]);
+    expect(issues[0]?.missingLocales).toEqual(["en-GB", "nn"]);
+  });
+});
+
+// #896 S4: the localize endpoint's schema has to accept what the SAVE schema accepts, or a
+// perfectly legal saved question cannot be translated and "translate what is missing" dead-ends.
+describe("mcqLocalizationBodySchema rationale (#896 S4)", () => {
+  it("accepts a question with no rationale", async () => {
+    const { mcqLocalizationBodySchema } = await import(
+      "../../src/modules/adminContent/adminContentSchemas.js"
+    );
+    const parsed = mcqLocalizationBodySchema.safeParse({
+      questions: [{ stem: "Q?", options: ["A", "B"], correctAnswer: "A" }],
+      sourceLocale: "nb",
+      targetLocale: "nn",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("still rejects an EMPTY rationale, which is a different thing from an absent one", () => {
+    // The client must omit the key rather than send "" — that distinction is what the gap-fill
+    // got wrong: an absent rationale became "" and the request 400'd before the model ran.
+    return import("../../src/modules/adminContent/adminContentSchemas.js").then(
+      ({ mcqLocalizationBodySchema }) => {
+        const parsed = mcqLocalizationBodySchema.safeParse({
+          questions: [{ stem: "Q?", options: ["A", "B"], correctAnswer: "A", rationale: "" }],
+          sourceLocale: "nb",
+          targetLocale: "nn",
+        });
+        expect(parsed.success).toBe(false);
+      },
+    );
   });
 });

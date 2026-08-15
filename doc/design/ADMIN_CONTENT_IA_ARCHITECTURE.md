@@ -154,8 +154,17 @@ Seks felt — identisk i Conversation og Advanced:
 ### Publiseringsgaten (#896 S4)
 
 Publisering er øyeblikket innhold når deltakeren, og dermed stedet en halvoversatt modul må
-stoppes. Gaten blokkerer dersom `title`, `taskText`, `assessorExpectedContent` eller — når den
-finnes — `candidateTaskConstraints` mangler ett av `en-GB` / `nb` / `nn`.
+stoppes. Gaten blokkerer dersom et deltakersynlig felt mangler ett av `en-GB` / `nb` / `nn`.
+Feltene — hvert enkelt bare når det finnes, siden et fraværende valgfritt felt ikke er uoversatt:
+
+| Felt | Hvorfor |
+|------|---------|
+| `title` | Vises i modullista og arbeidsrommet |
+| `description` | Vises for deltakeren i modullista — innhold, ikke oppsett |
+| `taskText` | Scenarioet deltakeren svarer på (mangler for `MCQ_ONLY`) |
+| `assessorExpectedContent` | Brukes i vurderingen og i tilbakemeldingen |
+| `candidateTaskConstraints` | Vises for deltakeren sammen med oppgaven |
+| `mcq.question<N>` | Spørsmålstekst, alternativer, fasit og begrunnelse. For `MCQ_ONLY` *er* spørsmålene vurderingen. Rapporteres per spørsmål, ikke per felt — én handlingsbar linje i stedet for åtte |
 
 - **Blokkerende, ikke advarsel.** En advarsel ved publisering er en advarsel ingen leser.
 - **Meldingen navngir felt × språk**, og handlingen «Oversett det som mangler» fyller kun hullene:
@@ -166,6 +175,12 @@ finnes — `candidateTaskConstraints` mangler ett av `en-GB` / `nb` / `nn`.
   allerede live versjon uten ny tekst). Se `doc/FEATURE_SURFACE_MAP.md` § 18.
 - Gaten forutsetter #905: før den ble en feilet oversettelse lagret som tre kopier av kildeteksten
   og var ikke til å skille fra en ekte oversettelse.
+
+**Kjent begrensning — Avansert-siden.** Publiserer du derfra, blokkerer gaten på samme måte og
+`issues`-detaljene vises, men handlingen «Oversett det som mangler» finnes ikke: den bor i
+samtaleflaten. Dette er et bevisst valg, ikke en glipp — Avansert-siden skal bort i denne epicen
+(S3c), og å bygge utbedringsflyten to steder ville være arbeid som kastes. Forfatteren får vite
+hvilke felt og språk som mangler, og henvises til arbeidsrommet for å fylle hullene.
 
 ---
 
