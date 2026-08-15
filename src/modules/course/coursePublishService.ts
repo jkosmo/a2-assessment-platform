@@ -3,7 +3,7 @@ import { AppError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
 import { publishSection } from "./sectionCommands.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
-import { validateModuleVersionForPublish } from "../adminContent/contentValidationService.js";
+import { validateModuleVersionForPublish, validateTranslationCompleteness } from "../adminContent/contentValidationService.js";
 import { courseRepository } from "./courseRepository.js";
 
 // Cascade-publish (#734): when an author publishes a COURSE, its modules/sections must already be
@@ -154,6 +154,23 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     blueprint: parseBlueprint(latest.assessmentBlueprint) as never,
     mcqQuestionCount,
   });
+
+  // #896 S4: the cascade is a second door into publishing. A translation gate that only guards
+  // the module-publish route would be trivially bypassed by adding the module to a course and
+  // publishing that — and the participant sees the same half-translated module either way.
+  // The values here are the raw stored strings, which is exactly what the check wants.
+  const translationIssues = validateTranslationCompleteness([
+    { field: "title", raw: module.title },
+    { field: "taskText", raw: latest.taskText },
+    { field: "assessorExpectedContent", raw: latest.assessorExpectedContent },
+    ...(latest.candidateTaskConstraints
+      ? [{ field: "candidateTaskConstraints", raw: latest.candidateTaskConstraints }]
+      : []),
+  ]);
+  if (translationIssues.length > 0) {
+    validation.issues.push(...translationIssues);
+    validation.valid = false;
+  }
 
   if (!validation.valid) {
     const blockers = validation.issues

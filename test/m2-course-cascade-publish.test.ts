@@ -23,14 +23,25 @@ const uniq = () => `cp-${Date.now()}-${seq++}`;
 
 async function makeModule(opts: { published?: boolean; withVersion?: boolean } = {}): Promise<string> {
   const withVersion = opts.withVersion ?? true;
-  const module = await prisma.module.create({ data: { title: `CP Module ${uniq()}` }, select: { id: true } });
+  // Three locales on title and task text: the cascade runs the #896 S4 translation gate, so a
+  // one-language fixture would be blocked for reasons this test is not about.
+  const title = JSON.stringify({
+    "en-GB": `CP Module ${uniq()}`,
+    nb: `CP Modul ${uniq()}`,
+    nn: `CP Modul ${uniq()}`,
+  });
+  const module = await prisma.module.create({ data: { title }, select: { id: true } });
   moduleIds.push(module.id);
   if (withVersion) {
     const version = await prisma.moduleVersion.create({
       data: {
         moduleId: module.id,
         versionNo: 1,
-        taskText: JSON.stringify({ "en-GB": "A task text that is clearly long enough to be meaningful." }),
+        taskText: JSON.stringify({
+          "en-GB": "A task text that is clearly long enough to be meaningful.",
+          nb: "En oppgavetekst som er tydelig lang nok til å være meningsfull.",
+          nn: "Ein oppgåvetekst som er tydeleg lang nok til å vere meiningsfull.",
+        }),
         publishedAt: opts.published ? new Date() : null,
       },
       select: { id: true },

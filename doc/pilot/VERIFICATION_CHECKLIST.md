@@ -58,6 +58,10 @@ Canonical routes from [route-map.md](../route-map.md):
   - open module
   - duplicate module
   - archive/restore path if suitable test data exists
+- [ ] **Publiseringsgaten (#896 S4):** on a module where one language is missing, press Publiser.
+  The message must name the field **and** the language (not a raw JSON error), and «Oversett det
+  som mangler» must fill only the gap, save, and publish — with the already-written languages
+  unchanged.
 
 ## 4. Course Flow
 

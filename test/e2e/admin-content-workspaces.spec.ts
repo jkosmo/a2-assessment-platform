@@ -1608,6 +1608,93 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
   });
 
+  // #896 S4: the publish translation gate, seen from the author's side. The server decides; this
+  // test is about what the author is told and what they can do about it. A 422 that renders as
+  // `422: {"error":...,"issues":[...]}` in the chat log is technically a report and practically
+  // a dead end — the whole point of the gate is that the next step is one click away.
+  test("shell publish names the missing languages and offers to fill only the gaps", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          // nn is missing on the task text — the case the gate exists for.
+          taskText: { "en-GB": "Scenario text (EN)", nb: "Scenario text (NB)" },
+          // The gap-fill ends in an ordinary save, and an ordinary save of a FREETEXT_PLUS_MCQ
+          // module refuses to run without questions. Without these the flow stops one step
+          // short and the test would be asserting the wrong thing.
+          mcqQuestions: [
+            {
+              stem: localizedText("Which body ratifies the agreement?"),
+              options: [localizedText("The board"), localizedText("The members")],
+              correctAnswer: localizedText("The members"),
+              rationale: localizedText("Members vote on ratification."),
+            },
+          ],
+        }),
+      },
+    });
+
+    // Registered after mockCommonApis, so it wins: the first publish is blocked, the second (after
+    // the gap is filled) succeeds — which is what makes "fill the gaps, then publish" verifiable
+    // rather than merely plausible.
+    let publishAttempts = 0;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      publishAttempts += 1;
+      if (publishAttempts === 1) {
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "publish_blocked_by_validation",
+            message: "Pre-publish validation found blocking issues.",
+            issues: [
+              {
+                severity: "blocking",
+                code: "translation_incomplete",
+                message: "taskText: missing nn",
+                field: "taskText",
+                missingLocales: ["nn"],
+              },
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+
+    // The author must be able to read which field and which language, without opening devtools.
+    // .first(): the chat bubble and the aria-live announcer both carry the text — by design, so
+    // a screen-reader user hears the block too.
+    await expect(page.getByText(/ikke ferdig oversatt|not fully translated/).first()).toBeVisible();
+    await expect(page.getByText(/Oppgavetekst|Task text/).first()).toBeVisible();
+
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    // Only the missing locale is requested — "translate what is missing" must not quietly
+    // re-translate (and overwrite) the languages the author already wrote.
+    await expect.poll(() => state.lastDraftLocalizationBody?.targetLocale).toBe("nn");
+
+    // The save that follows carries all three locales, with en-GB and nb byte-identical to what
+    // they were. A gap-fill that rewrites existing text is a different, unwanted feature.
+    await expect.poll(() => state.lastModuleVersionBody?.taskText?.nn).toBeTruthy();
+    expect(state.lastModuleVersionBody.taskText["en-GB"]).toBe("Scenario text (EN)");
+    expect(state.lastModuleVersionBody.taskText.nb).toBe("Scenario text (NB)");
+
+    // And publishing was retried automatically — the author asked to publish, and did.
+    await expect.poll(() => publishAttempts).toBe(2);
+  });
+
   test("shell publish keeps the module loaded and shows module actions", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],

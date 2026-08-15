@@ -151,6 +151,22 @@ Seks felt — identisk i Conversation og Advanced:
 | Slett | Module workspace, sekundær meny (blokkert hvis i kurs) |
 | Import / Export | Module workspace, sekundær meny |
 
+### Publiseringsgaten (#896 S4)
+
+Publisering er øyeblikket innhold når deltakeren, og dermed stedet en halvoversatt modul må
+stoppes. Gaten blokkerer dersom `title`, `taskText`, `assessorExpectedContent` eller — når den
+finnes — `candidateTaskConstraints` mangler ett av `en-GB` / `nb` / `nn`.
+
+- **Blokkerende, ikke advarsel.** En advarsel ved publisering er en advarsel ingen leser.
+- **Meldingen navngir felt × språk**, og handlingen «Oversett det som mangler» fyller kun hullene:
+  språk som allerede har tekst beholder forfatterens egne ord. Deretter lagres det som en vanlig
+  ny versjon, og publiseringen prøves på nytt.
+- **Gaten gjelder alle veier inn til publisering** — forfatterens knapp, kurskaskaden og
+  auto-publisering ved import. Kalibreringens terskelpublisering er unntatt (den republiserer en
+  allerede live versjon uten ny tekst). Se `doc/FEATURE_SURFACE_MAP.md` § 18.
+- Gaten forutsetter #905: før den ble en feilet oversettelse lagret som tre kopier av kildeteksten
+  og var ikke til å skille fra en ekte oversettelse.
+
 ---
 
 ## 7. Implementerte ruter

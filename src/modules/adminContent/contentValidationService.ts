@@ -1,10 +1,16 @@
 import type { GeneratedMcqQuestion } from "./llmContentGenerationService.js";
+import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
 
 export type ValidationIssue = {
   severity: "blocking" | "warning";
   code: string;
   message: string;
   questionIndex?: number;
+  // #896 S4: translation issues carry the field and the missing locales as data, not only inside
+  // the message. The UI has to offer "translate what is missing", and an action that has to
+  // re-parse an English sentence to know what to do is an action that breaks on the next reword.
+  field?: string;
+  missingLocales?: string[];
 };
 
 export type McqValidationResult = {
@@ -230,6 +236,59 @@ export type ModuleVersionPublishValidation = {
 // retroactively blocking publish on them would invalidate published modules
 // that worked under the old rules. A future enhancement could promote them to
 // blocking via a separate strict-mode flag.
+/**
+ * #896 S4: which locales a published field is missing.
+ *
+ * A value stored as a plain string is "written in one language, not translated yet" (#892/#905);
+ * a locale object names exactly the languages it has. Both shapes are readable, which is the
+ * whole reason this check can exist — before #905 an untranslated field arrived as three
+ * identical copies and was indistinguishable from a translated one.
+ *
+ * Returns the missing locales, newest-first order irrelevant. An empty array means complete.
+ */
+export function missingLocalesFor(raw: string | null | undefined, sourceLocale = "nb"): string[] {
+  const all = ["en-GB", "nb", "nn"];
+  const parsed = localizedTextCodec.parse(raw ?? null);
+  if (parsed === null) return [];
+  if (typeof parsed === "string") {
+    // One language, and we cannot tell which — the field carries no locale marker. Everything
+    // except the author's working language is missing.
+    return all.filter((locale) => locale !== sourceLocale);
+  }
+  return all.filter((locale) => {
+    const value = parsed[locale as "en-GB" | "nb" | "nn"];
+    return typeof value !== "string" || value.trim().length === 0;
+  });
+}
+
+/**
+ * #896 S4: the translation gate. Publishing is the moment content reaches participants, so it is
+ * the right place to stop a half-translated module — and the only place where blocking costs the
+ * author nothing they cannot immediately fix.
+ *
+ * Blocking, not a warning: a warning at publish is a warning nobody reads. The author gets the
+ * exact field/locale pairs so the fix is mechanical.
+ */
+export function validateTranslationCompleteness(
+  fields: Array<{ field: string; raw: string | null | undefined }>,
+  sourceLocale = "nb",
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const { field, raw } of fields) {
+    const missing = missingLocalesFor(raw, sourceLocale);
+    if (missing.length > 0) {
+      issues.push({
+        severity: "blocking",
+        code: "translation_incomplete",
+        message: `${field}: missing ${missing.join(", ")}`,
+        field,
+        missingLocales: missing,
+      });
+    }
+  }
+  return issues;
+}
+
 export function validateModuleVersionForPublish(input: {
   taskText: string;
   candidateTaskConstraints?: string | null;

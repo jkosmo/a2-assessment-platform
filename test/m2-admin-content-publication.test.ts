@@ -188,8 +188,19 @@ describe("MVP admin content management and publication", () => {
       .post(`/api/admin/content/modules/${moduleId}/module-versions`)
       .set(adminHeaders)
       .send({
-        taskText: "Submit practical reflection with benchmark-anchored quality expectations.",
-        assessorExpectedContent: "Use benchmark examples to calibrate scoring consistency.",
+        // Three locales, because this version gets published below and #896 S4 blocks publishing
+        // a version that is missing a language. The test is about benchmark wiring, not about
+        // translation — so it supplies complete content rather than asserting the gate here.
+        taskText: {
+          "en-GB": "Submit practical reflection with benchmark-anchored quality expectations.",
+          nb: "Lever praktisk refleksjon med benchmark-forankrede kvalitetskrav.",
+          nn: "Lever praktisk refleksjon med benchmark-forankra kvalitetskrav.",
+        },
+        assessorExpectedContent: {
+          "en-GB": "Use benchmark examples to calibrate scoring consistency.",
+          nb: "Bruk benchmark-eksempler for å kalibrere konsistent poenggiving.",
+          nn: "Bruk benchmark-døme for å kalibrere konsistent poenggjeving.",
+        },
         rubricVersionId,
         promptTemplateVersionId: benchmarkPromptTemplateVersionId,
         mcqSetVersionId,
@@ -670,7 +681,15 @@ describe("MVP admin content management and publication", () => {
     const createModuleResponse = await request(app)
       .post("/api/admin/content/modules")
       .set(adminHeaders)
-      .send({ title: "Assessment Policy Test Module" });
+      // Three locales: the version below gets published, and #896 S4 blocks publishing a module
+      // whose title is missing a language.
+      .send({
+        title: {
+          "en-GB": "Assessment Policy Test Module",
+          nb: "Testmodul for vurderingspolicy",
+          nn: "Testmodul for vurderingspolicy",
+        },
+      });
     expect(createModuleResponse.status).toBe(201);
     const moduleId = createModuleResponse.body.module.id as string;
 
@@ -717,11 +736,20 @@ describe("MVP admin content management and publication", () => {
       .post(`/api/admin/content/modules/${moduleId}/module-versions`)
       .set(adminHeaders)
       .send({
-        taskText: "Complete the policy test task with documented reasoning.",
+        taskText: {
+          "en-GB": "Complete the policy test task with documented reasoning.",
+          nb: "Fullfør policytesten med dokumentert resonnement.",
+          nn: "Fullfør policytesten med dokumentert resonnement.",
+        },
         // #372 pre-publish gate (a1e9a73) now requires assessorExpectedContent at
         // publish time. Adding the field here so this policy-focused test does not
         // get rejected by the unrelated content-validation gate.
-        assessorExpectedContent: "A strong response includes clear reasoning and references to policy.",
+        // #896 S4 added a second unrelated gate: all three locales must be present to publish.
+        assessorExpectedContent: {
+          "en-GB": "A strong response includes clear reasoning and references to policy.",
+          nb: "Et sterkt svar har tydelig resonnement og referanser til policyen.",
+          nn: "Eit sterkt svar har tydeleg resonnement og referansar til policyen.",
+        },
         rubricVersionId: rubricResponse.body.rubricVersion.id,
         promptTemplateVersionId: promptResponse.body.promptTemplateVersion.id,
         mcqSetVersionId: mcqResponse.body.mcqSetVersion.id,

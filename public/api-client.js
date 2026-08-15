@@ -161,7 +161,13 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
 
   const body = await parseResponseBody(response);
   if (!response.ok) {
-    throw new Error(`${response.status}: ${JSON.stringify(body)}`);
+    // The message keeps its exact old shape — several call sites and tests match on it. The
+    // parsed body rides along as properties so a caller that wants to act on structured error
+    // data (e.g. the publish translation gate's `issues[]`) does not have to re-parse the text.
+    const error = new Error(`${response.status}: ${JSON.stringify(body)}`);
+    error.status = response.status;
+    error.body = body;
+    throw error;
   }
 
   return body;

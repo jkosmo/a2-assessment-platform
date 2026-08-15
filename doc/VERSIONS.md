@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.2 - 2026-08-15
+
+**Publiseringsgaten (#896, S4).** Publisering blokkeres nå dersom et felt mangler ett av de tre
+språkene. Meldingen sier hvilke felt × hvilke språk, og handlingen **«Oversett det som mangler»**
+fyller kun hullene — språk som allerede har tekst beholder forfatterens egne ord — lagrer, og
+prøver publiseringen på nytt.
+
+Gaten er først mulig etter #905. Før den ble en feilet oversettelse lagret som tre identiske
+kopier av kildeteksten, altså strukturelt likt en ekte oversettelse: en dør uten vegg ved siden av.
+
+**Gaten dekker alle dørene inn til publisering**, ikke bare forfatterens egen knapp:
+
+| Dør | Oppførsel |
+|-----|-----------|
+| `POST /modules/:id/module-versions/:vid/publish` | 422 med `translation_incomplete`-issues |
+| Kurspublisering med `publishItems` (kaskaden) | Modulen rapporteres som ikke-publiserbar i `publish-preview`, og kaskaden avvises med 422 — ingenting publiseres |
+| Import med auto-publisering | Importen **lykkes**, men modulen lander som **utkast** i stedet for å gå live |
+| Kalibrering (terskelpublisering) | Bevisst unntatt — den republiserer en allerede live versjon med nye terskler og ingen ny tekst |
+
+Uten kaskaden ville «legg modulen i et kurs og publiser kurset» vært en ettklikks omvei rundt
+gaten, og deltakeren ville sett den samme halvoversatte modulen uansett vei.
+
+**Merk for eksisterende innhold:** en modul som er skrevet i ett språk kan ikke lenger publiseres
+før den er oversatt. Innhold lagret før #905 har alle tre språk fylt (med kopier) og passerer.
+
+Sidefunn registrert som **#912**: eksport skriver `certificationLevel: null` når feltet ikke er
+satt, og import avviser null — rundturen er brutt for moduler opprettet uten sertifiseringsnivå.
+
 ## 2.17.1 - 2026-08-15
 
 QA-runde på modulnivå-feltene. **To av funnene var samme feilklasse som #892, #902 og #905** — en

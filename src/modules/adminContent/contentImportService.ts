@@ -31,6 +31,7 @@ import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "
 import { ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { validateTranslationCompleteness } from "./contentValidationService.js";
 import {
   auditActions,
   auditEntityTypes,
@@ -252,7 +253,27 @@ async function importModulePayload(
   //
   // v1.2.14 (#456): in-app duplisering passerer autoPublish=false så kopier alltid
   // starter som utkast — forfatter skal eksplisitt publisere etter gjennomgang.
-  if (options.autoPublish !== false && payload.activeVersion.audit?.publishedAt) {
+  //
+  // #896 S4: auto-publish is the third door into publishing, and the only one that can bring in
+  // content no author ever reviewed here. If the package is missing a language, the import still
+  // succeeds — failing the whole transaction over a translation gap would lose the import — but
+  // the module stays a DRAFT. That is also the agreed import model: imported modules are drafts
+  // and publishing is an explicit act. The author publishes it once the gaps are filled, and the
+  // ordinary gate tells them which ones.
+  const importTranslationIssues = validateTranslationCompleteness([
+    { field: "title", raw: serializeRequired(payload.module.title) },
+    ...(isMcqOnly || !payload.activeVersion.taskText
+      ? []
+      : [{ field: "taskText", raw: serializeRequired(payload.activeVersion.taskText) }]),
+    ...(payload.activeVersion.assessorExpectedContent
+      ? [{ field: "assessorExpectedContent", raw: serializeLocalized(payload.activeVersion.assessorExpectedContent) }]
+      : []),
+  ]);
+  if (
+    options.autoPublish !== false
+    && payload.activeVersion.audit?.publishedAt
+    && importTranslationIssues.length === 0
+  ) {
     await publishModuleVersion(moduleId, moduleVersion.id, options.actorId, tx);
   }
 

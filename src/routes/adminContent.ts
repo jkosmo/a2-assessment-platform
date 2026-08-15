@@ -71,7 +71,8 @@ import {
   reviseMcqQuestions,
   checkScenarioAnswerability,
 } from "../modules/adminContent/llmContentGenerationService.js";
-import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish } from "../modules/adminContent/contentValidationService.js";
+import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish, validateTranslationCompleteness } from "../modules/adminContent/contentValidationService.js";
+import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
 import {
   submitParseJob,
@@ -831,6 +832,29 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       blueprint: blueprint as never,
       mcqQuestionCount: mcqSetVersion?.questions?.length ?? 0,
     });
+
+    // #896 S4: the translation gate. Publishing is where content reaches participants, so it is
+    // where a half-translated module has to stop. The check reads the stored shape directly —
+    // possible only since #905, because before that an untranslated field arrived as three
+    // identical copies of the source text and looked complete.
+    //
+    // Serialized values, not the flattened ones above: flattening picks the first non-empty
+    // locale and would hide exactly the gap we are looking for.
+    const serialize = (value: unknown): string | null =>
+      value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
+    const translationIssues = validateTranslationCompleteness([
+      { field: "title", raw: serialize(bundle.module.title) },
+      { field: "taskText", raw: serialize(moduleVersionData.taskText) },
+      { field: "assessorExpectedContent", raw: serialize(moduleVersionData.assessorExpectedContent) },
+      // candidateTaskConstraints is optional; only gate it when the module actually has one.
+      ...(moduleVersionData.candidateTaskConstraints
+        ? [{ field: "candidateTaskConstraints", raw: serialize(moduleVersionData.candidateTaskConstraints) }]
+        : []),
+    ]);
+    if (translationIssues.length > 0) {
+      validation.issues.push(...translationIssues);
+      validation.valid = false;
+    }
     if (!validation.valid) {
       response.status(422).json({
         error: "publish_blocked_by_validation",

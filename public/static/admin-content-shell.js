@@ -2223,6 +2223,173 @@ async function saveDraftBundleInBackground(options = {}) {
   }
 }
 
+// #896 S4: which locale a value ACTUALLY has, with no fallback. localizeValueForLocale falls
+// back to nb/en-GB by design so the preview is never blank — exactly wrong when the question is
+// "is this locale missing?", because the fallback answers "no" for every locale.
+function strictLocaleValue(value, locale) {
+  if (!value) return "";
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      const maybe = JSON.parse(parsed);
+      parsed = maybe && typeof maybe === "object" && !Array.isArray(maybe) ? maybe : null;
+    } catch {
+      // A plain string is written in one language. It belongs to no locale in particular, so
+      // the caller decides what the source locale is — it is not "present" under any of them.
+      parsed = null;
+    }
+    if (parsed === null) return "";
+  }
+  if (typeof parsed !== "object" || Array.isArray(parsed)) return "";
+  const candidate = parsed[locale];
+  return typeof candidate === "string" ? candidate : "";
+}
+
+// The stored value read as one language: a locale entry if there is one, otherwise the plain
+// string (the "written in one language, not translated yet" encoding).
+function sourceTextForLocale(value, locale) {
+  const strict = strictLocaleValue(value, locale);
+  if (strict.trim()) return strict;
+  return typeof value === "string" ? value : "";
+}
+
+const TRANSLATION_GATE_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
+
+function translationGateIssuesFrom(error) {
+  const issues = error?.body?.issues;
+  if (!Array.isArray(issues)) return [];
+  return issues.filter((issue) => issue?.code === "translation_incomplete" && Array.isArray(issue.missingLocales));
+}
+
+function describeTranslationGate(issues) {
+  const lines = issues.map((issue) => {
+    const fieldLabel = t(`shell.publish.field.${issue.field}`);
+    // An unknown field must still be named — a silent omission would tell the author the
+    // module is complete while publishing keeps failing.
+    const label = fieldLabel.startsWith("shell.publish.field.") ? issue.field : fieldLabel;
+    return t("shell.publish.translationGate.item")
+      .replace("{field}", label)
+      .replace("{locales}", issue.missingLocales.join(", "));
+  });
+  return `<strong>${escapeHtml(t("shell.publish.translationGate.heading"))}</strong><ul>${
+    lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
+  }</ul>`;
+}
+
+// #896 S4: "Oversett det som mangler" — fills only the holes. Every locale that already has
+// content keeps exactly the text it has; the author's own wording is never overwritten by a
+// machine translation of itself. What is translated goes through the ordinary save, so the
+// result is a normal new version, and then publish is retried.
+async function translateMissingLocalesThenPublish(issues) {
+  const moduleId = selectedModuleId;
+  if (!moduleId) return;
+
+  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
+  const current = {
+    title: sessionDraft?.title ?? bundle?.module?.title ?? "",
+    taskText: sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
+    assessorExpectedContent: sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
+    candidateTaskConstraints: sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
+  };
+
+  // Translate FROM a locale that actually has the content. The author's working language is the
+  // obvious first guess, but it may itself be one of the gaps.
+  const preferredOrder = [previewLocale ?? currentLocale, currentLocale, "nb", "en-GB", "nn"];
+  const sourceLocale = preferredOrder.find((locale) =>
+    locale
+    && sourceTextForLocale(current.taskText, locale).trim()
+    && sourceTextForLocale(current.assessorExpectedContent, locale).trim(),
+  );
+  if (!sourceLocale) {
+    logBot(() => t("shell.publish.translationGate.noSource"));
+    return;
+  }
+
+  const missingLocales = [...new Set(issues.flatMap((issue) => issue.missingLocales))]
+    .filter((locale) => locale !== sourceLocale);
+  if (missingLocales.length === 0) return;
+
+  const slot = logProgress("shell.publish.translationGate.progress");
+  slot.abortBtn.remove();
+
+  // Start from the stored values as locale maps, so untouched locales survive the save.
+  const merged = {};
+  for (const field of TRANSLATION_GATE_FIELDS) {
+    const value = current[field];
+    const map = {};
+    for (const locale of supportedLocales) {
+      const existing = strictLocaleValue(value, locale);
+      if (existing.trim()) map[locale] = existing;
+    }
+    // A plain string belongs to the source locale — record it there so it is not lost when the
+    // value becomes a map.
+    if (Object.keys(map).length === 0 && typeof value === "string" && value.trim()) {
+      map[sourceLocale] = value;
+    }
+    merged[field] = map;
+  }
+
+  const sourceDraft = {
+    title: sourceTextForLocale(current.title, sourceLocale),
+    taskText: sourceTextForLocale(current.taskText, sourceLocale),
+    assessorExpectedContent: sourceTextForLocale(current.assessorExpectedContent, sourceLocale),
+    candidateTaskConstraints: sourceTextForLocale(current.candidateTaskConstraints, sourceLocale),
+  };
+
+  const failedLocales = [];
+  for (const targetLocale of missingLocales) {
+    try {
+      const result = await apiFetch("/api/admin/content/generate/module-draft/localize", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ ...sourceDraft, sourceLocale, targetLocale }),
+      });
+      const draft = result?.draft ?? result;
+      if (!draft?.title) {
+        failedLocales.push(targetLocale);
+        continue;
+      }
+      // Only the holes. A locale that already had text keeps it — this is the whole point of
+      // "translate what is missing" rather than "translate everything".
+      for (const field of TRANSLATION_GATE_FIELDS) {
+        if (merged[field][targetLocale]?.trim()) continue;
+        const translated = draft[field];
+        if (typeof translated === "string" && translated.trim()) merged[field][targetLocale] = translated;
+      }
+    } catch {
+      failedLocales.push(targetLocale);
+    }
+  }
+
+  // #905: never store a source-language copy under a locale that failed. An empty field is
+  // honest; a copy pretends the translation happened.
+  const patch = {};
+  for (const field of TRANSLATION_GATE_FIELDS) {
+    const map = merged[field];
+    const locales = Object.keys(map);
+    if (locales.length === 0) {
+      patch[field] = "";
+    } else if (locales.length === 1 && locales[0] === sourceLocale) {
+      patch[field] = map[sourceLocale];
+    } else {
+      patch[field] = map;
+    }
+  }
+  commitSessionDraftPatch(patch);
+
+  if (failedLocales.length > 0) {
+    logResolveSlot(slot, () => escapeHtml(t("shell.publish.translationGate.failed")), [
+      { labelKey: "shell.action.retry", action: () => translateMissingLocalesThenPublish(issues) },
+    ]);
+    // Save what did succeed — the author should not lose the translations that worked — but do
+    // not retry publish, since it would only hit the same gate.
+    await saveDraftBundleInBackground();
+    return;
+  }
+
+  logResolveSlot(slot, () => escapeHtml(t("shell.revision.translateReady")));
+  await saveDraftBundleInBackground({ afterSave: publishLatestDraftInBackground });
+}
+
 async function publishLatestDraftInBackground() {
   const moduleId = selectedModuleId;
   const moduleVersionId = latestSavedModuleVersionId ?? bundle?.selectedConfiguration?.moduleVersion?.id;
@@ -2253,6 +2420,16 @@ async function publishLatestDraftInBackground() {
     // som unpublishModuleInBackground.
     await loadModule(moduleId);
   } catch (err) {
+    // #896 S4: a half-translated module is not a failure to report as a stack of JSON — it is a
+    // list of holes with an action that fills them.
+    const gateIssues = translationGateIssuesFrom(err);
+    if (gateIssues.length > 0) {
+      logResolveSlot(slot, () => describeTranslationGate(gateIssues), [
+        { labelKey: "shell.publish.translationGate.fillGaps", action: () => translateMissingLocalesThenPublish(gateIssues) },
+        { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
+      ]);
+      return;
+    }
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },

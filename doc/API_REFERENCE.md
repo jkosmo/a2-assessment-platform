@@ -161,6 +161,43 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 
+#### Publish translation gate (#896 S4)
+
+Publishing is blocked when a participant-facing field is missing one of the three locales
+(`en-GB`, `nb`, `nn`). The response is **422 `publish_blocked_by_validation`**, and each gap is one
+entry in `issues[]`:
+
+```json
+{
+  "error": "publish_blocked_by_validation",
+  "issues": [
+    {
+      "severity": "blocking",
+      "code": "translation_incomplete",
+      "message": "taskText: missing nn",
+      "field": "taskText",
+      "missingLocales": ["nn"]
+    }
+  ]
+}
+```
+
+`field` and `missingLocales` are structured deliberately: the UI's "translate what is missing"
+action reads them directly rather than parsing the message. Gated fields are `title`, `taskText`,
+`assessorExpectedContent`, and `candidateTaskConstraints` **when present** — an absent optional
+field is not an untranslated one. A value stored as a plain string counts as translated only into
+the source locale (`nb`), which is the #892/#905 encoding for "written once, not translated yet".
+
+The same check guards the other publish doors:
+
+- **Course cascade** (`POST /api/admin/content/courses/:courseId/publish` with `publishItems`):
+  the module appears in `publish-preview` with `publishable: false` and a `translation_incomplete`
+  blocker; the cascade returns 422 and publishes nothing.
+- **Import auto-publish**: the import succeeds, but a package missing a locale lands as a **draft**
+  instead of going live.
+- **Calibration threshold publish** is exempt — it re-publishes an already-live version with new
+  thresholds and no new participant-facing text.
+
 #### Module assessment mode (`assessmentMode`) — #525/#578
 
 `POST .../module-versions` accepts an optional `assessmentMode`:

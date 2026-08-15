@@ -413,11 +413,35 @@ must be changed together — three QA rounds found a defect in each pairing.
 | Busy state | `setFormBusy` | Disables the form buttons **and** the UI/preview locale pickers: a locale switch runs `retranslateChat`, which rebuilds the form under a running save. Must be released on BOTH the success and abort paths — releasing only on abort left the language selector dead for the session |
 | Abort | `abort.signal` listener (not the button) | The AbortController is NOT wired to the localize requests, so the call is **orphaned**, not stopped: `commit()` refuses to run once aborted and the response lands nowhere. The LLM call still completes and still costs |
 | Interplay with the tab dialog | `pendingSaveCommit` + `unsavedTabSwitchKind` in the shell | A translation that resolves while the discard dialog is open is HELD: «Bli værende» finishes the save, «Forkast» drops it. Aborting on dialog-open threw away a completed translation; committing during it saved values the author was about to discard |
-| Persistence | `saveDraftBundleInBackground` | **Five independent calls** (title PATCH, rubric, prompt, MCQ, module-version), each its own transaction, none idempotent — see #906. Untouched criteria are OMITTED from the patch (not sent as `null`, which would wipe draft criteria) so #902 only affects authors who really edited criteria |
-| Localization honesty | `dropFailedLocales` | Applies to the **title only**. Body fields cannot express partial translation: the schema demands all three locales and `translateLocalizedText` re-expands a plain string into three copies — #905, which also blocks the S4 publish gate |
+| Persistence | `saveDraftBundleInBackground` | **One composed call** to `POST /modules/:id/versions` since #906 — rename, rubric, prompt, MCQ and the version share a transaction. Untouched criteria are OMITTED from the patch (not sent as `null`, which would wipe draft criteria) so #902 only affects authors who really edited criteria |
+| Localization honesty | `dropFailedLocales` / `dropLocale` | Applies to **every** field since #905: a locale whose translation failed is dropped rather than filled with a copy of the source. This is what made the S4 publish gate possible — before it, a failed translation was structurally identical to a real one |
 
 **Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "Lagre translates and saves in one step,
 and an untouched form does neither", "cancelling the save writes nothing and hands the fields
 back", "discarding while a save is running writes nothing", "a failed translation saves one
 language honestly instead of three copies". Also `admin-content-mcq-only-revision.spec.ts` (an
 MCQ-only module must make a real edit before it saves).
+
+## 18. Publishing a module version — four doors (#896 S4)
+
+A module version can go live through four different code paths. A gate on one of them is not a
+gate; it is a detour sign. When you change what publishing requires, change **all** of these in
+the same PR — the participant sees the same module regardless of which door it came through.
+
+| Door | Where | Behaviour under the translation gate |
+|------|-------|--------------------------------------|
+| Author's publish action | `POST /modules/:id/module-versions/:vid/publish` in `src/routes/adminContent.ts` | 422 `publish_blocked_by_validation` with `translation_incomplete` issues carrying `field` + `missingLocales` |
+| Course cascade | `evaluateModule` in `src/modules/course/coursePublishService.ts` | Module reported `publishable: false` in `publish-preview`; cascade returns 422 and publishes **nothing** (not the module, not the course) |
+| Import auto-publish | `importModulePayload` in `src/modules/adminContent/contentImportService.ts` | Import **succeeds**, auto-publish is skipped — the module lands as a draft. Failing the transaction would lose the import; leaving it a draft matches the agreed import model |
+| Calibration thresholds | `publishModuleVersionWithThresholds` in `src/modules/adminContent/adminContentCommands.ts` | **Deliberately exempt.** It clones the already-live version and changes only pass thresholds; no new participant-facing text, and gating would block calibration on modules published before the gate existed |
+
+The shared check is `validateTranslationCompleteness` / `missingLocalesFor` in
+`src/modules/adminContent/contentValidationService.ts`. It reads the **stored** value (serialized),
+never a flattened one — flattening picks the first non-empty locale and hides exactly the gap.
+
+**Guards:** `test/m2-publish-translation-gate-896.test.ts` (door 1 + the locale arithmetic),
+`test/m2-publish-gate-surfaces-896.test.ts` (doors 2 and 3, both directions),
+`test/unit/content-import-service.test.ts` (door 3 at unit level), and
+`test/e2e/admin-content-workspaces.spec.ts` → "shell publish names the missing languages and
+offers to fill only the gaps" (the author-facing message, the gap-fill action, and that already
+translated locales are not overwritten).

@@ -917,6 +917,12 @@ type PublishThresholdsInput = {
   actorId: string;
 };
 
+// #896 S4 note — this is the one publish path deliberately NOT behind the translation gate.
+// It clones the module's currently ACTIVE (already published) version and changes only the pass
+// thresholds; not one character of participant-facing text is new. Gating here could not prevent
+// an untranslated module from going live — it is already live — and would instead block threshold
+// calibration on modules published before the gate existed. The gate belongs where new content
+// reaches participants: the module-publish route, the course cascade, and import auto-publish.
 export async function publishModuleVersionWithThresholds(input: PublishThresholdsInput) {
   const module = await ensureModuleExists(input.moduleId);
 

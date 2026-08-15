@@ -121,7 +121,13 @@ describe("Module archive and restore (#258)", () => {
       .post(`/api/admin/content/modules/${moduleId}/module-versions`)
       .set(adminHeaders)
       .send({
-        taskText: "Submit your response.",
+        // Three locales: this version is published below, and #896 S4 blocks publishing a
+        // version that is missing a language. The test is about archive/unpublish.
+        taskText: {
+          "en-GB": "Submit your response.",
+          nb: "Lever svaret ditt.",
+          nn: "Lever svaret ditt.",
+        },
         rubricVersionId: rubricRes.body.rubricVersion.id,
         promptTemplateVersionId: promptRes.body.promptTemplateVersion.id,
         mcqSetVersionId: mcqRes.body.mcqSetVersion.id,

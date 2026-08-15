@@ -69,24 +69,30 @@ type AssessmentMode = "FREETEXT_ONLY" | "MCQ_ONLY" | "FREETEXT_PLUS_MCQ";
 // Build a module envelope whose activeVersion carries every optional block.
 // Individual tests vary only the assessmentMode; importModulePayload decides
 // which blocks to actually create based on that mode.
+// #896 S4: `fullyTranslated` decides whether the package carries all three locales. Auto-publish
+// now depends on it — a package missing a language imports as a DRAFT — so tests that care about
+// publishing have to say which kind of package they mean.
 function buildModuleEnvelope(
   assessmentMode: AssessmentMode,
   audit: { publishedAt?: string | null; publishedBy?: string | null; sourceVersionNo?: number | null } = {},
+  { fullyTranslated = false }: { fullyTranslated?: boolean } = {},
 ): ExportEnvelope {
+  const localized = (base: string) =>
+    (fullyTranslated ? { "en-GB": base, nb: `${base} (nb)`, nn: `${base} (nn)` } : base) as never;
   return {
     exportFormat: "a2-content-export/v1",
     exportedAt: "2026-06-20T00:00:00.000Z",
     scope: "module",
     module: {
       module: {
-        title: "Imported module",
+        title: localized("Imported module"),
         description: "A description",
         certificationLevel: "foundation",
       },
       activeVersion: {
         assessmentMode,
-        taskText: "Do the task",
-        assessorExpectedContent: "Expected content",
+        taskText: localized("Do the task"),
+        assessorExpectedContent: localized("Expected content"),
         candidateTaskConstraints: "Constraints",
         assessmentBlueprint: "blueprint",
         rubric: {
@@ -283,7 +289,7 @@ describe("contentImportService.importModuleFromEnvelope", () => {
     );
 
     await importModuleFromEnvelope(
-      buildModuleEnvelope("FREETEXT_PLUS_MCQ", { publishedAt: "2026-06-01T00:00:00.000Z" }),
+      buildModuleEnvelope("FREETEXT_PLUS_MCQ", { publishedAt: "2026-06-01T00:00:00.000Z" }, { fullyTranslated: true }),
       { actorId: "actor-1", mode: "createNew" },
     );
 
@@ -294,6 +300,25 @@ describe("contentImportService.importModuleFromEnvelope", () => {
       "actor-1",
       expect.anything(), // #796: the import tx client
     );
+  });
+
+  // #896 S4: the third publish door. A package missing a language must still import — refusing
+  // the whole import over a translation gap loses work someone meant to keep — but it lands as a
+  // draft, and the author publishes it once the ordinary gate stops complaining.
+  it("does NOT auto-publish a source-published package that is missing a locale", async () => {
+    const { importModuleFromEnvelope } = await import(
+      "../../src/modules/adminContent/contentImportService.js"
+    );
+
+    const result = await importModuleFromEnvelope(
+      buildModuleEnvelope("FREETEXT_PLUS_MCQ", { publishedAt: "2026-06-01T00:00:00.000Z" }),
+      { actorId: "actor-1", mode: "createNew" },
+    );
+
+    expect(publishModuleVersion).not.toHaveBeenCalled();
+    // The import itself still succeeded — that is the whole distinction.
+    expect(result).toEqual({ moduleId: "new-module-id", moduleVersionId: "module-version-id" });
+    expect(createModuleVersion).toHaveBeenCalledTimes(1);
   });
 
   it("does NOT auto-publish when autoPublish is false even if the source was published", async () => {
