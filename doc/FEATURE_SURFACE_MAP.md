@@ -457,6 +457,12 @@ Norwegian legacy title being saved under `en-GB` because the client accepted a b
 source for whatever locale it was asked for. New saves avoid the question entirely by writing a
 one-key map.
 
+**Gate messages are rendered from `field` + `missingLocales`, never from `message`.** Three
+surfaces show them — the conversational workspace, the advanced editor, and the course cascade
+dialog — and each has its own field-label keys. The server's `message` is English on the module
+route and Norwegian in the cascade; both read as leaked internal strings in the wrong UI language.
+It is the fallback for blockers that carry no structured fields.
+
 **Two localizers, and the gap-fill must pick.** `generate/module-draft/localize` translates the
 scenario, answer key and constraints together (coherent, one call) but its schema DEMANDS a
 non-empty task text and answer key — so it 400s for `MCQ_ONLY` and for free-text modules with no

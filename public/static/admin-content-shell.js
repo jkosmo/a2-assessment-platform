@@ -2315,16 +2315,10 @@ function collapseLocaleMap(map) {
   return Object.keys(map).length === 0 ? "" : map;
 }
 
-// MCQ fields are the exception: their schema still accepts only a plain string or ALL three
-// locales (the #905 partial-map contract never reached MCQ — see #913). A partial map would be
-// rejected with a 400, so an incomplete fill falls back to the source language as a plain string
-// rather than losing the save entirely.
-function collapseMcqLocaleMap(map, sourceLocale) {
-  const locales = Object.keys(map);
-  if (locales.length === 0) return "";
-  if (supportedLocales.every((locale) => map[locale]?.trim())) return map;
-  return map[sourceLocale] ?? map[locales[0]];
-}
+// #913: MCQ fields now take partial maps too, so a half-successful translation keeps what
+// succeeded. This used to collapse anything short of all three locales back to the source
+// language, which threw away the locales that DID translate — the author paid for a translation,
+// was told it was saved, and the next publish attempt asked for it again.
 
 function translationGateIssuesFrom(error) {
   const issues = error?.body?.issues;
@@ -2388,7 +2382,17 @@ async function translateMissingLocalesThenPublish(issues) {
     if (!locale) return false;
     if (!gatedTextFields.every((field) => sourceTextForLocale(current[field], locale).trim())) return false;
     if (needsMcqSource) {
-      return currentMcq.every((question) => sourceTextForLocale(question?.stem ?? "", locale).trim());
+      // EVERY required part, not just the stem. A question can legally be mixed — a stem localized
+      // into three languages next to options still stored as legacy bare strings — and picking a
+      // source from the stem alone produced a request the options could not satisfy. The call
+      // failed validation, and the gap went unnoticed because the option had no source text to
+      // count as missing.
+      return currentMcq.every(
+        (question) =>
+          sourceTextForLocale(question?.stem ?? "", locale).trim()
+          && sourceTextForLocale(question?.correctAnswer ?? "", locale).trim()
+          && (question?.options ?? []).every((option) => sourceTextForLocale(option, locale).trim()),
+      );
     }
     return true;
   });
@@ -2512,7 +2516,13 @@ async function translateMissingLocalesThenPublish(issues) {
           if (!target) return;
           fillLocaleGap(target.stem, targetLocale, question?.stem);
           fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
-          fillLocaleGap(target.rationale, targetLocale, question?.rationale);
+          // Only if the question HAD a rationale. The localization response contract requires the
+          // model to return one, so a question without a rationale gets an invented one — stored
+          // under the target locales only, and therefore read back as a gap on the very next
+          // publish attempt. Inventing assessor-facing text nobody wrote is worse than the loop.
+          if (Object.keys(target.rationale).length > 0) {
+            fillLocaleGap(target.rationale, targetLocale, question?.rationale);
+          }
           (question?.options ?? []).forEach((option, optionIndex) => {
             if (target.options[optionIndex]) fillLocaleGap(target.options[optionIndex], targetLocale, option);
           });
@@ -2526,11 +2536,16 @@ async function translateMissingLocalesThenPublish(issues) {
     // from thrown exceptions instead meant a first-choice localizer that failed marked the locale
     // as failed even when the fallback filled every gap — the author was told the translation had
     // failed, and the automatic republish they had asked for never ran.
+    // A part is missing this locale when it HAS text somewhere and not here. Keyed on "the map is
+    // non-empty" rather than "the source locale has text": a part with no source text is still a
+    // gap the fill did not close, and reading it as satisfied reported success over the very hole
+    // that blocked publishing. A rationale that is absent everywhere is not a gap — it is a field
+    // this question does not have.
     const mcqStillMissing =
       needsMcqFill
       && mergedMcq.some((question) =>
         [question.stem, question.correctAnswer, question.rationale, ...question.options].some(
-          (map) => map[sourceLocale]?.trim() && !map[targetLocale]?.trim(),
+          (map) => Object.keys(map).length > 0 && !map[targetLocale]?.trim(),
         ),
       );
     if (stillMissing().length > 0 || mcqStillMissing) failedLocales.push(targetLocale);
@@ -2549,12 +2564,18 @@ async function translateMissingLocalesThenPublish(issues) {
     patch[field] = value;
   }
   if (needsMcqFill && mergedMcq.length > 0) {
-    patch.mcqQuestions = mergedMcq.map((question) => ({
-      stem: collapseMcqLocaleMap(question.stem, sourceLocale),
-      options: question.options.map((option) => collapseMcqLocaleMap(option, sourceLocale)),
-      correctAnswer: collapseMcqLocaleMap(question.correctAnswer, sourceLocale),
-      rationale: collapseMcqLocaleMap(question.rationale, sourceLocale),
-    }));
+    patch.mcqQuestions = mergedMcq.map((question) => {
+      const rationale = collapseLocaleMap(question.rationale);
+      return {
+        stem: collapseLocaleMap(question.stem),
+        options: question.options.map((option) => collapseLocaleMap(option)),
+        correctAnswer: collapseLocaleMap(question.correctAnswer),
+        // A question may legitimately have no rationale. `rationale: ""` is a different thing and
+        // the save schema rejects it, so an otherwise successful fill would 400 at the last step
+        // — taking the text translations from the same attempt down with it.
+        ...(rationale === "" ? {} : { rationale }),
+      };
+    });
   }
   commitSessionDraftPatch(patch);
 

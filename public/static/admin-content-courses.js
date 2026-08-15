@@ -413,6 +413,22 @@ function cascadeItemTypeLabel(type) {
     : (t("adminContent.courses.cascadePublish.moduleLabel") || "Modul");
 }
 
+// #896 S4: translation blockers arrive with `field` + `missingLocales` so they can be rendered in
+// the viewer's language. The server's `message` is Norwegian — correct for most of this page's
+// blockers, wrong in an English or Nynorsk UI — so it is the fallback, not the first choice.
+function blockerText(blocker) {
+  if (blocker?.code !== "translation_incomplete" || !blocker.field || !Array.isArray(blocker.missingLocales)) {
+    return blocker?.message ?? "";
+  }
+  const mcq = /^mcq\.question(\d+)$/.exec(String(blocker.field));
+  const label = mcq
+    ? (t("adminContent.courses.cascadePublish.field.mcqQuestion") || "MCQ question {n}").replace("{n}", mcq[1])
+    : (t(`adminContent.courses.cascadePublish.field.${blocker.field}`) || blocker.field);
+  const template = t("adminContent.courses.cascadePublish.translationBlocker")
+    || "The module is missing a translation of «{field}» in {locales}.";
+  return template.replace("{field}", label).replace("{locales}", blocker.missingLocales.join(", "));
+}
+
 function renderCascadeItemList(items, { showBlockers }) {
   return `<ul class="cascade-publish-list">${(items ?? [])
     .map((item) => {
@@ -420,7 +436,7 @@ function renderCascadeItemList(items, { showBlockers }) {
       const badge = `<span class="item-type-badge">${escapeHtml(cascadeItemTypeLabel(item.type))}</span>`;
       const blocked = showBlockers && !item.publishable && Array.isArray(item.blockers) && item.blockers.length > 0;
       const blockerNote = blocked
-        ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map((b) => b.message).join(" "))}</span>`
+        ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map(blockerText).join(" "))}</span>`
         : "";
       // #896 S4: a blocked module needs a way OUT of the dialog, not just an explanation of why
       // it is stuck. Every blocker here — untranslated, archived, no content — is fixed in the

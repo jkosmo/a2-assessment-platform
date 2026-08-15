@@ -107,12 +107,17 @@ export const promptTemplateBodySchema = z.object({
   active: z.boolean().optional(),
 });
 
+// #913 / #896 S4: MCQ fields take the same PARTIAL localized shape as the module-version text
+// fields have since #905. They used to demand a plain string or all three locales, which left no
+// way to say "nynorsk failed, the other two are real" — so a partly successful translation had to
+// be collapsed back to the source language, discarding the locales that DID translate. The
+// publish gate then blocked on gaps the author had just paid an LLM to fill.
 const mcqQuestionSchema = z
   .object({
-    stem: localizedTextSchema,
-    options: z.array(localizedTextSchema).min(2),
-    correctAnswer: localizedTextSchema,
-    rationale: localizedTextSchema.optional(),
+    stem: localizedTextMaybeUntranslatedSchema,
+    options: z.array(localizedTextMaybeUntranslatedSchema).min(2),
+    correctAnswer: localizedTextMaybeUntranslatedSchema,
+    rationale: localizedTextMaybeUntranslatedSchema.optional(),
   })
   .superRefine((question, context) => {
     const normalizedOptions = question.options.map((option) => localizedTextIdentity(option));
@@ -126,7 +131,10 @@ const mcqQuestionSchema = z
   });
 
 export const mcqSetBodySchema = z.object({
-  title: localizedTextSchema,
+  // Partial too, and not only for symmetry: the client derives an absent MCQ-set title from the
+  // MODULE title, which is a one-key map whenever a translation failed (#905/#896 S4). Demanding
+  // all three locales here would 400 the save for exactly the modules the gate is trying to help.
+  title: localizedTextMaybeUntranslatedSchema,
   questions: z.array(mcqQuestionSchema).min(1),
   active: z.boolean().optional(),
 });

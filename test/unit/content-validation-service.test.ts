@@ -430,3 +430,49 @@ describe("mcqLocalizationBodySchema rationale (#896 S4)", () => {
     );
   });
 });
+
+// #913: MCQ fields take partial locale maps, like the module-version text fields since #905.
+// Without this, a translation that succeeded for one target language and failed for the other had
+// no representable form, so the client had to collapse it back to the source and throw the
+// successful half away.
+describe("mcqSetBodySchema partial locales (#913)", () => {
+  it("accepts a question whose fields carry only some of the three locales", async () => {
+    const { mcqSetBodySchema } = await import("../../src/modules/adminContent/adminContentSchemas.js");
+    const parsed = mcqSetBodySchema.safeParse({
+      title: { nb: "Sett" },
+      questions: [
+        {
+          stem: { nb: "Hvem ratifiserer avtalen?", "en-GB": "Who ratifies the agreement?" },
+          options: [{ nb: "Styret" }, { nb: "Medlemmene" }],
+          correctAnswer: { nb: "Medlemmene" },
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("still requires the correct answer to be one of the options", async () => {
+    // The partial-locale change must not weaken the answer/option consistency check.
+    const { mcqSetBodySchema } = await import("../../src/modules/adminContent/adminContentSchemas.js");
+    const parsed = mcqSetBodySchema.safeParse({
+      title: { nb: "Sett" },
+      questions: [
+        {
+          stem: { nb: "Spørsmål" },
+          options: [{ nb: "A" }, { nb: "B" }],
+          correctAnswer: { nb: "C" },
+        },
+      ],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("still rejects a question with an empty localized value", async () => {
+    const { mcqSetBodySchema } = await import("../../src/modules/adminContent/adminContentSchemas.js");
+    const parsed = mcqSetBodySchema.safeParse({
+      title: { nb: "Sett" },
+      questions: [{ stem: {}, options: [{ nb: "A" }, { nb: "B" }], correctAnswer: { nb: "A" } }],
+    });
+    expect(parsed.success).toBe(false);
+  });
+});

@@ -24,7 +24,11 @@ import { courseRepository } from "./courseRepository.js";
 //     blueprint-aware pre-publish gate (validateModuleVersionForPublish → blocking issues). A module
 //     is also un-publishable if archived or if it has no version/content.
 
-export type PublishBlocker = { code: string; message: string };
+// #896 S4: `field` and `missingLocales` ride along on translation blockers so the courses page can
+// render them in the viewer's language. `message` stays as a server-side fallback — it is written
+// in Norwegian like every other blocker here, which is wrong in an English or Nynorsk UI, and the
+// client prefers the structured fields whenever they are present.
+export type PublishBlocker = { code: string; message: string; field?: string; missingLocales?: string[] };
 
 export type CourseUnpublishedItem = {
   type: "MODULE" | "SECTION";
@@ -222,6 +226,8 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
           ? {
               code: issue.code,
               message: `Modulen mangler oversettelse av «${translationFieldLabel(issue.field)}» på ${issue.missingLocales.join(", ")}. Åpne modulen og bruk «Oversett det som mangler».`,
+              field: issue.field,
+              missingLocales: issue.missingLocales,
             }
           : { code: issue.code, message: issue.message },
       );

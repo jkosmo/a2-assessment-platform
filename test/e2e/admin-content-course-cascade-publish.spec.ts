@@ -137,4 +137,48 @@ test.describe("course cascade publish (#734)", () => {
     await page.locator("#cascadePublishCancelBtn").click();
     expect(publishCalled).toBe(false);
   });
+
+  // #896 S4: the cascade's translation blocker is composed on the SERVER, which does not know the
+  // viewer's language — so every other string in this dialog followed the UI locale while the
+  // blocker stayed Norwegian. It now travels as `field` + `missingLocales` and is rendered here.
+  test("a translation blocker is rendered in the UI language, not the server's Norwegian", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [
+        { id: "course-1", title: "Labour rights", certificationLevel: "basic", moduleCount: 1, publishedAt: null },
+      ],
+    });
+    await mockPublishPreview(page, {
+      courseId: "course-1",
+      allPublished: false,
+      publishable: false,
+      unpublishedItems: [
+        {
+          type: "MODULE",
+          id: "module-1",
+          title: "Trade unions",
+          publishable: false,
+          blockers: [
+            {
+              code: "translation_incomplete",
+              // The server-side fallback, deliberately Norwegian like its sibling blockers.
+              message: "Modulen mangler oversettelse av «oppgavetekst» på nn.",
+              field: "taskText",
+              missingLocales: ["nn"],
+            },
+          ],
+        },
+      ],
+    });
+
+    await page.goto("/admin-content/courses");
+    const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
+    await row.locator('[data-action="publish"]').click();
+
+    const dialog = page.locator("#cascadePublishDialog");
+    await expect(dialog).toBeVisible();
+    // This spec runs with the UI in English.
+    await expect(dialog).toContainText("task text");
+    await expect(dialog).toContainText("nn");
+    await expect(dialog).not.toContainText("Modulen mangler");
+  });
 });

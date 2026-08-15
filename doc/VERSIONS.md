@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.6 - 2026-08-15
+
+QA-runde 4 på publiseringsgaten (#896 S4). Seks funn — alle i MCQ-håndteringen og i lokalisering
+av meldinger. Konvergens: 8, 7, 4, 6.
+
+**#913 er løst.** MCQ-feltene tar nå delvise språkkart, slik modulversjonens tekstfelt har gjort
+siden #905. Uten det fantes ingen måte å si «nynorsk feilet, de to andre er ekte» på — en delvis
+vellykket oversettelse måtte kollapses tilbake til kildespråket, og de språkene som *faktisk* ble
+oversatt ble kastet. Forfatteren betalte for en oversettelse, fikk beskjed om at den var lagret, og
+neste publiseringsforsøk ba om den samme på nytt. Settets tittel tar også delvise kart: klienten
+avleder den fra modultittelen, som er et ettspråkskart hver gang en oversettelse har feilet.
+
+**Ingen oppdiktet begrunnelse.** Lokaliseringsendepunktets svarkontrakt krever at modellen
+returnerer en begrunnelse. For et spørsmål uten begrunnelse ble den oppdiktede lagret — bare på
+målspråkene, så gaten fant den igjen som et hull ved neste forsøk. Vurderersynlig tekst ingen har
+skrevet er verre enn løkken. En fraværende begrunnelse forblir nå fraværende, i både forespørsel
+og lagring.
+
+**Kildespråket kontrolleres for hver MCQ-del.** Et spørsmål kan lovlig være blandet — stamme
+oversatt til tre språk ved siden av alternativer lagret som legacy-strenger. Kildevalget så bare på
+stammen, og forespørselen feilet på alternativer som ikke hadde tekst i det språket. Hullet gikk
+umerket fordi «mangler» ble målt mot kildespråket, som var tomt.
+
+**Meldinger følger nå brukerens språk.** Avansert-siden viste interne feltnavn og engelsk
+servertekst; kurskaskadens blokkering var hardkodet til bokmål i alle språk. Begge bygges nå fra
+`field` + `missingLocales`, og serverens tekst er bare en reserve.
+
 ## 2.17.5 - 2026-08-15
 
 QA-runde 3 på publiseringsgaten (#896 S4). Fire funn — konvergensen er tydelig: 8, 7, 4.

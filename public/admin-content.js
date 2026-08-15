@@ -628,6 +628,17 @@ async function runWithBusyButton(button, action) {
   }
 }
 
+// #896 S4: the same field labels the conversational workspace uses. Kept here rather than shared
+// because this page is being retired in S3c and importing across the two bundles for four strings
+// would outlive its usefulness. MCQ issues carry a question index in the field name, so their
+// label is built from the pattern.
+function translationGateFieldLabel(field) {
+  const mcq = /^mcq\.question(\d+)$/.exec(String(field ?? ""));
+  if (mcq) return (t("adminContent.publish.field.mcqQuestion") || "MCQ question {n}").replace("{n}", mcq[1]);
+  const label = t(`adminContent.publish.field.${field}`);
+  return label.startsWith("adminContent.publish.field.") ? String(field) : label;
+}
+
 function parseActionableErrorMessage(error) {
   if (!(error instanceof Error)) {
     return "Unexpected error.";
@@ -649,10 +660,19 @@ function parseActionableErrorMessage(error) {
     // conversational workspace, not here — this page is being retired in the same epic, so it is
     // not getting a second copy of that flow. Say where the fix is instead of leaving the author
     // with a correct diagnosis and no next step.
-    const hasTranslationGate = Array.isArray(payload.issues)
-      && payload.issues.some((issue) => issue?.code === "translation_incomplete");
-    if (hasTranslationGate) {
-      return `${issueText} — ${
+    const gateIssues = Array.isArray(payload.issues)
+      ? payload.issues.filter((issue) => issue?.code === "translation_incomplete" && Array.isArray(issue.missingLocales))
+      : [];
+    if (gateIssues.length > 0) {
+      // Rendered from `field` + `missingLocales`, not from `issue.message`. The server message is
+      // English and names the internal key (`description: missing nn`), which read as a leaked
+      // string in a Norwegian UI.
+      const described = gateIssues
+        .map((issue) => `${translationGateFieldLabel(issue.field)} (${issue.missingLocales.join(", ")})`)
+        .join("; ");
+      return `${
+        t("adminContent.publish.translationGateBlocked") || "Publisering er blokkert: modulen er ikke ferdig oversatt."
+      } ${described} — ${
         t("adminContent.publish.translationGateHint")
         || "Bruk «Oversett det som mangler» i samtale-arbeidsrommet for å fylle hullene."
       }`;

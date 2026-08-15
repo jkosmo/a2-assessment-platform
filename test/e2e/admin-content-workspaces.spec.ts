@@ -2082,6 +2082,100 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/Fikk ikke oversatt alt|Could not translate every gap/)).toHaveCount(0);
   });
 
+  // #896 S4 QA round 4: MCQ gap-fill on a question that legitimately has no rationale, where one
+  // target locale succeeds and the other fails. Three separate ways this used to go wrong.
+  test("MCQ gap-fill keeps partial success, invents no rationale, and omits an absent one", async ({ page }) => {
+    const mcqExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+      assessmentMode: "MCQ_ONLY",
+      taskText: {},
+      mcqQuestions: [
+        {
+          // nb only, and NO rationale — a legal saved question.
+          stem: { nb: "Hvem ratifiserer avtalen?" } as Record<string, string>,
+          options: [{ nb: "Styret" } as Record<string, string>, { nb: "Medlemmene" } as Record<string, string>],
+          correctAnswer: { nb: "Medlemmene" } as Record<string, string>,
+          rationale: {} as Record<string, string>,
+        },
+      ],
+    });
+    mcqExport.module.title = { "en-GB": "Trade unions", nb: "Fagforeninger", nn: "Fagforeiningar" };
+
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": mcqExport },
+    });
+
+    // en-GB translates; nn fails. The successful half must survive.
+    const mcqBodies: Array<Record<string, unknown>> = [];
+    await page.route("**/api/admin/content/generate/mcq/localize", async (route) => {
+      const body = route.request().postDataJSON() as { targetLocale?: string; questions?: unknown[] };
+      mcqBodies.push(body);
+      if (body.targetLocale === "nn") {
+        await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          questions: [
+            {
+              stem: "Who ratifies the agreement?",
+              options: ["The board", "The members"],
+              correctAnswer: "The members",
+              // The response contract makes the model return one even though none was sent.
+              rationale: "Invented by the model.",
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      await route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "publish_blocked_by_validation",
+          issues: [
+            {
+              severity: "blocking",
+              code: "translation_incomplete",
+              message: "mcq.question1: missing en-GB, nn",
+              field: "mcq.question1",
+              missingLocales: ["en-GB", "nn"],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    await expect.poll(() => state.lastModuleVersionBody?.mcqSet?.questions?.[0]?.stem?.["en-GB"]).toBeTruthy();
+    const saved = state.lastModuleVersionBody.mcqSet.questions[0];
+
+    // 1. The en-GB translation that DID succeed is kept. Collapsing to a bare source string
+    //    because nn failed threw away work the author had already paid for.
+    expect(saved.stem["en-GB"]).toBe("Who ratifies the agreement?");
+    expect(saved.stem.nb).toBe("Hvem ratifiserer avtalen?");
+    expect(saved.stem.nn).toBeUndefined();
+
+    // 2. No invented rationale. The endpoint's response contract demands one; storing it would
+    //    put assessor-facing text nobody wrote in front of a participant — and only in the target
+    //    locales, so the next publish attempt would flag it as a gap anyway.
+    expect(saved.rationale).toBeUndefined();
+
+    // 3. The request omitted rationale rather than sending "", which the endpoint rejects.
+    const sentQuestion = (mcqBodies[0]?.questions as Array<Record<string, unknown>>)[0];
+    expect(sentQuestion.rationale).toBeUndefined();
+  });
+
   test("shell publish keeps the module loaded and shows module actions", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
