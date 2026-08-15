@@ -4248,6 +4248,9 @@ function applyTabState(tab) {
   // cannot discard typed values. No bundle guard - a new module has a draft and no bundle,
   // and its preview needs the audience swap just as much.
   if (audienceChanges) renderPreview();
+  // Rendered on entry rather than kept in sync: the panel is a read-out of the loaded
+  // bundle, and the bundle cannot change while Innstillinger is the visible tab.
+  if (tab === "settings") renderSettingsPanel();
 }
 
 function switchToTab(tab) {
@@ -4273,6 +4276,95 @@ function switchToTab(tab) {
   applyTabState(tab);
   syncTabToUrl(tab);
   if (tab === "settings") scrollPreviewToTop();
+}
+
+// ---------------------------------------------------------------------------
+// #896 S3a: the Innstillinger read-out.
+//
+// Every value here already sits in the bundle the shell loaded — this reads, it never
+// writes. Editing still hands off to the Avansert page until S3b wires each row up, which
+// is a deliberate split: the settings surface is worth having in the new IA before the
+// write paths follow, and a read-only panel cannot corrupt a module.
+// ---------------------------------------------------------------------------
+
+function renderSettingsPanel() {
+  const host = document.getElementById("settingsSummary");
+  if (!host) return;
+
+  if (!bundle) {
+    host.innerHTML = `<p class="settings-empty">${escapeHtml(t("shell.settings.noModule"))}</p>`;
+    return;
+  }
+
+  const cfg = bundle.selectedConfiguration ?? {};
+  const version = cfg.moduleVersion ?? null;
+  const mod = bundle.module ?? {};
+  const policy = version?.assessmentPolicy ?? null;
+  const criteria = cfg.rubricVersion?.criteria ?? null;
+
+  const mode = version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+  const modeLabel = t(`shell.settings.mode.${mode}`);
+
+  const rows = [];
+  const row = (labelKey, valueHtml, isEmpty = false) => {
+    rows.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
+  };
+  const emptyText = escapeHtml(t("shell.settings.notSet"));
+
+  // Module type first, as the issue specifies: it decides which fields Rediger even shows.
+  row("shell.settings.moduleType", escapeHtml(modeLabel));
+
+  const mcqMinPercent = policy?.passRules?.mcqMinPercent;
+  if (mode !== "FREETEXT_ONLY") {
+    row(
+      "shell.settings.mcqThreshold",
+      Number.isFinite(mcqMinPercent) ? `${escapeHtml(String(mcqMinPercent))} %` : emptyText,
+      !Number.isFinite(mcqMinPercent),
+    );
+  }
+
+  const criteriaEntries = criteria && typeof criteria === "object" ? Object.entries(criteria) : [];
+  if (criteriaEntries.length > 0) {
+    const items = criteriaEntries
+      .map(([id, raw]) => {
+        const c = raw && typeof raw === "object" ? raw : {};
+        const label = localizeValue(c.label) || humaniseCriterionId(String(id));
+        const maxScore = Number(c.maxScore) > 0 ? ` (${Number(c.maxScore)})` : "";
+        return `<li>${escapeHtml(label)}${escapeHtml(maxScore)}</li>`;
+      })
+      .join("");
+    row("shell.settings.criteria", `<ul class="settings-criteria">${items}</ul>`);
+  } else {
+    row("shell.settings.criteria", emptyText, true);
+  }
+
+  const hasPrompt = !!cfg.promptTemplateVersion;
+  row(
+    "shell.settings.assessmentPrompt",
+    hasPrompt ? escapeHtml(tf("shell.settings.promptVersion", { version: cfg.promptTemplateVersion.versionNo })) : emptyText,
+    !hasPrompt,
+  );
+
+  const submissionFields = version?.submissionSchema?.fields;
+  row(
+    "shell.settings.submissionSchema",
+    Array.isArray(submissionFields) && submissionFields.length
+      ? escapeHtml(tf("shell.settings.fieldCount", { count: submissionFields.length }))
+      : emptyText,
+    !(Array.isArray(submissionFields) && submissionFields.length),
+  );
+
+  const certLevel = localizeValue(mod.certificationLevel);
+  row("shell.settings.certificationLevel", certLevel ? escapeHtml(certLevel) : emptyText, !certLevel);
+
+  const validity = [mod.validFrom, mod.validTo]
+    .map((d) => (d ? new Date(d).toLocaleDateString(currentLocale) : null));
+  const validityText = validity[0] || validity[1]
+    ? `${validity[0] ?? "—"} → ${validity[1] ?? "—"}`
+    : null;
+  row("shell.settings.validity", validityText ? escapeHtml(validityText) : emptyText, !validityText);
+
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>`;
 }
 
 function bindViewTabs() {

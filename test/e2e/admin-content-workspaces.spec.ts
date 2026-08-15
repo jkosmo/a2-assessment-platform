@@ -888,6 +888,41 @@ test.describe("admin content browser coverage", () => {
     await expect(page).not.toHaveURL(/[?&]tab=/);
   });
 
+  // #896 S3a: Innstillinger reads the module's setup out of the loaded bundle. Module type
+  // comes first because it decides which fields Rediger even shows.
+  test("Innstillinger shows the module's setup, module type first", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const list = page.locator("#settingsSummary .settings-list");
+    await expect(list).toBeVisible();
+
+    // Module type is the first row, and reads as a phrase rather than an enum value.
+    const firstTerm = list.locator("dt").first();
+    await expect(firstTerm).toHaveText(/Module type|Modultype/);
+    await expect(list.locator("dd").first()).toHaveText(/Free text and multiple choice|Fritekst og flervalg/);
+    await expect(list.locator("dd").first()).not.toHaveText(/FREETEXT_PLUS_MCQ/);
+
+    // Rows the author needs even when unset say so, rather than being missing.
+    await expect(list).toContainText(/Assessment criteria|Vurderingskriterier/);
+    await expect(list).toContainText(/Certification level|Sertifiseringsniv/);
+
+    // The hand-off is still there until S3b wires the rows up.
+    await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+  });
+
   test("Forhaandsvisning withholds the answer key and assessor-only content", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

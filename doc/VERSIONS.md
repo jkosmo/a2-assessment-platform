@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.14.0 - 2026-08-15
+
+**Innstillinger viser modulens oppsett (#896, S3a av S3).** Fanen var en tom ramme med en knapp.
+Nå leser den oppsettet ut av modulen som allerede er lastet: **modultype først** — den avgjør
+hvilke felt Rediger i det hele tatt viser — deretter beståttgrense for flervalg,
+vurderingskriterier med vekt, vurderingsinstruks, innsendingsskjema, sertifiseringsnivå og
+gyldighet.
+
+Felt som ikke er satt står som «Ikke satt» i stedet for å mangle. En forfatter skal kunne se at
+noe ikke er bestemt, ikke lure på om det finnes.
+
+**S3 er delt i tre.** Kartleggingen viste sju innholdskort, tolv dialoger og 5154 linjer
+JavaScript i Avansert-editoren. Å flytte alt i én leveranse ville gjentatt feilen fra S2, der en
+liten endring trengte tre QA-runder fordi kontraktene rundt ikke var synlige.
+
+- **S3a** (denne): Innstillinger viser oppsettet. Leser, skriver ikke.
+- **S3b**: hver rad blir redigerbar her, med modultype først. Beskrivelse flyttes til Rediger, og
+  modulopprettelse, dupliser og slett flyttes til modul-lista.
+- **S3c**: Avansert-siden pensjoneres — rute-redirect, handoff-mekanikken fjernes, og
+  kalibrering-dubletten og identitetspanelet ut.
+
+Redigering går fortsatt via Avansert til S3b. Et lesepanel kan ikke ødelegge en modul, og det
+lar oss se om inndelingen er riktig før skrivestiene følger etter.
+
 ## 2.13.1 - 2026-08-14
 
 To QA-runder på S2, med til sammen femten funn. De som betyr mest:

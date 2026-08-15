@@ -373,6 +373,15 @@
       /* Forhåndsvisning: the chat pane is hidden, so the preview takes the full width
          instead of leaving a 380px gap where the chat used to be. */
       .workspace-shell--preview-only { grid-template-columns: 1fr; }
+
+      /* #896 S3a: the settings read-out. A definition list rather than cards — these are
+         facts about one module, not seven separate things to open. */
+      .settings-list { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 6px var(--space-2); margin: var(--space-2) 0; font-size: 14px; }
+      .settings-list dt { color: var(--color-meta); font-weight: 600; }
+      .settings-list dd { margin: 0; color: var(--color-text); }
+      .settings-list dd.settings-empty { color: var(--color-meta); font-style: italic; }
+      .settings-criteria { margin: 4px 0 0; padding-left: 18px; }
+      .settings-criteria li { margin-bottom: 2px; }
     </style>
   </head>
   <body class="auth-resolving">
@@ -468,14 +477,15 @@
 
       </div>
 
-      <!-- #896 S1: Innstillinger is a frame for now. The fields listed in the issue (modultype
-           first, then terskler, kriterier, vurderingsinstruks, gyldighet) move here in S3, at
-           which point the separate Avansert page and this hand-off button both disappear. -->
-      <!-- style="display:none", not [hidden]: setHidden() governs this panel by inline display,
+      <!-- #896 S3a: Innstillinger shows the module's setup, read from the bundle the shell has
+           already loaded. Editing still hands off to the Avansert page; S3b makes each row
+           editable here and S3c retires that page along with this button.
+           style="display:none", not [hidden]: setHidden() governs this panel by inline display,
            and the hidden ATTRIBUTE would survive setHidden(el, false) and keep it invisible. -->
       <section class="card" id="tabPanelSettings" role="tabpanel" aria-labelledby="tabSettings" style="display:none">
         <h2 style="margin-top:0;font-size:16px" data-i18n="shell.settings.title">Innstillinger</h2>
-        <p class="small" data-i18n="shell.settings.placeholder">Modultype, terskler, vurderingskriterier og vurderingsinstruks flyttes hit. Foreløpig ligger de i den avanserte editoren.</p>
+        <div id="settingsSummary"></div>
+        <p class="small" data-i18n="shell.settings.placeholder">Feltene over redigeres foreløpig i den avanserte editoren. De flyttes hit i neste leveranse.</p>
         <button type="button" id="settingsOpenAdvanced" class="btn-secondary" data-i18n="shell.settings.openAdvanced">Åpne avansert redigering</button>
       </section>
 
