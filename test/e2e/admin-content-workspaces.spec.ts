@@ -923,6 +923,78 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
   });
 
+  // #896 S3b: module type is editable from Innstillinger, and only the types the module has
+  // components for are offered — the rest are disabled with the reason, instead of being
+  // selectable and then rejected by the API.
+  test("Innstillinger can change the module type, and only offers types the module supports", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const select = page.locator("#settingsModuleType");
+    await expect(select).toBeVisible();
+    await expect(select).toHaveValue("FREETEXT_PLUS_MCQ");
+
+    // Switching to MCQ-only saves a new version through the composed endpoint.
+    await select.selectOption("MCQ_ONLY");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("MCQ_ONLY");
+    // MCQ-only carries no free-text: the fields are left off rather than sent empty.
+    expect(state.lastModuleVersionBody.taskText).toBeUndefined();
+    expect(state.lastModuleVersionBody.rubricVersionId).toBeUndefined();
+    expect(state.lastModuleVersionBody.mcqSetVersionId).toBeTruthy();
+  });
+
+  test("Innstillinger refuses to save settings while an unsaved draft exists", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    // Produce an unsaved draft, then look at Innstillinger.
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+
+    await page.locator("#tabSettings").click();
+    await page.locator("#tabSwitchDiscard").click();
+
+    // A settings save would carry the STORED content forward and quietly drop the draft, so it
+    // is blocked with the reason rather than offered.
+    await expect(page.locator("#settingsSave")).toHaveCount(0);
+    await expect(page.locator("#settingsSummary")).toContainText(/unsaved draft|ulagret utkast/);
+  });
+
   test("Forhaandsvisning withholds the answer key and assessor-only content", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

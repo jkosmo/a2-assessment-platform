@@ -382,6 +382,10 @@
       .settings-list dd.settings-empty { color: var(--color-meta); font-style: italic; }
       .settings-criteria { margin: 4px 0 0; padding-left: 18px; }
       .settings-criteria li { margin-bottom: 2px; }
+      /* #896 S3b: editable rows. Sized to the content rather than the column so a percentage
+         field does not stretch across the panel. */
+      .settings-input { font-family: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; max-width: 320px; }
+      input.settings-input[type="number"] { max-width: 90px; }
     </style>
   </head>
   <body class="auth-resolving">

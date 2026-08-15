@@ -4315,15 +4315,40 @@ function renderSettingsPanel() {
   };
   const emptyText = escapeHtml(t("shell.settings.notSet"));
 
-  // Module type first, as the issue specifies: it decides which fields Rediger even shows.
-  row("shell.settings.moduleType", escapeHtml(modeLabel));
+  // #896 S3b: module type is editable, and first, as the issue specifies — it decides which
+  // fields Rediger even shows. Only the types this module has the components for are offered;
+  // the rest are disabled with the reason, rather than allowed and then rejected by the API.
+  const hasRubric = !!cfg.rubricVersion;
+  const hasPrompt = !!cfg.promptTemplateVersion;
+  const hasMcq = !!cfg.mcqSetVersion;
+  const hasTask = !!localizeValue(version?.taskText);
+  const freetextReady = hasTask && hasRubric && hasPrompt;
+
+  const modeOptions = [
+    { value: "FREETEXT_PLUS_MCQ", ok: freetextReady && hasMcq, missingKey: "shell.settings.needsBoth" },
+    { value: "FREETEXT_ONLY", ok: freetextReady, missingKey: "shell.settings.needsFreetext" },
+    { value: "MCQ_ONLY", ok: hasMcq, missingKey: "shell.settings.needsMcq" },
+  ];
+  const optionsHtml = modeOptions
+    .map(({ value, ok, missingKey }) => {
+      const label = t(`shell.settings.mode.${value}`);
+      const suffix = ok || value === mode ? "" : ` — ${t(missingKey)}`;
+      const disabled = !ok && value !== mode ? " disabled" : "";
+      const selected = value === mode ? " selected" : "";
+      return `<option value="${value}"${disabled}${selected}>${escapeHtml(label + suffix)}</option>`;
+    })
+    .join("");
+  row(
+    "shell.settings.moduleType",
+    `<select id="settingsModuleType" class="settings-input">${optionsHtml}</select>`,
+  );
 
   const mcqMinPercent = policy?.passRules?.mcqMinPercent;
   if (mode !== "FREETEXT_ONLY") {
     row(
       "shell.settings.mcqThreshold",
-      Number.isFinite(mcqMinPercent) ? `${escapeHtml(String(mcqMinPercent))} %` : emptyText,
-      !Number.isFinite(mcqMinPercent),
+      `<input id="settingsMcqMinPercent" class="settings-input" type="number" min="0" max="100"
+        value="${Number.isFinite(mcqMinPercent) ? escapeHtml(String(mcqMinPercent)) : 70}" /> %`,
     );
   }
 
@@ -4342,7 +4367,6 @@ function renderSettingsPanel() {
     row("shell.settings.criteria", emptyText, true);
   }
 
-  const hasPrompt = !!cfg.promptTemplateVersion;
   row(
     "shell.settings.assessmentPrompt",
     hasPrompt ? escapeHtml(tf("shell.settings.promptVersion", { version: cfg.promptTemplateVersion.versionNo })) : emptyText,
@@ -4368,7 +4392,78 @@ function renderSettingsPanel() {
     : null;
   row("shell.settings.validity", validityText ? escapeHtml(validityText) : emptyText, !validityText);
 
-  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>`;
+  // An unsaved draft and a settings save would fight over the same next version: the settings
+  // save carries the PERSISTED content forward, so it would quietly drop whatever is in the
+  // draft. Blocking with a reason beats a silent loss.
+  const draftBlocks = !!sessionDraft;
+  const actionHtml = draftBlocks
+    ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
+    : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
+
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${actionHtml}`;
+
+  document.getElementById("settingsSave")?.addEventListener("click", () => {
+    void saveSettingsInBackground();
+  });
+}
+
+/**
+ * #896 S3b: save the settings as a new module version.
+ *
+ * Everything not shown here is carried forward from the current version by reference, so the
+ * save changes the setup and nothing else. Content belonging to a type that is being switched
+ * away from is NOT deleted — it stays on the previous version, and switching back brings it
+ * into view again. That is what "beholdes, ikke slettes" means in a versioned model.
+ */
+async function saveSettingsInBackground() {
+  const moduleId = selectedModuleId;
+  if (!moduleId || !bundle) return;
+
+  const cfg = bundle.selectedConfiguration ?? {};
+  const version = cfg.moduleVersion ?? null;
+  const mode = document.getElementById("settingsModuleType")?.value ?? version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+  const thresholdInput = document.getElementById("settingsMcqMinPercent");
+  const mcqMinPercent = thresholdInput
+    ? parsePositiveIntInRange(thresholdInput.value, 0, 100) ?? SHELL_MCQ_ONLY_MIN_PERCENT
+    : null;
+
+  const isMcqOnly = mode === "MCQ_ONLY";
+  const isFreetextOnly = mode === "FREETEXT_ONLY";
+
+  const body = {
+    assessmentMode: mode,
+    ...(isMcqOnly ? {} : {
+      taskText: version?.taskText,
+      assessorExpectedContent: version?.assessorExpectedContent,
+      candidateTaskConstraints: omitWhenEveryLocaleBlank(version?.candidateTaskConstraints),
+      rubricVersionId: cfg.rubricVersion?.id,
+      promptTemplateVersionId: cfg.promptTemplateVersion?.id,
+    }),
+    ...(isFreetextOnly ? {} : { mcqSetVersionId: cfg.mcqSetVersion?.id }),
+    ...(mcqMinPercent !== null && !isFreetextOnly
+      ? { assessmentPolicy: { ...(version?.assessmentPolicy ?? {}), passRules: { ...(version?.assessmentPolicy?.passRules ?? {}), mcqMinPercent } } }
+      : {}),
+    ...(version?.submissionSchema ? { submissionSchema: version.submissionSchema } : {}),
+  };
+
+  const slot = logProgress("shell.settings.saving");
+  slot.abortBtn.remove();
+  try {
+    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/versions`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    await loadModule(moduleId);
+    renderSettingsPanel();
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.settings.saved"))}</strong>`);
+    showToast(t("shell.settings.saved"), "success");
+  } catch (error) {
+    // The composed save is all-or-nothing, so the module is untouched. Say what the server
+    // said rather than a generic failure - the reason is usually actionable.
+    const message = error?.body?.message || error?.message || t("shell.settings.saveFailed");
+    logResolveSlot(slot, () => escapeHtml(`${t("shell.settings.saveFailed")} ${message}`));
+    showToast(t("shell.settings.saveFailed"), "error");
+  }
 }
 
 function bindViewTabs() {

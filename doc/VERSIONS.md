@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.16.0 - 2026-08-15
+
+**Modultype kan endres fra Innstillinger (#896, S3b første del).** Fanen var lesbar; nå er den
+øverste raden redigerbar — modultype, og beståttgrensen for flervalg.
+
+To valg verdt å kjenne til:
+
+**Bare typer modulen faktisk kan bli tilbys.** Mangler modulen et MCQ-sett, er «bare flervalg»
+deaktivert med begrunnelsen ved siden av, i stedet for å være valgbar og så bli avvist av API-et.
+Forfatteren ser hva som mangler, ikke en feilmelding etterpå.
+
+**Innhold av en type du bytter bort fra slettes ikke.** Det blir liggende på den forrige
+versjonen, og bytter du tilbake, kommer det til syne igjen. Det er hva «beholdes, ikke slettes»
+betyr i en versjonert modell — ingen sletting, bare en ny versjon som peker på færre ting.
+
+Lagringen går gjennom det komponerte endepunktet fra #906, så typebyttet og alt som følger med
+er én transaksjon.
+
+**Blokkert ved ulagret utkast.** Har du et utkast i Rediger, sier Innstillinger fra i stedet for
+å lagre: en innstillingslagring bærer det *lagrede* innholdet videre, og ville stille kastet
+utkastet ditt.
+
 ## 2.15.1 - 2026-08-15
 
 QA-runde på #906. Hovedfunnet var at endepunktet var bygget, men **ingen brukte det** — hele
