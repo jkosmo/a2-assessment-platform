@@ -164,6 +164,15 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // #896 S3b: the stored values a partial update has to merge onto. Without reading them
+    // first, a patch for one locale replaces the whole localized object and deletes the others.
+    findModuleDetails(moduleId: string) {
+      return client.module.findUnique({
+        where: { id: moduleId },
+        select: { id: true, description: true, certificationLevel: true, validFrom: true, validTo: true },
+      });
+    },
+
     async countModuleCourses(moduleId: string) {
       return client.courseItem.count({ where: { moduleId } });
     },

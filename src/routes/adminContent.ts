@@ -699,19 +699,30 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
     return;
   }
 
+  // An unparseable date is a client error, not a request to clear the field. Without this,
+  // `validTo: "not-a-date"` returns 201 while silently removing an existing bound — the module
+  // create route already refuses it, and an update must be no more forgiving.
+  const validFrom = data.validFrom ? parseOptionalDate(data.validFrom) : null;
+  const validTo = data.validTo ? parseOptionalDate(data.validTo) : null;
+  if ((data.validFrom && !validFrom) || (data.validTo && !validTo)) {
+    response.status(400).json({
+      error: "validation_error",
+      message: "validFrom/validTo must be valid ISO date or datetime values.",
+    });
+    return;
+  }
+
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
     const result = await composeModuleVersion({
       moduleId: request.params.moduleId,
       actorId,
       title: data.title,
-      // null clears; undefined leaves alone. parseOptionalDate returns null for an unparseable
-      // string, so an explicit null and a bad date look the same here — the schema keeps the
-      // shape honest and the composer refuses an inverted window.
+      // null clears, undefined leaves alone.
       ...(data.description !== undefined ? { description: data.description } : {}),
       ...(data.certificationLevel !== undefined ? { certificationLevel: data.certificationLevel } : {}),
-      ...(data.validFrom !== undefined ? { validFrom: data.validFrom ? parseOptionalDate(data.validFrom) : null } : {}),
-      ...(data.validTo !== undefined ? { validTo: data.validTo ? parseOptionalDate(data.validTo) : null } : {}),
+      ...(data.validFrom !== undefined ? { validFrom: validFrom } : {}),
+      ...(data.validTo !== undefined ? { validTo: validTo } : {}),
       assessmentMode: data.assessmentMode,
       taskText: data.taskText,
       assessorExpectedContent: data.assessorExpectedContent,

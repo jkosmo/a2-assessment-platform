@@ -195,8 +195,22 @@ second set. Authoring UIs should use this route.
 
 Components can be **created** inline (`rubric`, `promptTemplate`, `mcqSet`) or **referenced** by
 id (`rubricVersionId`, `promptTemplateVersionId`, `mcqSetVersionId`) when unchanged. If both are
-given for the same slot the newly created one wins. Idempotency-keyed
-(`modules.versions.compose`), so a retried request does not double-write.
+given for the same slot the newly created one wins. Idempotency-keyed per module
+(`modules.versions.compose:<moduleId>`), so a retried request does not double-write and the same
+key against a different module is not replayed.
+
+It also accepts the **module-level** fields, applied in the same transaction (#896 S3b) — they
+had no update path at all before, only creation:
+
+| Field | Semantics |
+|---|---|
+| `title`, `description`, `certificationLevel` | Localized **patch**: naming one locale changes that locale and leaves the others. Send a plain string to replace the whole value as "one language, not translated yet" (#905). |
+| `description: null` | Clears the description. Omitting the field leaves it untouched. |
+| `validFrom`, `validTo` | ISO date or datetime; `null` clears the bound. An unparseable value is a `400`, not a clear. The **merged** window is validated against the stored dates, so moving one bound past the other is rejected even when only one is sent. |
+
+The mode rules are enforced in both directions: a mode missing its required components is
+rejected, and so is a mode carrying components it has no use for — those used to be dropped
+silently behind a `201`.
 
 `/modules/:moduleId/export` returns the full editing bundle for the module, **including MCQ
 `correctAnswer` and `rationale`**. Access is owner-or-administrator (`assertModuleOwnership`),

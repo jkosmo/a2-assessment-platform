@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.1 - 2026-08-15
+
+QA-runde på modulnivå-feltene. **To av funnene var samme feilklasse som #892, #902 og #905** — en
+lokalisert verdi som blir erstattet i stedet for flettet:
+
+- **Beskrivelsen slettet de andre språkene.** Et patch med bare `nb` skrev hele objektet, så
+  engelsk og nynorsk forsvant.
+- **Sertifiseringsnivået mistet lokaliseringsformen.** Panelet leste ett språk og sendte ren
+  streng tilbake, som kollapset alle tre til den redigerte teksten.
+
+Begge fletter nå mot lagret verdi, etter samme regel som tittelen alltid har fulgt. Tre
+integrasjonstester, verifisert i begge retninger.
+
+**Beskrivelsen er flyttet til Rediger**, der spesifikasjonen plasserer den — den er
+deltakersynlig i modullista og er dermed innhold, ikke oppsett. Den kunne til nå bare rettes fra
+Avansert-siden, som epicen holder på å fjerne.
+
+Fire mindre funn:
+
+- Ugyldig dato ble behandlet som «tøm feltet». En skrivefeil kunne slette en gyldighetsgrense.
+- Gyldighetsvinduet ble bare validert mot feltene i forespørselen. Flytter du én grense forbi
+  den lagrede andre, slapp det gjennom. Nå valideres det sammenslåtte vinduet.
+- «Lagre» i Innstillinger manglet ingen-endring-sjekk og laget en ny versjon uansett — samme
+  regel som redigeringsskjemaet allerede fulgte.
+- Etter lagring ble bare modultypen kontrollert mot det som kom tilbake, så en feilet omlasting
+  kunne vise gamle verdier under en grønn suksessmelding.
+
 ## 2.17.0 - 2026-08-15
 
 **Sertifiseringsnivå og gyldighet kan endres (#896, S3b).** De var **create-only**: satt én gang

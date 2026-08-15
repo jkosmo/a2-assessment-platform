@@ -69,6 +69,21 @@ function serializeRequired(value: LocalizedText): string {
   return localizedTextCodec.serialize(value);
 }
 
+/**
+ * Merge a localized patch onto what is stored.
+ *
+ * A plain string means "this is the whole value in one language, not translated yet" (#892/#905)
+ * and replaces outright. A locale object is a patch: the named locales change, the rest survive.
+ * Anything else — no stored value, or stored as a plain string being patched per locale — falls
+ * back to the patch itself, since there is nothing coherent to merge onto.
+ */
+function mergeLocalized(storedRaw: string | null, patch: LocalizedText): LocalizedText {
+  if (typeof patch === "string") return patch;
+  const stored = localizedTextCodec.parse(storedRaw);
+  if (!stored || typeof stored === "string") return patch;
+  return { ...stored, ...patch };
+}
+
 export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: DbTransactionClient) {
   const run = async (tx: DbTransactionClient) => {
     // The rename belongs to the same commitment. Saving it separately is how a failed version
@@ -77,29 +92,49 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
       await updateModuleTitle(input.moduleId, input.title, input.actorId, tx);
     }
 
-    const detailPatch: {
-      description?: string | null;
-      certificationLevel?: string;
-      validFrom?: Date | null;
-      validTo?: Date | null;
-    } = {};
-    if (input.description !== undefined) {
-      detailPatch.description = input.description === null ? null : localizedTextCodec.serialize(input.description);
-    }
-    if (input.certificationLevel !== undefined) {
-      detailPatch.certificationLevel = localizedTextCodec.serialize(input.certificationLevel);
-    }
-    if (input.validFrom !== undefined) detailPatch.validFrom = input.validFrom;
-    if (input.validTo !== undefined) detailPatch.validTo = input.validTo;
-    if (Object.keys(detailPatch).length > 0) {
-      // validTo before validFrom would let a module be published into a window that can never
-      // open. createModule already refuses it; an update has to refuse it too.
-      const from = detailPatch.validFrom ?? undefined;
-      const to = detailPatch.validTo ?? undefined;
+    const touchesDetails =
+      input.description !== undefined
+      || input.certificationLevel !== undefined
+      || input.validFrom !== undefined
+      || input.validTo !== undefined;
+
+    if (touchesDetails) {
+      const repo = createAdminContentRepository(tx);
+      const stored = await repo.findModuleDetails(input.moduleId);
+
+      const detailPatch: {
+        description?: string | null;
+        certificationLevel?: string;
+        validFrom?: Date | null;
+        validTo?: Date | null;
+      } = {};
+
+      // MERGE, never replace. A patch naming one locale means "change this language" — writing
+      // it as the whole value deletes the other two. Same rule updateModuleTitle follows, and
+      // the same failure #892/#902/#905 keep producing when a path forgets it.
+      if (input.description !== undefined) {
+        detailPatch.description = input.description === null
+          ? null
+          : localizedTextCodec.serialize(mergeLocalized(stored?.description ?? null, input.description));
+      }
+      if (input.certificationLevel !== undefined) {
+        detailPatch.certificationLevel = localizedTextCodec.serialize(
+          mergeLocalized(stored?.certificationLevel ?? null, input.certificationLevel),
+        );
+      }
+      if (input.validFrom !== undefined) detailPatch.validFrom = input.validFrom;
+      if (input.validTo !== undefined) detailPatch.validTo = input.validTo;
+
+      // Validate the MERGED window, not just the fields in this request. Moving one boundary
+      // past the stored other one would otherwise pass unnoticed and leave the module in a
+      // window that can never open.
+      const from = input.validFrom !== undefined ? detailPatch.validFrom : stored?.validFrom ?? null;
+      const to = input.validTo !== undefined ? detailPatch.validTo : stored?.validTo ?? null;
       if (from && to && to < from) {
         throw new Error("validTo must be on or after validFrom.");
       }
-      await createAdminContentRepository(tx).updateModuleDetails(input.moduleId, detailPatch);
+
+      await repo.updateModuleDetails(input.moduleId, detailPatch);
     }
 
     const isMcqOnly = input.assessmentMode === "MCQ_ONLY";

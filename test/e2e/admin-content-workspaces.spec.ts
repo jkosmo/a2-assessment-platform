@@ -1067,6 +1067,47 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastModuleVersionBody.description).toBeUndefined();
   });
 
+  // #896 S3b: the description is participant-visible in the module list, so it is content and
+  // lives in Rediger. It is sent as a locale patch so the composer merges it onto the stored
+  // value — writing the whole object would delete the languages the author did not touch, the
+  // same failure #892, #902 and #905 each produced in their own corner.
+  test("the description can be corrected from Rediger and is sent as a locale patch", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+
+    const description = page.locator("#previewEditDescription");
+    await expect(description).toBeVisible();
+    await description.fill("Rettet beskrivelse");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.description).toBeTruthy();
+    const sent = state.lastModuleVersionBody.description;
+    // A patch keyed by the edited locale — not a bare string, and not all three locales.
+    expect(typeof sent).toBe("object");
+    expect(Object.values(sent)).toContain("Rettet beskrivelse");
+    expect(Object.keys(sent).length).toBe(1);
+  });
+
   test("Innstillinger rejects a validity window that ends before it starts", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

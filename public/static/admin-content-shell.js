@@ -2115,6 +2115,9 @@ async function saveDraftBundleInBackground(options = {}) {
         method: "POST",
         body: JSON.stringify({
           ...(titlePatch ? { title: titlePatch } : {}),
+        // #896 S3b: the description travels with the save as a locale patch, so the composer
+        // merges it onto the stored value instead of replacing the other languages.
+        ...(sessionDraft?.description !== undefined ? { description: sessionDraft.description } : {}),
           assessmentMode: "MCQ_ONLY",
           mcqSet: { title: resolveMcqTitlePayload(), questions: mcqQuestions },
           assessmentPolicy: { passRules: { mcqMinPercent } },
@@ -2181,6 +2184,9 @@ async function saveDraftBundleInBackground(options = {}) {
       method: "POST",
       body: JSON.stringify({
         ...(titlePatch ? { title: titlePatch } : {}),
+        // #896 S3b: the description travels with the save as a locale patch, so the composer
+        // merges it onto the stored value instead of replacing the other languages.
+        ...(sessionDraft?.description !== undefined ? { description: sessionDraft.description } : {}),
         assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : "FREETEXT_PLUS_MCQ",
         // #905: send the value as it is. translateLocalizedText used to blow a plain string up
         // into three identical locales here - not because the API demanded it, but out of
@@ -3641,6 +3647,15 @@ function enterPreviewEditMode() {
 
   // Build edit-mode HTML using same visual classes as preview
   const escapedTitle = escapeHtml(currentTitle);
+  // #896 S3b: the description is participant-visible in the module list, so it is content and
+  // belongs in Rediger — not in Innstillinger with the setup. Until now it could only be
+  // corrected from the Avansert page, which the epic is retiring.
+  const currentDescription = localizeValueForLocale(
+    sessionDraft?.description ?? bundle?.module?.description ?? "",
+    editingLocale,
+  ) || "";
+  const escapedDescription = escapeHtml(currentDescription);
+  const labelDescription = escapeHtml(t("adminContent.module.description"));
   const escapedTask = escapeHtml(currentTaskText);
   const escapedGuidance = escapeHtml(currentGuidanceText);
   const escapedCandidateConstraints = escapeHtml(currentCandidateTaskConstraints);
@@ -3754,6 +3769,9 @@ function enterPreviewEditMode() {
         aria-label="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
       <span class="module-status-badge draft">${escapeHtml(t("shell.directEdit.editingBadge"))}</span>
     </div>
+    <div class="preview-section-label">${labelDescription}</div>
+    <textarea id="previewEditDescription" class="preview-edit-textarea preview-edit-textarea--compact"
+      aria-label="${labelDescription}">${escapedDescription}</textarea>
     ${freetextFieldsHtml}
     ${mcqHtml}
     ${criteriaSectionHtml}
@@ -3937,8 +3955,10 @@ function enterPreviewEditMode() {
     // (not abortable). Abort therefore means nothing was written - and because the form is
     // left standing until the translation resolves, the author keeps every typed value.
     const criteriaUnchanged = JSON.stringify(newCriteriaRecord) === JSON.stringify(existingCriteriaRecord);
+    const newDescription = document.getElementById("previewEditDescription")?.value.trim() ?? currentDescription;
     const nothingChanged =
-      newTitle === currentTitle
+      newDescription === currentDescription
+      && newTitle === currentTitle
       && newTaskText === currentTaskText
       && newGuidanceText === currentGuidanceText
       && newCandidateTaskConstraints === currentCandidateTaskConstraints
@@ -4004,6 +4024,10 @@ function enterPreviewEditMode() {
       // rather than papered over; the publish gate in S4 is where it has to be resolved.
       sessionDraft = buildPreviewCandidate({
         title: dropFailedLocales(localized.title, failedLocales, editingLocale),
+        // The description is not part of the translation round — it is one field in one
+        // language, patched onto the stored value by the composer so the other locales
+        // survive. Sent as a locale-keyed patch for exactly that reason.
+        ...(newDescription !== currentDescription ? { description: { [editingLocale]: newDescription } } : {}),
         taskText: localized.taskText,
         assessorExpectedContent: localized.assessorExpectedContent,
         candidateTaskConstraints: localized.candidateTaskConstraints,
@@ -4500,6 +4524,19 @@ async function saveSettingsInBackground() {
     ...(toInput && toInput.value !== currentTo ? { validTo: toInput.value || null } : {}),
   };
 
+  // Same rule as the edit form: nothing changed, nothing written. Without this, opening
+  // Innstillinger and pressing Lagre out of habit creates a module version identical to the
+  // last one — #896's "ingen endringer ⇒ ingen ny versjon" applies here too.
+  const currentMode = version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+  const currentThreshold = version?.assessmentPolicy?.passRules?.mcqMinPercent;
+  const thresholdChanged = thresholdInput
+    ? mcqMinPercent !== (Number.isFinite(currentThreshold) ? currentThreshold : SHELL_MCQ_ONLY_MIN_PERCENT)
+    : false;
+  if (mode === currentMode && !thresholdChanged && Object.keys(moduleFields).length === 0) {
+    showToast(t("shell.settings.noChanges"), "info");
+    return;
+  }
+
   const body = {
     ...moduleFields,
     assessmentMode: mode,
@@ -4528,7 +4565,11 @@ async function saveSettingsInBackground() {
     // showing the previous version under a green toast. Verify what came back instead of
     // trusting that it came back at all.
     const reloadedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
-    if (reloadedMode !== mode) {
+    // Check the module-level fields too. When certification or validity was the only change,
+    // comparing the mode alone always matched and a failed reload still showed green.
+    const reloadedCert = localizeValue(bundle?.module?.certificationLevel) ?? "";
+    const certStale = moduleFields.certificationLevel !== undefined && reloadedCert !== moduleFields.certificationLevel;
+    if (reloadedMode !== mode || certStale) {
       logResolveSlot(slot, () => escapeHtml(t("shell.settings.savedStale")));
       showToast(t("shell.settings.savedStale"), "info");
       return;
