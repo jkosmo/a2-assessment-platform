@@ -60,6 +60,12 @@ Creating a module is reachable from **two** places; a flow/step change must cove
 
 - Conversation new-module step and conversation **regen** step — `public/static/admin-content-shell.js`.
 - Advanced editor radio fieldset — `public/admin-content.js` + `public/admin-content-advanced.html`.
+- **Innstillinger tab (#896 S3b)** — `renderSettingsPanel` / `saveSettingsInBackground` in
+  `public/static/admin-content-shell.js`. The only surface that changes the type on an EXISTING
+  module. Two rules live here and nowhere else: availability is computed from the module's
+  version **history** (not the current version's pointers, or a switch becomes irreversible), and
+  the assessment policy is carried whole (sending only the MCQ rule silently reverts totalMin,
+  the practical minimum and the borderline window to platform defaults).
 
 **Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "authors a FREETEXT_ONLY module version", "authors an MCQ-only module version", "shell regen flow can switch the module to …".
 

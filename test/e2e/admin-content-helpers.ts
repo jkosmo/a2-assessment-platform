@@ -685,15 +685,24 @@ export async function mockCommonApis(page: Page, {
       assessorExpectedContent: body.assessorExpectedContent ?? localizedText("Guidance text"),
       submissionSchema: body.submissionSchema ?? { fields: [] },
       assessmentPolicy: body.assessmentPolicy ?? null,
-      rubricVersionId: rubricVersion?.id ?? body.rubricVersionId ?? moduleExport.selectedConfiguration.rubricVersion?.id ?? null,
-      promptTemplateVersionId: promptTemplateVersion?.id ?? body.promptTemplateVersionId ?? moduleExport.selectedConfiguration.promptTemplateVersion?.id ?? null,
-      mcqSetVersionId: mcqSetVersion?.id ?? body.mcqSetVersionId ?? moduleExport.selectedConfiguration.mcqSetVersion?.id ?? null,
+      // No inheriting from the previous version. The real endpoint stores exactly what the body
+      // references, so a mode switch that omits a component produces a version with null for
+      // it. Falling back to the old pointer here hid a bug where switching to MCQ-only left the
+      // module unable to switch back (#896 S3b).
+      rubricVersionId: rubricVersion?.id ?? body.rubricVersionId ?? null,
+      promptTemplateVersionId: promptTemplateVersion?.id ?? body.promptTemplateVersionId ?? null,
+      mcqSetVersionId: mcqSetVersion?.id ?? body.mcqSetVersionId ?? null,
     };
     moduleExport.selectedConfiguration.moduleVersion = moduleVersion;
     moduleExport.selectedConfiguration.source = "draftModuleVersion";
     if (rubricVersion) moduleExport.selectedConfiguration.rubricVersion = rubricVersion as never;
     if (mcqSetVersion) moduleExport.selectedConfiguration.mcqSetVersion = mcqSetVersion as never;
-    moduleExport.versions.moduleVersions = [moduleVersion];
+    // PREPEND, never replace. A module keeps its version history, and the UI reads that history
+    // to decide which module types are still reachable. Replacing the list made a mode switch
+    // look irreversible in tests while the real backend kept every version.
+    moduleExport.versions.moduleVersions = [moduleVersion, ...moduleExport.versions.moduleVersions];
+    if (rubricVersion) moduleExport.versions.rubricVersions = [rubricVersion, ...moduleExport.versions.rubricVersions];
+    if (mcqSetVersion) moduleExport.versions.mcqSetVersions = [mcqSetVersion, ...moduleExport.versions.mcqSetVersions];
 
     await route.fulfill({
       status: 201,

@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.16.1 - 2026-08-15
+
+QA-runde på S3b. Den fant at **påstanden i 2.16.0 ikke stemte**: typebyttet var ikke reversibelt.
+
+Tilgjengelige typer ble regnet ut fra hva den *nyeste* versjonen peker på. Byttet du til «bare
+flervalg», sluttet den nye versjonen å peke på rubrikk og instruks — og da ble begge
+fritekst-typene deaktivert, permanent. Innholdet var der, men veien tilbake var stengt.
+Tilgjengelighet leses nå fra modulens **versjonshistorikk**, og et bytte tilbake henter
+komponentene derfra.
+
+Fem funn til:
+
+- **Bytte til «bare fritekst» kastet hele vurderingspolicyen**, ikke bare MCQ-terskelen.
+  `totalMin`, praktisk minstekrav og borderline-vinduet falt tilbake til plattformens
+  standarder — altså endret hvem som består, uten at noen så det. Policyen bæres nå hel.
+- **Ugyldig terskel ble stille til 70.** Skriver du 101, får du beskjed i stedet.
+- **Panelet kunne vise gammel tilstand under en grønn suksessmelding**, fordi omlastingen
+  svelger sine egne feil. Resultatet kontrolleres nå.
+- **Språkbytte oppdaterte ikke panelet** — det bygges i JS, utenfor rekkevidden til
+  tekstoversetteren.
+- **Dokumentasjonen** pekte fortsatt på Avansert for både modultype og terskel.
+
+To av funnene var maskert av e2e-mocken: den arvet komponentpekere den ekte backenden ville satt
+til null, og erstattet versjonshistorikken i stedet for å legge til. Begge er rettet, og
+reversibiliteten er nå dekket av test.
+
 ## 2.16.0 - 2026-08-15
 
 **Modultype kan endres fra Innstillinger (#896, S3b første del).** Fanen var lesbar; nå er den

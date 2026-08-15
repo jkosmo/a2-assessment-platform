@@ -4318,10 +4318,20 @@ function renderSettingsPanel() {
   // #896 S3b: module type is editable, and first, as the issue specifies — it decides which
   // fields Rediger even shows. Only the types this module has the components for are offered;
   // the rest are disabled with the reason, rather than allowed and then rejected by the API.
-  const hasRubric = !!cfg.rubricVersion;
-  const hasPrompt = !!cfg.promptTemplateVersion;
-  const hasMcq = !!cfg.mcqSetVersion;
-  const hasTask = !!localizeValue(version?.taskText);
+  // Availability comes from the module's HISTORY, not from what the current version happens to
+  // point at. Switching to MCQ-only writes a version without rubric or prompt pointers — reading
+  // availability off that version would then disable every free-text mode and strand the module
+  // in the type it was last saved as. The components still exist; the version simply stopped
+  // referencing them, which is exactly what makes switching back possible.
+  const rubricHistory = bundle.versions?.rubricVersions ?? [];
+  const promptHistory = bundle.versions?.promptTemplateVersions ?? [];
+  const mcqHistory = bundle.versions?.mcqSetVersions ?? [];
+  const taskHistory = (bundle.versions?.moduleVersions ?? []).find((v) => !!localizeValue(v?.taskText));
+
+  const hasRubric = rubricHistory.length > 0 || !!cfg.rubricVersion;
+  const hasPrompt = promptHistory.length > 0 || !!cfg.promptTemplateVersion;
+  const hasMcq = mcqHistory.length > 0 || !!cfg.mcqSetVersion;
+  const hasTask = !!localizeValue(version?.taskText) || !!taskHistory;
   const freetextReady = hasTask && hasRubric && hasPrompt;
 
   const modeOptions = [
@@ -4430,19 +4440,48 @@ async function saveSettingsInBackground() {
   const isMcqOnly = mode === "MCQ_ONLY";
   const isFreetextOnly = mode === "FREETEXT_ONLY";
 
+  // An out-of-range threshold is the author's mistake to see, not something to quietly turn
+  // into 70. parsePositiveIntInRange returns null for 101, for 72.5 and for gibberish alike.
+  if (thresholdInput && !isFreetextOnly && mcqMinPercent === null) {
+    showToast(t("shell.settings.invalidThreshold"), "error");
+    thresholdInput.focus();
+    return;
+  }
+
+  // Falling back to history: switching back to a type needs the components the CURRENT version
+  // stopped pointing at. Newest first, matching how the bundle orders them.
+  const latestRubricId = cfg.rubricVersion?.id ?? bundle.versions?.rubricVersions?.[0]?.id;
+  const latestPromptId = cfg.promptTemplateVersion?.id ?? bundle.versions?.promptTemplateVersions?.[0]?.id;
+  const latestMcqId = cfg.mcqSetVersion?.id ?? bundle.versions?.mcqSetVersions?.[0]?.id;
+  const latestTaskVersion = version?.taskText
+    ? version
+    : (bundle.versions?.moduleVersions ?? []).find((v) => !!localizeValue(v?.taskText));
+
+  // The policy is carried whole. Sending only the MCQ rule would drop totalMin, the practical
+  // minimum and the borderline window — pass/fail rules the author never touched, silently
+  // reverting to platform defaults on a mode change.
+  const existingPolicy = version?.assessmentPolicy ?? null;
+  const passRules = { ...(existingPolicy?.passRules ?? {}) };
+  if (isFreetextOnly) {
+    delete passRules.mcqMinPercent;
+  } else if (mcqMinPercent !== null) {
+    passRules.mcqMinPercent = mcqMinPercent;
+  }
+  const policy = existingPolicy || Object.keys(passRules).length > 0
+    ? { ...(existingPolicy ?? {}), passRules }
+    : null;
+
   const body = {
     assessmentMode: mode,
     ...(isMcqOnly ? {} : {
-      taskText: version?.taskText,
-      assessorExpectedContent: version?.assessorExpectedContent,
-      candidateTaskConstraints: omitWhenEveryLocaleBlank(version?.candidateTaskConstraints),
-      rubricVersionId: cfg.rubricVersion?.id,
-      promptTemplateVersionId: cfg.promptTemplateVersion?.id,
+      taskText: latestTaskVersion?.taskText,
+      assessorExpectedContent: latestTaskVersion?.assessorExpectedContent,
+      candidateTaskConstraints: omitWhenEveryLocaleBlank(latestTaskVersion?.candidateTaskConstraints),
+      rubricVersionId: latestRubricId,
+      promptTemplateVersionId: latestPromptId,
     }),
-    ...(isFreetextOnly ? {} : { mcqSetVersionId: cfg.mcqSetVersion?.id }),
-    ...(mcqMinPercent !== null && !isFreetextOnly
-      ? { assessmentPolicy: { ...(version?.assessmentPolicy ?? {}), passRules: { ...(version?.assessmentPolicy?.passRules ?? {}), mcqMinPercent } } }
-      : {}),
+    ...(isFreetextOnly ? {} : { mcqSetVersionId: latestMcqId }),
+    ...(policy ? { assessmentPolicy: policy } : {}),
     ...(version?.submissionSchema ? { submissionSchema: version.submissionSchema } : {}),
   };
 
@@ -4455,6 +4494,15 @@ async function saveSettingsInBackground() {
     });
     await loadModule(moduleId);
     renderSettingsPanel();
+    // loadModule swallows its own fetch errors, so a 502 on the reload would leave the panel
+    // showing the previous version under a green toast. Verify what came back instead of
+    // trusting that it came back at all.
+    const reloadedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+    if (reloadedMode !== mode) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.settings.savedStale")));
+      showToast(t("shell.settings.savedStale"), "info");
+      return;
+    }
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.settings.saved"))}</strong>`);
     showToast(t("shell.settings.saved"), "success");
   } catch (error) {
@@ -5362,6 +5410,10 @@ function populateUiLocaleSelect() {
     renderPreviewLocaleBar();
     renderPreview();
     renderWorkspaceNavigation();
+    // #896 S3b: the settings panel is built in JS, so translatePageStaticText cannot reach it.
+    // Without this the module types, the "missing component" reasons and the save button stay
+    // in the previous language while the page around them switches.
+    renderSettingsPanel();
     if (wasEditing) {
       enterPreviewEditMode();
       // Feltene fylles fra det nye språket. Det som var skrevet i det forrige — og ikke bekreftet

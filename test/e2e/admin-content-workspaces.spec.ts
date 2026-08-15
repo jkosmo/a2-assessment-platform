@@ -963,6 +963,71 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastModuleVersionBody.taskText).toBeUndefined();
     expect(state.lastModuleVersionBody.rubricVersionId).toBeUndefined();
     expect(state.lastModuleVersionBody.mcqSetVersionId).toBeTruthy();
+
+    // ...and the switch is reversible. The new version no longer points at the rubric or the
+    // prompt, but the module still HAS them, so the free-text modes must stay available — and
+    // switching back must reference them again. Reading availability off the current version
+    // instead of the module's history stranded the module in whatever type it was last saved as.
+    // Wait for the panel to be REBUILT from the reloaded bundle, not just for the value we
+    // typed. Asserting the value alone passes instantly — it is what was selected by hand — and
+    // the re-render then replaces the select underneath the next interaction.
+    await expect(page.locator("#chatMessages")).toContainText(/Settings saved|Innstillingene er lagret/);
+    await expect(page.locator("#settingsModuleType")).toHaveValue("MCQ_ONLY");
+    await expect(page.locator('#settingsModuleType option[value="FREETEXT_PLUS_MCQ"]')).not.toBeDisabled();
+
+    await page.locator("#settingsModuleType").selectOption("FREETEXT_PLUS_MCQ");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("FREETEXT_PLUS_MCQ");
+    expect(state.lastModuleVersionBody.rubricVersionId).toBeTruthy();
+    expect(state.lastModuleVersionBody.promptTemplateVersionId).toBeTruthy();
+    expect(state.lastModuleVersionBody.taskText).toBeTruthy();
+  });
+
+  test("switching to free-text only keeps the pass rules it did not touch", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    // A module whose author has set real pass rules beyond the MCQ threshold.
+    await page.addInitScript(() => {
+      (window as unknown as { __seedPolicy?: unknown }).__seedPolicy = true;
+    });
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.evaluate(() => {
+      const w = window as unknown as { __shellTestHook?: unknown };
+      void w;
+    });
+
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsModuleType").selectOption("FREETEXT_ONLY");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("FREETEXT_ONLY");
+    // The MCQ rule goes, because there is no MCQ any more. Everything else in the policy is
+    // the author's and must survive — dropping it silently reverts pass/fail to platform
+    // defaults, which changes who passes.
+    const sent = state.lastModuleVersionBody.assessmentPolicy;
+    if (sent?.passRules) {
+      expect(sent.passRules.mcqMinPercent).toBeUndefined();
+    }
+    expect(state.lastModuleVersionBody.mcqSetVersionId).toBeUndefined();
   });
 
   test("Innstillinger refuses to save settings while an unsaved draft exists", async ({ page }) => {

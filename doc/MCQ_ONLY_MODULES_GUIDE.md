@@ -11,9 +11,17 @@ regenerate / re-save):
   decided purely by the MCQ score against a threshold (default 70%). Fast and cheap (deterministic
   grading, no LLM call) — use it for knowledge checks.
 
-You pick the type in the **conversation** («Hva slags modul er dette?» after the source step) or in
-the **advanced editor** (the *Module type* radio). The rest of this guide focuses on the two
-non-default types.
+You pick the type in the **conversation** («Hva slags modul er dette?» after the source step) when
+creating a module, and you can change it later on an existing module from the **Innstillinger**
+tab in the module workspace, where it is the first row (#896 S3b). The advanced editor still has
+its *Module type* radio until that page is retired.
+
+**Changing the type does not delete anything.** The new version simply references fewer
+components; the content you switched away from stays on the previous version, and switching back
+brings it into view again. Types the module has no components for are shown disabled, with what
+is missing — so a type you cannot save is never offered.
+
+The rest of this guide focuses on the two non-default types.
 
 ## MCQ-only modules
 
@@ -45,7 +53,7 @@ Since v1.3.36 (#555) the conversation follows the same order as the advanced edi
 4. Choose the certification level, number of questions, and options per question.
 5. The questions are generated — there is **no scenario or assessment-plan step** for MCQ-only.
 6. Review in the preview and **save**. The version is saved with a default **70 %** pass mark;
-   change it later in the advanced editor if you need a different threshold.
+   change it later from the **Innstillinger** tab, where the pass mark sits under the module type.
 
 Picking **“Free-text + MCQ”** instead keeps the full flow (scenario → certification level →
 assessment plan → questions).
