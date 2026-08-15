@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.15.0 - 2026-08-15
+
+**Én lagring, én transaksjon (#906).** Nytt endepunkt `POST /modules/:id/versions` skriver en
+modulversjon **og alle komponentene den peker på** — rubrikk, vurderingsinstruks og MCQ-sett — i
+én transaksjon.
+
+Lagring har vært fem uavhengige kall. Feilet det siste, satt du igjen med en modul som hadde nye
+komponentversjoner og ingen versjon som bandt dem sammen — og et nytt forsøk laget enda et sett.
+#896 S2 slo forfatterstegene sammen til én knapp, noe som gjorde svakheten lettere å treffe og
+umulig å se.
+
+Delene har alltid vært komponerbare: `importModuleFromEnvelope` har gjort nøyaktig dette siden
+#796, fordi hver kommando allerede tar en transaksjonsklient. Dette er den samme komposisjonen,
+gjort tilgjengelig for vanlig forfatterarbeid og ikke bare for import.
+
+Komponenter kan enten **opprettes** i kallet eller **refereres** med id når de er uendret. De
+gamle, granulære rutene består — de er det Avansert-editoren driver kort for kort, og det agenter
+og import komponerer.
+
+Testen som betyr noe er feiltilfellet: en komposisjon som avvises etter at rubrikk og instruks er
+opprettet inne i transaksjonen skal ikke etterlate noe. Den er verifisert, ikke antatt.
+
 ## 2.14.0 - 2026-08-15
 
 **Innstillinger viser modulens oppsett (#896, S3a av S3).** Fanen var en tom ramme med en knapp.

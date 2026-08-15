@@ -211,6 +211,30 @@ export const moduleVersionBodySchema = z
     },
   );
 
+/**
+ * #906: the whole module version in one request.
+ *
+ * Component versions can either be CREATED here (`rubric`, `promptTemplate`, `mcqSet`) or
+ * REFERENCED by id (`rubricVersionId`, …) when the caller is keeping the existing one. Sending
+ * both for the same slot is not an error — the freshly created one wins — because the common
+ * case is a UI that always sends what it has.
+ */
+export const composeModuleVersionBodySchema = z.object({
+  assessmentMode: assessmentModeSchema.optional(),
+  taskText: localizedTextMaybeUntranslatedSchema.optional(),
+  assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
+  candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.optional(),
+  assessmentBlueprint: z.string().trim().optional(),
+  rubric: rubricBodySchema.omit({ active: true }).optional(),
+  promptTemplate: promptTemplateBodySchema.omit({ active: true }).optional(),
+  mcqSet: mcqSetBodySchema.omit({ active: true }).optional(),
+  rubricVersionId: z.string().min(1).optional(),
+  promptTemplateVersionId: z.string().min(1).optional(),
+  mcqSetVersionId: z.string().min(1).optional(),
+  submissionSchema: submissionSchemaBodySchema.optional(),
+  assessmentPolicy: assessmentPolicyBodySchema.optional(),
+});
+
 export const benchmarkExampleVersionBodySchema = z.object({
   basePromptTemplateVersionId: z.string().min(1),
   linkedModuleVersionId: z.string().min(1).optional(),

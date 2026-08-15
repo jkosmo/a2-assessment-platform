@@ -180,7 +180,23 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 **Certification invariant (#476/#525):** a course completion / certificate is issued only when a
 participant has **passed all modules** in the course **and read all learning sections**. This is
 re-checked both when a module is passed and when a section is marked read.
+| `POST` | `/api/admin/content/modules/:moduleId/versions` | ADMINISTRATOR, or an **owner of this module** |
 | `GET` | `/api/admin/content/modules/:moduleId/export` | ADMINISTRATOR, or an **owner of this module** |
+
+**`POST /modules/:moduleId/versions` (#906)** creates a module version **and every component it
+references in one transaction** — rubric, prompt template and MCQ set. Either all of it exists
+afterwards, or none of it does.
+
+The granular routes (`/rubric-versions`, `/prompt-template-versions`, `/mcq-set-versions`,
+`/module-versions`) remain: they are what the advanced editor drives card by card, and what
+imports and agents compose. But five separate commits mean a failure on the last one leaves a
+module with orphaned component versions and no version referencing them, and a retry creates a
+second set. Authoring UIs should use this route.
+
+Components can be **created** inline (`rubric`, `promptTemplate`, `mcqSet`) or **referenced** by
+id (`rubricVersionId`, `promptTemplateVersionId`, `mcqSetVersionId`) when unchanged. If both are
+given for the same slot the newly created one wins. Idempotency-keyed
+(`modules.versions.compose`), so a retried request does not double-write.
 
 `/modules/:moduleId/export` returns the full editing bundle for the module, **including MCQ
 `correctAnswer` and `rationale`**. Access is owner-or-administrator (`assertModuleOwnership`),

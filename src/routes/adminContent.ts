@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import {
   createModule,
   updateModuleTitle,
@@ -32,6 +32,7 @@ import {
   promptTemplateBodySchema,
   mcqSetBodySchema,
   moduleVersionBodySchema,
+  composeModuleVersionBodySchema,
   benchmarkExampleVersionBodySchema,
   blueprintGenerationBodySchema,
   rubricGenerationBodySchema,
@@ -53,6 +54,7 @@ import {
   revokeAgentAuthoringToken,
 } from "../auth/agentAuthoringTokenService.js";
 import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
+import { composeModuleVersion } from "../modules/adminContent/moduleVersionComposer.js";
 import { validateAuthoringPackage } from "../modules/adminContent/agentAuthoringValidationService.js";
 import { AUTHORING_PACKAGE_FORMAT } from "../modules/adminContent/agentAuthoringSchemas.js";
 import { moduleAdminLinks } from "../modules/adminContent/adminUiLinks.js";
@@ -670,6 +672,62 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
     response.status(201).json({ moduleVersion });
   } catch (error) {
     response.status(400).json({ error: "create_module_version_failed", message: "Could not create module version." });
+  }
+});
+
+// #906: one call, one transaction, one version.
+//
+// The five-call sequence above (title PATCH → rubric → prompt → MCQ → module-version) commits
+// each step separately: a failure on the last leaves a renamed module with orphaned component
+// versions and no version referencing them, and a retry creates a second set. This route takes
+// the whole bundle and either writes all of it or none of it.
+//
+// The old routes stay — the advanced editor still drives them one card at a time, and they are
+// the granular API agents and imports use. This is the composed path the authoring UI wants.
+// Typed params: with middleware in the chain Express widens `request.params` to string|string[],
+// which the ownership check and composer both reject.
+adminContentRouter.post("/modules/:moduleId/versions", idempotency("modules.versions.compose"), async (request: Request<{ moduleId: string }>, response) => {
+  const { data, error } = parseRequest(composeModuleVersionBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    const result = await composeModuleVersion({
+      moduleId: request.params.moduleId,
+      actorId,
+      assessmentMode: data.assessmentMode,
+      taskText: data.taskText,
+      assessorExpectedContent: data.assessorExpectedContent,
+      candidateTaskConstraints: data.candidateTaskConstraints,
+      assessmentBlueprint: data.assessmentBlueprint,
+      rubric: data.rubric,
+      promptTemplate: data.promptTemplate,
+      mcqSet: data.mcqSet,
+      rubricVersionId: data.rubricVersionId,
+      promptTemplateVersionId: data.promptTemplateVersionId,
+      mcqSetVersionId: data.mcqSetVersionId,
+      submissionSchema: data.submissionSchema,
+      assessmentPolicy: data.assessmentPolicy,
+    });
+    response.status(201).json(result);
+  } catch (err) {
+    if (err instanceof AppError) {
+      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      return;
+    }
+    // The transaction rolled back, so the module is exactly as it was. Say what failed rather
+    // than a generic message: the author has to decide whether to retry or fix the content.
+    const message = err instanceof Error ? err.message : "Could not create module version.";
+    response.status(400).json({ error: "compose_module_version_failed", message });
   }
 });
 
