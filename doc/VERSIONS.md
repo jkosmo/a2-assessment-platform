@@ -31,6 +31,47 @@ ga en modul uten fasit, uten at noe varslet om det.
 Omfangskontrollen fra #392 står urørt — en SMO kan fortsatt bare eksportere moduler hen eier,
 og det er fortsatt dekket av test.
 
+## 2.11.14 - 2026-08-15
+
+QA-runde på #905. Å åpne skjemaet var ikke nok — søsterflatene gikk fortsatt i veggen:
+
+- **Eksport og import avviste sin egen datatype.** En delvis oversatt modul kunne lagres, men
+  ikke eksporteres, dupliseres eller importeres — envelopen sender det som er lagret, og import
+  validerte med det strenge skjemaet.
+- **Agent-forfatting avviste enspråklige utkast.** En agent som skriver på ett språk er
+  normaltilfellet, ikke en feil.
+- **Samtaleflyten lagret fortsatt kildeteksten som oversettelse.** Språkkartet fylles med
+  kildeteksten *før* oversettingen, og et språk som feilet ble registrert — men kopien ble
+  aldri fjernet. Det gjorde hele #905 virkningsløs i den flyten folk faktisk bruker. Feilede
+  språk tas nå ut av kartet.
+- **Kriteriegeneratoren fikk `[object Object]`** i stedet for oppgaveteksten, fordi et språkkart
+  ble sendt gjennom `String()`. Kriteriene ble altså generert uten å ha sett oppgaven.
+
+## 2.11.13 - 2026-08-14
+
+**Innhold kan nå si at det ikke er oversatt ennå (#905).** Oppgavetekst, forventning og rammer
+tok enten en ren streng eller et objekt med **alle tre** språk. Det fantes ingen måte å si «nb er
+oversatt, nn er det ikke».
+
+Konsekvensen var at ærlighetsregelen fra #892 bare kunne håndheves for titler. En klient der
+oversettingen delvis feilet måtte velge mellom 400 (delvis objekt) eller å fylle alle språk med
+kildeteksten — og det siste er det som ble sendt. Resultatet var innhold som *ser* oversatt ut og
+*leser* som feil språk.
+
+To endringer:
+
+- Feltene godtar nå et delvis språkkart, med krav om minst ett utfylt språk. Lagringslaget var
+  allerede forberedt — `LocalizedTextObject` har alltid vært `Partial`.
+- Klienten slutter å blåse en ren streng opp til tre identiske språk før den sender. Den gjorde
+  det av vane, ikke fordi API-et krevde det.
+
+Lesing er uendret: `localizeContentText` faller allerede tilbake mellom språk, som er nettopp
+slik rene strenger alltid har vist seg.
+
+Dette er forutsetningen for publiseringsgaten i #896 S4 — den skal stoppe innhold med
+oversettelseshull, og kunne til nå ikke skille tre ekte oversettelser fra tre kopier av samme
+kildetekst. Samme gjelder oversettelsesstatus i lista (#894) og kriteriene (#902).
+
 ## 2.11.10 - 2026-08-13
 
 **Språkbytte under Direkte redigering ga en blindvei.** Rapportert fra stage: bytt arbeidsflatens

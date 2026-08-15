@@ -566,6 +566,64 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator('.locale-picker #profileNavLink[href="/profile"]')).toBeVisible();
   });
 
+  // #905: a locale whose translation failed must be ABSENT from what is saved. Leaving the
+  // source copy behind is what made "not translated yet" invisible to the publish gate (#896 S4)
+  // and to the translation-status list (#894).
+  test("a failed locale is left out of the saved draft, not filled with the source text", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    // One target locale translates, the other fails outright.
+    let call = 0;
+    await page.route("**/generate/module-draft/localize", async (route: Route) => {
+      call += 1;
+      if (call === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ draft: { title: "Oversatt tittel", taskText: "Oversatt scenario" } }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+    await clickEnabledButton(page, /Save draft|Lagre utkast/);
+
+    await expect.poll(() => state.lastModuleVersionBody?.taskText).toBeTruthy();
+    const savedTaskText = state.lastModuleVersionBody.taskText;
+
+    // Whatever survived, no locale may hold a copy of the source text - that is the bug.
+    if (typeof savedTaskText === "object") {
+      const values = Object.values(savedTaskText);
+      expect(values.filter((v) => v === "Bearbeidet scenario").length).toBeLessThanOrEqual(1);
+      expect(Object.keys(savedTaskText).length).toBeLessThan(3);
+    } else {
+      expect(savedTaskText).toBe("Bearbeidet scenario");
+    }
+  });
+
   test("direct edit localizes from the active preview locale and save sends a title patch", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

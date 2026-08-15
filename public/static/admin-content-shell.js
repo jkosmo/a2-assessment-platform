@@ -1290,6 +1290,19 @@ function omitWhenEveryLocaleBlank(value) {
   return hasText ? value : undefined;
 }
 
+/**
+ * #905: remove one locale from every localized field of a draft-localization result.
+ *
+ * The maps are seeded with the source text for all locales before translation runs, so a locale
+ * that fails has to be taken back out — otherwise the source language is stored as though it
+ * were a translation, and nothing downstream can tell the difference.
+ */
+function dropLocale(localized, locale) {
+  for (const field of ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"]) {
+    if (localized[field] && typeof localized[field] === "object") delete localized[field][locale];
+  }
+}
+
 function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
   const result = {};
   for (const locale of supportedLocales) {
@@ -1410,14 +1423,22 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
         },
       );
     } catch {
-      // Kildeteksten blir stående, ellers blir utkastet ulagbart — men lokalen registreres som
-      // ikke-oversatt så kalleren kan si fra i stedet for å melde suksess.
+      // #905: DROP the pre-filled source copy for this locale. It used to be left standing
+      // "so the draft stays saveable" — but the API accepts a partial map now, and leaving the
+      // copy is what made a failed translation indistinguishable from a real one. The locale is
+      // recorded as failed so the caller can say so, and the field simply has no value here.
+      dropLocale(localized, targetLocale);
       localized.failedLocales.push(targetLocale);
       continue;
     }
     const draft = result?.draft ?? result;
-    if (!draft?.title) localized.failedLocales.push(targetLocale);
-    localized.title[targetLocale] = draft?.title ?? title;
+    if (!draft?.title) {
+      // A response without a title is not a translation. Same treatment as a thrown error.
+      dropLocale(localized, targetLocale);
+      localized.failedLocales.push(targetLocale);
+      continue;
+    }
+    localized.title[targetLocale] = draft.title;
     localized.taskText[targetLocale] = draft?.taskText ?? taskText;
     localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
     localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
@@ -2133,9 +2154,14 @@ async function saveDraftBundleInBackground(options = {}) {
       method: "POST",
       body: JSON.stringify({
         assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : undefined,
-        taskText: translateLocalizedText(taskText),
-        assessorExpectedContent: translateLocalizedText(assessorExpectedContent),
-        candidateTaskConstraints: omitWhenEveryLocaleBlank(translateLocalizedText(candidateTaskConstraints)),
+        // #905: send the value as it is. translateLocalizedText used to blow a plain string up
+        // into three identical locales here - not because the API demanded it, but out of
+        // habit - which stored the source language under every locale and made an untranslated
+        // field indistinguishable from a translated one. The schema accepts a plain string
+        // ("one language, not translated yet") and now also a partial map.
+        taskText,
+        assessorExpectedContent,
+        candidateTaskConstraints: omitWhenEveryLocaleBlank(candidateTaskConstraints),
         assessmentBlueprint: assessmentBlueprint || undefined,
         rubricVersionId: rubricBody?.rubricVersion?.id,
         promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
@@ -4572,10 +4598,13 @@ function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) 
 async function populateSessionDraftCriteriaInBackground() {
   if (!sessionDraft) return;
   if (sessionDraft.criteria) return;
-  const taskText = String(translateLocalizedText(sessionDraft.taskText ?? "") ?? "").trim();
-  const assessorText = String(translateLocalizedText(sessionDraft.assessorExpectedContent ?? "") ?? "").trim();
+  // translateLocalizedText returns a locale MAP, so String() on it produced the literal
+  // "[object Object]" - and the criteria generator was asked to build a rubric for a task it
+  // never saw. localizeValue picks the text for the active locale, which is what was meant.
+  const taskText = localizeValue(sessionDraft.taskText ?? "").trim();
+  const assessorText = localizeValue(sessionDraft.assessorExpectedContent ?? "").trim();
   if (!taskText || !assessorText) return;
-  const constraintsText = String(translateLocalizedText(sessionDraft.candidateTaskConstraints ?? "") ?? "").trim();
+  const constraintsText = localizeValue(sessionDraft.candidateTaskConstraints ?? "").trim();
 
   let blueprintObject = null;
   const bp = sessionDraft.assessmentBlueprint ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint;
