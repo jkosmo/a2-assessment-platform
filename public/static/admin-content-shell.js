@@ -2106,35 +2106,22 @@ async function saveDraftBundleInBackground(options = {}) {
     const promptPayload = resolveCurrentPromptPayload();
 
     const titlePatch = normalizeModuleTitlePatch(sessionDraft?.title);
-    if (titlePatch) {
-      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, getHeaders, {
-        method: "PATCH",
-        body: JSON.stringify({ title: titlePatch }),
-      });
-    }
 
-    // #555: MCQ-only save path — create the MCQ set and a MCQ_ONLY module version with a
-    // pass-mark policy, skipping rubric/prompt/taskText entirely. The server's module-version
-    // schema accepts assessmentMode + assessmentPolicy.passRules.mcqMinPercent for this mode.
+    // #555: MCQ-only save path — MCQ set plus an MCQ_ONLY version with a pass-mark policy, no
+    // rubric/prompt/taskText. #906: one composed call, so the rename, the MCQ set and the
+    // version share a transaction instead of committing one at a time.
     if (isMcqOnly) {
-      const mcqBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/mcq-set-versions`, getHeaders, {
+      const composed = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/versions`, getHeaders, {
         method: "POST",
         body: JSON.stringify({
-          title: resolveMcqTitlePayload(),
-          questions: mcqQuestions,
-        }),
-      });
-
-      const moduleVersionBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
+          ...(titlePatch ? { title: titlePatch } : {}),
           assessmentMode: "MCQ_ONLY",
-          mcqSetVersionId: mcqBody?.mcqSetVersion?.id,
+          mcqSet: { title: resolveMcqTitlePayload(), questions: mcqQuestions },
           assessmentPolicy: { passRules: { mcqMinPercent } },
         }),
       });
 
-      latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
+      latestSavedModuleVersionId = composed?.moduleVersion?.id ?? null;
       sessionDraft = null;
       previewDraft = null;
       await loadModule(moduleId);
@@ -2145,20 +2132,20 @@ async function saveDraftBundleInBackground(options = {}) {
       return;
     }
 
-    // Rubric-save: two paths.
-    //   - If direct-edit produced explicit criteria (sessionDraft.criteria), POST them as a
-    //     new RubricVersion. This is the B2 (#449) flow — user edited criteria in preview.
-    //   - Otherwise call ensure-rubric (#447 idempotent flow). Backend reuses existing or
-    //     auto-generates from taskText if none exists.
+    // Rubric: two paths.
+    //   - Explicit criteria from direct edit (#449) travel INSIDE the composed save below, so
+    //     they land in the same transaction as the version.
+    //   - Otherwise ensure-rubric (#447) runs first. It cannot join the transaction: it may
+    //     call the LLM to generate a rubric, and an HTTP round trip has no business holding a
+    //     database transaction open. It is idempotent by design, so a later failure just leaves
+    //     a reusable rubric behind rather than an orphan.
+    let inlineRubric = null;
     let rubricBody;
     if (criteria && Object.keys(criteria).length > 0) {
       const existingScaling = bundle?.selectedConfiguration?.rubricVersion?.scalingRule ?? {};
       const totalMax = Object.values(criteria).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
       const scalingRule = { ...existingScaling, max_total: totalMax, practical_weight: existingScaling.practical_weight ?? 70 };
-      rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({ criteria, scalingRule, active: true }),
-      });
+      inlineRubric = { criteria, scalingRule };
     } else {
       let blueprintObject = null;
       if (assessmentBlueprint) {
@@ -2186,26 +2173,15 @@ async function saveDraftBundleInBackground(options = {}) {
       });
     }
 
-    const promptBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/prompt-template-versions`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify(promptPayload),
-    });
-
-    // #578: FREETEXT_ONLY has no MCQ set — skip MCQ creation and omit mcqSetVersionId.
-    const mcqBody = isFreetextOnly
-      ? null
-      : await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/mcq-set-versions`, getHeaders, {
-          method: "POST",
-          body: JSON.stringify({
-            title: resolveMcqTitlePayload(),
-            questions: mcqQuestions,
-          }),
-        });
-
-    const moduleVersionBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions`, getHeaders, {
+    // #906: one call. Rename, rubric, prompt template, MCQ set and the version that ties them
+    // together now share a transaction — either the module has a complete new version or it is
+    // untouched. Five separate commits used to leave orphaned component versions behind when
+    // the last one failed, and a retry made a second set.
+    const composed = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/versions`, getHeaders, {
       method: "POST",
       body: JSON.stringify({
-        assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : undefined,
+        ...(titlePatch ? { title: titlePatch } : {}),
+        assessmentMode: isFreetextOnly ? "FREETEXT_ONLY" : "FREETEXT_PLUS_MCQ",
         // #905: send the value as it is. translateLocalizedText used to blow a plain string up
         // into three identical locales here - not because the API demanded it, but out of
         // habit - which stored the source language under every locale and made an untranslated
@@ -2215,14 +2191,16 @@ async function saveDraftBundleInBackground(options = {}) {
         assessorExpectedContent,
         candidateTaskConstraints: omitWhenEveryLocaleBlank(candidateTaskConstraints),
         assessmentBlueprint: assessmentBlueprint || undefined,
-        rubricVersionId: rubricBody?.rubricVersion?.id,
-        promptTemplateVersionId: promptBody?.promptTemplateVersion?.id,
-        mcqSetVersionId: isFreetextOnly ? undefined : mcqBody?.mcqSetVersion?.id,
+        // Explicit criteria ride along; a rubric from ensure-rubric is referenced by id.
+        ...(inlineRubric ? { rubric: inlineRubric } : { rubricVersionId: rubricBody?.rubricVersion?.id }),
+        promptTemplate: promptPayload,
+        // #578: FREETEXT_ONLY has no MCQ set.
+        ...(isFreetextOnly ? {} : { mcqSet: { title: resolveMcqTitlePayload(), questions: mcqQuestions } }),
         submissionSchema: resolveSubmissionSchemaPayload(),
       }),
     });
 
-    latestSavedModuleVersionId = moduleVersionBody?.moduleVersion?.id ?? null;
+    latestSavedModuleVersionId = composed?.moduleVersion?.id ?? null;
     sessionDraft = null;
     previewDraft = null;
     await loadModule(moduleId);

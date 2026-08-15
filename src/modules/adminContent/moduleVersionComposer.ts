@@ -4,6 +4,7 @@ import {
   createPromptTemplateVersion,
   createMcqSetVersion,
   createModuleVersion,
+  updateModuleTitle,
 } from "./adminContentCommands.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
@@ -28,6 +29,8 @@ import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
 export interface ComposeModuleVersionInput {
   moduleId: string;
   actorId: string;
+  /** Renames the module inside the same transaction as the version. */
+  title?: LocalizedText;
   assessmentMode?: "FREETEXT_PLUS_MCQ" | "MCQ_ONLY" | "FREETEXT_ONLY";
   taskText?: LocalizedText;
   assessorExpectedContent?: LocalizedText;
@@ -58,6 +61,12 @@ function serializeRequired(value: LocalizedText): string {
 
 export async function composeModuleVersion(input: ComposeModuleVersionInput, existingTx?: DbTransactionClient) {
   const run = async (tx: DbTransactionClient) => {
+    // The rename belongs to the same commitment. Saving it separately is how a failed version
+    // used to leave a module renamed with nothing else to show for it.
+    if (input.title !== undefined) {
+      await updateModuleTitle(input.moduleId, input.title, input.actorId, tx);
+    }
+
     const isMcqOnly = input.assessmentMode === "MCQ_ONLY";
     const isFreetextOnly = input.assessmentMode === "FREETEXT_ONLY";
 
@@ -88,7 +97,24 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
           moduleId: input.moduleId,
           title: serializeRequired(input.mcqSet.title),
           active: true,
-          questions: input.mcqSet.questions as never,
+          // Every field is serialized, not cast. The schema accepts locale objects here — which
+          // is exactly what arrives after translation — and Prisma stores strings. The earlier
+          // `as never` sailed past the compiler and would have failed at runtime on any real,
+          // translated MCQ; the tests only used plain strings and so never saw it.
+          questions: input.mcqSet.questions.map((question) => {
+            const q = question as {
+              stem: LocalizedText;
+              options: LocalizedText[];
+              correctAnswer: LocalizedText;
+              rationale?: LocalizedText;
+            };
+            return {
+              stem: serializeRequired(q.stem),
+              options: q.options.map((option) => serializeRequired(option)),
+              correctAnswer: serializeRequired(q.correctAnswer),
+              rationale: q.rationale ? serializeRequired(q.rationale) : undefined,
+            };
+          }),
         }, tx)
       : null;
 

@@ -305,10 +305,13 @@ describe("shell JS contracts", () => {
     expect(routes).toContain("updateModuleTitle");
   });
 
-  it("saveDraftBundleInBackground PATCHes module title when sessionDraft.title is a localized object", () => {
+  // #906: the rename used to be its own PATCH before the version was written, so a failed save
+  // left the module renamed and nothing else changed. It now travels inside the composed save.
+  it("saveDraftBundleInBackground sends the rename inside the composed version call", () => {
     const js = readFile("public/static/admin-content-shell.js");
     expect(js).toContain("sessionDraft?.title");
-    expect(js).toContain("/title`");
-    expect(js).toContain('"PATCH"');
+    expect(js).toContain("/versions`");
+    // The title rides along in the composed body rather than as a separate PATCH.
+    expect(js).toMatch(/titlePatch \? \{ title: titlePatch \}/);
   });
 });

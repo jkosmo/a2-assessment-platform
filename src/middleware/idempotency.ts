@@ -28,7 +28,14 @@ async function storeOrRelease(
   }
 }
 
-export function idempotency(endpoint: string) {
+/**
+ * `endpoint` may be a plain string, or a function of the request for routes where the same
+ * endpoint addresses different resources. #906: a composed module-version save must key on the
+ * module too — otherwise the same Idempotency-Key and body sent to two different modules replays
+ * the first module's response for the second, before ownership is even checked, and the second
+ * module is never written.
+ */
+export function idempotency(endpoint: string | ((req: Request) => string)) {
   return async function idempotencyMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
     const key = req.header("Idempotency-Key");
     const userId = req.context?.userId;
@@ -38,8 +45,9 @@ export function idempotency(endpoint: string) {
       return;
     }
 
+    const resolvedEndpoint = typeof endpoint === "function" ? endpoint(req) : endpoint;
     const payloadHash = sha256(JSON.stringify(req.body ?? {}));
-    const where = { userId, endpoint, key };
+    const where = { userId, endpoint: resolvedEndpoint, key };
 
     // Reserve the key. Winning the insert means we own execution; a conflict means someone got there first.
     let owned = false;
@@ -47,7 +55,7 @@ export function idempotency(endpoint: string) {
       const now = new Date();
       try {
         await prisma.idempotencyKey.create({
-          data: { userId, endpoint, key, payloadHash, status: "pending", expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS) },
+          data: { userId, endpoint: resolvedEndpoint, key, payloadHash, status: "pending", expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS) },
         });
         owned = true;
       } catch (error) {
@@ -56,7 +64,7 @@ export function idempotency(endpoint: string) {
           return;
         }
         const existing = await prisma.idempotencyKey.findUnique({
-          where: { userId_endpoint_key: { userId, endpoint, key } },
+          where: { userId_endpoint_key: { userId, endpoint: resolvedEndpoint, key } },
         });
         if (!existing) {
           continue; // raced away (e.g. expiry cleanup) — retry the reserve

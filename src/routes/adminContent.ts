@@ -686,7 +686,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
 // the granular API agents and imports use. This is the composed path the authoring UI wants.
 // Typed params: with middleware in the chain Express widens `request.params` to string|string[],
 // which the ownership check and composer both reject.
-adminContentRouter.post("/modules/:moduleId/versions", idempotency("modules.versions.compose"), async (request: Request<{ moduleId: string }>, response) => {
+adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `modules.versions.compose:${req.params.moduleId}`), async (request: Request<{ moduleId: string }>, response) => {
   const { data, error } = parseRequest(composeModuleVersionBodySchema, request.body);
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
@@ -704,6 +704,7 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency("modules.vers
     const result = await composeModuleVersion({
       moduleId: request.params.moduleId,
       actorId,
+      title: data.title,
       assessmentMode: data.assessmentMode,
       taskText: data.taskText,
       assessorExpectedContent: data.assessorExpectedContent,

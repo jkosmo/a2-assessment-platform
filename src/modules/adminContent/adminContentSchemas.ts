@@ -220,6 +220,8 @@ export const moduleVersionBodySchema = z
  * case is a UI that always sends what it has.
  */
 export const composeModuleVersionBodySchema = z.object({
+  /** Renamed in the same transaction as the version, so a failed save leaves the name alone. */
+  title: localizedTextPatchSchema.optional(),
   assessmentMode: assessmentModeSchema.optional(),
   taskText: localizedTextMaybeUntranslatedSchema.optional(),
   assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
@@ -233,7 +235,40 @@ export const composeModuleVersionBodySchema = z.object({
   mcqSetVersionId: z.string().min(1).optional(),
   submissionSchema: submissionSchemaBodySchema.optional(),
   assessmentPolicy: assessmentPolicyBodySchema.optional(),
-});
+})
+  // Mode-aware, and strict in BOTH directions. Missing pieces are an obvious error; sending
+  // pieces the mode has no use for is the dangerous one — the composer would skip them and
+  // answer 201, so an author with a stale screen would believe a rubric was saved when it was
+  // silently dropped. Rejecting before the transaction opens is the honest answer.
+  .superRefine((v, ctx) => {
+    const mode = v.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+    const hasRubric = Boolean(v.rubric || v.rubricVersionId);
+    const hasPrompt = Boolean(v.promptTemplate || v.promptTemplateVersionId);
+    const hasMcq = Boolean(v.mcqSet || v.mcqSetVersionId);
+    const fail = (message: string, path: string) =>
+      ctx.addIssue({ code: "custom", message, path: [path] });
+
+    if (mode === "MCQ_ONLY") {
+      if (!hasMcq) fail("MCQ_ONLY requires an MCQ set.", "mcqSet");
+      if (hasRubric) fail("MCQ_ONLY modules have no rubric — remove it or change the mode.", "rubric");
+      if (hasPrompt) fail("MCQ_ONLY modules have no prompt template — remove it or change the mode.", "promptTemplate");
+      if (v.taskText) fail("MCQ_ONLY modules have no task text — remove it or change the mode.", "taskText");
+      return;
+    }
+
+    // Both free-text modes need the task itself plus something to assess it with. The database
+    // column is nullable, so without this a version saves fine and only fails at publish.
+    if (!v.taskText) fail("Free-text modules require taskText.", "taskText");
+    if (!hasRubric) fail("Free-text modules require a rubric.", "rubric");
+    if (!hasPrompt) fail("Free-text modules require a prompt template.", "promptTemplate");
+
+    if (mode === "FREETEXT_ONLY" && hasMcq) {
+      fail("FREETEXT_ONLY modules have no MCQ set — remove it or change the mode.", "mcqSet");
+    }
+    if (mode === "FREETEXT_PLUS_MCQ" && !hasMcq) {
+      fail("FREETEXT_PLUS_MCQ requires an MCQ set.", "mcqSet");
+    }
+  });
 
 export const benchmarkExampleVersionBodySchema = z.object({
   basePromptTemplateVersionId: z.string().min(1),

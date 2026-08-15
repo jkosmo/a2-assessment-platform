@@ -183,8 +183,16 @@ function normalizeLocalizedTitlePatch(titlePatch: LocalizedTextObject): Localize
  * A localized OBJECT patch still merges onto the existing map, so translating one language never
  * disturbs the others.
  */
-export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedText, actorId: string) {
-  const existingModule = await adminContentRepository.findModuleTitle(moduleId);
+export async function updateModuleTitle(
+  moduleId: string,
+  titlePatch: LocalizedText,
+  actorId: string,
+  // #906: when the caller is already composing a version, the rename has to land in the SAME
+  // transaction — otherwise a failed version leaves the module renamed and nothing else changed.
+  existingTx?: DbTransactionClient,
+) {
+  const reader = existingTx ? createAdminContentRepository(existingTx) : adminContentRepository;
+  const existingModule = await reader.findModuleTitle(moduleId);
   if (!existingModule) {
     throw new NotFoundError("Module", "module_not_found", "Module not found.");
   }
@@ -196,7 +204,7 @@ export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedT
           ...normalizeLocalizedTitleSeed(existingModule.title),
           ...normalizeLocalizedTitlePatch(titlePatch),
         });
-  const module = await runInTransaction(async (tx) => {
+  const applyIn = async (tx: DbTransactionClient) => {
     const repo = createAdminContentRepository(tx);
     const updated = await repo.updateModuleTitle(moduleId, title);
     await recordAuditEvent(
@@ -210,8 +218,8 @@ export async function updateModuleTitle(moduleId: string, titlePatch: LocalizedT
       tx,
     );
     return updated;
-  });
-  return module;
+  };
+  return existingTx ? applyIn(existingTx) : runInTransaction(applyIn);
 }
 
 // v1.2.11: bulk-purge alle uplubliserte moduler (activeVersionId=null) som ikke er i kurs

@@ -641,6 +641,67 @@ export async function mockCommonApis(page: Page, {
     });
   });
 
+  // #906: the composed save — one call carrying the rename, the components and the version.
+  // Mirrors the granular mock below so existing assertions keep working: `lastModuleVersionBody`
+  // still sees the version fields, and `lastTitlePatchBody` still sees the rename, which now
+  // travels inside this body instead of a separate PATCH.
+  await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+    const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
+    const moduleExport = exportMap.get(moduleId);
+    if (!moduleExport) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
+      return;
+    }
+    const body = route.request().postDataJSON() as {
+      title?: unknown;
+      taskText?: Record<string, string>;
+      assessorExpectedContent?: Record<string, string>;
+      submissionSchema?: unknown;
+      rubric?: { criteria?: unknown; scalingRule?: unknown };
+      promptTemplate?: unknown;
+      mcqSet?: { title?: unknown; questions?: unknown[] };
+      rubricVersionId?: string;
+      promptTemplateVersionId?: string;
+      mcqSetVersionId?: string;
+      assessmentMode?: string;
+      assessmentPolicy?: unknown;
+    };
+    state.lastModuleVersionBody = body;
+    if (body.title !== undefined) state.lastTitlePatchBody = { title: body.title };
+
+    const rubricVersion = body.rubric
+      ? { id: `${moduleId}-rubric-composed`, versionNo: 1, criteria: body.rubric.criteria, scalingRule: body.rubric.scalingRule }
+      : null;
+    const promptTemplateVersion = body.promptTemplate ? { id: `${moduleId}-prompt-composed`, versionNo: 1 } : null;
+    const mcqSetVersion = body.mcqSet
+      ? { id: `${moduleId}-mcq-composed`, versionNo: 1, title: body.mcqSet.title, questions: body.mcqSet.questions ?? [] }
+      : null;
+
+    const moduleVersion = {
+      id: `${moduleId}-version-1`,
+      versionNo: 1,
+      assessmentMode: body.assessmentMode ?? "FREETEXT_PLUS_MCQ",
+      taskText: body.taskText ?? localizedText("Scenario text"),
+      assessorExpectedContent: body.assessorExpectedContent ?? localizedText("Guidance text"),
+      submissionSchema: body.submissionSchema ?? { fields: [] },
+      assessmentPolicy: body.assessmentPolicy ?? null,
+      rubricVersionId: rubricVersion?.id ?? body.rubricVersionId ?? moduleExport.selectedConfiguration.rubricVersion?.id ?? null,
+      promptTemplateVersionId: promptTemplateVersion?.id ?? body.promptTemplateVersionId ?? moduleExport.selectedConfiguration.promptTemplateVersion?.id ?? null,
+      mcqSetVersionId: mcqSetVersion?.id ?? body.mcqSetVersionId ?? moduleExport.selectedConfiguration.mcqSetVersion?.id ?? null,
+    };
+    moduleExport.selectedConfiguration.moduleVersion = moduleVersion;
+    moduleExport.selectedConfiguration.source = "draftModuleVersion";
+    if (rubricVersion) moduleExport.selectedConfiguration.rubricVersion = rubricVersion as never;
+    if (mcqSetVersion) moduleExport.selectedConfiguration.mcqSetVersion = mcqSetVersion as never;
+    moduleExport.versions.moduleVersions = [moduleVersion];
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ moduleVersion, rubricVersion, promptTemplateVersion, mcqSetVersion }),
+    });
+  });
+
   await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
     const moduleId = decodeURIComponent(route.request().url().split("/").slice(-2, -1)[0] ?? "");
     const moduleExport = exportMap.get(moduleId);

@@ -283,7 +283,7 @@ test.describe("admin content browser coverage", () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
       versionPayload = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
@@ -461,7 +461,7 @@ test.describe("admin content browser coverage", () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
       versionPayload = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
@@ -1468,7 +1468,7 @@ test.describe("admin content browser coverage", () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
       versionPayload = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
@@ -2067,7 +2067,7 @@ test.describe("admin content browser coverage", () => {
         body: JSON.stringify({ rubricVersion: { id: "rubric-1", versionNo: 1 } }),
       });
     });
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
       versionBody = route.request().postDataJSON();
       await route.fulfill({
         status: 201,

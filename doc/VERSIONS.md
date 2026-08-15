@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.15.1 - 2026-08-15
+
+QA-runde på #906. Hovedfunnet var at endepunktet var bygget, men **ingen brukte det** — hele
+forfatterflyten kalte fortsatt de fem gamle rutene. Mekanismen fantes, effekten ikke.
+
+- Lagringen i samtaleflaten går nå gjennom `/versions`: navnebytte, rubrikk, instruks, MCQ-sett
+  og versjonen deler én transaksjon. Alle tre modultypene.
+- Navnebyttet flyttet inn i transaksjonen. En feilet lagring lot tidligere modulen stå omdøpt.
+- MCQ-felt ble sendt som språkobjekter rett til databasen, som venter strenger. Testene mine
+  brukte rene strenger og så det aldri.
+- Skjemaet er nå modus-bevisst i **begge** retninger: manglende deler avvises, og deler modusen
+  ikke bruker avvises også — de ble tidligere stille kastet, med 201 tilbake.
+- Fritekstmoduler krever oppgavetekst. Kolonnen er nullbar, så uten dette lagret en versjon fint
+  og feilet først ved publisering.
+- Idempotensnøkkelen manglet modul-ID: samme nøkkel og kropp mot to moduler spilte av den
+  førstes svar for den andre, før eierskapssjekken.
+
+`ensure-rubric` blir liggende utenfor transaksjonen med vilje — den kan kalle språkmodellen, og
+et HTTP-kall har ikke noe å gjøre i en åpen databasetransaksjon. Den er idempotent, så en senere
+feil etterlater en gjenbrukbar rubrikk, ikke en foreldreløs.
+
 ## 2.15.0 - 2026-08-15
 
 **Én lagring, én transaksjon (#906).** Nytt endepunkt `POST /modules/:id/versions` skriver en

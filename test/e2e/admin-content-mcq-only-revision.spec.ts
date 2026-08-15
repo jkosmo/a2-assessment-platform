@@ -99,7 +99,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
     // Capture the saved module-version payload to prove the MCQ-only save path ran.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let savedVersionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
       savedVersionPayload = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
@@ -139,7 +139,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let savedVersionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
       savedVersionPayload = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
