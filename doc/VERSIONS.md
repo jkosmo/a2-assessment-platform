@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.4 - 2026-08-15
+
+QA-runde 2 på publiseringsgaten (#896 S4). Sju funn. De fleste hadde samme form: utbedringen
+*lyktes*, og publiseringen ble likevel blokkert på nøyaktig samme 422.
+
+**Et importert kurs kunne gå live med en modul som ikke var det.** Gaten holdt modulen tilbake,
+men kursimporten publiserte kurset uansett — `publishCourse` sjekker bare at et modulelement
+finnes, ikke at det kan publiseres. Resultatet var et publisert kurs som peker på en modul uten
+aktiv versjon: deltakeren får «modulen er ikke tilgjengelig». Kurset venter nå på modulene sine.
+
+**Utbedringen kunne ikke fullføre for tre tilfeller:**
+
+- **MCQ-only og fritekstmoduler uten fasit.** Alle målspråk gikk først til
+  `module-draft/localize`, hvis skjema krever både oppgavetekst og fasit. 400-en ble fanget, og
+  `continue` hoppet over MCQ-oversetteren. Nå brukes den samlede oversetteren bare når den kan
+  brukes, og resten fylles felt for felt.
+- **Beskrivelsen.** Den var med i gatens issues og i kildespråkvalget, men ble aldri sendt til
+  oversetteren — og endepunktet returnerer den ikke uansett. Et rent beskrivelseshull kunne derfor
+  ikke fylles i det hele tatt.
+- **Moduler uten beskrivelse eller rammer.** Utbedringen skrev `""` for et felt modulen ikke har,
+  og lagringen sendte det videre til et skjema som avviser tom streng.
+
+**Legacy-strenger ble oversatt fra feil språk.** Serveren leser en ren streng som bokmål; klienten
+godtok den som kilde for hvilket som helst språk. Med engelsk UI ble en norsk legacy-tittel lagret
+under `en-GB`, og `nb` manglet etterpå. Klienten følger nå samme regel som serveren.
+
+**Avansert-import publiserte fortsatt direkte.** Bibliotekets import sendte `autoPublish: false`;
+søsterflaten i avansert editor gjorde det ikke. Samme pakke ble utkast eller live avhengig av
+hvilken side du importerte fra.
+
+**Feltnavn manglet oversettelse.** Beskrivelse og MCQ-spørsmål ble vist som `description` og
+`mcq.question1` i gatemeldingen.
+
 ## 2.17.3 - 2026-08-15
 
 QA-runde på publiseringsgaten (#896 S4). Åtte funn, hvorav fire var reelle omveier rundt gaten

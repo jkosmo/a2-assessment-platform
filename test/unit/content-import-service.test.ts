@@ -168,7 +168,13 @@ describe("contentImportService.importModuleFromEnvelope", () => {
     // FREETEXT keeps taskText.
     expect(versionArg.taskText).toBe("Do the task");
 
-    expect(result).toEqual({ moduleId: "new-module-id", moduleVersionId: "module-version-id" });
+    expect(result).toEqual({
+      moduleId: "new-module-id",
+      moduleVersionId: "module-version-id",
+      // #896 S4: reported so a COURSE import knows whether it may publish the course. This package
+      // was never published at source, so nothing was held back.
+      heldBackByTranslationGate: false,
+    });
   });
 
   it("MCQ_ONLY: creates MCQ set but NO rubric/prompt; taskText and rubric/prompt ids omitted", async () => {
@@ -318,8 +324,13 @@ describe("contentImportService.importModuleFromEnvelope", () => {
     );
 
     expect(publishModuleVersion).not.toHaveBeenCalled();
-    // The import itself still succeeded — that is the whole distinction.
-    expect(result).toEqual({ moduleId: "new-module-id", moduleVersionId: "module-version-id" });
+    // The import itself still succeeded — that is the whole distinction. And the caller is TOLD
+    // the module was held back, so a course import can decline to publish the course around it.
+    expect(result).toEqual({
+      moduleId: "new-module-id",
+      moduleVersionId: "module-version-id",
+      heldBackByTranslationGate: true,
+    });
     expect(createModuleVersion).toHaveBeenCalledTimes(1);
   });
 

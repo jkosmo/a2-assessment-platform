@@ -162,7 +162,10 @@ async function importModulePayload(
   // #796: the whole module graph is built on this single transaction client, so a failure partway
   // through rolls back every row (no standalone module / partial versions / missing audit).
   tx: DbTransactionClient,
-): Promise<{ moduleId: string; moduleVersionId: string }> {
+  // #896 S4: `heldBackByTranslationGate` is true when the source was published but the package is
+  // missing a locale, so this module stayed a draft. A course import needs to know, or it publishes
+  // a course whose module is not live.
+): Promise<{ moduleId: string; moduleVersionId: string; heldBackByTranslationGate: boolean }> {
   let moduleId: string;
   if (options.mode === "replaceExisting") {
     if (!options.targetModuleId) {
@@ -287,15 +290,20 @@ async function importModulePayload(
       })),
     ),
   ];
-  if (
+  // `heldBackByTranslationGate` is reported to the caller, not just acted on locally. A course
+  // import publishes the course after its modules; if a module was held back and the course goes
+  // live anyway, the published course points at a module with no active version — participants get
+  // "module not available", which is invariant I1 violated by the very gate meant to protect them.
+  const heldBackByTranslationGate =
     options.autoPublish !== false
-    && payload.activeVersion.audit?.publishedAt
-    && importTranslationIssues.length === 0
-  ) {
+    && Boolean(payload.activeVersion.audit?.publishedAt)
+    && importTranslationIssues.length > 0;
+
+  if (options.autoPublish !== false && payload.activeVersion.audit?.publishedAt && !heldBackByTranslationGate) {
     await publishModuleVersion(moduleId, moduleVersion.id, options.actorId, tx);
   }
 
-  return { moduleId, moduleVersionId: moduleVersion.id };
+  return { moduleId, moduleVersionId: moduleVersion.id, heldBackByTranslationGate };
 }
 
 export async function importModuleFromEnvelope(
@@ -415,6 +423,9 @@ export async function importCourseFromEnvelope(
         // modules — that would conflate two different collision questions). Sections are recreated likewise.
         const importedModuleIds: string[] = [];
         let sectionCount = 0;
+        // #896 S4: set when any module in this course could not be auto-published because it is
+        // missing a locale. The course must then stay a draft too.
+        let anyModuleHeldBack = false;
 
         if (orderedItems) {
           const courseItemInputs: CourseItemInput[] = [];
@@ -428,6 +439,7 @@ export async function importCourseFromEnvelope(
               sectionCount += 1;
             } else {
               const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" }, tx);
+              if (imported.heldBackByTranslationGate) anyModuleHeldBack = true;
               courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
             }
@@ -437,6 +449,7 @@ export async function importCourseFromEnvelope(
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
             const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" }, tx);
+            if (imported.heldBackByTranslationGate) anyModuleHeldBack = true;
             importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
           }
           importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -450,7 +463,13 @@ export async function importCourseFromEnvelope(
 
         // Same publish-state-preservation rule as for modules: if the source course was published, publish
         // the destination too — AFTER the items exist so the has-modules check passes.
-        if (payload.course.audit?.publishedAt) {
+        //
+        // #896 S4: unless a module was held back by the translation gate. publishCourse only checks
+        // that a module item EXISTS, not that it is publishable, so publishing here would commit a
+        // live course whose module has no active version — the participant hits "module not
+        // available". The course waits with its modules; the author publishes both once the gaps
+        // are filled.
+        if (payload.course.audit?.publishedAt && !anyModuleHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
         }
 

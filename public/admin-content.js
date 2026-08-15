@@ -2023,12 +2023,16 @@ async function handleImportModulePackage(file) {
   } catch (parseError) {
     throw new Error(`Selected file is not valid JSON: ${parseError instanceof Error ? parseError.message : "unknown error"}`);
   }
+  // #896: imported modules always land as DRAFTS — publishing is an explicit act the author takes
+  // after reviewing, as with course import. The library import surface passes this too; leaving it
+  // out here meant the same package went live or stayed a draft depending on which page you
+  // imported it from.
   const result = await apiFetch(
     "/api/admin/content/modules/import",
     headers,
     {
       method: "POST",
-      body: JSON.stringify({ payload, mode: "createNew" }),
+      body: JSON.stringify({ payload, mode: "createNew", autoPublish: false }),
     },
   );
   if (!result?.moduleId) {

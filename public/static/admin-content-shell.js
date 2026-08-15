@@ -2265,12 +2265,20 @@ function strictLocaleValue(value, locale) {
   return typeof candidate === "string" ? candidate : "";
 }
 
-// The stored value read as one language: a locale entry if there is one, otherwise the plain
-// string (the "written in one language, not translated yet" encoding).
+// The stored value read as one language.
+//
+// A bare string is legacy content whose language was never recorded, and the SERVER resolves it as
+// nb (`missingLocalesFor`'s sourceLocale default). The client must agree, or the two disagree
+// about the same bytes: this used to hand the string back for whatever locale was asked, so with
+// an English UI a Norwegian legacy title was accepted as the en-GB source, saved under en-GB, and
+// nb ended up missing — the republish then failed on a gap the gap-fill had just created.
+const LEGACY_STRING_LOCALE = "nb";
+
 function sourceTextForLocale(value, locale) {
   const strict = strictLocaleValue(value, locale);
   if (strict.trim()) return strict;
-  return typeof value === "string" ? value : "";
+  if (locale === LEGACY_STRING_LOCALE && typeof value === "string") return value;
+  return "";
 }
 
 // The text fields the gate covers. Must stay in step with the server's field set — the two lists
@@ -2280,14 +2288,16 @@ const TRANSLATION_GATE_FIELDS = ["title", "description", "taskText", "assessorEx
 // The stored value as a locale map holding only the locales that really have text. A plain string
 // is recorded under `sourceLocale` — it has to land somewhere, and the author's working language
 // is the only honest guess available at this point.
-function localeMapOf(value, sourceLocale) {
+function localeMapOf(value) {
   const map = {};
   for (const locale of supportedLocales) {
     const existing = strictLocaleValue(value, locale);
     if (existing.trim()) map[locale] = existing;
   }
   if (Object.keys(map).length === 0 && typeof value === "string" && value.trim()) {
-    map[sourceLocale] = value;
+    // Legacy bare string: label it with the locale the server reads it as, not with whatever the
+    // author happens to be looking at. Anything else silently relabels the text's language.
+    map[LEGACY_STRING_LOCALE] = value;
   }
   return map;
 }
@@ -2322,12 +2332,20 @@ function translationGateIssuesFrom(error) {
   return issues.filter((issue) => issue?.code === "translation_incomplete" && Array.isArray(issue.missingLocales));
 }
 
+function translationGateFieldLabel(field) {
+  // MCQ issues are per question, so the field name carries an index: mcq.question3. There is no
+  // key per question — the label is built from the pattern.
+  const mcq = /^mcq\.question(\d+)$/.exec(String(field ?? ""));
+  if (mcq) return t("shell.publish.field.mcqQuestion").replace("{n}", mcq[1]);
+  const label = t(`shell.publish.field.${field}`);
+  // An unknown field must still be NAMED — a silent omission would tell the author the module is
+  // complete while publishing keeps failing. Falling back to the raw key is ugly but truthful.
+  return label.startsWith("shell.publish.field.") ? String(field) : label;
+}
+
 function describeTranslationGate(issues) {
   const lines = issues.map((issue) => {
-    const fieldLabel = t(`shell.publish.field.${issue.field}`);
-    // An unknown field must still be named — a silent omission would tell the author the
-    // module is complete while publishing keeps failing.
-    const label = fieldLabel.startsWith("shell.publish.field.") ? issue.field : fieldLabel;
+    const label = translationGateFieldLabel(issue.field);
     return t("shell.publish.translationGate.item")
       .replace("{field}", label)
       .replace("{locales}", issue.missingLocales.join(", "));
@@ -2399,76 +2417,118 @@ async function translateMissingLocalesThenPublish(issues) {
     candidateTaskConstraints: sourceTextForLocale(current.candidateTaskConstraints, sourceLocale),
   };
 
+  // The module-draft localizer translates the scenario, answer key and constraints together, which
+  // is what makes them read as one coherent whole — but its schema DEMANDS a non-empty task text
+  // and answer key. An MCQ-only module has neither, and a free-text module need not have the
+  // answer key, so calling it unconditionally 400s and took the rest of the fill down with it.
+  const canUseDraftLocalizer = Boolean(sourceDraft.taskText.trim() && sourceDraft.assessorExpectedContent.trim());
+  // Fields that localizer actually returns. `description` is NOT among them — it used to be asked
+  // for and never delivered, so a description-only gap could never be filled and the automatic
+  // republish hit the same 422 forever.
+  const DRAFT_LOCALIZER_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
+  // The per-field localizer has two slots: `title` for short text, `bodyMarkdown` for long.
+  const LONG_TEXT_FIELDS = new Set(["taskText", "assessorExpectedContent", "candidateTaskConstraints"]);
+
   // MCQ questions are participant-facing content too, and for an MCQ-only module they ARE the
   // assessment. Same rule as the text fields: start from what exists, fill only the empty slots.
   const mergedMcq = currentMcq.map((question) => ({
-    stem: localeMapOf(question?.stem, sourceLocale),
-    options: (question?.options ?? []).map((option) => localeMapOf(option, sourceLocale)),
-    correctAnswer: localeMapOf(question?.correctAnswer, sourceLocale),
-    rationale: localeMapOf(question?.rationale, sourceLocale),
+    stem: localeMapOf(question?.stem),
+    options: (question?.options ?? []).map((option) => localeMapOf(option)),
+    correctAnswer: localeMapOf(question?.correctAnswer),
+    rationale: localeMapOf(question?.rationale),
   }));
   const needsMcqFill = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
+  const gapFields = new Set(gatedTextFields);
 
   const failedLocales = [];
   for (const targetLocale of missingLocales) {
-    try {
-      const result = await apiFetch("/api/admin/content/generate/module-draft/localize", getHeaders, {
-        method: "POST",
-        body: JSON.stringify({ ...sourceDraft, sourceLocale, targetLocale }),
-      });
-      const draft = result?.draft ?? result;
-      if (!draft?.title) {
-        failedLocales.push(targetLocale);
-        continue;
+    let failedHere = false;
+    const stillMissing = () =>
+      [...gapFields].filter(
+        (field) => !merged[field][targetLocale]?.trim() && merged[field][sourceLocale]?.trim(),
+      );
+
+    if (canUseDraftLocalizer && stillMissing().some((field) => DRAFT_LOCALIZER_FIELDS.includes(field))) {
+      try {
+        const result = await apiFetch("/api/admin/content/generate/module-draft/localize", getHeaders, {
+          method: "POST",
+          body: JSON.stringify({ ...sourceDraft, sourceLocale, targetLocale }),
+        });
+        const draft = result?.draft ?? result;
+        if (!draft?.title) throw new Error("localize returned no title");
+        // Only the holes. A locale that already had text keeps it — this is the whole point of
+        // "translate what is missing" rather than "translate everything".
+        for (const field of DRAFT_LOCALIZER_FIELDS) {
+          if (gapFields.has(field)) fillLocaleGap(merged[field], targetLocale, draft[field]);
+        }
+      } catch {
+        failedHere = true;
       }
-      // Only the holes. A locale that already had text keeps it — this is the whole point of
-      // "translate what is missing" rather than "translate everything".
-      for (const field of TRANSLATION_GATE_FIELDS) {
-        if (merged[field][targetLocale]?.trim()) continue;
-        const translated = draft[field];
-        if (typeof translated === "string" && translated.trim()) merged[field][targetLocale] = translated;
-      }
-    } catch {
-      failedLocales.push(targetLocale);
-      continue;
     }
 
-    if (!needsMcqFill || mergedMcq.length === 0) continue;
-    try {
-      const mcqResult = await apiFetch("/api/admin/content/generate/mcq/localize", getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          questions: currentMcq.map((question) => ({
-            stem: sourceTextForLocale(question?.stem ?? "", sourceLocale),
-            options: (question?.options ?? []).map((option) => sourceTextForLocale(option, sourceLocale)),
-            correctAnswer: sourceTextForLocale(question?.correctAnswer ?? "", sourceLocale),
-            rationale: sourceTextForLocale(question?.rationale ?? "", sourceLocale),
-          })),
-          sourceLocale,
-          targetLocale,
-        }),
-      });
-      const translatedQuestions = mcqResult?.questions ?? [];
-      translatedQuestions.forEach((question, index) => {
-        const target = mergedMcq[index];
-        if (!target) return;
-        fillLocaleGap(target.stem, targetLocale, question?.stem);
-        fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
-        fillLocaleGap(target.rationale, targetLocale, question?.rationale);
-        (question?.options ?? []).forEach((option, optionIndex) => {
-          if (target.options[optionIndex]) fillLocaleGap(target.options[optionIndex], targetLocale, option);
+    // Whatever the draft localizer could not cover — because it was skipped, because it failed, or
+    // because the field is outside its vocabulary (description) — is translated one field at a
+    // time. Slower, but it works for every module type.
+    for (const field of stillMissing()) {
+      try {
+        const key = LONG_TEXT_FIELDS.has(field) ? "bodyMarkdown" : "title";
+        const result = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
+          method: "POST",
+          body: JSON.stringify({ [key]: merged[field][sourceLocale], sourceLocale, targetLocale }),
         });
-      });
-    } catch {
-      failedLocales.push(targetLocale);
+        const translated = result?.[key];
+        if (typeof translated !== "string" || !translated.trim()) throw new Error("empty translation");
+        merged[field][targetLocale] = translated.trim();
+      } catch {
+        failedHere = true;
+      }
     }
+
+    if (needsMcqFill && mergedMcq.length > 0) {
+      try {
+        const mcqResult = await apiFetch("/api/admin/content/generate/mcq/localize", getHeaders, {
+          method: "POST",
+          body: JSON.stringify({
+            questions: currentMcq.map((question) => ({
+              stem: sourceTextForLocale(question?.stem ?? "", sourceLocale),
+              options: (question?.options ?? []).map((option) => sourceTextForLocale(option, sourceLocale)),
+              correctAnswer: sourceTextForLocale(question?.correctAnswer ?? "", sourceLocale),
+              rationale: sourceTextForLocale(question?.rationale ?? "", sourceLocale),
+            })),
+            sourceLocale,
+            targetLocale,
+          }),
+        });
+        const translatedQuestions = mcqResult?.questions ?? [];
+        translatedQuestions.forEach((question, index) => {
+          const target = mergedMcq[index];
+          if (!target) return;
+          fillLocaleGap(target.stem, targetLocale, question?.stem);
+          fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
+          fillLocaleGap(target.rationale, targetLocale, question?.rationale);
+          (question?.options ?? []).forEach((option, optionIndex) => {
+            if (target.options[optionIndex]) fillLocaleGap(target.options[optionIndex], targetLocale, option);
+          });
+        });
+      } catch {
+        failedHere = true;
+      }
+    }
+
+    if (failedHere) failedLocales.push(targetLocale);
   }
 
   // #905: never store a source-language copy under a locale that failed. An empty field is
   // honest; a copy pretends the translation happened.
   const patch = {};
   for (const field of TRANSLATION_GATE_FIELDS) {
-    patch[field] = collapseLocaleMap(merged[field]);
+    const value = collapseLocaleMap(merged[field]);
+    // An optional field the module does not have must stay ABSENT, not become "". Materializing it
+    // makes the save send an empty string, which the localized-text schema rejects — so an
+    // otherwise successful gap-fill would fail at the last step for every module that has no
+    // description and no candidate constraints.
+    if (value === "") continue;
+    patch[field] = value;
   }
   if (needsMcqFill && mergedMcq.length > 0) {
     patch.mcqQuestions = mergedMcq.map((question) => ({

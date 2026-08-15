@@ -1765,25 +1765,28 @@ test.describe("admin content browser coverage", () => {
   });
 
   test("gap-fill can source a title-only gap on a module with no task text", async ({ page }) => {
+    const mcqOnlyExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+      assessmentMode: "MCQ_ONLY",
+      taskText: {},
+      mcqQuestions: [
+        {
+          stem: localizedText("Which body ratifies the agreement?"),
+          options: [localizedText("The board"), localizedText("The members")],
+          correctAnswer: localizedText("The members"),
+          rationale: localizedText("Members vote on ratification."),
+        },
+      ],
+    });
+    // The gap itself: the title genuinely lacks nn, so the fill has something to do. The helper
+    // always builds complete three-locale titles, so it is knocked out here.
+    mcqOnlyExport.module.title = { "en-GB": "Trade unions", nb: "Fagforeninger" };
+
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          assessmentMode: "MCQ_ONLY",
-          taskText: {},
-          mcqQuestions: [
-            {
-              stem: localizedText("Which body ratifies the agreement?"),
-              options: [localizedText("The board"), localizedText("The members")],
-              correctAnswer: localizedText("The members"),
-              rationale: localizedText("Members vote on ratification."),
-            },
-          ],
-        }),
-      },
+      moduleExports: { "module-1": mcqOnlyExport },
     });
 
     let publishAttempts = 0;
@@ -1822,7 +1825,146 @@ test.describe("admin content browser coverage", () => {
     // Requiring task text AND assessor guidance to pick a source locale made this unreachable:
     // an MCQ-only module has neither, so the action reported "no source language" even though
     // the title it needed to translate was right there.
-    await expect.poll(() => state.lastDraftLocalizationBody?.targetLocale).toBe("nn");
+    //
+    // The title goes through the PER-FIELD localizer: the module-draft endpoint's schema demands a
+    // task text and answer key this module does not have, so calling it would 400 and take the
+    // rest of the fill down with it.
+    await expect.poll(() => state.lastSectionLocalizationBody?.targetLocale).toBe("nn");
+    expect(state.lastDraftLocalizationBody).toBeNull();
+    await expect.poll(() => publishAttempts).toBe(2);
+  });
+
+  // #896 S4 QA round 2. Three ways the gap-fill could complete "successfully" and still leave the
+  // author blocked on exactly the same 422.
+  test("gap-fill fills a description gap, which the draft localizer cannot translate", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          description: { "en-GB": "About unions", nb: "Om fagforeninger" },
+          // The fill ends in an ordinary save, which refuses to run on a FREETEXT_PLUS_MCQ module
+          // with no questions.
+          mcqQuestions: [
+            {
+              stem: localizedText("Which body ratifies the agreement?"),
+              options: [localizedText("The board"), localizedText("The members")],
+              correctAnswer: localizedText("The members"),
+              rationale: localizedText("Members vote on ratification."),
+            },
+          ],
+        }),
+      },
+    });
+
+    let publishAttempts = 0;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      publishAttempts += 1;
+      if (publishAttempts === 1) {
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "publish_blocked_by_validation",
+            issues: [
+              {
+                severity: "blocking",
+                code: "translation_incomplete",
+                message: "description: missing nn",
+                field: "description",
+                missingLocales: ["nn"],
+              },
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+
+    // The message names the field in the author's language, not as the raw key `description`.
+    await expect(page.getByText(/Beskrivelse|Description/).first()).toBeVisible();
+
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    // The description was translated by the PER-FIELD localizer. The module-draft one never
+    // returns a description, so a description-only gap used to survive the "successful" fill and
+    // fail publish again on the very same issue.
+    await expect.poll(() => state.lastSectionLocalizationBody?.targetLocale).toBe("nn");
+    await expect.poll(() => state.lastModuleVersionBody?.description?.nn).toBeTruthy();
+    // The languages the author already wrote are untouched.
+    expect(state.lastModuleVersionBody.description["en-GB"]).toBe("About unions");
+    expect(state.lastModuleVersionBody.description.nb).toBe("Om fagforeninger");
+    await expect.poll(() => publishAttempts).toBe(2);
+  });
+
+  test("gap-fill leaves an absent optional field absent rather than sending an empty string", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "Scenario text (EN)", nb: "Scenario text (NB)" },
+          mcqQuestions: [
+            {
+              stem: localizedText("Which body ratifies the agreement?"),
+              options: [localizedText("The board"), localizedText("The members")],
+              correctAnswer: localizedText("The members"),
+              rationale: localizedText("Members vote on ratification."),
+            },
+          ],
+        }),
+      },
+    });
+
+    let publishAttempts = 0;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      publishAttempts += 1;
+      await route.fulfill(
+        publishAttempts === 1
+          ? {
+              status: 422,
+              contentType: "application/json",
+              body: JSON.stringify({
+                error: "publish_blocked_by_validation",
+                issues: [
+                  {
+                    severity: "blocking",
+                    code: "translation_incomplete",
+                    message: "taskText: missing nn",
+                    field: "taskText",
+                    missingLocales: ["nn"],
+                  },
+                ],
+              }),
+            }
+          : {
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+            },
+      );
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    await expect.poll(() => state.lastModuleVersionBody?.taskText?.nn).toBeTruthy();
+    // This module has no description. Writing "" for it would make the save send an empty string,
+    // which the localized-text schema rejects — the fill would succeed and the save would 400.
+    expect(state.lastModuleVersionBody.description).toBeUndefined();
     await expect.poll(() => publishAttempts).toBe(2);
   });
 

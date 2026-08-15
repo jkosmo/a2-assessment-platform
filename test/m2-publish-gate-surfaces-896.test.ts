@@ -190,6 +190,67 @@ describe("#896 S4 translation gate — every publish door", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
+  // A published course whose module is not live is worse than an unpublished course: the
+  // participant opens it and hits "module not available". publishCourse only checks that a module
+  // ITEM exists, not that it is publishable — so the course has to wait for its modules.
+  it("keeps an imported course as a draft when one of its modules is held back", async () => {
+    const moduleId = await createModule(threeLocales("Task"));
+    const courseId = await createCourseWith(moduleId);
+    const versions = await prisma.moduleVersion.findMany({
+      where: { moduleId },
+      orderBy: { versionNo: "desc" },
+      take: 1,
+      select: { id: true },
+    });
+    await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/module-versions/${versions[0]!.id}/publish`)
+      .set(adminHeaders)
+      .send({})
+      .expect(200);
+    await request(app)
+      .post(`/api/admin/content/courses/${courseId}/publish`)
+      .set(adminHeaders)
+      .send({})
+      .expect(200);
+
+    const exportRes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/export-package`)
+      .set(adminHeaders);
+    expect(exportRes.status, JSON.stringify(exportRes.body)).toBe(200);
+    // The course envelope nests one level deeper than the module one: envelope.course.course.
+    const envelope = exportRes.body.envelope;
+    const coursePayload = envelope.course.course;
+    expect(coursePayload.audit.publishedAt).toBeTruthy();
+
+    // Knock a language out of the module inside the course package.
+    const courseItem = (coursePayload.items ?? coursePayload.modules)[0];
+    delete courseItem.module.activeVersion.taskText.nn;
+
+    const importRes = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(adminHeaders)
+      .send({ payload: envelope, mode: "createNew" });
+    expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
+
+    const importedCourse = await prisma.course.findUnique({
+      where: { id: importRes.body.courseId as string },
+      select: { publishedAt: true, items: { select: { moduleId: true } } },
+    });
+    expect(importedCourse?.publishedAt).toBeNull();
+    const importedModuleId = importedCourse?.items.find((item) => item.moduleId)?.moduleId;
+    const importedModule = await prisma.module.findUnique({
+      where: { id: importedModuleId! },
+      select: { activeVersionId: true },
+    });
+    expect(importedModule?.activeVersionId).toBeNull();
+
+    await request(app).delete(`/api/admin/content/courses/${importRes.body.courseId}`).set(adminHeaders);
+    await request(app).post(`/api/admin/content/courses/${courseId}/unpublish`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/courses/${courseId}`).set(adminHeaders);
+    await request(app).post(`/api/admin/content/modules/${moduleId}/unpublish`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
+  });
+
   it("still auto-publishes an imported package that has every locale", async () => {
     const moduleId = await createModule(threeLocales("Task"));
     const versions = await prisma.moduleVersion.findMany({

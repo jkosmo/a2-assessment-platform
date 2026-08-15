@@ -100,6 +100,9 @@ export function buildMockModuleExport({
   // #896 S4: the save path reads the STORED mode when the session draft has none, so specs that
   // exercise a non-default module type have to be able to set it on the fixture.
   assessmentMode = "FREETEXT_PLUS_MCQ",
+  // #896 S4: participant-visible in the module list, so the publish gate covers it. Undefined
+  // means "this module has no description" — a distinct case from "an empty one".
+  description = undefined,
 }: {
   id: string;
   title: string;
@@ -115,6 +118,7 @@ export function buildMockModuleExport({
   activeVersionId?: string | null;
   moduleVersionId?: string | null;
   assessmentMode?: string;
+  description?: Record<string, string> | undefined;
 }): MockModuleExport {
   const moduleVersion = moduleVersionId
     ? {
@@ -149,6 +153,7 @@ export function buildMockModuleExport({
     module: {
       id,
       title: localizedText(title),
+      ...(description ? { description } : {}),
       certificationLevel,
       activeVersionId,
       archivedAt: null,
@@ -260,6 +265,9 @@ export async function mockCommonApis(page: Page, {
     exportMap,
     lastDraftGenerationBody: null as any,
     lastDraftLocalizationBody: null as any,
+    // #896 S4: the per-field localizer, used for description and for modules the draft localizer
+    // cannot serve.
+    lastSectionLocalizationBody: null as any,
     lastMcqLocalizationBody: null as any,
     lastCourseLocalizationBodies: [] as any[],
     lastTitlePatchBody: null as any,
@@ -377,6 +385,29 @@ export async function mockCommonApis(page: Page, {
         title: body.title ? `${body.title} [${suffix}]` : undefined,
         taskText: `${body.taskText ?? ""} [${suffix}]`,
         assessorExpectedContent: `${body.assessorExpectedContent ?? ""} [${suffix}]`,
+      }),
+    });
+  });
+
+  // The per-field localizer. #896 S4's gap-fill uses it for fields the module-draft localizer
+  // cannot handle — the description, and any body field on a module that lacks the task text +
+  // answer key pair that endpoint's schema demands. Without this mock those specs would hit the
+  // static server and 404.
+  await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
+    const body = route.request().postDataJSON() as {
+      title?: string;
+      bodyMarkdown?: string;
+      sourceLocale?: string;
+      targetLocale?: string;
+    };
+    state.lastSectionLocalizationBody = body;
+    const suffix = body.targetLocale ?? "xx";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...(body.title !== undefined ? { title: `${body.title} [${suffix}]` } : {}),
+        ...(body.bodyMarkdown !== undefined ? { bodyMarkdown: `${body.bodyMarkdown} [${suffix}]` } : {}),
       }),
     });
   });

@@ -432,7 +432,7 @@ the same PR — the participant sees the same module regardless of which door it
 |------|-------|--------------------------------------|
 | Author's publish action | `POST /modules/:id/module-versions/:vid/publish` in `src/routes/adminContent.ts` | 422 `publish_blocked_by_validation` with `translation_incomplete` issues carrying `field` + `missingLocales` |
 | Course cascade | `evaluateModule` in `src/modules/course/coursePublishService.ts` | Module reported `publishable: false` in `publish-preview`; cascade returns 422 and publishes **nothing** (not the module, not the course) |
-| Import auto-publish | `importModulePayload` in `src/modules/adminContent/contentImportService.ts` | Import **succeeds**, auto-publish is skipped — the module lands as a draft. Failing the transaction would lose the import; leaving it a draft matches the agreed import model |
+| Import auto-publish | `importModulePayload` in `src/modules/adminContent/contentImportService.ts` | Import **succeeds**, auto-publish is skipped — the module lands as a draft. Failing the transaction would lose the import; leaving it a draft matches the agreed import model. It returns `heldBackByTranslationGate` so `importCourseFromEnvelope` can keep the COURSE a draft too — `publishCourse` only checks that a module item exists, so publishing around a held-back module produces a live course whose module is not available |
 | Calibration thresholds | `publishModuleVersionWithThresholds` in `src/modules/adminContent/adminContentCommands.ts` | **Deliberately exempt.** It clones the already-live version and changes only pass thresholds; no new participant-facing text, and gating would block calibration on modules published before the gate existed |
 
 The shared check is `validateTranslationCompleteness` + `validateMcqTranslationCompleteness` /
@@ -449,6 +449,23 @@ gated four fields, the cascade the same four, and import only three.
 **The client's `TRANSLATION_GATE_FIELDS`** in `public/static/admin-content-shell.js` mirrors the
 same list. The gap-fill offers a fix per field, so a field the server blocks on but the client does
 not know about produces an action that cannot resolve the block.
+
+**A bare string is `nb` on both sides.** `missingLocalesFor`'s `sourceLocale` default and the
+client's `LEGACY_STRING_LOCALE` are the same claim about the same bytes. Change one and an author
+working in a different UI language gets their text relabelled: the second QA round found a
+Norwegian legacy title being saved under `en-GB` because the client accepted a bare string as the
+source for whatever locale it was asked for. New saves avoid the question entirely by writing a
+one-key map.
+
+**Two localizers, and the gap-fill must pick.** `generate/module-draft/localize` translates the
+scenario, answer key and constraints together (coherent, one call) but its schema DEMANDS a
+non-empty task text and answer key — so it 400s for `MCQ_ONLY` and for free-text modules with no
+answer key. `sections/localize` takes one field at a time (`title` for short text, `bodyMarkdown`
+for long) and works everywhere. The description is only ever reachable through the second one: the
+draft localizer does not return it. Import surfaces: **both** the library
+(`admin-content-library.js`) and the advanced editor (`admin-content.js`) must send
+`autoPublish: false`, or the same package goes live or stays a draft depending on which page it was
+imported from.
 
 **Guards:** `test/m2-publish-translation-gate-896.test.ts` (door 1 + the locale arithmetic),
 `test/m2-publish-gate-surfaces-896.test.ts` (doors 2 and 3, both directions),
