@@ -1165,8 +1165,10 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await clickEnabledButton(page, /Edit directly|Rediger direkte/);
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    // #896 S2 merged Bekreft and Lagre: this one click translates and writes. The test was
+    // written against the old two-step flow on a branch off main, and the extra "Lagre utkast"
+    // click had nothing left to press once the branches met on dev.
     await page.locator("#previewEditConfirm").click();
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
 
     await expect.poll(() => state.lastModuleVersionBody?.taskText).toBeTruthy();
     const savedTaskText = state.lastModuleVersionBody.taskText;
