@@ -418,11 +418,18 @@ function renderCascadeItemList(items, { showBlockers }) {
     .map((item) => {
       const title = escapeHtml(localizedText(item.title) || item.id);
       const badge = `<span class="item-type-badge">${escapeHtml(cascadeItemTypeLabel(item.type))}</span>`;
-      const blockerNote =
-        showBlockers && !item.publishable && Array.isArray(item.blockers) && item.blockers.length > 0
-          ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map((b) => b.message).join(" "))}</span>`
-          : "";
-      return `<li class="cascade-publish-item${item.publishable ? "" : " is-blocked"}">${badge} <span class="cascade-publish-item-title">${title}</span>${blockerNote}</li>`;
+      const blocked = showBlockers && !item.publishable && Array.isArray(item.blockers) && item.blockers.length > 0;
+      const blockerNote = blocked
+        ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map((b) => b.message).join(" "))}</span>`
+        : "";
+      // #896 S4: a blocked module needs a way OUT of the dialog, not just an explanation of why
+      // it is stuck. Every blocker here — untranslated, archived, no content — is fixed in the
+      // module's own workspace, so link straight there. The dialog otherwise offers only "Lukk",
+      // leaving the author to find the module by hand.
+      const fixLink = blocked && item.type === "MODULE"
+        ? ` <a class="cascade-publish-fix" href="/admin-content/module/${encodeURIComponent(item.id)}/conversation">${escapeHtml(t("adminContent.courses.cascadePublish.openModule") || "Åpne modulen")}</a>`
+        : "";
+      return `<li class="cascade-publish-item${item.publishable ? "" : " is-blocked"}">${badge} <span class="cascade-publish-item-title">${title}</span>${blockerNote}${fixLink}</li>`;
     })
     .join("")}</ul>`;
 }

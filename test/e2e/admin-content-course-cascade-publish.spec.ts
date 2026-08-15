@@ -126,6 +126,14 @@ test.describe("course cascade publish (#734)", () => {
     await expect(dialog).toContainText("The module has no content to publish.");
     // No cascade action offered; publish is never sent.
     await expect(page.locator("#cascadePublishConfirmBtn")).toBeHidden();
+
+    // #896 S4: a blocked module needs a way OUT, not only an explanation. Every blocker here is
+    // fixed in the module's own workspace, and the dialog otherwise offers just "Lukk" — so the
+    // author was told what was wrong and left to find the module by hand.
+    const fixLink = dialog.locator(".cascade-publish-fix");
+    await expect(fixLink).toBeVisible();
+    await expect(fixLink).toHaveAttribute("href", "/admin-content/module/module-1/conversation");
+
     await page.locator("#cascadePublishCancelBtn").click();
     expect(publishCalled).toBe(false);
   });
