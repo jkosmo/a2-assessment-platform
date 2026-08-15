@@ -705,6 +705,13 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       moduleId: request.params.moduleId,
       actorId,
       title: data.title,
+      // null clears; undefined leaves alone. parseOptionalDate returns null for an unparseable
+      // string, so an explicit null and a bad date look the same here — the schema keeps the
+      // shape honest and the composer refuses an inverted window.
+      ...(data.description !== undefined ? { description: data.description } : {}),
+      ...(data.certificationLevel !== undefined ? { certificationLevel: data.certificationLevel } : {}),
+      ...(data.validFrom !== undefined ? { validFrom: data.validFrom ? parseOptionalDate(data.validFrom) : null } : {}),
+      ...(data.validTo !== undefined ? { validTo: data.validTo ? parseOptionalDate(data.validTo) : null } : {}),
       assessmentMode: data.assessmentMode,
       taskText: data.taskText,
       assessorExpectedContent: data.assessorExpectedContent,

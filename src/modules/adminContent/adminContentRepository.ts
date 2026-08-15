@@ -176,6 +176,20 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // #896 S3b: the module-level fields an author edits after creation. Until now these were
+    // create-only — the only update path on a module was the title — so «beskrivelse»,
+    // «sertifiseringsnivå» and validity could be set once and never corrected.
+    updateModuleDetails(
+      moduleId: string,
+      data: { description?: string | null; certificationLevel?: string; validFrom?: Date | null; validTo?: Date | null },
+    ) {
+      return client.module.update({
+        where: { id: moduleId },
+        data,
+        select: { id: true, description: true, certificationLevel: true, validFrom: true, validTo: true },
+      });
+    },
+
     deleteModule(moduleId: string) {
       return client.module.delete({
         where: { id: moduleId },

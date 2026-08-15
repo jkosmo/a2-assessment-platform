@@ -222,6 +222,12 @@ export const moduleVersionBodySchema = z
 export const composeModuleVersionBodySchema = z.object({
   /** Renamed in the same transaction as the version, so a failed save leaves the name alone. */
   title: localizedTextPatchSchema.optional(),
+  // #896 S3b: module-level fields. `null` on description clears it; omitting a field leaves it
+  // untouched, which is what lets a settings save avoid rewriting content it never showed.
+  description: localizedTextPatchSchema.nullable().optional(),
+  certificationLevel: certificationLevelInputSchema.optional(),
+  validFrom: z.string().trim().nullable().optional(),
+  validTo: z.string().trim().nullable().optional(),
   assessmentMode: assessmentModeSchema.optional(),
   taskText: localizedTextMaybeUntranslatedSchema.optional(),
   assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),

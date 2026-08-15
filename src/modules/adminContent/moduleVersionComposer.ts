@@ -8,6 +8,7 @@ import {
 } from "./adminContentCommands.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
+import { createAdminContentRepository } from "./adminContentRepository.js";
 
 /**
  * #906: compose a complete module version in ONE transaction.
@@ -31,6 +32,15 @@ export interface ComposeModuleVersionInput {
   actorId: string;
   /** Renames the module inside the same transaction as the version. */
   title?: LocalizedText;
+  /**
+   * Module-level fields, applied in the same transaction. They belong to the module rather than
+   * the version, but an author changes them in the same breath as the rest — and until #896 S3b
+   * they could not be changed at all after creation.
+   */
+  description?: LocalizedText | null;
+  certificationLevel?: LocalizedText;
+  validFrom?: Date | null;
+  validTo?: Date | null;
   assessmentMode?: "FREETEXT_PLUS_MCQ" | "MCQ_ONLY" | "FREETEXT_ONLY";
   taskText?: LocalizedText;
   assessorExpectedContent?: LocalizedText;
@@ -65,6 +75,31 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
     // used to leave a module renamed with nothing else to show for it.
     if (input.title !== undefined) {
       await updateModuleTitle(input.moduleId, input.title, input.actorId, tx);
+    }
+
+    const detailPatch: {
+      description?: string | null;
+      certificationLevel?: string;
+      validFrom?: Date | null;
+      validTo?: Date | null;
+    } = {};
+    if (input.description !== undefined) {
+      detailPatch.description = input.description === null ? null : localizedTextCodec.serialize(input.description);
+    }
+    if (input.certificationLevel !== undefined) {
+      detailPatch.certificationLevel = localizedTextCodec.serialize(input.certificationLevel);
+    }
+    if (input.validFrom !== undefined) detailPatch.validFrom = input.validFrom;
+    if (input.validTo !== undefined) detailPatch.validTo = input.validTo;
+    if (Object.keys(detailPatch).length > 0) {
+      // validTo before validFrom would let a module be published into a window that can never
+      // open. createModule already refuses it; an update has to refuse it too.
+      const from = detailPatch.validFrom ?? undefined;
+      const to = detailPatch.validTo ?? undefined;
+      if (from && to && to < from) {
+        throw new Error("validTo must be on or after validFrom.");
+      }
+      await createAdminContentRepository(tx).updateModuleDetails(input.moduleId, detailPatch);
     }
 
     const isMcqOnly = input.assessmentMode === "MCQ_ONLY";

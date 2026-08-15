@@ -1030,6 +1030,68 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastModuleVersionBody.mcqSetVersionId).toBeUndefined();
   });
 
+  // #896 S3b: certification level and validity were create-only — the only update path on a
+  // module was the title, so a typo at creation was permanent. They now ride the composed save.
+  test("Innstillinger can correct certification level and validity, and only sends what changed", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    await page.locator("#settingsCertLevel").fill("advanced");
+    await page.locator("#settingsValidFrom").fill("2026-09-01");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.certificationLevel).toBe("advanced");
+    expect(state.lastModuleVersionBody.validFrom).toBe("2026-09-01");
+    // Untouched fields are omitted, so a settings save never rewrites what it only displayed.
+    expect(state.lastModuleVersionBody.validTo).toBeUndefined();
+    expect(state.lastModuleVersionBody.description).toBeUndefined();
+  });
+
+  test("Innstillinger rejects a validity window that ends before it starts", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    await page.locator("#settingsValidFrom").fill("2026-09-01");
+    await page.locator("#settingsValidTo").fill("2026-08-01");
+    await page.locator("#settingsSave").click();
+
+    // Caught before the request: a window that can never open is the author's mistake to see.
+    await expect(page.locator(".toast, [role='alert']").first()).toContainText(/end date|Sluttdatoen/);
+    expect(state.lastModuleVersionBody).toBeNull();
+  });
+
   test("Innstillinger refuses to save settings while an unsaved draft exists", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.0 - 2026-08-15
+
+**Sertifiseringsnivå og gyldighet kan endres (#896, S3b).** De var **create-only**: satt én gang
+ved opprettelse, og umulige å rette etterpå. Eneste oppdateringsvei på en modul var tittelen.
+
+Nå redigeres de fra Innstillinger, og lagres gjennom det samme komponerte endepunktet som resten
+— så en rettelse av sertifiseringsnivået og et typebytte er én transaksjon, ikke to halve.
+
+To detaljer verdt å kjenne til:
+
+**Bare det du har endret sendes.** Panelet viser flere felt enn du rører; en lagring skal ikke
+skrive tilbake noe den bare hadde vist fram.
+
+**En gyldighetsperiode som slutter før den starter avvises** før forespørselen går. Modulen ville
+ellers fått et vindu som aldri kan åpne. `createModule` har alltid nektet dette; nå gjør
+oppdateringen det også.
+
 ## 2.16.1 - 2026-08-15
 
 QA-runde på S3b. Den fant at **påstanden i 2.16.0 ikke stemte**: typebyttet var ikke reversibelt.

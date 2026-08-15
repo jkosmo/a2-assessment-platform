@@ -4392,15 +4392,23 @@ function renderSettingsPanel() {
     !(Array.isArray(submissionFields) && submissionFields.length),
   );
 
+  // #896 S3b: editable now that the composed save can write module-level fields. They were
+  // create-only before — set once at creation and impossible to correct afterwards.
   const certLevel = localizeValue(mod.certificationLevel);
-  row("shell.settings.certificationLevel", certLevel ? escapeHtml(certLevel) : emptyText, !certLevel);
+  row(
+    "shell.settings.certificationLevel",
+    `<input id="settingsCertLevel" class="settings-input" type="text" value="${escapeHtml(certLevel ?? "")}"
+      placeholder="${escapeHtml(t("shell.settings.notSet"))}" />`,
+  );
 
-  const validity = [mod.validFrom, mod.validTo]
-    .map((d) => (d ? new Date(d).toLocaleDateString(currentLocale) : null));
-  const validityText = validity[0] || validity[1]
-    ? `${validity[0] ?? "—"} → ${validity[1] ?? "—"}`
-    : null;
-  row("shell.settings.validity", validityText ? escapeHtml(validityText) : emptyText, !validityText);
+  // date inputs need yyyy-mm-dd, not a localized rendering
+  const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+  row(
+    "shell.settings.validity",
+    `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}" />
+     <span aria-hidden="true">→</span>
+     <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}" />`,
+  );
 
   // An unsaved draft and a settings save would fight over the same next version: the settings
   // save carries the PERSISTED content forward, so it would quietly drop whatever is in the
@@ -4471,7 +4479,29 @@ async function saveSettingsInBackground() {
     ? { ...(existingPolicy ?? {}), passRules }
     : null;
 
+  // Module-level fields. Sent only when the author actually changed them, so a mode switch
+  // does not rewrite a description or a date the panel merely displayed.
+  const certInput = document.getElementById("settingsCertLevel");
+  const fromInput = document.getElementById("settingsValidFrom");
+  const toInput = document.getElementById("settingsValidTo");
+  const currentCert = localizeValue(bundle.module?.certificationLevel) ?? "";
+  const currentFrom = bundle.module?.validFrom ? new Date(bundle.module.validFrom).toISOString().slice(0, 10) : "";
+  const currentTo = bundle.module?.validTo ? new Date(bundle.module.validTo).toISOString().slice(0, 10) : "";
+
+  if (fromInput?.value && toInput?.value && toInput.value < fromInput.value) {
+    showToast(t("shell.settings.invalidValidity"), "error");
+    toInput.focus();
+    return;
+  }
+
+  const moduleFields = {
+    ...(certInput && certInput.value.trim() !== currentCert ? { certificationLevel: certInput.value.trim() } : {}),
+    ...(fromInput && fromInput.value !== currentFrom ? { validFrom: fromInput.value || null } : {}),
+    ...(toInput && toInput.value !== currentTo ? { validTo: toInput.value || null } : {}),
+  };
+
   const body = {
+    ...moduleFields,
     assessmentMode: mode,
     ...(isMcqOnly ? {} : {
       taskText: latestTaskVersion?.taskText,
