@@ -14,6 +14,23 @@ Modulens egen eksport var vaktet. Kursvarianten var veien rundt.
 Fortsatt åpent i #903: eierskap til et *kurs* er ikke eierskap til *modulene* i det. Et kurs
 kan inneholde andres moduler, og kurseieren får fortsatt deres fasit gjennom denne ruta.
 
+## 2.11.11 - 2026-08-14
+
+**Fasiten følger med i moduleksporten igjen.** `GET /modules/:id/export` fjernet `correctAnswer`
+og `rationale` for alle uten ADMINISTRATOR-rolle. Det ble innført som sikkerhetsfiks #392 i
+v1.1.11, men kontrollen viste seg å være virkningsløs:
+
+- Ruta krever allerede at du **eier** modulen (`assertModuleOwnership`), så den som fikk en
+  redigert eksport var forfatteren selv — som leser fasiten i redigeringsflaten uansett.
+- `GET /modules/:id/export-package` gir den samme eieren de samme svarene uredigert. Fasiten
+  var altså allerede tilgjengelig for nøyaktig samme person.
+
+Den eneste reelle effekten var en **ufullstendig sikkerhetskopi**: eksport etterfulgt av import
+ga en modul uten fasit, uten at noe varslet om det.
+
+Omfangskontrollen fra #392 står urørt — en SMO kan fortsatt bare eksportere moduler hen eier,
+og det er fortsatt dekket av test.
+
 ## 2.11.10 - 2026-08-13
 
 **Språkbytte under Direkte redigering ga en blindvei.** Rapportert fra stage: bytt arbeidsflatens
