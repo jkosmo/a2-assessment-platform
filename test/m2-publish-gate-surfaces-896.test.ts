@@ -28,11 +28,19 @@ const rubric = {
   scalingRule: { max_total: 5 },
 };
 const promptTemplate = { systemPrompt: "You assess.", userPromptTemplate: "Assess: {{answer}}" };
-const mcqSet = {
-  title: "Set",
-  questions: [{ stem: "Q?", options: ["A", "B"], correctAnswer: "A", rationale: "Because." }],
-};
 const threeLocales = (base: string) => ({ "en-GB": `${base} EN`, nb: `${base} NB`, nn: `${base} NN` });
+// MCQ content is gated too — see the note in m2-publish-translation-gate-896.test.ts.
+const mcqSet = {
+  title: threeLocales("Set"),
+  questions: [
+    {
+      stem: threeLocales("Q?"),
+      options: [threeLocales("A"), threeLocales("B")],
+      correctAnswer: threeLocales("A"),
+      rationale: threeLocales("Because."),
+    },
+  ],
+};
 
 async function createModule(taskText: unknown) {
   const moduleRes = await request(app)
@@ -93,9 +101,13 @@ describe("#896 S4 translation gate — every publish door", () => {
     const moduleItem = (preview.body.unpublishedItems as Array<Record<string, unknown>>)
       .find((item) => item.id === moduleId);
     expect(moduleItem?.publishable).toBe(false);
-    expect(
-      (moduleItem?.blockers as Array<{ code: string }>).some((b) => b.code === "translation_incomplete"),
-    ).toBe(true);
+    const blockers = moduleItem?.blockers as Array<{ code: string; message: string }>;
+    expect(blockers.some((b) => b.code === "translation_incomplete")).toBe(true);
+    // The dialog prints `message` verbatim beside blockers written in Norwegian, so this one has
+    // to read as a sentence — not as a leaked "taskText: missing nn".
+    const message = blockers.find((b) => b.code === "translation_incomplete")!.message;
+    expect(message).toContain("oppgavetekst");
+    expect(message).toContain("nn");
 
     const publishRes = await request(app)
       .post(`/api/admin/content/courses/${courseId}/publish`)

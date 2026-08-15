@@ -31,7 +31,7 @@ import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "
 import { ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { validateTranslationCompleteness } from "./contentValidationService.js";
+import { validateTranslationCompleteness, validateMcqTranslationCompleteness } from "./contentValidationService.js";
 import {
   auditActions,
   auditEntityTypes,
@@ -260,15 +260,33 @@ async function importModulePayload(
   // the module stays a DRAFT. That is also the agreed import model: imported modules are drafts
   // and publishing is an explicit act. The author publishes it once the gaps are filled, and the
   // ordinary gate tells them which ones.
-  const importTranslationIssues = validateTranslationCompleteness([
-    { field: "title", raw: serializeRequired(payload.module.title) },
-    ...(isMcqOnly || !payload.activeVersion.taskText
-      ? []
-      : [{ field: "taskText", raw: serializeRequired(payload.activeVersion.taskText) }]),
-    ...(payload.activeVersion.assessorExpectedContent
-      ? [{ field: "assessorExpectedContent", raw: serializeLocalized(payload.activeVersion.assessorExpectedContent) }]
-      : []),
-  ]);
+  // Same field set as the module-publish route and the cascade. A gate that checks fewer fields
+  // here is a gate with a hole shaped exactly like an import.
+  const importTranslationIssues = [
+    ...validateTranslationCompleteness([
+      { field: "title", raw: serializeRequired(payload.module.title) },
+      ...(payload.module.description
+        ? [{ field: "description", raw: serializeLocalized(payload.module.description) }]
+        : []),
+      ...(isMcqOnly || !payload.activeVersion.taskText
+        ? []
+        : [{ field: "taskText", raw: serializeRequired(payload.activeVersion.taskText) }]),
+      ...(payload.activeVersion.assessorExpectedContent
+        ? [{ field: "assessorExpectedContent", raw: serializeLocalized(payload.activeVersion.assessorExpectedContent) }]
+        : []),
+      ...(payload.activeVersion.candidateTaskConstraints
+        ? [{ field: "candidateTaskConstraints", raw: serializeLocalized(payload.activeVersion.candidateTaskConstraints) }]
+        : []),
+    ]),
+    ...validateMcqTranslationCompleteness(
+      (payload.activeVersion.mcqSet?.questions ?? []).map((question) => ({
+        stem: serializeRequired(question.stem),
+        optionsJson: JSON.stringify(question.options.map((option) => serializeRequired(option))),
+        correctAnswer: serializeRequired(question.correctAnswer),
+        rationale: question.rationale ? serializeRequired(question.rationale) : null,
+      })),
+    ),
+  ];
   if (
     options.autoPublish !== false
     && payload.activeVersion.audit?.publishedAt

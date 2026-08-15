@@ -71,7 +71,7 @@ import {
   reviseMcqQuestions,
   checkScenarioAnswerability,
 } from "../modules/adminContent/llmContentGenerationService.js";
-import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish, validateTranslationCompleteness } from "../modules/adminContent/contentValidationService.js";
+import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish, validateTranslationCompleteness, validateMcqTranslationCompleteness } from "../modules/adminContent/contentValidationService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
 import {
@@ -842,15 +842,34 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     // locale and would hide exactly the gap we are looking for.
     const serialize = (value: unknown): string | null =>
       value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
-    const translationIssues = validateTranslationCompleteness([
-      { field: "title", raw: serialize(bundle.module.title) },
-      { field: "taskText", raw: serialize(moduleVersionData.taskText) },
-      { field: "assessorExpectedContent", raw: serialize(moduleVersionData.assessorExpectedContent) },
-      // candidateTaskConstraints is optional; only gate it when the module actually has one.
-      ...(moduleVersionData.candidateTaskConstraints
-        ? [{ field: "candidateTaskConstraints", raw: serialize(moduleVersionData.candidateTaskConstraints) }]
-        : []),
-    ]);
+    const translationIssues = [
+      ...validateTranslationCompleteness([
+        { field: "title", raw: serialize(bundle.module.title) },
+        // The description is shown to participants in the module list, so it is content, not
+        // setup — an English-only description reaches a Norwegian participant as English.
+        ...(bundle.module.description ? [{ field: "description", raw: serialize(bundle.module.description) }] : []),
+        // Optional fields are gated only when they exist: an absent field is not an untranslated
+        // one. taskText is absent for MCQ_ONLY modules, where the questions carry the assessment.
+        ...(moduleVersionData.taskText ? [{ field: "taskText", raw: serialize(moduleVersionData.taskText) }] : []),
+        ...(moduleVersionData.assessorExpectedContent
+          ? [{ field: "assessorExpectedContent", raw: serialize(moduleVersionData.assessorExpectedContent) }]
+          : []),
+        ...(moduleVersionData.candidateTaskConstraints
+          ? [{ field: "candidateTaskConstraints", raw: serialize(moduleVersionData.candidateTaskConstraints) }]
+          : []),
+      ]),
+      // The bundle hands back DECODED questions (LocalizedText objects, `options` not
+      // `optionsJson`), so serialize them back into the shape the check reads. Passing the
+      // decoded objects compiled to `[object Object]` in an earlier draft of this.
+      ...validateMcqTranslationCompleteness(
+        (mcqSetVersion?.questions ?? []).map((question) => ({
+          stem: serialize(question.stem),
+          optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
+          correctAnswer: serialize(question.correctAnswer),
+          rationale: serialize(question.rationale),
+        })),
+      ),
+    ];
     if (translationIssues.length > 0) {
       validation.issues.push(...translationIssues);
       validation.valid = false;

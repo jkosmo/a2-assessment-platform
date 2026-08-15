@@ -23,11 +23,20 @@ const rubric = {
   scalingRule: { max_total: 5 },
 };
 const promptTemplate = { systemPrompt: "You assess.", userPromptTemplate: "Assess: {{answer}}" };
-const mcqSet = {
-  title: "Set",
-  questions: [{ stem: "Q?", options: ["A", "B"], correctAnswer: "A", rationale: "Because." }],
-};
 const threeLocales = (base: string) => ({ "en-GB": `${base} EN`, nb: `${base} NB`, nn: `${base} NN` });
+// MCQ content is gated too — for an MCQ-only module the questions ARE the assessment. Fixtures
+// that go on to publish therefore need all three locales here as well.
+const mcqSet = {
+  title: threeLocales("Set"),
+  questions: [
+    {
+      stem: threeLocales("Q?"),
+      options: [threeLocales("A"), threeLocales("B")],
+      correctAnswer: threeLocales("A"),
+      rationale: threeLocales("Because."),
+    },
+  ],
+};
 
 async function createModuleWithVersion(taskText: unknown) {
   const moduleRes = await request(app)

@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.3 - 2026-08-15
+
+QA-runde på publiseringsgaten (#896 S4). Åtte funn, hvorav fire var reelle omveier rundt gaten
+eller utbedringsflyter som ikke kunne fullføres.
+
+**Gaten dekket for få felt.** Den så tittel, oppgavetekst, fasit og kandidatrammer — men ikke
+**beskrivelsen** (deltakersynlig i modullista) og ikke **MCQ-innholdet**. En MCQ-only modul med
+norske spørsmål kunne publiseres, og en engelsk deltaker fikk norske spørsmål. For den modultypen
+*er* spørsmålene vurderingen. Nå gjelder samme feltsett på alle tre dørene.
+
+**Utbedringen kunne ikke fullføres for to modultyper.**
+
+- «Oversett det som mangler» krevde både oppgavetekst og fasit for å velge kildespråk. En
+  MCQ-only modul har ingen av delene, og et rent tittelhull hadde dem ikke som problem — så
+  handlingen svarte «ingen kilde» selv om teksten den skulle oversette lå rett der. Kildespråket
+  utledes nå fra feltene gaten faktisk klaget på.
+- Lagringen leste modultypen kun fra `sessionDraft`. Publiserer du en lastet modul uten å ha
+  redigert noe, er den null — så en `FREETEXT_ONLY`-modul ble behandlet som `FREETEXT_PLUS_MCQ`,
+  traff MCQ-kravet og lagret aldri. Dette rammet **alle** lagringer uten sessionDraft, ikke bare
+  utbedringen. Samme fallback er lagt inn for MCQ-beståttgrensen, som ellers ble stilt tilbake til
+  plattformstandarden.
+
+**Ren streng mistet språket.** Overlevde bare kildespråket en oversettelse, ble verdien lagret som
+ren streng. Skjemaet aksepterer det — det er #892-kodingen for «ett språk, ikke oversatt ennå» —
+men det kaster bort *hvilket* språk, og gaten måtte anta bokmål. En forfatter som jobbet på
+engelsk fikk beskjed om at engelsk manglet, og utbedringen fylte de to gale språkene. Nå lagres
+`{"en-GB": "..."}`: like ærlig, uten gjetningen.
+
+**Import lander alltid som utkast.** Filimport fra modullista sendte ikke `autoPublish: false`, så
+en pakke gikk rett live så snart kilden hadde vært publisert — i strid med importmodellen i #896.
+
+**Avansert-siden viste bare sammendraget.** `parseActionableErrorMessage` returnerte toppnivå-
+meldingen «See `issues` for details» og forkastet nettopp de detaljene den pekte på.
+
+Kurskaskadens blokkeringsmelding er nå en norsk setning med feltnavn, språk og henvisning til
+«Oversett det som mangler», i samme stemme som de andre blokkeringene på den flaten.
+
+Registrert: **#913** — MCQ-feltene kan fortsatt ikke uttrykke delvis oversettelse; #905-kontrakten
+nådde aldri MCQ. Utbedringen faller derfor tilbake til kildespråket som ren streng når ett målspråk
+feiler for MCQ.
+
 ## 2.17.2 - 2026-08-15
 
 **Publiseringsgaten (#896, S4).** Publisering blokkeres nå dersom et felt mangler ett av de tre

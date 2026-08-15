@@ -183,10 +183,24 @@ entry in `issues[]`:
 ```
 
 `field` and `missingLocales` are structured deliberately: the UI's "translate what is missing"
-action reads them directly rather than parsing the message. Gated fields are `title`, `taskText`,
-`assessorExpectedContent`, and `candidateTaskConstraints` **when present** — an absent optional
-field is not an untranslated one. A value stored as a plain string counts as translated only into
-the source locale (`nb`), which is the #892/#905 encoding for "written once, not translated yet".
+action reads them directly rather than parsing the message.
+
+Gated fields — all of them **only when present**, since an absent optional field is not an
+untranslated one:
+
+| Field | Why it is gated |
+|-------|-----------------|
+| `title` | Shown in the module list and the workspace |
+| `description` | Shown to participants in the module list — content, not setup |
+| `taskText` | The scenario the participant answers (absent for `MCQ_ONLY`) |
+| `assessorExpectedContent` | Feeds assessment; surfaces in feedback |
+| `candidateTaskConstraints` | Shown to the participant with the task |
+| `mcq.question<N>` | Stem, options, correct answer and rationale of question N. For `MCQ_ONLY` the questions *are* the assessment. Reported per question rather than per option — one actionable line instead of eight |
+
+A value stored as a plain string counts as translated only into the source locale (`nb`). That is
+the #892/#905 encoding for "written once, not translated yet" — but it does not record *which*
+language, so the client now writes a one-key map (`{"en-GB": "…"}`) instead. Bare strings remain
+readable for legacy rows and API clients; they are simply assumed to be `nb`.
 
 The same check guards the other publish doors:
 

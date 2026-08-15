@@ -95,6 +95,8 @@ describe("MVP admin content management and publication", () => {
           nb: "MVP admin innholdstest",
           nn: "MVP admin innhaldstest",
         },
+        // Every MCQ field carries all three locales: the module version built from this set is
+        // published below, and #896 S4 gates MCQ content the same way it gates the task text.
         questions: [
           {
             stem: {
@@ -103,27 +105,43 @@ describe("MVP admin content management and publication", () => {
               nn: "Kven eig endeleg vurderings- og avgjerdslogikk?",
             },
             options: [
-              "LLM service",
+              { "en-GB": "LLM service", nb: "LLM-tjeneste", nn: "LLM-teneste" },
               {
                 "en-GB": "Backend service",
                 nb: "Backend-tjeneste",
                 nn: "Backend-teneste",
               },
-              "Frontend",
-              "External reviewer only",
+              { "en-GB": "Frontend", nb: "Frontend", nn: "Frontend" },
+              { "en-GB": "External reviewer only", nb: "Kun ekstern vurderer", nn: "Berre ekstern vurderar" },
             ],
             correctAnswer: {
               "en-GB": "Backend service",
               nb: "Backend-tjeneste",
               nn: "Backend-teneste",
             },
-            rationale: "Backend must own final scoring and decision logic.",
+            rationale: {
+              "en-GB": "Backend must own final scoring and decision logic.",
+              nb: "Backend må eie endelig vurderings- og beslutningslogikk.",
+              nn: "Backend må eige endeleg vurderings- og avgjerdslogikk.",
+            },
           },
           {
-            stem: "What should be config-driven to reduce hardcoding?",
-            options: ["Prompts and thresholds", "Secrets in source", "Role IDs in code"],
-            correctAnswer: "Prompts and thresholds",
-            rationale: "Frequently changed values should be outside code.",
+            stem: {
+              "en-GB": "What should be config-driven to reduce hardcoding?",
+              nb: "Hva bør være konfigurasjonsstyrt for å redusere hardkoding?",
+              nn: "Kva bør vere konfigurasjonsstyrt for å redusere hardkoding?",
+            },
+            options: [
+              { "en-GB": "Prompts and thresholds", nb: "Prompter og terskler", nn: "Promptar og tersklar" },
+              { "en-GB": "Secrets in source", nb: "Hemmeligheter i kildekoden", nn: "Løyndomar i kjeldekoden" },
+              { "en-GB": "Role IDs in code", nb: "Rolle-ID-er i koden", nn: "Rolle-ID-ar i koden" },
+            ],
+            correctAnswer: { "en-GB": "Prompts and thresholds", nb: "Prompter og terskler", nn: "Promptar og tersklar" },
+            rationale: {
+              "en-GB": "Frequently changed values should be outside code.",
+              nb: "Verdier som endres ofte bør ligge utenfor koden.",
+              nn: "Verdiar som blir endra ofte bør liggje utanfor koden.",
+            },
           },
         ],
       });
@@ -615,7 +633,8 @@ describe("MVP admin content management and publication", () => {
               nn: "Kva lag eig den endelege sertifiseringsavgjerda?",
             },
             options: [
-              "LLM service",
+              // Three locales throughout — this set is published below and #896 S4 gates MCQ.
+              { "en-GB": "LLM service", nb: "LLM-tjeneste", nn: "LLM-teneste" },
               {
                 "en-GB": "Backend service",
                 nb: "Backend-tjeneste",
@@ -719,9 +738,18 @@ describe("MVP admin content management and publication", () => {
         title: "Policy Test MCQ",
         questions: [
           {
-            stem: "What does assessment policy control?",
-            options: ["Pass thresholds", "Module title", "User roles"],
-            correctAnswer: "Pass thresholds",
+            // Three locales: published below, and #896 S4 gates MCQ content.
+            stem: {
+              "en-GB": "What does assessment policy control?",
+              nb: "Hva styrer vurderingspolicyen?",
+              nn: "Kva styrer vurderingspolicyen?",
+            },
+            options: [
+              { "en-GB": "Pass thresholds", nb: "Beståttgrenser", nn: "Ståttgrenser" },
+              { "en-GB": "Module title", nb: "Modultittel", nn: "Modultittel" },
+              { "en-GB": "User roles", nb: "Brukerroller", nn: "Brukarroller" },
+            ],
+            correctAnswer: { "en-GB": "Pass thresholds", nb: "Beståttgrenser", nn: "Ståttgrenser" },
           },
         ],
       });

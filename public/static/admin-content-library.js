@@ -848,12 +848,16 @@ async function init() {
       if (payload?.scope === "course") {
         throw new Error("Dette er en kurs-pakke. Importer den fra Kurs-siden med «Importer kurs-pakke».");
       }
+      // #896: importerte moduler skal alltid lande som UTKAST — publisering er en eksplisitt
+      // handling forfatteren gjør etter gjennomgang, på samme måte som ved kursimport. Uten
+      // autoPublish:false gikk en pakke rett live så snart kilden hadde vært publisert, før noen
+      // hadde sett på den i denne installasjonen.
       const result = await apiFetch("/api/admin/content/modules/import", getHeaders, {
         method: "POST",
-        body: JSON.stringify({ payload, mode: "createNew" }),
+        body: JSON.stringify({ payload, mode: "createNew", autoPublish: false }),
       });
       if (!result?.moduleId) throw new Error("Import-respons mangler moduleId.");
-      showToast("Modul-pakken er importert.");
+      showToast("Modul-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.");
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/advanced`;
     } catch (error) {
       showToast(`Modul-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");

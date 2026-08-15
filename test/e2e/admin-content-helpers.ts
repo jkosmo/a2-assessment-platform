@@ -97,6 +97,9 @@ export function buildMockModuleExport({
   mcqQuestions = [],
   activeVersionId = null,
   moduleVersionId = null,
+  // #896 S4: the save path reads the STORED mode when the session draft has none, so specs that
+  // exercise a non-default module type have to be able to set it on the fixture.
+  assessmentMode = "FREETEXT_PLUS_MCQ",
 }: {
   id: string;
   title: string;
@@ -111,11 +114,13 @@ export function buildMockModuleExport({
   }>;
   activeVersionId?: string | null;
   moduleVersionId?: string | null;
+  assessmentMode?: string;
 }): MockModuleExport {
   const moduleVersion = moduleVersionId
     ? {
         id: moduleVersionId,
         versionNo: 1,
+        assessmentMode,
         taskText,
         assessorExpectedContent,
         submissionSchema: {

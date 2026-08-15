@@ -23,7 +23,13 @@ describe("Module archive and restore (#258)", () => {
           nb: `Arkivtestmodul ${titleSuffix}`,
           nn: `Arkivtestmodul ${titleSuffix}`,
         },
-        description: "For archive flow testing.",
+        // The description is participant-visible in the module list, so #896 S4 gates it as
+        // content. One of these modules gets published, so all three locales are needed.
+        description: {
+          "en-GB": "For archive flow testing.",
+          nb: "For testing av arkivflyten.",
+          nn: "For testing av arkivflyten.",
+        },
       });
     expect(res.status).toBe(201);
     return res.body.module.id as string;
@@ -111,8 +117,17 @@ describe("Module archive and restore (#258)", () => {
       .send({
         title: "Archive Block MCQ",
         active: true,
+        // Three locales: this set is published below and #896 S4 gates MCQ content too.
         questions: [
-          { stem: "Q?", options: ["A", "B"], correctAnswer: "A", rationale: "A is correct." },
+          {
+            stem: { "en-GB": "Q?", nb: "Sp?", nn: "Sp?" },
+            options: [
+              { "en-GB": "A", nb: "A", nn: "A" },
+              { "en-GB": "B", nb: "B", nn: "B" },
+            ],
+            correctAnswer: { "en-GB": "A", nb: "A", nn: "A" },
+            rationale: { "en-GB": "A is correct.", nb: "A er riktig.", nn: "A er rett." },
+          },
         ],
       });
     expect(mcqRes.status).toBe(201);

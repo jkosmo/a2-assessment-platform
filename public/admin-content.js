@@ -642,11 +642,17 @@ function parseActionableErrorMessage(error) {
   const payloadText = raw.slice(splitIndex + 1).trim();
   try {
     const payload = JSON.parse(payloadText);
+    const issueText = Array.isArray(payload.issues) && payload.issues.length > 0
+      ? payload.issues.map((issue) => issue.message).join("; ")
+      : "";
     if (typeof payload.message === "string" && payload.message.trim().length > 0) {
-      return payload.message;
+      // The top-level message is usually a summary that ends in "see `issues` for details" —
+      // and this page then showed only the summary, so the details it pointed at were the one
+      // thing the author never got. Append them (#896 S4 QA finding).
+      return issueText ? `${payload.message} ${issueText}` : payload.message;
     }
-    if (Array.isArray(payload.issues) && payload.issues.length > 0) {
-      return payload.issues.map((issue) => issue.message).join("; ");
+    if (issueText) {
+      return issueText;
     }
   } catch {
     return raw;

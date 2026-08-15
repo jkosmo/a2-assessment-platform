@@ -796,9 +796,18 @@ test.describe("admin content browser coverage", () => {
 
     // The save still goes through - but the untranslated locales must stay untranslated.
     // Copying the source text into all three is precisely the #892 bug.
+    //
+    // #896 S4 QA: the surviving locale is now sent as a ONE-KEY MAP rather than a bare string.
+    // Both mean "written in one language, not translated yet"; only the map records WHICH one.
+    // The bare string forced the publish gate to assume nb, so an author working in English was
+    // told English was missing and the gap-fill filled the wrong two languages.
+    // This spec runs with the UI in en-GB, so en-GB is the working language — and the saved value
+    // says so. That is the whole improvement: under the old bare-string encoding this same save
+    // was indistinguishable from Norwegian, and the gate would have reported en-GB as missing.
     await expect.poll(() => state.lastTitlePatchBody?.title).toBeTruthy();
-    expect(typeof state.lastTitlePatchBody.title).toBe("string");
-    expect(state.lastTitlePatchBody.title).toBe("Fagforeninger");
+    expect(state.lastTitlePatchBody.title).toEqual({ "en-GB": "Fagforeninger" });
+    expect(state.lastTitlePatchBody.title.nb).toBeUndefined();
+    expect(state.lastTitlePatchBody.title.nn).toBeUndefined();
   });
 
   test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
@@ -1692,6 +1701,128 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastModuleVersionBody.taskText.nb).toBe("Scenario text (NB)");
 
     // And publishing was retried automatically — the author asked to publish, and did.
+    await expect.poll(() => publishAttempts).toBe(2);
+  });
+
+  // #896 S4 QA round 1 found two ways the gap-fill could never complete. Both are about the flow
+  // guessing at things it should read: which languages the source can come from, and what type of
+  // module it is saving.
+  test("gap-fill works on a FREETEXT_ONLY module, where there is no MCQ and no assessor guidance", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          assessmentMode: "FREETEXT_ONLY",
+          taskText: { "en-GB": "Scenario text (EN)", nb: "Scenario text (NB)" },
+          // No assessor guidance either — the other half of the case that could not pick a source.
+          assessorExpectedContent: {},
+          mcqQuestions: [],
+        }),
+      },
+    });
+
+    let publishAttempts = 0;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      publishAttempts += 1;
+      if (publishAttempts === 1) {
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "publish_blocked_by_validation",
+            issues: [
+              {
+                severity: "blocking",
+                code: "translation_incomplete",
+                message: "taskText: missing nn",
+                field: "taskText",
+                missingLocales: ["nn"],
+              },
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    // The save has to know the module is FREETEXT_ONLY. Reading the mode from `sessionDraft`
+    // alone — which is null here, since nothing was edited — made the save demand an MCQ set,
+    // fail its own guard, and never retry publish.
+    await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("FREETEXT_ONLY");
+    await expect.poll(() => publishAttempts).toBe(2);
+  });
+
+  test("gap-fill can source a title-only gap on a module with no task text", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          assessmentMode: "MCQ_ONLY",
+          taskText: {},
+          mcqQuestions: [
+            {
+              stem: localizedText("Which body ratifies the agreement?"),
+              options: [localizedText("The board"), localizedText("The members")],
+              correctAnswer: localizedText("The members"),
+              rationale: localizedText("Members vote on ratification."),
+            },
+          ],
+        }),
+      },
+    });
+
+    let publishAttempts = 0;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      publishAttempts += 1;
+      if (publishAttempts === 1) {
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "publish_blocked_by_validation",
+            issues: [
+              {
+                severity: "blocking",
+                code: "translation_incomplete",
+                message: "title: missing nn",
+                field: "title",
+                missingLocales: ["nn"],
+              },
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+    await clickEnabledButton(page, /Oversett det som mangler|Translate what is missing/);
+
+    // Requiring task text AND assessor guidance to pick a source locale made this unreachable:
+    // an MCQ-only module has neither, so the action reported "no source language" even though
+    // the title it needed to translate was right there.
+    await expect.poll(() => state.lastDraftLocalizationBody?.targetLocale).toBe("nn");
     await expect.poll(() => publishAttempts).toBe(2);
   });
 

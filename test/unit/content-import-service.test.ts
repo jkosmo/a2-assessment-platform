@@ -86,14 +86,14 @@ function buildModuleEnvelope(
     module: {
       module: {
         title: localized("Imported module"),
-        description: "A description",
+        description: localized("A description"),
         certificationLevel: "foundation",
       },
       activeVersion: {
         assessmentMode,
         taskText: localized("Do the task"),
         assessorExpectedContent: localized("Expected content"),
-        candidateTaskConstraints: "Constraints",
+        candidateTaskConstraints: localized("Constraints"),
         assessmentBlueprint: "blueprint",
         rubric: {
           criteria: { c1: 1 },
@@ -108,10 +108,12 @@ function buildModuleEnvelope(
           title: "Quiz",
           questions: [
             {
-              stem: "Q?",
-              options: ["A", "B"],
-              correctAnswer: "A",
-              rationale: "because",
+              // MCQ content is participant-facing and gated too — an MCQ-only module's questions
+              // ARE the assessment.
+              stem: localized("Q?"),
+              options: [localized("A"), localized("B")],
+              correctAnswer: localized("A"),
+              rationale: localized("because"),
             },
           ],
         },

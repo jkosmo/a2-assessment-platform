@@ -1254,7 +1254,11 @@ function dropFailedLocales(localizedValue, failedLocales, sourceLocale) {
   }
   const remaining = Object.keys(kept);
   if (remaining.length === 0) return "";
-  if (remaining.length === 1 && remaining[0] === sourceLocale) return kept[sourceLocale];
+  // #896 S4 QA: this used to collapse "only the source survived" back to a BARE STRING. The schema
+  // accepts that — it is the #892 encoding for "one language, not translated yet" — but it throws
+  // away WHICH language, and the publish gate then has to assume nb. An author working in English
+  // was told English and Nynorsk were missing, and the gap-fill filled the wrong two. A one-key
+  // map says exactly as much, minus the guess.
   return kept;
 }
 
@@ -2061,10 +2065,26 @@ async function saveDraftBundleInBackground(options = {}) {
   // #555: MCQ-only drafts have no taskText/rubric/prompt — they save a single MCQ_ONLY module
   // version with a pass-mark policy. assessmentMode/mcqMinPercent are flagged on sessionDraft by
   // createMcqOnlyModuleThenGenerate.
-  const isMcqOnly = sessionDraft?.assessmentMode === "MCQ_ONLY";
+  // #896 S4 QA: fall back to the STORED mode. Reading only `sessionDraft` meant any save that
+  // started without a session draft — the gap-fill flow, but also anything else that patches one
+  // field on a loaded module — treated a FREETEXT_ONLY or MCQ_ONLY module as FREETEXT_PLUS_MCQ.
+  // For FREETEXT_ONLY that hits the MCQ-required guard and the save silently never happens; for
+  // MCQ_ONLY it would have written a version of the wrong type. The direct-edit path already
+  // resolved the mode this way; the save path did not.
+  const storedAssessmentMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode;
+  const effectiveAssessmentMode = sessionDraft?.assessmentMode ?? storedAssessmentMode;
+  const isMcqOnly = effectiveAssessmentMode === "MCQ_ONLY";
   // #578: FREETEXT_ONLY drafts have taskText + rubric + prompt but NO MCQ set.
-  const isFreetextOnly = sessionDraft?.assessmentMode === "FREETEXT_ONLY";
-  const mcqMinPercent = Number.isFinite(sessionDraft?.mcqMinPercent) ? sessionDraft.mcqMinPercent : SHELL_MCQ_ONLY_MIN_PERCENT;
+  const isFreetextOnly = effectiveAssessmentMode === "FREETEXT_ONLY";
+  // Same fallback chain as the mode above: session draft, then the stored policy, then the
+  // platform default. Skipping the stored value silently reset the pass threshold on any save
+  // that did not go through the revision flow.
+  const storedMcqMinPercent = bundle?.selectedConfiguration?.moduleVersion?.assessmentPolicy?.passRules?.mcqMinPercent;
+  const mcqMinPercent = Number.isFinite(sessionDraft?.mcqMinPercent)
+    ? sessionDraft.mcqMinPercent
+    : Number.isFinite(storedMcqMinPercent)
+      ? storedMcqMinPercent
+      : SHELL_MCQ_ONLY_MIN_PERCENT;
   // v1.1.95: when save fails on pre-save validation, attach recovery actions to the error
   // message. Previously the bot message had no choices and the chat menu was deactivated
   // (because the user just clicked Lagre utkast and _deactivateAll fired), so users were
@@ -2253,7 +2273,48 @@ function sourceTextForLocale(value, locale) {
   return typeof value === "string" ? value : "";
 }
 
-const TRANSLATION_GATE_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
+// The text fields the gate covers. Must stay in step with the server's field set — the two lists
+// disagreeing means the author is offered a fix for a gap that is not the one blocking them.
+const TRANSLATION_GATE_FIELDS = ["title", "description", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
+
+// The stored value as a locale map holding only the locales that really have text. A plain string
+// is recorded under `sourceLocale` — it has to land somewhere, and the author's working language
+// is the only honest guess available at this point.
+function localeMapOf(value, sourceLocale) {
+  const map = {};
+  for (const locale of supportedLocales) {
+    const existing = strictLocaleValue(value, locale);
+    if (existing.trim()) map[locale] = existing;
+  }
+  if (Object.keys(map).length === 0 && typeof value === "string" && value.trim()) {
+    map[sourceLocale] = value;
+  }
+  return map;
+}
+
+function fillLocaleGap(map, locale, text) {
+  if (map[locale]?.trim()) return;
+  if (typeof text === "string" && text.trim()) map[locale] = text;
+}
+
+// #905: a locale with no text gets no entry — never a copy of the source. Note what this does NOT
+// do: it does not collapse a single-locale map back to a bare string. A bare string is content
+// whose language is unrecorded, which is what forced the gate to guess "nb" and mislabel an
+// author working in English. `{nb: "..."}` says the same thing and says which language.
+function collapseLocaleMap(map) {
+  return Object.keys(map).length === 0 ? "" : map;
+}
+
+// MCQ fields are the exception: their schema still accepts only a plain string or ALL three
+// locales (the #905 partial-map contract never reached MCQ — see #913). A partial map would be
+// rejected with a 400, so an incomplete fill falls back to the source language as a plain string
+// rather than losing the save entirely.
+function collapseMcqLocaleMap(map, sourceLocale) {
+  const locales = Object.keys(map);
+  if (locales.length === 0) return "";
+  if (supportedLocales.every((locale) => map[locale]?.trim())) return map;
+  return map[sourceLocale] ?? map[locales[0]];
+}
 
 function translationGateIssuesFrom(error) {
   const issues = error?.body?.issues;
@@ -2287,19 +2348,32 @@ async function translateMissingLocalesThenPublish(issues) {
   const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
   const current = {
     title: sessionDraft?.title ?? bundle?.module?.title ?? "",
+    description: sessionDraft?.description ?? bundle?.module?.description ?? "",
     taskText: sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
     assessorExpectedContent: sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
     candidateTaskConstraints: sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
   };
+  const currentMcq = sessionDraft?.mcqQuestions?.length
+    ? sessionDraft.mcqQuestions
+    : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
 
-  // Translate FROM a locale that actually has the content. The author's working language is the
-  // obvious first guess, but it may itself be one of the gaps.
-  const preferredOrder = [previewLocale ?? currentLocale, currentLocale, "nb", "en-GB", "nn"];
-  const sourceLocale = preferredOrder.find((locale) =>
-    locale
-    && sourceTextForLocale(current.taskText, locale).trim()
-    && sourceTextForLocale(current.assessorExpectedContent, locale).trim(),
+  // Translate FROM a locale that actually has the content — and "the content" means the fields
+  // the gate actually complained about, not a fixed pair. Requiring taskText AND
+  // assessorExpectedContent made this unusable for the two cases most likely to hit the gate: an
+  // MCQ-only module (no task text at all) and a module whose only gap is the title.
+  const gatedTextFields = TRANSLATION_GATE_FIELDS.filter((field) =>
+    issues.some((issue) => issue.field === field),
   );
+  const needsMcqSource = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
+  const preferredOrder = [previewLocale ?? currentLocale, currentLocale, "nb", "en-GB", "nn"];
+  const sourceLocale = preferredOrder.find((locale) => {
+    if (!locale) return false;
+    if (!gatedTextFields.every((field) => sourceTextForLocale(current[field], locale).trim())) return false;
+    if (needsMcqSource) {
+      return currentMcq.every((question) => sourceTextForLocale(question?.stem ?? "", locale).trim());
+    }
+    return true;
+  });
   if (!sourceLocale) {
     logBot(() => t("shell.publish.translationGate.noSource"));
     return;
@@ -2315,18 +2389,7 @@ async function translateMissingLocalesThenPublish(issues) {
   // Start from the stored values as locale maps, so untouched locales survive the save.
   const merged = {};
   for (const field of TRANSLATION_GATE_FIELDS) {
-    const value = current[field];
-    const map = {};
-    for (const locale of supportedLocales) {
-      const existing = strictLocaleValue(value, locale);
-      if (existing.trim()) map[locale] = existing;
-    }
-    // A plain string belongs to the source locale — record it there so it is not lost when the
-    // value becomes a map.
-    if (Object.keys(map).length === 0 && typeof value === "string" && value.trim()) {
-      map[sourceLocale] = value;
-    }
-    merged[field] = map;
+    merged[field] = localeMapOf(current[field], sourceLocale);
   }
 
   const sourceDraft = {
@@ -2335,6 +2398,16 @@ async function translateMissingLocalesThenPublish(issues) {
     assessorExpectedContent: sourceTextForLocale(current.assessorExpectedContent, sourceLocale),
     candidateTaskConstraints: sourceTextForLocale(current.candidateTaskConstraints, sourceLocale),
   };
+
+  // MCQ questions are participant-facing content too, and for an MCQ-only module they ARE the
+  // assessment. Same rule as the text fields: start from what exists, fill only the empty slots.
+  const mergedMcq = currentMcq.map((question) => ({
+    stem: localeMapOf(question?.stem, sourceLocale),
+    options: (question?.options ?? []).map((option) => localeMapOf(option, sourceLocale)),
+    correctAnswer: localeMapOf(question?.correctAnswer, sourceLocale),
+    rationale: localeMapOf(question?.rationale, sourceLocale),
+  }));
+  const needsMcqFill = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
 
   const failedLocales = [];
   for (const targetLocale of missingLocales) {
@@ -2357,6 +2430,37 @@ async function translateMissingLocalesThenPublish(issues) {
       }
     } catch {
       failedLocales.push(targetLocale);
+      continue;
+    }
+
+    if (!needsMcqFill || mergedMcq.length === 0) continue;
+    try {
+      const mcqResult = await apiFetch("/api/admin/content/generate/mcq/localize", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({
+          questions: currentMcq.map((question) => ({
+            stem: sourceTextForLocale(question?.stem ?? "", sourceLocale),
+            options: (question?.options ?? []).map((option) => sourceTextForLocale(option, sourceLocale)),
+            correctAnswer: sourceTextForLocale(question?.correctAnswer ?? "", sourceLocale),
+            rationale: sourceTextForLocale(question?.rationale ?? "", sourceLocale),
+          })),
+          sourceLocale,
+          targetLocale,
+        }),
+      });
+      const translatedQuestions = mcqResult?.questions ?? [];
+      translatedQuestions.forEach((question, index) => {
+        const target = mergedMcq[index];
+        if (!target) return;
+        fillLocaleGap(target.stem, targetLocale, question?.stem);
+        fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
+        fillLocaleGap(target.rationale, targetLocale, question?.rationale);
+        (question?.options ?? []).forEach((option, optionIndex) => {
+          if (target.options[optionIndex]) fillLocaleGap(target.options[optionIndex], targetLocale, option);
+        });
+      });
+    } catch {
+      failedLocales.push(targetLocale);
     }
   }
 
@@ -2364,15 +2468,15 @@ async function translateMissingLocalesThenPublish(issues) {
   // honest; a copy pretends the translation happened.
   const patch = {};
   for (const field of TRANSLATION_GATE_FIELDS) {
-    const map = merged[field];
-    const locales = Object.keys(map);
-    if (locales.length === 0) {
-      patch[field] = "";
-    } else if (locales.length === 1 && locales[0] === sourceLocale) {
-      patch[field] = map[sourceLocale];
-    } else {
-      patch[field] = map;
-    }
+    patch[field] = collapseLocaleMap(merged[field]);
+  }
+  if (needsMcqFill && mergedMcq.length > 0) {
+    patch.mcqQuestions = mergedMcq.map((question) => ({
+      stem: collapseMcqLocaleMap(question.stem, sourceLocale),
+      options: question.options.map((option) => collapseMcqLocaleMap(option, sourceLocale)),
+      correctAnswer: collapseMcqLocaleMap(question.correctAnswer, sourceLocale),
+      rationale: collapseMcqLocaleMap(question.rationale, sourceLocale),
+    }));
   }
   commitSessionDraftPatch(patch);
 

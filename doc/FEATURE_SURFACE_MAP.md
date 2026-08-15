@@ -435,13 +435,27 @@ the same PR — the participant sees the same module regardless of which door it
 | Import auto-publish | `importModulePayload` in `src/modules/adminContent/contentImportService.ts` | Import **succeeds**, auto-publish is skipped — the module lands as a draft. Failing the transaction would lose the import; leaving it a draft matches the agreed import model |
 | Calibration thresholds | `publishModuleVersionWithThresholds` in `src/modules/adminContent/adminContentCommands.ts` | **Deliberately exempt.** It clones the already-live version and changes only pass thresholds; no new participant-facing text, and gating would block calibration on modules published before the gate existed |
 
-The shared check is `validateTranslationCompleteness` / `missingLocalesFor` in
-`src/modules/adminContent/contentValidationService.ts`. It reads the **stored** value (serialized),
-never a flattened one — flattening picks the first non-empty locale and hides exactly the gap.
+The shared check is `validateTranslationCompleteness` + `validateMcqTranslationCompleteness` /
+`missingLocalesFor` in `src/modules/adminContent/contentValidationService.ts`. It reads the
+**stored** value (serialized), never a flattened one — flattening picks the first non-empty locale
+and hides exactly the gap.
+
+**The field set must be identical on all three enforcing doors** (`title`, `description`,
+`taskText`, `assessorExpectedContent`, `candidateTaskConstraints`, MCQ questions — each only when
+present). Two gates that disagree about what "complete" means tell the author different things
+depending on which button they pressed. The first QA round found exactly this: the module route
+gated four fields, the cascade the same four, and import only three.
+
+**The client's `TRANSLATION_GATE_FIELDS`** in `public/static/admin-content-shell.js` mirrors the
+same list. The gap-fill offers a fix per field, so a field the server blocks on but the client does
+not know about produces an action that cannot resolve the block.
 
 **Guards:** `test/m2-publish-translation-gate-896.test.ts` (door 1 + the locale arithmetic),
 `test/m2-publish-gate-surfaces-896.test.ts` (doors 2 and 3, both directions),
-`test/unit/content-import-service.test.ts` (door 3 at unit level), and
-`test/e2e/admin-content-workspaces.spec.ts` → "shell publish names the missing languages and
-offers to fill only the gaps" (the author-facing message, the gap-fill action, and that already
-translated locales are not overwritten).
+`test/unit/content-import-service.test.ts` (door 3 at unit level), and in
+`test/e2e/admin-content-workspaces.spec.ts`: "shell publish names the missing languages and offers
+to fill only the gaps" (the author-facing message, the gap-fill, and that already-translated
+locales survive untouched), "gap-fill works on a FREETEXT_ONLY module…" (the save reads the
+**stored** assessment mode — reading only `sessionDraft` made the save demand an MCQ set that
+module type does not have), and "gap-fill can source a title-only gap on a module with no task
+text" (the source locale comes from the fields the gate named, not a fixed pair).

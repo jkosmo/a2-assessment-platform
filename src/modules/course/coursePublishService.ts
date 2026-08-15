@@ -3,7 +3,7 @@ import { AppError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
 import { publishSection } from "./sectionCommands.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
-import { validateModuleVersionForPublish, validateTranslationCompleteness } from "../adminContent/contentValidationService.js";
+import { validateModuleVersionForPublish, validateTranslationCompleteness, validateMcqTranslationCompleteness } from "../adminContent/contentValidationService.js";
 import { courseRepository } from "./courseRepository.js";
 
 // Cascade-publish (#734): when an author publishes a COURSE, its modules/sections must already be
@@ -60,6 +60,23 @@ function flattenLocalized(value: string | null | undefined): string | null {
   return value ?? null;
 }
 
+// The cascade preview is server-rendered text (the courses page prints `blocker.message` as-is),
+// so the field labels live here rather than in the client i18n bundle. Norwegian only, matching
+// every other blocker message in this service.
+const TRANSLATION_FIELD_LABELS: Record<string, string> = {
+  title: "tittel",
+  description: "beskrivelse",
+  taskText: "oppgavetekst",
+  assessorExpectedContent: "fasit",
+  candidateTaskConstraints: "rammer for kandidaten",
+};
+
+function translationFieldLabel(field: string): string {
+  const mcq = /^mcq\.question(\d+)$/.exec(field);
+  if (mcq) return `MCQ-spørsmål ${mcq[1]}`;
+  return TRANSLATION_FIELD_LABELS[field] ?? field;
+}
+
 function parseBlueprint(raw: string | null | undefined): unknown {
   if (!raw || typeof raw !== "string") return null;
   try {
@@ -82,6 +99,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     where: { id: moduleId },
     select: {
       title: true,
+      description: true,
       archivedAt: true,
       activeVersionId: true,
       versions: {
@@ -139,12 +157,24 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
   }
 
   let mcqQuestionCount = 0;
+  // #896 S4: the question rows themselves, not only the count — the translation gate reads their
+  // stored text.
+  let mcqQuestions: Array<{
+    stem: string | null;
+    optionsJson: string | null;
+    correctAnswer: string | null;
+    rationale: string | null;
+  }> = [];
   if (latest.mcqSetVersionId) {
     const set = await prisma.mCQSetVersion.findUnique({
       where: { id: latest.mcqSetVersionId },
-      select: { _count: { select: { questions: true } } },
+      select: {
+        _count: { select: { questions: true } },
+        questions: { select: { stem: true, optionsJson: true, correctAnswer: true, rationale: true } },
+      },
     });
     mcqQuestionCount = set?._count.questions ?? 0;
+    mcqQuestions = set?.questions ?? [];
   }
 
   const validation = validateModuleVersionForPublish({
@@ -159,14 +189,23 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
   // the module-publish route would be trivially bypassed by adding the module to a course and
   // publishing that — and the participant sees the same half-translated module either way.
   // The values here are the raw stored strings, which is exactly what the check wants.
-  const translationIssues = validateTranslationCompleteness([
-    { field: "title", raw: module.title },
-    { field: "taskText", raw: latest.taskText },
-    { field: "assessorExpectedContent", raw: latest.assessorExpectedContent },
-    ...(latest.candidateTaskConstraints
-      ? [{ field: "candidateTaskConstraints", raw: latest.candidateTaskConstraints }]
-      : []),
-  ]);
+  // The field set must match the module-publish route exactly. Two gates that disagree about what
+  // "complete" means are worse than one gate, because the author is told different things
+  // depending on which button they pressed.
+  const translationIssues = [
+    ...validateTranslationCompleteness([
+      { field: "title", raw: module.title },
+      ...(module.description ? [{ field: "description", raw: module.description }] : []),
+      ...(latest.taskText ? [{ field: "taskText", raw: latest.taskText }] : []),
+      ...(latest.assessorExpectedContent
+        ? [{ field: "assessorExpectedContent", raw: latest.assessorExpectedContent }]
+        : []),
+      ...(latest.candidateTaskConstraints
+        ? [{ field: "candidateTaskConstraints", raw: latest.candidateTaskConstraints }]
+        : []),
+    ]),
+    ...validateMcqTranslationCompleteness(mcqQuestions),
+  ];
   if (translationIssues.length > 0) {
     validation.issues.push(...translationIssues);
     validation.valid = false;
@@ -175,7 +214,17 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
   if (!validation.valid) {
     const blockers = validation.issues
       .filter((issue) => issue.severity === "blocking")
-      .map((issue) => ({ code: issue.code, message: issue.message }));
+      // The cascade dialog prints `message` verbatim next to blockers like "Modulen er arkivert.
+      // Gjenopprett den før du publiserer." A raw "taskText: missing nn" would read as a leaked
+      // internal string beside them, so translation issues get a sentence in the same voice.
+      .map((issue) =>
+        issue.code === "translation_incomplete" && issue.field && issue.missingLocales
+          ? {
+              code: issue.code,
+              message: `Modulen mangler oversettelse av «${translationFieldLabel(issue.field)}» på ${issue.missingLocales.join(", ")}. Åpne modulen og bruk «Oversett det som mangler».`,
+            }
+          : { code: issue.code, message: issue.message },
+      );
     return { unpublished: true, publishable: false, blockers, title, latestVersionId: latest.id };
   }
 

@@ -289,6 +289,59 @@ export function validateTranslationCompleteness(
   return issues;
 }
 
+/**
+ * #896 S4: MCQ content is participant-facing too. An MCQ-only module whose questions exist only in
+ * Norwegian is exactly as broken for an English participant as an untranslated task text — more so,
+ * since for that module type the questions ARE the assessment.
+ *
+ * Reported per question rather than per option: "question 2 is missing nn" is something an author
+ * can act on; eight separate issues for one question's stem, four options and answer is a wall.
+ * `rationale` is included because it is shown in participant feedback after submission.
+ */
+export function validateMcqTranslationCompleteness(
+  questions: Array<{
+    stem?: string | null;
+    optionsJson?: string | null;
+    correctAnswer?: string | null;
+    rationale?: string | null;
+  }>,
+  sourceLocale = "nb",
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  questions.forEach((question, index) => {
+    const parts: Array<string | null | undefined> = [question.stem, question.correctAnswer, question.rationale];
+    // optionsJson is an array of LocalizedText, each serialized in turn.
+    if (question.optionsJson) {
+      try {
+        const options: unknown = JSON.parse(question.optionsJson);
+        if (Array.isArray(options)) {
+          for (const option of options) {
+            parts.push(typeof option === "string" ? option : JSON.stringify(option));
+          }
+        }
+      } catch {
+        // Unparseable options are a different defect; the translation gate says nothing about it.
+      }
+    }
+    const missing = new Set<string>();
+    for (const part of parts) {
+      if (part === null || part === undefined || part === "") continue;
+      for (const locale of missingLocalesFor(part, sourceLocale)) missing.add(locale);
+    }
+    if (missing.size > 0) {
+      const missingLocales = [...missing].sort();
+      issues.push({
+        severity: "blocking",
+        code: "translation_incomplete",
+        message: `mcq.question${index + 1}: missing ${missingLocales.join(", ")}`,
+        field: `mcq.question${index + 1}`,
+        missingLocales,
+      });
+    }
+  });
+  return issues;
+}
+
 export function validateModuleVersionForPublish(input: {
   taskText: string;
   candidateTaskConstraints?: string | null;
