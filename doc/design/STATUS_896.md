@@ -51,7 +51,7 @@ Avansert, kan ikke Avansert fjernes, og «ett sted å gjøre hver ting» er ikke
 | Terskler / poengregler | redigerbar | ⚠️ kun `mcqMinPercent`. `totalMin`, `practicalMinPercent` og `borderlineWindow` bæres videre urørt, men kan ikke endres |
 | Gyldighet | redigerbar | ✅ `settingsValidFrom` / `settingsValidTo` |
 | Sertifiseringsnivå | redigerbar | ✅ `settingsCertLevel` |
-| **Vurderingskriterier (rubrikk)** | **redigerbar** | ❌ **kun lesevisning** — editoren finnes bare i Avansert (`editBtn_rubric`) |
+| **Vurderingskriterier (rubrikk)** | **redigerbar** | ✅ **flyttet hit** (v2.18.6). Sammendragsrad + sammenslått editor under lista; lagres som inline rubrikk |
 | **Vurderingsinstruks (prompt)** | **redigerbar** | ❌ **kun versjonsnummer** — editoren finnes bare i Avansert (`editBtn_prompt`) |
 | **Innsendingsskjema** | **redigerbar** | ❌ **kun feltantall** — editoren finnes bare i Avansert (`editBtn_submissionSchema`) |
 | **Skaleringsregel** | redigerbar | ❌ **finnes ikke i Innstillinger i det hele tatt** |
@@ -113,7 +113,7 @@ Grovt, i den rekkefølgen de må gjøres:
 
 | Bolk | Omfang | Merknad |
 |---|---|---|
-| Kriterieeditor → Innstillinger | **Stor** | Underredigerer, ~150 linjer skal ut av `enterPreviewEditMode` og gjenoppbygges |
+| ~~Kriterieeditor → Innstillinger~~ | ~~Stor~~ | ✅ Ferdig v2.18.6. `buildEditorStateFromCriteriaRecord` og `wireCriteriaEditor` er nå delte; Rediger og Innstillinger kjører samme kode |
 | Vurderingsinstruks → Innstillinger | Middels | System-prompt, mal, eksempler |
 | Innsendingsskjema → Innstillinger | Middels | Begrenset til ett felt i UI (#901) |
 | Skaleringsregel → Innstillinger | Liten | Finnes ikke noe sted i ny flate |

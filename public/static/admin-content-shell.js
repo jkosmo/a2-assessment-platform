@@ -3275,6 +3275,121 @@ function buildCriteriaEditorHtml(criteria, t, tf) {
     </div>`;
 }
 
+/**
+ * #896 S3c: storage-shape criteria record → editor state.
+ *
+ * Lifted out of `enterPreviewEditMode`, where it closed over `editingLocale`. The locale is now a
+ * parameter because the editor is moving to Innstillinger, which has no editing locale of its own
+ * — it reads in the UI language. Same function, two callers, one behaviour.
+ */
+function buildEditorStateFromCriteriaRecord(source, locale) {
+  if (!source || typeof source !== "object") return [];
+  return Object.entries(source).map(([id, raw]) => {
+    const c = raw && typeof raw === "object" ? raw : {};
+    // v1.1.78: for sparse legacy criteria with only `weight` (no maxScore), derive
+    // maxScore from weight × 10 so the slider opens at a meaningful position.
+    const derivedFromWeight = Number(c.weight) > 0 ? Math.max(1, Math.round(Number(c.weight) * 10)) : 0;
+    const initialMaxScore = Number(c.maxScore) > 0
+      ? Number(c.maxScore)
+      : (derivedFromWeight > 0 ? derivedFromWeight : 5);
+    // v1.2.10: c.label/c.description kan være string ELLER locale-objekt.
+    // #902: read in the locale being edited — reading in the UI language put English criteria
+    // beside Norwegian scenario text, and what was typed was written back as the edited language.
+    const rawLabel = localizeValueForLocale(c.label, locale);
+    const rawDesc = localizeValueForLocale(c.description, locale);
+    return {
+      id: String(id),
+      label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
+      description: typeof rawDesc === "string" ? rawDesc : "",
+      maxScore: Math.max(1, Math.min(10, initialMaxScore)),
+      candidateVisible: Boolean(c.candidateVisible),
+    };
+  });
+}
+
+/**
+ * #896 S3c: the criteria editor's event behaviour, extracted so it can be mounted anywhere.
+ *
+ * It was ~110 lines inlined in `enterPreviewEditMode`, closing over five local variables. The
+ * caller now supplies the container and a state accessor pair; everything else — slider echo,
+ * aria upkeep, add/remove/regenerate — is identical, because a second copy of this behaviour is
+ * exactly what the epic is trying to get rid of.
+ */
+function wireCriteriaEditor({ container, getState, setState, rerender, onRegenerate }) {
+  if (!container) return;
+
+  const captureFromDom = () => {
+    const cards = container.querySelectorAll(".vk-card");
+    const previous = getState();
+    setState(Array.from(cards).map((card, idx) => ({
+      id: (previous[idx] ?? {}).id,
+      label: card.querySelector(".vk-label")?.value.trim() ?? "",
+      description: card.querySelector(".vk-description")?.value.trim() ?? "",
+      maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
+      candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
+    })));
+  };
+
+  container.addEventListener("input", (e) => {
+    if (e.target.classList?.contains("vk-weight")) {
+      const card = e.target.closest(".vk-card");
+      const valueEl = card?.querySelector(".vk-weight-value");
+      if (valueEl) valueEl.textContent = String(e.target.value);
+      // B4 (#451) a11y: keep aria-valuenow + aria-valuetext in sync during drag/arrow-key use.
+      e.target.setAttribute("aria-valuenow", String(e.target.value));
+      e.target.setAttribute("aria-valuetext", tf("shell.criteria.weightOfTen", { value: e.target.value }));
+      const total = Array.from(container.querySelectorAll(".vk-weight"))
+        .reduce((sum, el) => sum + (Number(el.value) || 0), 0);
+      const totalEl = container.querySelector(".vk-total-value");
+      if (totalEl) totalEl.textContent = String(total);
+    }
+    // B4 (#451) a11y: the remove button must always say "Fjern: {current label}", not the name
+    // it had at render time.
+    if (e.target.classList?.contains("vk-label")) {
+      const card = e.target.closest(".vk-card");
+      const removeBtn = card?.querySelector(".vk-remove");
+      if (removeBtn) {
+        const idx = Number(card.dataset.criterionIndex ?? 0) + 1;
+        const newLabel = String(e.target.value ?? "").trim();
+        removeBtn.setAttribute(
+          "aria-label",
+          newLabel
+            ? tf("shell.criteria.removeAriaWithLabel", { label: newLabel })
+            : tf("shell.criteria.removeAriaPositional", { index: idx }),
+        );
+      }
+    }
+  });
+
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    if (btn.classList.contains("vk-remove")) {
+      captureFromDom();
+      const idx = Number(btn.dataset.criterionIndex);
+      if (Number.isFinite(idx)) {
+        const next = getState();
+        next.splice(idx, 1);
+        setState(next);
+        rerender();
+      }
+    } else if (btn.classList.contains("vk-add")) {
+      captureFromDom();
+      const next = getState();
+      next.push({ id: `new_criterion_${next.length + 1}`, label: "", description: "", maxScore: 5, candidateVisible: false });
+      setState(next);
+      rerender();
+      const inputs = container.querySelectorAll(".vk-label");
+      inputs[inputs.length - 1]?.focus();
+    } else if (btn.classList.contains("vk-regenerate")) {
+      captureFromDom();
+      // v1.1.80: no confirm here. Nothing is persisted yet — close without saving and the edits
+      // are gone anyway. The B3 drift-banner confirm stays, because that one writes immediately.
+      onRegenerate?.();
+    }
+  });
+}
+
 // B2 (#449 redesign): one-shot DOM-to-state capture, used when leaving edit mode. Re-reads
 // every visible criterion card and returns a fresh array; falls back to the closure's last
 // known state if the container has already been torn down. Same shape as criteriaEditorState
@@ -4034,36 +4149,8 @@ function enterPreviewEditMode() {
   // captured back into a record on confirm. Tolerates rich + sparse shapes (#378 vs default).
   // v1.1.92: extracted as helper so the criteriaReadyCallback can rebuild editor state when
   // async generation completes mid-edit-session.
-  const buildEditorStateFromCriteriaRecord = (source) => {
-    if (!source || typeof source !== "object") return [];
-    return Object.entries(source).map(([id, raw]) => {
-      const c = raw && typeof raw === "object" ? raw : {};
-      // v1.1.78: for sparse legacy criteria with only `weight` (no maxScore), derive
-      // maxScore from weight × 10 so the slider opens at a meaningful position.
-      const derivedFromWeight = Number(c.weight) > 0 ? Math.max(1, Math.round(Number(c.weight) * 10)) : 0;
-      const initialMaxScore = Number(c.maxScore) > 0
-        ? Number(c.maxScore)
-        : (derivedFromWeight > 0 ? derivedFromWeight : 5);
-      // v1.2.10: c.label/c.description kan være string ELLER locale-objekt. Bruk
-      // localizeValueForLocale så direkte-edit-view-en plukker riktig locale i input-feltet.
-      // humaniseCriterionId-fallback brukes kun når både string og locale-objekt mangler.
-      // editingLocale, not currentLocale: every other field in this form is read in the
-      // language being edited. Reading criteria in the UI language put English criteria
-      // beside Norwegian scenario text - and whatever was typed there was written back as
-      // the edited language (#902).
-      const rawLabel = localizeValueForLocale(c.label, editingLocale);
-      const rawDesc = localizeValueForLocale(c.description, editingLocale);
-      return {
-        id: String(id),
-        label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
-        description: typeof rawDesc === "string" ? rawDesc : "",
-        maxScore: Math.max(1, Math.min(10, initialMaxScore)),
-        candidateVisible: Boolean(c.candidateVisible),
-      };
-    });
-  };
   const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
-  let criteriaEditorState = buildEditorStateFromCriteriaRecord(sourceCriteria);
+  let criteriaEditorState = buildEditorStateFromCriteriaRecord(sourceCriteria, editingLocale);
   // #896 S2 baseline: what the form opened with, so Lagre can tell "nothing changed" from
   // an edit. Criteria can still arrive asynchronously (criteriaReadyCallback); if they land
   // after this, the baseline is null and the save proceeds - erring toward saving is safe,
@@ -4223,7 +4310,7 @@ function enterPreviewEditMode() {
     // populate the criteria editor when it completes mid-edit-session. Cleared in exitEditMode.
     // Title-label count is also updated since it's derived from criteriaEditorState.length.
     criteriaReadyCallback = (record) => {
-      const fresh = buildEditorStateFromCriteriaRecord(record);
+      const fresh = buildEditorStateFromCriteriaRecord(record, editingLocale);
       if (fresh.length === 0) return;
       criteriaEditorState = fresh;
       criteriaContainer.innerHTML = renderCriteriaEditor();
@@ -4234,92 +4321,23 @@ function enterPreviewEditMode() {
       }
     };
 
-    const captureCriteriaFromDom = () => {
-      const cards = criteriaContainer.querySelectorAll(".vk-card");
-      criteriaEditorState = Array.from(cards).map((card, idx) => {
-        const existing = criteriaEditorState[idx] ?? {};
-        return {
-          id: existing.id,
-          label: card.querySelector(".vk-label")?.value.trim() ?? "",
-          description: card.querySelector(".vk-description")?.value.trim() ?? "",
-          maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
-          candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
-        };
-      });
-    };
-
     const reRenderCriteria = () => {
       criteriaContainer.innerHTML = renderCriteriaEditor();
     };
 
-    criteriaContainer.addEventListener("input", (e) => {
-      if (e.target.classList?.contains("vk-weight")) {
-        const card = e.target.closest(".vk-card");
-        const valueEl = card?.querySelector(".vk-weight-value");
-        if (valueEl) valueEl.textContent = String(e.target.value);
-        // B4 (#451) a11y: keep aria-valuenow + aria-valuetext in sync with the slider so
-        // screen readers announce the current weight during drag/arrow-key adjustment.
-        e.target.setAttribute("aria-valuenow", String(e.target.value));
-        e.target.setAttribute("aria-valuetext", tf("shell.criteria.weightOfTen", { value: e.target.value }));
-        const total = Array.from(criteriaContainer.querySelectorAll(".vk-weight"))
-          .reduce((sum, el) => sum + (Number(el.value) || 0), 0);
-        const totalEl = criteriaContainer.querySelector(".vk-total-value");
-        if (totalEl) totalEl.textContent = String(total);
-      }
-      // B4 (#451) a11y: when the label changes, update the remove-button's aria-label so
-      // it always says "Fjern: {current label}". Without this, screen readers would
-      // announce the stale name set at render time.
-      if (e.target.classList?.contains("vk-label")) {
-        const card = e.target.closest(".vk-card");
-        const removeBtn = card?.querySelector(".vk-remove");
-        if (removeBtn) {
-          const idx = Number(card.dataset.criterionIndex ?? 0) + 1;
-          const newLabel = String(e.target.value ?? "").trim();
-          removeBtn.setAttribute(
-            "aria-label",
-            newLabel
-              ? tf("shell.criteria.removeAriaWithLabel", { label: newLabel })
-              : tf("shell.criteria.removeAriaPositional", { index: idx }),
-          );
-        }
-      }
+    // #896 S3c: behaviour comes from the shared `wireCriteriaEditor` now, so Innstillinger can
+    // mount the same editor without a second copy of it.
+    wireCriteriaEditor({
+      container: criteriaContainer,
+      getState: () => criteriaEditorState,
+      setState: (next) => { criteriaEditorState = next; },
+      rerender: reRenderCriteria,
+      onRegenerate: () => regenerateCriteriaFromTask(criteriaContainer, (newList) => {
+        criteriaEditorState = newList;
+        reRenderCriteria();
+      }),
     });
 
-    criteriaContainer.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      if (btn.classList.contains("vk-remove")) {
-        captureCriteriaFromDom();
-        const idx = Number(btn.dataset.criterionIndex);
-        if (Number.isFinite(idx)) {
-          criteriaEditorState.splice(idx, 1);
-          reRenderCriteria();
-        }
-      } else if (btn.classList.contains("vk-add")) {
-        captureCriteriaFromDom();
-        criteriaEditorState.push({
-          id: `new_criterion_${nextNewCriterionId++}`,
-          label: "",
-          description: "",
-          maxScore: 5,
-          candidateVisible: false,
-        });
-        reRenderCriteria();
-        const inputs = criteriaContainer.querySelectorAll(".vk-label");
-        inputs[inputs.length - 1]?.focus();
-      } else if (btn.classList.contains("vk-regenerate")) {
-        captureCriteriaFromDom();
-        // v1.1.80: ingen confirm-dialog her. Endringene i editoren er ikke persistert
-        // ennå — lukker du edit-modus uten å lagre, så er de like borte uansett. Den
-        // gamle dialogen forhindret kun et tilfeldig museklikk og kostet en ekstra OK
-        // hver gang. Confirm-dialogen for B3 drift-banner ("Regenerer fra ny plan") er
-        // beholdt der den faktisk skriver til DB umiddelbart.
-        regenerateCriteriaFromTask(criteriaContainer, (newList) => {
-          criteriaEditorState = newList;
-          reRenderCriteria();
-        });
-      }
-    });
   }
 
   function exitEditMode() {
@@ -5014,6 +5032,9 @@ function renderSettingsPanel() {
   } else {
     row("shell.settings.criteria", emptyText, true);
   }
+  // #896 S3c: the row above stays as the at-a-glance summary; the editor itself is a collapsed
+  // section below the list. The spec's reason for moving it here — "endres sjelden etter at den
+  // er satt" — is also the reason it opens closed: the common visit is a glance, not an edit.
 
   row(
     "shell.settings.assessmentPrompt",
@@ -5056,7 +5077,8 @@ function renderSettingsPanel() {
     ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
     : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
-  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${actionHtml}${renderVersionHistory()}`;
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${renderCriteriaSection()}${actionHtml}${renderVersionHistory()}`;
+  mountCriteriaSection();
 
   // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
   // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
@@ -5079,6 +5101,88 @@ function renderSettingsPanel() {
       void restoreModuleVersionInBackground(button.dataset.restoreVersion);
     });
   });
+}
+
+// #896 S3c: the criteria editor's state while Innstillinger is open. Module-level, because the
+// panel re-renders on every settings change and a closure would lose the author's edits each time.
+// `null` = not opened this visit; an array = opened, and whatever is in it is what will be saved.
+let settingsCriteriaState = null;
+let settingsCriteriaExpanded = false;
+
+function settingsCriteriaSource() {
+  return sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
+}
+
+// The record the section opened with, so the save can tell an edit from a visit.
+let settingsCriteriaBaseline = null;
+
+function renderCriteriaSection() {
+  if (!bundle) return "";
+  const count = settingsCriteriaState
+    ? settingsCriteriaState.length
+    : Object.keys(settingsCriteriaSource() ?? {}).length;
+
+  const toggle = `<button type="button" id="settingsCriteriaToggle" class="btn-secondary settings-criteria-toggle"
+      aria-expanded="${settingsCriteriaExpanded ? "true" : "false"}" aria-controls="settingsCriteriaEditor">${
+        escapeHtml(t(settingsCriteriaExpanded ? "shell.settings.criteriaDone" : "shell.settings.criteriaEdit"))
+      }</button>`;
+
+  // Rendered but hidden rather than absent when collapsed: the editor keeps DOM state (focus,
+  // scroll, half-typed text) that a rebuild would throw away every time the panel re-renders.
+  const editorHtml = settingsCriteriaExpanded
+    ? `<div id="settingsCriteriaEditor" class="settings-criteria-editor">${
+        buildCriteriaEditorHtml(settingsCriteriaState ?? [], t, tf)
+      }</div>`
+    : `<div id="settingsCriteriaEditor" class="settings-criteria-editor" hidden></div>`;
+
+  return `<section class="settings-criteria-section" aria-labelledby="settingsCriteriaHeading">
+    <div class="settings-criteria-head">
+      <h3 id="settingsCriteriaHeading" class="version-history-heading">${
+        escapeHtml(tf("shell.criteria.title", { count }))
+      }</h3>
+      ${toggle}
+    </div>
+    ${editorHtml}
+  </section>`;
+}
+
+function mountCriteriaSection() {
+  const toggle = document.getElementById("settingsCriteriaToggle");
+  const container = document.getElementById("settingsCriteriaEditor");
+  if (!toggle || !container) return;
+
+  toggle.addEventListener("click", () => {
+    if (!settingsCriteriaExpanded) {
+      // Read the stored criteria only on OPEN. Re-reading on every render would discard edits.
+      settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), currentLocale);
+      settingsCriteriaBaseline = buildCriteriaRecordFromEditorState(settingsCriteriaState);
+    }
+    settingsCriteriaExpanded = !settingsCriteriaExpanded;
+    renderSettingsPanel();
+  });
+
+  if (!settingsCriteriaExpanded) return;
+
+  wireCriteriaEditor({
+    container,
+    getState: () => settingsCriteriaState ?? [],
+    setState: (next) => { settingsCriteriaState = next; },
+    rerender: () => { container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState ?? [], t, tf); },
+    onRegenerate: () => regenerateCriteriaFromTask(container, (newList) => {
+      settingsCriteriaState = newList;
+      container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState, t, tf);
+    }),
+  });
+}
+
+// Criteria count as unsaved settings work, so every exit from Innstillinger warns about them too
+// — the same three exits the tab, language and Avansert guards already cover.
+function hasUnsavedCriteriaEdits() {
+  if (!settingsCriteriaExpanded || settingsCriteriaState === null) return false;
+  const current = buildCriteriaRecordFromEditorState(
+    captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState),
+  );
+  return JSON.stringify(current) !== JSON.stringify(settingsCriteriaBaseline);
 }
 
 /**
@@ -5212,10 +5316,11 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
 // elements so anything that reloads the module can tell whether it would be throwing away edits.
 function hasUnsavedSettingsEdits() {
   const ids = ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType"];
-  return ids.some((id) => {
+  const fieldDirty = ids.some((id) => {
     const el = document.getElementById(id);
     return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
   });
+  return fieldDirty || hasUnsavedCriteriaEdits();
 }
 
 /**
@@ -5301,7 +5406,16 @@ async function saveSettingsInBackground() {
   const thresholdChanged = thresholdInput
     ? mcqMinPercent !== (Number.isFinite(currentThreshold) ? currentThreshold : SHELL_MCQ_ONLY_MIN_PERCENT)
     : false;
-  if (mode === currentMode && !thresholdChanged && Object.keys(moduleFields).length === 0) {
+  // #896 S3c: criteria edited here ride along as an INLINE rubric, exactly as the direct-edit save
+  // does. Referencing `rubricVersionId` would carry the old criteria forward and quietly discard
+  // what the author just typed.
+  const criteriaRecord = hasUnsavedCriteriaEdits()
+    ? buildCriteriaRecordFromEditorState(
+        captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState),
+      )
+    : null;
+
+  if (mode === currentMode && !thresholdChanged && !criteriaRecord && Object.keys(moduleFields).length === 0) {
     showToast(t("shell.settings.noChanges"), "info");
     return;
   }
@@ -5316,7 +5430,20 @@ async function saveSettingsInBackground() {
       assessorExpectedContent:
         dropBlankLocales(latestTaskVersion?.assessorExpectedContent) ?? latestTaskVersion?.assessorExpectedContent,
       candidateTaskConstraints: dropBlankLocales(latestTaskVersion?.candidateTaskConstraints),
-      rubricVersionId: latestRubricId,
+      // Inline rubric when the author edited criteria here, otherwise keep referencing the
+      // existing one. Sending both would be ambiguous; sending only the id would drop the edit.
+      ...(criteriaRecord
+        ? {
+            rubric: {
+              criteria: criteriaRecord,
+              scalingRule: {
+                ...(cfg.rubricVersion?.scalingRule ?? {}),
+                max_total: Object.values(criteriaRecord).reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1,
+                practical_weight: cfg.rubricVersion?.scalingRule?.practical_weight ?? 70,
+              },
+            },
+          }
+        : { rubricVersionId: latestRubricId }),
       promptTemplateVersionId: latestPromptId,
     }),
     ...(isFreetextOnly ? {} : { mcqSetVersionId: latestMcqId }),
@@ -5332,6 +5459,12 @@ async function saveSettingsInBackground() {
       body: JSON.stringify(body),
     });
     await loadModule(moduleId);
+    // The criteria the author typed are now the stored ones. Clearing the editor state makes the
+    // next render read them back from the bundle; leaving it would keep reporting unsaved edits
+    // forever and warn on every exit from a tab with nothing left to lose.
+    settingsCriteriaState = null;
+    settingsCriteriaBaseline = null;
+    settingsCriteriaExpanded = false;
     renderSettingsPanel();
     // loadModule swallows its own fetch errors, so a 502 on the reload would leave the panel
     // showing the previous version under a green toast. Verify what came back instead of

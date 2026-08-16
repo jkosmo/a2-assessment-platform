@@ -156,6 +156,96 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).first()).toBeVisible();
   });
 
+  // #896 S3c: the criteria editor moved from Rediger to Innstillinger. The spec's reason is that
+  // it is a whole sub-editor that fills a lot of space and changes rarely once set — "the ordinary
+  // task, adjust the scenario and save, should not pay for it every time".
+  test("Innstillinger edits criteria and saves them as an inline rubric", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: {
+        clarity: { label: "Clarity", description: "Is it clear?", maxScore: 5, weight: 0.5, candidateVisible: true },
+        depth: { label: "Depth", description: "Is it deep?", maxScore: 5, weight: 0.5, candidateVisible: false },
+      },
+      scalingRule: { max_total: 10, practical_weight: 70 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let savedBody: any = null;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    // Collapsed by default — a glance costs nothing.
+    await expect(page.locator("#settingsCriteriaEditor")).toBeHidden();
+    await expect(page.locator("#settingsCriteriaToggle")).toHaveAttribute("aria-expanded", "false");
+
+    await page.locator("#settingsCriteriaToggle").click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(2);
+
+    await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Klarhet");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => savedBody !== null).toBe(true);
+    // An INLINE rubric, not a reference. Referencing the existing rubricVersionId would carry the
+    // old criteria forward and silently discard what was just typed.
+    expect(savedBody.rubricVersionId).toBeUndefined();
+    expect(savedBody.rubric?.criteria).toBeTruthy();
+    const labels = Object.values(savedBody.rubric.criteria).map((c: any) => c.label);
+    expect(labels).toContain("Klarhet");
+    // The scaling rule keeps its practical weight and recomputes the total from the criteria.
+    expect(savedBody.rubric.scalingRule.practical_weight).toBe(70);
+    expect(savedBody.rubric.scalingRule.max_total).toBe(10);
+  });
+
+  test("unsaved criteria edits are caught by the same exit guard as the other settings", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: { clarity: { label: "Clarity", description: "", maxScore: 5, weight: 1, candidateVisible: true } },
+      scalingRule: { max_total: 5 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsCriteriaToggle").click();
+    await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Endret kriterium");
+
+    // Criteria are settings work too. Leaving without saving must warn, or the edit is gone —
+    // the panel is rebuilt from the bundle on the way back.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
+    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Endret kriterium");
+  });
+
   // #896 S6 QA: the Innstillinger inputs live only in the DOM until Lagre, and every way OUT of
   // that tab re-renders the panel and destroys them. I guarded one exit and there were four. This
   // pins all of them, because the failure mode is silent — the value is simply gone.

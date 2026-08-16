@@ -739,6 +739,10 @@ const adminContentBase = {
   "shell.publish.field.candidateTaskConstraints": "Constraints for the candidate",
   "shell.publish.field.mcqQuestion": "Multiple-choice question {n}",
   // #896 S5: version history. Every save already wrote a row; this is the way to see it.
+  // #896 S3c: the criteria editor moved from Rediger to Innstillinger. Collapsed by default —
+  // criteria change rarely once set, and the common visit is a glance.
+  "shell.settings.criteriaEdit": "Edit criteria",
+  "shell.settings.criteriaDone": "Done",
   "shell.versions.heading": "Saved versions",
   "shell.versions.explainer": "Every save is kept. Restoring copies a version forward as a new draft — nothing is deleted, so you can always come back.",
   "shell.versions.versionNo": "Version {versionNo}",
@@ -2044,6 +2048,8 @@ const adminContentLateOverrides = {
     "shell.publish.field.assessorExpectedContent": "Fasit",
     "shell.publish.field.candidateTaskConstraints": "Rammer for kandidaten",
     "shell.publish.field.mcqQuestion": "Flervalgsspørsmål {n}",
+    "shell.settings.criteriaEdit": "Endre kriterier",
+    "shell.settings.criteriaDone": "Ferdig",
     "shell.versions.heading": "Lagrede versjoner",
     "shell.versions.explainer": "Alle lagringer beholdes. Å gjenopprette kopierer en versjon fram som et nytt utkast — ingenting slettes, så du kan alltid gå tilbake.",
     "shell.versions.versionNo": "Versjon {versionNo}",
@@ -2544,6 +2550,8 @@ const adminContentLateOverrides = {
     "shell.publish.field.assessorExpectedContent": "Fasit",
     "shell.publish.field.candidateTaskConstraints": "Rammer for kandidaten",
     "shell.publish.field.mcqQuestion": "Fleirvalsspørsmål {n}",
+    "shell.settings.criteriaEdit": "Endre kriterium",
+    "shell.settings.criteriaDone": "Ferdig",
     "shell.versions.heading": "Lagra versjonar",
     "shell.versions.explainer": "Alle lagringar blir tekne vare på. Å gjenopprette kopierer ein versjon fram som eit nytt utkast — ingenting blir sletta, så du kan alltid gå tilbake.",
     "shell.versions.versionNo": "Versjon {versionNo}",

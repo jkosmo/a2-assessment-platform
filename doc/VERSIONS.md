@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.6 - 2026-08-16
+
+**Kriterieeditoren er flyttet til Innstillinger (#896, S3c — første bolk).** Den største
+enkeltbolken som gjensto i epicen.
+
+Spesifikasjonens begrunnelse er også begrunnelsen for hvordan den ser ut: kriterieeditoren er en
+hel underredigerer som fyller mye plass og endres sjelden etter at den er satt — «den vanlige
+oppgaven, juster scenarioteksten og lagre, skal ikke betale for den hver gang». Derfor: en
+sammendragsrad i lista, og selve editoren i en seksjon som er **slått sammen som standard**.
+
+**Ingen andre kopi.** Editoren var ~110 linjer hendelseskobling inne i `enterPreviewEditMode`, med
+fem lokale variabler i lukkingen. Den er trukket ut til `wireCriteriaEditor` og
+`buildEditorStateFromCriteriaRecord`, og begge flatene kjører nå nøyaktig samme kode — en andre
+kopi av denne oppførselen er akkurat det epicen forsøker å bli kvitt.
+
+Kriterier redigert i Innstillinger lagres som **inline rubrikk**, ikke som en referanse til den
+eksisterende. En referanse ville båret de gamle kriteriene videre og stille forkastet det
+forfatteren nettopp skrev. Skaleringsregelen beholder `practical_weight` og regner ut `max_total`
+på nytt fra kriteriene.
+
+Kriterier teller som ulagret arbeid i Innstillinger, så de er dekket av de samme tre
+utgangsvaktene som resten (fanebytte, språkbytte, «Åpne avansert redigering»).
+
 ## 2.18.5 - 2026-08-16
 
 **#912 løst:** en modul uten sertifiseringsnivå kunne eksporteres, men ikke importeres igjen.
