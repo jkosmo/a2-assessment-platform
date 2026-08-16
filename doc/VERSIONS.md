@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.8 - 2026-08-16
+
+**§2 er ferdig: Innstillinger har nå alle åtte redigerbare feltene (#896, S3c).** Dermed er §3 —
+å fjerne Avansert-siden — ikke lenger blokkert av manglende funksjonalitet.
+
+**Innsendingsskjemaet.** Første felt redigerbart, per #901. De øvrige feltene bæres uendret
+videre: en modul laget via API-et kan lovlig ha flere, og å bygge lista på nytt fra ett input
+ville slettet dem.
+
+**Praktisk vekt** (skaleringsregelen). `max_total` har bevisst *ingen* input — den utledes av
+kriteriene og vises der. To måter å sette samme tall på er verre enn ingen. Vekten bor på
+rubrikkens `scalingRule`, så å endre den skriver en ny rubrikkversjon; kriteriene bæres da uendret
+med, i stedet for å bli bygget på nytt fra tomt.
+
+**En reell feil, funnet av testen og ikke av gjennomlesing:** å utvide en seksjon kaller
+`renderSettingsPanel()`, som bygger hele panelet på nytt fra bundlen. En gyldighetsdato skrevet et
+øyeblikk tidligere ble dermed stille tilbakestilt — og forfatteren ville neppe merket det, siden
+blikket var på seksjonen de nettopp åpnet. Ulagrede verdier fanges nå før rebuild og legges tilbake
+etterpå.
+
+## 2.18.7 - 2026-08-16
+
+**Vurderingsinstruksen flyttet til Innstillinger (#896, S3c).** Samme mønster som
+kriterieeditoren: sammenslått seksjon, åpnes ved behov.
+
+Ett språk om gangen, per §7. Avansert viser tre språkpaner ved siden av hverandre — det er
+modellen epicen flytter seg bort fra. Her redigeres aktivt UI-språk, og de to andre **flettes**
+inn.
+
+Flettingen er hele poenget: `composeModuleVersion` skriver `promptTemplate` ordrett. Sender man
+bare det redigerte språket, er de to andre borte. Nøyaktig den feilen er gjort tre ganger i denne
+epicen — tittel (#892), beskrivelse og sertifiseringsnivå (S3b) — så `mergeLocaleInto` finnes nå
+ett sted.
+
+Eksempler forblir et JSON-felt, slik det er på Avansert: de er en liste av fritt formede objekter
+som LLM-en konsumerer, og en strukturert editor for dem her ville vært en gjetning på en form
+ingenting ellers i systemet begrenser. Ugyldig JSON meldes i stedet for å bli stille til `[]`.
+
+*(Denne oppføringen ble skrevet etterskuddsvis — versjonen ble bumpet uten VERSIONS-notat, i strid
+med regelen om at begge skal skje i samme commit.)*
+
 ## 2.18.6 - 2026-08-16
 
 **Kriterieeditoren er flyttet til Innstillinger (#896, S3c — første bolk).** Den største

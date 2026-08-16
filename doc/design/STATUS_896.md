@@ -6,19 +6,19 @@ slice sier lite om hvor mye av *helheten* som gjenstår.
 
 ## Kortversjonen
 
-**Alt som handler om datamodell, lagring og publisering er ferdig. Det som gjenstår er nesten
-utelukkende UI — og det er den største enkeltbolken i hele epicen.**
+**Oppdatert 2026-08-16 (v2.18.8): §2 er nå ferdig.** Alle åtte feltene i Innstillinger er
+redigerbare. Dermed er §3 — å fjerne Avansert-siden — ikke lenger blokkert av manglende
+funksjonalitet; det som gjenstår der er sletting og opprydding.
 
-Konkret: Innstillinger-fanen viser i dag **8 rader**, hvorav **5 er redigerbare**. Spesifikasjonen
-krever **8 redigerbare**. De tre som mangler — kriterieeditoren, vurderingsinstruksen og
-innsendingsskjemaet — er ikke småfelter, de er hele underredigerere. Så lenge de bare finnes i
-Avansert, kan ikke Avansert fjernes, og «ett sted å gjøre hver ting» er ikke oppfylt.
+Opprinnelig funn: Innstillinger hadde 5 av 8 redigerbare felt, og de tre som manglet var hele
+underredigerere (kriterier, vurderingsinstruks, innsendingsskjema). Alle tre er flyttet, og
+kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være en andre kopi.
 
 | Del | Status |
 |---|---|
 | §1 Tre faner | ✅ Ferdig |
-| §2 Feltkart | ⚠️ Rediger ferdig · Innstillinger 5 av 8 |
-| §3 Avansert oppløses | ❌ Ikke startet — blokkert av §2 |
+| §2 Feltkart | ✅ Ferdig — Innstillinger 8 av 8 |
+| §3 Avansert oppløses | ⚠️ Ikke lenger blokkert. Gjenstår: fjerne dubletter, handoff, kalibreringsfane, identitetspanel |
 | §4 Lagringsmodell | ✅ Ferdig (inkl. #905, #906) |
 | §5 Publiseringsgate | ✅ Ferdig |
 | §6 Utkastversjoner | ⚠️ Versjonshistorikk ferdig · konflikthåndtering ikke startet |
@@ -52,9 +52,9 @@ Avansert, kan ikke Avansert fjernes, og «ett sted å gjøre hver ting» er ikke
 | Gyldighet | redigerbar | ✅ `settingsValidFrom` / `settingsValidTo` |
 | Sertifiseringsnivå | redigerbar | ✅ `settingsCertLevel` |
 | **Vurderingskriterier (rubrikk)** | **redigerbar** | ✅ **flyttet hit** (v2.18.6). Sammendragsrad + sammenslått editor under lista; lagres som inline rubrikk |
-| **Vurderingsinstruks (prompt)** | **redigerbar** | ❌ **kun versjonsnummer** — editoren finnes bare i Avansert (`editBtn_prompt`) |
-| **Innsendingsskjema** | **redigerbar** | ❌ **kun feltantall** — editoren finnes bare i Avansert (`editBtn_submissionSchema`) |
-| **Skaleringsregel** | redigerbar | ❌ **finnes ikke i Innstillinger i det hele tatt** |
+| **Vurderingsinstruks (prompt)** | **redigerbar** | ✅ **flyttet hit** (v2.18.7). Ett språk om gangen, de andre flettes |
+| **Innsendingsskjema** | **redigerbar** | ✅ **flyttet hit** (v2.18.8). Første felt redigerbart (#901); øvrige bæres uendret |
+| **Skaleringsregel** | redigerbar | ✅ **praktisk vekt** flyttet hit (v2.18.8). `max_total` utledes av kriteriene og har bevisst ingen egen input |
 
 De tre editorene er de tyngste i hele Avansert-siden. Kriterieeditoren alene er en
 underredigerer med per-kriterium kort, vekting og maks-score.

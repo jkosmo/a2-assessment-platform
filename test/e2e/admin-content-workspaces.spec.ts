@@ -306,6 +306,102 @@ test.describe("admin content browser coverage", () => {
     expect(saveCalled).toBe(false);
   });
 
+  // #896 S3c, last two settings fields. Both write to structures that carry more than the one
+  // value being edited, so both are really tests about what is NOT lost.
+  test("Innstillinger edits the answer field and the practical weight", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: { clarity: { label: "Clarity", description: "", maxScore: 5, weight: 1, candidateVisible: true } },
+      scalingRule: { max_total: 5, practical_weight: 70 },
+    };
+    // Two fields: the admin UI edits only the first (#901), and the second must survive.
+    moduleExport.selectedConfiguration.moduleVersion.submissionSchema = {
+      fields: [
+        { id: "response", label: { "en-GB": "Your answer", nb: "Ditt svar", nn: "Ditt svar" }, type: "textarea", required: true },
+        { id: "notes", label: { "en-GB": "Notes", nb: "Notater", nn: "Notat" }, type: "text", required: false },
+      ],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let savedBody: any = null;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    // Practical weight is a plain row, not a collapsed section — it is one number.
+    await expect(page.locator("#settingsPracticalWeight")).toHaveValue("70");
+    await page.locator("#settingsPracticalWeight").fill("60");
+
+    await page.locator("#settingsSchemaToggle").click();
+    await expect(page.locator("#settingsSchemaLabel")).toHaveValue("Your answer");
+    await page.locator("#settingsSchemaLabel").fill("Your response");
+
+    await page.locator("#settingsSave").click();
+    await expect.poll(() => savedBody !== null).toBe(true);
+
+    // The weight lives on the rubric's scalingRule, so changing it writes a rubric — but the
+    // criteria must come along unchanged rather than being rebuilt from nothing.
+    expect(savedBody.rubric.scalingRule.practical_weight).toBe(60);
+    expect(Object.keys(savedBody.rubric.criteria)).toHaveLength(1);
+
+    // The edited locale changed; the other two did not.
+    expect(savedBody.submissionSchema.fields[0].label["en-GB"]).toBe("Your response");
+    expect(savedBody.submissionSchema.fields[0].label.nb).toBe("Ditt svar");
+    // And the second field — which this UI never shows — is still there. Rebuilding the array
+    // from one input would have deleted it.
+    expect(savedBody.submissionSchema.fields).toHaveLength(2);
+    expect(savedBody.submissionSchema.fields[1].id).toBe("notes");
+  });
+
+  // Found by the test above rather than by review: expanding a section re-renders the WHOLE panel
+  // from the bundle, so a validity date typed a moment earlier silently reverted — and the author
+  // would not notice, because their eyes were on the section they had just opened.
+  test("typed settings survive expanding a section", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    await page.locator("#settingsCertLevel").fill("advanced");
+    await page.locator("#settingsValidFrom").fill("2027-01-01");
+
+    // Any section will do — all three re-render the panel.
+    await page.locator("#settingsCriteriaToggle").click();
+    await expect(page.locator("#settingsCertLevel")).toHaveValue("advanced");
+    await expect(page.locator("#settingsValidFrom")).toHaveValue("2027-01-01");
+
+    // And collapsing it again does not revert them either.
+    await page.locator("#settingsCriteriaToggle").click();
+    await expect(page.locator("#settingsCertLevel")).toHaveValue("advanced");
+  });
+
   test("unsaved criteria edits are caught by the same exit guard as the other settings", async ({ page }) => {
     const moduleExport = buildMockModuleExport({
       id: "module-1",

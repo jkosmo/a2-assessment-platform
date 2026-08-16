@@ -5060,6 +5060,18 @@ function renderSettingsPanel() {
       placeholder="${escapeHtml(t("shell.settings.notSet"))}" />`,
   );
 
+  // #896 S3c: the scaling rule's practical weight — the last settings field that existed only on
+  // Avansert. `max_total` is NOT editable: it is derived from the criteria and shown there, so an
+  // input for it would be a second, conflicting way to set the same number.
+  if (mode !== "MCQ_ONLY") {
+    const practicalWeight = Number(cfg.rubricVersion?.scalingRule?.practical_weight);
+    row(
+      "shell.settings.practicalWeight",
+      `<input id="settingsPracticalWeight" class="settings-input" type="number" min="0" max="100"
+        value="${escapeHtml(String(Number.isFinite(practicalWeight) ? practicalWeight : 70))}" /> %`,
+    );
+  }
+
   // date inputs need yyyy-mm-dd, not a localized rendering
   const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
   row(
@@ -5077,16 +5089,22 @@ function renderSettingsPanel() {
     ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
     : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
-  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${renderCriteriaSection()}${renderPromptSection()}${actionHtml}${renderVersionHistory()}`;
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${renderCriteriaSection()}${renderPromptSection()}${renderSubmissionSchemaSection()}${actionHtml}${renderVersionHistory()}`;
   mountCriteriaSection();
   mountPromptSection();
+  mountSubmissionSchemaSection();
 
   // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
   // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
-  for (const id of ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType"]) {
+  for (const id of ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType", "settingsPracticalWeight"]) {
     const el = document.getElementById(id);
     if (el) el.dataset.renderedValue = el.value;
   }
+  // #896 S3c: put back anything the author had typed but not saved. Expanding a section re-renders
+  // the WHOLE panel, so opening the criteria editor after typing a new validity date silently
+  // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
+  // top of it, so the dirty-check still knows the difference.
+  restoreSettingsDraftValues();
 
   document.getElementById("settingsSave")?.addEventListener("click", () => {
     void saveSettingsInBackground();
@@ -5125,6 +5143,45 @@ function mergeLocaleInto(stored, locale, text) {
   if (typeof text === "string" && text.trim()) next[locale] = text;
   else delete next[locale];
   return Object.keys(next).length > 0 ? next : undefined;
+}
+
+/**
+ * #896 S3c: unsaved settings values survive a panel re-render.
+ *
+ * The panel is rebuilt from `bundle` every time a section is expanded or collapsed. Without this,
+ * typing a validity date and then opening the criteria editor reverted the date — the author would
+ * not necessarily notice, because their eyes were on the section they just opened.
+ *
+ * Captured before the rebuild, reapplied after. `renderedValue` still holds the STORED value, so
+ * `hasUnsavedSettingsEdits` keeps working.
+ */
+const SETTINGS_TEXT_INPUT_IDS = [
+  "settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent",
+  "settingsModuleType", "settingsPracticalWeight",
+  "settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples",
+  "settingsSchemaLabel", "settingsSchemaPlaceholder",
+];
+let settingsDraftValues = null;
+
+function captureSettingsDraftValues() {
+  const dirty = {};
+  for (const id of SETTINGS_TEXT_INPUT_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue) {
+      dirty[id] = el.value;
+    }
+  }
+  settingsDraftValues = Object.keys(dirty).length > 0 ? dirty : null;
+}
+
+function restoreSettingsDraftValues() {
+  if (!settingsDraftValues) return;
+  for (const [id, value] of Object.entries(settingsDraftValues)) {
+    const el = document.getElementById(id);
+    // A field belonging to a collapsed section is simply not in the DOM; its value stays in
+    // `settingsDraftValues` until the section is opened again.
+    if (el) el.value = value;
+  }
 }
 
 // #896 S3c: the criteria editor's state while Innstillinger is open. Module-level, because the
@@ -5181,6 +5238,7 @@ function mountCriteriaSection() {
       settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), currentLocale);
       settingsCriteriaBaseline = buildCriteriaRecordFromEditorState(settingsCriteriaState);
     }
+    captureSettingsDraftValues();
     settingsCriteriaExpanded = !settingsCriteriaExpanded;
     renderSettingsPanel();
   });
@@ -5264,10 +5322,68 @@ function mountPromptSection() {
   const toggle = document.getElementById("settingsPromptToggle");
   if (!toggle) return;
   toggle.addEventListener("click", () => {
+    captureSettingsDraftValues();
     settingsPromptExpanded = !settingsPromptExpanded;
     renderSettingsPanel();
   });
   for (const id of ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"]) {
+    const el = document.getElementById(id);
+    if (el) el.dataset.renderedValue = el.value;
+  }
+}
+
+/**
+ * #896 S3c: the submission schema — what the participant is asked to fill in.
+ *
+ * One field, per #901: the backend, the participant view and the assessment all support several,
+ * but the admin UI clamps it to one and that limitation is tracked separately. Editing the first
+ * field here rather than pretending the others do not exist: any extra fields are carried through
+ * untouched, so a module authored via the API keeps them.
+ */
+let settingsSchemaExpanded = false;
+
+function renderSubmissionSchemaSection() {
+  if (!bundle) return "";
+  const field = bundle.selectedConfiguration?.moduleVersion?.submissionSchema?.fields?.[0] ?? null;
+
+  if (!settingsSchemaExpanded) {
+    return `<section class="settings-criteria-section">
+      <div class="settings-criteria-head">
+        <h3 class="version-history-heading">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
+        <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
+          aria-expanded="false" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.schemaEdit"))}</button>
+      </div>
+      <div id="settingsSchemaEditor" hidden></div>
+    </section>`;
+  }
+
+  const label = escapeHtml(localizeValueForLocale(field?.label ?? "", currentLocale));
+  const placeholder = escapeHtml(localizeValueForLocale(field?.placeholder ?? "", currentLocale));
+  return `<section class="settings-criteria-section">
+    <div class="settings-criteria-head">
+      <h3 class="version-history-heading">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
+      <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
+        aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
+    </div>
+    <div id="settingsSchemaEditor" class="settings-criteria-editor">
+      <p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: currentLocale }))}</p>
+      <label class="settings-field-label" for="settingsSchemaLabel">${escapeHtml(t("shell.settings.schemaLabel"))}</label>
+      <input id="settingsSchemaLabel" class="settings-input" type="text" value="${label}" />
+      <label class="settings-field-label" for="settingsSchemaPlaceholder">${escapeHtml(t("shell.settings.schemaPlaceholder"))}</label>
+      <input id="settingsSchemaPlaceholder" class="settings-input" type="text" value="${placeholder}" />
+    </div>
+  </section>`;
+}
+
+function mountSubmissionSchemaSection() {
+  const toggle = document.getElementById("settingsSchemaToggle");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
+    captureSettingsDraftValues();
+    settingsSchemaExpanded = !settingsSchemaExpanded;
+    renderSettingsPanel();
+  });
+  for (const id of ["settingsSchemaLabel", "settingsSchemaPlaceholder"]) {
     const el = document.getElementById(id);
     if (el) el.dataset.renderedValue = el.value;
   }
@@ -5405,8 +5521,10 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
 function hasUnsavedSettingsEdits() {
   const ids = [
     "settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType",
-    // #896 S3c: the prompt editor's fields are DOM-only too, and leaving the tab rebuilds them.
+    // #896 S3c: the prompt and schema editors' fields are DOM-only too, and leaving the tab
+    // rebuilds them.
     "settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples",
+    "settingsSchemaLabel", "settingsSchemaPlaceholder", "settingsPracticalWeight",
   ];
   const fieldDirty = ids.some((id) => {
     const el = document.getElementById(id);
@@ -5507,6 +5625,21 @@ async function saveSettingsInBackground() {
       )
     : null;
 
+  // #896 S3c: the practical weight lives on the rubric's scalingRule, so changing it means writing
+  // a rubric — the criteria come along unchanged when they were not edited.
+  const weightInput = document.getElementById("settingsPracticalWeight");
+  const storedWeight = Number(cfg.rubricVersion?.scalingRule?.practical_weight);
+  const practicalWeight = weightInput ? parsePositiveIntInRange(weightInput.value, 0, 100) : null;
+  const weightChanged = Boolean(
+    weightInput && practicalWeight !== (Number.isFinite(storedWeight) ? storedWeight : 70),
+  );
+  if (weightInput && weightInput.value.trim() !== "" && practicalWeight === null) {
+    // Out of range or not a whole number is the author's mistake to see, not something to round.
+    showToast(t("shell.settings.invalidWeight"), "error");
+    weightInput.focus();
+    return;
+  }
+
   // #896 S3c: the assessment instruction. Edited in ONE language, merged onto the stored value —
   // the composer writes it verbatim, so sending only the edited locale would delete the other two.
   const promptDirty = ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"].some((id) => {
@@ -5539,7 +5672,32 @@ async function saveSettingsInBackground() {
     promptPayload = { systemPrompt, userPromptTemplate, examples };
   }
 
-  if (mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload && Object.keys(moduleFields).length === 0) {
+  // #896 S3c: the submission schema. Only the FIRST field is editable (#901), and the rest are
+  // carried through untouched — a module authored via the API can legitimately have several, and
+  // rebuilding the array from one input would delete them.
+  const schemaDirty = ["settingsSchemaLabel", "settingsSchemaPlaceholder"].some((id) => {
+    const el = document.getElementById(id);
+    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  });
+  let submissionSchemaPayload = null;
+  if (schemaDirty) {
+    const existing = version?.submissionSchema ?? buildDefaultSubmissionSchema();
+    const fields = (existing.fields ?? []).map((f) => ({ ...f }));
+    const first = fields[0] ?? { id: "response", type: "textarea", required: true };
+    const label = mergeLocaleInto(first.label, currentLocale, document.getElementById("settingsSchemaLabel")?.value ?? "");
+    if (!label) {
+      showToast(t("shell.settings.schemaLabelRequired"), "error");
+      return;
+    }
+    const placeholder = mergeLocaleInto(first.placeholder, currentLocale, document.getElementById("settingsSchemaPlaceholder")?.value ?? "");
+    fields[0] = { ...first, label, ...(placeholder ? { placeholder } : {}) };
+    submissionSchemaPayload = { ...existing, fields };
+  }
+
+  if (
+    mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload
+    && !submissionSchemaPayload && !weightChanged && Object.keys(moduleFields).length === 0
+  ) {
     showToast(t("shell.settings.noChanges"), "info");
     return;
   }
@@ -5556,16 +5714,27 @@ async function saveSettingsInBackground() {
       candidateTaskConstraints: dropBlankLocales(latestTaskVersion?.candidateTaskConstraints),
       // Inline rubric when the author edited criteria here, otherwise keep referencing the
       // existing one. Sending both would be ambiguous; sending only the id would drop the edit.
-      ...(criteriaRecord
+      // A rubric is written when the criteria OR the practical weight changed — both live on the
+      // same row, so either one means a new version of it. `criteriaRecord` falls back to the
+      // stored criteria so a weight-only change does not rewrite them.
+      ...(criteriaRecord || weightChanged
         ? {
-            rubric: {
-              criteria: criteriaRecord,
-              scalingRule: {
-                ...(cfg.rubricVersion?.scalingRule ?? {}),
-                max_total: Object.values(criteriaRecord).reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1,
-                practical_weight: cfg.rubricVersion?.scalingRule?.practical_weight ?? 70,
-              },
-            },
+            rubric: (() => {
+              const criteria = criteriaRecord
+                ?? buildCriteriaRecordFromEditorState(
+                  buildEditorStateFromCriteriaRecord(cfg.rubricVersion?.criteria ?? null, currentLocale),
+                );
+              return {
+                criteria,
+                scalingRule: {
+                  ...(cfg.rubricVersion?.scalingRule ?? {}),
+                  max_total: Object.values(criteria ?? {}).reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1,
+                  practical_weight: weightChanged
+                    ? practicalWeight
+                    : (cfg.rubricVersion?.scalingRule?.practical_weight ?? 70),
+                },
+              };
+            })(),
           }
         : { rubricVersionId: latestRubricId }),
       // Same either/or as the rubric: a new inline prompt, or a reference to the existing one.
@@ -5573,7 +5742,9 @@ async function saveSettingsInBackground() {
     }),
     ...(isFreetextOnly ? {} : { mcqSetVersionId: latestMcqId }),
     ...(policy ? { assessmentPolicy: policy } : {}),
-    ...(version?.submissionSchema ? { submissionSchema: version.submissionSchema } : {}),
+    ...(submissionSchemaPayload
+      ? { submissionSchema: submissionSchemaPayload }
+      : (version?.submissionSchema ? { submissionSchema: version.submissionSchema } : {})),
   };
 
   const slot = logProgress("shell.settings.saving");
@@ -5591,6 +5762,10 @@ async function saveSettingsInBackground() {
     settingsCriteriaBaseline = null;
     settingsCriteriaExpanded = false;
     settingsPromptExpanded = false;
+    settingsSchemaExpanded = false;
+    // What was typed is now what is stored. Keeping the draft values would restore them on top of
+    // the freshly loaded ones and report unsaved edits that no longer exist.
+    settingsDraftValues = null;
     renderSettingsPanel();
     // loadModule swallows its own fetch errors, so a 502 on the reload would leave the panel
     // showing the previous version under a green toast. Verify what came back instead of
