@@ -4584,8 +4584,13 @@ async function exportModulePackageInBackground() {
   slot.abortBtn.remove();
 
   try {
+    // Export the version this workspace is SHOWING. Without it the endpoint packages the live
+    // version, so an author looking at an unpublished v2 exported v1 and their newest work
+    // silently did not travel.
+    const shownVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+    const query = shownVersionId ? `?moduleVersionId=${encodeURIComponent(shownVersionId)}` : "";
     const body = await apiFetch(
-      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`,
+      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package${query}`,
       getHeaders,
     );
     const envelope = body?.envelope;
@@ -4607,6 +4612,9 @@ async function exportModulePackageInBackground() {
 
     logResolveSlot(slot, () => escapeHtml(t("shell.module.exportSuccess")));
     showToast(t("shell.module.exportSuccess"), "success");
+    // Choosing a chat action disables the whole menu. Without putting it back, downloading a file
+    // left the author on Rediger with no actions at all until they reloaded the page.
+    showModuleActions();
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.module.exportError"))}${escapeHtml(errMsg)}`, [
@@ -4629,7 +4637,14 @@ function startImportPackageFlow() {
   const moduleId = selectedModuleId;
   if (!moduleId) return;
 
-  if (sessionDraft && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) return;
+  // Same combined guard as restore: the settings inputs are DOM-only until Lagre, so `sessionDraft`
+  // alone does not know whether the reload after import would throw work away.
+  if ((sessionDraft || hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
+    // Choosing this action already disabled the menu. Declining must not leave the workspace with
+    // no actions at all.
+    showModuleActions();
+    return;
+  }
 
   const input = document.createElement("input");
   input.type = "file";
@@ -4637,13 +4652,20 @@ function startImportPackageFlow() {
   input.addEventListener("change", () => {
     const file = input.files?.[0];
     if (file) void importModulePackageInBackground(moduleId, file);
+    else showModuleActions();
   });
+  // A cancelled file chooser fires `cancel` in modern browsers and nothing at all in older ones.
+  // Either way the menu has to come back; `cancel` covers the common case.
+  input.addEventListener("cancel", () => showModuleActions());
   input.click();
 }
 
-async function importModulePackageInBackground(moduleId, file) {
+async function importModulePackageInBackground(moduleId, file, idempotencyKey = null) {
   const slot = logProgress("shell.module.importProgress");
   slot.abortBtn.remove();
+  // One key per import ACTION, reused by a retry: a lost response must not turn one package into
+  // two complete versions.
+  const key = idempotencyKey ?? `import-${moduleId}-${Date.now()}`;
 
   try {
     const text = await file.text();
@@ -4657,13 +4679,17 @@ async function importModulePackageInBackground(moduleId, file) {
     // half-understood. Say so before sending it.
     if (payload?.scope === "course") throw new Error(t("shell.module.importIsCourse"));
 
-    await apiFetch(`/api/admin/content/modules/import`, getHeaders, {
+    const result = await apiFetch(`/api/admin/content/modules/import`, getHeaders, {
       method: "POST",
+      headers: { "Idempotency-Key": key },
       body: JSON.stringify({
         payload,
         // Into THIS module, appending a version — not a new module beside it.
         mode: "replaceExisting",
-        targetModuleId: moduleId,
+        // `targetId`, not `targetModuleId`. The route renames it on the way to the service, and
+        // the schema strips unknown keys — so `targetModuleId` here produced a 400 on every single
+        // import, invisibly, because the e2e mocked the endpoint instead of exercising it.
+        targetId: moduleId,
         // #896 §9: import always lands unpublished, whatever the source's state was.
         autoPublish: false,
       }),
@@ -4673,12 +4699,29 @@ async function importModulePackageInBackground(moduleId, file) {
     previewDraft = null;
     await loadModule(moduleId);
     switchToTab("edit");
+
+    // loadModule swallows its own fetch errors, so getting here does not prove the workspace shows
+    // the imported version. Announcing success over the old content would be the worst outcome:
+    // the change happened, and the screen says otherwise.
+    const importedId = result?.moduleVersionId ?? null;
+    const shown = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+    if (importedId && shown !== importedId) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.module.importReloadFailed")), [
+        { labelKey: "shell.action.retry", action: () => loadModule(moduleId) },
+      ]);
+      showToast(t("shell.module.importReloadFailed"), "error");
+      return;
+    }
+
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.module.importSuccess"))}</strong>`);
     showToast(t("shell.module.importSuccess"), "success");
     announceStatus(t("shell.module.importSuccess"));
   } catch (err) {
     const errMsg = String(err?.message ?? err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.module.importError"))}${escapeHtml(errMsg)}`);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.module.importError"))}${escapeHtml(errMsg)}`, [
+      // Same key — a retry after a lost response must not import the package twice.
+      { labelKey: "shell.action.retry", action: () => importModulePackageInBackground(moduleId, file, key) },
+    ]);
   }
 }
 
@@ -4789,6 +4832,11 @@ function hasOpenEditForm() {
 function unsavedTabSwitchKind() {
   if (hasOpenEditForm()) return "form";
   if (sessionDraft) return "draft";
+  // #896 S6 QA: the Innstillinger inputs are DOM-only until Lagre, and leaving that tab re-renders
+  // the panel from `bundle` — so a typed-but-unsaved certification level or validity date simply
+  // vanished, with no warning. The spec's §8 rule ("warn on tab switch with unsaved changes")
+  // covers these too; only Rediger's draft was ever checked.
+  if (hasUnsavedSettingsEdits()) return "settings";
   return null;
 }
 
@@ -4826,20 +4874,26 @@ function applyTabState(tab) {
 
 function switchToTab(tab) {
   if (tab === activeTab) return;
-  // Gate on the tab being LEFT: only Rediger holds an editing surface. Gating on the
-  // destination re-asked on every Forhaandsvisning <-> Innstillinger move, where nothing
-  // is at risk and the author has already answered.
-  const kind = activeTab === "edit" ? unsavedTabSwitchKind() : null;
+  // Gate on the tab being LEFT. Rediger holds the editing surface; Innstillinger holds inputs that
+  // exist only in the DOM until Lagre and are re-rendered from `bundle` on the way back — leaving
+  // it without asking simply threw typed values away. Forhaandsvisning risks nothing.
+  const kind = activeTab === "edit" || activeTab === "settings" ? unsavedTabSwitchKind() : null;
   if (kind && unsavedTabSwitchDialog) {
     pendingTabSwitch = tab;
     pendingTabSwitchKind = kind;
     const body = document.getElementById("unsavedTabSwitchBody");
     const confirmBtn = document.getElementById("tabSwitchDiscard");
-    if (body) body.textContent = t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.draftBody");
+    const bodyKey = kind === "form"
+      ? "shell.tab.unsaved.body"
+      : kind === "settings"
+        ? "shell.tab.unsaved.settingsBody"
+        : "shell.tab.unsaved.draftBody";
+    if (body) body.textContent = t(bodyKey);
     if (confirmBtn) {
-      confirmBtn.textContent = t(kind === "form" ? "shell.tab.unsaved.discard" : "shell.tab.unsaved.switchAnyway");
-      // Nothing is destroyed when only a draft is unsaved, so the action is not destructive.
-      confirmBtn.className = kind === "form" ? "btn-danger" : "btn-primary";
+      // Leaving Innstillinger DOES destroy the typed values, so that confirm is destructive —
+      // unlike an unsaved draft, which survives the switch.
+      confirmBtn.textContent = t(kind === "draft" ? "shell.tab.unsaved.switchAnyway" : "shell.tab.unsaved.discard");
+      confirmBtn.className = kind === "draft" ? "btn-primary" : "btn-danger";
     }
     unsavedTabSwitchDialog.showModal();
     return;

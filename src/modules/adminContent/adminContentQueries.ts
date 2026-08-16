@@ -315,11 +315,27 @@ async function buildSectionExportPayload(
 export async function buildModuleExportEnvelope(
   moduleId: string,
   exportedBy: { userId?: string | null; email?: string | null },
+  // #896 S6: which version to package. Default (undefined) keeps the historical rule — the live
+  // version, falling back to the latest — which is what the module list and course export want:
+  // a package of what participants actually get.
+  //
+  // The module WORKSPACE passes the version it is displaying. An author standing in Rediger
+  // looking at an unpublished v2 and clicking "Export" got a file containing the published v1,
+  // and their newest work silently did not travel.
+  moduleVersionId?: string,
 ): Promise<import("./adminContentSchemas.js").ExportEnvelope> {
   const bundle = await getModuleContentBundle(moduleId);
 
+  const requested = moduleVersionId
+    ? bundle.versions.moduleVersions.find((v) => v.id === moduleVersionId)
+    : undefined;
+  if (moduleVersionId && !requested) {
+    throw new Error("Requested module version not found on this module.");
+  }
+
   const moduleVersion =
-    bundle.versions.moduleVersions.find((v) => v.id === bundle.module.activeVersionId)
+    requested
+    ?? bundle.versions.moduleVersions.find((v) => v.id === bundle.module.activeVersionId)
     ?? bundle.versions.moduleVersions[0]
     ?? null;
   if (!moduleVersion) {

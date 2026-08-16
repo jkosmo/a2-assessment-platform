@@ -3480,15 +3480,21 @@ function mcqLocaleMap(value) {
 // differ in another («Styret»/«Styret» in nb, "The board"/"The committee" in en-GB). A per-locale
 // `.some()` marks both as correct, the radio group keeps only the last one, and applying the
 // dialog rewrites correctAnswer to the wrong option — silently, with no edit.
+// JSON.stringify, not a `|`-join: the join is not injective when the text itself contains the
+// separator, so two different options could share an identity and both radios would be marked —
+// leaving the browser with the later, wrong one selected. Mirrors the server's
+// `localizedTextIdentity`, which had the same flaw.
 function mcqLocaleIdentity(value) {
   const map = mcqLocaleMap(value);
-  return ["en-GB", "nb", "nn"].map((locale) => (map[locale] ?? "").trim()).join("|");
+  return JSON.stringify(["en-GB", "nb", "nn"].map((locale) => (map[locale] ?? "").trim()));
 }
+
+const MCQ_EMPTY_IDENTITY = JSON.stringify(["", "", ""]);
 
 function mcqOptionIsCorrect(option, correctAnswer) {
   const identity = mcqLocaleIdentity(option);
   // An all-empty identity would match every empty option; a question with no answer set has none.
-  if (identity === "||") return false;
+  if (identity === MCQ_EMPTY_IDENTITY) return false;
   return identity === mcqLocaleIdentity(correctAnswer);
 }
 

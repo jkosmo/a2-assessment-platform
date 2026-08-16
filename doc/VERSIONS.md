@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.2 - 2026-08-16
+
+QA på S6. **Importen var totalt ødelagt, og testene var grønne.**
+
+Klienten sendte `targetModuleId` der skjemaet krever `targetId`. Zod fjerner ukjente nøkler, så
+hver eneste import fikk 400 — mens Playwright-testen passerte, fordi den mocket endepunktet og bare
+inspiserte kroppen den selv hadde satt sammen. En mock kan ikke avvise et feltnavn den aldri ble
+lært. Ny integrasjonstest treffer nå det ekte endepunktet med nøyaktig samme kropp som klienten
+sender; regelen den fester er at når klient og server deler en kontrakt, må minst én test kjøre
+**begge sider** av den.
+
+**Eksport pakket feil versjon.** Endepunktet foretrekker den *live* versjonen, mens arbeidsrommet
+viser nyeste utkast — så en forfatter som så på en upublisert v2 og trykket «Eksporter» fikk en fil
+med v1, og det nyeste arbeidet reiste ikke med. `export-package` tar nå
+`?moduleVersionId=`, og Rediger sender versjonen den viser. Standarden er uendret for modullista og
+kurseksport, som skal ha det deltakerne får.
+
+**Ulagrede innstillinger forsvant ved fane- og språkbytte.** Vakten i §8 så bare på Rediger.
+Innstillinger-feltene lever bare i DOM-en til man trykker Lagre, og panelet bygges på nytt fra
+bundlen når man kommer tilbake — så en tastet, ulagret gyldighetsdato var borte uten et ord.
+Bekreftelsen er dessuten *destruktiv* her, i motsetning til ved et utkast, som overlever byttet.
+
+**`|`-sammenføyningen i identiteten var ikke injektiv** — i klienten *og* i serverens
+`localizedTextIdentity`. Alternativer som `{en-GB:"A|B", nb:"C"}` og `{en-GB:"A", nb:"B|C"}` fikk
+samme identitet, så en fasit som **ikke** er ett av alternativene kunne passere validering. Et slikt
+spørsmål kan ingen deltaker få rett på, siden poengberegningen sammenligner de faktiske strengene.
+Begge sider bruker nå `JSON.stringify`.
+
+Dessuten: import mangler ikke lenger `Idempotency-Key`, verifiserer at innlastingen faktisk viser
+den importerte versjonen, og lar ikke handlingsmenyen dø når forfatteren avbryter bekreftelsen,
+avbryter filvelgeren eller fullfører en eksport.
+
+Brukerdokumentasjonen beskriver nå begge importflatene og hva som skiller dem.
+
 ## 2.18.1 - 2026-08-16
 
 **Eksport og import på Rediger (#896, S6).** Begge har bodd på modullista og i Avansert, så å

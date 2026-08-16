@@ -488,9 +488,17 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
   }
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
-    const envelope = await buildModuleExportEnvelope(request.params.moduleId, {
-      userId: actorId,
-    });
+    // #896 S6: ?moduleVersionId= lets the workspace export the version it is showing. Omitted, the
+    // historical rule applies (live version, else latest) — what the module list and course export
+    // want.
+    const requestedVersion = typeof request.query.moduleVersionId === "string"
+      ? request.query.moduleVersionId
+      : undefined;
+    const envelope = await buildModuleExportEnvelope(
+      request.params.moduleId,
+      { userId: actorId },
+      requestedVersion,
+    );
     response.json({ envelope });
   } catch (error) {
     if (error instanceof AppError) {
@@ -503,6 +511,10 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
     // message to the UI; 404 is reserved for "module does not exist".
     if (/no (versions|rubric|prompt|MCQ)/i.test(message)) {
       response.status(422).json({ error: "module_not_exportable", message });
+      return;
+    }
+    if (/Requested module version not found/i.test(message)) {
+      response.status(404).json({ error: "module_version_not_found", message });
       return;
     }
     response.status(404).json({ error: "module_export_failed", message });

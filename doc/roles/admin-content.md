@@ -70,16 +70,39 @@ API:
 
 ### 4. Importere og eksportere modul-JSON
 
-**Eksportere:**
+Det finnes **to** steder, med bevisst ulik betydning:
+
+| Hvor | Import gjør |
+|------|-------------|
+| **Modullista** | Oppretter en **ny modul** fra pakken |
+| **Inne i en modul → Rediger** | Legger pakken som en **ny upublisert versjon på modulen du står i** |
+
+Velg etter hva du er ute etter: en kopi ved siden av, eller nytt innhold i modulen du allerede har.
+
+**Eksportere fra modullista:**
 1. Finn modulen i listen
 2. Klikk **Eksporter JSON** (last ned)
-3. JSON-filen inneholder all modul-metadata, rubrikk og MCQ
+3. Filen inneholder den **publiserte** versjonen — det deltakerne faktisk får
 
-**Importere:**
+**Eksportere fra Rediger (inne i modulen):**
+1. Velg **Eksporter modulpakke** i handlingsmenyen
+2. Filen inneholder **versjonen du ser på** — også når den er et upublisert utkast
+
+**Importere inn i modulen du står i:**
+1. Velg **Importer pakke i denne modulen** i handlingsmenyen på Rediger
+2. Velg JSON-filen
+3. Innholdet legges som en ny upublisert versjon. Modulens egen tittel og beskrivelse endres
+   **ikke** — modulen beholder identiteten sin
+4. Gå gjennom innholdet og publiser når det er klart. Angrer du, gjenoppretter du en tidligere
+   versjon fra **Innstillinger → Lagrede versjoner**
+
+**Importere som ny modul:**
 1. Klikk **Importer JSON** i toppen av modullisten
 2. Velg JSON-filen
-3. Gjennomgå det importerte innholdet
-4. Lagre som kladd og publiser når klar
+3. Modulen opprettes som utkast — gjennomgå og publiser når klar
+
+> Import publiserer aldri av seg selv, uansett om pakken kom fra en publisert modul. Publisering er
+> alltid en egen, uttrykkelig handling — og den må gjennom oversettelseskontrollen.
 
 ### 5. Opprette og administrere kurs
 

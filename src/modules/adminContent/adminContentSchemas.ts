@@ -35,11 +35,22 @@ export const localizedTextPatchSchema = z.union([z.string().trim().min(1), local
  */
 export const localizedTextMaybeUntranslatedSchema = localizedTextPatchSchema;
 
+/**
+ * A collision-free identity for a localized value, used to check that an MCQ's correct answer is
+ * one of its options.
+ *
+ * JSON.stringify of the locale array, not a `|`-join: the join is not injective, because the
+ * separator can appear in the text. `{en-GB:"A|B", nb:"C"}` and `{en-GB:"A", nb:"B|C"}` produced
+ * the same identity, so an answer that is NOT one of the options could pass validation — and a
+ * question whose stored answer matches no option can never be scored correct for anyone
+ * (`matchesLocalizedContentVariant` compares the real strings). The question silently became
+ * unanswerable.
+ */
 export function localizedTextIdentity(value: LocalizedText): string {
   if (typeof value === "string") {
-    return `plain:${value.trim()}`;
+    return `plain:${JSON.stringify(value.trim())}`;
   }
-  return `locale:${value["en-GB"] ?? ""}|${value.nb ?? ""}|${value.nn ?? ""}`;
+  return `locale:${JSON.stringify([value["en-GB"] ?? "", value.nb ?? "", value.nn ?? ""])}`;
 }
 
 const safeShortString = z.string().trim().max(100).refine(

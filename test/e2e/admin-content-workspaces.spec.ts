@@ -156,24 +156,75 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).first()).toBeVisible();
   });
 
+  // #896 S6: export packages the version the workspace is SHOWING, and leaves the author able to
+  // keep working. Both halves were wrong: the endpoint defaults to the live version, and choosing
+  // a chat action disables the menu, which nothing put back after a download.
+  test("Rediger exports the version on screen and keeps the module actions usable", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-2",
+    });
+    // Live is v1; the workspace is showing the unpublished v2.
+    moduleExport.module.activeVersionId = "module-1-version-1";
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let exportUrl: string | null = null;
+    await page.route("**/api/admin/content/modules/*/export-package*", async (route) => {
+      exportUrl = route.request().url();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ envelope: { exportFormat: "a2-content-export/v1", scope: "module" } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    const download = page.waitForEvent("download");
+    await clickEnabledButton(page, /Eksporter modulpakke|Export module package/);
+    await download;
+
+    // The request names the displayed version. Without it the file holds the published v1 and the
+    // author's newest work never leaves the machine.
+    await expect.poll(() => exportUrl).toContain("moduleVersionId=module-1-version-2");
+
+    // And the workspace is still usable — the menu comes back rather than dead-ending on a
+    // download.
+    await expect(
+      page.getByRole("button", { name: /Eksporter modulpakke|Export module package/ }).last(),
+    ).toBeEnabled();
+  });
+
   // #896 S6: import belongs on Rediger and goes INTO the module you are in, as a new unpublished
   // version. Creating a new module beside it is the module list's job, and publishing stays an
   // explicit act — so a package whose source was live still lands as a draft.
   test("Rediger imports a package into this module as a new unpublished version", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-        }),
-      },
+      moduleExports: { "module-1": moduleExport },
     });
 
     let importBody: Record<string, unknown> | null = null;
+    let importKey: string | null = null;
     await page.route("**/api/admin/content/modules/import", async (route) => {
       importBody = route.request().postDataJSON() as Record<string, unknown>;
+      importKey = route.request().headers()["idempotency-key"] ?? null;
+      // The real endpoint appends a version, so the reload afterwards selects a different one.
+      // A mock that skips this hides the client's reload check — which exists because loadModule
+      // swallows its own fetch errors and would otherwise announce success over stale content.
+      const imported = { ...moduleExport.selectedConfiguration.moduleVersion, id: "module-1-version-2", versionNo: 2 };
+      moduleExport.selectedConfiguration.moduleVersion = imported;
+      moduleExport.versions.moduleVersions = [imported, ...moduleExport.versions.moduleVersions];
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -194,9 +245,16 @@ test.describe("admin content browser coverage", () => {
     });
 
     await expect.poll(() => importBody?.mode).toBe("replaceExisting");
-    expect(importBody!.targetModuleId).toBe("module-1");
+    // `targetId` is the schema's field name. This assertion used to read `targetModuleId`, which
+    // the mock happily accepted and the real endpoint strips — so every import 400'd while the
+    // suite stayed green. `test/m2-workspace-export-import-896.test.ts` now exercises the real
+    // endpoint with the same body; this one only guards the client's half.
+    expect(importBody!.targetId).toBe("module-1");
+    expect(importBody!.targetModuleId).toBeUndefined();
     // #896 §9: import always lands unpublished, whatever the source's state was.
     expect(importBody!.autoPublish).toBe(false);
+    // A retry after a lost response must not turn one package into two versions.
+    expect(importKey).toBeTruthy();
     await expect(page.getByText(/ny upublisert versjon|new unpublished version/).first()).toBeVisible();
   });
 
