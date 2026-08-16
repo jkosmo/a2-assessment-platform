@@ -4719,8 +4719,14 @@ async function importModulePackageInBackground(moduleId, file, idempotencyKey = 
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.module.importError"))}${escapeHtml(errMsg)}`, [
-      // Same key — a retry after a lost response must not import the package twice.
+      // Two different recoveries, because there are two different failures. A transient one
+      // (network, 502) is fixed by retrying the SAME file with the SAME key — no double import.
+      // A deterministic one (wrong package, malformed JSON) is not: retrying re-sends the file
+      // that was just rejected, and with the action menu disabled the author had no way to pick
+      // another one short of reloading the page.
       { labelKey: "shell.action.retry", action: () => importModulePackageInBackground(moduleId, file, key) },
+      { labelKey: "shell.module.importPickAnother", action: () => startImportPackageFlow() },
+      { labelKey: "shell.module.backToActions", action: () => showModuleActions() },
     ]);
   }
 }
@@ -4831,12 +4837,12 @@ function hasOpenEditForm() {
 // an open form's field values are LOST, while a draft is kept but stays unsaved.
 function unsavedTabSwitchKind() {
   if (hasOpenEditForm()) return "form";
-  if (sessionDraft) return "draft";
-  // #896 S6 QA: the Innstillinger inputs are DOM-only until Lagre, and leaving that tab re-renders
-  // the panel from `bundle` — so a typed-but-unsaved certification level or validity date simply
-  // vanished, with no warning. The spec's §8 rule ("warn on tab switch with unsaved changes")
-  // covers these too; only Rediger's draft was ever checked.
+  // #896 S6 QA: settings BEFORE the draft, deliberately. The Innstillinger inputs are DOM-only
+  // until Lagre and are destroyed by the re-render; a draft survives the switch. When both are
+  // dirty, checking the draft first showed the reassuring "your draft is kept" message while the
+  // settings were quietly thrown away — the most misleading of the three outcomes.
   if (hasUnsavedSettingsEdits()) return "settings";
+  if (sessionDraft) return "draft";
   return null;
 }
 
@@ -5053,6 +5059,12 @@ function renderSettingsPanel() {
   });
   host.querySelectorAll("[data-restore-version]").forEach((button) => {
     button.addEventListener("click", () => {
+      // #896 S6 QA: a physical double-click produced two calls with two different Date.now() keys,
+      // so idempotency could not help — either two versions, or the second failing on the unique
+      // (moduleId, versionNo). Disabling every restore button on the first click is what makes
+      // "exactly one new version" true from the author's side; the server key covers the
+      // lost-response retry, which is a different problem.
+      host.querySelectorAll("[data-restore-version]").forEach((other) => { other.disabled = true; });
       void restoreModuleVersionInBackground(button.dataset.restoreVersion);
     });
   });
@@ -5175,6 +5187,9 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
     announceStatus(t("shell.versions.restoreSuccess"));
   } catch (err) {
     const errMsg = String(err?.message ?? err);
+    // The click disabled every restore button to stop a double-click. A success path reloads and
+    // re-renders them; a failure has to put them back by hand, or the list is dead until reload.
+    document.querySelectorAll("[data-restore-version]").forEach((button) => { button.disabled = false; });
     logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, [
       // Same key: a retry after a lost response must not create a second version.
       { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId, key) },
@@ -5312,7 +5327,14 @@ async function saveSettingsInBackground() {
     // comparing the mode alone always matched and a failed reload still showed green.
     const reloadedCert = localizeValue(bundle?.module?.certificationLevel) ?? "";
     const certStale = moduleFields.certificationLevel !== undefined && reloadedCert !== moduleFields.certificationLevel;
-    if (reloadedMode !== mode || certStale) {
+    // Validity too. Checking mode and certification only meant a date-only change always compared
+    // equal on the two fields that were checked, so a failed reload still showed green over the
+    // old date — the exact hole the check was added to close, left open for one more field.
+    const asDay = (value) => (value ? new Date(value).toISOString().slice(0, 10) : "");
+    const datesStale = ["validFrom", "validTo"].some(
+      (field) => moduleFields[field] !== undefined && asDay(bundle?.module?.[field]) !== asDay(moduleFields[field]),
+    );
+    if (reloadedMode !== mode || certStale || datesStale) {
       logResolveSlot(slot, () => escapeHtml(t("shell.settings.savedStale")));
       showToast(t("shell.settings.savedStale"), "info");
       return;
@@ -5410,6 +5432,11 @@ function bindViewTabs() {
   // first / take the draft along / cancel) in the CHAT, which Innstillinger hides - so
   // return to Rediger first, or the button looks dead whenever a draft exists.
   settingsOpenAdvancedBtn?.addEventListener("click", () => {
+    // #896 S6 QA: the THIRD exit from Innstillinger. It calls applyTabState directly — bypassing
+    // switchToTab and therefore the unsaved-settings guard — so a typed validity date was lost on
+    // the way to Avansert, silently. The guard belongs on every way out, not on the one that was
+    // easiest to find.
+    if (hasUnsavedSettingsEdits() && !window.confirm(t("shell.tab.unsaved.settingsBody"))) return;
     applyTabState("edit");
     // The hand-off can be cancelled, or fail, and leave us here - so the URL has to move too,
     // or a reload would drop the author back into Innstillinger.
@@ -6206,6 +6233,14 @@ function populateUiLocaleSelect() {
   uiLocaleSelect.addEventListener("change", () => {
     const chosen = uiLocaleSelect.value;
     if (!supportedLocales.includes(chosen)) return;
+    // #896 S6 QA: switching UI language re-renders the settings panel further down, which destroys
+    // the DOM-only inputs. This is the second exit from Innstillinger and it had no guard at all —
+    // a typed validity date vanished the instant the language changed. Ask before, and put the
+    // selector back if the author says no.
+    if (activeTab === "settings" && hasUnsavedSettingsEdits() && !window.confirm(t("shell.tab.unsaved.settingsBody"))) {
+      uiLocaleSelect.value = currentLocale;
+      return;
+    }
     localStorage.setItem("participant.locale", chosen);
     const prev = currentLocale;
     currentLocale = chosen;

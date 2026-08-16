@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.3 - 2026-08-16
+
+Siste QA før stage. Fire P1 — alle samme feil: **jeg sikret én utgang fra Innstillinger, og det
+finnes fire.**
+
+Feltene der lever bare i DOM-en til man trykker Lagre, og hver vei ut bygger panelet på nytt fra
+bundlen. Én tastet gyldighetsdato, tre måter å miste den på uten et ord:
+
+- **Fanebytte med både utkast og skitne innstillinger** viste den *betryggende* meldingen «utkastet
+  beholdes» — sant om utkastet, usant om innstillingene, og den mest villedende av utfallene.
+  Innstillinger sjekkes nå først.
+- **Språkbytte i topplinja** hadde ingen vakt overhodet. Avslår du nå, settes velgeren tilbake, så
+  siden ikke påstår et språk den ikke byttet til.
+- **«Åpne avansert redigering»** kaller `applyTabState` direkte og gikk dermed utenom vakten.
+
+**Dobbeltklikk på «Gjenopprett»** lagde to versjoner. Hvert klikk genererte sin egen
+idempotensnøkkel, så nøkkelen kunne ikke hjelpe. Knappene deaktiveres nå ved første klikk;
+servernøkkelen dekker det andre problemet — tapt respons — som er noe annet.
+
+**Import med feil pakketype var en blindvei.** «Prøv igjen» sendte samme avviste fil, og
+handlingsmenyen var deaktivert. Nå tilbys «Velg en annen fil» og «Tilbake til modulhandlinger» ved
+siden av retry, fordi en forbigående feil og en deterministisk feil trenger ulik utvei.
+
+**Kontrollen etter innstillingslagring** sjekket modultype og sertifiseringsnivå, men ikke
+gyldighetsdatoene — så en endring som *bare* rørte datoene sammenlignet alltid likt på feltene som
+faktisk ble sjekket, og en feilet innlasting viste grønt over gammel dato. Nøyaktig hullet
+kontrollen ble lagt inn for å lukke, latt stå åpent for ett felt til.
+
 ## 2.18.2 - 2026-08-16
 
 QA på S6. **Importen var totalt ødelagt, og testene var grønne.**

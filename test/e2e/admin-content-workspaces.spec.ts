@@ -156,6 +156,60 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).first()).toBeVisible();
   });
 
+  // #896 S6 QA: the Innstillinger inputs live only in the DOM until Lagre, and every way OUT of
+  // that tab re-renders the panel and destroys them. I guarded one exit and there were four. This
+  // pins all of them, because the failure mode is silent — the value is simply gone.
+  test("unsaved settings are protected on every exit from Innstillinger", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const certInput = page.locator("#settingsCertLevel");
+    await expect(certInput).toBeVisible();
+    const original = await certInput.inputValue();
+    await certInput.fill("advanced-unsaved");
+
+    // Exit 1: tab switch. The dialog must be the DESTRUCTIVE one — settings are not kept, unlike
+    // a draft, and telling the author "your draft is kept" here would be a lie about a different
+    // thing entirely.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
+    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/forkast|discard/i);
+    await page.locator("#tabSwitchStay").click();
+    await expect(certInput).toHaveValue("advanced-unsaved");
+
+    // Exit 2: UI language. This one had no guard at all — the panel re-rendered instantly.
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await page.locator("#localeSelect").selectOption("nb");
+    await expect(certInput).toHaveValue("advanced-unsaved");
+    // Declining puts the selector back, so the page is not left claiming a language it did not
+    // switch to.
+    await expect(page.locator("#localeSelect")).toHaveValue("en-GB");
+
+    // Exit 3: "Åpne avansert redigering" calls applyTabState directly, going around switchToTab
+    // and therefore around the guard.
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await page.locator("#settingsOpenAdvanced").click();
+    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
+    await expect(certInput).toHaveValue("advanced-unsaved");
+
+    // And an untouched field must not trigger any of this — a guard that cries wolf gets clicked
+    // through without reading.
+    await certInput.fill(original);
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+  });
+
   // #896 S6: export packages the version the workspace is SHOWING, and leaves the author able to
   // keep working. Both halves were wrong: the endpoint defaults to the live version, and choosing
   // a chat action disables the menu, which nothing put back after a download.
