@@ -5077,8 +5077,9 @@ function renderSettingsPanel() {
     ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
     : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
-  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${renderCriteriaSection()}${actionHtml}${renderVersionHistory()}`;
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${renderCriteriaSection()}${renderPromptSection()}${actionHtml}${renderVersionHistory()}`;
   mountCriteriaSection();
+  mountPromptSection();
 
   // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
   // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
@@ -5101,6 +5102,29 @@ function renderSettingsPanel() {
       void restoreModuleVersionInBackground(button.dataset.restoreVersion);
     });
   });
+}
+
+/**
+ * #896 S3c: replace ONE locale in a stored localized value, keeping the others.
+ *
+ * The composer writes `promptTemplate.systemPrompt` verbatim — it does not merge. So an editor that
+ * edits one language has to do the merging itself, or the two languages it never showed are gone.
+ * That exact mistake has been made three times in this epic (title #892, description and
+ * certification level in S3b); this helper exists so it is made once and fixed once.
+ */
+function mergeLocaleInto(stored, locale, text) {
+  const next = {};
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    for (const [key, value] of Object.entries(stored)) {
+      if (typeof value === "string" && value.trim()) next[key] = value;
+    }
+  } else if (typeof stored === "string" && stored.trim()) {
+    // A bare string is legacy content the server reads as nb (#896 S4).
+    next[LEGACY_STRING_LOCALE] = stored;
+  }
+  if (typeof text === "string" && text.trim()) next[locale] = text;
+  else delete next[locale];
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 // #896 S3c: the criteria editor's state while Innstillinger is open. Module-level, because the
@@ -5183,6 +5207,70 @@ function hasUnsavedCriteriaEdits() {
     captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState),
   );
   return JSON.stringify(current) !== JSON.stringify(settingsCriteriaBaseline);
+}
+
+/**
+ * #896 S3c: the assessment instruction (prompt) editor.
+ *
+ * One language at a time, per §7 — the workspace edits in the active UI language and the other two
+ * are merged, not overwritten. Avansert shows three locale panes side by side; that is the model
+ * this epic is moving away from.
+ *
+ * Examples stay a JSON textarea, exactly as on Avansert. They are an array of free-shaped objects
+ * consumed by the LLM, and inventing a structured editor for them here would be a guess at a shape
+ * nothing else in the system constrains.
+ */
+let settingsPromptExpanded = false;
+
+function renderPromptSection() {
+  if (!bundle) return "";
+  const prompt = bundle.selectedConfiguration?.promptTemplateVersion ?? null;
+  const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: currentLocale }));
+
+  if (!settingsPromptExpanded) {
+    return `<section class="settings-criteria-section">
+      <div class="settings-criteria-head">
+        <h3 class="version-history-heading">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
+        <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
+          aria-expanded="false" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.promptEdit"))}</button>
+      </div>
+      <div id="settingsPromptEditor" hidden></div>
+    </section>`;
+  }
+
+  const sys = escapeHtml(localizeValueForLocale(prompt?.systemPrompt ?? "", currentLocale));
+  const user = escapeHtml(localizeValueForLocale(prompt?.userPromptTemplate ?? "", currentLocale));
+  const examples = escapeHtml(JSON.stringify(prompt?.examples ?? [], null, 2));
+
+  return `<section class="settings-criteria-section">
+    <div class="settings-criteria-head">
+      <h3 class="version-history-heading">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
+      <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
+        aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
+    </div>
+    <div id="settingsPromptEditor" class="settings-criteria-editor">
+      <p class="settings-empty">${localeLabel}</p>
+      <label class="settings-field-label" for="settingsPromptSystem">${escapeHtml(t("shell.settings.promptSystem"))}</label>
+      <textarea id="settingsPromptSystem" class="settings-textarea" rows="4">${sys}</textarea>
+      <label class="settings-field-label" for="settingsPromptUser">${escapeHtml(t("shell.settings.promptUser"))}</label>
+      <textarea id="settingsPromptUser" class="settings-textarea" rows="4">${user}</textarea>
+      <label class="settings-field-label" for="settingsPromptExamples">${escapeHtml(t("shell.settings.promptExamples"))}</label>
+      <textarea id="settingsPromptExamples" class="settings-textarea settings-textarea--mono" rows="4">${examples}</textarea>
+    </div>
+  </section>`;
+}
+
+function mountPromptSection() {
+  const toggle = document.getElementById("settingsPromptToggle");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
+    settingsPromptExpanded = !settingsPromptExpanded;
+    renderSettingsPanel();
+  });
+  for (const id of ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"]) {
+    const el = document.getElementById(id);
+    if (el) el.dataset.renderedValue = el.value;
+  }
 }
 
 /**
@@ -5315,7 +5403,11 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
 // The settings inputs live only in the DOM until Lagre. Their rendered values are stamped on the
 // elements so anything that reloads the module can tell whether it would be throwing away edits.
 function hasUnsavedSettingsEdits() {
-  const ids = ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType"];
+  const ids = [
+    "settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType",
+    // #896 S3c: the prompt editor's fields are DOM-only too, and leaving the tab rebuilds them.
+    "settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples",
+  ];
   const fieldDirty = ids.some((id) => {
     const el = document.getElementById(id);
     return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
@@ -5415,7 +5507,39 @@ async function saveSettingsInBackground() {
       )
     : null;
 
-  if (mode === currentMode && !thresholdChanged && !criteriaRecord && Object.keys(moduleFields).length === 0) {
+  // #896 S3c: the assessment instruction. Edited in ONE language, merged onto the stored value —
+  // the composer writes it verbatim, so sending only the edited locale would delete the other two.
+  const promptDirty = ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"].some((id) => {
+    const el = document.getElementById(id);
+    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  });
+  let promptPayload = null;
+  if (promptDirty) {
+    const stored = cfg.promptTemplateVersion ?? {};
+    const examplesEl = document.getElementById("settingsPromptExamples");
+    let examples = stored.examples ?? [];
+    if (examplesEl) {
+      try {
+        const parsed = JSON.parse(examplesEl.value || "[]");
+        if (!Array.isArray(parsed)) throw new Error("not an array");
+        examples = parsed;
+      } catch {
+        // Malformed JSON is the author's to see, not something to silently drop or guess at.
+        showToast(t("shell.settings.promptExamplesInvalid"), "error");
+        examplesEl.focus();
+        return;
+      }
+    }
+    const systemPrompt = mergeLocaleInto(stored.systemPrompt, currentLocale, document.getElementById("settingsPromptSystem")?.value ?? "");
+    const userPromptTemplate = mergeLocaleInto(stored.userPromptTemplate, currentLocale, document.getElementById("settingsPromptUser")?.value ?? "");
+    if (!systemPrompt || !userPromptTemplate) {
+      showToast(t("shell.settings.promptRequired"), "error");
+      return;
+    }
+    promptPayload = { systemPrompt, userPromptTemplate, examples };
+  }
+
+  if (mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload && Object.keys(moduleFields).length === 0) {
     showToast(t("shell.settings.noChanges"), "info");
     return;
   }
@@ -5444,7 +5568,8 @@ async function saveSettingsInBackground() {
             },
           }
         : { rubricVersionId: latestRubricId }),
-      promptTemplateVersionId: latestPromptId,
+      // Same either/or as the rubric: a new inline prompt, or a reference to the existing one.
+      ...(promptPayload ? { promptTemplate: promptPayload } : { promptTemplateVersionId: latestPromptId }),
     }),
     ...(isFreetextOnly ? {} : { mcqSetVersionId: latestMcqId }),
     ...(policy ? { assessmentPolicy: policy } : {}),
@@ -5465,6 +5590,7 @@ async function saveSettingsInBackground() {
     settingsCriteriaState = null;
     settingsCriteriaBaseline = null;
     settingsCriteriaExpanded = false;
+    settingsPromptExpanded = false;
     renderSettingsPanel();
     // loadModule swallows its own fetch errors, so a 502 on the reload would leave the panel
     // showing the previous version under a green toast. Verify what came back instead of

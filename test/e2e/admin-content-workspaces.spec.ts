@@ -215,6 +215,97 @@ test.describe("admin content browser coverage", () => {
     expect(savedBody.rubric.scalingRule.max_total).toBe(10);
   });
 
+  // #896 S3c: the assessment instruction. The composer writes promptTemplate VERBATIM — it does
+  // not merge — so an editor that edits one language must merge the other two itself. That exact
+  // mistake has been made three times in this epic already (title, description, certification
+  // level), which is why this test looks at what happens to the languages nobody touched.
+  test("Innstillinger edits the assessment instruction in one language and keeps the others", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.promptTemplateVersion = {
+      id: "prompt-1",
+      versionNo: 1,
+      systemPrompt: { "en-GB": "You assess.", nb: "Du vurderer.", nn: "Du vurderer." },
+      userPromptTemplate: { "en-GB": "Assess: {{a}}", nb: "Vurder: {{a}}", nn: "Vurder: {{a}}" },
+      examples: [{ example: "Good" }],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let savedBody: any = null;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#settingsPromptEditor")).toBeHidden();
+    await page.locator("#settingsPromptToggle").click();
+
+    // One language at a time (§7) — the UI is en-GB here, so that is what is shown and edited.
+    await expect(page.locator("#settingsPromptSystem")).toHaveValue("You assess.");
+    await page.locator("#settingsPromptSystem").fill("You assess strictly.");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => savedBody !== null).toBe(true);
+    // Inline prompt, not a reference to the old version.
+    expect(savedBody.promptTemplateVersionId).toBeUndefined();
+    expect(savedBody.promptTemplate.systemPrompt["en-GB"]).toBe("You assess strictly.");
+    // The two languages the editor never showed are still there. This is the whole point.
+    expect(savedBody.promptTemplate.systemPrompt.nb).toBe("Du vurderer.");
+    expect(savedBody.promptTemplate.systemPrompt.nn).toBe("Du vurderer.");
+    // Untouched fields ride along unchanged.
+    expect(savedBody.promptTemplate.userPromptTemplate.nb).toBe("Vurder: {{a}}");
+    expect(savedBody.promptTemplate.examples).toEqual([{ example: "Good" }]);
+  });
+
+  test("malformed examples JSON is reported instead of silently dropped", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.promptTemplateVersion = {
+      id: "prompt-1",
+      versionNo: 1,
+      systemPrompt: { "en-GB": "You assess.", nb: "Du vurderer.", nn: "Du vurderer." },
+      userPromptTemplate: { "en-GB": "Assess: {{a}}", nb: "Vurder: {{a}}", nn: "Vurder: {{a}}" },
+      examples: [],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let saveCalled = false;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      saveCalled = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsPromptToggle").click();
+    await page.locator("#settingsPromptExamples").fill("{not json");
+    await page.locator("#settingsSave").click();
+
+    // Nothing is sent, and the author is told why — rather than the examples quietly becoming [].
+    await expect(page.getByText(/JSON-liste|JSON array/).first()).toBeVisible();
+    expect(saveCalled).toBe(false);
+  });
+
   test("unsaved criteria edits are caught by the same exit guard as the other settings", async ({ page }) => {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
