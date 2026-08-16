@@ -161,6 +161,31 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 
+#### Localized text: complete, partial, or a bare string (#892 / #905 / #913)
+
+Every localized field accepts three shapes, and they mean different things:
+
+| Shape | Meaning |
+|-------|---------|
+| `{"en-GB": "…", "nb": "…", "nn": "…"}` | Translated into all three languages |
+| `{"nb": "…", "en-GB": "…"}` (partial) | Translated into the listed languages, **genuinely missing** the others |
+| `"…"` (bare string) | Written in one language, not translated yet. Read as `nb` |
+
+The partial form is the important one. A translation that succeeds for one target language and
+fails for another has to be expressible, or the client is forced to collapse the value back to the
+source language and **discard the translation that succeeded** — which is what #892 and #905 were
+about, and what #913 finished by extending the same contract to MCQ content (`mcqSet.title`,
+`questions[].stem`, `questions[].options[]`, `questions[].correctAnswer`, `questions[].rationale`).
+
+Two rules for clients:
+
+- **Never write a source-language copy into a locale whose translation failed.** A copy is
+  indistinguishable from a real translation, so the publish gate cannot see the gap and the wrong
+  language reaches a participant.
+- **Omit a locale rather than sending `""`.** An empty localized value is rejected; an absent
+  locale is the supported way to say "not translated". The same holds for an optional field the
+  content does not have (`rationale`, `description`): omit the key.
+
 #### Publish translation gate (#896 S4)
 
 Publishing is blocked when a participant-facing field is missing one of the three locales

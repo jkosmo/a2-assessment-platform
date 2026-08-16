@@ -2176,6 +2176,53 @@ test.describe("admin content browser coverage", () => {
     expect(sentQuestion.rationale).toBeUndefined();
   });
 
+  // #896 S4 QA round 5: a publish response can carry a blueprint mismatch alongside the
+  // translation gaps — the route appends gate issues to the existing validation list. Showing only
+  // the gaps meant the author translated, retried, and failed again on a blocker nobody had
+  // mentioned. A gate that hides half the reason teaches authors to distrust it.
+  test("shell publish lists a non-translation blocker alongside the translation gaps", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.route("**/api/admin/content/modules/*/module-versions/*/publish", async (route) => {
+      await route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "publish_blocked_by_validation",
+          issues: [
+            {
+              severity: "blocking",
+              code: "translation_incomplete",
+              message: "taskText: missing nn",
+              field: "taskText",
+              missingLocales: ["nn"],
+            },
+            {
+              severity: "blocking",
+              code: "MCQ_COUNT_FAR_BELOW_BLUEPRINT",
+              message: "The module has 2 MCQ questions but the blueprint asks for 10.",
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Publish|Publiser/);
+
+    await expect(page.getByText(/Task text|Oppgavetekst/).first()).toBeVisible();
+    await expect(page.getByText(/blueprint asks for 10/).first()).toBeVisible();
+  });
+
   test("shell publish keeps the module loaded and shows module actions", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],

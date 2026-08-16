@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.7 - 2026-08-16
+
+QA-runde 5 på publiseringsgaten (#896 S4). Seks funn, alle P2 — ingen P1 igjen.
+
+**To blokkeringer kunne komme etter hverandre i stedet for sammen.** En publiseringsrespons kan
+bære både oversettelseshull og for eksempel et blueprint-avvik; ruten legger gate-issues til den
+eksisterende valideringslista. Begge flatene viste bare oversettelsesdelen, så forfatteren oversatte,
+prøvde igjen og feilet på en blokkering de aldri hadde fått se. En gate som skjuler halve grunnen
+lærer forfatteren å ikke stole på den.
+
+**Kildespråkvalget så ikke på begrunnelsen.** Etter #913 kan et spørsmål ha begrunnelse på ett
+språk og stamme på et annet; å velge stammens språk gjorde begrunnelsens hull umulig å fylle.
+
+**Avansert-siden kunne ikke lagre den nye, lovlige MCQ-formen.** Dialogen skrev `""` for språk
+forfatteren ikke hadde fylt ut, og sendte alltid `rationale`. Tomme lokaliserte verdier avvises, så
+å åpne en delvis oversatt MCQ og trykke «Bruk» ga 400.
+
+**En oversatt fasit som ikke lenger matchet et alternativ ga en gåtefull lagringsfeil.** Returnerer
+oversetteren «The members.» der alternativet er «The members», svarer lokaliseringen 200, klienten
+tror hullene er fylt, og den komponerte lagringen feiler med 400 uten spor tilbake til
+oversettelsen. Svaret kontrolleres nå mot alternativene før det aksepteres.
+
+**API-referansen** beskriver nå de tre formene en lokalisert verdi kan ha — komplett, delvis og ren
+streng — og hva de betyr, inkludert de to reglene en klient må følge: aldri skriv en kildekopi inn
+i et språk som feilet, og utelat et språk i stedet for å sende tom streng.
+
 ## 2.17.6 - 2026-08-15
 
 QA-runde 4 på publiseringsgaten (#896 S4). Seks funn — alle i MCQ-håndteringen og i lokalisering

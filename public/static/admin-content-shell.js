@@ -2337,16 +2337,28 @@ function translationGateFieldLabel(field) {
   return label.startsWith("shell.publish.field.") ? String(field) : label;
 }
 
-function describeTranslationGate(issues) {
+function describeTranslationGate(issues, otherBlockers = []) {
   const lines = issues.map((issue) => {
     const label = translationGateFieldLabel(issue.field);
     return t("shell.publish.translationGate.item")
       .replace("{field}", label)
       .replace("{locales}", issue.missingLocales.join(", "));
   });
+  // A publish response can carry a blueprint mismatch alongside the translation gaps. Showing only
+  // the gaps meant the author translated, retried, and failed again on a blocker they were never
+  // told about — the gate would have taught them to distrust it.
+  const others = otherBlockers.map((issue) => issue?.message).filter(Boolean);
   return `<strong>${escapeHtml(t("shell.publish.translationGate.heading"))}</strong><ul>${
-    lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
+    [...lines, ...others].map((line) => `<li>${escapeHtml(line)}</li>`).join("")
   }</ul>`;
+}
+
+// Blocking issues from the same publish response that are NOT translation gaps. "Translate what is
+// missing" cannot clear these, so they are listed but not acted on.
+function otherBlockingIssuesFrom(error) {
+  const issues = error?.body?.issues;
+  if (!Array.isArray(issues)) return [];
+  return issues.filter((issue) => issue?.code !== "translation_incomplete" && issue?.severity === "blocking");
 }
 
 // #896 S4: "Oversett det som mangler" — fills only the holes. Every locale that already has
@@ -2520,6 +2532,18 @@ async function translateMissingLocalesThenPublish(issues) {
         translatedQuestions.forEach((question, index) => {
           const target = mergedMcq[index];
           if (!target) return;
+          // The save schema requires correctAnswer to be one of options, VERBATIM. A translator
+          // that renders the answer "The members." and the option "The members" produces a 200
+          // here and a 400 three steps later, surfacing as a generic save failure with no hint
+          // that the translation was the cause. Reject this locale's MCQ fill instead — the gap
+          // stays open and is reported as such, which is at least true.
+          const translatedOptions = question?.options ?? [];
+          if (
+            typeof question?.correctAnswer === "string"
+            && !translatedOptions.some((option) => option === question.correctAnswer)
+          ) {
+            throw new Error("translated correctAnswer does not match any translated option");
+          }
           fillLocaleGap(target.stem, targetLocale, question?.stem);
           fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
           // Only if the question HAD a rationale. The localization response contract requires the
@@ -2633,7 +2657,8 @@ async function publishLatestDraftInBackground() {
     // list of holes with an action that fills them.
     const gateIssues = translationGateIssuesFrom(err);
     if (gateIssues.length > 0) {
-      logResolveSlot(slot, () => describeTranslationGate(gateIssues), [
+      const otherBlockers = otherBlockingIssuesFrom(err);
+      logResolveSlot(slot, () => describeTranslationGate(gateIssues, otherBlockers), [
         { labelKey: "shell.publish.translationGate.fillGaps", action: () => translateMissingLocalesThenPublish(gateIssues) },
         { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
       ]);

@@ -3461,6 +3461,16 @@ async function fillOtherLocalesFromActiveMcqLocale() {
   }
 }
 
+// #913: keep only the locales that actually have text. An empty string is not "this language is
+// blank" to the schema — it is an invalid localized value, and the whole save is rejected.
+function dropBlankLocales(map) {
+  const kept = {};
+  for (const [locale, value] of Object.entries(map)) {
+    if (typeof value === "string" && value.trim()) kept[locale] = value;
+  }
+  return kept;
+}
+
 function applyMcqDialog() {
   const dialog = document.getElementById("dialogMcq");
   const titleEl = document.getElementById("dlgMCQ_setTitle");
@@ -3491,7 +3501,19 @@ function applyMcqDialog() {
     if (!foundCorrect && options.length > 0) {
       for (const locale of locales) correctAnswer[locale] = options[0][locale];
     }
-    questions.push({ stem, options, correctAnswer, rationale });
+    // #913: a locale the author left blank must be OMITTED, not sent as "". The schema rejects an
+    // empty localized value, so an untouched language turned every save from this dialog into a
+    // 400 — and since #913 made partial MCQs storable, opening one here and pressing Bruk was the
+    // ordinary way to hit it. An absent rationale likewise stays absent rather than becoming an
+    // object full of empty strings.
+    const question = {
+      stem: dropBlankLocales(stem),
+      options: options.map((option) => dropBlankLocales(option)),
+      correctAnswer: dropBlankLocales(correctAnswer),
+    };
+    const trimmedRationale = dropBlankLocales(rationale);
+    if (Object.keys(trimmedRationale).length > 0) question.rationale = trimmedRationale;
+    questions.push(question);
   }
 
   mcqQuestionsJsonInput.value = questions.length > 0 ? JSON.stringify(questions, null, 2) : "";
