@@ -104,9 +104,17 @@ test.describe("admin content browser coverage", () => {
     });
 
     let restoredFrom: string | null = null;
+    let restoreKey: string | null = null;
     await page.route("**/api/admin/content/modules/*/module-versions/*/restore", async (route) => {
       const segments = new URL(route.request().url()).pathname.split("/");
       restoredFrom = decodeURIComponent(segments[segments.length - 2] ?? "");
+      restoreKey = route.request().headers()["idempotency-key"] ?? null;
+      // The real server appends a version, so the reload afterwards shows a DIFFERENT current
+      // version. A mock that skips this would hide the client's reload check — which exists
+      // precisely because loadModule swallows its own fetch errors.
+      const restored = { ...current, id: "module-1-version-4", versionNo: 4, publishedAt: null };
+      moduleExport.selectedConfiguration.moduleVersion = restored;
+      moduleExport.versions.moduleVersions = [restored, ...moduleExport.versions.moduleVersions];
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -127,15 +135,102 @@ test.describe("admin content browser coverage", () => {
     await expect(items.nth(0).locator(".version-restore")).toHaveCount(0);
     await expect(items.nth(1).locator(".version-restore")).toHaveCount(1);
 
+    // Each button names its version. Four identically-labelled "Gjenopprett" buttons tell a
+    // screen-reader user nothing about which one goes where.
+    await expect(items.nth(2).locator(".version-restore")).toHaveAttribute(
+      "aria-label",
+      /(Gjenopprett|Restore) (versjon|version) 1/,
+    );
+
     await items.nth(2).locator(".version-restore").click();
 
     await expect.poll(() => restoredFrom).toBe("module-1-version-1");
+    // An Idempotency-Key rides along, so a retry after a lost response cannot produce a second
+    // restored version.
+    expect(restoreKey).toBeTruthy();
 
     // Restore is triggered from Innstillinger, but the author's next question is "what does it say
     // now?" — so the workspace returns to Rediger. That also puts the confirmation somewhere they
     // can actually see it: the chat log lives in the panel Innstillinger hides.
     await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).first()).toBeVisible();
+  });
+
+  // #896 S6: import belongs on Rediger and goes INTO the module you are in, as a new unpublished
+  // version. Creating a new module beside it is the module list's job, and publishing stays an
+  // explicit act — so a package whose source was live still lands as a draft.
+  test("Rediger imports a package into this module as a new unpublished version", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    let importBody: Record<string, unknown> | null = null;
+    await page.route("**/api/admin/content/modules/import", async (route) => {
+      importBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleId: "module-1", moduleVersionId: "module-1-version-2" }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    const chooser = page.waitForEvent("filechooser");
+    await clickEnabledButton(page, /Importer pakke i denne modulen|Import package into this module/);
+    await (await chooser).setFiles({
+      name: "module.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({ exportFormat: "a2-content-export/v1", scope: "module", module: {} }),
+      ),
+    });
+
+    await expect.poll(() => importBody?.mode).toBe("replaceExisting");
+    expect(importBody!.targetModuleId).toBe("module-1");
+    // #896 §9: import always lands unpublished, whatever the source's state was.
+    expect(importBody!.autoPublish).toBe(false);
+    await expect(page.getByText(/ny upublisert versjon|new unpublished version/).first()).toBeVisible();
+  });
+
+  test("Rediger refuses a course package instead of sending it to the module importer", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    let importCalled = false;
+    await page.route("**/api/admin/content/modules/import", async (route) => {
+      importCalled = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+
+    const chooser = page.waitForEvent("filechooser");
+    await clickEnabledButton(page, /Importer pakke i denne modulen|Import package into this module/);
+    await (await chooser).setFiles({
+      name: "course.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify({ exportFormat: "a2-content-export/v1", scope: "course" })),
+    });
+
+    // Said so before sending it, rather than failing deep inside the importer.
+    await expect(page.getByText(/kurspakke|course package/).first()).toBeVisible();
+    expect(importCalled).toBe(false);
   });
 
   test("advanced editor can save, publish, and unpublish a module version", async ({ page }) => {

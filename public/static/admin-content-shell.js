@@ -4552,9 +4552,133 @@ function showModuleActions() {
       action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     },
   };
-  logBot(() => t("shell.module.actionsPrompt"), model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
+  const actions = model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
+  // #896 S6: export/import belong on Rediger, per the IA table. They lived only on the module list
+  // and in Avansert, so moving content between installations meant leaving the workspace you were
+  // working in. Appended rather than folded into `actionKeys` because they are not part of the
+  // authoring progression the status model describes — they are available whenever a module is.
+  if (selectedModuleId) {
+    actions.push(
+      { labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
+      { labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
+    );
+  }
+  logBot(() => t("shell.module.actionsPrompt"), actions);
   if (model.shouldOfferUnifiedRevision) {
     startUnifiedRevisionFlow();
+  }
+}
+
+/**
+ * #896 S6: export the module as a portable package.
+ *
+ * `export-package`, not `/export`. The two are not a pair: `/export` returns the live editing
+ * bundle, while the import endpoint only accepts the `a2-content-export/v1` envelope this one
+ * produces. Exporting from the wrong endpoint gives a file that cannot be imported.
+ */
+async function exportModulePackageInBackground() {
+  const moduleId = selectedModuleId;
+  if (!moduleId) return;
+
+  const slot = logProgress("shell.module.exportProgress");
+  slot.abortBtn.remove();
+
+  try {
+    const body = await apiFetch(
+      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`,
+      getHeaders,
+    );
+    const envelope = body?.envelope;
+    if (!envelope) throw new Error("empty envelope");
+
+    const title = localizeValueForLocale(bundle?.module?.title ?? "module", currentLocale);
+    const safeTitle =
+      String(title).replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "module";
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `module-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    logResolveSlot(slot, () => escapeHtml(t("shell.module.exportSuccess")));
+    showToast(t("shell.module.exportSuccess"), "success");
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.module.exportError"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => exportModulePackageInBackground() },
+    ]);
+  }
+}
+
+/**
+ * #896 S6: import a package INTO this module, as a new unpublished version.
+ *
+ * Not "create a new module" — that is the module list's job. Here the package becomes just another
+ * «Mellomlagring» in this module's version chain: reviewable, discardable by restoring an earlier
+ * version, and publishable only by the ordinary explicit act. Same rule as course import.
+ *
+ * The module's own title and description are NOT taken from the package. The module keeps its
+ * identity; only its content gains a version.
+ */
+function startImportPackageFlow() {
+  const moduleId = selectedModuleId;
+  if (!moduleId) return;
+
+  if (sessionDraft && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) return;
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) void importModulePackageInBackground(moduleId, file);
+  });
+  input.click();
+}
+
+async function importModulePackageInBackground(moduleId, file) {
+  const slot = logProgress("shell.module.importProgress");
+  slot.abortBtn.remove();
+
+  try {
+    const text = await file.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error(t("shell.module.importNotJson"));
+    }
+    // A course package imported here would either fail deep inside the importer or, worse, be
+    // half-understood. Say so before sending it.
+    if (payload?.scope === "course") throw new Error(t("shell.module.importIsCourse"));
+
+    await apiFetch(`/api/admin/content/modules/import`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        payload,
+        // Into THIS module, appending a version — not a new module beside it.
+        mode: "replaceExisting",
+        targetModuleId: moduleId,
+        // #896 §9: import always lands unpublished, whatever the source's state was.
+        autoPublish: false,
+      }),
+    });
+
+    sessionDraft = null;
+    previewDraft = null;
+    await loadModule(moduleId);
+    switchToTab("edit");
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.module.importSuccess"))}</strong>`);
+    showToast(t("shell.module.importSuccess"), "success");
+    announceStatus(t("shell.module.importSuccess"));
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.module.importError"))}${escapeHtml(errMsg)}`);
   }
 }
 
@@ -4863,6 +4987,13 @@ function renderSettingsPanel() {
 
   host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${actionHtml}${renderVersionHistory()}`;
 
+  // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
+  // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
+  for (const id of ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType"]) {
+    const el = document.getElementById(id);
+    if (el) el.dataset.renderedValue = el.value;
+  }
+
   document.getElementById("settingsSave")?.addEventListener("click", () => {
     void saveSettingsInBackground();
   });
@@ -4903,9 +5034,12 @@ function renderVersionHistory() {
       ? `<span class="version-when">${escapeHtml(formatDateTime(version.createdAt))}</span>`
       : "";
     // No restore button on the version already loaded — it would copy the module onto itself.
+    // aria-label carries the version number: a screen-reader user tabbing a list of five
+    // identically-named "Restore" buttons has no way to tell which one goes where.
     const action = isCurrent
       ? ""
-      : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}">${
+      : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}"
+          aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: version.versionNo }))}">${
           escapeHtml(t("shell.versions.restore"))
         }</button>`;
     return `<li class="version-item">
@@ -4937,13 +5071,20 @@ function formatDateTime(value) {
  * #896 S5: restore. The server copies the chosen version forward into a NEW version — history is
  * append-only, so this is undoable by restoring whatever came before it.
  */
-async function restoreModuleVersionInBackground(sourceVersionId) {
+async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey = null) {
   const moduleId = selectedModuleId;
   if (!moduleId || !sourceVersionId) return;
 
-  // An unsaved draft would be lost: the restore writes the next version from stored content, so
-  // whatever is in the editor never reaches the database. Same reasoning as the settings save.
-  if (sessionDraft && !window.confirm(t("shell.versions.confirmDiscardDraft"))) return;
+  // Unsaved work would be lost: the restore writes the next version from STORED content, so
+  // whatever is only in the browser never reaches the database. That includes the settings inputs,
+  // which are DOM-only until Lagre — `sessionDraft` says nothing about them.
+  const losesWork = !!sessionDraft || hasUnsavedSettingsEdits();
+  if (losesWork && !window.confirm(t("shell.versions.confirmDiscardDraft"))) return;
+
+  // One key per restore ACTION, reused by the retry. Without it a lost response leaves the author
+  // choosing between "retry and maybe get two versions" and "do not retry and maybe get none";
+  // with it, the retry either finds the committed result or performs the restore once.
+  const key = idempotencyKey ?? `restore-${moduleId}-${sourceVersionId}-${Date.now()}`;
 
   const slot = logProgress("shell.versions.restoreProgress");
   slot.abortBtn.remove();
@@ -4952,24 +5093,49 @@ async function restoreModuleVersionInBackground(sourceVersionId) {
     const result = await apiFetch(
       `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(sourceVersionId)}/restore`,
       getHeaders,
-      { method: "POST", body: JSON.stringify({}) },
+      { method: "POST", body: JSON.stringify({}), headers: { "Idempotency-Key": key } },
     );
-    latestSavedModuleVersionId = result?.moduleVersion?.id ?? null;
+    const restoredId = result?.moduleVersion?.id ?? null;
+    latestSavedModuleVersionId = restoredId;
     sessionDraft = null;
     previewDraft = null;
     await loadModule(moduleId);
     // Restore is triggered from Innstillinger, but what the author wants to see afterwards is the
     // restored CONTENT — and the confirmation itself lands in the chat log, which that tab hides.
     switchToTab("edit");
+
+    // loadModule swallows its own fetch errors, so reaching this line does NOT prove the workspace
+    // is showing the restored version. Saying "restored" over the previous content would be the
+    // worst of both: the change happened, and the screen argues otherwise.
+    const shown = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+    if (restoredId && shown !== restoredId) {
+      logResolveSlot(slot, () => escapeHtml(t("shell.versions.restoreReloadFailed")), [
+        { labelKey: "shell.action.retry", action: () => loadModule(moduleId) },
+      ]);
+      showToast(t("shell.versions.restoreReloadFailed"), "error");
+      return;
+    }
+
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.versions.restoreSuccess"))}</strong>`);
     showToast(t("shell.versions.restoreSuccess"), "success");
     announceStatus(t("shell.versions.restoreSuccess"));
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId) },
+      // Same key: a retry after a lost response must not create a second version.
+      { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId, key) },
     ]);
   }
+}
+
+// The settings inputs live only in the DOM until Lagre. Their rendered values are stamped on the
+// elements so anything that reloads the module can tell whether it would be throwing away edits.
+function hasUnsavedSettingsEdits() {
+  const ids = ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType"];
+  return ids.some((id) => {
+    const el = document.getElementById(id);
+    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  });
 }
 
 /**

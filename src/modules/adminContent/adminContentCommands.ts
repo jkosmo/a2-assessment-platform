@@ -921,9 +921,16 @@ export async function publishModuleVersion(
  * to this text", not "put this in front of participants" — publishing stays the separate,
  * deliberate act it is everywhere else, and it still has to pass the translation gate.
  *
- * Component versions (rubric, prompt, MCQ set) are REFERENCED, not copied. They are immutable
- * rows, so pointing at the same ones reproduces the source version exactly; copying them would
- * add rows nobody can tell apart from the originals.
+ * Component versions (rubric, prompt, MCQ set) are REFERENCED, not copied. They are versioned
+ * rows, so pointing at the same ones reproduces the source version; copying them would add rows
+ * nobody can tell apart from the originals.
+ *
+ * One documented exception (#915): `updateRubricVersionScalingRule` patches a RubricVersion IN
+ * PLACE — «Behold kriteriene» flips the stored blueprint hash without bumping versionNo. Restore a
+ * version authored before that flip and the criteria come back correct, but the drift banner reads
+ * the newer hash and may show a false "criteria have drifted". The criteria themselves are intact;
+ * only the drift indicator is misleading. Copying the rubric on restore would trade a wrong banner
+ * for a duplicated row on every restore, which is a worse deal.
  */
 export async function restoreModuleVersion(input: {
   moduleId: string;

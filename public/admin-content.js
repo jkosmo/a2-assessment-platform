@@ -3371,8 +3371,13 @@ function openMcqDialog(triggerBtn) {
     questions.forEach((q, i) => list.appendChild(createMcqQuestionEl(q, i)));
   }
 
-  setActiveDialogLocaleTab(dialog, "en-GB");
-  setActiveMcqLocale("en-GB");
+  // Open on the author's own language, not on en-GB. A legacy MCQ stored as bare Norwegian strings
+  // now loads into the nb controls (that is what the server reads them as), so forcing the en-GB
+  // tab greeted a Norwegian author with an empty stem, empty options and an empty rationale — the
+  // content looked deleted until they thought to click another tab.
+  const openLocale = ["en-GB", "nb", "nn"].includes(currentLocale) ? currentLocale : "en-GB";
+  setActiveDialogLocaleTab(dialog, openLocale);
+  setActiveMcqLocale(openLocale);
   dialog.showModal();
 }
 
@@ -3468,15 +3473,23 @@ function mcqLocaleMap(value) {
   return {};
 }
 
-// True when this option is the correct answer, in ANY locale they share. Comparing a single locale
-// fails for a question translated into nb/nn only.
+// True when this option IS the correct answer. Compares the whole locale map, mirroring the
+// server's `localizedTextIdentity` — which is the comparison the save schema will make.
+//
+// Not "matches in any one locale": two options can legitimately share a word in one language and
+// differ in another («Styret»/«Styret» in nb, "The board"/"The committee" in en-GB). A per-locale
+// `.some()` marks both as correct, the radio group keeps only the last one, and applying the
+// dialog rewrites correctAnswer to the wrong option — silently, with no edit.
+function mcqLocaleIdentity(value) {
+  const map = mcqLocaleMap(value);
+  return ["en-GB", "nb", "nn"].map((locale) => (map[locale] ?? "").trim()).join("|");
+}
+
 function mcqOptionIsCorrect(option, correctAnswer) {
-  const optionMap = mcqLocaleMap(option);
-  const answerMap = mcqLocaleMap(correctAnswer);
-  return ["en-GB", "nb", "nn"].some((locale) => {
-    const a = (answerMap[locale] ?? "").trim();
-    return a !== "" && a === (optionMap[locale] ?? "").trim();
-  });
+  const identity = mcqLocaleIdentity(option);
+  // An all-empty identity would match every empty option; a question with no answer set has none.
+  if (identity === "||") return false;
+  return identity === mcqLocaleIdentity(correctAnswer);
 }
 
 // #913: keep only the locales that actually have text. An empty string is not "this language is

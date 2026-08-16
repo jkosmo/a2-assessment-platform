@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.1 - 2026-08-16
+
+**Eksport og import på Rediger (#896, S6).** Begge har bodd på modullista og i Avansert, så å
+flytte innhold mellom installasjoner betydde å forlate arbeidsrommet man jobbet i. Nå ligger de i
+modulhandlingene på Rediger.
+
+- **Eksport** bruker `export-package`, ikke `/export`. De to er ikke et par: `/export` gir
+  redigeringsbundlen, mens importen bare godtar `a2-content-export/v1`-konvolutten. Eksport fra
+  feil endepunkt gir en fil som ikke kan importeres.
+- **Import går inn i modulen du står i**, som en ny upublisert versjon i versjonskjeden — å
+  opprette en ny modul ved siden av er modullistas jobb. Pakken blir dermed «bare enda en
+  mellomlagring»: den kan gjennomgås, forkastes ved å gjenopprette en tidligere versjon, og
+  publiseres bare ved en eksplisitt handling. Modulens egen tittel og beskrivelse endres ikke —
+  modulen beholder identiteten sin, innholdet får en versjon.
+- En kurspakke avvises før den sendes, i stedet for å feile inne i importøren.
+
+Det åpne punktet i §9 om redigert MCQ-fasit er **utgått**: redigeringen ble fjernet i v2.11.11, så
+eksporten bærer fasiten og rundturen er ikke lenger tapsgivende.
+
+**QA-funn fra S5, rettet:**
+
+- **Fasiten kunne fortsatt endres stille.** Radiovalget sammenlignet ett språk om gangen, så to
+  alternativer som deler ordlyd i *ett* språk («Styret»/«Styret» på bokmål) ble begge merket
+  riktige, og radiogruppen beholdt den siste. Sammenligningen bruker nå hele språkkartet, likt
+  serverens `localizedTextIdentity`.
+- **MCQ-dialogen åpnet alltid på engelsk.** Etter at en legacy-streng nå leses som bokmål, møtte en
+  norsk forfatter tomme felt og innhold som så slettet ut. Dialogen åpner på forfatterens språk.
+- **Ulagrede innstillinger forsvant ved gjenoppretting.** Feltene er DOM-bare til man trykker
+  Lagre, så `sessionDraft` visste ikke om dem.
+- **Gjenoppretting sendte ingen `Idempotency-Key`.** En retry etter tapt respons kunne lage en
+  versjon til; nøkkelen lages per handling og gjenbrukes.
+- **Suksess ble meldt selv om innlastingen feilet.** `loadModule` svelger sine egne feil, så
+  arbeidsrommet kunne vise gammelt innhold under «Versjonen er gjenopprettet».
+- **Gjenopprett-knappene het alle «Gjenopprett».** De har nå `aria-label` med versjonsnummeret.
+
+Registrert **#915**: rubrikkversjoner muteres på stedet av «Behold kriteriene», så gjenoppretting
+kan vise falsk kriteriedrift. Kriteriene er intakte — bare driftindikatoren lyver.
+
 ## 2.18.0 - 2026-08-16
 
 **Utkastversjonering (#896, S5).** Hver «Mellomlagring» har skrevet en versjonsrad helt siden

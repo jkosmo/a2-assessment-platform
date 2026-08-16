@@ -34,6 +34,23 @@ The conversational and advanced editors are two modes of the same module workspa
 survives reload and can be shared. `replaceState` is used, so browser Back still means previous
 page rather than previous tab. Advanced editing is reached from **Innstillinger → «Åpne avansert redigering»**, which keeps the existing draft hand-off. The advanced page keeps its own mode rail for now. Both the tab route to advanced and the `/advanced` page itself disappear in S3, when the settings fields move into the tab.
 
+**#896 S4 — publish gate.** Publishing from **Rediger** blocks when a participant-facing field is
+missing one of the three locales, and the block carries an action («Oversett det som mangler») that
+fills only the gaps. Same gate on the course cascade (`/admin-content/courses`) and on import
+auto-publish. No new route; the behaviour is on
+`POST .../module-versions/:id/publish`. See `doc/API_REFERENCE.md` → "Publish translation gate".
+
+**#896 S5 — version history.** **Innstillinger** lists the module's saved versions with a
+«Gjenopprett» action on each one that is not currently loaded. Restoring copies that version
+forward as a new **draft** — history is append-only — and the workspace switches to **Rediger** so
+the author sees the restored content. New route:
+`POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/restore`.
+
+**#896 S6 — export/import.** Both live on **Rediger**, in the module-actions menu. Export
+downloads the `a2-content-export/v1` envelope from `GET .../export-package`. Import takes a package
+**into the module you are in**, as a new unpublished version — creating a new module is the module
+list's job, and publishing stays an explicit act.
+
 ## Participant, «Deltakere» and review workspaces
 
 The **«Deltakere»** top-nav area (#765) groups the participant-/outcome-oriented surfaces —
