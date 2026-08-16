@@ -402,6 +402,84 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#settingsCertLevel")).toHaveValue("advanced");
   });
 
+  // QA found that §2 was NOT complete: only mcqMinPercent was editable, so an author who wanted to
+  // change the overall pass mark still had to go to Avansert — the one thing this epic exists to
+  // stop. The other three pass rules are now here.
+  test("Innstillinger edits the whole pass policy, and blank means not set", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.moduleVersion.assessmentPolicy = {
+      passRules: { totalMin: 65, mcqMinPercent: 70, practicalMinPercent: 50, borderlineWindow: { min: 60, max: 64 } },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let savedBody: any = null;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    await expect(page.locator("#settingsTotalMin")).toHaveValue("65");
+    await page.locator("#settingsTotalMin").fill("70");
+    // Emptying a field removes the per-module override; decisionService then uses the platform
+    // rules. That is a real choice, distinct from setting it to 0.
+    await page.locator("#settingsPracticalMin").fill("");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => savedBody !== null).toBe(true);
+    expect(savedBody.assessmentPolicy.passRules.totalMin).toBe(70);
+    expect(savedBody.assessmentPolicy.passRules).not.toHaveProperty("practicalMinPercent");
+    // Untouched rules ride along.
+    expect(savedBody.assessmentPolicy.passRules.mcqMinPercent).toBe(70);
+    expect(savedBody.assessmentPolicy.passRules.borderlineWindow).toEqual({ min: 60, max: 64 });
+  });
+
+  test("a fractional threshold is rejected rather than silently truncated", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    let saveCalled = false;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      saveCalled = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    // parseInt("72.5") is 72 — the field said "whole number" and then quietly saved a different
+    // number than the one on screen. A threshold the author did not choose is worse than a
+    // rejected one.
+    await page.locator("#settingsPracticalWeight").fill("72.5");
+    await page.locator("#settingsSave").click();
+
+    await expect(page.getByText(/helt tall|whole number/).first()).toBeVisible();
+    expect(saveCalled).toBe(false);
+    // And the Save button comes back, so the panel is not dead.
+    await expect(page.locator("#settingsSave")).toBeEnabled();
+  });
+
   test("unsaved criteria edits are caught by the same exit guard as the other settings", async ({ page }) => {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
@@ -655,7 +733,10 @@ test.describe("admin content browser coverage", () => {
 
     await page.locator("#publishModuleVersion").click();
     await expect(page.getByText("Module version published.")).toBeVisible();
-    await expect(page.locator("#moduleStatusLive")).toContainText("Module v1");
+    // v2, not v1: the fixture already has a version, and saving writes a NEW one. The mock used to
+    // return the same id and versionNo on every compose, which made this read v1 — faithful to the
+    // mock, not to the endpoint.
+    await expect(page.locator("#moduleStatusLive")).toContainText("Module v2");
     await expect(page.locator("#unpublishModuleBtn")).toBeVisible();
 
     await page.locator("#unpublishModuleBtn").click();

@@ -221,4 +221,31 @@ test.describe("admin content module library", () => {
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/advanced$/);
     await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
   });
+
+  // Rapportert fra stage 2026-08-16: import landet i Avansert — den ene flaten epicen
+  // forsøker å avvikle, og den uten publiseringsgatens utbedringshandling. Etter en import er
+  // det første man vil gjøre å se gjennom innholdet, og det gjør man i arbeidsrommet.
+  test("importing a module package lands in the workspace, not in Avansert", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [],
+      modules: [{ id: "module-9", title: "Imported" }],
+    });
+
+    await page.route("**/api/admin/content/modules/import", async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleId: "module-9", moduleVersionId: "module-9-version-1" }),
+      });
+    });
+
+    await page.goto(LIBRARY_PATH);
+    await page.locator("#importModulePackageFile").setInputFiles({
+      name: "module.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify({ exportFormat: "a2-content-export/v1", scope: "module", module: {} })),
+    });
+
+    await expect(page).toHaveURL(/\/admin-content\/module\/module-9\/conversation$/);
+  });
 });

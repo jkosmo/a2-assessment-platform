@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.9 - 2026-08-16
+
+QA på S3c. **Rundens viktigste funn var at jeg overdrev:** v2.18.8 sa «§2 er ferdig, alle åtte
+feltene er redigerbare», mens bare `mcqMinPercent` av poengreglene faktisk var det. Min egen
+statusfil innrømmet det i én tabellrad samtidig som sammendraget påsto det motsatte. En forfatter
+som ville endre samlet beståttgrense måtte fortsatt til Avansert — nøyaktig det epicen finnes for
+å stoppe.
+
+Nå er **alle fire poengreglene** redigerbare: `mcqMinPercent`, `totalMin`, `practicalMinPercent`
+og `borderlineWindow`. Et **tomt** felt betyr «ingen overstyring» — vurderingen faller da tilbake
+på plattformreglene. Det er et reelt valg, forskjellig fra å sette verdien til 0, så de to kan
+ikke slås sammen. En halv grensesone avvises.
+
+**Tall ble stille avkortet.** `parseInt("72.5")` er 72, så feltet som sa «helt tall» lagret et
+annet tall enn det som sto på skjermen. Samme feil fantes i MCQ-terskelen, der `?? 70` dessuten
+gjorde vakten under den uoppnåelig. Begge bruker nå en parser som avviser i stedet for å avkorte.
+
+**En lovlig 0 ble overskrevet med 70.** `Number(x) || 70` i kriteriedrift-flyten gjenopprettet
+standarden for en forfatter som bevisst hadde satt praktisk vekt til null. Feltet ble redigerbart i
+v2.18.8, så 0 er nå noe man faktisk kan velge.
+
+**Hjelpetekst kunne ikke tømmes.** `submissionSchemaFieldSchema` krevde alle tre språk, så å slette
+den norske hjelpeteksten ga et tospråks-objekt og 400. Feltene tar nå delvise kart, som alt annet
+siden #905/#913.
+
+**Innstillinger blandet UI-språk og forhåndsvisningsspråk.** Sammendraget leste
+forhåndsvisningsspråket mens editorene leste UI-språket, så panelet kunne vise engelsk sammendrag
+over en editor som sa den redigerte bokmål.
+
+Dessuten: Lagre-knappen deaktiveres ved klikk og forespørselen bærer en idempotensnøkkel, og
+etterkontrollen ser nå på **versjons-id-en** — det eneste signalet som dekker lagringer der bare
+kriterier, instruks, skjema eller vekt endret seg.
+
+**Fra stage:** import landet i Avansert. Den skal bort, og forfatteren fikk dermed den ene flaten
+epicen forsøker å avvikle — uten publiseringsgatens utbedringshandling. Import lander nå i
+arbeidsrommet.
+
 ## 2.18.8 - 2026-08-16
 
 **§2 er ferdig: Innstillinger har nå alle åtte redigerbare feltene (#896, S3c).** Dermed er §3 —

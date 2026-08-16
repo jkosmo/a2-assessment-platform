@@ -281,6 +281,11 @@ export async function mockCommonApis(page: Page, {
     lastSourceMaterialExtraction: null as any,
   };
   const extractionJobs = new Map<string, { fileName: string; extractedText: string }>();
+  // #896 S3c: a real save always writes a NEW module version, and the client now checks that the
+  // reload actually shows it — the only signal that covers criteria-, prompt- or policy-only
+  // saves, which change none of the fields the older check compared. A mock that returns the same
+  // id every time would make that check fire on every successful save.
+  let composedVersionCounter = 1;
 
   await page.route("**/participant/config", async (route: Route) => {
     await route.fulfill({
@@ -719,8 +724,8 @@ export async function mockCommonApis(page: Page, {
       : null;
 
     const moduleVersion = {
-      id: `${moduleId}-version-1`,
-      versionNo: 1,
+      id: `${moduleId}-version-${++composedVersionCounter}`,
+      versionNo: composedVersionCounter,
       assessmentMode: body.assessmentMode ?? "FREETEXT_PLUS_MCQ",
       taskText: body.taskText ?? localizedText("Scenario text"),
       assessorExpectedContent: body.assessorExpectedContent ?? localizedText("Guidance text"),
@@ -769,8 +774,8 @@ export async function mockCommonApis(page: Page, {
     };
     state.lastModuleVersionBody = body;
     const moduleVersion = {
-      id: `${moduleId}-version-1`,
-      versionNo: 1,
+      id: `${moduleId}-version-${++composedVersionCounter}`,
+      versionNo: composedVersionCounter,
       taskText: body.taskText ?? localizedText("Scenario text"),
       assessorExpectedContent: body.assessorExpectedContent ?? localizedText("Guidance text"),
       submissionSchema: body.submissionSchema ?? { fields: [] },

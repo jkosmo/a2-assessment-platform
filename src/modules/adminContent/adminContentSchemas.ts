@@ -152,10 +152,13 @@ export const mcqSetBodySchema = z.object({
 
 export const submissionSchemaFieldSchema = z.object({
   id: z.string().min(1),
-  label: localizedTextSchema,
+  // #896 S3c: partial maps, like every other localized value since #905/#913. These demanded all
+  // three locales, so clearing the Norwegian placeholder on a field that had all three produced a
+  // two-locale object and a 400 — the author could add a placeholder but never remove one.
+  label: localizedTextMaybeUntranslatedSchema,
   type: z.enum(["textarea", "text"]),
   required: z.boolean().optional(),
-  placeholder: localizedTextSchema.optional(),
+  placeholder: localizedTextMaybeUntranslatedSchema.optional(),
 });
 
 export const submissionSchemaBodySchema = z.object({

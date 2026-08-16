@@ -858,7 +858,10 @@ async function init() {
       });
       if (!result?.moduleId) throw new Error("Import-respons mangler moduleId.");
       showToast("Modul-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.");
-      window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/advanced`;
+      // #896: land i arbeidsrommet, ikke i Avansert. Avansert-siden skal bort (S3c), og å sende
+      // forfatteren dit rett etter en import ga dem den ene flaten epicen forsøker å avvikle —
+      // og den uten publiseringsgatens utbedringshandling. Rapportert fra stage 2026-08-16.
+      window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {
       showToast(`Modul-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
       // v1.2.18 (#458): toast har role="alert" så SR annonserer feilen. I tillegg flytter

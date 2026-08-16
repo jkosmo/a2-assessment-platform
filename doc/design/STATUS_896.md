@@ -43,12 +43,12 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 | MCQ-spørsmål | ✅ |
 | Eksport / import | ✅ (S6) |
 
-### Innstillinger (oppsett) — 5 av 8
+### Innstillinger (oppsett) — 8 av 8
 
 | Felt | Spesifisert | Faktisk i dag |
 |---|---|---|
 | Modultype | redigerbar, øverst | ✅ `settingsModuleType` |
-| Terskler / poengregler | redigerbar | ⚠️ kun `mcqMinPercent`. `totalMin`, `practicalMinPercent` og `borderlineWindow` bæres videre urørt, men kan ikke endres |
+| Terskler / poengregler | redigerbar | ✅ alle fire: `mcqMinPercent`, `totalMin`, `practicalMinPercent`, `borderlineWindow` (v2.18.9). Tomt felt = ingen overstyring |
 | Gyldighet | redigerbar | ✅ `settingsValidFrom` / `settingsValidTo` |
 | Sertifiseringsnivå | redigerbar | ✅ `settingsCertLevel` |
 | **Vurderingskriterier (rubrikk)** | **redigerbar** | ✅ **flyttet hit** (v2.18.6). Sammendragsrad + sammenslått editor under lista; lagres som inline rubrikk |
@@ -56,18 +56,24 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 | **Innsendingsskjema** | **redigerbar** | ✅ **flyttet hit** (v2.18.8). Første felt redigerbart (#901); øvrige bæres uendret |
 | **Skaleringsregel** | redigerbar | ✅ **praktisk vekt** flyttet hit (v2.18.8). `max_total` utledes av kriteriene og har bevisst ingen egen input |
 
-De tre editorene er de tyngste i hele Avansert-siden. Kriterieeditoren alene er en
-underredigerer med per-kriterium kort, vekting og maks-score.
+De tre editorene var de tyngste i hele Avansert-siden. Kriterieeditoren og vurderingsinstruksen
+**deler nå kode** med Rediger (`wireCriteriaEditor`, `buildEditorStateFromCriteriaRecord`,
+`mergeLocaleInto`) i stedet for å være en andre kopi — å bygge nye editorer ved siden av de gamle
+ville løst symptomet og lagt til problemet.
+
+**Rettelse etter QA 2026-08-16:** en tidligere versjon av dette dokumentet påsto «8 av 8» mens
+tabellen samtidig innrømmet at bare `mcqMinPercent` var redigerbar. Det var en overdrivelse.
+De øvrige tre poengreglene kom i v2.18.9; først da ble påstanden sann.
 
 ---
 
-## §3 · Avansert oppløses — ikke startet
+## §3 · Avansert oppløses — ikke lenger blokkert
 
 Avansert-siden serverer fortsatt alt. Det som per spesifikasjon skal bort derfra:
 
 | Funksjon | Nytt sted | Status |
 |---|---|---|
-| Kriterier, vurderingsinstruks, innsendingsskjema | Innstillinger | ❌ blokkert av §2 |
+| Kriterier, vurderingsinstruks, innsendingsskjema | Innstillinger | ✅ flyttet (dubletten i Avansert består) |
 | Modultype, terskler, gyldighet, sertifiseringsnivå | Innstillinger | ✅ flyttet (dubletten i Avansert består) |
 | Beskrivelse | Rediger | ✅ flyttet (dubletten består) |
 | Eksport / import | Rediger | ✅ flyttet (dubletten består) |
@@ -76,9 +82,12 @@ Avansert-siden serverer fortsatt alt. Det som per spesifikasjon skal bort derfra
 | Identitetspanel (mock-bruker) | utviklerverktøy | ❌ `mock-identity-panel` ligger i forfatterflaten |
 | `writeHandoff` / `openAdvancedEditor` | fjernes | ❌ 5 forekomster igjen |
 
-**Rekkefølgen er tvungen:** ingenting her kan fjernes før de tre editorene finnes i Innstillinger.
-Å fjerne Avansert nå ville tatt fra forfatteren muligheten til å redigere kriterier i det hele
-tatt.
+**Rekkefølgen var tvungen, og forutsetningen er nå oppfylt.** Alt forfatteren trenger finnes i den
+nye flaten, så det som gjenstår er sletting: dublettene, handoff-mekanikken, kalibreringsdubletten
+og identitetspanelet. Det er den siste store bolken i epicen.
+
+Merk at dublettene er en **mellomtilstand, ikke en feil** — men den betyr at samme handling finnes
+to steder. Rapporter det hvis de to gir ulikt resultat.
 
 ---
 
@@ -113,18 +122,18 @@ Grovt, i den rekkefølgen de må gjøres:
 
 | Bolk | Omfang | Merknad |
 |---|---|---|
-| ~~Kriterieeditor → Innstillinger~~ | ~~Stor~~ | ✅ Ferdig v2.18.6. `buildEditorStateFromCriteriaRecord` og `wireCriteriaEditor` er nå delte; Rediger og Innstillinger kjører samme kode |
-| Vurderingsinstruks → Innstillinger | Middels | System-prompt, mal, eksempler |
-| Innsendingsskjema → Innstillinger | Middels | Begrenset til ett felt i UI (#901) |
-| Skaleringsregel → Innstillinger | Liten | Finnes ikke noe sted i ny flate |
-| Full `assessmentPolicy` redigerbar | Liten | 3 felt til ved siden av `mcqMinPercent` |
-| **S3c: fjern Avansert** | Middels | Ren sletting når det over er gjort — men berører ruter, handoff og modul-lista |
-| §6 forslag- og fanemerking | Middels | |
+| ~~Kriterieeditor → Innstillinger~~ | ~~Stor~~ | ✅ v2.18.6 — deler kode med Rediger |
+| ~~Vurderingsinstruks → Innstillinger~~ | ~~Middels~~ | ✅ v2.18.7 |
+| ~~Innsendingsskjema → Innstillinger~~ | ~~Middels~~ | ✅ v2.18.8 |
+| ~~Skaleringsregel → Innstillinger~~ | ~~Liten~~ | ✅ v2.18.8 (praktisk vekt) |
+| ~~Full `assessmentPolicy` redigerbar~~ | ~~Liten~~ | ✅ v2.18.9 |
+| **S3c: fjern Avansert** | **Middels** | Ren sletting nå — men berører ruter, handoff, modul-lista og e2e-er som navigerer dit |
+| §6 forslag- og fanemerking | Middels | Samtalen skal foreslå, ikke overskrive; fanemerking ved asynkrone endringer |
 | E2E «ny modul» ende-til-ende | Liten | |
 
-**Vurdering:** det gjenstår omtrent like mye UI-arbeid som er gjort i S3a+S3b til sammen. Epicen
-er ikke i sluttfasen — den er i overgangen fra «ny flate finnes ved siden av den gamle» til «den
-gamle kan fjernes».
+**Vurdering (oppdatert 2026-08-16):** §2 er i havn. Det som gjenstår er **to bolker** — å fjerne
+Avansert, og §6-konflikthåndteringen — pluss én e2e. Epicen har flyttet seg fra «ny flate finnes
+ved siden av den gamle» til «den gamle kan fjernes».
 
 ---
 

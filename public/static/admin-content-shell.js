@@ -74,6 +74,21 @@ function parsePositiveIntInRange(rawValue, min, max) {
   return value;
 }
 
+/**
+ * Like the above, but a whole number OR NOTHING — never a silent truncation.
+ *
+ * `Number.parseInt("72.5")` is 72, so a field that told the author "must be a whole number"
+ * quietly accepted 72.5 and saved 72 instead. A threshold the author did not choose is worse than
+ * a rejected one: they read 72.5 on screen, and the module scores against 72.
+ */
+function parsePercentInRange(rawValue, min, max) {
+  const raw = String(rawValue).trim();
+  if (!/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) return null;
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -4037,7 +4052,13 @@ async function persistMergedRubric(criteriaRecord) {
   const existingScalingRule = bundle?.selectedConfiguration?.rubricVersion?.scalingRule ?? {};
   const scalingRule = {
     ...existingScalingRule,
-    practical_weight: Number(existingScalingRule.practical_weight) || 70,
+    // `|| 70` turned a legitimate 0 into 70: an author who deliberately set the practical weight
+    // to zero got it silently restored the next time they accepted a criteria-drift suggestion.
+    // Now that the weight is editable in Innstillinger (#896 S3c), 0 is a real value someone can
+    // actually choose.
+    practical_weight: Number.isFinite(Number(existingScalingRule.practical_weight))
+      ? Number(existingScalingRule.practical_weight)
+      : 70,
     max_total: totalMax,
   };
   if (blueprintHash) scalingRule.generated_from_blueprint_hash = blueprintHash;
@@ -4970,6 +4991,11 @@ function renderSettingsPanel() {
     rows.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
   };
   const emptyText = escapeHtml(t("shell.settings.notSet"));
+  // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
+  // used localizeValue (preview locale) while the editors use currentLocale, so with the UI in
+  // Norwegian and the preview in English the criteria summary showed English while "Endre
+  // kriterier" opened the Norwegian values and said it was editing nb. One language per surface.
+  const settingsValue = (value) => localizeValueForLocale(value, currentLocale);
 
   // #896 S3b: module type is editable, and first, as the issue specifies — it decides which
   // fields Rediger even shows. Only the types this module has the components for are offered;
@@ -4982,12 +5008,12 @@ function renderSettingsPanel() {
   const rubricHistory = bundle.versions?.rubricVersions ?? [];
   const promptHistory = bundle.versions?.promptTemplateVersions ?? [];
   const mcqHistory = bundle.versions?.mcqSetVersions ?? [];
-  const taskHistory = (bundle.versions?.moduleVersions ?? []).find((v) => !!localizeValue(v?.taskText));
+  const taskHistory = (bundle.versions?.moduleVersions ?? []).find((v) => !!settingsValue(v?.taskText));
 
   const hasRubric = rubricHistory.length > 0 || !!cfg.rubricVersion;
   const hasPrompt = promptHistory.length > 0 || !!cfg.promptTemplateVersion;
   const hasMcq = mcqHistory.length > 0 || !!cfg.mcqSetVersion;
-  const hasTask = !!localizeValue(version?.taskText) || !!taskHistory;
+  const hasTask = !!settingsValue(version?.taskText) || !!taskHistory;
   const freetextReady = hasTask && hasRubric && hasPrompt;
 
   const modeOptions = [
@@ -5018,12 +5044,41 @@ function renderSettingsPanel() {
     );
   }
 
+  // #896 S3c: the rest of the pass rules. Only mcqMinPercent was editable, so an author who wanted
+  // to change the overall pass mark still had to go to Avansert — which makes "ett sted å gjøre
+  // hver ting" untrue for the very field most likely to be adjusted after a calibration round.
+  //
+  // Blank means "not set": decisionService falls back to the platform rules, and writing a number
+  // in would turn a deliberate default into a per-module override nobody chose.
+  const numberRow = (labelKey, id, value, suffix = " %") =>
+    row(
+      labelKey,
+      `<input id="${id}" class="settings-input" type="number" min="0" max="100"
+        value="${Number.isFinite(Number(value)) && value !== null && value !== undefined ? escapeHtml(String(value)) : ""}"
+        placeholder="${escapeHtml(t("shell.settings.notSet"))}" />${suffix}`,
+    );
+  numberRow("shell.settings.totalMin", "settingsTotalMin", policy?.passRules?.totalMin);
+  if (mode !== "MCQ_ONLY") {
+    numberRow("shell.settings.practicalMin", "settingsPracticalMin", policy?.passRules?.practicalMinPercent);
+  }
+  const borderline = policy?.passRules?.borderlineWindow;
+  row(
+    "shell.settings.borderlineWindow",
+    `<input id="settingsBorderlineMin" class="settings-input" type="number" min="0" max="100"
+      value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
+      placeholder="${escapeHtml(t("shell.settings.notSet"))}" />
+     <span aria-hidden="true">→</span>
+     <input id="settingsBorderlineMax" class="settings-input" type="number" min="0" max="100"
+      value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
+      placeholder="${escapeHtml(t("shell.settings.notSet"))}" /> %`,
+  );
+
   const criteriaEntries = criteria && typeof criteria === "object" ? Object.entries(criteria) : [];
   if (criteriaEntries.length > 0) {
     const items = criteriaEntries
       .map(([id, raw]) => {
         const c = raw && typeof raw === "object" ? raw : {};
-        const label = localizeValue(c.label) || humaniseCriterionId(String(id));
+        const label = settingsValue(c.label) || humaniseCriterionId(String(id));
         const maxScore = Number(c.maxScore) > 0 ? ` (${Number(c.maxScore)})` : "";
         return `<li>${escapeHtml(label)}${escapeHtml(maxScore)}</li>`;
       })
@@ -5053,7 +5108,7 @@ function renderSettingsPanel() {
 
   // #896 S3b: editable now that the composed save can write module-level fields. They were
   // create-only before — set once at creation and impossible to correct afterwards.
-  const certLevel = localizeValue(mod.certificationLevel);
+  const certLevel = settingsValue(mod.certificationLevel);
   row(
     "shell.settings.certificationLevel",
     `<input id="settingsCertLevel" class="settings-input" type="text" value="${escapeHtml(certLevel ?? "")}"
@@ -5106,7 +5161,12 @@ function renderSettingsPanel() {
   // top of it, so the dirty-check still knows the difference.
   restoreSettingsDraftValues();
 
-  document.getElementById("settingsSave")?.addEventListener("click", () => {
+  document.getElementById("settingsSave")?.addEventListener("click", (event) => {
+    // Disabled on the first click, like the restore buttons. A double-click on a slow connection
+    // sent two concurrent POSTs and produced either two identical versions or a confusing
+    // conflict; the idempotency key inside handles the lost-response retry, which is a different
+    // problem. Re-enabled on the failure paths, since success re-renders the panel.
+    event.currentTarget.disabled = true;
     void saveSettingsInBackground();
   });
   host.querySelectorAll("[data-restore-version]").forEach((button) => {
@@ -5162,6 +5222,13 @@ const SETTINGS_TEXT_INPUT_IDS = [
   "settingsSchemaLabel", "settingsSchemaPlaceholder",
 ];
 let settingsDraftValues = null;
+
+// The Save button is disabled on click to stop a double-submit. Every path that returns without
+// saving has to put it back, or the panel is dead until the next re-render.
+function reenableSettingsSave() {
+  const btn = document.getElementById("settingsSave");
+  if (btn) btn.disabled = false;
+}
 
 function captureSettingsDraftValues() {
   const dirty = {};
@@ -5549,18 +5616,20 @@ async function saveSettingsInBackground() {
   const version = cfg.moduleVersion ?? null;
   const mode = document.getElementById("settingsModuleType")?.value ?? version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
   const thresholdInput = document.getElementById("settingsMcqMinPercent");
-  const mcqMinPercent = thresholdInput
-    ? parsePositiveIntInRange(thresholdInput.value, 0, 100) ?? SHELL_MCQ_ONLY_MIN_PERCENT
-    : null;
+  // No `?? SHELL_MCQ_ONLY_MIN_PERCENT` here: that fallback made the guard below unreachable, so an
+  // out-of-range or fractional threshold was silently saved as 70 — the exact behaviour the guard
+  // was written to prevent.
+  const mcqMinPercent = thresholdInput ? parsePercentInRange(thresholdInput.value, 0, 100) : null;
 
   const isMcqOnly = mode === "MCQ_ONLY";
   const isFreetextOnly = mode === "FREETEXT_ONLY";
 
   // An out-of-range threshold is the author's mistake to see, not something to quietly turn
-  // into 70. parsePositiveIntInRange returns null for 101, for 72.5 and for gibberish alike.
+  // into 70. parsePercentInRange returns null for 101, for 72.5 and for gibberish alike.
   if (thresholdInput && !isFreetextOnly && mcqMinPercent === null) {
     showToast(t("shell.settings.invalidThreshold"), "error");
     thresholdInput.focus();
+    reenableSettingsSave();
     return;
   }
 
@@ -5583,6 +5652,49 @@ async function saveSettingsInBackground() {
   } else if (mcqMinPercent !== null) {
     passRules.mcqMinPercent = mcqMinPercent;
   }
+
+  // #896 S3c: the rest of the pass rules, now editable here. An EMPTY field means "not set" and
+  // removes the per-module override — decisionService then falls back to the platform rules. That
+  // is a real, distinct choice from "set it to 0", so the two cannot be collapsed.
+  const readOptionalPercent = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return { present: false };
+    const raw = el.value.trim();
+    if (raw === "") return { present: true, value: null };
+    const parsed = parsePercentInRange(raw, 0, 100);
+    return { present: true, value: parsed };
+  };
+  const policyFieldSpecs = [
+    { id: "settingsTotalMin", key: "totalMin" },
+    { id: "settingsPracticalMin", key: "practicalMinPercent" },
+  ];
+  for (const { id, key } of policyFieldSpecs) {
+    const read = readOptionalPercent(id);
+    if (!read.present) continue;
+    if (read.value === null && document.getElementById(id).value.trim() !== "") {
+      showToast(t("shell.settings.invalidThreshold"), "error");
+      document.getElementById(id).focus();
+      return;
+    }
+    if (read.value === null) delete passRules[key];
+    else passRules[key] = read.value;
+  }
+  const bMin = readOptionalPercent("settingsBorderlineMin");
+  const bMax = readOptionalPercent("settingsBorderlineMax");
+  if (bMin.present || bMax.present) {
+    if (bMin.value === null && bMax.value === null) {
+      delete passRules.borderlineWindow;
+    } else if (bMin.value === null || bMax.value === null || bMin.value > bMax.value) {
+      // Half a window is not a window, and a reversed one silently matches nothing.
+      showToast(t("shell.settings.invalidBorderline"), "error");
+      document.getElementById("settingsBorderlineMin")?.focus();
+      reenableSettingsSave();
+    return;
+    } else {
+      passRules.borderlineWindow = { min: bMin.value, max: bMax.value };
+    }
+  }
+
   const policy = existingPolicy || Object.keys(passRules).length > 0
     ? { ...(existingPolicy ?? {}), passRules }
     : null;
@@ -5616,6 +5728,10 @@ async function saveSettingsInBackground() {
   const thresholdChanged = thresholdInput
     ? mcqMinPercent !== (Number.isFinite(currentThreshold) ? currentThreshold : SHELL_MCQ_ONLY_MIN_PERCENT)
     : false;
+  // The whole pass-rule object, not just the MCQ threshold. Adding the other three rules to the
+  // payload without adding them here meant editing the overall pass mark hit "no changes" and
+  // nothing was written — the field existed and did nothing.
+  const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {});
   // #896 S3c: criteria edited here ride along as an INLINE rubric, exactly as the direct-edit save
   // does. Referencing `rubricVersionId` would carry the old criteria forward and quietly discard
   // what the author just typed.
@@ -5629,7 +5745,7 @@ async function saveSettingsInBackground() {
   // a rubric — the criteria come along unchanged when they were not edited.
   const weightInput = document.getElementById("settingsPracticalWeight");
   const storedWeight = Number(cfg.rubricVersion?.scalingRule?.practical_weight);
-  const practicalWeight = weightInput ? parsePositiveIntInRange(weightInput.value, 0, 100) : null;
+  const practicalWeight = weightInput ? parsePercentInRange(weightInput.value, 0, 100) : null;
   const weightChanged = Boolean(
     weightInput && practicalWeight !== (Number.isFinite(storedWeight) ? storedWeight : 70),
   );
@@ -5637,6 +5753,7 @@ async function saveSettingsInBackground() {
     // Out of range or not a whole number is the author's mistake to see, not something to round.
     showToast(t("shell.settings.invalidWeight"), "error");
     weightInput.focus();
+    reenableSettingsSave();
     return;
   }
 
@@ -5660,14 +5777,16 @@ async function saveSettingsInBackground() {
         // Malformed JSON is the author's to see, not something to silently drop or guess at.
         showToast(t("shell.settings.promptExamplesInvalid"), "error");
         examplesEl.focus();
-        return;
+        reenableSettingsSave();
+    return;
       }
     }
     const systemPrompt = mergeLocaleInto(stored.systemPrompt, currentLocale, document.getElementById("settingsPromptSystem")?.value ?? "");
     const userPromptTemplate = mergeLocaleInto(stored.userPromptTemplate, currentLocale, document.getElementById("settingsPromptUser")?.value ?? "");
     if (!systemPrompt || !userPromptTemplate) {
       showToast(t("shell.settings.promptRequired"), "error");
-      return;
+      reenableSettingsSave();
+    return;
     }
     promptPayload = { systemPrompt, userPromptTemplate, examples };
   }
@@ -5687,7 +5806,8 @@ async function saveSettingsInBackground() {
     const label = mergeLocaleInto(first.label, currentLocale, document.getElementById("settingsSchemaLabel")?.value ?? "");
     if (!label) {
       showToast(t("shell.settings.schemaLabelRequired"), "error");
-      return;
+      reenableSettingsSave();
+    return;
     }
     const placeholder = mergeLocaleInto(first.placeholder, currentLocale, document.getElementById("settingsSchemaPlaceholder")?.value ?? "");
     fields[0] = { ...first, label, ...(placeholder ? { placeholder } : {}) };
@@ -5696,9 +5816,10 @@ async function saveSettingsInBackground() {
 
   if (
     mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload
-    && !submissionSchemaPayload && !weightChanged && Object.keys(moduleFields).length === 0
+    && !submissionSchemaPayload && !weightChanged && !policyChanged && Object.keys(moduleFields).length === 0
   ) {
     showToast(t("shell.settings.noChanges"), "info");
+    reenableSettingsSave();
     return;
   }
 
@@ -5749,9 +5870,12 @@ async function saveSettingsInBackground() {
 
   const slot = logProgress("shell.settings.saving");
   slot.abortBtn.remove();
+  const versionBefore = version?.id ?? null;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/versions`, getHeaders, {
       method: "POST",
+      // A lost response must not turn one Lagre into two versions on retry.
+      headers: { "Idempotency-Key": `settings-${moduleId}-${Date.now()}` },
       body: JSON.stringify(body),
     });
     await loadModule(moduleId);
@@ -5782,7 +5906,13 @@ async function saveSettingsInBackground() {
     const datesStale = ["validFrom", "validTo"].some(
       (field) => moduleFields[field] !== undefined && asDay(bundle?.module?.[field]) !== asDay(moduleFields[field]),
     );
-    if (reloadedMode !== mode || certStale || datesStale) {
+    // The check above only looks at mode, certification and dates. A criteria-, prompt-, schema-
+    // or weight-only save changes none of them, so a failed reload compared equal on everything
+    // that WAS checked and reported success over the old configuration. Every successful save
+    // writes a NEW module version, so the version id is the one signal that covers all of them.
+    const reloadedVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+    const versionStale = versionBefore !== null && reloadedVersionId === versionBefore;
+    if (reloadedMode !== mode || certStale || datesStale || versionStale) {
       logResolveSlot(slot, () => escapeHtml(t("shell.settings.savedStale")));
       showToast(t("shell.settings.savedStale"), "info");
       return;
@@ -5795,6 +5925,7 @@ async function saveSettingsInBackground() {
     const message = error?.body?.message || error?.message || t("shell.settings.saveFailed");
     logResolveSlot(slot, () => escapeHtml(`${t("shell.settings.saveFailed")} ${message}`));
     showToast(t("shell.settings.saveFailed"), "error");
+    reenableSettingsSave();
   }
 }
 
