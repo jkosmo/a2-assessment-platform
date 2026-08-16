@@ -19,6 +19,67 @@ import {
 // the shell HTML directly via its `/admin-content.html` file path (the static server's public-file
 // fallback), independent of the library route.
 test.describe("admin content browser coverage", () => {
+  // #913 QA round 6: opening the advanced MCQ dialog and pressing Bruk WITHOUT EDITING ANYTHING
+  // must be a no-op. It was not: the dialog assumed every field carried all three locales, and
+  // #913 made partially translated MCQs an ordinary thing to open. Three separate silent
+  // corruptions came out of that assumption, and none of them announced itself.
+  test("advanced MCQ dialog: apply without editing changes nothing on a partially translated set", async ({ page }) => {
+    const partialExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+      mcqQuestions: [
+        {
+          // nb/nn only, and the correct answer is NOT the first option.
+          stem: { nb: "Hvem ratifiserer avtalen?", nn: "Kven ratifiserer avtalen?" },
+          options: [
+            { nb: "Styret", nn: "Styret" },
+            { nb: "Medlemmene", nn: "Medlemene" },
+          ],
+          correctAnswer: { nb: "Medlemmene", nn: "Medlemene" },
+          rationale: { nb: "Medlemmene stemmer.", nn: "Medlemene røystar." },
+        },
+      ],
+    });
+    // A three-locale set title: the dialog has one input for all three.
+    partialExport.selectedConfiguration.mcqSetVersion.title = {
+      "en-GB": "Trade unions quiz",
+      nb: "Fagforeningsquiz",
+      nn: "Fagforeiningsquiz",
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": partialExport },
+    });
+
+    await page.goto("/admin-content/module/module-1/advanced");
+    await page.locator("#editBtn_mcq").click();
+    await expect(page.locator("#dialogMcq")).toBeVisible();
+
+    // The correct answer must already be selected. Comparing only en-GB — which this question does
+    // not have — left every radio unset, and applying then fell back to the FIRST option, quietly
+    // changing which answer scores as correct for every future participant.
+    const radios = page.locator("#dlgMCQ_questionsList input[type='radio']");
+    await expect(radios.nth(1)).toBeChecked();
+
+    await page.locator("#dialogMcqApply").click();
+
+    const savedQuestions = JSON.parse(await page.locator("#mcqQuestionsJson").inputValue());
+    expect(savedQuestions[0].correctAnswer).toEqual({ nb: "Medlemmene", nn: "Medlemene" });
+    expect(savedQuestions[0].stem).toEqual({ nb: "Hvem ratifiserer avtalen?", nn: "Kven ratifiserer avtalen?" });
+    // No en-GB key invented out of the blank control.
+    expect(savedQuestions[0].stem["en-GB"]).toBeUndefined();
+
+    // The set title survives the round trip. The dialog shows one language, but the page keeps the
+    // full locale map in the field's `dataset.localeOriginal` and merges the typed text back into
+    // the current locale on save — so the two languages the dialog never displayed are still there.
+    await expect(page.locator("#mcqSetTitle")).toHaveValue("Trade unions quiz");
+    const preserved = JSON.parse(await page.locator("#mcqSetTitle").getAttribute("data-locale-original") ?? "{}");
+    expect(preserved.nb).toBe("Fagforeningsquiz");
+    expect(preserved.nn).toBe("Fagforeiningsquiz");
+  });
+
   test("advanced editor can save, publish, and unpublish a module version", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],

@@ -909,6 +909,77 @@ export async function publishModuleVersion(
   return tx ? run(tx) : runInTransaction(run);
 }
 
+/**
+ * #896 S5: restore an earlier saved version as a NEW draft.
+ *
+ * History is append-only. Restoring copies the chosen version's content forward into a fresh
+ * version rather than rewinding the module to it — so the versions created after the one being
+ * restored stay in the list, and "I restored the wrong one" is itself undoable. Rewinding would
+ * make the restore action the one operation in this workspace that can destroy work.
+ *
+ * The new version is a DRAFT, never published, even when the source was. Restoring says "go back
+ * to this text", not "put this in front of participants" — publishing stays the separate,
+ * deliberate act it is everywhere else, and it still has to pass the translation gate.
+ *
+ * Component versions (rubric, prompt, MCQ set) are REFERENCED, not copied. They are immutable
+ * rows, so pointing at the same ones reproduces the source version exactly; copying them would
+ * add rows nobody can tell apart from the originals.
+ */
+export async function restoreModuleVersion(input: {
+  moduleId: string;
+  sourceModuleVersionId: string;
+  actorId: string;
+}) {
+  await ensureModuleExists(input.moduleId);
+
+  const sourceVersion = await adminContentRepository.findActiveModuleVersionForClone(input.sourceModuleVersionId);
+  if (!sourceVersion) {
+    throw new NotFoundError("ModuleVersion", "module_version_not_found", "Module version not found.");
+  }
+  // A version id from a different module would silently graft that module's content onto this one.
+  if (sourceVersion.moduleId !== input.moduleId) {
+    throw new NotFoundError("ModuleVersion", "module_version_not_found", "The module version does not belong to this module.");
+  }
+
+  const versionNo = await getNextVersionNo("module", input.moduleId);
+
+  return runInTransaction(async (tx) => {
+    const repo = createAdminContentRepository(tx);
+    const restored = await repo.createModuleVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      assessmentMode: sourceVersion.assessmentMode,
+      taskText: sourceVersion.taskText,
+      assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
+      candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,
+      assessmentBlueprint: sourceVersion.assessmentBlueprint ?? undefined,
+      rubricVersionId: sourceVersion.rubricVersionId,
+      promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
+      mcqSetVersionId: sourceVersion.mcqSetVersionId,
+      submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
+      assessmentPolicyJson: sourceVersion.assessmentPolicyJson ?? undefined,
+    });
+
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.moduleVersion,
+        entityId: restored.id,
+        action: auditActions.adminContent.moduleVersionRestored,
+        actorId: input.actorId,
+        metadata: {
+          moduleId: input.moduleId,
+          moduleVersionId: restored.id,
+          sourceModuleVersionId: sourceVersion.id,
+          sourceVersionNo: sourceVersion.versionNo,
+        },
+      },
+      tx,
+    );
+
+    return restored;
+  });
+}
+
 type PublishThresholdsInput = {
   moduleId: string;
   totalMin: number;
@@ -962,6 +1033,9 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
     const newVersion = await repo.createModuleVersion({
       moduleId: input.moduleId,
       versionNo,
+      // #896 S5: carry the mode. Without it the clone fell back to the schema default and an
+      // MCQ_ONLY module came back as FREETEXT_PLUS_MCQ after a threshold calibration.
+      assessmentMode: sourceVersion.assessmentMode,
       taskText: sourceVersion.taskText,
       assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
       candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,

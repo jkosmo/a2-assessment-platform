@@ -10,6 +10,7 @@ export {
   createModuleVersion,
   createBenchmarkExampleVersion,
   publishModuleVersion,
+  restoreModuleVersion,
   unpublishModule,
   archiveModule,
   restoreModule,

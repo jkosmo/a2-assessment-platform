@@ -2532,19 +2532,27 @@ async function translateMissingLocalesThenPublish(issues) {
         translatedQuestions.forEach((question, index) => {
           const target = mergedMcq[index];
           if (!target) return;
+          fillLocaleGap(target.stem, targetLocale, question?.stem);
+
           // The save schema requires correctAnswer to be one of options, VERBATIM. A translator
           // that renders the answer "The members." and the option "The members" produces a 200
           // here and a 400 three steps later, surfacing as a generic save failure with no hint
-          // that the translation was the cause. Reject this locale's MCQ fill instead — the gap
-          // stays open and is reported as such, which is at least true.
-          const translatedOptions = question?.options ?? [];
-          if (
-            typeof question?.correctAnswer === "string"
-            && !translatedOptions.some((option) => option === question.correctAnswer)
-          ) {
-            throw new Error("translated correctAnswer does not match any translated option");
+          // that the translation was the cause.
+          //
+          // Only checked for the values actually being merged: the response always carries every
+          // field, so an inconsistency in an answer this locale does not need must not discard a
+          // stem or rationale translation it does.
+          const fillingAnswer = !target.correctAnswer[targetLocale]?.trim();
+          const fillingOptions = target.options.some((option) => !option[targetLocale]?.trim());
+          if (fillingAnswer || fillingOptions) {
+            const translatedOptions = question?.options ?? [];
+            if (
+              typeof question?.correctAnswer === "string"
+              && !translatedOptions.some((option) => option === question.correctAnswer)
+            ) {
+              throw new Error("translated correctAnswer does not match any translated option");
+            }
           }
-          fillLocaleGap(target.stem, targetLocale, question?.stem);
           fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
           // Only if the question HAD a rationale. The localization response contract requires the
           // model to return one, so a question without a rationale gets an invented one — stored

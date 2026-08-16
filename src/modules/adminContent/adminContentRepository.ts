@@ -568,6 +568,12 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
         select: {
           id: true,
           moduleId: true,
+          // #896 S5: the mode has to travel with a clone. It did not, and `assessmentMode` defaults
+          // to FREETEXT_PLUS_MCQ in the schema — so calibrating thresholds on an MCQ_ONLY module
+          // silently republished it as a free-text-plus-MCQ one. Restoring a version would have
+          // inherited the same bug.
+          assessmentMode: true,
+          versionNo: true,
           taskText: true,
           assessorExpectedContent: true,
           candidateTaskConstraints: true,

@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.17.8 - 2026-08-16
+
+QA-runde 6 på publiseringsgaten (#896 S4). Rundens viktigste funn var mot **min egen forrige
+rettelse**: `dropBlankLocales` i Avansert-dialogen gjorde en høylytt feil om til stille korrupsjon.
+
+Før endringen ga det 400 å åpne en delvis oversatt MCQ og trykke «Bruk» — dialogen skrev `""` for
+språk forfatteren ikke hadde fylt ut, og skjemaet avviste det. Etter endringen lagret den, og tok
+med seg tre feil dialogen alltid har hatt, men som ingen kunne nå før #913 gjorde delvis oversatte
+MCQ-er til noe man faktisk åpner der:
+
+- **Fasiten kunne endres av å åpne dialogen.** Radioknappen ble satt ved å sammenligne `en-GB`.
+  Et spørsmål lovlig oversatt til bare bokmål og nynorsk hadde ingen `en-GB` å sammenligne, så
+  ingen knapp ble valgt — og «Bruk» falt tilbake på *første* alternativ. Hvilket svar som gir
+  poeng kunne altså endres ved å åpne og lukke en dialog.
+- **Legacy-strenger ble omdøpt til engelsk.** En ren streng er bokmål etter serverens kontrakt,
+  men dialogen la den i `en-GB`-feltet. Lagring merket dermed norsk tekst som engelsk, og gaten
+  regnet språket som oversatt.
+- **Tomme kontroller ble til `en-GB`-nøkler** på felt som ikke hadde det språket.
+
+Alle tre er rettet, og dekket av en e2e som åpner dialogen på et delvis oversatt sett, trykker
+«Bruk» uten å endre noe, og krever at alt er byte-for-byte likt.
+
+Ett funn var **falsk positivt**: settets tittel klobbes ikke. Siden holder språkkartet i
+`dataset.localeOriginal` og fletter mot aktivt språk ved lagring. Rettelsen jeg først skrev ville
+omgått nettopp den mekanismen. E2e-en fester nå oppførselen, og kommentaren i koden forklarer
+hvorfor det *ser* galt ut.
+
+To øvrige: Avansert viste advarsler som om de blokkerte publisering (nå filtrert på
+`severity === "blocking"`), og MCQ-konsistenssjekken avbrøt en oversettelse som fylte stamme eller
+begrunnelse, fordi fasiten i et *annet* språk ikke stemte. Sjekken gjelder nå bare de verdiene som
+faktisk skal flettes inn.
+
+Registrert **#914**: valideringsmeldinger som ikke er oversettelseshull er engelsk servertekst i
+alle UI-språk. Hver kode trenger sin egen meldingsnøkkel med plassholdere — egen jobb.
+
 ## 2.17.7 - 2026-08-16
 
 QA-runde 5 på publiseringsgaten (#896 S4). Seks funn, alle P2 — ingen P1 igjen.

@@ -674,8 +674,11 @@ function parseActionableErrorMessage(error) {
       // route appends gate issues to the existing validation list. Returning only the gate text
       // hid the other blocker until the author had translated and retried, at which point the
       // publish failed again for a reason they were never shown.
+      // Blocking only. The route returns warnings in the same `issues` array, and listing a
+      // warning as a reason publishing was refused sends the author off to fix something that was
+      // never going to stop them.
       const otherIssues = (payload.issues ?? [])
-        .filter((issue) => issue?.code !== "translation_incomplete")
+        .filter((issue) => issue?.code !== "translation_incomplete" && issue?.severity === "blocking")
         .map((issue) => issue?.message)
         .filter(Boolean)
         .join("; ");
@@ -3231,10 +3234,7 @@ function addMcqOptionRow(qId, container, optLocaleObj, isCorrect) {
     inp.dataset.locale = locale;
     inp.autocomplete = "off";
     if (locale !== "en-GB") inp.hidden = true;
-    const locVal = typeof optLocaleObj === "object" && optLocaleObj !== null
-      ? (optLocaleObj[locale] ?? "")
-      : (locale === "en-GB" ? (typeof optLocaleObj === "string" ? optLocaleObj : "") : "");
-    inp.value = locVal;
+    inp.value = mcqLocaleMap(optLocaleObj)[locale] ?? "";
     row.appendChild(inp);
   }
   row.appendChild(removeBtn);
@@ -3288,9 +3288,8 @@ function createMcqQuestionEl(question, idx) {
     const ta = document.createElement("textarea");
     ta.className = "mcq-stem";
     ta.rows = 2;
-    ta.value = typeof question?.stem === "object" && question.stem !== null
-      ? (question.stem[locale] ?? "")
-      : (locale === "en-GB" ? (typeof question?.stem === "string" ? question.stem : "") : "");
+    // A bare string belongs to nb, not en-GB — see mcqLocaleMap.
+    ta.value = mcqLocaleMap(question?.stem)[locale] ?? "";
     wrap.appendChild(ta);
     item.appendChild(wrap);
   }
@@ -3313,15 +3312,11 @@ function createMcqQuestionEl(question, idx) {
   const correctAnswer = question?.correctAnswer;
   for (let i = 0; i < options.length; i++) {
     const optLocale = options[i];
-    let isCorrect = false;
-    if (correctAnswer && typeof correctAnswer === "object") {
-      const caEnGB = correctAnswer["en-GB"] ?? "";
-      const optEnGB = typeof optLocale === "object" ? (optLocale["en-GB"] ?? "") : (typeof optLocale === "string" ? optLocale : "");
-      isCorrect = caEnGB !== "" && caEnGB === optEnGB;
-    } else if (typeof correctAnswer === "string" && typeof optLocale === "string") {
-      isCorrect = optLocale === correctAnswer;
-    }
-    addMcqOptionRow(qId, optContainer, optLocale, isCorrect);
+    // #913: compare across EVERY locale, not just en-GB. A question that is legally translated
+    // into nb/nn only had no en-GB text to compare, so no radio was selected — and applyMcqDialog
+    // then fell back to the first option. Opening the dialog and pressing Bruk, changing nothing,
+    // could silently change which answer scores as correct.
+    addMcqOptionRow(qId, optContainer, optLocale, mcqOptionIsCorrect(optLocale, correctAnswer));
   }
 
   // Rationale per locale
@@ -3333,9 +3328,7 @@ function createMcqQuestionEl(question, idx) {
     const ta = document.createElement("textarea");
     ta.className = "mcq-rationale";
     ta.rows = 2;
-    ta.value = typeof question?.rationale === "object" && question.rationale !== null
-      ? (question.rationale[locale] ?? "")
-      : (locale === "en-GB" ? (typeof question?.rationale === "string" ? question.rationale : "") : "");
+    ta.value = mcqLocaleMap(question?.rationale)[locale] ?? "";
     wrap.appendChild(ta);
     item.appendChild(wrap);
   }
@@ -3351,12 +3344,17 @@ function openMcqDialog(triggerBtn) {
 
   const titleEl = document.getElementById("dlgMCQ_setTitle");
   if (titleEl) {
+    // `mcqSetTitleInput.value` is already the current language as plain text — the locale map lives
+    // in its `dataset.localeOriginal` and is merged back on save. The JSON.parse is for the one
+    // path that writes a raw map into the field (a restored draft snapshot, line ~1971).
     const rawTitle = mcqSetTitleInput.value ?? "";
     let displayTitle = rawTitle;
     try {
       const parsed = JSON.parse(rawTitle);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        displayTitle = parsed["en-GB"] ?? Object.values(parsed).find((v) => typeof v === "string" && v.trim()) ?? "";
+        displayTitle = parsed[currentLocale]
+          ?? Object.values(parsed).find((v) => typeof v === "string" && v.trim())
+          ?? "";
       }
     } catch { /* not JSON, use as-is */ }
     titleEl.value = displayTitle;
@@ -3461,6 +3459,26 @@ async function fillOtherLocalesFromActiveMcqLocale() {
   }
 }
 
+// A localized value as a locale→text map. A bare string is legacy content the server reads as nb
+// (#896 S4), so it is labelled nb here too — loading it into the en-GB control and saving relabels
+// Norwegian text as English, which the publish gate then reads as a translated locale.
+function mcqLocaleMap(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) return { nb: value };
+  return {};
+}
+
+// True when this option is the correct answer, in ANY locale they share. Comparing a single locale
+// fails for a question translated into nb/nn only.
+function mcqOptionIsCorrect(option, correctAnswer) {
+  const optionMap = mcqLocaleMap(option);
+  const answerMap = mcqLocaleMap(correctAnswer);
+  return ["en-GB", "nb", "nn"].some((locale) => {
+    const a = (answerMap[locale] ?? "").trim();
+    return a !== "" && a === (optionMap[locale] ?? "").trim();
+  });
+}
+
 // #913: keep only the locales that actually have text. An empty string is not "this language is
 // blank" to the schema — it is an invalid localized value, and the whole save is rejected.
 function dropBlankLocales(map) {
@@ -3474,6 +3492,11 @@ function dropBlankLocales(map) {
 function applyMcqDialog() {
   const dialog = document.getElementById("dialogMcq");
   const titleEl = document.getElementById("dlgMCQ_setTitle");
+  // Plain text, deliberately. `mcqSetTitleInput` is a LOCALIZED editor field: setLocalizedEditorValue
+  // keeps the full locale map in `dataset.localeOriginal` and shows only the current language, and
+  // readLocalizedFieldValue merges the typed text back into `currentLocale` on save. Writing JSON
+  // here would bypass that mechanism and fight it. (A QA round read this as the dialog clobbering
+  // the other two languages; the e2e below pins that it does not.)
   if (titleEl) mcqSetTitleInput.value = titleEl.value;
 
   const locales = ["en-GB", "nb", "nn"];
