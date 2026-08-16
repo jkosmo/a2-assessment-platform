@@ -50,7 +50,20 @@ test("course owner panel: lists, adds via search, and removes owners", async ({ 
   const strip = await page.locator("#ownerPanelHost").boundingBox();
   expect(strip).not.toBeNull();
   expect(strip!.height).toBeLessThanOrEqual(52);
-  await panel.locator(".owner-edit-toggle").click();
+
+  // Stage-tilbakemelding 2026-08-16, two things at once:
+  const toggle = panel.locator(".owner-edit-toggle");
+  // 1. It must not be called "Rediger". On the module workspace that is the name of a TAB a few
+  //    centimetres above, and a second control with the same word read as a way back to it.
+  await expect(toggle).toHaveText("Endre eiere");
+  // 2. It must LOOK pressable before the mouse arrives. It was borderless with a transparent
+  //    background and only underlined on hover, which reads as a heading — and on a touch screen
+  //    there is no hover at all. Measured, not assumed: a CSS regression here is invisible to any
+  //    assertion about text or classes.
+  const border = await toggle.evaluate((el) => getComputedStyle(el).borderTopWidth);
+  expect(parseFloat(border)).toBeGreaterThan(0);
+
+  await toggle.click();
   await expect(panel.locator(".owner-row")).toHaveCount(1);
   await expect(panel.locator(".owner-name").first()).toHaveText("Alice Owner");
 

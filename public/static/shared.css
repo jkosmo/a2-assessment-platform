@@ -1212,8 +1212,14 @@ dialog::backdrop {
 .owner-compact-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-meta); }
 .owner-compact-names { color: var(--color-text); font-weight: 600; flex: 1 1 auto; min-width: 0; }
 .owner-compact-names .owner-none { font-weight: 400; font-style: italic; opacity: 0.65; }
-.owner-edit-toggle, .owner-collapse { width: auto; flex: 0 0 auto; background: none; border: 0; padding: 2px 4px;
-  min-height: 0; color: var(--color-link-active, var(--color-blue)); font-size: 0.85rem; font-weight: 600; cursor: pointer; }
-.owner-edit-toggle:hover, .owner-collapse:hover { text-decoration: underline; }
+/* Stage-tilbakemelding 2026-08-16: disse var borderless med background:none og fikk understrek
+   først ved hover — de så ut som overskrifter, ikke som noe man kan trykke på. En kontroll må se
+   trykkbar ut FØR musen er der; på berøringsskjerm finnes ingen hover i det hele tatt.
+   Fortsatt lette nok til at feltet er en slank stripe. */
+.owner-edit-toggle, .owner-collapse { width: auto; flex: 0 0 auto; background: #fff;
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-button, 999px);
+  padding: 3px 12px; min-height: 0; color: var(--color-link-active, var(--color-blue));
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.owner-edit-toggle:hover, .owner-collapse:hover { background: var(--color-row-hover); }
 .owner-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .owner-panel-head .owner-panel-title { margin: 0; }

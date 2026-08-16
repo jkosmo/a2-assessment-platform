@@ -1327,23 +1327,31 @@ function translateLocalizedText(text) {
 }
 
 /**
- * Utelat en lokalisert verdi der ALLE språk er tomme, i stedet for å sende den.
+ * Fjern språk som er tomme fra en lokalisert verdi.
  *
- * `localizedTextObjectSchema` krever minst ett tegn i hvert av de tre språkene, og et objekt er
- * alltid truthy — så `verdi || undefined` fanget aldri `{"en-GB":"", nb:"", nn:""}`. Å lagre en
- * modul uten «rammer for kandidaten» ga derfor:
+ * Skjemaet avviser tom streng i et språk, men godtar at språket mangler — det ER kodingen for
+ * «ikke oversatt» (#905/#913, se doc/API_REFERENCE.md). `{"en-GB":"tekst", nb:"", nn:"tekst"}`
+ * er altså ikke et delvis utfylt kart serveren skal klage på; det er et kart som skulle vært
+ * skrevet uten `nb`.
+ *
+ * Dette het før `omitWhenEveryLocaleBlank` og lot delvise kart gå uendret gjennom, med den
+ * begrunnelsen at klienten ikke skulle dikte seg ut av problemet ved å kopiere ett språk inn i de
+ * andre (#892). Riktig den gangen — den gang var alternativet nettopp en kopi. Etter #905 finnes
+ * et tredje valg, og det er dette. Symptomet var:
  *
  *   400 validation_error · path ["candidateTaskConstraints","nb"] · String must contain at least 1
  *
- * Delvis utfylte kart sendes uendret: da er det et ekte problem serveren skal si fra om, ikke noe
- * klienten skal dikte seg ut av ved å kopiere ett språk inn i de andre (#892).
+ * på en helt vanlig lagring der forfatteren bare hadde endret tittelen.
  */
-function omitWhenEveryLocaleBlank(value) {
+function dropBlankLocales(value) {
   if (value == null) return undefined;
   if (typeof value === "string") return value.trim() ? value : undefined;
   if (typeof value !== "object") return undefined;
-  const hasText = Object.values(value).some((text) => typeof text === "string" && text.trim());
-  return hasText ? value : undefined;
+  const kept = {};
+  for (const [locale, text] of Object.entries(value)) {
+    if (typeof text === "string" && text.trim()) kept[locale] = text;
+  }
+  return Object.keys(kept).length > 0 ? kept : undefined;
 }
 
 /**
@@ -2213,9 +2221,12 @@ async function saveDraftBundleInBackground(options = {}) {
         // habit - which stored the source language under every locale and made an untranslated
         // field indistinguishable from a translated one. The schema accepts a plain string
         // ("one language, not translated yet") and now also a partial map.
-        taskText,
-        assessorExpectedContent,
-        candidateTaskConstraints: omitWhenEveryLocaleBlank(candidateTaskConstraints),
+        // Blank locales stripped from ALL of them, not just the optional one. A blank locale is
+        // rejected wherever it appears, and the field that happened to hit it first was only the
+        // first to be noticed.
+        taskText: dropBlankLocales(taskText) ?? taskText,
+        assessorExpectedContent: dropBlankLocales(assessorExpectedContent) ?? assessorExpectedContent,
+        candidateTaskConstraints: dropBlankLocales(candidateTaskConstraints),
         assessmentBlueprint: assessmentBlueprint || undefined,
         // Explicit criteria ride along; a rubric from ensure-rubric is referenced by id.
         ...(inlineRubric ? { rubric: inlineRubric } : { rubricVersionId: rubricBody?.rubricVersion?.id }),
@@ -5299,9 +5310,12 @@ async function saveSettingsInBackground() {
     ...moduleFields,
     assessmentMode: mode,
     ...(isMcqOnly ? {} : {
-      taskText: latestTaskVersion?.taskText,
-      assessorExpectedContent: latestTaskVersion?.assessorExpectedContent,
-      candidateTaskConstraints: omitWhenEveryLocaleBlank(latestTaskVersion?.candidateTaskConstraints),
+      // Same stripping here: this carries the STORED content forward, so any blank locale already
+      // in the database would otherwise fail a settings-only save the author never touched.
+      taskText: dropBlankLocales(latestTaskVersion?.taskText) ?? latestTaskVersion?.taskText,
+      assessorExpectedContent:
+        dropBlankLocales(latestTaskVersion?.assessorExpectedContent) ?? latestTaskVersion?.assessorExpectedContent,
+      candidateTaskConstraints: dropBlankLocales(latestTaskVersion?.candidateTaskConstraints),
       rubricVersionId: latestRubricId,
       promptTemplateVersionId: latestPromptId,
     }),

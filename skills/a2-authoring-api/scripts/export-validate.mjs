@@ -143,10 +143,16 @@ export function normalizeEnvelopeDates(envelope) {
 
 // Localized-text identity that matches the platform's localizedTextIdentity (structural, per
 // locale — NOT by index), so an MCQ correctAnswer must match an option in EVERY locale.
+//
+// JSON.stringify, not a `|`-join: the join is not injective when the text itself contains the
+// separator, so `{en-GB:"A|B", nb:"C"}` and `{en-GB:"A", nb:"B|C"}` shared an identity and an
+// answer that is NOT one of the options could pass. The platform was fixed the same way
+// (#896 S6 QA) — if these two drift apart, this validator starts calling files valid that the
+// real import rejects, which is precisely what this whole reference exists to prevent.
 function localizedIdentity(value) {
   if (value == null) return "";
-  if (typeof value === "string") return `plain:${value.trim()}`;
-  return `locale:${value["en-GB"] ?? ""}|${value.nb ?? ""}|${value.nn ?? ""}`;
+  if (typeof value === "string") return `plain:${JSON.stringify(value.trim())}`;
+  return `locale:${JSON.stringify([value["en-GB"] ?? "", value.nb ?? "", value.nn ?? ""])}`;
 }
 
 function isNonEmptyLocalized(value) {

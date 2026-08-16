@@ -77,8 +77,13 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
     wire();
   }
 
-  // Compact default: "Eiere: Name A, Name B" on one line, plus an inline "Rediger" affordance for
-  // those who can manage. Keeps the panel to a slim strip since it's shown far more than edited.
+  // Compact default: "Eiere: Name A, Name B" on one line, plus an inline "Endre eiere" affordance
+  // for those who can manage. Keeps the panel to a slim strip since it's shown far more than edited.
+  //
+  // The label says "Endre eiere", not "Rediger" (stage-tilbakemelding 2026-08-16). On the module
+  // workspace "Rediger" is the name of a TAB, so a second control with the same word a few
+  // centimetres below it read as a way back to that tab. A verb plus its object costs three
+  // characters and removes the question.
   function paintCompact() {
     // Slim the host card down to a strip while compact (QA r5/r6 #1): the host brings .card/.detail-section
     // padding meant for full sections. Page-level styles load after shared.css and win the cascade at equal
@@ -94,7 +99,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       <div class="owner-panel owner-panel--compact">
         <span class="owner-compact-label">Eiere</span>
         <span class="owner-compact-names">${names}</span>
-        ${canManage ? `<button type="button" class="owner-edit-toggle">Rediger</button>` : ""}
+        ${canManage ? `<button type="button" class="owner-edit-toggle">Endre eiere</button>` : ""}
       </div>`;
     container.querySelector(".owner-edit-toggle")?.addEventListener("click", () => {
       expanded = true;

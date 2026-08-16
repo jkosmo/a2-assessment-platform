@@ -3273,6 +3273,94 @@ test.describe("admin content browser coverage", () => {
     expect(ensureBody?.taskText).toContain("scenario");
   });
 
+  // Reported from stage: rename a module, press save, and get
+  //   400 · path ["candidateTaskConstraints","nb"] · String must contain at least 1 character
+  //
+  // The cause is the combination, not either half alone. The module has NO candidate constraints,
+  // so the map is seeded blank for all three locales — and the real localizer, asked to translate
+  // a draft, returns a constraints string for SOME target locale anyway. One locale filled, two
+  // empty. `hasText` was then true, so the map went out verbatim with two empty strings in it.
+  //
+  // The old helper omitted a localized value only when EVERY locale was blank, on the reasoning
+  // that a partial map was a real problem the server should report rather than something the
+  // client should paper over by copying one locale into the others (#892). That was right when a
+  // copy was the only alternative. Since #905 there is a third option and it is the contract:
+  // an absent locale means "not translated"; an empty one is invalid.
+  test("saving strips blank locales instead of sending them and failing validation", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "English scenario", nb: "Norsk scenario", nn: "Nynorsk scenario" },
+          assessorExpectedContent: { "en-GB": "English guidance", nb: "Norsk veiledning", nn: "Nynorsk rettleiing" },
+          // No constraints on the module at all — the state the author was actually in.
+          mcqQuestions: [
+            {
+              stem: { "en-GB": "Q", nb: "Q", nn: "Q" },
+              options: [
+                { "en-GB": "A", nb: "A", nn: "A" },
+                { "en-GB": "B", nb: "B", nn: "B" },
+              ],
+              correctAnswer: { "en-GB": "A", nb: "A", nn: "A" },
+              rationale: { "en-GB": "R", nb: "R", nn: "R" },
+            },
+          ],
+        }),
+      },
+    });
+
+    let versionBody: any = null;
+    await page.route("**/api/admin/content/modules/*/rubric-versions/ensure", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ rubricVersion: { id: "rubric-1", versionNo: 1 } }),
+      });
+    });
+    // The half that made it happen: the localizer volunteers constraints for ONE target locale
+    // even though the source had none. Registered after mockCommonApis so it wins.
+    await page.route("**/api/admin/content/generate/module-draft/localize", async (route: Route) => {
+      const body = route.request().postDataJSON() as { targetLocale?: string };
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: `Fagforeninger [${body.targetLocale}]`,
+          taskText: `Scenario [${body.targetLocale}]`,
+          assessorExpectedContent: `Guidance [${body.targetLocale}]`,
+          ...(body.targetLocale === "nn" ? { candidateTaskConstraints: "Maks 500 ord" } : {}),
+        }),
+      });
+    });
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      versionBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").fill("Fagforeninger");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect.poll(() => versionBody !== null).toBe(true);
+
+    // The save goes through at all — this is the 400 the author hit on stage.
+    expect(versionBody).not.toBeNull();
+    // The blank locales are GONE, not sent as "", which the schema rejects outright.
+    expect(versionBody.candidateTaskConstraints?.nb).toBeUndefined();
+    expect(versionBody.candidateTaskConstraints?.["en-GB"]).toBeUndefined();
+    // ...and the one locale that DID get text survives. Dropping the whole field would have been
+    // the other way to make the 400 go away, and it would have thrown that text away.
+    expect(versionBody.candidateTaskConstraints?.nn).toBe("Maks 500 ord");
+  });
+
   // Rapportert fra stage: bytt språk mens du står i Direkte redigering, og du havner i lesemodus
   // med en samtale som fortsatt sier «rediger feltene og trykk Bekreft» — mens handlingsknappene
   // er brukt opp og deaktiverte. Ingen vei videre uten å laste siden på nytt. Årsaken er at

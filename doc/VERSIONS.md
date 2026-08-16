@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.4 - 2026-08-16
+
+Første stage-runde, to funn — begge fra reell bruk, ingen av dem fanget av 163 e2e.
+
+**Lagring feilet med 400 på et tomt språk.** Å endre tittelen på en helt vanlig modul ga
+
+    400 · path ["candidateTaskConstraints","nb"] · String must contain at least 1 character
+
+Årsaken er kombinasjonen, ikke halvdelene: modulen har **ingen** rammer for kandidaten, så kartet
+seedes tomt for alle tre språk — og oversetteren, bedt om å oversette utkastet, returnerer en
+rammetekst for ett målspråk likevel. Ett språk fylt, to tomme. Hjelperen utelot verdien bare når
+**alle** språk var tomme, så kartet gikk ut ordrett med to tomme strenger i seg.
+
+Begrunnelsen for den gamle oppførselen — at delvise kart er et ekte problem serveren skal si fra
+om, ikke noe klienten skal dikte seg ut av ved å kopiere ett språk inn i de andre (#892) — var
+riktig da kopi var eneste alternativ. Etter #905 finnes et tredje valg, og det *er* kontrakten:
+et fraværende språk betyr «ikke oversatt», et tomt er ugyldig. Tomme språk strippes nå fra alle
+lokaliserte felt i lagringen, ikke bare det ene som tilfeldigvis ble oppdaget først.
+
+**«Rediger» på eierpanelet var både feil ord og feil form.** På modularbeidsrommet er «Rediger»
+navnet på en **fane** noen centimeter over, så en knapp med samme ord leste som en vei tilbake dit.
+Den het nå «Endre eiere». Den var dessuten stilt uten ramme og bakgrunn, med understrek først ved
+hover — den så ut som en overskrift, og på berøringsskjerm finnes ingen hover i det hele tatt.
+Nå har den synlig ramme, og e2e-en **måler** rammebredden, siden en CSS-regresjon her er usynlig
+for enhver påstand om tekst eller klasser.
+
+Rettet også en drift jeg selv skapte: ferdighetens innebygde eksportvalidator speilet den gamle
+`|`-baserte identiteten. Kommentaren påsto at den matcher plattformen — etter gårsdagens endring
+gjorde den ikke det, og en validator som godkjenner filer den ekte importen avviser er nøyaktig
+feilen den referansen finnes for å hindre.
+
 ## 2.18.3 - 2026-08-16
 
 Siste QA før stage. Fire P1 — alle samme feil: **jeg sikret én utgang fra Innstillinger, og det

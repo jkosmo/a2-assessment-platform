@@ -103,6 +103,9 @@ export function buildMockModuleExport({
   // #896 S4: participant-visible in the module list, so the publish gate covers it. Undefined
   // means "this module has no description" — a distinct case from "an empty one".
   description = undefined,
+  // Needed to reproduce the blank-locale save failure reported from stage: a map with some
+  // locales filled and one empty is an ordinary state, and it used to be sent verbatim.
+  candidateTaskConstraints = undefined,
 }: {
   id: string;
   title: string;
@@ -119,12 +122,14 @@ export function buildMockModuleExport({
   moduleVersionId?: string | null;
   assessmentMode?: string;
   description?: Record<string, string> | undefined;
+  candidateTaskConstraints?: Record<string, string> | undefined;
 }): MockModuleExport {
   const moduleVersion = moduleVersionId
     ? {
         id: moduleVersionId,
         versionNo: 1,
         assessmentMode,
+        ...(candidateTaskConstraints ? { candidateTaskConstraints } : {}),
         taskText,
         assessorExpectedContent,
         submissionSchema: {
