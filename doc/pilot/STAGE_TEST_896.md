@@ -19,6 +19,27 @@ Test i denne rekkefølgen — hvert punkt bygger på det forrige.
 - [ ] Bytt modultype i Innstillinger og tilbake igjen. Begge veier skal være mulige — det er
       historikken, ikke gjeldende versjon, som avgjør hva som tilbys.
 
+## 1b · Innstillinger er nå komplett (S3c) — nytt siden forrige runde
+
+Alle åtte feltene spesifikasjonen krever er redigerbare her. Tre av dem er nye:
+
+- [ ] **Kriterier.** «Endre kriterier» åpner editoren. Endre et navn, juster en vekt, lagre.
+      Kontroller at endringen står etter reload — og at totalvekten oppdateres mens du drar.
+- [ ] **Vurderingsinstruks.** «Endre instruks». Den viser **ett språk** (ditt UI-språk) og sier
+      det. Endre systeminstruksen, lagre, bytt UI-språk og kontroller at **de to andre språkene er
+      urørt**. Dette er det viktigste punktet i hele seksjonen — samme feil er gjort tre ganger før.
+- [ ] Skriv ugyldig JSON i «Eksempler» og lagre → du skal få beskjed, ikke en stille tømming.
+- [ ] **Svarfelt** (innsendingsskjema) og **praktisk vekt**. Endre begge, lagre, kontroller at de
+      står. Merk: `max_total` har med vilje ingen input — den følger av kriteriene.
+- [ ] **Skriv en verdi, og utvid så en seksjon.** Verdien skal fortsatt stå. (Den ble stille
+      tilbakestilt før; rettet, men verdt å se med egne øyne.)
+- [ ] Alt over skal fortsatt utløse advarsel ved fanebytte, språkbytte og «Åpne avansert
+      redigering» hvis det er ulagret.
+
+> **Avansert-siden har fortsatt de samme editorene.** Den er ikke fjernet ennå (S3c gjenstår), så
+> du kan gjøre samme ting to steder. Det er en mellomtilstand, ikke en feil — men rapporter det
+> hvis de to gir *ulikt resultat*.
+
 ## 2 · Publiseringsgaten (S4) — hovedpunktet
 
 Lag en modul der **ett** språk mangler i oppgaveteksten.
@@ -76,4 +97,6 @@ Lag en modul der **ett** språk mangler i oppgaveteksten.
   som komplette — teknisk sant, innholdsmessig ikke. Opprydding hører til #892.
 - **#915:** gjenoppretting kan vise falsk kriteriedrift fordi rubrikkversjoner muteres på stedet.
   Kriteriene er intakte; bare driftindikatoren lyver.
-- **#912:** eksport/import brytes for moduler uten sertifiseringsnivå (`null` avvises ved import).
+- **#916:** en enslig seksjon kan ikke eksporteres eller importeres for seg — den kan bare reise
+  som del av en kurspakke. Funksjonen er aldri bygget; tas etter S3c.
+- ~~#912: eksport/import brytes for moduler uten sertifiseringsnivå~~ — **løst i v2.18.5.**
