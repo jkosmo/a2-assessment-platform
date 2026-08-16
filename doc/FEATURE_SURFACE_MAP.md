@@ -482,3 +482,28 @@ locales survive untouched), "gap-fill works on a FREETEXT_ONLY module…" (the s
 **stored** assessment mode — reading only `sessionDraft` made the save demand an MCQ set that
 module type does not have), and "gap-fill can source a title-only gap on a module with no task
 text" (the source locale comes from the fields the gate named, not a fixed pair).
+
+## 19. Cloning a module version — three callers, one forgotten field (#896 S5)
+
+Three code paths build a new `ModuleVersion` from an existing one. `assessmentMode` has a schema
+default of `FREETEXT_PLUS_MCQ`, so a clone that forgets to carry it does not fail — it silently
+converts the module to a different type.
+
+| Caller | Where | Carries `assessmentMode`? |
+|--------|-------|---------------------------|
+| Restore an earlier version | `restoreModuleVersion` in `adminContentCommands.ts` | Yes |
+| Calibration threshold publish | `publishModuleVersionWithThresholds` in `adminContentCommands.ts` | Yes — **it did not until #896 S5**; calibrating an MCQ-only module republished it as free-text-plus-MCQ |
+| Import | `importModulePayload` in `contentImportService.ts` | Yes — reads it from the envelope |
+
+The shared read is `findActiveModuleVersionForClone`. Anything it does not `select` is silently
+absent from every clone, so adding a column to `ModuleVersion` means checking that select too.
+
+**Guards:** `test/m2-restore-module-version-896.test.ts` → "carries the assessment mode, so
+restoring an MCQ-only version does not change the module type".
+
+**Restore is append-only.** It copies forward; it never rewinds. The versions created after the
+restored one stay in the list, which is what makes restoring the wrong version undoable — and is
+the reason the UI can offer the action without a scary confirmation. A restored version is a
+DRAFT even when its source was published; publishing stays separate and still passes the #896 S4
+translation gate. Guard: same file, "restores a published version as a draft, leaving the live
+version untouched".

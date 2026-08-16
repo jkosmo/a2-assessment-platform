@@ -386,6 +386,19 @@
          field does not stretch across the panel. */
       .settings-input { font-family: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; max-width: 320px; }
       input.settings-input[type="number"] { max-width: 90px; }
+      /* #896 S5: version history. Each row is one saved version; the badges say which one is live
+         and which one is loaded, so "Restore" never has to be guessed at. */
+      .version-history { margin-top: var(--space-3); border-top: 1px solid var(--color-border-soft); padding-top: var(--space-2); }
+      .version-history-heading { font-size: 14px; margin: 0 0 4px; }
+      .version-list { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+      .version-item { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; padding: 6px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); }
+      .version-no { font-weight: 600; }
+      .version-when { color: var(--color-meta); }
+      .version-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+      .version-badge.live { background: #e6f4ea; color: #1e7a3c; }
+      .version-badge.current { background: var(--color-row-hover); color: var(--color-meta); }
+      /* Pushed to the right so the actions line up in a column the eye can scan. */
+      .version-restore { margin-left: auto; width: auto; font-size: 12px; padding: 4px 10px; }
     </style>
   </head>
   <body class="auth-resolving">

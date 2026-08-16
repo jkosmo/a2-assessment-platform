@@ -80,6 +80,64 @@ test.describe("admin content browser coverage", () => {
     expect(preserved.nn).toBe("Fagforeiningsquiz");
   });
 
+  // #896 S5: version history. The rows have existed since the first «Mellomlagring» — every save
+  // writes one. What was missing was any way to SEE them, so "I liked the previous wording better"
+  // meant retyping from memory.
+  test("Innstillinger lists saved versions and restores an earlier one as a new draft", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-3",
+    });
+    const current = moduleExport.selectedConfiguration.moduleVersion;
+    current.versionNo = 3;
+    current.createdAt = "2026-08-14T09:00:00.000Z";
+    moduleExport.versions.moduleVersions = [
+      current,
+      { id: "module-1-version-2", versionNo: 2, createdAt: "2026-08-13T09:00:00.000Z", publishedAt: null },
+      { id: "module-1-version-1", versionNo: 1, createdAt: "2026-08-12T09:00:00.000Z", publishedAt: null },
+    ];
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    let restoredFrom: string | null = null;
+    await page.route("**/api/admin/content/modules/*/module-versions/*/restore", async (route) => {
+      const segments = new URL(route.request().url()).pathname.split("/");
+      restoredFrom = decodeURIComponent(segments[segments.length - 2] ?? "");
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-4", versionNo: 4, publishedAt: null } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const items = page.locator(".version-list .version-item");
+    await expect(items).toHaveCount(3);
+    // Newest first — the author's mental model is a stack, not a queue.
+    await expect(items.nth(0)).toContainText("3");
+    await expect(items.nth(2)).toContainText("1");
+
+    // The loaded version offers no Restore: restoring it would copy the module onto itself.
+    await expect(items.nth(0).locator(".version-restore")).toHaveCount(0);
+    await expect(items.nth(1).locator(".version-restore")).toHaveCount(1);
+
+    await items.nth(2).locator(".version-restore").click();
+
+    await expect.poll(() => restoredFrom).toBe("module-1-version-1");
+
+    // Restore is triggered from Innstillinger, but the author's next question is "what does it say
+    // now?" — so the workspace returns to Rediger. That also puts the confirmation somewhere they
+    // can actually see it: the chat log lives in the panel Innstillinger hides.
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).first()).toBeVisible();
+  });
+
   test("advanced editor can save, publish, and unpublish a module version", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],

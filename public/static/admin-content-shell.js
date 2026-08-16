@@ -4861,11 +4861,115 @@ function renderSettingsPanel() {
     ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
     : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
-  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${actionHtml}`;
+  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${actionHtml}${renderVersionHistory()}`;
 
   document.getElementById("settingsSave")?.addEventListener("click", () => {
     void saveSettingsInBackground();
   });
+  host.querySelectorAll("[data-restore-version]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void restoreModuleVersionInBackground(button.dataset.restoreVersion);
+    });
+  });
+}
+
+/**
+ * #896 S5: the list of saved versions, and the way back to one of them.
+ *
+ * Every «Mellomlagring» already wrote a row — the data has been there since long before this UI.
+ * What was missing was any way to SEE it, so "I liked the previous wording better" meant retyping
+ * from memory.
+ *
+ * The current version has no restore button: restoring it would create an identical copy and
+ * nothing else, which is a confusing way to spend a click.
+ */
+function renderVersionHistory() {
+  const versions = [...(bundle?.versions?.moduleVersions ?? [])].sort(
+    (a, b) => (b?.versionNo ?? 0) - (a?.versionNo ?? 0),
+  );
+  if (versions.length === 0) return "";
+
+  const currentId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
+  const activeId = bundle?.module?.activeVersionId ?? null;
+
+  const items = versions.map((version) => {
+    const isCurrent = version.id === currentId;
+    const isLive = version.id === activeId;
+    const badges = [
+      isLive ? `<span class="version-badge live">${escapeHtml(t("shell.versions.live"))}</span>` : "",
+      isCurrent && !isLive ? `<span class="version-badge current">${escapeHtml(t("shell.versions.current"))}</span>` : "",
+    ].join("");
+    const when = version.createdAt
+      ? `<span class="version-when">${escapeHtml(formatDateTime(version.createdAt))}</span>`
+      : "";
+    // No restore button on the version already loaded — it would copy the module onto itself.
+    const action = isCurrent
+      ? ""
+      : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}">${
+          escapeHtml(t("shell.versions.restore"))
+        }</button>`;
+    return `<li class="version-item">
+      <span class="version-no">${escapeHtml(tf("shell.versions.versionNo", { versionNo: version.versionNo }))}</span>
+      ${when}${badges}${action}
+    </li>`;
+  });
+
+  return `<section class="version-history" aria-labelledby="versionHistoryHeading">
+    <h3 id="versionHistoryHeading" class="version-history-heading">${escapeHtml(t("shell.versions.heading"))}</h3>
+    <p class="settings-empty">${escapeHtml(t("shell.versions.explainer"))}</p>
+    <ul class="version-list">${items.join("")}</ul>
+  </section>`;
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(currentLocale === "en-GB" ? "en-GB" : "nb-NO", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * #896 S5: restore. The server copies the chosen version forward into a NEW version — history is
+ * append-only, so this is undoable by restoring whatever came before it.
+ */
+async function restoreModuleVersionInBackground(sourceVersionId) {
+  const moduleId = selectedModuleId;
+  if (!moduleId || !sourceVersionId) return;
+
+  // An unsaved draft would be lost: the restore writes the next version from stored content, so
+  // whatever is in the editor never reaches the database. Same reasoning as the settings save.
+  if (sessionDraft && !window.confirm(t("shell.versions.confirmDiscardDraft"))) return;
+
+  const slot = logProgress("shell.versions.restoreProgress");
+  slot.abortBtn.remove();
+
+  try {
+    const result = await apiFetch(
+      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(sourceVersionId)}/restore`,
+      getHeaders,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    latestSavedModuleVersionId = result?.moduleVersion?.id ?? null;
+    sessionDraft = null;
+    previewDraft = null;
+    await loadModule(moduleId);
+    // Restore is triggered from Innstillinger, but what the author wants to see afterwards is the
+    // restored CONTENT — and the confirmation itself lands in the chat log, which that tab hides.
+    switchToTab("edit");
+    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.versions.restoreSuccess"))}</strong>`);
+    showToast(t("shell.versions.restoreSuccess"), "success");
+    announceStatus(t("shell.versions.restoreSuccess"));
+  } catch (err) {
+    const errMsg = String(err?.message ?? err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, [
+      { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId) },
+    ]);
+  }
 }
 
 /**

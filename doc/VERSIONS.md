@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.0 - 2026-08-16
+
+**Utkastversjonering (#896, S5).** Hver «Mellomlagring» har skrevet en versjonsrad helt siden
+starten — det som manglet var enhver måte å *se* dem på. «Jeg likte den forrige formuleringen
+bedre» betydde å skrive den opp igjen fra hukommelsen.
+
+Innstillinger viser nå lagrede versjoner, nyeste først, med merker for hvilken som er live og
+hvilken som er åpen. Hver av de andre har **«Gjenopprett»**.
+
+**Historikken er append-only.** Gjenoppretting kopierer den valgte versjonen *framover* som en ny
+versjon i stedet for å spole modulen tilbake til den. Versjonene som ble laget etter den du
+gjenoppretter blir stående, så «jeg gjenopprettet feil versjon» er i seg selv omgjørbart.
+Tilbakespoling ville gjort gjenoppretting til den ene handlingen i dette arbeidsrommet som kan
+ødelegge arbeid.
+
+**Gjenoppretting er ikke publisering.** Den nye versjonen er et utkast, også når kilden var
+publisert — «gå tilbake til denne teksten» er ikke «vis dette til deltakerne». Publisering er
+fortsatt en egen handling, og den må fortsatt gjennom oversettelsesgaten.
+
+Komponentversjoner (rubrikk, prompt, MCQ-sett) **refereres**, ikke kopieres. De er uforanderlige
+rader, så å peke på de samme gjengir kilden nøyaktig; å kopiere dem ville lagt igjen rader ingen
+kan skille fra originalene.
+
+**Sidefunn rettet:** `findActiveModuleVersionForClone` hentet ikke `assessmentMode`. Feltet har
+`FREETEXT_PLUS_MCQ` som skjemastandard, så kalibrering av terskler på en MCQ-only modul
+republiserte den stille som en fritekst-pluss-MCQ-modul. Gjenoppretting ville arvet samme feil.
+
 ## 2.17.8 - 2026-08-16
 
 QA-runde 6 på publiseringsgaten (#896 S4). Rundens viktigste funn var mot **min egen forrige

@@ -160,6 +160,22 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `POST` | `/api/admin/content/modules/:moduleId/mcq-set-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/publish` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `POST` | `/api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/restore` | ADMINISTRATOR, or an **owner of this module** |
+
+#### Restore an earlier module version (#896 S5)
+
+`POST /api/admin/content/modules/:moduleId/module-versions/:moduleVersionId/restore` → **201**
+`{ moduleVersion }`.
+
+Copies the named version's content **forward** into a new version. It does not rewind the module:
+versions created after the restored one stay in the history, so restoring the wrong one is itself
+undoable. The new version is always a **draft**, even when the source was published — restoring
+says "go back to this text", not "publish it". Component versions (rubric, prompt template, MCQ
+set) are referenced, not copied.
+
+Idempotent per `(moduleId, moduleVersionId)` with an `Idempotency-Key`, so a double-click does not
+create two versions. **404** when the version does not exist or belongs to a different module;
+**403** for a caller who does not own the module.
 
 #### Localized text: complete, partial, or a bare string (#892 / #905 / #913)
 

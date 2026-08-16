@@ -15,6 +15,7 @@ import {
   ensureRubricVersion,
   syncActiveRubricBlueprintHash,
   publishModuleVersion,
+  restoreModuleVersion,
   unpublishModule,
   archiveModule,
   restoreModule,
@@ -778,6 +779,40 @@ adminContentRouter.post("/modules/:moduleId/benchmark-example-versions", async (
     response.status(400).json({ error: "create_benchmark_example_version_failed", message: "Could not create benchmark example version." });
   }
 });
+
+// #896 S5: restore an earlier saved version as a new DRAFT. Append-only — the versions created
+// after the one being restored stay in the history, so restoring the wrong one is itself undoable.
+// Publishing remains separate and still has to clear the translation gate.
+adminContentRouter.post(
+  "/modules/:moduleId/module-versions/:moduleVersionId/restore",
+  idempotency((request) => `modules.versions.restore:${request.params.moduleId}:${request.params.moduleVersionId}`),
+  async (request: Request<{ moduleId: string; moduleVersionId: string }>, response) => {
+    const actorId = request.context?.userId;
+    if (!actorId) {
+      response.status(401).json({ error: "unauthorized" });
+      return;
+    }
+
+    try {
+      await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+      const moduleVersion = await restoreModuleVersion({
+        moduleId: request.params.moduleId,
+        sourceModuleVersionId: request.params.moduleVersionId,
+        actorId,
+      });
+      response.status(201).json({ moduleVersion });
+    } catch (error) {
+      if (error instanceof AppError) {
+        response.status(error.httpStatus).json({ error: error.code, message: error.message });
+        return;
+      }
+      response.status(400).json({
+        error: "restore_module_version_failed",
+        message: "Could not restore module version.",
+      });
+    }
+  },
+);
 
 adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/publish", async (request, response) => {
   const actorId = request.context?.userId;
