@@ -443,7 +443,12 @@ export const moduleExportPayloadSchema = z.object({
   module: z.object({
     title: localizedTextSchema,
     description: localizedTextSchema.nullable().optional(),
-    certificationLevel: certificationLevelInputSchema,
+    // #912: nullable, matching the COURSE export payload below and matching what the exporter
+    // actually writes. `certificationLevel` is optional at module creation, the export emits
+    // `null` when it was never set, and the importer already handles null — only this schema
+    // disagreed. The round trip was therefore broken for exactly the modules made fastest: export
+    // succeeded, import rejected the file it had just produced.
+    certificationLevel: certificationLevelInputSchema.nullable(),
   }),
   activeVersion: z.object({
     // #525/#547: MCQ_ONLY exports omit taskText/rubric/promptTemplate (no free-text assessment).

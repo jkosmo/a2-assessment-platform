@@ -149,6 +149,37 @@ describe("#896 S6 workspace export/import", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
+  // #912: a module created without a certification level — the fastest way to make one, since the
+  // field is optional — exported fine and then failed its own import. The exporter wrote
+  // `certificationLevel: null`, the module export schema demanded a value, and the round trip was
+  // broken for exactly the modules made in the fewest clicks. The course export payload had been
+  // nullable all along; only this one disagreed.
+  it("round-trips a module that has no certification level (#912)", async () => {
+    const moduleRes = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({ title: threeLocales("No cert level") });
+    expect(moduleRes.status).toBe(201);
+    const source = moduleRes.body.module.id as string;
+    await addVersion(source, "Scenario");
+
+    const exportRes = await request(app)
+      .get(`/api/admin/content/modules/${source}/export-package`)
+      .set(adminHeaders);
+    expect(exportRes.status).toBe(200);
+    // The exporter really does emit null — this is the input the importer has to accept.
+    expect(exportRes.body.envelope.module.module.certificationLevel).toBeNull();
+
+    const importRes = await request(app)
+      .post("/api/admin/content/modules/import")
+      .set(adminHeaders)
+      .send({ payload: exportRes.body.envelope, mode: "createNew" });
+    expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
+
+    await request(app).delete(`/api/admin/content/modules/${importRes.body.moduleId}`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/modules/${source}`).set(adminHeaders);
+  });
+
   it("refuses a version id that belongs to another module", async () => {
     const a = await createModule("A");
     await addVersion(a, "A scenario");

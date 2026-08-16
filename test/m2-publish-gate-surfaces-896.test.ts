@@ -46,9 +46,6 @@ async function createModule(taskText: unknown) {
   const moduleRes = await request(app)
     .post("/api/admin/content/modules")
     .set(adminHeaders)
-    // certificationLevel is set explicitly because export emits it as null when unset and the
-    // import schema rejects null — a round-trip defect of its own (#912), not something these
-    // tests are about.
     .send({ title: threeLocales("Cascade gate"), certificationLevel: "foundation" });
   expect(moduleRes.status).toBe(201);
   const moduleId = moduleRes.body.module.id as string;

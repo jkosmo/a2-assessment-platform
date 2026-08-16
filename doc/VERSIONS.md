@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.5 - 2026-08-16
+
+**#912 løst:** en modul uten sertifiseringsnivå kunne eksporteres, men ikke importeres igjen.
+
+Feltet er valgfritt ved opprettelse, eksporten skriver `null` når det aldri ble satt, og importøren
+håndterte allerede `null` — det var bare skjemaet som var uenig. Kurs-varianten hadde vært
+`.nullable()` hele tiden; modul-varianten var det ikke. Rundturen var altså brutt for nøyaktig de
+modulene som lages på færrest klikk.
+
+Rettet før eksport/import-punktet i stage-planen, slik at det ikke stanser på noe som allerede var
+kjent.
+
 ## 2.18.4 - 2026-08-16
 
 Første stage-runde, to funn — begge fra reell bruk, ingen av dem fanget av 163 e2e.
