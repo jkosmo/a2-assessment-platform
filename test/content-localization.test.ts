@@ -27,3 +27,31 @@ describe("content localization helpers", () => {
     expect(matchesLocalizedContentVariant(source, "Backend eier endelig beslutning")).toBe(true);
   });
 });
+
+// #913 widened what an MCQ field may hold: a PARTIAL locale map, so a translation that succeeded
+// for one language and failed for another can be stored honestly. That change is only safe if the
+// read side survives a missing locale — scoring compares a participant's selection against the
+// stored correct answer, and a module can be live with a gap only for content published before
+// the #896 S4 gate existed.
+describe("partial locale maps (#913)", () => {
+  const partial = JSON.stringify({ nb: "Medlemmene", "en-GB": "The members" });
+
+  it("resolves only the locales that are actually present", () => {
+    expect(resolveContentVariants(partial).sort()).toEqual(["Medlemmene", "The members"]);
+  });
+
+  it("scores a selection made in either present locale as correct", () => {
+    expect(matchesLocalizedContentVariant(partial, "Medlemmene")).toBe(true);
+    expect(matchesLocalizedContentVariant(partial, "The members")).toBe(true);
+  });
+
+  it("still rejects an answer that is not one of the stored variants", () => {
+    expect(matchesLocalizedContentVariant(partial, "Styret")).toBe(false);
+  });
+
+  it("falls back to another language rather than rendering blank for the missing locale", () => {
+    // Degrading to a language the participant may not read is bad — which is exactly why the
+    // publish gate exists. Rendering nothing at all would be worse.
+    expect(localizeContentText("nn", partial)).toBe("The members");
+  });
+});

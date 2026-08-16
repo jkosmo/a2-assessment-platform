@@ -670,12 +670,22 @@ function parseActionableErrorMessage(error) {
       const described = gateIssues
         .map((issue) => `${translationGateFieldLabel(issue.field)} (${issue.missingLocales.join(", ")})`)
         .join("; ");
-      return `${
+      // A publish response can carry a blueprint mismatch alongside the translation gaps — the
+      // route appends gate issues to the existing validation list. Returning only the gate text
+      // hid the other blocker until the author had translated and retried, at which point the
+      // publish failed again for a reason they were never shown.
+      const otherIssues = (payload.issues ?? [])
+        .filter((issue) => issue?.code !== "translation_incomplete")
+        .map((issue) => issue?.message)
+        .filter(Boolean)
+        .join("; ");
+      const gateText = `${
         t("adminContent.publish.translationGateBlocked") || "Publisering er blokkert: modulen er ikke ferdig oversatt."
       } ${described} — ${
         t("adminContent.publish.translationGateHint")
         || "Bruk «Oversett det som mangler» i samtale-arbeidsrommet for å fylle hullene."
       }`;
+      return otherIssues ? `${gateText} ${otherIssues}` : gateText;
     }
     if (typeof payload.message === "string" && payload.message.trim().length > 0) {
       // The top-level message is usually a summary that ends in "see `issues` for details" —

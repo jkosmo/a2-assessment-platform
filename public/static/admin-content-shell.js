@@ -2387,12 +2387,18 @@ async function translateMissingLocalesThenPublish(issues) {
       // source from the stem alone produced a request the options could not satisfy. The call
       // failed validation, and the gap went unnoticed because the option had no source text to
       // count as missing.
-      return currentMcq.every(
-        (question) =>
-          sourceTextForLocale(question?.stem ?? "", locale).trim()
-          && sourceTextForLocale(question?.correctAnswer ?? "", locale).trim()
-          && (question?.options ?? []).every((option) => sourceTextForLocale(option, locale).trim()),
-      );
+      return currentMcq.every((question) => {
+        if (!sourceTextForLocale(question?.stem ?? "", locale).trim()) return false;
+        if (!sourceTextForLocale(question?.correctAnswer ?? "", locale).trim()) return false;
+        if (!(question?.options ?? []).every((option) => sourceTextForLocale(option, locale).trim())) return false;
+        // The rationale too, but only when the question HAS one. Since #913 a question can hold a
+        // rationale in one language and its stem in another; picking the stem's locale as source
+        // left the rationale's gap unfillable, because the source locale is excluded from the
+        // target list and only targets are ever checked. The republish then hit the same gate.
+        const hasRationale = supportedLocales.some((l) => strictLocaleValue(question?.rationale, l).trim())
+          || (typeof question?.rationale === "string" && question.rationale.trim());
+        return !hasRationale || Boolean(sourceTextForLocale(question?.rationale ?? "", locale).trim());
+      });
     }
     return true;
   });
