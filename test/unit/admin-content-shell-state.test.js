@@ -103,7 +103,7 @@ describe("admin content shell state helpers", () => {
           canUnpublish: false,
         }),
       ).toEqual({
-        actionKeys: ["generateContent", "generateMcq", "directEdit", "editAdvanced", "pickAnother", "saveDraft"],
+        actionKeys: ["generateContent", "generateMcq", "directEdit", "editAdvanced", "saveDraft"],
         shouldOfferUnifiedRevision: true,
       });
     });
@@ -122,8 +122,7 @@ describe("admin content shell state helpers", () => {
           "generateContent",
           "resumeChatEdit",
           "directEdit",
-          "editAdvanced",
-          "pickAnother",
+          "editAdvanced",
           "publish",
           "unpublish",
         ],

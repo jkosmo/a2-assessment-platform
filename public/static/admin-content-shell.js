@@ -1213,10 +1213,19 @@ function updateStateRail() {
   }
 
   if (srEditing) {
+    // Stage-tilbakemelding 2026-08-17: "det står at preview viser publisert versjon, men det som
+    // faktisk vises er min versjon under endring". Riktig — dette feltet leste `liveChain`, altså
+    // hva som er PUBLISERT, mens forhåndsvisningen viser den LASTEDE versjonen. De to er ulike
+    // hver gang forfatteren har gjenopprettet en tidligere versjon, eller står på et lagret utkast.
+    // Feltet heter "Du redigerer"; da må det navngi det som er på skjermen.
+    const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
+    const loadedIsLive = loaded?.id && loaded.id === bundle?.module?.activeVersionId;
     if (hasUnsaved) {
       srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
-    } else if (chains?.latestDraftChain.length > 0) {
-      srEditing.innerHTML = makeSrBadge("saved-draft", tf("stateRail.editing.savedDraft", { versionNo: chains.latestDraftChain[0].versionNo }));
+    } else if (loaded?.versionNo != null) {
+      srEditing.innerHTML = loadedIsLive
+        ? makeSrBadge("published", tf("stateRail.editing.published", { versionNo: loaded.versionNo }))
+        : makeSrBadge("saved-draft", tf("stateRail.editing.savedDraft", { versionNo: loaded.versionNo }));
     } else if (chains?.liveChain.length > 0) {
       srEditing.innerHTML = makeSrBadge("published", tf("stateRail.editing.published", { versionNo: chains.liveChain[0].versionNo }));
     } else {
@@ -3060,8 +3069,10 @@ async function loadModule(moduleId, options = {}) {
     const exportData = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
     bundle = exportData?.moduleExport ?? null;
   } catch {
+    // Stage-tilbakemelding 2026-08-17: send forfatteren til modul-lista i stedet for å bygge en
+    // ny, lang liste inne i samtalen. Lista har søk og filtre; dette hadde ingen av delene.
     logResolveSlot(slot, () => t("shell.module.loadError"), [
-      { labelKey: "shell.module.pickAnother", action: startModulePicker },
+      { labelKey: "shell.module.goToLibrary", action: () => { location.href = "/admin-content"; } },
       { labelKey: "shell.action.cancel", action: startIdle },
     ]);
     return;
@@ -3263,30 +3274,41 @@ function buildCriteriaEditorHtml(criteria, t, tf) {
     // B4 a11y: aria-valuetext is what screen readers announce. Localised "{value} av 10" /
     // "{value} of 10". The vk-weight input event listener updates this dynamically.
     const weightValueText = escapeHtml(tf("shell.criteria.weightOfTen", { value: c.maxScore }));
+    // Stage-tilbakemelding 2026-08-17: "Vurderingskriterium tar veldig mye plass". Fire stablede
+    // rader i en kolonne dobbelt så bred som innholdet trengte. Samme felt, samme redigerbarhet —
+    // pakket i BREDDEN. Skyveknappen er byttet mot en teller (femtedel av plassen, treffer et helt
+    // tall hver gang), og beskrivelsen er én linje som vokser når man klikker i den.
+    //
+    // `vk-weight` beholder `type="range"` og klassenavnet: totalvekt-utregningen, aria-oppdateringen
+    // og fire e2e-er leser dem. Den er visuelt skjult og erstattet av tellerknappene, som skriver
+    // til samme input — ett tall, én kilde.
     return `
       <li class="vk-card" data-criterion-index="${i}">
-        <div class="vk-row">
-          <input class="vk-label" type="text" value="${escapeHtml(c.label)}"
-                 placeholder="${escapeHtml(t("shell.criteria.labelPlaceholder"))}"
-                 aria-label="${labelLabel}" />
-          <button type="button" class="vk-remove" data-criterion-index="${i}"
-                  aria-label="${removeAria}">×</button>
-        </div>
-        <textarea class="vk-description" rows="2"
-                  placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
-                  aria-label="${descLabel}">${escapeHtml(c.description)}</textarea>
-        <label class="vk-weight-label">
-          <span>${weightText}:</span>
+        <input class="vk-label" type="text" value="${escapeHtml(c.label)}"
+               placeholder="${escapeHtml(t("shell.criteria.labelPlaceholder"))}"
+               aria-label="${labelLabel}" />
+        <span class="vk-stepper">
+          <button type="button" class="vk-step" data-step="-1"
+                  aria-label="${escapeHtml(tf("shell.criteria.weightDown", { label: c.label || String(i + 1) }))}">&minus;</button>
           <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
                  aria-label="${weightText}"
                  aria-valuemin="1" aria-valuemax="10" aria-valuenow="${c.maxScore}"
                  aria-valuetext="${weightValueText}" />
           <span class="vk-weight-value">${c.maxScore}</span>
-        </label>
-        <label class="vk-visible-label">
-          <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} />
-          ${escapeHtml(t("shell.criteria.visibleToCandidate"))}
-        </label>
+          <button type="button" class="vk-step" data-step="1"
+                  aria-label="${escapeHtml(tf("shell.criteria.weightUp", { label: c.label || String(i + 1) }))}">+</button>
+        </span>
+        <button type="button" class="vk-visible-toggle" aria-pressed="${c.candidateVisible ? "true" : "false"}"
+                title="${escapeHtml(t("shell.criteria.visibleToCandidate"))}"
+                aria-label="${escapeHtml(t("shell.criteria.visibleToCandidate"))}">
+          <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} tabindex="-1" aria-hidden="true" />
+          <span aria-hidden="true">${c.candidateVisible ? "◉" : "○"}</span>
+        </button>
+        <button type="button" class="vk-remove" data-criterion-index="${i}"
+                aria-label="${removeAria}">×</button>
+        <textarea class="vk-description" rows="1"
+                  placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
+                  aria-label="${descLabel}">${escapeHtml(c.description)}</textarea>
       </li>`;
   }).join("");
   const total = criteria.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0);
@@ -3451,6 +3473,29 @@ function wireCriteriaEditor({ container, getState, setState, rerender, onRegener
   container.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
+    // The stepper and the visibility toggle write to the SAME `vk-weight` / `vk-visible` inputs the
+    // save and the tests already read, then fire `input`/`change` so the existing listeners run.
+    // One source of truth per value; the buttons are only a smaller way to reach it.
+    if (btn.classList.contains("vk-step")) {
+      const range = btn.closest(".vk-stepper")?.querySelector(".vk-weight");
+      if (!range) return;
+      const next = Math.max(1, Math.min(10, (Number(range.value) || 5) + Number(btn.dataset.step)));
+      if (next === Number(range.value)) return;
+      range.value = String(next);
+      range.dispatchEvent(new Event("input", { bubbles: true }));
+      range.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (btn.classList.contains("vk-visible-toggle")) {
+      const box = btn.querySelector(".vk-visible");
+      if (!box) return;
+      box.checked = !box.checked;
+      btn.setAttribute("aria-pressed", box.checked ? "true" : "false");
+      const glyph = btn.querySelector("span[aria-hidden]");
+      if (glyph) glyph.textContent = box.checked ? "◉" : "○";
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
     if (btn.classList.contains("vk-remove")) {
       captureFromDom();
       // QA round 6: removing the LAST criterion could not be saved. An empty list builds a `null`
@@ -5154,8 +5199,16 @@ function renderSettingsPanel() {
     openGroup = [];
     groups.set(labelKey, openGroup);
   };
-  const row = (labelKey, valueHtml, isEmpty = false) => {
-    openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
+  // Stage-tilbakemelding 2026-08-17: poengreglene sier ikke hva de gjør. Forklaringen ligger bak
+  // et i-ikon, åpnet med KLIKK — hover finnes ikke på nettbrett og kan ikke nås med tastatur.
+  // Ingen innebygde hjelpetekster: forfatteren ba om den kompakte varianten.
+  const row = (labelKey, valueHtml, isEmpty = false, infoKey = null) => {
+    const info = infoKey
+      ? ` <button type="button" class="settings-info" data-info="${escapeHtml(infoKey)}"
+          aria-label="${escapeHtml(tf("shell.settings.infoAria", { field: t(labelKey) }))}"
+          aria-expanded="false">i</button>`
+      : "";
+    openGroup.push(`<dt>${escapeHtml(t(labelKey))}${info}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
   };
   const emptyText = escapeHtml(t("shell.settings.notSet"));
   // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
@@ -5255,7 +5308,9 @@ function renderSettingsPanel() {
       // point of the redesign; this field was the one left behaving differently.
       `<input id="settingsMcqMinPercent" class="settings-input" type="number" min="0" max="100"
         value="${Number.isFinite(mcqMinPercent) ? escapeHtml(String(mcqMinPercent)) : ""}"
-        placeholder="${escapeHtml(t("shell.settings.notSet"))}" /> %`,
+        placeholder="${escapeHtml(t("shell.settings.noLimit"))}" /> %`,
+      false,
+      "mcqThreshold",
     );
   }
 
@@ -5265,27 +5320,54 @@ function renderSettingsPanel() {
   //
   // Blank means "not set": decisionService falls back to the platform rules, and writing a number
   // in would turn a deliberate default into a per-module override nobody chose.
-  const numberRow = (labelKey, id, value, suffix = " %") =>
+  //
+  // Stage-tilbakemelding 2026-08-17 avdekket at "tomt = plattformstandard" bare gjelder EN av de
+  // fire. decisionService.ts:101-132: totalMin faller tilbake på plattformverdien, mens de tre
+  // andre er AV når de er tomme — ingen sperre i det hele tatt. Plassholderen sier derfor hva
+  // tomt faktisk gjør for nettopp det feltet, i stedet for en felles forklaring som er usann for
+  // tre av dem. Å fylle inn verdiene i stedet, som først foreslått, ville slått PÅ en sperre som
+  // er av — akkurat feilen QA fant på MCQ-feltet.
+  const numberRow = (labelKey, id, value, placeholderText, infoKey, suffix = " %") =>
     row(
       labelKey,
       `<input id="${id}" class="settings-input" type="number" min="0" max="100"
         value="${Number.isFinite(Number(value)) && value !== null && value !== undefined ? escapeHtml(String(value)) : ""}"
-        placeholder="${escapeHtml(t("shell.settings.notSet"))}" />${suffix}`,
+        placeholder="${escapeHtml(placeholderText)}" />${suffix}`,
+      false,
+      infoKey,
     );
-  numberRow("shell.settings.totalMin", "settingsTotalMin", policy?.passRules?.totalMin);
+  // The one rule with a platform fallback: show the number it falls back TO, without storing it.
+  const platformTotalMin = bundle?.platformDefaults?.totalMin;
+  numberRow(
+    "shell.settings.totalMin",
+    "settingsTotalMin",
+    policy?.passRules?.totalMin,
+    Number.isFinite(platformTotalMin)
+      ? tf("shell.settings.platformDefault", { value: platformTotalMin })
+      : t("shell.settings.notSet"),
+    "totalMin",
+  );
   if (mode !== "MCQ_ONLY") {
-    numberRow("shell.settings.practicalMin", "settingsPracticalMin", policy?.passRules?.practicalMinPercent);
+    numberRow(
+      "shell.settings.practicalMin",
+      "settingsPracticalMin",
+      policy?.passRules?.practicalMinPercent,
+      t("shell.settings.noLimit"),
+      "practicalMin",
+    );
   }
   const borderline = policy?.passRules?.borderlineWindow;
   row(
     "shell.settings.borderlineWindow",
     `<input id="settingsBorderlineMin" class="settings-input" type="number" min="0" max="100"
       value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
-      placeholder="${escapeHtml(t("shell.settings.notSet"))}" />
+      placeholder="${escapeHtml(t("shell.settings.noneShort"))}" />
      <span aria-hidden="true">→</span>
      <input id="settingsBorderlineMax" class="settings-input" type="number" min="0" max="100"
       value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
-      placeholder="${escapeHtml(t("shell.settings.notSet"))}" /> %`,
+      placeholder="${escapeHtml(t("shell.settings.noneShort"))}" /> %`,
+    false,
+    "borderlineWindow",
   );
 
   // #896 S3c: NO summary rows for criteria, assessment instruction or submission schema.
@@ -5303,6 +5385,8 @@ function renderSettingsPanel() {
       "shell.settings.practicalWeight",
       `<input id="settingsPracticalWeight" class="settings-input" type="number" min="0" max="100"
         value="${escapeHtml(String(Number.isFinite(practicalWeight) ? practicalWeight : 70))}" /> %`,
+      false,
+      "practicalWeight",
     );
   }
 
@@ -5336,6 +5420,10 @@ function renderSettingsPanel() {
     settingsGroup("shell.settings.groupModule", groupList("shell.settings.groupModule")),
     settingsGroup(
       "shell.settings.groupAssessment",
+      // Stage-tilbakemelding 2026-08-17: fem tall uten kontekst. Det uklare er ikke hva hvert felt
+      // heter, men at grensene legges OPPÅ hverandre og at totalen vektes — det forklares én gang
+      // her, ikke gjentatt i fem verktøytips. Feltdetaljene ligger bak i-ikonene.
+      `<p class="settings-group-explainer">${escapeHtml(t("shell.settings.assessmentExplainer"))}</p>`,
       groupList("shell.settings.groupAssessment"),
       renderCriteriaSection(),
       renderPromptSection(),
@@ -5359,6 +5447,7 @@ function renderSettingsPanel() {
   // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
   // top of it, so the dirty-check still knows the difference.
   restoreSettingsDraftValues();
+  mountSettingsInfoButtons(host);
 
   document.getElementById("settingsSave")?.addEventListener("click", (event) => {
     // Disabled on the first click, like the restore buttons. A double-click on a slow connection
@@ -5692,6 +5781,53 @@ function mountCriteriaSection() {
 
 // Criteria count as unsaved settings work, so every exit from Innstillinger warns about them too
 // — the same three exits the tab, language and Avansert guards already cover.
+/**
+ * Wire the i-buttons beside the pass-rule labels.
+ *
+ * Stage-tilbakemelding 2026-08-17. Opened on CLICK, not hover: hover does not exist on a tablet
+ * and cannot be reached from the keyboard, so a hover-only explanation is an explanation some
+ * authors can never read. One popover open at a time; Escape and a click elsewhere close it.
+ */
+function mountSettingsInfoButtons(host) {
+  // ONCE per host, not once per render. `renderSettingsPanel` replaces `host.innerHTML`, which
+  // destroys child listeners — but `host` itself survives, so a listener attached here accumulates
+  // one copy per render. Two copies made the popover open and close within the same click: the
+  // first created it, the second read `aria-expanded="true"` and treated the click as "close".
+  // Symptom was a button that did nothing at all.
+  if (host.dataset.infoButtonsMounted === "1") return;
+  host.dataset.infoButtonsMounted = "1";
+
+  const close = () => {
+    host.querySelectorAll(".settings-popover").forEach((p) => p.remove());
+    host.querySelectorAll(".settings-info[aria-expanded='true']").forEach((b) => {
+      b.setAttribute("aria-expanded", "false");
+    });
+  };
+
+  host.addEventListener("click", (event) => {
+    if (event.target.closest(".settings-popover")) return;
+    const button = event.target.closest(".settings-info");
+    const wasOpen = button?.getAttribute("aria-expanded") === "true";
+    close();
+    if (!button || wasOpen) return;
+
+    const body = t(`shell.settings.info.${button.dataset.info}`);
+    // A missing key resolves to the key itself; showing that to an author is worse than nothing.
+    if (!body || body.startsWith("shell.settings.info.")) return;
+
+    const popover = document.createElement("div");
+    popover.className = "settings-popover";
+    popover.setAttribute("role", "note");
+    popover.textContent = body;
+    button.setAttribute("aria-expanded", "true");
+    button.insertAdjacentElement("afterend", popover);
+  });
+
+  host.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close();
+  });
+}
+
 /** Has the author changed the criteria since the panel opened? Independent of where they land. */
 function settingsCriteriaEdited() {
   if (settingsCriteriaState === null) return false;

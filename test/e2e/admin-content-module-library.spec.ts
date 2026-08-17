@@ -210,6 +210,7 @@ test.describe("admin content module library", () => {
             promptTemplateVersions: [],
             mcqSetVersions: [],
           },
+          platformDefaults: { totalMin: 70 },
         },
       },
     });

@@ -748,6 +748,76 @@ test.describe("admin content browser coverage", () => {
     expect(labels).toContain("Depth");
   });
 
+  // Stage-tilbakemelding 2026-08-17: poengreglene forklarte seg ikke. The explanation lives behind
+  // an i-button, opened by CLICK (hover is unreachable on touch and from the keyboard).
+  //
+  // The first attempt looked like a dead button: `renderSettingsPanel` replaces `host.innerHTML`
+  // but not `host`, so a listener attached there accumulated one copy per render — the first copy
+  // opened the popover and the second read it as already-open and closed it, within one click.
+  // This test re-renders the panel before clicking, which is what makes it catch that.
+  test("the pass-rule help opens on click, and still works after a re-render", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    // Expanding a section re-renders the whole panel — the step that used to add the second listener.
+    await page.locator("#settingsPromptToggle").click();
+    await page.locator("#settingsPromptToggle").click();
+
+    const info = page.locator(".settings-info[data-info='totalMin']");
+    await expect(info).toHaveAttribute("aria-expanded", "false");
+    await info.click();
+
+    const popover = page.locator(".settings-popover");
+    await expect(popover).toBeVisible();
+    await expect(popover).toContainText(/platform default|plattformens standardverdi/);
+    await expect(info).toHaveAttribute("aria-expanded", "true");
+
+    // Clicking it again closes; only one is ever open.
+    await info.click();
+    await expect(popover).toHaveCount(0);
+
+    await page.locator(".settings-info[data-info='mcqThreshold']").click();
+    await page.locator(".settings-info[data-info='practicalWeight']").click();
+    await expect(page.locator(".settings-popover")).toHaveCount(1);
+
+    // Escape closes it, so a keyboard user is not stuck with it covering the fields below.
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".settings-popover")).toHaveCount(0);
+  });
+
+  // Stage-tilbakemelding 2026-08-17: an empty pass-rule field means different things per field, and
+  // the placeholder has to say which. Filling the values in instead — the first suggestion — would
+  // switch ON a gate that is currently off, which is the QA-round-7 defect all over again.
+  test("an empty pass rule says what empty actually does for that rule", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    // The three gates are OFF when blank — decisionService resolves them to null.
+    await expect(page.locator("#settingsMcqMinPercent")).toHaveAttribute("placeholder", /No limit|Ingen grense|Inga grense/);
+    await expect(page.locator("#settingsPracticalMin")).toHaveAttribute("placeholder", /No limit|Ingen grense|Inga grense/);
+    await expect(page.locator("#settingsBorderlineMin")).toHaveAttribute("placeholder", /None|Ingen/);
+    // Only the overall pass mark falls back to a platform value, and it names the number.
+    await expect(page.locator("#settingsTotalMin")).toHaveAttribute("placeholder", /70/);
+  });
+
   // QA round 5: a section is saved as a unit, so editing the system instruction ran the locale
   // merge over the user template too — turning a stored bare string (= "one language, not
   // translated") into a two-locale map claiming the same text is valid English. A translation

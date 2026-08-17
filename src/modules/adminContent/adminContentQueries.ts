@@ -3,6 +3,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { ValidationError } from "../../errors/AppError.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
 
 // v1.2.20 (#460): "published_with_draft" skiller mellom (a) modul som aldri har vært
 // publisert (unpublished_draft) og (b) modul som er live med eldre publisert versjon
@@ -183,6 +184,17 @@ export async function getModuleContentBundle(moduleId: string) {
       rubricVersions,
       promptTemplateVersions,
       mcqSetVersions,
+    },
+    // Stage-tilbakemelding 2026-08-17: Innstillinger viser fire poengregler der et tomt felt betyr
+    // helt ulike ting — og forfatteren kan ikke se hvilke. `totalMin` faller tilbake på denne
+    // plattformverdien; de tre andre er AV når de er tomme (decisionService.ts:101-132). Panelet
+    // trenger tallet for å kunne vise "70 (plattformstandard)" som plassholder i stedet for å
+    // lagre det, som ville frosset en kopi modulen aldri følger igjen.
+    //
+    // Bevisst IKKE med i eksportkonvolutten (a2-content-export/v1): den flyttes mellom miljøer
+    // som kan ha andre regler, og dette er ikke modulinnhold.
+    platformDefaults: {
+      totalMin: getAssessmentRules().thresholds.totalMin,
     },
   };
 }

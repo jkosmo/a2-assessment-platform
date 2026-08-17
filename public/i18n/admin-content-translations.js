@@ -415,6 +415,8 @@ const adminContentBase = {
   "shell.modules.selectPrompt": "Select a module:",
   "shell.module.loading": "Loading module\u2026",
   "shell.module.loadError": "Could not load the module. Please try again.",
+  "shell.module.goToLibrary": "Go to the module list",
+
   "shell.module.pickAnother": "Select another module",
   "shell.module.actionsPrompt": "What would you like to do with this module?",
   "shell.module.generateContent": "Generate new content from source material",
@@ -549,6 +551,10 @@ const adminContentBase = {
   "shell.criteria.descLabel": "Criterion description",
   "shell.criteria.descPlaceholder": "What the assessor looks for",
   "shell.criteria.weight": "Weight",
+  "shell.criteria.weightDown": "Lower the weight of {label}",
+
+  "shell.criteria.weightUp": "Raise the weight of {label}",
+
   "shell.criteria.weightOfTen": "{value} of 10",
   "shell.criteria.visibleToCandidate": "Visible to candidate",
   "shell.criteria.removeAria": "Remove criterion",
@@ -863,6 +869,26 @@ const adminContentBase = {
   "shell.settings.placeholder": "These are edited in the advanced editor for now. They move here in the next delivery.",
   "shell.settings.openAdvanced": "Open advanced editing",
   "shell.settings.noModule": "Load a module to see its settings.",
+  "shell.settings.noLimit": "No limit",
+
+  "shell.settings.noneShort": "None",
+
+  "shell.settings.platformDefault": "{value} (platform default)",
+
+  "shell.settings.infoAria": "About {field}",
+
+  "shell.settings.assessmentExplainer": "Every limit set here must be met for the candidate to pass — they stack, they are not alternatives. The total is weighted by the practical weight below: at 70 % the free-text answer counts 70 % and the multiple choice 30 %.",
+
+  "shell.settings.info.mcqThreshold": "Share of multiple-choice answers that must be correct. Below this the candidate fails regardless of total score. Leave blank for no multiple-choice limit at all.",
+
+  "shell.settings.info.totalMin": "Total score across both parts, weighted by the practical weight. Leave blank to follow the platform default.",
+
+  "shell.settings.info.practicalMin": "Lowest accepted score on the free-text answer alone. Stops a strong multiple choice from covering a weak practical answer. Leave blank for no limit.",
+
+  "shell.settings.info.borderlineWindow": "A total score inside this band neither passes nor fails — it goes to manual review. Leave blank to send nothing to review on score alone.",
+
+  "shell.settings.info.practicalWeight": "How much the free-text answer counts towards the total. The rest is the multiple choice.",
+
   "shell.settings.notSet": "Not set",
   "shell.settings.groupModule": "The module",
   "shell.settings.groupAssessment": "Assessment",
@@ -1748,6 +1774,8 @@ const adminContentLateOverrides = {
     "shell.modules.selectPrompt": "Velg en modul:",
     "shell.module.loading": "Laster modul\u2026",
     "shell.module.loadError": "Kunne ikke laste modulen. Pr\u00f8v igjen.",
+    "shell.module.goToLibrary": "Gå til modul-lista",
+
     "shell.module.pickAnother": "Velg annen modul",
     "shell.module.actionsPrompt": "Hva vil du gj\u00f8re med denne modulen?",
     "shell.module.generateContent": "Generer nytt innhold fra kildemateriale",
@@ -1881,6 +1909,10 @@ const adminContentLateOverrides = {
     "shell.criteria.descLabel": "Kriterium-beskrivelse",
     "shell.criteria.descPlaceholder": "Hva sensor leter etter",
     "shell.criteria.weight": "Vekt",
+    "shell.criteria.weightDown": "Senk vekten på {label}",
+
+    "shell.criteria.weightUp": "Øk vekten på {label}",
+
     "shell.criteria.weightOfTen": "{value} av 10",
     "shell.criteria.visibleToCandidate": "Synlig for kandidat",
     "shell.criteria.removeAria": "Fjern kriterium",
@@ -2190,6 +2222,26 @@ const adminContentLateOverrides = {
     "shell.settings.placeholder": "Feltene over redigeres foreløpig i den avanserte editoren. De flyttes hit i neste leveranse.",
     "shell.settings.openAdvanced": "Åpne avansert redigering",
     "shell.settings.noModule": "Last inn en modul for å se innstillingene.",
+    "shell.settings.noLimit": "Ingen grense",
+
+    "shell.settings.noneShort": "Ingen",
+
+    "shell.settings.platformDefault": "{value} (plattformstandard)",
+
+    "shell.settings.infoAria": "Om {field}",
+
+    "shell.settings.assessmentExplainer": "Alle grensene som er satt her må være oppfylt for at kandidaten skal bestå — de legges oppå hverandre, de er ikke alternativer. Totalen vektes etter praktisk vekt nedenfor: står den på 70 %, teller fritekstsvaret 70 % og flervalget 30 %.",
+
+    "shell.settings.info.mcqThreshold": "Andel riktige flervalgssvar som kreves. Under dette stryker kandidaten uansett totalscore. Tomt felt betyr ingen flervalgsgrense i det hele tatt.",
+
+    "shell.settings.info.totalMin": "Totalscore på tvers av begge deler, vektet etter praktisk vekt. Tomt felt følger plattformens standardverdi.",
+
+    "shell.settings.info.practicalMin": "Laveste godtatte score på fritekstsvaret alene. Hindrer at et sterkt flervalg dekker over et svakt praktisk svar. Tomt felt betyr ingen grense.",
+
+    "shell.settings.info.borderlineWindow": "Totalscore i dette båndet verken består eller stryker — den sendes til manuell vurdering. Tomt felt sender ingenting til vurdering på score alene.",
+
+    "shell.settings.info.practicalWeight": "Hvor mye fritekstsvaret teller i totalen. Resten er flervalget.",
+
     "shell.settings.notSet": "Ikke satt",
     "shell.settings.groupModule": "Modulen",
     "shell.settings.groupAssessment": "Vurdering",
@@ -2272,6 +2324,8 @@ const adminContentLateOverrides = {
     "shell.modules.selectPrompt": "Vel ein modul:",
     "shell.module.loading": "Lastar modul\u2026",
     "shell.module.loadError": "Kunne ikkje laste modulen. Pr\u00f8v igjen.",
+    "shell.module.goToLibrary": "Gå til modullista",
+
     "shell.module.pickAnother": "Vel ein annan modul",
     "shell.module.actionsPrompt": "Kva vil du gj\u00f8re med denne modulen?",
     "shell.module.generateContent": "Generer nytt innhald fr\u00e5 kjeldemateriale",
@@ -2405,6 +2459,10 @@ const adminContentLateOverrides = {
     "shell.criteria.descLabel": "Skildring av kriterium",
     "shell.criteria.descPlaceholder": "Kva sensor leitar etter",
     "shell.criteria.weight": "Vekt",
+    "shell.criteria.weightDown": "Senk vekta på {label}",
+
+    "shell.criteria.weightUp": "Auk vekta på {label}",
+
     "shell.criteria.weightOfTen": "{value} av 10",
     "shell.criteria.visibleToCandidate": "Synleg for kandidat",
     "shell.criteria.removeAria": "Fjern kriterium",
@@ -2714,6 +2772,26 @@ const adminContentLateOverrides = {
     "shell.settings.placeholder": "Felta over blir førebels redigerte i den avanserte editoren. Dei blir flytta hit i neste leveranse.",
     "shell.settings.openAdvanced": "Opne avansert redigering",
     "shell.settings.noModule": "Last inn ein modul for å sjå innstillingane.",
+    "shell.settings.noLimit": "Inga grense",
+
+    "shell.settings.noneShort": "Ingen",
+
+    "shell.settings.platformDefault": "{value} (plattformstandard)",
+
+    "shell.settings.infoAria": "Om {field}",
+
+    "shell.settings.assessmentExplainer": "Alle grensene som er sette her må vere oppfylte for at kandidaten skal bestå — dei blir lagde oppå kvarandre, dei er ikkje alternativ. Totalen blir vekta etter praktisk vekt nedanfor: står han på 70 %, tel fritekstsvaret 70 % og fleirvalet 30 %.",
+
+    "shell.settings.info.mcqThreshold": "Del rette fleirvalssvar som blir kravd. Under dette stryk kandidaten uansett totalscore. Tomt felt tyder inga fleirvalsgrense i det heile.",
+
+    "shell.settings.info.totalMin": "Totalscore på tvers av begge delar, vekta etter praktisk vekt. Tomt felt følgjer plattforma sin standardverdi.",
+
+    "shell.settings.info.practicalMin": "Lågaste godtekne score på fritekstsvaret åleine. Hindrar at eit sterkt fleirval dekkjer over eit svakt praktisk svar. Tomt felt tyder inga grense.",
+
+    "shell.settings.info.borderlineWindow": "Totalscore i dette bandet korkje består eller stryk — han blir sendt til manuell vurdering. Tomt felt sender ingenting til vurdering på score åleine.",
+
+    "shell.settings.info.practicalWeight": "Kor mykje fritekstsvaret tel i totalen. Resten er fleirvalet.",
+
     "shell.settings.notSet": "Ikkje sett",
     "shell.settings.groupModule": "Modulen",
     "shell.settings.groupAssessment": "Vurdering",

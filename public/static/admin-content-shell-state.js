@@ -130,7 +130,10 @@ export function deriveShellModuleActionModel({
   // B2 (#449 redesign v1.1.78): "Rediger vurderingskriterier"-action removed from menu —
   // Vurderingskriterier are now visible as content in the preview pane and editable via
   // "Rediger direkte". Two paths to the same place was confusing per user feedback.
-  actionKeys.push("directEdit", "editAdvanced", "pickAnother");
+  // Stage-tilbakemelding 2026-08-17: «Velg annen modul» er kuttet. Den åpnet en fullstendig
+  // modulliste inne i samtalen, som blir uleselig lang så snart biblioteket vokser — og
+  // modul-lista finnes allerede som egen side, med søk og filtre. Færre veier til samme sted.
+  actionKeys.push("directEdit", "editAdvanced");
   if (hasDraft) actionKeys.push("saveDraft");
   if (!hasDraft && canPublish) actionKeys.push("publish");
   if (canUnpublish) actionKeys.push("unpublish");

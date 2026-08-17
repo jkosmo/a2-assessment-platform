@@ -66,6 +66,9 @@ export type MockModuleExport = {
     promptTemplateVersions: any[];
     mcqSetVersions: any[];
   };
+  // Sent by getModuleContentBundle so Innstillinger can show which number an empty "Samlet
+  // beståttgrense" falls back to, without storing it. Mirrors config/assessment-rules.json.
+  platformDefaults: { totalMin: number };
 };
 
 export function localizedText(base: string): Record<string, string> {
@@ -210,6 +213,9 @@ export function buildMockModuleExport({
         : [],
       mcqSetVersions: mcqSetVersion ? [mcqSetVersion] : [],
     },
+    // Matches config/assessment-rules.json. Only `totalMin` has a platform fallback; the other
+    // three pass rules are simply OFF when unset, which is why the panel's placeholders differ.
+    platformDefaults: { totalMin: 70 },
   };
 }
 

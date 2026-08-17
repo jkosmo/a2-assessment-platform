@@ -2,6 +2,53 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.11 - 2026-08-17
+
+Første runde stage-tilbakemelding på den omlagte Innstillinger-flaten. Fire av seks punkter er
+løst her; de to som endrer oppførsel mest — direkte redigerbar Rediger-fane og skillet mellom
+UI-språk og innholdsspråk — kommer separat.
+
+**Statuslinjen navnga feil versjon.** *«Det står at preview viser publisert versjon, men det som
+faktisk vises er min versjon under endring.»* Riktig: feltet leste `liveChain`, altså hva som er
+**publisert**, mens forhåndsvisningen viser den **lastede** versjonen. De er ulike hver gang man
+har gjenopprettet en tidligere versjon, eller står på et lagret utkast. Feltet heter «Du
+redigerer» — da må det navngi det som er på skjermen.
+
+**«Velg annen modul» er kuttet fra menyen.** Den bygde en full modulliste inne i samtalen, som
+blir uleselig så snart biblioteket vokser — og lista finnes allerede som egen side, med søk og
+filtre. Ved lastefeil går knappen nå dit i stedet.
+
+**Poengreglene forklarer seg.** Fem tall uten kontekst. Modellen — at grensene legges *oppå*
+hverandre, og at totalen vektes — sies én gang over gruppen; detaljene per felt ligger bak et
+i-ikon som åpnes med **klikk**, ikke hover (hover finnes ikke på nettbrett og kan ikke nås med
+tastatur).
+
+**Og de sier hva et tomt felt gjør.** Produkteier foreslo å fylle inn standardverdiene i stedet
+for å forklare dem. Det avdekket at min egen forklaring var feil: «tomt = plattformstandard»
+gjelder bare **én av fire**. `decisionService` faller tilbake på plattformverdien for `totalMin`,
+mens `mcqMinPercent`, `practicalMinPercent` og `borderlineWindow` er **helt av** når de er tomme.
+Å fylle inn tall der ville slått PÅ en sperre som er av — nøyaktig feilen QA fant på MCQ-feltet i
+runde 7. Plassholderen sier derfor hva tomt betyr for nettopp det feltet: «Ingen grense», «Ingen»,
+eller «70 (plattformstandard)». Plattformverdien sendes med innholdspakken, ikke med
+eksportkonvolutten — den flyttes mellom miljøer som kan ha andre regler.
+
+**Kriteriekortene er komprimert.** Fire stablede rader er blitt én rad i bredden pluss beskrivelsen
+under, og kortrammen er byttet mot en skillelinje: ~2,3× flere kriterier synlig samtidig, uten å
+kollapse noe og uten å fjerne et eneste felt. Skyveknappen tok en tredjedel av bredden for å velge
+mellom ti heltall og er byttet mot en `− 5 +`-teller; «Synlig for kandidat» er blitt en øye-knapp.
+Begge skriver til de **samme** `vk-weight`/`vk-visible`-inputene som lagringen og testene leser —
+ett tall, én kilde.
+
+**En feil verdt å merke seg:** i-ikonet var en død knapp i første forsøk. `renderSettingsPanel`
+erstatter `host.innerHTML`, men ikke `host` — så en lytter festet der hoper seg opp med én kopi
+per rendering. Første kopi åpnet popoveren, andre kopi leste den som allerede åpen og lukket den
+igjen, i samme klikk. E2E-en gjør nettopp en re-rendering før den klikker, ellers ville den ikke
+fanget det.
+
+Alle knappene måtte dessuten ha `min-height: 0`: `shared.css` setter
+`button { width:100%; padding:8px; min-height:40px }` for skjemaknapper, og uten overstyring ble
+sirkelen en oval. Samme felle er dokumentert to ganger i `shared.css` fra før.
+
 ## 2.18.10 - 2026-08-16
 
 Omlegging av Innstillinger-panelet, etter en presis tilbakemelding fra stage: *«Vurderingskriteria
