@@ -1054,7 +1054,7 @@ function renderPreviewLocaleBar() {
       renderPreview();
       renderSettingsPanel();
       if (wasEditing) {
-        enterPreviewEditMode();
+        enterPreviewEditMode({ force: true });
         logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
       }
     });
@@ -3166,6 +3166,9 @@ async function loadModule(moduleId, options = {}) {
   // that content had arrived — so opening a module straight from its URL left it invisible. It
   // showed up only if you had come through the conversation flow, which renders it on its own.
   renderPreviewLocaleBar();
+  // Rediger is the default tab, so a module opened from its URL lands here — and it has to land in
+  // an editable state, not a read-only one behind a button.
+  if (activeTab === "edit") enterPreviewEditMode();
 
   // Capture data for retranslatable closure
   const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
@@ -4428,7 +4431,18 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
   }
 }
 
-function enterPreviewEditMode() {
+/**
+ * @param force rebuild even when the open form holds unsaved text. Only for the callers that MEAN
+ *   to replace it — a language switch shows the other language, Avbryt re-reads the stored values.
+ *
+ * Rebuilding re-reads every field from the bundle, so doing it over a form the author is typing
+ * into silently deletes their work. While the form only existed after "Rediger direkte" that could
+ * not happen; now that it is open the whole time Rediger is, any async completion that reaches
+ * here would do it. The guard belongs in one place rather than in each caller — I already got one
+ * caller's check wrong (it asked "is it dirty" where it meant "does it exist").
+ */
+function enterPreviewEditMode({ force = false } = {}) {
+  if (!force && hasOpenEditForm()) return;
   const editingLocale = contentLocale;
   const currentTitle = localizeValueForLocale(sessionDraft?.title ?? bundle?.module?.title ?? "", editingLocale) || "";
   const currentTaskText = localizeValueForLocale(
@@ -4598,7 +4612,12 @@ function enterPreviewEditMode() {
   `.trim();
 
   scrollPreviewToTop();
-  document.getElementById("previewEditTitle")?.focus();
+  // `hasOpenEditForm` compares against these, and the form is now open the whole time Rediger is,
+  // so an unstamped field would read as changed from the first render.
+  stampEditFormValues();
+  // No auto-focus any more. Moving the caret into the title made sense when opening the form was
+  // a deliberate action; now the form opens on every tab switch, every save and every language
+  // change, and grabbing focus each time takes it away from wherever the author actually is.
 
   // #896 S3c: criteria generated asynchronously from the conversation used to repaint an editor
   // that lived here. That editor is gone, so they are parked on the session draft instead — kept,
@@ -4621,6 +4640,13 @@ function enterPreviewEditMode() {
 
   document.getElementById("previewEditCancel").addEventListener("click", () => {
     exitEditMode();
+    // On Rediger the form IS the tab, so leaving it would strand the author in a read-only view of
+    // a tab called "Rediger". Re-opening re-reads the stored values, which is what "forkast" means
+    // here: the typed text is dropped and the fields show what is saved.
+    if (activeTab === "edit" && (bundle || sessionDraft)) {
+      enterPreviewEditMode({ force: true });
+      return;
+    }
     if (sessionDraft) showDraftReadyActions(); else showModuleActions();
   });
 
@@ -4690,6 +4716,12 @@ function enterPreviewEditMode() {
       // spend a translation and leave a version nobody asked for.
       exitEditMode();
       logBot(() => escapeHtml(t("shell.directEdit.noChanges")));
+      // Same rule as Avbryt: on Rediger the form IS the tab, so it has to come back rather than
+      // leave the author looking at a read-only version of the tab they are editing in.
+      if (activeTab === "edit" && (bundle || sessionDraft)) {
+        enterPreviewEditMode({ force: true });
+        return;
+      }
       if (sessionDraft) showDraftReadyActions(); else showModuleActions();
       return;
     }
@@ -5130,8 +5162,49 @@ let pendingTabSwitchKind = null;
 // finish the save they asked for, "Forkast" must drop it.
 let pendingSaveCommit = null;
 
-function hasOpenEditForm() {
+/**
+ * Does the edit form hold work a tab switch would destroy?
+ *
+ * This used to mean "is the form on screen", which was the same question while the form only
+ * existed after clicking "Rediger direkte". Now that Rediger IS the form, mere existence says
+ * nothing — and the old reading made every switch to Innstillinger raise an unsaved-changes
+ * dialog over a form the author had not touched. A warning that always fires is a warning people
+ * learn to click through, which is worse than none.
+ *
+ * Each field is stamped with what it was rendered with (`stampEditFormValues`), so "dirty" is a
+ * comparison, exactly as it is in the settings panel.
+ */
+/**
+ * Is the edit form on screen at all? Distinct from `hasOpenEditForm`, which asks whether it holds
+ * unsaved work. Callers that auto-open the form must use THIS one: asking the dirty question and
+ * getting "no" led `showDraftReadyActions` to rebuild a form the author was typing into, which
+ * re-reads every field from the bundle and throws the typed text away.
+ */
+function isEditFormOpen() {
   return !!document.getElementById("previewEditConfirm");
+}
+
+function hasOpenEditForm() {
+  const form = document.getElementById("previewEditConfirm");
+  if (!form) return false;
+  const fields = previewContent?.querySelectorAll("[data-rendered-value]") ?? [];
+  for (const el of fields) {
+    if (el.value !== el.dataset.renderedValue) return true;
+  }
+  return false;
+}
+
+/**
+ * Record what every edit-form field was drawn with, so `hasOpenEditForm` can tell a typed value
+ * from an untouched one. Checkboxes carry their state as a string for the same comparison.
+ */
+function stampEditFormValues() {
+  const fields = previewContent?.querySelectorAll(
+    ".preview-edit-title, .preview-edit-input, .preview-edit-textarea, .vk-label, .vk-description, .vk-weight",
+  ) ?? [];
+  for (const el of fields) {
+    el.dataset.renderedValue = el.value;
+  }
 }
 
 // Same signal as the status rail's "Ulagrede endringer": if the rail calls it unsaved, a
@@ -5188,6 +5261,22 @@ function applyTabState(tab) {
   // Rendered on entry rather than kept in sync: the panel is a read-out of the loaded
   // bundle, and the bundle cannot change while Innstillinger is the visible tab.
   if (tab === "settings") renderSettingsPanel();
+
+  // Stage-tilbakemelding 2026-08-17: *"Åpner modul, den havner på rediger fanen, men jeg kan ikke
+  // redigere før jeg trykker på «Rediger direkte»."* A tab called Rediger that does not let you
+  // edit is a tab that lies about its name. The fields are open on arrival now, and the separate
+  // "Rediger direkte" action is gone from the menu — one way in, not two.
+  //
+  // Forhåndsvisning shares this pane and must stay read-only: it is the participant's view.
+  if (tab === "edit") {
+    if (!isEditFormOpen() && (bundle || sessionDraft)) enterPreviewEditMode();
+  } else {
+    // Leaving Rediger tears the form down. The discard path clicks Avbryt while `activeTab` is
+    // still "edit", so the cancel handler re-opens the form a moment before the switch lands —
+    // and `renderPreview` replaces the pane's CONTENT but not this class, so it lingered and the
+    // participant view stayed styled as if it were being edited.
+    document.querySelector(".preview-pane")?.classList.remove("preview-pane--editing");
+  }
 }
 
 function switchToTab(tab) {
@@ -7314,6 +7403,10 @@ function showDraftReadyActions() {
   // v1.1.81: kick off criteria-generation in background so preview shows them.
   // Idempotent — does nothing if sessionDraft.criteria is already populated.
   populateSessionDraftCriteriaInBackground();
+  // A freshly generated draft lands on Rediger, and Rediger is editable — the invariant has to
+  // hold on the new-module flow too, or the tab is editable everywhere except where a new author
+  // meets it first.
+  if (activeTab === "edit" && !isEditFormOpen() && (bundle || sessionDraft)) enterPreviewEditMode();
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
@@ -7531,7 +7624,7 @@ function populateUiLocaleSelect() {
     // in the previous language while the page around them switches.
     renderSettingsPanel();
     if (wasEditing) {
-      enterPreviewEditMode();
+      enterPreviewEditMode({ force: true });
       // Feltene fylles fra det nye språket. Det som var skrevet i det forrige — og ikke bekreftet
       // — er borte, og det skal man få vite, ikke oppdage.
       logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));

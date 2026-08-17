@@ -152,7 +152,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     // Module actions → "Edit directly" (directEdit → enterPreviewEditMode).
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
 
     // The free-text editor fields must NOT exist for an MCQ-only module, but the MCQ editor must.
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
@@ -205,12 +205,12 @@ test.describe("admin content — module-type bugs (#655)", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Union basics");
     await page.locator("#previewEditConfirm").click();
 
-    // Translation runs in the background; wait for the flow to settle back into draft-ready actions.
-    await expect(page.locator("#previewEditTitle")).toHaveCount(0);
+    // Translation runs in the background. v2.18.13: Rediger stays in edit mode after the save, so
+    // "settled" is no longer "the form went away" — it is the localisation calls having landed.
     await expect.poll(() => titleLocalizeCalls.length).toBe(2);
 
     // The title went to the title-only endpoint, once per target locale, carrying the NEW title.

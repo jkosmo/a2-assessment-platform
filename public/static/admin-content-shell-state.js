@@ -133,7 +133,10 @@ export function deriveShellModuleActionModel({
   // Stage-tilbakemelding 2026-08-17: «Velg annen modul» er kuttet. Den åpnet en fullstendig
   // modulliste inne i samtalen, som blir uleselig lang så snart biblioteket vokser — og
   // modul-lista finnes allerede som egen side, med søk og filtre. Færre veier til samme sted.
-  actionKeys.push("directEdit", "editAdvanced");
+  //
+  // «Rediger direkte» er kuttet av samme grunn: Rediger-fanen åpner nå i redigeringsmodus, så
+  // knappen var en andre vei til den fanen man allerede sto i.
+  actionKeys.push("editAdvanced");
   if (hasDraft) actionKeys.push("saveDraft");
   if (!hasDraft && canPublish) actionKeys.push("publish");
   if (canUnpublish) actionKeys.push("unpublish");
@@ -145,7 +148,9 @@ export function deriveShellModuleActionModel({
 }
 
 export function deriveShellDraftReadyActionModel({ hasSelectedModule }) {
-  const actionKeys = ["directEdit", "revise"];
+  // «Rediger direkte» er ute her også: utkastet landes i Rediger, som allerede står i
+  // redigeringsmodus. Knappen ville vært en vei inn til fanen man er på.
+  const actionKeys = ["revise"];
   if (hasSelectedModule) actionKeys.push("openEditor");
   actionKeys.push("restart", "saveDraft");
   return {

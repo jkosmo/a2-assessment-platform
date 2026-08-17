@@ -1866,7 +1866,7 @@ test.describe("admin content browser coverage", () => {
 
     // Produce an unsaved draft without opening the edit form: confirm a direct edit, which
     // leaves a sessionDraft behind and makes the status rail say "unsaved".
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#previewEditConfirm").click();
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
@@ -1917,13 +1917,13 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     // Opening and closing without editing must not spend a translation or write a version.
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditConfirm").click();
     await expect(page.getByText(/Nothing changed|Ingenting er endret/)).toBeVisible();
     expect(state.lastDraftLocalizationBody).toBeFalsy();
 
     // A real edit translates and saves without a second click.
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#previewEditConfirm").click();
 
@@ -1952,7 +1952,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
     await page.locator("#previewEditConfirm").click();
 
@@ -1988,7 +1988,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Skal forkastes");
     await page.locator("#previewEditConfirm").click();
 
@@ -2029,7 +2029,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
 
@@ -2063,7 +2063,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
     // Switching to Forhaandsvisning re-renders the preview for a different audience, which
@@ -2076,7 +2076,7 @@ test.describe("admin content browser coverage", () => {
     // Back in Rediger the module is editable again, not frozen mid-edit.
     await page.locator("#tabEdit").click();
     await expect(page.getByText("Norsk scenario")).toBeVisible();
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
   });
 
@@ -2094,7 +2094,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#previewEditConfirm").click();
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
@@ -2408,7 +2408,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
 
     const description = page.locator("#previewEditDescription");
     await expect(description).toBeVisible();
@@ -2464,7 +2464,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     // Produce an unsaved draft, then look at Innstillinger.
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#previewEditConfirm").click();
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
@@ -2502,10 +2502,12 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation");
 
-    // Rediger is the author's view: everything is on the table.
-    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toBeVisible();
-    await expect(page.getByText("Fordi B er riktig")).toBeVisible();
-    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(1);
+    // Rediger is the author's view, and since v2.18.13 it is the EDIT FORM — so the assessor-only
+    // material appears as editable fields rather than as read-out text. Everything is still on the
+    // table, which is the half of this test that matters for Rediger.
+    await page.locator("#previewEditTitle").waitFor();
+    await expect(page.locator("#previewEditGuidanceText")).toHaveValue(/Maa nevne risikoreduserende tiltak/);
+    await expect(page.locator("#previewEditMcqRationale0")).toHaveValue(/Fordi B er riktig/);
 
     // Forhaandsvisning claims to show what the participant meets - so the assessor
     // expectation, the rationale and the marked correct option must all be gone.
@@ -2518,11 +2520,12 @@ test.describe("admin content browser coverage", () => {
     // themselves stay, unmarked, exactly as a learner sees them.
     await expect(page.locator(".preview-mcq-meta")).toHaveCount(0);
     await expect(page.locator(".preview-mcq-option", { hasText: "Option B" })).toHaveCount(1);
+    // And no editable field leaked into the participant's view.
+    await expect(page.locator("#previewEditGuidanceText")).toHaveCount(0);
 
-    // ...and back: the author sees the full picture again.
+    // ...and back: the author gets the full picture again, editable.
     await page.locator("#tabEdit").click();
-    await expect(page.getByText("Maa nevne risikoreduserende tiltak")).toBeVisible();
-    await expect(page.locator(".preview-mcq-option.correct")).toHaveCount(1);
+    await expect(page.locator("#previewEditGuidanceText")).toHaveValue(/Maa nevne risikoreduserende tiltak/);
   });
 
   test("Escape on the unsaved-changes dialog behaves like staying", async ({ page }) => {
@@ -2539,7 +2542,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
     await page.locator("#tabEdit").focus();
@@ -2607,7 +2610,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
     // Arrowing focuses the target tab before the dialog appears, so "stay" must hand focus
@@ -2659,7 +2662,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
     await page.locator("#tabPreview").click();
@@ -2718,7 +2721,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     // #896 S2 merged Bekreft and Lagre: this one click translates and writes. The test was
     // written against the old two-step flow on a branch off main, and the extra "Lagre utkast"
@@ -2788,7 +2791,7 @@ test.describe("admin content browser coverage", () => {
 
     await expect(page.getByText("Norsk scenario")).toBeVisible();
 
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
     await page.locator("#previewEditTaskText").fill("Oppdatert norsk scenario");
     await page.locator("#previewEditGuidanceText").fill("Oppdatert norsk veiledning");
@@ -2908,19 +2911,19 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-2/conversation");
 
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await expect(page.locator("#previewEditMcqStem0")).toHaveValue("Norsk sporsmal");
     await page.locator("#previewEditMcqStem0").fill("Oppdatert norsk sporsmal");
     await page.locator("#previewEditMcqOption0_1").fill("Oppdatert alternativ B");
     await page.locator("#previewEditConfirm").click();
 
     await expect.poll(() => state.lastMcqLocalizationBody?.sourceLocale).toBe("nb");
-    await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
-    await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
 
-    // #896 S2: the save already happened as part of Lagre; the MCQ survives it.
-    await expect(page.getByText("Oppdatert norsk sporsmal")).toBeVisible();
-    await expect(page.getByText("Oppdatert alternativ B").first()).toBeVisible();
+    // v2.18.13: Rediger stays in edit mode after a save — the form is the tab, so dropping to a
+    // read-out would leave the author looking at a read-only "Rediger". The MCQ therefore survives
+    // as editable fields holding the saved values, not as rendered text.
+    await expect(page.locator("#previewEditMcqStem0")).toHaveValue("Oppdatert norsk sporsmal");
+    await expect(page.locator("#previewEditMcqOption0_1")).toHaveValue("Oppdatert alternativ B");
   });
 
   // #896 S4: the publish translation gate, seen from the author's side. The server decides; this
@@ -4238,7 +4241,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
 
@@ -4325,7 +4328,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Fagforeninger");
     await page.locator("#previewEditConfirm").click();
 
@@ -4360,7 +4363,7 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, /Edit directly|Rediger direkte/);
+    await page.locator("#previewEditTitle").waitFor();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("English scenario");
 
     // Stage-tilbakemelding 2026-08-17: the UI language and the CONTENT language are separate now.
@@ -4379,9 +4382,10 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditConfirm")).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
 
-    // And confirming from there must still work — the way forward is intact.
+    // And confirming from there must still work — the way forward is intact. Since v2.18.13 the
+    // form stays open after the save (Rediger IS the form), showing the values that were written.
     await page.locator("#previewEditConfirm").click();
-    await expect(page.locator("#previewEditConfirm")).toHaveCount(0);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
   });
 
   // Stage-tilbakemelding 2026-08-17: Innstillinger edited in the UI language while Rediger edited

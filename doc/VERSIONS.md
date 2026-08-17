@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.13 - 2026-08-17
+
+**Rediger-fanen er redigerbar.** Stage-tilbakemelding: *«Åpner modul, den havner på rediger fanen,
+men jeg kan ikke redigere før jeg trykker på "Rediger direkte".»* En fane som heter Rediger og ikke
+lar deg redigere, lyver om navnet sitt.
+
+Feltene står nå åpne fra det øyeblikket fanen vises — enten du åpner en modul fra URL-en, bytter til
+fanen, eller nettopp har generert et utkast. Alle tre veiene inn er dekket, for ellers ville flaten
+vært redigerbar overalt bortsett fra der en ny forfatter møter den først.
+
+**«Rediger direkte» er fjernet fra begge samtalemenyene.** Den var en vei inn til fanen man allerede
+sto i. Samme begrunnelse som «Velg annen modul» i v2.18.11: færre måter å gjøre samme ting.
+
+**«Avbryt» betyr nå «forkast endringene»** i stedet for «gå ut av redigeringsmodus». Å gå ut ville
+etterlatt forfatteren i en skrivebeskyttet visning av en fane som heter Rediger; i stedet leses de
+lagrede verdiene inn på nytt, som er det å forkaste faktisk betyr her.
+
+Merk at **Lagre-knappen alltid har lagret** — den oversetter og skriver versjonen i én operasjon
+(§2, v1.1.x). Det er ingen ny to-trinnsflyt her; det som er borte er trinnet *før* redigeringen.
+
+**22 e2e-er klikket seg inn via «Rediger direkte»** og venter nå på skjemaet som allerede står der.
+Forhåndsvisning er urørt og fortsatt skrivebeskyttet — det er deltakerens visning.
+
+**To ting endringen tvang fram, og som var reelle feil:**
+
+`hasOpenEditForm()` betød «har ulagrede endringer», men sjekket bare *om skjemaet fantes*. Det var
+samme spørsmål så lenge skjemaet bare oppsto etter et knappetrykk. Nå som Rediger *er* skjemaet, var
+svaret alltid ja — og hvert eneste fanebytte til Innstillinger møtte en «ulagrede endringer»-dialog
+over et skjema forfatteren ikke hadde rørt. En advarsel som alltid kommer, er en advarsel folk lærer
+seg å klikke bort. Feltene stemples nå med det de ble tegnet med, og «endret» er en sammenligning —
+akkurat som i innstillingspanelet.
+
+**Og en gjenoppbygging av skjemaet sletter det som er skrevet.** Å bygge det på nytt leser hvert felt
+fra bunten, så enhver asynkron ferdigstillelse som traff `enterPreviewEditMode` mens forfatteren
+skrev, ville tømt feltene. Det kunne ikke skje da skjemaet bare fantes etter «Rediger direkte».
+Vakten ligger nå i funksjonen selv: den nekter å bygge over et skittent skjema med mindre kalleren
+uttrykkelig ber om det — og de som gjør det (språkbytte, Avbryt) mener det. Jeg tok forresten feil
+på nøyaktig dette i ett kallsted først: spurte «er den skitten» der jeg mente «finnes den».
+
+**Auto-fokus på tittelfeltet er fjernet.** Det ga mening da skjemaet var en bevisst handling; nå
+åpnes det ved hvert fanebytte, hver lagring og hvert språkbytte, og å rive markøren dit hver gang
+tar den fra der forfatteren faktisk er.
+
+**Etter lagring blir man stående i skjemaet**, med de lagrede verdiene. Å falle ned i lesemodus
+ville etterlatt forfatteren i en skrivebeskyttet visning av fanen som heter Rediger.
+
 ## 2.18.12 - 2026-08-17
 
 **UI-språk og innholdsspråk er skilt fra hverandre.** Stage-tilbakemelding: *«Står i preview på

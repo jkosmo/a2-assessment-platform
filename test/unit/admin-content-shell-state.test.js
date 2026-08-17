@@ -103,7 +103,7 @@ describe("admin content shell state helpers", () => {
           canUnpublish: false,
         }),
       ).toEqual({
-        actionKeys: ["generateContent", "generateMcq", "directEdit", "editAdvanced", "saveDraft"],
+        actionKeys: ["generateContent", "generateMcq", "editAdvanced", "saveDraft"],
         shouldOfferUnifiedRevision: true,
       });
     });
@@ -121,8 +121,7 @@ describe("admin content shell state helpers", () => {
         actionKeys: [
           "generateContent",
           "resumeChatEdit",
-          "directEdit",
-          "editAdvanced",
+          "editAdvanced",
           "publish",
           "unpublish",
         ],
@@ -134,14 +133,14 @@ describe("admin content shell state helpers", () => {
   describe("deriveShellDraftReadyActionModel", () => {
     it("includes revise as an explicit action and does not auto-open the textarea when a module already exists", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: true })).toEqual({
-        actionKeys: ["directEdit", "revise", "openEditor", "restart", "saveDraft"],
+        actionKeys: ["revise", "openEditor", "restart", "saveDraft"],
         shouldOpenUnifiedRevision: false,
       });
     });
 
     it("omits open-editor when no module has been created yet and keeps revise as an explicit action", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: false })).toEqual({
-        actionKeys: ["directEdit", "revise", "restart", "saveDraft"],
+        actionKeys: ["revise", "restart", "saveDraft"],
         shouldOpenUnifiedRevision: false,
       });
     });
