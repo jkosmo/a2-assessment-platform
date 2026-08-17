@@ -1722,7 +1722,10 @@ test.describe("admin content browser coverage", () => {
     expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(70);
   });
 
-  test("shell locale switching updates the rendered task text", async ({ page }) => {
+  // Stage-tilbakemelding 2026-08-17: this used to switch on the UI language selector. The two are
+  // separate now — the menus are one thing, the language the module is written in is another — so
+  // the assertion moved to the control that actually governs the content.
+  test("the content-language switcher changes the rendered task text; the UI language does not", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -1760,7 +1763,16 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     await expect(page.getByText("English scenario")).toBeVisible();
+
+    // Menus only.
     await page.locator("#localeSelect").selectOption("nb");
+    await expect(
+      page.getByText("English scenario"),
+      "switching the menu language moved the content with it",
+    ).toBeVisible();
+
+    // Content.
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
     await expect(page.getByText("Norsk scenario")).toBeVisible();
     await expect(page.getByText("English scenario")).toHaveCount(0);
   });
@@ -4351,18 +4363,63 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, /Edit directly|Rediger direkte/);
     await expect(page.locator("#previewEditTaskText")).toHaveValue("English scenario");
 
-    // The pane's own locale buttons are disabled while editing (.preview-pane--editing), so the
-    // reachable control is the workspace language selector in the top bar — which is exactly the
-    // one that had no guard.
+    // Stage-tilbakemelding 2026-08-17: the UI language and the CONTENT language are separate now.
+    // Switching the menus to Norwegian must NOT move the author to a different language's text —
+    // that was the surprise being reported ("står i preview på bokmål, endrer UI til nynorsk...").
     await page.locator("#localeSelect").selectOption("nb");
+    await expect(page.locator("#previewEditConfirm")).toBeVisible();
+    await expect(
+      page.locator("#previewEditTaskText"),
+      "the UI language moved the content language with it",
+    ).toHaveValue("English scenario");
 
-    // The editor must still be there — and now showing the language that was switched to.
+    // The content-language switcher is the one that changes what is being authored, and the editor
+    // survives it — that is the original bug this test was written for.
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
     await expect(page.locator("#previewEditConfirm")).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
 
     // And confirming from there must still work — the way forward is intact.
     await page.locator("#previewEditConfirm").click();
     await expect(page.locator("#previewEditConfirm")).toHaveCount(0);
-    await expect.poll(() => true).toBe(true);
+  });
+
+  // Stage-tilbakemelding 2026-08-17: Innstillinger edited in the UI language while Rediger edited
+  // in the content language, so the same module answered "which language am I writing in" two ways.
+  test("Innstillinger authors in the content language, not the UI language", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+      taskText: { "en-GB": "English scenario", nb: "Norsk scenario", nn: "Nynorsk scenario" },
+    });
+    moduleExport.selectedConfiguration.promptTemplateVersion = {
+      id: "prompt-1", versionNo: 1,
+      systemPrompt: { "en-GB": "English system", nb: "Norsk system", nn: "Nynorsk system" },
+      userPromptTemplate: { "en-GB": "English user", nb: "Norsk bruker", nn: "Nynorsk brukar" },
+      examples: [],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsPromptToggle").click();
+    await expect(page.locator("#settingsPromptSystem")).toHaveValue("English system");
+
+    // The switcher is reachable from Innstillinger at all — it used to live inside the preview
+    // pane, hidden from the one tab that is not a preview.
+    const bar = page.locator("#previewLocaleBar");
+    await expect(bar).toBeVisible();
+
+    // Changing the MENU language leaves the content alone. (The section stays expanded across
+    // both switches, so there is nothing to re-open.)
+    await page.locator("#localeSelect").selectOption("nb");
+    await expect(page.locator("#settingsPromptSystem")).toHaveValue("English system");
+
+    // Changing the CONTENT language moves every surface, this one included.
+    await bar.locator("button", { hasText: /Norsk bokmål/ }).click();
+    await expect(page.locator("#settingsPromptSystem")).toHaveValue("Norsk system");
   });
 });

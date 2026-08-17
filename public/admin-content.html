@@ -33,9 +33,13 @@
         .preview-pane { position: sticky; top: var(--space-2); }
       }
       /* Locale bar only shown when a module is loaded (JS adds .visible) */
-      .preview-locale-bar { display: none; gap: 4px; margin-bottom: var(--space-1); }
+      .preview-locale-bar { display: none; gap: 4px; align-items: center; margin: 0 0 var(--space-2); }
       .preview-locale-bar.visible { display: flex; }
-      .preview-locale-btn { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; }
+      .content-locale-label { font-size: 12px; font-weight: 600; color: var(--color-meta); margin-right: 4px; }
+      /* width/min-height: shared.css gir alle knapper `width:100%; min-height:40px` for skjemaer.
+         Inne i den smale forhåndsvisningsruten merket man det ikke; over hele arbeidsflaten ble de
+         tre språkknappene til tre digre bokser. Tredje gang samme felle i denne endringen. */
+      .preview-locale-btn { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; width: auto; min-height: 0; flex: 0 0 auto; }
       .preview-locale-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
       .preview-locale-btn:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
 
@@ -412,6 +416,9 @@
          field does not stretch across the panel. */
       .settings-input { font-family: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; max-width: 320px; }
       input.settings-input[type="number"] { max-width: 90px; }
+      /* Ett unntak: samlet beståttgrense er det eneste feltet som har en plattformverdi å falle
+         tilbake på, og plassholderen navngir tallet. 90 px kuttet den midt i ordet. */
+      input.settings-input--wide[type="number"] { max-width: 165px; }
       /* #896 S3c: four levels, and only four. A group title (Modulen, Vurdering,
          Innsendingsskjema, Versjonshistorikk) opens a top-level block; a subsection title
          (Vurderingskriterier, Vurderingsinstruks) sits one step in, under Vurdering. Reported
@@ -525,6 +532,12 @@
         </div>
       </div>
 
+      <!-- Stage-tilbakemelding 2026-08-17: dette var «forhåndsvisningsspråk» og lå INNE i
+           forhåndsvisningsruten — men det styrer språket for Forhåndsvisning, Rediger OG
+           Innstillinger. Skjult fra den ene fanen som ikke er forhåndsvisning, mens det avgjorde
+           hva den fanen redigerte. Nå står det over fanene, synlig fra alle tre. -->
+      <div id="previewLocaleBar" class="preview-locale-bar"></div>
+
       <!-- QA r7 #1: dropped the redundant «Modul» (shown in the module card) and «Språk» (in the locale
            picker) items from the status rail. -->
       <div id="stateRail" class="state-rail" hidden aria-label="Modulstatus">
@@ -564,7 +577,6 @@
 
         <!-- Preview pane -->
         <section class="card preview-pane" aria-label="Modulforhåndsvisning">
-          <div id="previewLocaleBar" class="preview-locale-bar"></div>
           <div id="previewContent">
             <p class="preview-empty">Ingen modul valgt.</p>
           </div>

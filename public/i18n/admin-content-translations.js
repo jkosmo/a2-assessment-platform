@@ -849,6 +849,8 @@ const adminContentBase = {
   "stateRail.changes.saved": "All saved",
   "stateRail.label.preview": "Preview shows",
   "stateRail.preview.workingDraft": "Working draft",
+  "stateRail.preview.savedVersion": "Saved version v{versionNo}",
+
   "stateRail.preview.published": "Published version",
   "stateRail.label.language": "Language",
   "stateRail.language.format": "UI: {uiLocale} · Preview: {previewLocale}",
@@ -888,6 +890,12 @@ const adminContentBase = {
   "shell.settings.info.borderlineWindow": "A total score inside this band neither passes nor fails — it goes to manual review. Leave blank to send nothing to review on score alone.",
 
   "shell.settings.info.practicalWeight": "How much the free-text answer counts towards the total. The rest is the multiple choice.",
+
+  "shell.contentLocale.label": "Content language:",
+
+
+  "shell.contentLocale.switchAria": "Author the content in {locale}",
+
 
   "shell.settings.notSet": "Not set",
   "shell.settings.groupModule": "The module",
@@ -2202,6 +2210,8 @@ const adminContentLateOverrides = {
     "stateRail.changes.saved": "Alt lagret",
     "stateRail.label.preview": "Preview viser",
     "stateRail.preview.workingDraft": "Arbeidsutkast",
+    "stateRail.preview.savedVersion": "Lagret versjon v{versionNo}",
+
     "stateRail.preview.published": "Publisert versjon",
     "stateRail.label.language": "Språk",
     "stateRail.language.format": "UI: {uiLocale} · Preview: {previewLocale}",
@@ -2241,6 +2251,12 @@ const adminContentLateOverrides = {
     "shell.settings.info.borderlineWindow": "Totalscore i dette båndet verken består eller stryker — den sendes til manuell vurdering. Tomt felt sender ingenting til vurdering på score alene.",
 
     "shell.settings.info.practicalWeight": "Hvor mye fritekstsvaret teller i totalen. Resten er flervalget.",
+
+    "shell.contentLocale.label": "Innholdsspråk:",
+
+
+    "shell.contentLocale.switchAria": "Skriv innholdet på {locale}",
+
 
     "shell.settings.notSet": "Ikke satt",
     "shell.settings.groupModule": "Modulen",
@@ -2752,6 +2768,8 @@ const adminContentLateOverrides = {
     "stateRail.changes.saved": "Alt lagra",
     "stateRail.label.preview": "Preview viser",
     "stateRail.preview.workingDraft": "Arbeidsutkast",
+    "stateRail.preview.savedVersion": "Lagra versjon v{versionNo}",
+
     "stateRail.preview.published": "Publisert versjon",
     "stateRail.label.language": "Språk",
     "stateRail.language.format": "UI: {uiLocale} · Preview: {previewLocale}",
@@ -2791,6 +2809,12 @@ const adminContentLateOverrides = {
     "shell.settings.info.borderlineWindow": "Totalscore i dette bandet korkje består eller stryk — han blir sendt til manuell vurdering. Tomt felt sender ingenting til vurdering på score åleine.",
 
     "shell.settings.info.practicalWeight": "Kor mykje fritekstsvaret tel i totalen. Resten er fleirvalet.",
+
+    "shell.contentLocale.label": "Innhaldsspråk:",
+
+
+    "shell.contentLocale.switchAria": "Skriv innhaldet på {locale}",
+
 
     "shell.settings.notSet": "Ikkje sett",
     "shell.settings.groupModule": "Modulen",

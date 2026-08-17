@@ -65,7 +65,7 @@ function tf(key, vars) {
 }
 
 function localizeValue(value) {
-  return localizeValueForLocale(value, previewLocale);
+  return localizeValueForLocale(value, contentLocale);
 }
 
 function parsePositiveIntInRange(rawValue, min, max) {
@@ -99,7 +99,26 @@ let sessionState = "idle";
 let modules = [];
 let selectedModuleId = null;
 let bundle = null;
-let previewLocale = currentLocale;
+/**
+ * The language the author is AUTHORING in — separate from `currentLocale`, which is the language
+ * of the menus and buttons.
+ *
+ * Stage-tilbakemelding 2026-08-17: *"Står i preview på bokmål, endrer UI til nynorsk, navigerer så
+ * til rediger, bokmål er fortsatt aktivt. Vi må tenke gjennom hvordan skift av språk for UI, og
+ * skifte av språk i innholdsproduksjon samhandler."*
+ *
+ * Two things were wrong. The variable was called `previewLocale` and presented as a preview
+ * setting, while it actually governed the preview pane, Rediger AND every generation request —
+ * everything except Innstillinger, which used the UI language instead. And it FOLLOWED the UI
+ * language until the author touched it, then silently stopped following. Whether a language switch
+ * moved the content with it therefore depended on something the author did ten minutes earlier and
+ * cannot see.
+ *
+ * The model now: one content language, chosen explicitly, governing all three surfaces. It never
+ * follows the UI language. It starts as the UI language because a new author is almost always
+ * authoring in the language they read.
+ */
+let contentLocale = currentLocale;
 
 // Generation state
 let generationAbort = null; // AbortController for active generation
@@ -168,7 +187,7 @@ function getHeaders() {
 
 const chatMessages = document.getElementById("chatMessages");
 const previewPane = document.getElementById("previewPane");
-const previewLocaleBar = document.getElementById("previewLocaleBar");
+const contentLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
@@ -990,32 +1009,56 @@ function retranslateChat() {
 // ---------------------------------------------------------------------------
 
 function renderPreviewLocaleBar() {
-  // Only show the locale switcher when content is loaded — avoids duplicating
-  // the top-bar UI language selector when nothing is being previewed.
+  // Only show the switcher when content is loaded — with nothing to author, the only language that
+  // means anything is the UI one, and that has its own selector in the top bar.
   const hasContent = !!bundle || !!sessionDraft || !!previewDraft;
-  previewLocaleBar.classList.toggle("visible", hasContent);
-  previewLocaleBar.innerHTML = "";
+  contentLocaleBar.classList.toggle("visible", hasContent);
+  contentLocaleBar.innerHTML = "";
   if (!hasContent) return;
+
+  // Stage-tilbakemelding 2026-08-17: this reads as a PREVIEW control, but it decides the language
+  // for Forhåndsvisning, Rediger and Innstillinger alike. Saying so is half the fix; the other
+  // half was making Innstillinger actually obey it.
+  const label = document.createElement("span");
+  label.className = "content-locale-label";
+  label.textContent = t("shell.contentLocale.label");
+  contentLocaleBar.appendChild(label);
 
   for (const loc of supportedLocales) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "preview-locale-btn" + (loc === previewLocale ? " active" : "");
+    btn.className = "preview-locale-btn" + (loc === contentLocale ? " active" : "");
     btn.textContent = localeLabels[loc] ?? loc;
-    btn.setAttribute("aria-pressed", String(loc === previewLocale));
+    btn.setAttribute("aria-pressed", String(loc === contentLocale));
+    btn.setAttribute("aria-label", tf("shell.contentLocale.switchAria", { locale: localeLabels[loc] ?? loc }));
     btn.addEventListener("click", () => {
+      if (loc === contentLocale) return;
       // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
       // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
       const wasEditing = !!document.getElementById("previewEditConfirm");
-      previewLocale = loc;
+      // Innstillinger holds one language's text in DOM-only fields, exactly like the UI-language
+      // switch does — so it needs the same guard, or a typed instruction is lost on the way.
+      if (activeTab === "settings" && hasUnsavedSettingsEdits()
+        && !window.confirm(t("shell.tab.unsaved.settingsBody"))) {
+        return;
+      }
+      contentLocale = loc;
+      // The panel's editors are seeded once, in the language they were seeded FOR. Discard so the
+      // next render re-reads them in the new one; otherwise the author edits Norwegian text that
+      // the save then files as English.
+      settingsCriteriaState = null;
+      settingsCriteriaBaseline = null;
+      settingsCriteriaDraftBaseline = undefined;
+      settingsDraftValues = null;
       renderPreviewLocaleBar();
       renderPreview();
+      renderSettingsPanel();
       if (wasEditing) {
         enterPreviewEditMode();
         logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
       }
     });
-    previewLocaleBar.appendChild(btn);
+    contentLocaleBar.appendChild(btn);
   }
 }
 
@@ -1089,7 +1132,7 @@ function attachDriftBannerHandlers() {
 }
 
 function renderPreview() {
-  const opts = { locale: previewLocale, t, tf };
+  const opts = { locale: contentLocale, t, tf };
 
   if (!bundle && !sessionDraft && !previewDraft) {
     previewContent.innerHTML = buildPreviewHtml({ emptyText: t("adminContent.status.noneTitle") }, opts);
@@ -1207,19 +1250,19 @@ function updateStateRail() {
 
   const chains = bundle ? deriveModuleStatusChains(bundle) : null;
   const hasUnsaved = !!sessionDraft;
+  // The version the workspace actually has open — which is NOT the same as the live one whenever
+  // the author has restored an earlier version or is sitting on a saved draft. Both rail fields
+  // below describe what is on screen, so both read this rather than the published chain.
+  const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
+  const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
 
   if (srModuleName) {
     srModuleName.textContent = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || selectedModuleId;
   }
 
   if (srEditing) {
-    // Stage-tilbakemelding 2026-08-17: "det står at preview viser publisert versjon, men det som
-    // faktisk vises er min versjon under endring". Riktig — dette feltet leste `liveChain`, altså
-    // hva som er PUBLISERT, mens forhåndsvisningen viser den LASTEDE versjonen. De to er ulike
-    // hver gang forfatteren har gjenopprettet en tidligere versjon, eller står på et lagret utkast.
-    // Feltet heter "Du redigerer"; da må det navngi det som er på skjermen.
-    const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
-    const loadedIsLive = loaded?.id && loaded.id === bundle?.module?.activeVersionId;
+    // Same correction as the preview field below: this read `liveChain` — what is PUBLISHED —
+    // while the field is called "Du redigerer" and the author is editing whatever is loaded.
     if (hasUnsaved) {
       srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
     } else if (loaded?.versionNo != null) {
@@ -1252,13 +1295,26 @@ function updateStateRail() {
   }
 
   if (srPreview) {
-    srPreview.innerHTML = hasUnsaved
-      ? makeSrBadge("unsaved", t("stateRail.preview.workingDraft"))
-      : `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
+    // Stage-tilbakemelding 2026-08-17: *"det står at preview viser publisert versjon, men det som
+    // faktisk vises er min versjon under endring"*. This field had exactly two answers — "working
+    // draft" when a session draft existed, and otherwise the flat claim "published version". It
+    // never looked at WHICH version the preview had loaded. Open a saved draft, or restore an
+    // older version, and it asserted "published" over content that was not published at all.
+    //
+    // Three states now, and they are the three the preview can actually be in.
+    if (hasUnsaved) {
+      srPreview.innerHTML = makeSrBadge("unsaved", t("stateRail.preview.workingDraft"));
+    } else if (loadedIsLive) {
+      srPreview.innerHTML = `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
+    } else if (loaded?.versionNo != null) {
+      srPreview.innerHTML = makeSrBadge("saved-draft", tf("stateRail.preview.savedVersion", { versionNo: loaded.versionNo }));
+    } else {
+      srPreview.innerHTML = `<span class="state-rail-value">—</span>`;
+    }
   }
 
   if (srLang) {
-    srLang.textContent = localeLabels[previewLocale ?? currentLocale] ?? (previewLocale ?? currentLocale);
+    srLang.textContent = localeLabels[contentLocale] ?? (contentLocale);
   }
 }
 
@@ -1657,7 +1713,7 @@ function resolveDraftForSave() {
   return { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria };
 }
 
-function resolveCurrentDraftSnapshot(locale = (previewLocale ?? currentLocale)) {
+function resolveCurrentDraftSnapshot(locale = (contentLocale)) {
   const fallbackTitle = bundle?.module?.title ?? sessionDraft?.title ?? t("shell.newModule.defaultTitle");
   return {
     sourceLocale: locale,
@@ -2424,7 +2480,7 @@ async function translateMissingLocalesThenPublish(issues) {
     issues.some((issue) => issue.field === field),
   );
   const needsMcqSource = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
-  const preferredOrder = [previewLocale ?? currentLocale, currentLocale, "nb", "en-GB", "nn"];
+  const preferredOrder = [contentLocale, currentLocale, "nb", "en-GB", "nn"];
   const sourceLocale = preferredOrder.find((locale) => {
     if (!locale) return false;
     if (!gatedTextFields.every((field) => sourceTextForLocale(current[field], locale).trim())) return false;
@@ -3089,8 +3145,10 @@ async function loadModule(moduleId, options = {}) {
   if (handoff?.locale && supportedLocales.includes(handoff.locale) && handoff.locale !== currentLocale) {
     currentLocale = handoff.locale;
   }
+  // `previewLocale` is the WIRE name in the handoff payload, shared with the advanced editor.
+  // Renaming the variable does not rename the contract.
   if (handoff?.previewLocale && supportedLocales.includes(handoff.previewLocale)) {
-    previewLocale = handoff.previewLocale;
+    contentLocale = handoff.previewLocale;
   }
   const resumeBehavior = resolveShellResumeBehavior({
     hasHandoffDraft: !!handoff?.draft,
@@ -3104,6 +3162,10 @@ async function loadModule(moduleId, options = {}) {
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
   // had to switch tabs and back. Only the preview was re-rendered here.
   renderSettingsPanel();
+  // The content-language switcher is hidden until there is content, and `loadModule` never told it
+  // that content had arrived — so opening a module straight from its URL left it invisible. It
+  // showed up only if you had come through the conversation flow, which renders it on its own.
+  renderPreviewLocaleBar();
 
   // Capture data for retranslatable closure
   const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
@@ -3525,7 +3587,7 @@ function wireCriteriaEditor({ container, getState, setState, rerender, onRegener
         // last entry per key, so one of the two new criteria vanished at save time without a word.
         // A counter that only ever goes up cannot collide.
         id: freshCriterionId(next), label: "", description: "", maxScore: 5,
-        candidateVisible: false, storedLabel: null, storedDescription: null, locale: currentLocale,
+        candidateVisible: false, storedLabel: null, storedDescription: null, locale: contentLocale,
       });
       setState(next);
       rerender();
@@ -3580,7 +3642,7 @@ function buildCriteriaRecordFromEditorState(criteria) {
     // #902: merge the edited language into whatever was stored. A criterion the editor never
     // localized (`storedLabel` absent — a brand-new one, or a caller that does not track it)
     // keeps the old bare-string behaviour, which the reader still understands as "one language".
-    const locale = c.locale ?? currentLocale;
+    const locale = c.locale ?? contentLocale;
     // An UNTOUCHED field keeps its stored value byte for byte. Merging it would turn a bare
     // string — "one language, not translated yet" — into a two-locale map asserting the same
     // text is valid in both, which is a translation nobody made.
@@ -3638,15 +3700,15 @@ async function handleDriftRegenerate() {
   const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
   const taskText = localizeValueForLocale(
     sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
-    previewLocale ?? currentLocale,
+    contentLocale,
   );
   const assessorText = localizeValueForLocale(
     sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
-    previewLocale ?? currentLocale,
+    contentLocale,
   );
   const constraintsText = localizeValueForLocale(
     sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
-    previewLocale ?? currentLocale,
+    contentLocale,
   );
   if (!taskText || !assessorText) {
     showToast(t("shell.drift.regenerate.missingTask"), "error");
@@ -3666,7 +3728,7 @@ async function handleDriftRegenerate() {
           assessorExpectedContent: assessorText,
           candidateTaskConstraints: constraintsText || undefined,
           certificationLevel: certificationLevelForGeneration(),
-          locale: previewLocale ?? currentLocale,
+          locale: contentLocale,
           ...(blueprint ? { blueprint } : {}),
           force: true,
         }),
@@ -3694,15 +3756,15 @@ async function handleDriftShowDiff() {
   const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
   const taskText = localizeValueForLocale(
     sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
-    previewLocale ?? currentLocale,
+    contentLocale,
   );
   const assessorText = localizeValueForLocale(
     sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
-    previewLocale ?? currentLocale,
+    contentLocale,
   );
   const constraintsText = localizeValueForLocale(
     sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
-    previewLocale ?? currentLocale,
+    contentLocale,
   );
   if (!taskText || !assessorText) {
     showToast(t("shell.drift.regenerate.missingTask"), "error");
@@ -3713,7 +3775,7 @@ async function handleDriftShowDiff() {
   // QA round 5: I changed this request to send `requestedLocale` without declaring it here — it
   // only existed inside regenerateCriteriaFromTask. Every "show what would change" threw a
   // ReferenceError that the catch below reported as a generation error, so the action was dead.
-  const requestedLocale = previewLocale ?? currentLocale;
+  const requestedLocale = contentLocale;
   const slot = logProgress("shell.drift.diff.progress");
   let result;
   try {
@@ -3787,7 +3849,7 @@ function llmCriteriaArrayToStorageRecord(arr, locale) {
 function driftText(value) {
   if (value == null) return "";
   if (typeof value === "string") return value;
-  return localizeValueForLocale(value, previewLocale ?? currentLocale) ?? "";
+  return localizeValueForLocale(value, contentLocale) ?? "";
 }
 
 function computeCriteriaDiff(existing, next) {
@@ -4288,7 +4350,7 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
   // session and not saved it yet); otherwise fall back to the draft, then to what is stored.
   // The language this regeneration is FOR: it decides what text is sent, what the service is
   // asked to write, and what locale the result is stored under. All three must be the same value.
-  const requestedLocale = previewLocale ?? currentLocale;
+  const requestedLocale = contentLocale;
   const fieldOr = (id, stored) => {
     const el = document.getElementById(id);
     if (el) return el.value.trim();
@@ -4328,7 +4390,7 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
         assessorExpectedContent: assessorText,
         candidateTaskConstraints: constraintsText || undefined,
         certificationLevel: certificationLevelForGeneration(),
-        locale: previewLocale ?? currentLocale,
+        locale: contentLocale,
         ...(blueprintObj ? { blueprint: blueprintObj } : {}),
       }),
     });
@@ -4350,7 +4412,7 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
         candidateVisible: Boolean(c.candidateVisible),
         // #902: one language, so the save writes `{<locale>: "..."}` rather than a bare string the
         // reader would have to guess the language of. QA round 4: this said `currentLocale` while
-        // the REQUEST asked for `previewLocale`, so English text was filed as Norwegian. One
+        // the REQUEST asked for `contentLocale`, so English text was filed as Norwegian. One
         // variable feeds both now.
         storedLabel: previous?.label ?? null,
         storedDescription: previous?.description ?? null,
@@ -4367,7 +4429,7 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
 }
 
 function enterPreviewEditMode() {
-  const editingLocale = previewLocale ?? currentLocale;
+  const editingLocale = contentLocale;
   const currentTitle = localizeValueForLocale(sessionDraft?.title ?? bundle?.module?.title ?? "", editingLocale) || "";
   const currentTaskText = localizeValueForLocale(
     sessionDraft?.taskText ?? bundle?.selectedConfiguration?.moduleVersion?.taskText ?? "",
@@ -4639,7 +4701,7 @@ function enterPreviewEditMode() {
       // leave the in-flight save writing the OLD values over a freshly rebuilt form. One save
       // owns the session until it resolves or is aborted.
       if (uiLocaleSelect) uiLocaleSelect.disabled = busy;
-      for (const btn of previewLocaleBar?.querySelectorAll("button") ?? []) btn.disabled = busy;
+      for (const btn of contentLocaleBar?.querySelectorAll("button") ?? []) btn.disabled = busy;
     };
     setFormBusy(true);
 
@@ -4980,7 +5042,7 @@ function openAdvancedEditor(moduleId) {
 
   if (!hasUnsavedDraft) {
     // No unsaved work — carry locale context only so the advanced editor can restore it
-    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale });
+    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale: contentLocale });
     logBot(() => t("shell.module.openingEditor"));
     setTimeout(() => { location.href = url; }, 400);
     return;
@@ -5005,7 +5067,7 @@ function openAdvancedEditor(moduleId) {
         assessmentBlueprint: sessionDraft?.assessmentBlueprint ?? null,
       },
       locale: currentLocale,
-      previewLocale,
+      previewLocale: contentLocale,
     });
     logBot(() => t("shell.module.openingEditor"));
     setTimeout(() => { location.href = url; }, 400);
@@ -5215,7 +5277,7 @@ function renderSettingsPanel() {
   // used localizeValue (preview locale) while the editors use currentLocale, so with the UI in
   // Norwegian and the preview in English the criteria summary showed English while "Endre
   // kriterier" opened the Norwegian values and said it was editing nb. One language per surface.
-  const settingsValue = (value) => localizeValueForLocale(value, currentLocale);
+  const settingsValue = (value) => localizeValueForLocale(value, contentLocale);
 
   // #896 S3b: module type is editable, and first, as the issue specifies — it decides which
   // fields Rediger even shows. Only the types this module has the components for are offered;
@@ -5327,10 +5389,10 @@ function renderSettingsPanel() {
   // tomt faktisk gjør for nettopp det feltet, i stedet for en felles forklaring som er usann for
   // tre av dem. Å fylle inn verdiene i stedet, som først foreslått, ville slått PÅ en sperre som
   // er av — akkurat feilen QA fant på MCQ-feltet.
-  const numberRow = (labelKey, id, value, placeholderText, infoKey, suffix = " %") =>
+  const numberRow = (labelKey, id, value, placeholderText, infoKey, suffix = " %", wide = false) =>
     row(
       labelKey,
-      `<input id="${id}" class="settings-input" type="number" min="0" max="100"
+      `<input id="${id}" class="settings-input${wide ? " settings-input--wide" : ""}" type="number" min="0" max="100"
         value="${Number.isFinite(Number(value)) && value !== null && value !== undefined ? escapeHtml(String(value)) : ""}"
         placeholder="${escapeHtml(placeholderText)}" />${suffix}`,
       false,
@@ -5346,6 +5408,9 @@ function renderSettingsPanel() {
       ? tf("shell.settings.platformDefault", { value: platformTotalMin })
       : t("shell.settings.notSet"),
     "totalMin",
+    " %",
+    // The only field whose placeholder is a sentence rather than a word.
+    true,
   );
   if (mode !== "MCQ_ONLY") {
     numberRow(
@@ -5604,7 +5669,7 @@ function fieldIsDirty(id) {
  */
 function mergeSettingsField(id, stored) {
   if (!fieldIsDirty(id)) return stored;
-  return mergeLocaleInto(stored, currentLocale, settingsFieldValue(id) ?? "");
+  return mergeLocaleInto(stored, contentLocale, settingsFieldValue(id) ?? "");
 }
 
 /** True when any of `ids` differs from its stored value, counting collapsed sections. */
@@ -5698,7 +5763,7 @@ function renderCriteriaSection() {
   // Read the stored criteria the first time the panel renders them. Re-reading on every render
   // would discard edits, since the panel rebuilds whenever anything else in it changes.
   if (settingsCriteriaState === null) {
-    settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), currentLocale);
+    settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), contentLocale);
     settingsCriteriaBaseline = buildCriteriaRecordFromEditorState(settingsCriteriaState);
     settingsCriteriaDraftBaseline = sessionDraft?.criteria ?? null;
   }
@@ -5870,7 +5935,7 @@ function renderPromptSection() {
   const promptMode = bundle.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
   if (promptMode === "MCQ_ONLY") return "";
   const prompt = bundle.selectedConfiguration?.promptTemplateVersion ?? null;
-  const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: currentLocale }));
+  const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: contentLocale }));
 
   if (!settingsPromptExpanded) {
     return `<section class="settings-criteria-section">
@@ -5883,8 +5948,8 @@ function renderPromptSection() {
     </section>`;
   }
 
-  const sys = escapeHtml(localizeValueForLocale(prompt?.systemPrompt ?? "", currentLocale));
-  const user = escapeHtml(localizeValueForLocale(prompt?.userPromptTemplate ?? "", currentLocale));
+  const sys = escapeHtml(localizeValueForLocale(prompt?.systemPrompt ?? "", contentLocale));
+  const user = escapeHtml(localizeValueForLocale(prompt?.userPromptTemplate ?? "", contentLocale));
   const examples = escapeHtml(JSON.stringify(prompt?.examples ?? [], null, 2));
 
   return `<section class="settings-criteria-section">
@@ -5941,8 +6006,8 @@ function renderSubmissionSchemaSection() {
     </section>`;
   }
 
-  const label = escapeHtml(localizeValueForLocale(field?.label ?? "", currentLocale));
-  const placeholder = escapeHtml(localizeValueForLocale(field?.placeholder ?? "", currentLocale));
+  const label = escapeHtml(localizeValueForLocale(field?.label ?? "", contentLocale));
+  const placeholder = escapeHtml(localizeValueForLocale(field?.placeholder ?? "", contentLocale));
   return `<section class="settings-criteria-section">
     <div class="settings-criteria-head">
       <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
@@ -5950,7 +6015,7 @@ function renderSubmissionSchemaSection() {
         aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
     </div>
     <div id="settingsSchemaEditor" class="settings-criteria-editor">
-      <p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: currentLocale }))}</p>
+      <p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: contentLocale }))}</p>
       <label class="settings-field-label" for="settingsSchemaLabel">${escapeHtml(t("shell.settings.schemaLabel"))}</label>
       <input id="settingsSchemaLabel" class="settings-input" type="text" value="${label}" />
       <label class="settings-field-label" for="settingsSchemaPlaceholder">${escapeHtml(t("shell.settings.schemaPlaceholder"))}</label>
@@ -6384,7 +6449,7 @@ async function saveSettingsInBackground() {
             rubric: (() => {
               const criteria = criteriaRecord
                 ?? buildCriteriaRecordFromEditorState(
-                  buildEditorStateFromCriteriaRecord(cfg.rubricVersion?.criteria ?? null, currentLocale),
+                  buildEditorStateFromCriteriaRecord(cfg.rubricVersion?.criteria ?? null, contentLocale),
                 );
               return {
                 criteria,
@@ -7425,7 +7490,6 @@ function populateUiLocaleSelect() {
       return;
     }
     localStorage.setItem("participant.locale", chosen);
-    const prev = currentLocale;
     currentLocale = chosen;
     // QA 2026-08-16: the criteria editor holds the text of ONE language plus the locale it was
     // read in, and it only seeds itself when the state is null. Switching language therefore left
@@ -7445,8 +7509,10 @@ function populateUiLocaleSelect() {
     settingsCriteriaBaseline = null;
     settingsCriteriaDraftBaseline = undefined;
     settingsDraftValues = null;
-    // Keep preview locale in sync if it wasn't manually overridden
-    if (previewLocale === prev) previewLocale = chosen;
+    // The content language does NOT follow. Stage-tilbakemelding 2026-08-17: it used to, until the
+    // author touched the selector — after which it silently stopped, with nothing on screen saying
+    // so. Changing the menu language now changes the menus; the content stays in the language it
+    // is written in, which is the only rule that can be stated in one sentence.
     // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den.
     // Forhåndsvisningens EGEN språkvelger er deaktivert under redigering
     // (.preview-pane--editing .preview-locale-btn { pointer-events: none }) — men denne, i

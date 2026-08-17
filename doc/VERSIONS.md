@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.12 - 2026-08-17
+
+**UI-språk og innholdsspråk er skilt fra hverandre.** Stage-tilbakemelding: *«Står i preview på
+bokmål, endrer UI til nynorsk, navigerer så til rediger, bokmål er fortsatt aktivt. Vi må tenke
+gjennom hvordan skift av språk for UI, og skifte av språk i innholdsproduksjon samhandler.»*
+
+To ting var galt, og de forsterket hverandre.
+
+**Variabelen het `previewLocale` og ble presentert som en forhåndsvisningsinnstilling** — men den
+styrte forhåndsvisningen, Rediger og hver eneste genereringsforespørsel. Alt unntatt Innstillinger,
+som brukte UI-språket i stedet. Samme modul svarte altså to forskjellige ting på «hvilket språk
+skriver jeg nå». Den heter `contentLocale` nå, og Innstillinger følger den: sammendraget,
+kriteriene, vurderingsinstruksen og innsendingsskjemaet leses og skrives alle i den.
+
+**Og den FULGTE UI-språket — helt til forfatteren rørte velgeren, hvorpå den stille sluttet.** Om
+et språkbytte flyttet innholdet med seg avhang dermed av noe man gjorde ti minutter tidligere og
+ikke kan se noe sted. Den følger ikke lenger. Å bytte menyspråk bytter menyene; innholdet blir
+stående i språket det er skrevet i. Det er den eneste regelen som kan sies i én setning.
+
+**Velgeren lå inne i forhåndsvisningsruten** — altså skjult fra den ene fanen som ikke er en
+forhåndsvisning, samtidig som den avgjorde hva den fanen redigerte. Den står nå over fanene,
+synlig fra alle tre, og heter «Innholdsspråk».
+
+Et bytte av innholdsspråk forkaster panelets editorer (de er seedet for ett språk) og spør først
+hvis det finnes ulagrede endringer — samme vakt som UI-byttet allerede hadde.
+
+**To eldre feil falt ut av dette:**
+
+`loadModule` tegnet aldri språkvelgeren på nytt, så åpnet man en modul rett fra URL-en var den
+usynlig. Den dukket bare opp hvis man kom via samtaleflyten, som tegner den selv.
+
+Og **jeg fikset feil felt i statuslinjen i v2.18.11.** Rapporten gjaldt «PREVIEW SHOWS», ikke «Du
+redigerer». Det feltet hadde nøyaktig to svar — «arbeidsutkast» når det fantes et sesjonsutkast, og
+ellers den flate påstanden «publisert versjon». Det så aldri på hvilken versjon som var lastet. Nå
+har det tre tilstander, og de tre er de forhåndsvisningen faktisk kan være i. (Rettelsen i v2.18.11
+var også riktig for sitt felt, men den løste ikke det som ble rapportert.)
+
+**To e2e-er festet den gamle modellen** og er skrevet om: begge byttet UI-språk og forventet at
+innholdet fulgte med. De sjekker nå at menyspråket *ikke* flytter innholdet, og at innholdsspråket
+gjør det.
+
 ## 2.18.11 - 2026-08-17
 
 Første runde stage-tilbakemelding på den omlagte Innstillinger-flaten. Fire av seks punkter er
